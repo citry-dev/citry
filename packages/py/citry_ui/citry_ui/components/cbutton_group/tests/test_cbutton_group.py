@@ -75,16 +75,28 @@ def test_vertical_growing_group_reflects_layout():
 
 
 @pytest.mark.parametrize(
-    ("template", "error"),
+    ("template", "error", "match"),
     [
-        ('<c-CButtonGroup label=""><c-CButton>One</c-CButton></c-CButtonGroup>', TypeError),
-        ('<c-CButtonGroup label="Map" orientation="diagonal"><c-CButton>One</c-CButton></c-CButtonGroup>', ValueError),
-        ('<c-CButtonGroup label="Map"></c-CButtonGroup>', SyntaxError),
-        ('<c-CButtonGroup label="Map" c-attrs="[]"><c-CButton>One</c-CButton></c-CButtonGroup>', TypeError),
+        (
+            '<c-CButtonGroup label=""><c-CButton>One</c-CButton></c-CButtonGroup>',
+            TypeError,
+            r"CButtonGroup\.Kwargs\.label expects str",
+        ),
+        (
+            '<c-CButtonGroup label="Map" orientation="diagonal"><c-CButton>One</c-CButton></c-CButtonGroup>',
+            TypeError,
+            r"CButtonGroup\.Kwargs\.orientation expects Literal\[",
+        ),
+        ('<c-CButtonGroup label="Map"></c-CButtonGroup>', SyntaxError, None),
+        (
+            '<c-CButtonGroup label="Map" c-attrs="[]"><c-CButton>One</c-CButton></c-CButtonGroup>',
+            TypeError,
+            r"CButtonGroup\.Kwargs\.attrs expects",
+        ),
     ],
 )
-def test_invalid_inputs_fail(template, error):
-    with pytest.raises(error):
+def test_invalid_inputs_fail(template, error, match):
+    with pytest.raises(error, match=match):
         _render(template)
 
 

@@ -102,10 +102,6 @@ class CSidebar(LibraryComponent):
         footer: SlotInput[CSidebarFooterSlotData] | None = None
         toggle: SlotInput[CSidebarToggleSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         validate_html_id("CSidebar", kwargs.id)
         validate_non_empty_string("CSidebar", "label", kwargs.label)

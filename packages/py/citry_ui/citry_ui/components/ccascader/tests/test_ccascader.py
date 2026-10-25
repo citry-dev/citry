@@ -100,7 +100,10 @@ def test_parent_selection_policy_and_explicit_messages() -> None:
             "duplicated",
         ),
         (f"<c-CCascader c-value=\"['missing']\">{_OPTIONS}</c-CCascader>", "not one continuous"),
-        ('<c-CCascader c-disabled="1"><c-CCascaderOption value="x" label="X" /></c-CCascader>', "must be a bool"),
+        (
+            '<c-CCascader c-disabled="1"><c-CCascaderOption value="x" label="X" /></c-CCascader>',
+            r"CCascader\.Kwargs\.disabled expects bool",
+        ),
         (
             '<c-CCascader selected_label="Selected"><c-CCascaderOption value="x" label="X" /></c-CCascader>',
             "must contain",

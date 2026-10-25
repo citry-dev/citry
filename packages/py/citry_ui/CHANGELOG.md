@@ -49,18 +49,13 @@
 - `heading_level` on `CAccordion` and `CDisclosure` now accepts only
   `2` to `6` and the same numbers as text, so `"02"` and `2.0` raise
   `ValueError`.
-- An invalid input to these components now raises Citry's `TypeError`,
-  which names the input and the expected type: Breadcrumbs, Carousel,
-  Command Palette, Data Grid, Drawer, Form Collection, List, Native
-  Select, Navigation Menu, Pagination, Scroll Area, Table, Tag, Toast
-  Region, Toggle, and Tree Grid, plus `CField`, `CAccordionItem`,
-  `CCascaderOption`, `CDropTarget`, `CListboxGroup`, `CListboxOption`,
-  `CMenuItem`, `CMenuGroup`, `CMenuRadioGroup`, `CMenuRadioItem`,
-  `CMenuSeparator`, `CRadio`, `CSortableItem`, `CSplitterPanel`,
-  `CStep`, `CTabPanel`, `CTransferListItem`, `CTreeItem`,
-  `CVirtualListItem`, and `CVirtualWindow`. For a value outside a listed choice, such as
-  `variant="bogus"`, this replaces Citry UI's `ValueError`, so code that
-  catches `ValueError` there must catch `TypeError`.
+- **Breaking:** A wrong input to most Citry UI components now raises
+  Citry's `TypeError`, which names the input and the expected type. This
+  includes a value outside a listed choice, such as `variant="bogus"`,
+  which used to raise `ValueError`, so code that catches `ValueError`
+  there must catch `TypeError`. `CAccordion`, `CDisclosure`, `CIcon`,
+  `CAlert`, `CCalendar`, `CDatePicker`, and `CDateRange` keep Citry UI's
+  own errors on all their inputs.
 
 ## [0.3.0] - 2026-10-19
 

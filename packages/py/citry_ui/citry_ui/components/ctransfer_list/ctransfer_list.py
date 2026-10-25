@@ -228,10 +228,6 @@ class CTransferList(LibraryComponent):
     class Slots:
         default: SlotInput[CTransferListDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_transfer_list_snapshot", None)
         if cached is not None:

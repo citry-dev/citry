@@ -195,10 +195,6 @@ class CStepper(LibraryComponent):
     class Slots:
         default: SlotInput[CStepperDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_STEPPER_CONTEXT, None) is not None:
             raise ValueError(

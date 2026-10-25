@@ -154,7 +154,9 @@ class CCalendar(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # Citry's error for first_day_of_week would print all 14 values twice;
+    # Citry UI's says "from 1 through 7, where 1 is Monday" in one line. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

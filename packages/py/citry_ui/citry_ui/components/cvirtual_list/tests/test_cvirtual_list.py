@@ -213,7 +213,7 @@ def test_window_rejects_ranges_outside_total_and_unsafe_geometry():
     [
         ('<c-CVirtualList c-estimated_item_size="0" />', "estimated_item_size must be between 1 and 16000000"),
         ('<c-CVirtualList c-viewport_size="0" />', "viewport_size must be between 1 and 16000000"),
-        ('<c-CVirtualList c-focusable="1" />', "focusable must be a bool"),
+        ('<c-CVirtualList c-focusable="1" />', r"CVirtualList\.Kwargs\.focusable expects bool"),
         ('<c-CVirtualWindow c-total_count="-1" />', "total_count must be at least 0"),
         ('<c-CVirtualWindow c-total_count="1" c-item_size="0" />', "item_size must be between 1 and 16000000"),
         ('<c-CVirtualWindow c-total_count="1" c-overscan="101" />', "overscan must be between 0 and 100"),

@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias, TypedDict, cast
+from typing import Any, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import (
@@ -36,9 +36,9 @@ from citry_ui.components._validation import (
 from citry_ui.components.ccalendar import (
     CCalendarFirstDayOfWeek,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
 )
-
-if TYPE_CHECKING:
-    from citry_ui.components.cpopover import CPopoverPlacement
+from citry_ui.components.cpopover import (
+    CPopoverPlacement,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
+)
 
 CDateRangeDate: TypeAlias = date | str
 CDateRangeVariant = Literal["outline", "filled", "plain"]
@@ -216,7 +216,9 @@ class CDateRange(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # Citry's error for first_day_of_week would print all 14 values twice;
+    # Citry UI's says "from 1 through 7, where 1 is Monday" in one line. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

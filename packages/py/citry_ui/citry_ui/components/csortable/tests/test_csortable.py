@@ -124,7 +124,10 @@ def test_default_and_handle_slots_render_without_replacing_owned_button() -> Non
             '<c-CSortable c-order="[\'missing\']"><c-CSortableItem value="a" label="A" /></c-CSortable>',
             "every declared",
         ),
-        ('<c-CSortable layout="stack"><c-CSortableItem value="a" label="A" /></c-CSortable>', "must be one of"),
+        (
+            '<c-CSortable layout="stack"><c-CSortableItem value="a" label="A" /></c-CSortable>',
+            r"CSortable\.Kwargs\.layout expects Literal\[",
+        ),
         ('<c-CSortable><p>wrong</p><c-CSortableItem value="a" label="A" /></c-CSortable>', "may contain only"),
     ],
 )

@@ -8,13 +8,15 @@ import pytest
 from markupsafe import Markup
 
 import citry_ui
-from citry import Citry, Component
+from citry import Citry, Component, LintSettings
 from citry_ui import CProgress
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(progress: object, *, include_css: bool = False, static_fallback: bool = False) -> str:
-    app = Citry(autodiscover=False)
+def _render(
+    progress: object, *, include_css: bool = False, static_fallback: bool = False, check_input_types: bool = True
+) -> str:
+    app = Citry(autodiscover=False, lint=LintSettings(check_input_types=check_input_types))
     app.register_library(citry_ui)
 
     class Page(Component):
@@ -99,7 +101,7 @@ def test_determinate_custom_range_value_text_and_root_styling():
     ("kwargs", "error", "match"),
     [
         ({"label": ""}, ValueError, "label must be non-empty"),
-        ({"label": 4}, TypeError, "label must be a string"),
+        ({"label": 4}, TypeError, r"CProgress\.Kwargs\.label expects str"),
         ({"label": "Task", "max": 0}, ValueError, "max must be greater than zero"),
         ({"label": "Task", "max": True}, TypeError, "max must be a finite number"),
         ({"label": "Task", "max": float("inf")}, ValueError, "max must be finite"),
@@ -108,10 +110,10 @@ def test_determinate_custom_range_value_text_and_root_styling():
         ({"label": "Task", "value": True}, TypeError, "value must be a finite number"),
         ({"label": "Task", "value": float("nan")}, ValueError, "value must be finite"),
         ({"label": "Task", "value_text": ""}, ValueError, "value_text must be non-empty"),
-        ({"label": "Task", "intent": "info"}, ValueError, "intent must be one of"),
-        ({"label": "Task", "size": "xl"}, ValueError, "size must be one of"),
-        ({"label": "Task", "shape": "circle"}, ValueError, "shape must be one of"),
-        ({"label": "Task", "attrs": []}, TypeError, "attrs must be a mapping"),
+        ({"label": "Task", "intent": "info"}, TypeError, r"CProgress\.Kwargs\.intent expects Literal"),
+        ({"label": "Task", "size": "xl"}, TypeError, r"CProgress\.Kwargs\.size expects Literal"),
+        ({"label": "Task", "shape": "circle"}, TypeError, r"CProgress\.Kwargs\.shape expects Literal"),
+        ({"label": "Task", "attrs": []}, TypeError, r"CProgress\.Kwargs\.attrs expects Mapping"),
     ],
 )
 def test_invalid_server_inputs_fail_deterministically(kwargs, error, match):
@@ -174,8 +176,11 @@ def test_progress_attrs_without_vue_syntax_stay_ordinary_attributes():
     assert 'title="Upload"' in html
 
 
-def test_choices_and_labels_are_detrusted_before_rendering():
-    with pytest.raises(ValueError, match="intent must be one of"):
+def test_markup_outside_the_choices_is_rejected_and_labels_are_plain_text():
+    # Markup is a str subclass that templates do not escape, so a Markup value
+    # that is not one of the choices must fail before it reaches an attribute.
+    # Citry's check compares the text with each choice.
+    with pytest.raises(TypeError, match=r"CProgress\.Kwargs\.intent expects Literal"):
         _render(CProgress(label="Task", intent=Markup('primary" onfocus="evil')))
     html = _render(
         CProgress(label=Markup('Archive "delta"'), value_text=Markup("2 < crates")),
@@ -202,3 +207,10 @@ def test_css_exposes_native_track_range_and_environment_contract():
     assert ":indeterminate" in css
     assert "prefers-reduced-motion: reduce" in css
     assert "forced-colors: active" in css
+
+
+def test_markup_outside_the_choices_is_rejected_with_citrys_check_off():
+    # An app can turn Citry's input check off, and then Citry UI's own check
+    # is the only thing between a Markup value and the rendered attribute.
+    with pytest.raises(ValueError, match="intent must be one of"):
+        _render(CProgress(label="Task", intent=Markup('primary" onfocus="evil')), check_input_types=False)

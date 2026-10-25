@@ -852,6 +852,70 @@ _GENERALLY_CHECKED = [
     ("CTreeItem", {"value": "one", "label": "One"}, "disabled", "yes"),
     ("CVirtualListItem", {}, "item_key", 3),
     ("CVirtualWindow", {"total_count": 3}, "focusable", "yes"),
+    # Classes whose own messages said no more than Citry's (#212).
+    ("CAlertDialog", {}, "open", "yes"),
+    ("CAvatar", {}, "src", 3),
+    ("CBadge", {}, "class_", 3),
+    ("CButton", {}, "disabled", "yes"),
+    ("CButtonGroup", {"label": "label"}, "attached", "yes"),
+    ("CCard", {}, "class_", 3),
+    ("CCascader", {}, "change_on_select", "yes"),
+    ("CCheckbox", {}, "checked", "yes"),
+    ("CCol", {}, "reverse", "yes"),
+    ("CColorPicker", {"label": "label"}, "open", "yes"),
+    ("CCombobox", {}, "open", "yes"),
+    ("CContainer", {}, "fluid", "yes"),
+    ("CContextMenu", {"aria_label": "x"}, "open", "yes"),
+    ("CDateInput", {}, "name", 3),
+    ("CDialog", {}, "open", "yes"),
+    ("CDivider", {}, "decorative", "yes"),
+    ("CEditable", {}, "editing", "yes"),
+    ("CFileInput", {}, "multiple", "yes"),
+    ("CForm", {}, "disabled", "yes"),
+    ("CGrid", {}, "min_col", 3),
+    ("CGridItem", {}, "class_", 3),
+    ("CHoverCard", {}, "open", "yes"),
+    ("CImage", {"src": "x", "alt": "x", "width": 1, "height": 1}, "draggable", "yes"),
+    ("CInfiniteScroll", {}, "has_more", "yes"),
+    ("CInput", {}, "name", 3),
+    ("CListbox", {"label": "label"}, "multiple", "yes"),
+    ("CMenu", {}, "open", "yes"),
+    ("CMenuCheckboxItem", {"value": "value"}, "disabled", "yes"),
+    ("CMenuSubmenu", {"value": "value"}, "disabled", "yes"),
+    ("CMultiSelect", {"options": [], "placeholder": "x"}, "open", "yes"),
+    ("CNumberInput", {}, "show_controls", "yes"),
+    ("CPinInput", {}, "mask", "yes"),
+    ("CPopover", {}, "open", "yes"),
+    ("CProgress", {"label": "label"}, "value_text", 3),
+    ("CRadioGroup", {"name": "name"}, "value", 3),
+    ("CRangeSlider", {}, "name", 3),
+    ("CRating", {}, "allow_clear", "yes"),
+    ("CRow", {}, "reverse", "yes"),
+    ("CSelect", {"options": [], "placeholder": "x"}, "open", "yes"),
+    ("CSidebar", {}, "collapsed", "yes"),
+    ("CSkeleton", {}, "width", 3),
+    ("CSlider", {}, "name", 3),
+    ("CSortable", {}, "disabled", "yes"),
+    ("CSpinner", {"label": "label"}, "class_", 3),
+    ("CSplitButton", {}, "disabled", "yes"),
+    ("CSplitter", {}, "disabled", "yes"),
+    ("CStepper", {"label": "label"}, "interactive", "yes"),
+    ("CSwitch", {}, "checked", "yes"),
+    ("CTab", {"value": "value"}, "disabled", "yes"),
+    ("CTabs", {"default_value": "x"}, "loop", "yes"),
+    ("CTagsInput", {}, "name", 3),
+    ("CTextarea", {}, "name", 3),
+    ("CTimeInput", {}, "name", 3),
+    ("CTimePicker", {}, "clearable", "yes"),
+    ("CTimeline", {}, "label", 3),
+    ("CTimelineItem", {}, "class_", 3),
+    ("CToolbar", {"label": "label"}, "loop", "yes"),
+    ("CTooltip", {}, "open", "yes"),
+    ("CTour", {}, "open", "yes"),
+    ("CTourStep", {"value": "value"}, "arrow", "yes"),
+    ("CTransferList", {}, "required", "yes"),
+    ("CTree", {"label": "label"}, "disabled", "yes"),
+    ("CVirtualList", {}, "focusable", "yes"),
 ]
 
 
@@ -880,9 +944,25 @@ def test_every_public_component_with_the_general_check_has_an_invalid_input_case
     assert checked == {case[0] for case in _GENERALLY_CHECKED}
 
 
+def test_every_public_kwargs_annotation_resolves_at_run_time():
+    # Citry's input check and the editor read the Kwargs annotations from the
+    # live class, and leave a field unchecked when its annotation names a type
+    # imported only for type checkers.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    unresolved = []
+    for definition in installation.definitions:
+        try:
+            get_type_hints(installation[definition].Kwargs)
+        except NameError as error:
+            unresolved.append(f"{definition.__name__}: {error}")
+    assert unresolved == []
+
+
 def test_cdisclosure_keeps_its_own_heading_level_check():
-    # CDisclosure keeps Citry's general check off and checks heading_level
-    # itself, so it still renders `heading_level="2"`.
+    # CDisclosure keeps Citry's general check off so that a wrong
+    # heading_level gets Citry UI's one-line message, and its own check still
+    # accepts `heading_level="2"`.
     app = Citry(autodiscover=False)
     installation = app.register_library(citry_ui)
     disclosure = next(installation[d] for d in installation.definitions if d.__name__ == "CDisclosure")

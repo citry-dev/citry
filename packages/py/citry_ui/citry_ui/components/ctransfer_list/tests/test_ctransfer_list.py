@@ -184,8 +184,8 @@ def test_declaration_values_and_parent_value_are_validated():
 @pytest.mark.parametrize(
     ("source", "message"),
     [
-        ('<c-CTransferList c-required="1" />', "required must be a bool"),
-        ('<c-CTransferList size="xl" />', "size must be one of"),
+        ('<c-CTransferList c-required="1" />', r"CTransferList\.Kwargs\.required expects bool"),
+        ('<c-CTransferList size="xl" />', r"CTransferList\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"),
         ('<c-CTransferList form="bad id" />', "cannot contain ASCII whitespace"),
         ("<c-CTransferList c-value=\"'a'\" />", "sequence of strings"),
         (

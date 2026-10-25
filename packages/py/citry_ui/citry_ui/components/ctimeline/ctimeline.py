@@ -189,10 +189,6 @@ class CTimeline(LibraryComponent):
     class Slots:
         default: SlotInput[CTimelineDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_TIMELINE_CONTEXT, None) is not None:
             raise ValueError(
@@ -244,10 +240,6 @@ class CTimelineItem(LibraryComponent):
         default: SlotInput[CTimelineItemDefaultSlotData]
         opposite: SlotInput[CTimelineItemOppositeSlotData] | None = None
         indicator: SlotInput[CTimelineItemIndicatorSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "default" not in self.raw_slots:

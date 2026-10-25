@@ -71,8 +71,8 @@ def test_circle_keeps_equal_geometry():
 @pytest.mark.parametrize(
     ("input_name", "bad_value", "error"),
     [
-        ("kind", "card", ValueError),
-        ("animation", "spin", ValueError),
+        ("kind", "card", TypeError),
+        ("animation", "spin", TypeError),
         ("lines", 0, ValueError),
         ("lines", 1.5, TypeError),
         ("width", "10px;color:red", ValueError),
@@ -81,7 +81,10 @@ def test_circle_keeps_equal_geometry():
     ],
 )
 def test_invalid_inputs_fail(input_name, bad_value, error):
-    with pytest.raises(error):
+    # A wrong type fails Citry's input check, which names the field; a value
+    # of the right type that breaks a rule fails Citry UI's own check.
+    match = rf"CSkeleton\.Kwargs\.{input_name} expects" if error is TypeError else None
+    with pytest.raises(error, match=match):
         _render(CSkeleton(**{input_name: bad_value}))
 
 

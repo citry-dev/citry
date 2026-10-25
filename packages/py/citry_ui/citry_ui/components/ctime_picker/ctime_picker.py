@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import time
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias, TypedDict, cast
+from typing import Any, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
@@ -34,9 +34,9 @@ from citry_ui.components._validation import (
     validate_non_empty_string,
     validate_optional_boolean,
 )
-
-if TYPE_CHECKING:
-    from citry_ui.components.cpopover import CPopoverPlacement
+from citry_ui.components.cpopover import (
+    CPopoverPlacement,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
+)
 
 CTimePickerTime: TypeAlias = time | str
 CTimePickerVariant = Literal["outline", "filled", "plain"]
@@ -244,10 +244,6 @@ class CTimePicker(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_time_picker_snapshot", None)
