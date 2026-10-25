@@ -164,10 +164,6 @@ class CTable(LibraryComponent):
         loading: SlotInput[CTableLoadingSlotData] | None = None
         error: SlotInput[CTableErrorSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(
         self,
         kwargs: Kwargs,

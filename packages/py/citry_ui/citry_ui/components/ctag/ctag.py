@@ -219,10 +219,6 @@ class CTagGroup(LibraryComponent):
         label: SlotInput[CTagGroupLabelSlotData] | None = None
         description: SlotInput[CTagGroupDescriptionSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         label = _plain("CTagGroup label", kwargs.label)
         group_id = _plain("CTagGroup id", kwargs.id, optional=True)
@@ -786,10 +782,6 @@ class CTag(LibraryComponent):
     class Slots:
         default: SlotInput[CTagDefaultSlotData]
         start: SlotInput[CTagStartSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         provided = self.inject(_TAG_CONTEXT_KEY, None)

@@ -431,10 +431,6 @@ class CTransferListItem(LibraryComponent):
     class Slots:
         default: SlotInput[CTransferListItemDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         validate_boolean("CTransferListItem", "disabled", kwargs.disabled)
         registry = _registry(self)

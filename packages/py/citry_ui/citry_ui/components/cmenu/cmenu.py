@@ -4008,10 +4008,6 @@ class CMenuItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _item_snapshot(self, "CMenuItem", kwargs, kind="item")
 
@@ -4230,10 +4226,6 @@ class CMenuRadioItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _item_snapshot(self, "CMenuRadioItem", kwargs, kind="radio")
 
@@ -4328,10 +4320,6 @@ class CMenuGroup(LibraryComponent):
     class Slots:
         label: SlotInput[CMenuGroupLabelSlotData]
         default: SlotInput[CMenuGroupDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self, "CMenuGroup")
@@ -4453,10 +4441,6 @@ class CMenuRadioGroup(LibraryComponent):
     class Slots:
         default: SlotInput[CMenuRadioGroupDefaultSlotData]
         label: SlotInput[CMenuRadioGroupLabelSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_menu_radio_group_snapshot", None)
@@ -4780,10 +4764,6 @@ class CMenuSeparator(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self, "CMenuSeparator")

@@ -600,10 +600,6 @@ class CSplitterPanel(LibraryComponent):
     class Slots:
         default: SlotInput[CSplitterPanelDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         panel_id = _identifier(kwargs.id)
         label = _plain("CSplitterPanel", "label", kwargs.label)

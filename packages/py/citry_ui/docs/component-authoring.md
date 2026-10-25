@@ -106,21 +106,27 @@ input schemas.
 
 Citry's general input type check rejects an input whose type does not match
 its annotation, or a value outside a listed choice (a `Literal`), with a
-`TypeError` that names the input and the expected type.
+`TypeError` that names the input and the expected type. Leave it on unless a
+component has a reason to turn it off:
 
 - **Internal components** (`CInternal*`) keep it on. Their inputs come only
   from Citry UI's own templates, so a failure there is a Citry UI bug.
-- **Public components** turn it off for now with a nested `Lint` class after
-  their input schemas. Their own checks name the input and the accepted
-  values, and some accept values their annotations do not name, such as a
-  `StrEnum` member where the annotation is a `Literal` of strings.
+- **Public components keep it on** when their annotations name every value
+  they accept. Its own checks then run after Citry's and cover what an
+  annotation cannot say, such as a number range or a non-empty string.
+- **Turn it off on a public component** only when its own checks give a
+  better error than Citry's, or when it accepts values its annotations do
+  not name. Do this with a nested `Lint` class after its input schemas, and
+  say why in a comment:
 
 ```python
-class CTabs(LibraryComponent):
+class CDisclosure(LibraryComponent):
     class Kwargs: ...
 
     class Slots: ...
 
+    # heading_level accepts 2 to 6 as a number or as text, and Citry UI's
+    # error says so in one line.
     class Lint:
         check_input_types = False
 ```

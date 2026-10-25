@@ -338,10 +338,6 @@ class CSortableItem(LibraryComponent):
         default: SlotInput[CSortableItemSlotData] | None = None
         handle: SlotInput[CSortableItemSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         validate_boolean("CSortableItem", "disabled", kwargs.disabled)
         registry = _registry(self)
