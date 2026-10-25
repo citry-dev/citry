@@ -5371,7 +5371,7 @@ fn validate_tag_grouping(
     // We've found the previous node. Now check if it's allowed
     let prev_tag_name = effective_control_flow_tag(previous_node);
 
-    if !allowed_previous_tags.contains(prev_tag_name) {
+    if !allowed_previous_tags.contains(&prev_tag_name) {
         return Err(context.error_from_token(
             start_tag_token,
             format!(

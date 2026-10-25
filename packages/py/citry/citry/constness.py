@@ -98,13 +98,14 @@ from weakref import ref
 import wrapt
 from typing_extensions import Self
 
+from citry._walk import Call, run
 from citry.citry_element import CitryElement
 from citry.component_like import ComponentLike
 from citry.slots import Slot
 from citry.util.html import escape
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection, Hashable, Iterable
+    from collections.abc import Callable, Collection, Generator, Hashable, Iterable
     from weakref import ReferenceType
 
     from citry.citry_context import CitryContext
@@ -1375,12 +1376,16 @@ def precompute_const_parts(
     )
     token = _ACTIVE_PRECOMPUTE_ADAPTER.set(adapter or _HTML_PRECOMPUTE_ADAPTER)
     try:
-        return _precompute_into(
-            body,
-            const_names,
-            precompute_context,
-            visible_names=root_visible_names,
-            precompute_attrs=precompute_attrs,
+        # The walk runs as generators on one driver loop, so Python's call
+        # depth does not grow with how deeply the template nests.
+        return run(
+            _precompute_into(
+                body,
+                const_names,
+                precompute_context,
+                visible_names=root_visible_names,
+                precompute_attrs=precompute_attrs,
+            )
         )
     finally:
         _ACTIVE_PRECOMPUTE_ADAPTER.reset(token)
@@ -1393,17 +1398,26 @@ def _precompute_into(
     *,
     visible_names: frozenset[str] | None,
     precompute_attrs: bool,
-) -> list[BodyItem]:
-    """Precompute one body list (the recursion step of ``precompute_const_parts``)."""
+) -> Generator[Call, Any, list[BodyItem]]:
+    """
+    Precompute one body list for ``precompute_const_parts``.
+
+    A walk generator: it yields a ``Call`` for each item where it would call
+    ``_precompute_item``, and ``citry._walk.run`` runs those calls from a
+    list.
+    """
     precomputed: list[BodyItem] = []
     for item in body:
-        _precompute_item(
-            item,
-            const_names,
-            precompute_context,
-            precomputed,
-            visible_names=visible_names,
-            precompute_attrs=precompute_attrs,
+        (
+            yield Call(
+                _precompute_item,
+                item,
+                const_names,
+                precompute_context,
+                precomputed,
+                visible_names=visible_names,
+                precompute_attrs=precompute_attrs,
+            )
         )
     return _merge_static(precomputed)
 
@@ -1416,8 +1430,8 @@ def _precompute_item(
     *,
     visible_names: frozenset[str] | None,
     precompute_attrs: bool,
-) -> None:
-    """Precompute one body item, appending the result(s) to ``out``."""
+) -> Generator[Call, Any, None]:
+    """Precompute one body item, appending the result(s) to ``out``, as a walk generator."""
     # Imported lazily to break the import cycle; see the NOTE above precompute_const_parts.
     from citry.nodes import (  # noqa: PLC0415
         ComponentNode,
@@ -1460,7 +1474,8 @@ def _precompute_item(
         # writer's scope), so const expressions inside them precompute like any
         # other. Each FillNode below applies its own binding scope before its
         # body is precomputed.
-        precomputed = _precompute_into(
+        precomputed = yield Call(
+            _precompute_into,
             item.body,
             const_names,
             precompute_context,
@@ -1491,7 +1506,8 @@ def _precompute_item(
         # mask matching outer constants. A c-bind that may still supply either
         # name makes every variable-dependent expression unsafe to precompute.
         fill_const_names, fill_visible_names = _fill_body_scope(item, const_names, visible_names)
-        precomputed = _precompute_into(
+        precomputed = yield Call(
+            _precompute_into,
             item.body,
             fill_const_names,
             precompute_context,
@@ -1505,7 +1521,8 @@ def _precompute_item(
 
     if isinstance(item, SlotNode):
         # A slot's fallback body stays in the surrounding component scope.
-        precomputed = _precompute_into(
+        precomputed = yield Call(
+            _precompute_into,
             item.body,
             const_names,
             precompute_context,
@@ -1530,30 +1547,37 @@ def _precompute_item(
                 # remains at all.
                 if branch_body is not None:
                     for child in branch_body:
-                        _precompute_item(
-                            child,
-                            const_names,
-                            precompute_context,
-                            out,
-                            visible_names=visible_names,
-                            precompute_attrs=precompute_attrs,
+                        (
+                            yield Call(
+                                _precompute_item,
+                                child,
+                                const_names,
+                                precompute_context,
+                                out,
+                                visible_names=visible_names,
+                                precompute_attrs=precompute_attrs,
+                            )
                         )
                 return
         # Dynamic (or failing) conditions: keep the node, precompute inside the
         # branch bodies.
         out.append(
-            _precompute_branch_bodies(
-                item,
-                const_names,
-                precompute_context,
-                visible_names=visible_names,
-                precompute_attrs=precompute_attrs,
+            (
+                yield Call(
+                    _precompute_branch_bodies,
+                    item,
+                    const_names,
+                    precompute_context,
+                    visible_names=visible_names,
+                    precompute_attrs=precompute_attrs,
+                )
             )
         )
         return
 
     if isinstance(item, ForNode):
-        unrolled = _try_unroll_for(
+        unrolled = yield Call(
+            _try_unroll_for,
             item,
             const_names,
             precompute_context,
@@ -1564,12 +1588,15 @@ def _precompute_item(
             out.append(unrolled)
             return
         out.append(
-            _precompute_branch_bodies(
-                item,
-                const_names,
-                precompute_context,
-                visible_names=visible_names,
-                precompute_attrs=precompute_attrs,
+            (
+                yield Call(
+                    _precompute_branch_bodies,
+                    item,
+                    const_names,
+                    precompute_context,
+                    visible_names=visible_names,
+                    precompute_attrs=precompute_attrs,
+                )
             )
         )
         return
@@ -1671,7 +1698,7 @@ def _precompute_branch_bodies(
     *,
     visible_names: frozenset[str] | None,
     precompute_attrs: bool,
-) -> BodyItem:
+) -> Generator[Call, Any, BodyItem]:
     """
     Precompute inside a kept ``IfNode``/``ForNode``: same node, precomputed branch bodies.
 
@@ -1689,7 +1716,8 @@ def _precompute_branch_bodies(
         introduced = frozenset(branch[3])
         branch_const_names = const_names.difference(introduced)
         branch_visible_names = None if visible_names is None else visible_names | introduced
-        precomputed = _precompute_into(
+        precomputed = yield Call(
+            _precompute_into,
             body,
             branch_const_names,
             precompute_context,
@@ -1713,7 +1741,7 @@ def _try_unroll_for(
     *,
     visible_names: frozenset[str] | None,
     precompute_attrs: bool,
-) -> BodyItem | None:
+) -> Generator[Call, Any, BodyItem | None]:
     """
     Run an all-const loop once, ahead of time; retain a guarded node, or ``None``.
 
@@ -1760,7 +1788,8 @@ def _try_unroll_for(
         for count, (body, body_context) in enumerate(node.iter_bodies(precompute_context), start=1):
             if count > _MAX_UNROLL_ITERATIONS:
                 return None
-            precomputed = _precompute_into(
+            precomputed = yield Call(
+                _precompute_into,
                 body,
                 inner_names,
                 body_context,
@@ -1790,29 +1819,30 @@ def _statically_precomputable(body: list[BodyItem], names: frozenset[str], *, pr
     conditions and every branch body fit. Any other node kind (component,
     slot, fill, nested template, extension-injected) does not precompute to text,
     so the body fails.
+
+    Nested ``<c-if>`` branch bodies are checked on this function's own stack,
+    so Python's call depth does not grow with how deeply they nest. The
+    answer does not depend on the order the bodies are checked in.
     """
     # Imported lazily to break the import cycle; see the NOTE above precompute_const_parts.
     from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprNode, IfNode  # noqa: PLC0415
 
-    for item in body:
-        if _ACTIVE_PRECOMPUTE_ADAPTER.get().static_parts(item) is not None:
-            continue
-        if isinstance(item, ExprNode) and set(item.used_vars) <= names:
-            continue
-        if precompute_attrs and isinstance(item, ElementAttrsNode) and set(item.used_vars) <= names:
-            continue
-        if isinstance(item, ElementKeyNode) and set(item.used_vars) <= names:
-            continue
-        if (
-            isinstance(item, IfNode)
-            and _conds_are_const(item, names)
-            and all(
-                _statically_precomputable(branch[2], names, precompute_attrs=precompute_attrs)
-                for branch in item.branches
-            )
-        ):
-            continue
-        return False
+    adapter = _ACTIVE_PRECOMPUTE_ADAPTER.get()
+    pending: list[list[BodyItem]] = [body]
+    while pending:
+        for item in pending.pop():
+            if adapter.static_parts(item) is not None:
+                continue
+            if isinstance(item, ExprNode) and set(item.used_vars) <= names:
+                continue
+            if precompute_attrs and isinstance(item, ElementAttrsNode) and set(item.used_vars) <= names:
+                continue
+            if isinstance(item, ElementKeyNode) and set(item.used_vars) <= names:
+                continue
+            if isinstance(item, IfNode) and _conds_are_const(item, names):
+                pending.extend(branch[2] for branch in item.branches)
+                continue
+            return False
     return True
 
 

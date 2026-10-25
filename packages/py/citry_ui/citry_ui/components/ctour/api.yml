@@ -75,7 +75,7 @@ events:
   - id: ctour-events
     component: CTour
     entries:
-      - {id: on-open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CTourOpenChangeDetail) => void', interfaces: [CTourOpenChangeDetail]}, trigger: Activator dismissal skip finish target loss or native lifecycle requests a visibility change., detail: {display: '{reason, active, value, controlled, source}', interfaces: [CTourOpenChangeDetail]}, behavior: Uncontrolled state commits before notification; controlled state is request-only.}
+      - {id: on-open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CTourOpenChangeDetail) => void', interfaces: [CTourOpenChangeDetail]}, trigger: 'Activator dismissal skip finish target loss or native lifecycle requests a visibility change, or a dialog or popover around the tour closes it.', detail: {display: '{reason, active, value, controlled, source}', interfaces: [CTourOpenChangeDetail]}, behavior: 'Uncontrolled state commits before notification; controlled state is request-only, except that a closing ancestor closes the tour with reason "ancestor".'}
       - {id: on-active-change, name: onActiveChange, signature: {display: '(active: number, detail: CTourActiveChangeDetail) => void', interfaces: [CTourActiveChangeDetail]}, trigger: Previous next client reconciliation or missing-target skip requests a step change., detail: {display: '{previousActive, value, previousValue, reason, controlled, source}', interfaces: [CTourActiveChangeDetail]}, behavior: Uncontrolled state commits before notification; controlled state is request-only.}
 
 methods: []
@@ -147,7 +147,7 @@ interfaces:
       - {id: scroll, name: CTourScroll, definition: 'Literal["auto", "smooth", "none"]'}
       - {id: missing-target, name: CTourMissingTarget, definition: 'Literal["skip", "close"]'}
       - {id: size, name: CTourSize, definition: 'Literal["sm", "md", "lg"]'}
-      - {id: open-reason, name: CTourOpenReason, definition: 'Literal["activator", "close", "escape", "outside", "skip", "finish", "missing-target", "native"]'}
+      - {id: open-reason, name: CTourOpenReason, definition: 'Literal["activator", "close", "escape", "outside", "skip", "finish", "missing-target", "native", "ancestor"]'}
       - {id: active-reason, name: CTourActiveReason, definition: 'Literal["next", "previous", "client", "missing-target"]'}
       - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
       - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}

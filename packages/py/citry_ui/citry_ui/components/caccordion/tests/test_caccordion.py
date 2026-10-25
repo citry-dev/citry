@@ -110,6 +110,14 @@ def test_accordion_renders_native_anatomy_and_conditional_region_pair():
     assert "aria-labelledby=" not in neutral
 
 
+@pytest.mark.parametrize("level_input", ['heading_level="4"', 'c-heading_level="4"'])
+def test_accordion_accepts_the_heading_level_as_text_or_number(level_input: str):
+    # A template attribute passes text and a `c-` attribute passes the number;
+    # both must name the same heading element.
+    html = _render_template(_basic_template(f'value="canopy" {level_input}'))
+    assert html.count("<h4") == 2
+
+
 def test_multiple_mode_normalizes_by_item_membership_and_accepts_disabled_open_item():
     html = _render_template(
         _basic_template(
@@ -129,6 +137,11 @@ def test_multiple_mode_normalizes_by_item_membership_and_accepts_disabled_open_i
         ('multiple c-collapsible="False"', "must remain true"),
         ('variant="loud"', "variant must be one of"),
         ('heading_level="1"', "heading_level must be one of"),
+        ('heading_level="7"', "heading_level must be one of"),
+        ('c-heading_level="True"', "heading_level must be one of"),
+        # Only the exact numbers and their text name a level.
+        ('heading_level="02"', "heading_level must be one of"),
+        ('c-heading_level="2.0"', "heading_level must be one of"),
     ],
 )
 def test_accordion_rejects_invalid_root_configuration(root_inputs: str, message: str):

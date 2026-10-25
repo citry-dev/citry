@@ -500,14 +500,36 @@ def _union_matcher(members: tuple[object, ...]) -> _Matcher | None:
 
 
 def _literal_matcher(members: tuple[object, ...]) -> _Matcher | None:
-    """Accept a value equal to a member of the same type, so ``True`` does not pass for ``Literal[1]``."""
+    """
+    Accept a value equal to a member, of the member's type or a subclass of it.
+
+    A ``StrEnum`` member or ``Markup("sm")`` passes for ``Literal["sm"]``, as
+    a ``str`` subclass passes for ``str``, although a type checker rejects
+    both. ``True`` never passes for ``Literal[1]``, and ``1`` never passes
+    for ``Literal[True]``.
+    """
     if not members:
         return None
     accepted: set[type] = {_NONE_TYPE} if None in members else set()
     values = tuple(member for member in members if member is not None)
 
     def equals_member(value: object) -> bool:
-        return any(type(value) is type(member) and value == member for member in values)
+        for member in values:
+            member_type = type(member)
+            if type(value) is member_type:
+                if value == member:
+                    return True
+                continue
+            # bool is a subclass of int, but Literal keeps them apart both ways.
+            if isinstance(value, bool) or member_type is bool:
+                continue
+            # Compare with the member type's own __eq__, so a subclass that
+            # overrides __eq__ cannot pass for a member it does not equal.
+            # `is True` also rejects NotImplemented, which str.__eq__ returns
+            # for a proxy that only claims to be a str.
+            if isinstance(value, member_type) and member_type.__eq__(member, value) is True:
+                return True
+        return False
 
     return _Matcher(accepted, value_tests=(equals_member,) if values else ())
 

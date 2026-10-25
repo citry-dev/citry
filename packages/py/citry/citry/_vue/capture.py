@@ -30,7 +30,12 @@ from citry.constness import const_value
 from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprHtmlAttr, ExprNode, ForNode, Node
 from citry.util.html import Markup, decode_character_references
 
-from .direct import DirectProjectionRender, bind_nested_template, wrap_python_composition_result
+from .direct import (
+    DirectProjectionRender,
+    bind_nested_template,
+    bind_received_output,
+    wrap_python_composition_result,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
@@ -881,7 +886,7 @@ class PreparedExprNode(ExprNode):
 
     def resolve_evaluated_value(self, value: object, context: CitryContext) -> RenderPart:
         """Normalize one already evaluated expression without evaluating it again."""
-        value = bind_nested_template(value, context)
+        value = bind_received_output(bind_nested_template(value, context), context)
         if isinstance(value, DirectProjectionRender):
             return value
         if isinstance(value, (PreparedDynamicElementOpen, PreparedDynamicElementClose)):
@@ -1464,6 +1469,13 @@ def _validate_prepared_render(render: CitryRender) -> None:
                 raise TypeError(f"prepared Vue rendering received unsupported raw output: {type(part).__name__}")
 
 
+def is_v_pre_element_open(value: object) -> bool:
+    """Whether a typed opening carries an authored `v-pre`, so Vue leaves its contents as written."""
+    return isinstance(value, PreparedElementOpen) and any(
+        attr.origin == "source" and attr.name.casefold() == "v-pre" for attr in value.attrs
+    )
+
+
 def is_ignored_element_open(value: object) -> bool:
     """Whether a typed opening carries `#c-ignore` metadata."""
     return isinstance(value, PreparedElementOpen) and any(
@@ -1472,9 +1484,10 @@ def is_ignored_element_open(value: object) -> bool:
 
 
 def _ignored_element_close_indices(nodes: list[BodyItem]) -> set[int]:
-    """Return the positions of the closes that end `#c-ignore` elements in one body."""
+    """Return the positions of the closes that end `#c-ignore` and `v-pre` elements in one body."""
     closes: set[int] = set()
-    # Each entry says whether that open element carries `#c-ignore`.
+    # Each entry says whether that open element carries `#c-ignore` or
+    # `v-pre`, whose close must stay a typed node the assembler can find.
     stack: list[bool] = []
     for index, node in enumerate(nodes):
         # An extension may wrap the opening (the i18n binding wrapper does for
@@ -1486,7 +1499,10 @@ def _ignored_element_close_indices(nodes: list[BodyItem]) -> set[int]:
             opening = opening.original  # type: ignore[attr-defined]
         if isinstance(opening, PreparedElementOpenNode):
             if not opening.is_void:
-                stack.append(any(item[0] == "morph" for item in opening.element_metadata))
+                stack.append(
+                    any(item[0] == "morph" for item in opening.element_metadata)
+                    or any(attr.key.casefold() == "v-pre" for attr in opening._authored_vue_attrs)
+                )
         elif isinstance(node, ElementAttrsNode):
             # An opening this function cannot read still needs its own entry,
             # or its close would end the wrong element.
@@ -1494,7 +1510,7 @@ def _ignored_element_close_indices(nodes: list[BodyItem]) -> set[int]:
                 stack.append(False)
         elif isinstance(node, PreparedConstantNode) and isinstance(node.value, PreparedElementOpen):
             if not node.value.is_void:
-                stack.append(is_ignored_element_open(node.value))
+                stack.append(is_ignored_element_open(node.value) or is_v_pre_element_open(node.value))
         elif isinstance(node, PreparedElementCloseNode) and stack and stack.pop():
             closes.add(index)
     return closes

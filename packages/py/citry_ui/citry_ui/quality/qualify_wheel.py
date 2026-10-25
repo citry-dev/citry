@@ -28,6 +28,7 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/components/_date.py",
     "citry_ui/components/_dialog_controller.py",
     "citry_ui/components/_form_control_runtime.py",
+    "citry_ui/components/_heading.py",
     "citry_ui/components/_i18n.py",
     "citry_ui/components/_scroll_geometry.py",
     "citry_ui/components/_shared_component_assets.py",

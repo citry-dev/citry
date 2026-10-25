@@ -112,8 +112,7 @@ its annotation, or a value outside a listed choice (a `Literal`), with a
   from Citry UI's own templates, so a failure there is a Citry UI bug.
 - **Public components** turn it off for now with a nested `Lint` class after
   their input schemas. Their own checks name the input and the accepted
-  values, and some accept values their annotations do not name, such as
-  `CDisclosure`'s `heading_level="2"`, or a `str` subclass such as a
+  values, and some accept values their annotations do not name, such as a
   `StrEnum` member where the annotation is a `Literal` of strings.
 
 ```python

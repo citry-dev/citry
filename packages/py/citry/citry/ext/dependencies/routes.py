@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from citry._owned_resource import _OwnedResource
+from citry.cache import _forget_stored_key
 from citry.ext.dependencies.scripts import (
     component_script_hash,
     gen_asset_cache_key,
@@ -105,8 +106,12 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
         return _OwnedResource(url="", content=script.content, content_type=content_type).response()
 
     def serve_asset(request: Any, *, file_name: str) -> RouteResponse:  # noqa: ARG001 - unused, see above
-        content = citry.cache.get(gen_asset_cache_key(file_name))
+        key = gen_asset_cache_key(file_name)
+        content = citry.cache.get(key)
         if content is None:
+            # This process's next render that links this file writes it again
+            # instead of trusting its record that it is stored.
+            _forget_stored_key(citry, key)
             return RouteResponse(status=404)
         extension = file_name.rpartition(".")[2]
         return _OwnedResource(

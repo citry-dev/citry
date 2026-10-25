@@ -45,6 +45,7 @@ from citry._nested_declarations import (
     _compose_nested_declaration_class,
     _get_nested_class_declarations,
 )
+from citry._walk import Call, run
 from citry.attrs import (
     hide_template_empty_values,
     is_vue_code_attr_name,
@@ -64,7 +65,7 @@ from citry.util.exception import set_component_error_message
 from citry.util.misc import snake_to_pascal
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
@@ -2533,6 +2534,31 @@ class ExtensionManager:
         origin: str,
         template_kind: Literal["primary", "standalone", "nested"],
     ) -> list[BodyItem]:
+        # The walk runs as generators on one driver loop, so Python's call
+        # depth does not grow with how deeply the template nests. Child bodies
+        # are resolved, completely and in order, before their parent.
+        return run(
+            self._resolve_foreign_body_walk(
+                component_class,
+                nodes,
+                provider_metadata=provider_metadata,
+                template_id=template_id,
+                origin=origin,
+                template_kind=template_kind,
+            )
+        )
+
+    def _resolve_foreign_body_walk(
+        self,
+        component_class: type[Component],
+        nodes: list[BodyItem],
+        *,
+        provider_metadata: Mapping[str, object | None],
+        template_id: str,
+        origin: str,
+        template_kind: Literal["primary", "standalone", "nested"],
+    ) -> Generator[Call, Any, list[BodyItem]]:
+        """The walk generator behind ``_resolve_foreign_body``."""
         from citry.nodes import (  # noqa: PLC0415
             ComponentNode,
             FillNode,
@@ -2555,7 +2581,8 @@ class ExtensionManager:
             elif isinstance(item, (IfNode, ForNode)):
                 child_bodies.extend(branch[2] for branch in item.branches)
             for child in child_bodies:
-                resolved = self._resolve_foreign_body(
+                resolved = yield Call(
+                    self._resolve_foreign_body_walk,
                     component_class,
                     child,
                     provider_metadata=provider_metadata,
