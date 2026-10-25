@@ -448,10 +448,14 @@ def test_fallbacks_render_the_same_way_in_development_mode(render_path: str) -> 
 
 def _paused_fallbacks() -> int:
     """Count slot fallbacks whose steps are paused, still holding their scopes."""
+    # `type()` reads each object's real type. `isinstance()` would also read
+    # `__class__`, which a lazy proxy that another test left alive, such as
+    # Django's `staticfiles_storage`, answers by setting itself up, and that
+    # raises ImproperlyConfigured when Django has no static files settings.
     return sum(
         1
         for value in gc.get_objects()
-        if isinstance(value, types.GeneratorType)
+        if type(value) is types.GeneratorType
         and value.gi_code.co_qualname == "SlotNode._render_steps.<locals>.fallback"
         and value.gi_frame is not None
     )
