@@ -833,6 +833,27 @@ def _default_value_dispatch_for(kind: type[object]) -> bool:
     )
 
 
+def _render_passes_through(kind: type[object]) -> bool:
+    """
+    Whether `_render_value` returns a value of this exact type unchanged.
+
+    Only the built-in ``CitryRender`` does, and only while no code has
+    registered it for a value protocol or patched the class.
+    ``SlotNode._render_steps`` asks this too before it hands a fallback to
+    the body renderer, so both give the same result. It is checked on every call, so a
+    registration or class change made after import still counts.
+    """
+    return (
+        kind is _DEFAULT_VALUE_TYPES[2]
+        and _default_value_dispatch_for(kind)
+        and kind.__bases__ == (object,)
+        and "__citry_element__" not in kind.__dict__
+        and "__getattribute__" not in kind.__dict__
+        and "__getattr__" not in kind.__dict__
+        and "__class__" not in kind.__dict__
+    )
+
+
 def _render_slot_value(slot: Slot, data: Any, fallback: Slot | None, context: CitryContext) -> RenderPart:
     """Keep the insertion context while a Python slot produces a component value."""
     token = _VALUE_CONTEXT.set(context)
@@ -909,15 +930,9 @@ def _render_value(
     kind = type(value)
     if kind is str and _default_value_dispatch_for(kind):
         return escape(value)
-    if (
-        kind is _DEFAULT_VALUE_TYPES[2]
-        and _default_value_dispatch_for(kind)
-        and kind.__bases__ == (object,)
-        and "__citry_element__" not in kind.__dict__
-        and "__getattribute__" not in kind.__dict__
-        and "__getattr__" not in kind.__dict__
-        and "__class__" not in kind.__dict__
-    ):
+    # Test the type here before calling the helper: this line runs for every
+    # value a template prints, and most are not a CitryRender.
+    if kind is _DEFAULT_VALUE_TYPES[2] and _render_passes_through(kind):
         return value
     # Exact numbers are plain text unless registered for a protocol; skip
     # the lookups below for them.

@@ -327,6 +327,8 @@
   framework already uses part of Python's stack. `citry check` now also
   reports a `Secret`, or a value that cannot be sent as JSON, however
   deeply it sits in `js_data()`.
+- A template that nests about 90 or more `<c-slot>` tags inside each
+  other's fallback content now renders. It used to raise `RecursionError`.
 - In a component that uses Vue, a `Markup` value without tags, such as
   `Markup("a&#127;b")`, now keeps a character such as U+007F, or the
   Unicode noncharacter U+FDD0, that a numeric reference names, as the

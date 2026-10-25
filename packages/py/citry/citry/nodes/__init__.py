@@ -98,6 +98,7 @@ from citry.citry_render import (
     DeferredComponent,
     _DeferredRun,
     _DeferredRunRow,
+    _render_passes_through,
     _render_slot_value,
     _render_value,
 )
@@ -125,7 +126,7 @@ from citry.constness import (
     _overlay_const_mapping,
     const_value,
 )
-from citry.slots import Slot, SlotData, normalize_slot_fills
+from citry.slots import Slot, SlotData, _normalize_slot_data, normalize_slot_fills
 from citry.util.exception import add_slot_to_error_message
 from citry.util.html import escape
 from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
@@ -134,7 +135,7 @@ from citry_core.safe_eval import compile_expr
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-    from citry._vue.direct import DirectExecutionFrame
+    from citry._vue.direct import DirectExecutionFrame, DirectFillSource
     from citry.citry_render import RenderPart
     from citry.citry_template import CitryTemplate
     from citry.component import Component
@@ -2203,19 +2204,52 @@ class ComponentNode(Node):
 @final
 class BodySteps(NamedTuple):
     """
-    The bodies a control-flow node renders, and how it wraps their parts.
+    The bodies a node renders, and how it wraps their parts.
 
-    ``IfNode`` and ``ForNode`` return this from ``_render_steps``, so the body
-    renderer can render each body on its own stack instead of calling the
-    node's ``render``, which would call the body renderer again for every
-    level of nesting. ``bodies`` yields each ``(body, context)`` pair in render
+    ``IfNode``, ``ForNode`` and ``SlotNode`` return this from
+    ``_render_steps``, so the body renderer can render each body on its own
+    stack instead of calling the node's ``render``, which would call the
+    body renderer again for every level of nesting. ``SlotNode`` returns it
+    only for its own fallback. ``bodies`` yields each ``(body, context)`` pair in render
     order, and is read one pair at a time, so loop side effects and errors
     happen in the same order as in ``render``. ``finish`` takes the parts of
     every body, in order, and returns the node's part.
     """
 
     bodies: Iterator[tuple[Sequence[BodyItem], CitryContext]]
-    finish: Callable[[list[RenderPart]], CitryRender]
+    finish: Callable[[list[RenderPart]], RenderPart]
+    # The list the bodies' parts go into. The body renderer makes its own
+    # when this is None; a node passes one when `bodies` must read the parts
+    # itself before it finishes, as a slot's fallback does.
+    parts: list[RenderPart] | None = None
+    # When true, an error that passes out of a body is thrown into `bodies`
+    # at its `yield`, so a `with` block there sees it; otherwise `bodies` is
+    # only closed.
+    wraps_errors: bool = False
+
+
+class _CarriedStopIteration(Exception):
+    """
+    Carry a ``StopIteration`` out of a slot fallback's ``bodies`` generator.
+
+    Python turns a ``StopIteration`` that leaves a generator into a
+    ``RuntimeError``. One raised by template code (a ``next()`` on an empty
+    iterator in a template function) or by an ``on_slot_rendered`` hook comes
+    out unchanged when a fallback renders through a ``Slot`` call, as
+    ``render`` still does, so the generator raises this instead, and the
+    body renderer raises the original from ``stop``.
+    """
+
+    def __init__(self, stop: StopIteration) -> None:
+        super().__init__()
+        self.stop = stop
+
+
+# What a `<c-slot>` renders, as `SlotNode._select` returns it: the
+# component, the slot name, whether it is required, the slot data, and the
+# fill it got (or None). A plain tuple, because a NamedTuple costs more to
+# build and this is made for every slot of every render.
+_SlotSelection: TypeAlias = tuple[Any, str, bool, dict[str, Any], "Slot | None"]
 
 
 @final
@@ -2426,7 +2460,9 @@ class ForNode(Node):
         parts: list[RenderPart] = []
         for body, body_context in steps.bodies:
             parts.extend(_render_body(body, body_context))
-        return steps.finish(parts)
+        # A loop's `finish` always builds a `CitryRender`. The wider return
+        # type is for a slot's fallback steps, which return the wrapped part.
+        return cast("CitryRender", steps.finish(parts))
 
     def _render_steps(self, context: CitryContext) -> BodySteps | CitryRender:
         """
@@ -2822,6 +2858,27 @@ class SlotNode(Node):
 
         A required slot with no fill raises, with a "did you mean" hint over
         the fills the component received.
+
+        Inside a template body the body renderer usually renders the fallback
+        itself, through ``_render_steps``, so nested fallbacks do not add a
+        Python call per level; this method gives the same result.
+        """
+        selected = self._select(context)
+        # A render part, for a simple component's outlet, is never a tuple.
+        if not isinstance(selected, tuple):
+            return selected
+        from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
+
+        if direct_prepared_render_active():
+            return self._render_direct(context, *selected)
+        return self._render_plain(context, *selected)
+
+    def _select(self, context: CitryContext) -> _SlotSelection | RenderPart:
+        """
+        Pick what this slot renders: the part for a simple outlet, or the fill to use.
+
+        ``render`` and ``_render_steps`` both start here, so they resolve the
+        same props, look up the same fill, and write the same trace line.
         """
         component = context.component
         if component is None:
@@ -2860,11 +2917,7 @@ class SlotNode(Node):
             slot_fills=fills,
         )
 
-        from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
-
-        if direct_prepared_render_active():
-            return self._render_direct(context, component, name, required, data, fill)
-        return self._render_plain(context, component, name, required, data, fill)
+        return (component, name, required, data, fill)
 
     def _render_plain(
         self,
@@ -2917,11 +2970,9 @@ class SlotNode(Node):
     ) -> RenderPart:
         """Render one prepared outlet and retain only its selected direct relation."""
         from citry._vue.direct import (  # noqa: PLC0415
-            DirectSlotRender,
             begin_slot_execution,
             direct_execution_scope,
             direct_fill_source,
-            wrap_slot_result,
         )
 
         body_slot = _make_body_slot(
@@ -2956,31 +3007,158 @@ class SlotNode(Node):
             part = _render_slot_value(slot_used, data, body_slot if fill is not None else None, context)
             if not component.citry.extensions.has_hook("on_slot_rendered"):
                 return part
-            hook_result = part.selected if isinstance(part, DirectSlotRender) else part
-            selected = component.citry.extensions.on_slot_rendered(
-                component=component,
-                slot=slot_used,
-                slot_name=name,
-                slot_node=self,
-                slot_is_required=required,
-                result=hook_result,
-                # Text or HTML a hook returns comes back as a render of its
-                # own, which a direct slot needs for its fill.
-                context=context,
-            )
-            selected_source = source
-            if isinstance(selected, DirectSlotRender):
-                selected_source = selected.fill_source
-                selected = selected.selected
-            return wrap_slot_result(
-                selected,
-                fill_source=selected_source,
-                public_name=name,
-                receiver_render_id=component.id,
-                source=self.source,
-                span=self.position,
-                execution=execution,
-            )
+            return self._direct_slot_hook(context, component, name, required, slot_used, source, execution, part)
+
+    def _direct_slot_hook(
+        self,
+        context: CitryContext,
+        component: Any,
+        name: str,
+        required: bool,
+        slot_used: Slot,
+        source: DirectFillSource,
+        execution: DirectExecutionFrame,
+        part: RenderPart,
+    ) -> RenderPart:
+        """Run ``on_slot_rendered`` on a direct slot's part, and wrap what it returns."""
+        from citry._vue.direct import DirectSlotRender, wrap_slot_result  # noqa: PLC0415
+
+        hook_result = part.selected if isinstance(part, DirectSlotRender) else part
+        selected = component.citry.extensions.on_slot_rendered(
+            component=component,
+            slot=slot_used,
+            slot_name=name,
+            slot_node=self,
+            slot_is_required=required,
+            result=hook_result,
+            # Text or HTML a hook returns comes back as a render of its
+            # own, which a direct slot needs for its fill.
+            context=context,
+        )
+        selected_source = source
+        if isinstance(selected, DirectSlotRender):
+            selected_source = selected.fill_source
+            selected = selected.selected
+        return wrap_slot_result(
+            selected,
+            fill_source=selected_source,
+            public_name=name,
+            receiver_render_id=component.id,
+            source=self.source,
+            span=self.position,
+            execution=execution,
+        )
+
+    def _render_steps(self, context: CitryContext) -> BodySteps | RenderPart:
+        """
+        Return the fallback for the body renderer to render, or the part ``render`` returns.
+
+        A slot that gets no fill renders its own body. Rendering that body
+        through a ``Slot`` call, as ``render`` does, would start the body
+        renderer again for every nested fallback, so here the fallback body
+        is handed to the running body renderer instead. Everything else
+        happens as in ``_render_direct``, in the same order: the same Slot
+        is made, the same execution is started, the same scopes are held
+        while the body renders, and the result is wrapped the same way.
+
+        A passed fill renders a body that another component wrote, through
+        that component, so walking it here would not save a frame per level;
+        it renders through ``_render_direct``. So does a fallback while code
+        has patched the ``CitryRender`` class, which ``_render_value`` would
+        treat differently. Without a Vue capture session, which every
+        ordinary render has, the slot renders through ``_render_plain``.
+        """
+        from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
+
+        selected = self._select(context)
+        # A render part, for a simple component's outlet, is never a tuple.
+        if not isinstance(selected, tuple):
+            return selected
+        if not direct_prepared_render_active():
+            return self._render_plain(context, *selected)
+        component, name, required, data, fill = selected
+        if fill is not None or not _render_passes_through(CitryRender):
+            return self._render_direct(context, component, name, required, data, fill)
+
+        # Imported only here, so a filled slot does not pay for them.
+        from citry._vue.direct import (  # noqa: PLC0415
+            active_execution,
+            begin_slot_execution,
+            direct_execution_scope,
+            direct_fill_source,
+            wrap_slot_result,
+        )
+
+        # The same steps as `_render_direct` with no fill, up to the Slot call.
+        body_slot = _make_body_slot(
+            self.body,
+            context,
+            type(component).__name__,
+            name,
+            None,
+            None,
+            self.position,
+            source=self.source,
+            kind=LogicalFillKind.FALLBACK,
+        )
+        if required:
+            raise RuntimeError(_missing_required_slot_message(component, name))
+        source = direct_fill_source(body_slot)
+        if source is None:
+            return self._render_plain(context, component, name, required, data, None)
+        # `begin_slot_execution` checks that the fallback's source belongs to
+        # the open session, which is the check `Slot.__call__` makes. The
+        # branch there for a Slot with no source cannot apply: it has one.
+        execution = begin_slot_execution(
+            source,
+            public_name=name,
+            receiver_render_id=component.id,
+            source=self.source,
+            span=self.position,
+        )
+
+        parts: list[RenderPart] = []
+        finished: list[RenderPart] = []
+
+        def fallback() -> Iterator[tuple[Sequence[BodyItem], CitryContext]]:
+            try:
+                # The scopes `_render_direct` holds around the Slot call, then
+                # the one `capture_slot_call` holds around the body, in that order.
+                with direct_execution_scope(execution), add_slot_to_error_message(type(component).__name__, name):
+                    # A fallback reads none of the slot data, but invalid data
+                    # must still fail here, as it does in a Slot call.
+                    _normalize_slot_data(data)
+                    # `capture_slot_call` would find this execution active and
+                    # not yet used, and mark it used; do the same. The check
+                    # only guards against a later change breaking that.
+                    if active_execution() is not execution or execution.consumed:
+                        raise RuntimeError("a slot fallback's execution is not the active one")
+                    execution.consumed = True
+                    with direct_execution_scope(execution):
+                        # The fallback renders in the slot's own context: it
+                        # has no slot data or fallback variable to add, and the
+                        # slot site's provides are that context's own.
+                        yield (self.body, context)
+                        rendered = CitryRender(parts=parts, context=context)
+                    part: RenderPart = wrap_slot_result(
+                        rendered,
+                        fill_source=source,
+                        public_name=execution.public_name,
+                        receiver_render_id=execution.receiver_render_id,
+                        source=execution.source,
+                        span=execution.span,
+                        execution=execution,
+                    )
+                    if component.citry.extensions.has_hook("on_slot_rendered"):
+                        part = self._direct_slot_hook(
+                            context, component, name, required, body_slot, source, execution, part
+                        )
+                    finished.append(part)
+            except StopIteration as stop:
+                # Leaving the generator would turn it into a RuntimeError.
+                raise _CarriedStopIteration(stop) from None
+
+        return BodySteps(fallback(), lambda _parts: finished[0], parts, wraps_errors=True)
 
     def _resolve_props(self, context: CitryContext) -> tuple[str, bool, dict[str, Any]]:
         """
