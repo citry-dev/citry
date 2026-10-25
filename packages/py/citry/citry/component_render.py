@@ -2921,6 +2921,11 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
             )
         ]
     if isinstance(value, CitryRender):
+        if value.context is context and value.frame.is_component_root and value.frame.render_id == component.id:
+            # The hook returned the output it received (or an earlier
+            # replacement): it is already this component's content, not a
+            # second occurrence of the component inside itself.
+            return [CitryRender(parts=list(value.parts), context=context)]
         # An already-rendered subtree is inlined; its collected data is
         # copied into this render.
         if value.context is not context:

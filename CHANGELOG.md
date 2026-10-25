@@ -135,6 +135,15 @@
 
 ### Changed
 
+- Output that an `on_render` hook passes to another component, as in
+  `return Frame(body=result)`, or that an `on_component_rendered` hook
+  passes on as `ctx.render`, no longer carries the component's own
+  `data-cid-*` and `data-ccss-*` markers on its top elements, the same as
+  content passed as a nested template. The other component's root
+  element, which is now the component's root, still carries them. When
+  both components set the same `css_data` variable, the passed output now
+  inherits the value from that root instead of using the component's
+  value directly.
 - **Breaking:** Citry now requires Python 3.11 or newer, because Python
   3.10 reached its end of life on October 1, 2026. On Python 3.10, pip
   keeps installing Citry 0.6.x. If your project declares
@@ -475,12 +484,13 @@
   import annotations`. Every field used to accept any value from the
   browser.
 - An `on_render` hook that passes the output it received to another
-  component, such as `return Frame(body=result)`, now works when the
-  component is used inside another component's template, on a page
-  rendered without Vue. This also works for an `on_component_rendered`
-  hook that wraps `ctx.render`, and when the component, or one around it,
-  is cached. Turning the page into HTML used to raise `RuntimeError: The
-  same rendered component id was encountered more than once`.
+  component, such as `return Frame(body=result)`, now works inside another
+  component's template and on pages that use Vue. The same holds for an
+  `on_component_rendered` hook that wraps `ctx.render`, and when the
+  component or one around it is cached. It used to raise `RuntimeError:
+  The same rendered component id was encountered more than once`, and on
+  a Vue page it failed even for a component used on its own, as did a
+  hook that returns `result` unchanged.
 
 ### Performance
 
