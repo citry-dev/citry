@@ -61,6 +61,10 @@
   now always lists the tags it may follow in the same order, for example
   `<c-if>, <c-elif>` for `<c-else>`. The order used to change from one run
   to the next.
+- Rendering a Vue component whose data nests hundreds of levels deep no
+  longer crashes the process on a thread with a small stack, such as a
+  thread on musl Linux or one started after a small
+  `threading.stack_size()`.
 - The Vue compiler and the server renderer that writes a Vue component's
   HTML handle templates nested hundreds of tags deep on threads with small
   stacks, where they used to crash the process. The server now writes elements nested up
