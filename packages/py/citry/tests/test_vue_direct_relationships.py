@@ -1641,10 +1641,196 @@ $component({});
     assert _vue_host(Caller().render().serialize()) == host
 
 
-def test_a_fallback_shown_by_a_fill_cannot_hold_a_component() -> None:
-    # The caller's template compiles the fallback, but a component call in
-    # it would be recorded in the receiver's data, which that template
-    # does not read.
+@pytest.mark.parametrize("receiver_uses_vue", [True, False], ids=["receiver-js", "receiver-no-js"])
+@pytest.mark.parametrize(
+    ("fallback", "host"),
+    [
+        ("<c-Child />", "<main><article><!--[--><!--[--><b>child</b><!--]--><!--]--></article></main>"),
+        (
+            '<c-for each="item in items"><c-Child #c-key="item" /></c-for>',
+            "<main><article><!--[--><!--[--><b>child</b><b>child</b><!--]--><!--]--></article></main>",
+        ),
+        (
+            '<c-provide key="k" value="v"><i>text</i></c-provide>',
+            "<main><article><!--[--><i>text</i><!--]--></article></main>",
+        ),
+        (
+            '<c-provide key="k" value="v"><c-Child /></c-provide>',
+            "<main><article><!--[--><!--[--><b>child</b><!--]--><!--]--></article></main>",
+        ),
+        ("<c-Wrap>wrapped</c-Wrap>", "<main><article><!--[--><em>wrapped</em><!--]--></article></main>"),
+        ("<c-Wrap><c-Child /></c-Wrap>", "<main><article><!--[--><em><b>child</b></em><!--]--></article></main>"),
+        (
+            '<c-Child c-title="label" />',
+            '<main><article><!--[--><!--[--><b title="from-receiver">child</b><!--]--><!--]--></article></main>',
+        ),
+        # The same output as when the receiver shows this fallback itself.
+        (
+            "<c-Child :title=\"'fixed'\" />",
+            '<main><article data-allow-mismatch="children"><b>child</b></article></main>',
+        ),
+    ],
+    ids=[
+        "one",
+        "keyed-loop",
+        "provide",
+        "provide-child",
+        "transparent",
+        "transparent-child",
+        "server-value",
+        "vue-literal",
+    ],
+)
+def test_a_fallback_shown_by_a_fill_shows_its_components(fallback: str, host: str, receiver_uses_vue: bool) -> None:
+    # The caller's template compiles the fallback, so the calls in it are
+    # recorded in the caller's data, which that template reads (#351). A
+    # transparent component's content is copied in place, as in any fill.
+    # Values computed on the server, and Vue bindings that read no Vue data,
+    # work there too.
+    registry = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = registry
+        template = """
+<b c-bind="attrs">child</b>
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": kwargs}
+
+    class Wrap(Component):
+        citry = registry
+        transparent = True
+        template = """
+<em><c-slot /></em>
+"""
+
+    receiver_js = (
+        """
+$component({});
+"""
+        if receiver_uses_vue
+        else None
+    )
+
+    class Receiver(Component):
+        citry = registry
+        template = f"""
+<article><c-slot name="body">{fallback}</c-slot></article>
+"""
+        js = receiver_js
+
+        def template_data(self, kwargs, slots):
+            return {"items": ["a", "b"], "label": "from-receiver"}
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver><c-fill name="body" fallback="fallback">{{ fallback }}</c-fill></c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+    assert _vue_host(Caller().render().serialize()) == host
+
+
+@pytest.mark.parametrize(
+    ("fallback", "what"),
+    [
+        ('<c-slot name="inner"><i>inner</i></c-slot>', "a '<c-slot>' outlet."),
+        ("<c-Child>child fill</c-Child>", "a component with fill content."),
+        ('<c-Child :title="message" />', "content that uses Vue data or event handlers (:title="),
+        ('<c-Child @c-click="go" />', "content that uses Vue data or event handlers (@c-click="),
+        ('<i :class="message">text</i>', "content that uses Vue data or event handlers (:class="),
+        ('<b @c-click="go">text</b>', "content that uses Vue data or event handlers (@c-click on <b>)"),
+        (
+            '<c-Wrap><i :class="message">text</i></c-Wrap>',
+            "content that uses Vue data or event handlers (:class=",
+        ),
+        ("<c-WrapOwnFallback />", "content that uses Vue data or event handlers (:class="),
+        ('<i ref="target">text</i>', "content that uses Vue data or event handlers (ref="),
+        ('<i @click="message = 1">text</i>', "content that uses Vue data or event handlers (@click="),
+    ],
+    ids=[
+        "outlet",
+        "filled-component",
+        "component-vue-binding",
+        "component-event-handler",
+        "element-vue-binding",
+        "element-event-handler",
+        "inside-transparent",
+        "transparent-own-fallback",
+        "element-ref",
+        "element-assignment",
+    ],
+)
+def test_a_fallback_shown_by_a_fill_refuses_content_that_needs_the_receiver(fallback: str, what: str) -> None:
+    # A `<c-slot>` would choose its content from the receiver's slots, and a
+    # child's fill would be passed on through a slot in the caller's
+    # template. A Vue binding or a `@c-` handler would read the caller's Vue
+    # data and handlers. The caller's template, which compiles the fallback,
+    # can do none of these for the receiver.
+    registry = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = registry
+        template = """
+<b><c-slot>child</c-slot></b>
+"""
+
+    class Wrap(Component):
+        citry = registry
+        transparent = True
+        template = """
+<em><c-slot /></em>
+"""
+
+    class WrapOwnFallback(Component):
+        citry = registry
+        transparent = True
+        template = """
+<em><c-slot><i :class="message">own</i></c-slot></em>
+"""
+
+    class Receiver(Component):
+        citry = registry
+        template = f"""
+<article><c-slot name="body">{fallback}</c-slot></article>
+"""
+        js = """
+$component({
+  data() {
+    return { message: "receiver" };
+  },
+});
+"""
+
+        class Events:
+            def go(self) -> None:
+                pass
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver><c-fill name="body" fallback="fallback">{{ fallback }}</c-fill></c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+    message = (
+        "Caller shows the fallback of Receiver's 'body' slot through '<c-fill fallback=...>', so that fallback"
+        f" cannot hold {what}"
+    )
+    with pytest.raises(TypeError, match=re.escape(message)):
+        Caller().render().serialize()
+
+
+def test_a_fill_that_shows_the_fallback_keeps_its_own_vue_bindings() -> None:
+    # Only the fallback is checked for Vue data reads. The caller wrote the
+    # rest of its fill, so its bindings around `{{ fallback }}` read its own
+    # Vue data, as in any fill.
     registry = Citry(autodiscover=False)
 
     class Child(Component):
@@ -1665,14 +1851,22 @@ $component({});
     class Caller(Component):
         citry = registry
         template = """
-<main><c-Receiver><c-fill name="body" fallback="fallback">{{ fallback }}</c-fill></c-Receiver></main>
+<main><c-Receiver>
+  <c-fill name="body" fallback="fallback"><p :class="tone">{{ fallback }}</p></c-fill>
+</c-Receiver></main>
 """
         js = """
-$component({});
+$component({
+  data() {
+    return { tone: "caller" };
+  },
+});
 """
 
-    with pytest.raises(TypeError, match=r"through '<c-fill fallback=\.\.\.>' cannot hold a component"):
-        Caller().render().serialize()
+    assert (
+        _vue_host(Caller().render().serialize())
+        == '<main><article data-allow-mismatch="children"><p><b>child</b></p></article></main>'
+    )
 
 
 def test_a_fill_shown_by_another_component_keeps_its_own_text() -> None:

@@ -275,11 +275,16 @@
 - In a component that uses Vue, a `<c-fill fallback="...">` that shows
   the receiving component's fallback now shows the receiving component's
   values, not the caller's values with the same names, and no longer fails
-  when a value is `Markup`. A fallback shown this way that holds a
-  component or a `<c-slot>` now raises an error, where it used to drop
-  that content or fail with an unrelated error. Content passed through
-  a captured `Slot` to another component no longer shows the page's
-  own text in its place.
+  when a value is `Markup`. A fallback shown this way can now hold
+  components, including inside a `<c-provide>` or a component marked
+  `transparent = True`. One that holds a `<c-slot>`, a component other
+  than those with content between its tags, a Vue attribute that uses
+  Vue data, such as `:title="message"` or `ref`, or a `@c-` event handler
+  raises an error. Such a fallback used to drop that content, fail with
+  an unrelated error, or read the caller's Vue data and run the caller's
+  event handler of the same name.
+- In a component that uses Vue, content passed through a captured `Slot`
+  to another component no longer shows the page's own text in its place.
 - In a component that uses Vue, `{{ }}` expressions, `c-` bindings such
   as `c-title`, `<c-if>`, `<c-for>`, and `simple = True` and transparent
   components inside an element with `v-pre` now render, and the `v-pre`
