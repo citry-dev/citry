@@ -195,10 +195,6 @@ class CFormCollection(LibraryComponent):
         # Keep this camelCase spelling in sync with the JavaScript data key.
         serverDefaults: dict[str, bool]  # noqa: N815
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_form_collection_snapshot", None)
         if cached is not None:
@@ -321,10 +317,6 @@ class CFormCollectionItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CFormCollectionItemSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "default" not in self.raw_slots:

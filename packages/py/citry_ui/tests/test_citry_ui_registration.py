@@ -796,9 +796,89 @@ def test_internal_components_keep_the_general_input_type_check():
     assert [d.__name__ for d in internal if installation[d]._citry_input_types is False] == []
 
 
-def test_public_components_keep_their_own_input_checks():
-    # Public components check their own inputs and keep Citry's general check
-    # off; CDisclosure still renders `heading_level="2"` with it off.
+# Each entry names a public component that keeps Citry's general input type
+# check on, the inputs it needs, one input, and a wrong value for it. Citry's
+# check must reject the value with a TypeError that names the field.
+_GENERALLY_CHECKED = [
+    ("CBreadcrumbs", {"items": []}, "wrap", "yes"),
+    ("CCarousel", {"label": "Stories"}, "loop", "yes"),
+    ("CCarouselSlide", {"value": "one"}, "label", 3),
+    ("CCommandPalette", {"entries": [], "label": "Commands"}, "disabled", "yes"),
+    ("CDataGrid", {"columns": [], "rows": [], "label": "Grid"}, "multi_sort", "yes"),
+    ("CDrawer", {}, "dismissible", "yes"),
+    ("CField", {}, "required", "yes"),
+    ("CFormCollection", {"label": "Items"}, "allow_add", "yes"),
+    ("CFormCollectionItem", {"value": "one", "label": "One"}, "removable", "yes"),
+    ("CList", {}, "ordered", "yes"),
+    ("CListItem", {}, "disabled", "yes"),
+    ("CNativeSelect", {"options": []}, "disabled", "yes"),
+    ("CNavigationMenu", {"label": "Site"}, "loop", "yes"),
+    ("CNavigationMenuLink", {"href": "/"}, "current", "yes"),
+    ("CNavigationMenuItem", {"value": "more"}, "disabled", "yes"),
+    ("CPagination", {"pages": 3}, "show_controls", "yes"),
+    # A value outside a listed choice, and template text for an int.
+    ("CPagination", {"pages": 3}, "variant", "bogus"),
+    ("CPagination", {}, "pages", "3"),
+    ("CScrollArea", {}, "aria_label", 3),
+    ("CTable", {"columns": [], "rows": []}, "striped", "yes"),
+    ("CTagGroup", {"label": "Tags"}, "mandatory", "yes"),
+    ("CTag", {"value": "one"}, "disabled", "yes"),
+    ("CToastRegion", {}, "pause_on_hover", "yes"),
+    ("CToggleGroup", {"label": "View"}, "multiple", "yes"),
+    ("CToggle", {}, "pressed", "yes"),
+    ("CTreeGrid", {"columns": [], "rows": [], "label": "Tree"}, "disabled", "yes"),
+    # Classes that keep the check on while another class in their family
+    # turns it off.
+    ("CAccordionItem", {"value": "one"}, "disabled", "yes"),
+    ("CCascaderOption", {"value": "one", "label": "One"}, "disabled", "yes"),
+    ("CDropTarget", {"label": "Files"}, "multiple", "yes"),
+    ("CListboxGroup", {}, "label", 3),
+    ("CListboxOption", {"value": "one"}, "disabled", "yes"),
+    ("CMenuGroup", {}, "class_", 3),
+    ("CMenuItem", {}, "disabled", "yes"),
+    ("CMenuRadioGroup", {}, "value", 3),
+    ("CMenuRadioItem", {"value": "one"}, "disabled", "yes"),
+    ("CMenuSeparator", {}, "class_", 3),
+    ("CRadio", {"value": "one"}, "disabled", "yes"),
+    ("CSortableItem", {"value": "one", "label": "One"}, "disabled", "yes"),
+    ("CSplitterPanel", {"id": "one", "label": "One"}, "min_size", "wide"),
+    ("CStep", {}, "optional", "yes"),
+    ("CTabPanel", {}, "value", 3),
+    ("CTransferListItem", {"value": "one", "label": "One"}, "disabled", "yes"),
+    ("CTreeItem", {"value": "one", "label": "One"}, "disabled", "yes"),
+    ("CVirtualListItem", {}, "item_key", 3),
+    ("CVirtualWindow", {"total_count": 3}, "focusable", "yes"),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "kwargs", "field", "value"), _GENERALLY_CHECKED, ids=[f"{c[0]}-{c[2]}" for c in _GENERALLY_CHECKED]
+)
+def test_public_components_with_the_general_check_reject_a_wrong_type(name, kwargs, field, value):
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    component = next(installation[d] for d in installation.definitions if d.__name__ == name)
+    assert component._citry_input_types is not False
+
+    with pytest.raises(TypeError, match=rf"{name}\.Kwargs\.{field} expects"):
+        component(**kwargs, **{field: value}).render().serialize(deps_strategy="ignore")
+
+
+def test_every_public_component_with_the_general_check_has_an_invalid_input_case():
+    # Removing another opt-out must come with a case in `_GENERALLY_CHECKED`.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    checked = {
+        d.__name__
+        for d in installation.definitions
+        if not d.__name__.startswith("CInternal") and installation[d]._citry_input_types is not False
+    }
+    assert checked == {case[0] for case in _GENERALLY_CHECKED}
+
+
+def test_cdisclosure_keeps_its_own_heading_level_check():
+    # CDisclosure keeps Citry's general check off and checks heading_level
+    # itself, so it still renders `heading_level="2"`.
     app = Citry(autodiscover=False)
     installation = app.register_library(citry_ui)
     disclosure = next(installation[d] for d in installation.definitions if d.__name__ == "CDisclosure")

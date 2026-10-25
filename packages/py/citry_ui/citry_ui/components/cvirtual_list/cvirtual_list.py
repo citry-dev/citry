@@ -254,10 +254,6 @@ class CVirtualListItem(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListItemDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "default" not in self.raw_slots:
             raise ValueError("CVirtualListItem requires a default content slot.")
@@ -508,10 +504,6 @@ class CVirtualWindow(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_virtual_window_snapshot", None)

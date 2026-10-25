@@ -152,10 +152,6 @@ class CList(LibraryComponent):
     class Slots:
         default: SlotInput[CListDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         validate_boolean("CList", "ordered", kwargs.ordered)
         validate_boolean("CList", "reversed", kwargs.reversed)
@@ -244,10 +240,6 @@ class CListItem(LibraryComponent):
         start: SlotInput[CListItemStartSlotData] | None = None
         description: SlotInput[CListItemDescriptionSlotData] | None = None
         end: SlotInput[CListItemEndSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context_value = self.inject(_LIST_CONTEXT_KEY, None)

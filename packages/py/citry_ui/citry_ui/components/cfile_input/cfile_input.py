@@ -580,10 +580,6 @@ class CDropTarget(LibraryComponent):
     class Slots:
         default: SlotInput[CDropTargetDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(FIELD_CONTEXT_KEY, None) is not None:
             raise ValueError("CDropTarget cannot be used as the control inside CField; use CFileInput.")

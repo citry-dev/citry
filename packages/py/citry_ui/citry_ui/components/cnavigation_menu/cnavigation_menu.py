@@ -244,10 +244,6 @@ class CNavigationMenu(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_navigation_menu_snapshot", None)
         if cached is not None:
@@ -790,10 +786,6 @@ class CNavigationMenuLink(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuLinkDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self)
         context.count += 1
@@ -848,10 +840,6 @@ class CNavigationMenuItem(LibraryComponent):
     class Slots:
         label: SlotInput[CNavigationMenuItemLabelSlotData]
         default: SlotInput[CNavigationMenuItemDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self)
