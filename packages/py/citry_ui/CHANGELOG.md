@@ -8,6 +8,19 @@
   title, now reads a numeric character reference with thousands of digits
   (`&#` followed by 5,000 zeros and `106;`) instead of raising
   `ValueError`.
+- A popup inside a `CDialog` or `CDrawer` now calls
+  `onOpenChange(false, ...)` with reason `"ancestor"` when the dialog
+  closes, as `CMenu` already did. This applies to `CPopover`,
+  `CHoverCard`, `CTooltip`, `CSelect`, `CMultiSelect`, `CCombobox`,
+  `CCascader`, `CColorPicker`, `CDatePicker`, `CDateRange`, `CTimePicker`
+  and `CTour`.
+- `CMenu` no longer calls `onOpenChange` on page load when the server
+  renders it open inside a closed dialog, which matches the other popups:
+  a popup that was never shown reports nothing. If a controlled popup's
+  owner asks it to open while the dialog around it is closed, the popup
+  calls `onOpenChange(false, ...)` with reason `"ancestor"` once while the
+  dialog stays closed, and again after the dialog has been shown and
+  closed.
 
 ### Changed
 

@@ -124,6 +124,105 @@ _TEMPLATES: dict[str, str] = {
         </div>
       </section>
     """,
+    "ctooltip": """
+      <section>
+        <output id="owner-step">{{ step }}</output>
+        <button
+          id="advance-owner"
+          type="button"
+          @c-click="advance"
+        >Advance</button>
+        <button
+          id="open-on-server"
+          type="button"
+          @c-click="open_on_server"
+        >Open on server</button>
+        <button
+          id="close-on-server"
+          type="button"
+          @c-click="close_on_server"
+        >Close on server</button>
+        <button
+          id="disable-on-server"
+          type="button"
+          @c-click="disable_on_server"
+        >Disable on server</button>
+        <button
+          id="enable-on-server"
+          type="button"
+          @c-click="enable_on_server"
+        >Enable on server</button>
+        <button
+          id="disable-and-open-on-server"
+          type="button"
+          @c-click="disable_and_open_on_server"
+        >Disable and open on server</button>
+        <button
+          id="disable-and-close-on-server"
+          type="button"
+          @c-click="disable_and_close_on_server"
+        >Disable and close on server</button>
+        <button
+          id="remove-on-server"
+          type="button"
+          @c-click="remove_on_server"
+        >Remove on server</button>
+        <div id="overlay-slot">
+          <c-if cond="not show"></c-if>
+          <c-elif cond="controlled">
+            <c-CTooltip
+              :open="clientOpen"
+              :onOpenChange="(open, detail) => { log(open, detail); clientOpen = open; }"
+            >
+              <c-fill name="activator" data="{ activator_attrs }">
+                <a href="#tip" c-bind="activator_attrs">Open overlay</a>
+              </c-fill>
+              <c-fill name="default">Tooltip text</c-fill>
+            </c-CTooltip>
+          </c-elif>
+          <c-elif cond="pair">
+            <div class="instance">
+              <c-CTooltip
+                c-open="server_open"
+                c-disabled="disabled"
+                :onOpenChange="(open, detail) => log(open, detail, 1)"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <a href="#tip" c-bind="activator_attrs">Open overlay</a>
+                </c-fill>
+                <c-fill name="default">Tooltip text</c-fill>
+              </c-CTooltip>
+            </div>
+            <div class="instance">
+              <c-CTooltip
+                c-open="server_open"
+                c-disabled="disabled"
+                :onOpenChange="(open, detail) => log(open, detail, 2)"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <a href="#tip" c-bind="activator_attrs">Open overlay</a>
+                </c-fill>
+                <c-fill name="default">Tooltip text</c-fill>
+              </c-CTooltip>
+            </div>
+          </c-elif>
+          <c-else>
+            <div class="instance">
+              <c-CTooltip
+                c-open="server_open"
+                c-disabled="disabled"
+                :onOpenChange="(open, detail) => log(open, detail)"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <a href="#tip" c-bind="activator_attrs">Open overlay</a>
+                </c-fill>
+                <c-fill name="default">Tooltip text</c-fill>
+              </c-CTooltip>
+            </div>
+          </c-else>
+        </div>
+      </section>
+    """,
     "cselect": """
       <section>
         <output id="owner-step">{{ step }}</output>
@@ -1572,6 +1671,7 @@ _TEMPLATES: dict[str, str] = {
 # count as open.
 _OPENING: dict[str, tuple[str, str]] = {
     "chover_card": ("focus", ".cui-hover-card"),
+    "ctooltip": ("focus", ".cui-tooltip"),
     "cselect": ("click", ".cui-select__popup"),
     "cmulti_select": ("click", ".cui-multi-select__popup"),
     "ccombobox": ("keyboard", '[data-citry-ui-part="popup"]'),
@@ -1594,8 +1694,13 @@ _MODAL = {"cdialog", "calert_dialog", "cdrawer", "ccommand_palette"}
 
 # Components whose server render takes an `open` input, and those that take
 # `disabled`.
-_SERVER_OPEN = [name for name in _OPENING if name not in {"cdate_picker", "cdate_range", "ctime_picker"}]
-_DISABLED = [name for name in _OPENING if name not in {"cdialog", "calert_dialog", "cdrawer", "cpopover", "ctour"}]
+# CTooltip takes part only in the dialog tests at the end of this file. The
+# re-render tests above find a separate gap in how it reports a disable and a
+# change to the server's `open` input (#367).
+_DIALOG_TESTS_ONLY = {"ctooltip"}
+_OVERLAYS = [name for name in _OPENING if name not in _DIALOG_TESTS_ONLY]
+_SERVER_OPEN = [name for name in _OVERLAYS if name not in {"cdate_picker", "cdate_range", "ctime_picker"}]
+_DISABLED = [name for name in _OVERLAYS if name not in {"cdialog", "calert_dialog", "cdrawer", "cpopover", "ctour"}]
 
 # The reason each component reports when disabling closes it. CSelect and
 # CMultiSelect already report a forced "ancestor" close when they are
@@ -1627,7 +1732,14 @@ _IS_OPEN = """([scope, selector, modal]) => {
 }"""
 
 
-def _owner_page(component: str, *, controlled: bool = False, pair: bool = False) -> tuple[Citry, str]:
+def _owner_page(
+    component: str,
+    *,
+    controlled: bool = False,
+    pair: bool = False,
+    in_dialog: bool = False,
+    server_open: bool = False,
+) -> tuple[Citry, str]:
     app = Citry(secret="citry-ui-open-state-rerender-e2e", autodiscover=False)  # noqa: S106
     app.set_mounted_prefix("/citry")
     app.register_library(citry_ui)
@@ -1751,7 +1863,96 @@ def _owner_page(component: str, *, controlled: bool = False, pair: bool = False)
           });
         """
 
-    return app, str(Page())
+    # The same owner inside a dialog that the server opens and closes, like a
+    # form inside a CDialog. Closing the dialog re-renders the owner too, so
+    # the overlay's browser code runs again and takes over its open state.
+    class DialogOwner(Component):
+        citry = app
+
+        class Kwargs:
+            dialog_step: int = 0
+            dialog_open: bool = False
+
+        class State(Kwargs):
+            pass
+
+        class Events:
+            def open_dialog_on_server(self, state: Any) -> DialogOwner:
+                return DialogOwner(dialog_step=state.dialog_step + 1, dialog_open=True)
+
+            def close_dialog_on_server(self, state: Any) -> DialogOwner:
+                return DialogOwner(dialog_step=state.dialog_step + 1, dialog_open=False)
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {
+                "dialog_step": kwargs.dialog_step,
+                "dialog_open": kwargs.dialog_open,
+                "inner_controlled": controlled,
+                "inner_open": server_open,
+            }
+
+        template = """
+          <section>
+            <output id="dialog-step">{{ dialog_step }}</output>
+            <button
+              id="open-dialog-on-server"
+              type="button"
+              @c-click="open_dialog_on_server"
+            >Open dialog on server</button>
+            <button
+              id="close-dialog-on-server"
+              type="button"
+              @c-click="close_dialog_on_server"
+            >Close dialog on server</button>
+            <c-CDialog
+              c-open="dialog_open"
+              :onOpenChange="(open, detail) => log(open, detail)"
+            >
+              <c-fill name="activator" data="{ activator_attrs }">
+                <button type="button" c-bind="activator_attrs">Open dialog</button>
+              </c-fill>
+              <c-fill name="title">Form dialog</c-fill>
+              <c-fill name="default">
+                <c-overlay-owner
+                  c-controlled="inner_controlled"
+                  c-server_open="inner_open"
+                />
+              </c-fill>
+            </c-CDialog>
+          </section>
+        """
+        js = """
+          $component({
+            methods: {
+              log(open, detail) {
+                window.__openChanges.push({ open, reason: detail?.reason, instance: "dialog" });
+              },
+            },
+          });
+        """
+
+    class DialogPage(Component):
+        citry = app
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body>
+              <c-dialog-owner />
+              <c-js />
+            </body>
+          </html>
+        """
+        js = """
+          $component({
+            data() {
+              window.__openChanges = [];
+              return {};
+            },
+          });
+        """
+
+    return app, str(DialogPage() if in_dialog else Page())
 
 
 def _scope(controlled: bool = False) -> str:
@@ -1861,7 +2062,7 @@ def _close_by_user(page: Any, component: str, scope: str = _FIRST) -> None:
     _wait_open(page, component, open_=False, scope=scope)
 
 
-@pytest.mark.parametrize("component", list(_OPENING))
+@pytest.mark.parametrize("component", _OVERLAYS)
 def test_server_rerender_that_keeps_an_open_overlay_keeps_it_open(
     page: Any,
     serve_citry_ui_live: Any,
@@ -1885,7 +2086,7 @@ def test_server_rerender_that_keeps_an_open_overlay_keeps_it_open(
     assert page.evaluate("window.__openChanges") == opened
 
 
-@pytest.mark.parametrize("component", list(_OPENING))
+@pytest.mark.parametrize("component", _OVERLAYS)
 def test_two_overlays_on_one_page_keep_their_own_open_state(
     page: Any,
     serve_citry_ui_live: Any,
@@ -1958,7 +2159,7 @@ def test_user_close_survives_a_rerender_with_an_unchanged_server_open(
     assert page.evaluate("window.__openChanges") == closed
 
 
-@pytest.mark.parametrize("component", list(_OPENING))
+@pytest.mark.parametrize("component", _OVERLAYS)
 def test_client_open_binding_still_controls_the_overlay_after_a_rerender(
     page: Any,
     serve_citry_ui_live: Any,
@@ -2097,7 +2298,7 @@ def test_disable_that_also_changes_server_open_reports_the_close(
     assert page.evaluate("window.__openChanges") == [*before, {"open": False, "reason": _DISABLED_REASON[component]}]
 
 
-@pytest.mark.parametrize("component", list(_OPENING))
+@pytest.mark.parametrize("component", _OVERLAYS)
 def test_server_rerender_that_removes_an_open_overlay_reports_nothing_and_releases_the_page(
     page: Any,
     serve_citry_ui_live: Any,
@@ -2458,3 +2659,210 @@ def test_palette_opened_by_the_server_while_a_drawer_closes_in_the_same_render_o
     assert page.evaluate(_NESTED_SHOWN, drawer) == {"open": False, "modal": False}
     # Both changes came from the server, so neither overlay reports.
     assert page.evaluate("window.__openChanges") == []
+
+
+# The popups an app puts inside a dialog. Dialogs, drawers and command
+# palettes inside a dialog have their own tests above
+# (test_server_close_of_an_outer_overlay_closes_an_open_inner_one_and_releases_the_page).
+_IN_DIALOG = [name for name in _OPENING if name not in _MODAL]
+
+
+def _dialog_event(page: Any, send_event: Any, button: str, handler: str, step: int) -> None:
+    send_event(lambda: page.locator(button).evaluate("element => element.click()"), handler=handler)
+    page.wait_for_function(f"document.querySelector('#dialog-step').textContent === '{step}'")
+
+
+@pytest.mark.parametrize("component", _IN_DIALOG)
+def test_server_close_of_a_dialog_closes_an_open_popup_inside_and_reports_it(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    settle_timers: Any,
+    component: str,
+) -> None:
+    """Closing a dialog on the server closes an open popup inside it, and the popup's owner hears why."""
+    _load(page, serve_citry_ui_live, wait_for_citry_ready, component, in_dialog=True)
+    _dialog_event(page, send_event, "#open-dialog-on-server", "open_dialog_on_server", 1)
+    page.wait_for_function("document.querySelector('dialog').matches(':modal')")
+    _open_by_user(page, component)
+    opened = page.evaluate("window.__openChanges")
+
+    _dialog_event(page, send_event, "#close-dialog-on-server", "close_dialog_on_server", 2)
+    settle_timers()
+
+    assert not _is_open(page, component)
+    # The server closed the dialog, so the dialog itself reports nothing. The
+    # popup closed because the dialog around it did, which its owner hears
+    # about once.
+    assert page.evaluate("window.__openChanges")[len(opened) :] == [{"open": False, "reason": "ancestor"}]
+    leftover = page.evaluate(
+        """() => ({
+          modal: [...document.querySelectorAll(':modal')].map(element => element.tagName),
+          overflow: document.documentElement.style.overflow,
+        })"""
+    )
+    assert leftover == {"modal": [], "overflow": ""}
+    # A real click must reach the page, which fails if a hidden modal dialog
+    # still covers it.
+    page.locator("#dialog-step").click(timeout=2_000)
+
+
+@pytest.mark.parametrize("component", _IN_DIALOG)
+def test_closing_a_dialog_in_the_browser_closes_an_open_popup_inside_and_reports_it(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    settle_timers: Any,
+    component: str,
+) -> None:
+    """A dialog closed by page code, with no re-render, closes an open popup inside it the same way."""
+    _load(page, serve_citry_ui_live, wait_for_citry_ready, component, in_dialog=True)
+    # The user opens the dialog with its button, so closing it moves focus
+    # back to that button, out of the popup's trigger.
+    page.get_by_role("button", name="Open dialog", exact=True).click()
+    page.wait_for_function("document.querySelector('dialog').matches(':modal')")
+    _open_by_user(page, component)
+    opened = page.evaluate("window.__openChanges")
+
+    # Page code closes the dialog, as a form with method="dialog" does. The
+    # popup closes after the browser fires the dialog's close event, so wait
+    # for it to close.
+    page.evaluate("document.querySelector('dialog').close()")
+    _wait_open(page, component, open_=False)
+    settle_timers()
+    reports = page.evaluate("window.__openChanges")[len(opened) :]
+    # The dialog reports its own close; the popup inside reports that its
+    # ancestor closed it, once.
+    assert [report for report in reports if report.get("instance") != "dialog"] == [
+        {"open": False, "reason": "ancestor"}
+    ]
+
+
+@pytest.mark.parametrize("component", [name for name in _IN_DIALOG if name in _SERVER_OPEN or name == "ctooltip"])
+def test_a_popup_rendered_open_inside_a_closed_dialog_starts_closed_and_reports_nothing(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    settle_timers: Any,
+    component: str,
+) -> None:
+    """A popup the server renders open inside a closed dialog was never shown, so its owner hears nothing."""
+    _load(page, serve_citry_ui_live, wait_for_citry_ready, component, in_dialog=True, server_open=True)
+    settle_timers()
+
+    assert not _is_open(page, component)
+    assert page.evaluate("window.__openChanges") == []
+
+
+@pytest.mark.parametrize("component", _IN_DIALOG)
+def test_a_controlled_popup_asked_to_open_inside_a_closed_dialog_is_told_once_per_close(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    settle_timers: Any,
+    component: str,
+) -> None:
+    """An owner that asks for the popup while the dialog is closed hears why once, and again after the next close."""
+    _load(page, serve_citry_ui_live, wait_for_citry_ready, component, in_dialog=True, controlled=True)
+    scope = _scope(controlled=True)
+    _dialog_event(page, send_event, "#open-dialog-on-server", "open_dialog_on_server", 1)
+    page.wait_for_function("document.querySelector('dialog').matches(':modal')")
+    _open_by_user(page, component, scope=scope)
+    opened = page.evaluate("window.__openChanges")
+
+    _dialog_event(page, send_event, "#close-dialog-on-server", "close_dialog_on_server", 2)
+    settle_timers()
+    # The owner's handler stores each reported state, so it now holds closed.
+    assert page.evaluate("window.__openChanges")[len(opened) :] == [{"open": False, "reason": "ancestor"}]
+    closed = page.evaluate("window.__openChanges")
+
+    # Asking again while the dialog stays closed is not answered again. An
+    # owner that asks after each report would otherwise loop.
+    page.evaluate("window.__owner.clientOpen = true")
+    settle_timers()
+    assert not _is_open(page, component, scope=scope)
+    assert page.evaluate("window.__openChanges")[len(closed) :] == []
+
+    # After the dialog opens and closes again, a new request is answered.
+    page.evaluate("window.__owner.clientOpen = false")
+    _dialog_event(page, send_event, "#open-dialog-on-server", "open_dialog_on_server", 3)
+    page.wait_for_function("document.querySelector('dialog').matches(':modal')")
+    _dialog_event(page, send_event, "#close-dialog-on-server", "close_dialog_on_server", 4)
+    settle_timers()
+    reopened = page.evaluate("window.__openChanges")
+    page.evaluate("window.__owner.clientOpen = true")
+    settle_timers()
+    assert not _is_open(page, component, scope=scope)
+    assert page.evaluate("window.__openChanges")[len(reopened) :] == [{"open": False, "reason": "ancestor"}]
+
+
+@pytest.mark.parametrize("component", _IN_DIALOG)
+def test_a_controlled_popup_is_told_again_after_the_dialog_is_shown_and_closed_in_the_browser(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    settle_timers: Any,
+    component: str,
+) -> None:
+    """Showing the dialog again, with no re-render, lets the owner's next request be answered again."""
+    _load(page, serve_citry_ui_live, wait_for_citry_ready, component, in_dialog=True, controlled=True)
+    scope = _scope(controlled=True)
+    open_dialog = page.get_by_role("button", name="Open dialog", exact=True)
+    open_dialog.click()
+    page.wait_for_function("document.querySelector('dialog').matches(':modal')")
+    _open_by_user(page, component, scope=scope)
+
+    page.evaluate("document.querySelector('dialog').close()")
+    _wait_open(page, component, open_=False, scope=scope)
+    settle_timers()
+    told = page.evaluate("window.__openChanges")
+    # Asking while the dialog stays closed is not answered again. The answer
+    # to a request comes after Vue applies the new input, so give it a moment.
+    page.evaluate("window.__owner.clientOpen = true")
+    settle_timers()
+    page.wait_for_timeout(200)
+    assert [report for report in page.evaluate("window.__openChanges")[len(told) :] if "instance" not in report] == []
+    page.evaluate("window.__owner.clientOpen = false")
+
+    # The user shows the dialog again and page code closes it again; the
+    # owner's next request is answered. The popup notices it was shown after
+    # the browser lays the dialog out, so let two frames pass first.
+    open_dialog.click()
+    page.wait_for_function("document.querySelector('dialog').matches(':modal')")
+    page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    page.evaluate("document.querySelector('dialog').close()")
+    settle_timers()
+    shown = page.evaluate("window.__openChanges")
+    page.evaluate("window.__owner.clientOpen = true")
+    settle_timers()
+    page.wait_for_function(f"window.__openChanges.length > {len(shown)}")
+
+    assert not _is_open(page, component, scope=scope)
+    assert [report for report in page.evaluate("window.__openChanges")[len(shown) :] if "instance" not in report] == [
+        {"open": False, "reason": "ancestor"}
+    ]
+
+
+@pytest.mark.parametrize("component", ["chover_card", "ctooltip"])
+def test_a_focus_popup_whose_region_collapses_closes_and_reports_the_ancestor(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    settle_timers: Any,
+    component: str,
+) -> None:
+    """A focus-opened popup closes, reporting "ancestor", when CSS hides the region around its trigger."""
+    _load(page, serve_citry_ui_live, wait_for_citry_ready, component)
+    # A collapsed region hides its content with CSS, as CSidebar does.
+    page.add_style_tag(content="[data-collapsed] #overlay-slot { display: none; }")
+    _open_by_user(page, component)
+    opened = page.evaluate("window.__openChanges")
+
+    page.evaluate("document.body.setAttribute('data-collapsed', '')")
+    _wait_open(page, component, open_=False)
+    settle_timers()
+
+    assert page.evaluate("window.__openChanges")[len(opened) :] == [{"open": False, "reason": "ancestor"}]
