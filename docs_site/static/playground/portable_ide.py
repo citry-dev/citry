@@ -8,10 +8,11 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from citry._walk import Call, run
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement, parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection
+    from collections.abc import Callable, Collection, Generator
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,11 +117,13 @@ def template_tag_uses(
 ) -> tuple[TemplateTagUse, ...]:
     """Return exact tag tokens from a template and its nested templates."""
     uses: list[TemplateTagUse] = []
-    _collect_template_tags(
-        template,
-        uses,
-        parse_nested=parse_nested,
-        base_index=0,
+    run(
+        _collect_template_tags(
+            template,
+            uses,
+            parse_nested=parse_nested,
+            base_index=0,
+        )
     )
     return tuple(sorted(uses, key=lambda use: (use.start_index, use.end_index)))
 
@@ -166,7 +169,7 @@ def _collect_template_tags(
     *,
     parse_nested: Callable[[str], object],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     elements = getattr(template, "elements", None)
     if type(elements) is not list:
         msg = "template must expose parser elements"
@@ -197,7 +200,8 @@ def _collect_template_tags(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_template_tags(
+            yield Call(
+                _collect_template_tags,
                 body,
                 uses,
                 parse_nested=parse_nested,
@@ -210,7 +214,8 @@ def _collect_template_tags(
             if nested is None:
                 continue
             nested_template, nested_start = nested
-            _collect_template_tags(
+            yield Call(
+                _collect_template_tags,
                 nested_template,
                 uses,
                 parse_nested=parse_nested,
