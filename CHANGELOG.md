@@ -231,6 +231,11 @@
 
 ### Fixes
 
+- Without a configured cache, the stylesheets that `css_data()` produces
+  no longer pile up in memory, one per distinct set of values, for the
+  life of the process. They now count toward `vue_asset_max_bytes`, and
+  Citry drops the ones used longest ago first. If a page that stays open
+  loses its styles, raise the limit or configure a cache.
 - In a component that uses Vue, a Vue expression holding an unpaired
   surrogate escape, such as `v-text="'a\ud800b'"`, no longer makes the
   server write U+FFFD and the escape's hex digits into the page. Vue now

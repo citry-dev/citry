@@ -16,7 +16,7 @@ from citry.ext.cache import CacheKeyError, OnComponentCacheHitContext, component
 from citry.ext.cache.artifact import _decode_artifact
 from citry.ext.debug import Debug
 from citry.ext.dependencies.extension import EXTRA_KEY as DEPENDENCIES_EXTRA_KEY
-from citry.ext.dependencies.scripts import gen_cache_key
+from citry.ext.dependencies.scripts import gen_cache_key, get_script
 
 
 class _RecordingCache(InMemoryCache):
@@ -615,7 +615,9 @@ class TestComponentCacheSlots:
 
 class TestComponentCacheLifecycle:
     def test_cache_hit_repairs_an_evicted_dependency_variable_stylesheet(self):
-        app = Citry()
+        # A configured backend is where other workers look for the
+        # stylesheet, so a replay writes it back there.
+        app = Citry(cache=InMemoryCache())
         data_calls = 0
 
         class Card(Component):
@@ -651,6 +653,44 @@ class TestComponentCacheLifecycle:
         assert app.cache.get(variables_key) == expected
         assert first_record.css_vars_hash in first_html
         assert first_record.css_vars_hash in second.serialize()
+
+    def test_cache_hit_without_a_configured_cache_keeps_its_stylesheet_in_memory_only(self):
+        # A tiny limit, so the next render's stylesheet drops this one.
+        app = Citry(vue_asset_max_bytes=1)
+        data_calls = 0
+
+        class Card(Component):
+            citry = app
+
+            class Cache:
+                enabled = True
+
+            def css_data(self, kwargs, slots):
+                nonlocal data_calls
+                data_calls += 1
+                return {"accent": kwargs["accent"]}
+
+            template = """
+            <div>cached</div>
+            """
+            css = """
+            div { color: var(--accent); }
+            """
+
+        first = Card(accent="red").render()
+        first.serialize()
+        record = next(iter(first.context.extra[DEPENDENCIES_EXTRA_KEY]))
+        variables_key = gen_cache_key(Card.class_id, "css", record.css_vars_hash)
+        Card(accent="blue").render().serialize()
+        assert get_script("css", Card, record.css_vars_hash) is None
+
+        # The replayed page still inlines its stylesheet, and the default
+        # cache, which nothing ever trims, holds no copy of it.
+        replayed = Card(accent="red").render().serialize()
+        assert data_calls == 2
+        assert "--accent: red;" in replayed
+        assert not app.cache.has(variables_key)
+        assert get_script("css", Card, record.css_vars_hash) is not None
 
     def test_hit_hook_runs_after_replay_and_render_hooks_are_skipped(self):
         calls: list[str] = []

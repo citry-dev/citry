@@ -1012,42 +1012,48 @@ def _serialize_render_result(
     # nothing was collected for it either.
     vue_plan = None
     if root_citry is not None:
+        from citry._vue.events import hold_page_assets  # noqa: PLC0415
         from citry._vue.serialization import prepare_vue_serialization  # noqa: PLC0415
         from citry.extension import OnSerializeContext  # noqa: PLC0415
 
-        vue_plan = prepare_vue_serialization(
-            OnSerializeContext(
-                citry=root_citry,
+        # Every file this page publishes (its compiled Vue code and styles,
+        # its css_data() stylesheets) stays in memory until the page is
+        # written, so a later step's publish cannot drop an earlier one the
+        # page links or inlines.
+        with hold_page_assets(root_citry, root, publish_css_data=deps_strategy != "ignore"):
+            vue_plan = prepare_vue_serialization(
+                OnSerializeContext(
+                    citry=root_citry,
+                    context=root.context,
+                    selected_render=root,
+                    html=html,
+                    placeholders=placeholder_map,
+                    deps_strategy=deps_strategy,
+                    deps_position=deps_position,
+                ),
+                session._script_security,
+                session.security_csp,
+                javascript_policy,
+                session.security_javascript,
+                vue_analysis,
+                early_selected_tree=early_selected_tree,
+                hydration_candidate=hydration_candidate,
+                server_html=server_html,
+            )
+            html = root_citry.extensions.on_serialize(
                 context=root.context,
                 selected_render=root,
-                html=html,
+                html=vue_plan.shell_html if vue_plan is not None else html,
                 placeholders=placeholder_map,
                 deps_strategy=deps_strategy,
                 deps_position=deps_position,
-            ),
-            session._script_security,
-            session.security_csp,
-            javascript_policy,
-            session.security_javascript,
-            vue_analysis,
-            early_selected_tree=early_selected_tree,
-            hydration_candidate=hydration_candidate,
-            server_html=server_html,
-        )
-        html = root_citry.extensions.on_serialize(
-            context=root.context,
-            selected_render=root,
-            html=vue_plan.shell_html if vue_plan is not None else html,
-            placeholders=placeholder_map,
-            deps_strategy=deps_strategy,
-            deps_position=deps_position,
-            _script_security=session._script_security,
-            _security_csp=session.security_csp,
-            _javascript_policy=javascript_policy,
-            _security_javascript=session.security_javascript,
-        )
-        if vue_plan is not None:
-            html = vue_plan.finalize(html)
+                _script_security=session._script_security,
+                _security_csp=session.security_csp,
+                _javascript_policy=javascript_policy,
+                _security_javascript=session.security_javascript,
+            )
+            if vue_plan is not None:
+                html = vue_plan.finalize(html)
 
     # A Placeholder is an optional serialize-time insertion point. Extensions
     # replace the exact placeholder text they own; anything left after every

@@ -19,6 +19,11 @@ Keys follow django-components' scheme with a citry prefix::
     citry:<class_id>:css:component:<hash>  one content-addressed CSS version
     citry:<class_id>:css:<hash>      a generated css_data() variables stylesheet
 
+The ``css_data()`` stylesheets go to ``Citry.cache`` only when a cache is
+configured. Without one, each page puts its own into this process's store of
+page files as it is written, which ``CitrySettings.vue_asset_max_bytes``
+limits (``citry.ext.dependencies.emission.publish_css_data_stylesheets``).
+
 Design: docs/design/dependencies.md section 4.
 """
 
@@ -694,7 +699,18 @@ def get_script(
     if variables_hash is None:
         class_cached = _cache_component_script(script_type, comp_cls)
         return None if class_cached is None else class_cached[0]
-    serialized = comp_cls.citry.cache.get(gen_cache_key(comp_cls.class_id, script_type, variables_hash))
+    # _vue.events imports this module, so importing it here at load time
+    # would be circular.
+    from citry._vue.events import css_data_stylesheet, keeps_assets_in_process_only  # noqa: PLC0415
+
+    citry = comp_cls.citry
+    key = gen_cache_key(comp_cls.class_id, script_type, variables_hash)
+    # Without a configured cache, css_data() stylesheets live only in this
+    # process's store of page files; with one, the backend holds them.
+    if keeps_assets_in_process_only(citry):
+        serialized = css_data_stylesheet(citry, key) if script_type == "css" else None
+    else:
+        serialized = citry.cache.get(key)
     if serialized is None:
         return None
     data = json.loads(serialized)
@@ -899,16 +915,41 @@ def _cache_component_css_vars_capture(
             raise ValueError(msg) from error
     source_json, _variables_hash = _hash_vars(css_data)
     capture = _css_vars_capture(comp_cls.class_id, source_json)
-    cache = comp_cls.citry.cache
-    key = gen_cache_key(comp_cls.class_id, "css", capture.variables_hash)
-    if cache.get(key) != capture.cache_value:
-        cache.set(key, capture.cache_value)
+    _store_css_data_stylesheet(comp_cls.citry, comp_cls.class_id, capture)
     return capture
+
+
+def _store_css_data_stylesheet(citry: Citry, class_id: str, capture: _VariablesScriptCapture) -> None:
+    """
+    Write one ``css_data()`` stylesheet to a configured cache, so any worker can serve its URL.
+
+    Each distinct ``css_data()`` result is its own stylesheet, so values that
+    change per request (a per-user color, say) make a new one each time.
+    Without a configured cache, the engine's default cache has no limit, so
+    it never receives them: the page publishes them into this process's
+    store of page files when it is written (see
+    ``citry.ext.dependencies.emission.publish_css_data_stylesheets``).
+    """
+    # _vue.events imports this module, so importing it here at load time
+    # would be circular.
+    from citry._vue.events import keeps_assets_in_process_only  # noqa: PLC0415
+
+    if keeps_assets_in_process_only(citry):
+        return
+    # The key is named by the stylesheet's inputs, not its bytes, and a
+    # worker of another Citry version may have written other bytes, so the
+    # stored value is compared on every render and replaced when it differs.
+    key = gen_cache_key(class_id, "css", capture.variables_hash)
+    if citry.cache.get(key) != capture.cache_value:
+        citry.cache.set(key, capture.cache_value)
 
 
 def cache_component_css_vars(comp_cls: type[Component], css_data: Mapping[str, object]) -> str | None:
     """
-    Cache the stylesheet delivering one distinct ``css_data()`` result, returning its hash.
+    Build the stylesheet delivering one distinct ``css_data()`` result, returning its hash.
+
+    With a configured cache, the stylesheet is also written there; without
+    one, the page that uses it stores it when it is written.
 
     The stylesheet defines the data as CSS custom properties scoped to the
     instances rendered with this data: their root elements carry a
