@@ -234,11 +234,12 @@ def _recently_confirmed(owner: object, key: str, mark: str | None, now: float) -
     with _STORED_KEYS_LOCK:
         remembered = _STORED_KEYS.get(owner)
         confirmed = None if remembered is None else remembered.get(key)
-        if confirmed is not None:
-            # A key in use stays at the recent end, so the limit drops the
-            # keys no page links any more.
-            remembered.move_to_end(key)
-    return confirmed is not None and confirmed[1] == mark and now - confirmed[0] < _STORED_KEY_RECHECK_SECONDS
+        if remembered is None or confirmed is None:
+            return False
+        # A key in use stays at the recent end, so the limit drops the keys
+        # no page links any more.
+        remembered.move_to_end(key)
+    return confirmed[1] == mark and now - confirmed[0] < _STORED_KEY_RECHECK_SECONDS
 
 
 def _remember_confirmed(owner: object, key: str, mark: str | None, now: float) -> None:
