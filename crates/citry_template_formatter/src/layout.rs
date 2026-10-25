@@ -108,7 +108,14 @@ fn analyze_element(element: &TemplateElement, parent_tag_name: Option<&str>) -> 
     }
 }
 
+// A control tag such as `c-if` takes its leading and trailing whitespace
+// rules from its body, so this calls itself once per nested control tag, and
+// every level checks that enough stack is left first.
 fn analyze_node(node: &Node, parent_tag_name: Option<&str>) -> ElementLayout {
+    citry_template_parser::stack::with_enough_stack(|| analyze_node_on_stack(node, parent_tag_name))
+}
+
+fn analyze_node_on_stack(node: &Node, parent_tag_name: Option<&str>) -> ElementLayout {
     let tag_name = node.tag_name();
     let physical_control = control_branch(tag_name);
     let control = physical_control.or_else(|| shorthand_control_branch(node));

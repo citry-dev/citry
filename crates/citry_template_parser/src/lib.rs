@@ -31,7 +31,7 @@ pub mod lang {
 }
 pub mod parser;
 pub mod parser_context;
-mod stack;
+pub mod stack;
 pub mod utils {
     pub(crate) mod line_index;
     pub mod pest;

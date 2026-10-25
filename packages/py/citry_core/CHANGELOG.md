@@ -54,6 +54,11 @@
 
 ### Fixed
 
+- Parsing, compiling and formatting a template, and the `html_transform`
+  functions, no longer crash the process when called with little stack
+  left, for example from deep recursion on a thread with a small stack.
+  `format_template()` also handles templates nested 1,000 elements deep on
+  such threads, where it used to crash the process.
 - `html_transform.transform_html()` stays fast on a tag with thousands of
   attributes when it tracks added attributes. Such a tag used to take time
   that grew with the square of the attribute count.

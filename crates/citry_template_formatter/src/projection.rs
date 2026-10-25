@@ -76,19 +76,72 @@ pub(crate) enum ContractError {
     Python { kind: &'static str, message: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct DocumentProjection {
     body: BodyProjection,
     comments: Vec<CommentProjection>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 struct BodyProjection {
     items: Vec<BodyItemProjection>,
     gaps: Vec<GapProjection>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Comparing, printing and freeing a projection walk its whole tree, once per
+/// nested element, as deep as the parser accepts. Each level passes through a
+/// `BodyProjection`, so each one checks that enough stack is left first, like
+/// the parser's own `Template`. The results are the same as the derived
+/// implementations'.
+impl PartialEq for BodyProjection {
+    fn eq(&self, other: &Self) -> bool {
+        let compare = || self.items == other.items && self.gaps == other.gaps;
+        // A body without nodes cannot nest further, so it skips the guard.
+        if self.has_child_nodes() {
+            citry_template_parser::stack::with_enough_stack(compare)
+        } else {
+            compare()
+        }
+    }
+}
+
+impl Eq for BodyProjection {}
+
+impl std::fmt::Debug for BodyProjection {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let print = |formatter: &mut std::fmt::Formatter<'_>| {
+            formatter
+                .debug_struct("BodyProjection")
+                .field("items", &self.items)
+                .field("gaps", &self.gaps)
+                .finish()
+        };
+        if self.has_child_nodes() {
+            citry_template_parser::stack::with_enough_stack(|| print(formatter))
+        } else {
+            print(formatter)
+        }
+    }
+}
+
+impl Drop for BodyProjection {
+    fn drop(&mut self) {
+        if self.has_child_nodes() {
+            let items = std::mem::take(&mut self.items);
+            citry_template_parser::stack::with_enough_stack(|| drop(items));
+        }
+    }
+}
+
+impl BodyProjection {
+    /// Whether this body holds a node, the only item that can nest further.
+    fn has_child_nodes(&self) -> bool {
+        self.items
+            .iter()
+            .any(|item| matches!(item, BodyItemProjection::Node(_)))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 enum BodyItemProjection {
     Node(NodeProjection),
     Expr(String),
@@ -96,14 +149,14 @@ enum BodyItemProjection {
     TemplateComment(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct NodeProjection {
     start_tag: StartTagProjection,
     end_tag: Option<EndTagProjection>,
     body: Option<BodyProjection>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct StartTagProjection {
     name: String,
     attrs: Vec<AttrProjection>,
@@ -119,7 +172,7 @@ struct EndTagProjection {
     comments: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct AttrProjection {
     key: String,
     kind: AttrKindProjection,
@@ -127,7 +180,7 @@ struct AttrProjection {
     value: AttrValueProjection,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 enum AttrValueProjection {
     None,
     Exact(String),
@@ -386,7 +439,20 @@ fn project_body(
     })
 }
 
+// The projection recurses once per nested element, as deep as the parser
+// accepts, so every level checks that enough stack is left first.
 fn project_node(
+    source: &str,
+    node: &Node,
+    mode: ProjectionCapability,
+    document_comments: &[Comment],
+) -> Result<NodeProjection, ContractError> {
+    citry_template_parser::stack::with_enough_stack(|| {
+        project_node_on_stack(source, node, mode, document_comments)
+    })
+}
+
+fn project_node_on_stack(
     source: &str,
     node: &Node,
     mode: ProjectionCapability,
