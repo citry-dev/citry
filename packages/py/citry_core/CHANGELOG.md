@@ -61,6 +61,10 @@
   now always lists the tags it may follow in the same order, for example
   `<c-if>, <c-elif>` for `<c-else>`. The order used to change from one run
   to the next.
+- In a component that uses Vue, the server now writes an element inside
+  `v-pre` that has an attribute such as `:x="y"`, a `:` followed by a
+  lowercase name. Its parent used to be left for the browser to build, so
+  the page showed the element without that attribute until Vue ran.
 - Rendering a Vue component whose data nests hundreds of levels deep no
   longer crashes the process on a thread with a small stack, such as a
   thread on musl Linux or one started after a small
