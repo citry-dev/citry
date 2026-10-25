@@ -780,18 +780,16 @@ def _collect_state_target_errors(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_state_target_errors,
-                            parsed,
-                            found,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                        )
+                    yield Call(
+                        _collect_state_target_errors,
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            (yield Call(_collect_state_target_errors, body, found, parse_nested=parse_nested, base_index=base_index))
+            yield Call(_collect_state_target_errors, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def browser_state_bindings(
@@ -829,18 +827,16 @@ def _collect_state_bindings(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_state_bindings,
-                            parsed,
-                            found,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                        )
+                    yield Call(
+                        _collect_state_bindings,
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            (yield Call(_collect_state_bindings, body, found, parse_nested=parse_nested, base_index=base_index))
+            yield Call(_collect_state_bindings, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def browser_bindings(
@@ -902,7 +898,7 @@ def _collect_enclosing_elements(
         found.append((node, node.start_tag.name.content, tag_token.start_index))
         body = getattr(node, "body", None)
         if body is not None:
-            (yield Call(_collect_enclosing_elements, body, start_index, end_index, found))
+            yield Call(_collect_enclosing_elements, body, start_index, end_index, found)
 
 
 def _v_for_expression(node: Any) -> str:
@@ -2165,19 +2161,17 @@ def _collect_browser_expressions(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_browser_expressions,
-                            parsed,
-                            found,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                            bindings=(*bindings, *loop_bindings),
-                            ambient_names=descendant_ambient,
-                            # A nested template renders in the same Python scope
-                            # as the attribute that holds it.
-                            python_names=own_python,
-                        )
+                    yield Call(
+                        _collect_browser_expressions,
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                        bindings=(*bindings, *loop_bindings),
+                        ambient_names=descendant_ambient,
+                        # A nested template renders in the same Python scope
+                        # as the attribute that holds it.
+                        python_names=own_python,
                     )
                 continue
             canonical_attribute = _ascii_lower(attr.key.content)
@@ -2229,17 +2223,15 @@ def _collect_browser_expressions(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_browser_expressions,
-                    body,
-                    found,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                    bindings=(*bindings, *introduced),
-                    ambient_names=descendant_ambient,
-                    python_names=descendant_python,
-                )
+            yield Call(
+                _collect_browser_expressions,
+                body,
+                found,
+                parse_nested=parse_nested,
+                base_index=base_index,
+                bindings=(*bindings, *introduced),
+                ambient_names=descendant_ambient,
+                python_names=descendant_python,
             )
 
 
@@ -2298,15 +2290,13 @@ def _collect_declarative_events(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_declarative_events,
-                            parsed,
-                            found,
-                            known_names=known_names,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                        )
+                    yield Call(
+                        _collect_declarative_events,
+                        parsed,
+                        found,
+                        known_names=known_names,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
                     )
                 continue
             attribute = attr.key.content
@@ -2328,15 +2318,13 @@ def _collect_declarative_events(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_declarative_events,
-                    body,
-                    found,
-                    known_names=known_names,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                )
+            yield Call(
+                _collect_declarative_events,
+                body,
+                found,
+                known_names=known_names,
+                parse_nested=parse_nested,
+                base_index=base_index,
             )
 
 
@@ -2360,25 +2348,21 @@ def _collect_browser_bindings(
             if nested is None:
                 continue
             parsed, nested_start = nested
-            (
-                yield Call(
-                    _collect_browser_bindings,
-                    parsed,
-                    found,
-                    parse_nested=parse_nested,
-                    base_index=base_index + inner.start_index + nested_start,
-                )
+            yield Call(
+                _collect_browser_bindings,
+                parsed,
+                found,
+                parse_nested=parse_nested,
+                base_index=base_index + inner.start_index + nested_start,
             )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_browser_bindings,
-                    body,
-                    found,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                )
+            yield Call(
+                _collect_browser_bindings,
+                body,
+                found,
+                parse_nested=parse_nested,
+                base_index=base_index,
             )
 
 
@@ -2406,14 +2390,12 @@ def _collect_component_prop_sites(
                     nested = _nested_template(inner.content, parse_nested)
                     if nested is not None:
                         nested_template, nested_start = nested
-                        (
-                            yield Call(
-                                _collect_component_prop_sites,
-                                nested_template,
-                                found,
-                                parse_nested=parse_nested,
-                                base_index=base_index + inner.start_index + nested_start,
-                            )
+                        yield Call(
+                            _collect_component_prop_sites,
+                            nested_template,
+                            found,
+                            parse_nested=parse_nested,
+                            base_index=base_index + inner.start_index + nested_start,
                         )
                 continue
             if not component_boundary:
@@ -2510,14 +2492,12 @@ def _collect_component_prop_sites(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_component_prop_sites,
-                    body,
-                    found,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                )
+            yield Call(
+                _collect_component_prop_sites,
+                body,
+                found,
+                parse_nested=parse_nested,
+                base_index=base_index,
             )
 
 
@@ -2663,18 +2643,16 @@ def _collect_mark_literal_findings(
             nested = _nested_template(inner.content, parse_nested)
             if nested is not None:
                 parsed, nested_start = nested
-                (
-                    yield Call(
-                        _collect_mark_literal_findings,
-                        parsed,
-                        found,
-                        parse_nested=parse_nested,
-                        base_index=base_index + inner.start_index + nested_start,
-                    )
+                yield Call(
+                    _collect_mark_literal_findings,
+                    parsed,
+                    found,
+                    parse_nested=parse_nested,
+                    base_index=base_index + inner.start_index + nested_start,
                 )
         body = getattr(node, "body", None)
         if body is not None:
-            (yield Call(_collect_mark_literal_findings, body, found, parse_nested=parse_nested, base_index=base_index))
+            yield Call(_collect_mark_literal_findings, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def _collect_i18n_binding_directives(
@@ -2695,14 +2673,12 @@ def _collect_i18n_binding_directives(
                     nested = _nested_template(inner.content, parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        (
-                            yield Call(
-                                _collect_i18n_binding_directives,
-                                parsed,
-                                found,
-                                parse_nested=parse_nested,
-                                base_index=base_index + inner.start_index + nested_start,
-                            )
+                        yield Call(
+                            _collect_i18n_binding_directives,
+                            parsed,
+                            found,
+                            parse_nested=parse_nested,
+                            base_index=base_index + inner.start_index + nested_start,
                         )
                 continue
             authored = attr.key.content
@@ -2771,14 +2747,12 @@ def _collect_i18n_binding_directives(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_i18n_binding_directives,
-                    body,
-                    found,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                )
+            yield Call(
+                _collect_i18n_binding_directives,
+                body,
+                found,
+                parse_nested=parse_nested,
+                base_index=base_index,
             )
 
 

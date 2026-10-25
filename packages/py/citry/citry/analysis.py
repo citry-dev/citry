@@ -1164,18 +1164,16 @@ def _collect_alpine_attributes(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_alpine_attributes,
-                            parsed,
-                            found,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                        )
+                    yield Call(
+                        _collect_alpine_attributes,
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            (yield Call(_collect_alpine_attributes, body, found, parse_nested=parse_nested, base_index=base_index))
+            yield Call(_collect_alpine_attributes, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def lint_attribute_values(
@@ -1283,22 +1281,18 @@ def _collect_attribute_values(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_attribute_values,
-                            parsed,
-                            found,
-                            severity,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                        )
+                    yield Call(
+                        _collect_attribute_values,
+                        parsed,
+                        found,
+                        severity,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_attribute_values, body, found, severity, parse_nested=parse_nested, base_index=base_index
-                )
+            yield Call(
+                _collect_attribute_values, body, found, severity, parse_nested=parse_nested, base_index=base_index
             )
 
 
@@ -1635,31 +1629,27 @@ def _collect_misspelled_directives(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_misspelled_directives,
-                            parsed,
-                            found,
-                            severity,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                            consumers=consumers,
-                            vue_skipped=inside_v_pre,
-                        )
+                    yield Call(
+                        _collect_misspelled_directives,
+                        parsed,
+                        found,
+                        severity,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                        consumers=consumers,
+                        vue_skipped=inside_v_pre,
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_misspelled_directives,
-                    body,
-                    found,
-                    severity,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                    consumers=consumers,
-                    vue_skipped=inside_v_pre,
-                )
+            yield Call(
+                _collect_misspelled_directives,
+                body,
+                found,
+                severity,
+                parse_nested=parse_nested,
+                base_index=base_index,
+                consumers=consumers,
+                vue_skipped=inside_v_pre,
             )
 
 

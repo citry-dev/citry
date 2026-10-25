@@ -2,10 +2,11 @@
 Checking a deeper template does not need more Python frames.
 
 ``citry check`` walks each template's parsed tree with several linters and
-collectors. They run as walk generators on one driver loop, so the deepest
-Python call stack during a check stays the same however deeply the template
-nests. Each case checks one component at depth 32 and at depth 128; the
-peak at 128 may be at most 20 frames above the peak at 32.
+collectors. Each walker is a generator that ``citry._walk.run`` steps
+through in one loop, so the deepest Python stack during a check grows by at
+most 20 frames between depth 32 and depth 128. Each case checks one
+component at both depths, and the deep check must still report the
+template's unknown variable, which shows the whole template was walked.
 """
 
 from __future__ import annotations
@@ -46,8 +47,8 @@ SHAPES: dict[str, Callable[[int], str]] = {
 }
 
 
-def _check_peak(template: str, tmp_path: Path) -> int:
-    """Return the deepest Python stack seen while checking a component with ``template``."""
+def _check_peak(template: str, tmp_path: Path) -> tuple[int, list[str]]:
+    """Return the deepest Python stack seen while checking a component with ``template``, and the finding codes."""
     engine = Citry(autodiscover=False)
 
     class Card(Component):
@@ -71,10 +72,10 @@ def _check_peak(template: str, tmp_path: Path) -> int:
 
     sys.setprofile(profile)
     try:
-        check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
     finally:
         sys.setprofile(None)
-    return peak
+    return peak, [finding.code for finding in report.findings]
 
 
 @pytest.mark.parametrize("shape", SHAPES)
@@ -83,6 +84,9 @@ def test_checking_a_deeper_template_uses_the_same_python_stack(shape: str, tmp_p
     # the shallow measurement.
     _check_peak(SHAPES["elements"](2), tmp_path)
     build = SHAPES[shape]
-    shallow = _check_peak(build(SHALLOW), tmp_path)
-    deep = _check_peak(build(DEEP), tmp_path)
+    shallow, _ = _check_peak(build(SHALLOW), tmp_path)
+    deep, codes = _check_peak(build(DEEP), tmp_path)
+    # The innermost `{{ n }}` reads a variable nothing defines; finding it
+    # shows the deep template parsed and every walker reached the bottom.
+    assert "citry.template.unknown-variable" in codes, codes
     assert deep - shallow <= ALLOWED_GROWTH, f"{shape}: {shallow} frames at depth {SHALLOW}, {deep} at {DEEP}"

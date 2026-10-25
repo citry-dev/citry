@@ -313,14 +313,12 @@ def _collect_static_input_queries(
                 nested = _nested_template(attr.inner_value.content, parse_nested)
                 if nested is not None:
                     nested_template, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_static_input_queries,
-                            nested_template,
-                            queries,
-                            base_index=base_index + attr.inner_value.start_index + nested_start,
-                            parse_nested=parse_nested,
-                        )
+                    yield Call(
+                        _collect_static_input_queries,
+                        nested_template,
+                        queries,
+                        base_index=base_index + attr.inner_value.start_index + nested_start,
+                        parse_nested=parse_nested,
                     )
                 continue
             if (
@@ -346,11 +344,7 @@ def _collect_static_input_queries(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_static_input_queries, body, queries, base_index=base_index, parse_nested=parse_nested
-                )
-            )
+            yield Call(_collect_static_input_queries, body, queries, base_index=base_index, parse_nested=parse_nested)
 
 
 def build_inferred_template_shadow(

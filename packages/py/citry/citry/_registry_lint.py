@@ -113,46 +113,42 @@ def _collect_repeated_calls(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_repeated_calls,
-                            parsed,
-                            found,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                            in_loop=inner_loop,
-                        )
+                    yield Call(
+                        _collect_repeated_calls,
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                        in_loop=inner_loop,
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_repeated_calls,
-                    body,
-                    found,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                    in_loop=inner_loop,
-                )
+            yield Call(
+                _collect_repeated_calls,
+                body,
+                found,
+                parse_nested=parse_nested,
+                base_index=base_index,
+                in_loop=inner_loop,
             )
 
 
 def template_has_vue_attributes(template: Template, *, parse_nested: Callable[[str], Template]) -> bool:
-    """Return whether ``template`` or a template nested in it has a Vue attribute."""
-    # The walk runs as generators on one driver loop, so Python's call depth
-    # does not grow with how deeply the template nests.
-    return run(_template_has_vue_attributes_walk(template, parse_nested=parse_nested))
-
-
-def _template_has_vue_attributes_walk(
-    template: Template, *, parse_nested: Callable[[str], Template]
-) -> Generator[Call, Any, bool]:
     """
     Return whether any tag in a template has a Vue attribute: a ``v-*``, ``@``, or ``:`` name.
 
     Such an attribute, including Citry's ``@c-*`` and ``:c-*`` bindings,
     makes the page that renders the template use Vue.
     """
+    # `run` steps through the walk in one loop, so Python's call depth stays
+    # the same however deeply the template nests.
+    return run(_template_has_vue_attributes_walk(template, parse_nested=parse_nested))
+
+
+def _template_has_vue_attributes_walk(
+    template: Template, *, parse_nested: Callable[[str], Template]
+) -> Generator[Call, Any, bool]:
+    """The walk generator behind ``template_has_vue_attributes``."""
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -231,15 +227,13 @@ def _collect_server_event_calls(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_server_event_calls,
-                            parsed,
-                            found,
-                            handler_names,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                        )
+                    yield Call(
+                        _collect_server_event_calls,
+                        parsed,
+                        found,
+                        handler_names,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
                     )
                 continue
             if not attr.key.content.startswith("@c-"):
@@ -262,15 +256,13 @@ def _collect_server_event_calls(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_server_event_calls,
-                    body,
-                    found,
-                    handler_names,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                )
+            yield Call(
+                _collect_server_event_calls,
+                body,
+                found,
+                handler_names,
+                parse_nested=parse_nested,
+                base_index=base_index,
             )
 
 
@@ -731,15 +723,13 @@ def _collect_server_event_forms(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_server_event_forms,
-                            parsed,
-                            found,
-                            handler_names,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                        )
+                    yield Call(
+                        _collect_server_event_forms,
+                        parsed,
+                        found,
+                        handler_names,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
                     )
         body = getattr(node, "body", None)
         call = (
@@ -755,15 +745,13 @@ def _collect_server_event_forms(
         # A form inside a form is invalid HTML, which the browser drops, so
         # the walk goes on into any element's content either way.
         if body is not None:
-            (
-                yield Call(
-                    _collect_server_event_forms,
-                    body,
-                    found,
-                    handler_names,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                )
+            yield Call(
+                _collect_server_event_forms,
+                body,
+                found,
+                handler_names,
+                parse_nested=parse_nested,
+                base_index=base_index,
             )
 
 
@@ -857,7 +845,7 @@ class _FormControls:
                 self._control(lower, attrs, base_index, disabled=inside_disabled)
             body = getattr(node, "body", None)
             if body is not None:
-                (yield Call(self.walk, body, base_index=base_index, disabled=inside_disabled))
+                yield Call(self.walk, body, base_index=base_index, disabled=inside_disabled)
 
     def _control(self, lower: str, attrs: Any, base_index: int, *, disabled: bool) -> None:
         name_attr = None
@@ -1097,14 +1085,12 @@ def _collect_template_urls(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    (
-                        yield Call(
-                            _collect_template_urls,
-                            parsed,
-                            found,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
-                        )
+                    yield Call(
+                        _collect_template_urls,
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
                     )
                 continue
             if (
@@ -1121,7 +1107,7 @@ def _collect_template_urls(
                 found.append(TemplateUrl(path, base_index + inner.start_index, base_index + inner.end_index))
         body = getattr(node, "body", None)
         if body is not None:
-            (yield Call(_collect_template_urls, body, found, parse_nested=parse_nested, base_index=base_index))
+            yield Call(_collect_template_urls, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 # `<link>` types whose `href` names a server to connect to early, not a

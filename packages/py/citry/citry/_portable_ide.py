@@ -198,14 +198,12 @@ def _collect_template_tags(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            (
-                yield Call(
-                    _collect_template_tags,
-                    body,
-                    uses,
-                    parse_nested=parse_nested,
-                    base_index=base_index,
-                )
+            yield Call(
+                _collect_template_tags,
+                body,
+                uses,
+                parse_nested=parse_nested,
+                base_index=base_index,
             )
         for attr in node.start_tag.attrs:
             if attr.inner_value is None or not _is_nested_template_attr(attr):
@@ -214,14 +212,12 @@ def _collect_template_tags(
             if nested is None:
                 continue
             nested_template, nested_start = nested
-            (
-                yield Call(
-                    _collect_template_tags,
-                    nested_template,
-                    uses,
-                    parse_nested=parse_nested,
-                    base_index=base_index + attr.inner_value.start_index + nested_start,
-                )
+            yield Call(
+                _collect_template_tags,
+                nested_template,
+                uses,
+                parse_nested=parse_nested,
+                base_index=base_index + attr.inner_value.start_index + nested_start,
             )
 
 

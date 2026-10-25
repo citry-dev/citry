@@ -308,13 +308,13 @@ class _Writer:
                 tag, start = self.open_elements.pop()
                 self.elements.append((tag, start, node.position[0], node.position[1]))
         elif isinstance(node, IfNode):
-            (yield Call(self.write_if, node))
+            yield Call(self.write_if, node)
         elif isinstance(node, ForNode):
-            (yield Call(self.write_for, node))
+            yield Call(self.write_for, node)
         elif isinstance(node, ComponentNode):
-            (yield Call(self.write_component, node))
+            yield Call(self.write_component, node)
         elif isinstance(node, SlotNode):
-            (yield Call(self.write_slot, node))
+            yield Call(self.write_slot, node)
         else:
             msg = f"no Vue form for {type(node).__name__}"
             raise UnsupportedStaticTemplate(msg)
@@ -325,27 +325,27 @@ class _Writer:
             # A render writes the branch it picks, so each branch is written
             # in turn and every one must compile.
             for branch in node.branches:
-                (yield Call(self.write_nodes, branch[2]))
+                yield Call(self.write_nodes, branch[2])
             return
         key = self.next_key("citryIf")
         for index, branch in enumerate(node.branches):
             self.write_generated(branch_opening(key, index), branch[0])
-            (yield Call(self.write_nodes, branch[2]))
+            yield Call(self.write_nodes, branch[2])
             self.write_generated("</template>", branch[0])
 
     def write_for(self, node: ForNode) -> Generator[Call, Any, None]:
         if not self.leaf:
             # A render repeats the body once per row; one copy compiles the same.
             for branch in node.branches:
-                (yield Call(self.write_nodes, branch[2]))
+                yield Call(self.write_nodes, branch[2])
             return
         key = self.next_key("citryLoop")
         self.write_generated(loop_opening(key), node.branches[0][0])
-        (yield Call(self.write_nodes, node.branches[0][2]))
+        yield Call(self.write_nodes, node.branches[0][2])
         self.write_generated("</template>", node.branches[0][0])
         for branch in node.branches[1:]:
             self.write_generated(loop_empty_opening(key), branch[0])
-            (yield Call(self.write_nodes, branch[2]))
+            yield Call(self.write_nodes, branch[2])
             self.write_generated("</template>", branch[0])
 
     def write_generated(self, text: str, span: tuple[int, int]) -> None:
@@ -501,7 +501,7 @@ class _Writer:
         if in_place:
             # The render copies the body into the caller's template.
             for _site_id, _span, body in _fills(node):
-                (yield Call(self.write_nodes, body))
+                yield Call(self.write_nodes, body)
             return
         if node.name == "element":
             # A `<c-element>` whose tag Python chooses. The tag is unknown
@@ -510,7 +510,7 @@ class _Writer:
             start = self.output.byte_length
             self.output.append("<template>")
             self.mark_generated(start, node.position)
-            (yield Call(self.write_nodes, node.body))
+            yield Call(self.write_nodes, node.body)
             start = self.output.byte_length
             self.output.append("</template>")
             self.mark_generated(start, node.position)
@@ -539,7 +539,7 @@ class _Writer:
             start = self.output.byte_length
             self.output.append(_fill_opening(site_id))
             self.mark_generated(start, span)
-            (yield Call(self.write_nodes, body))
+            yield Call(self.write_nodes, body)
             start = self.output.byte_length
             self.output.append("</template>")
             self.mark_generated(start, span)
@@ -659,7 +659,7 @@ def _fills(node: ComponentNode) -> list[tuple[str, tuple[int, int], Sequence[Bod
                 fills.append(item)
             elif isinstance(item, (IfNode, ForNode)):
                 for branch in item.branches:
-                    (yield Call(collect, branch[2]))
+                    yield Call(collect, branch[2])
 
     run(collect(node.body))
     if not fills:

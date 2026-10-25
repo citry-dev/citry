@@ -644,13 +644,11 @@ class _MarkupWalker:
                     nested = _nested_template(inner.content, self.parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        (
-                            yield Call(
-                                self._walk,
-                                parsed,
-                                _Context(foreign=foreign, may_repeat=True, vue_skipped=vue_skipped),
-                                base_index=base_index + inner.start_index + nested_start,
-                            )
+                        yield Call(
+                            self._walk,
+                            parsed,
+                            _Context(foreign=foreign, may_repeat=True, vue_skipped=vue_skipped),
+                            base_index=base_index + inner.start_index + nested_start,
                         )
             if (
                 html
@@ -660,22 +658,20 @@ class _MarkupWalker:
                 self._check_image_alt(node, names, attrs, base_index)
             body = getattr(node, "body", None)
             if body is not None:
-                (
-                    yield Call(
-                        self._walk,
-                        body,
-                        _Context(
-                            foreign=foreign,
-                            in_paragraph=self._paragraph_stays_open(context, lower, html=html, component=component)
-                            and not foreign,
-                            may_repeat=may_repeat,
-                            vue_skipped=vue_skipped,
-                        ),
-                        base_index=base_index,
-                        # A root inside a top-level condition is still the
-                        # element Vue passes a parent's attributes to.
-                        roots=roots,
-                    )
+                yield Call(
+                    self._walk,
+                    body,
+                    _Context(
+                        foreign=foreign,
+                        in_paragraph=self._paragraph_stays_open(context, lower, html=html, component=component)
+                        and not foreign,
+                        may_repeat=may_repeat,
+                        vue_skipped=vue_skipped,
+                    ),
+                    base_index=base_index,
+                    # A root inside a top-level condition is still the
+                    # element Vue passes a parent's attributes to.
+                    roots=roots,
                 )
 
     @staticmethod

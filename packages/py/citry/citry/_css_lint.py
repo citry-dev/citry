@@ -349,7 +349,7 @@ class _TemplateCssWalker:
                     nested = _nested_template(inner.content, self.parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        (yield Call(self.walk, parsed, base_index=base_index + inner.start_index + nested_start))
+                        yield Call(self.walk, parsed, base_index=base_index + inner.start_index + nested_start)
                     continue
                 key = _ascii_lower(attr.key.content)
                 if key in _STYLE_BINDINGS:
@@ -379,7 +379,7 @@ class _TemplateCssWalker:
                     "".join(item._0.token.content for item in body.elements if isinstance(item, TemplateElement.Text))
                 )
                 continue
-            (yield Call(self.walk, body, base_index=base_index))
+            yield Call(self.walk, body, base_index=base_index)
 
     def _record_classes(self, written: str, value_start: int) -> None:
         # Citry renders `{{ }}` in a plain attribute as written, so the words

@@ -491,7 +491,7 @@ def _walk_template(
             occurrences.append(occurrence)
         body = getattr(node, "body", None)
         if body is not None:
-            (yield Call(_walk_template, engine, source, body, occurrences, problems, base_index=base_index))
+            yield Call(_walk_template, engine, source, body, occurrences, problems, base_index=base_index)
         for attr in node.start_tag.attrs:
             if attr.inner_value is None or attr.kind != HtmlAttrKind.Template:
                 continue
@@ -521,16 +521,14 @@ def _walk_template(
             except (SyntaxError, ValueError) as exc:
                 problems.append(_diagnostic_problem(exc, code="nested-template-syntax", base_index=nested_base))
                 continue
-            (
-                yield Call(
-                    _walk_template,
-                    engine,
-                    source,
-                    nested,
-                    occurrences,
-                    problems,
-                    base_index=nested_base,
-                )
+            yield Call(
+                _walk_template,
+                engine,
+                source,
+                nested,
+                occurrences,
+                problems,
+                base_index=nested_base,
             )
 
 
