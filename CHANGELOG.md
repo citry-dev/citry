@@ -231,6 +231,7 @@
 
 ### Fixes
 
+- The built-in asset routes now match long request paths in linear time.
 - Without a configured cache, the stylesheets that `css_data()` produces
   no longer pile up in memory, one per distinct set of values, for the
   life of the process. They now count toward `vue_asset_max_bytes`, and
