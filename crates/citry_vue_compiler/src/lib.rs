@@ -1285,7 +1285,7 @@ fn walk(
                     .modifiers
                     .iter()
                     .any(|modifier| CITRY_LISTENER_MODIFIERS.contains(&modifier.content))
-                && let Some(rewritten) = plan_citry_listener(directive, state)
+                && let Some(rewritten) = plan_citry_listener(element, directive, state)
             {
                 citry_listeners.insert(ordinal, rewritten);
             }
@@ -1630,6 +1630,7 @@ const MAX_LISTENER_TIME_MS: u128 = (1 << 53) - 1;
 /// `onCitryOn0`; the directive in `client.js` finds it there and attaches the
 /// real listener where and when the modifiers say.
 fn plan_citry_listener(
+    element: &ElementNode<'_>,
     directive: &vize_atelier_core::DirectiveNode<'_>,
     state: &mut WalkState<'_>,
 ) -> Option<(Option<String>, Vec<String>)> {
@@ -1666,12 +1667,24 @@ fn plan_citry_listener(
             character => depth == 0 && character.is_whitespace(),
         })
         .map_or(attribute.len(), |(index, _)| index);
-    let (event, dynamic) = match directive.arg.as_ref() {
-        Some(ExpressionNode::Simple(arg)) => (arg.content.to_owned(), !arg.is_static),
+    // The parser refuses these for tags written in the template; the
+    // compiler refuses them too, for callers that compile without it, on a
+    // tag its parse reads as a component: a capitalized tag, `<component>`,
+    // or a component call. A
+    // component's listener hears the component's own events, and a dynamic
+    // event name would let a run-time value pick what the listener hears.
+    if element.tag_type == vize_atelier_core::ElementType::Component {
+        return fail(
+            state,
+            "a listener with a Citry modifier works only on an HTML element",
+        );
+    }
+    let event = match directive.arg.as_ref() {
+        Some(ExpressionNode::Simple(arg)) if arg.is_static => arg.content.to_owned(),
         _ => {
             return fail(
                 state,
-                "a listener with a Citry modifier needs an event name",
+                "a listener with a Citry modifier needs its event name written out",
             );
         }
     };
@@ -1680,11 +1693,11 @@ fn plan_citry_listener(
         .iter()
         .map(|modifier| modifier.content)
         .collect::<Vec<_>>();
-    // Vue's `transformOn` renames these two for a static name; the directive
-    // applies the same renaming in the browser for a dynamic one.
+    // Vue's `transformOn` renames these two, so the directive listens for the
+    // event Vue would.
     let event = match event.as_str() {
-        "click" if !dynamic && authored.contains(&"right") => "contextmenu".to_owned(),
-        "click" if !dynamic && authored.contains(&"middle") => "mouseup".to_owned(),
+        "click" if authored.contains(&"right") => "contextmenu".to_owned(),
+        "click" if authored.contains(&"middle") => "mouseup".to_owned(),
         _ => event,
     };
     // Each timing modifier and its time become one token, because Vue writes
@@ -1735,7 +1748,6 @@ fn plan_citry_listener(
     modifiers.sort();
     let number = state.citry_listeners;
     state.citry_listeners += 1;
-    let argument = if dynamic { format!("[{event}]") } else { event };
     let suffix = modifiers
         .iter()
         .map(|modifier| format!(".{modifier}"))
@@ -1748,9 +1760,9 @@ fn plan_citry_listener(
     state.edits.push(Edit {
         start: end,
         end,
-        replacement: format!(r#" v-citry-on:{argument}{suffix}="'{number}'""#),
+        replacement: format!(r#" v-citry-on:{event}{suffix}="'{number}'""#),
     });
-    Some((Some(argument), modifiers))
+    Some((Some(event), modifiers))
 }
 
 /// The milliseconds a time segment such as `300ms` or `2s` names.
@@ -4054,50 +4066,35 @@ mod tests {
     }
 
     #[test]
-    fn rewrites_a_dynamic_event_name_and_an_inline_statement() {
-        let artifact = compile_template(r#"<div @[name].outside="open = false; count++">x</div>"#);
+    fn refuses_a_dynamic_event_name_and_a_component_tag() {
+        // The parser refuses both when it reads the template; the compiler
+        // refuses them too, so a caller that compiles without the parser
+        // cannot let a run-time value pick what the listener hears.
+        for template in [
+            r#"<div @[name].outside="open = false">x</div>"#,
+            r#"<div v-on:[name].window="go">x</div>"#,
+            r#"<MyThing @click.outside="close"></MyThing>"#,
+        ] {
+            let artifact = compile_template(template);
+            assert_eq!(artifact.transformed_template, template, "{template}");
+            assert!(citry_on_directives(&artifact).is_empty(), "{template}");
+            assert!(
+                artifact
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code == "CITRY_LISTENER_SHAPE"),
+                "{template}: {:?}",
+                artifact.diagnostics
+            );
+        }
+        // An inline statement still compiles as it does for any listener.
+        let inline = compile_template(r#"<div @click.outside="open = false; count++">x</div>"#);
         assert!(
-            artifact.diagnostics.is_empty(),
-            "{:?}",
-            artifact.diagnostics
-        );
-        assert!(
-            artifact
-                .transformed_template
-                .contains(r#"@citry-on-0="open = false; count++" v-citry-on:[name].outside="'0'""#),
-            "{}",
-            artifact.transformed_template
-        );
-        // Vue compiles the inline statement as it does for any listener,
-        // and the dynamic argument gets the `_ctx.` prefix.
-        assert!(
-            artifact
+            inline
                 .code
                 .contains("onCitryOn0: $event => {_ctx.open = false; _ctx.count++}"),
             "{}",
-            artifact.code
-        );
-        assert!(
-            artifact
-                .code
-                .contains(r#"[_directive_citry_on, '0', _ctx.name, { "outside": true }]"#),
-            "{}",
-            artifact.code
-        );
-        // The metadata writes a dynamic name as `[name]`, so a static and a
-        // dynamic event never share a signature.
-        assert_eq!(
-            citry_on_directives(&artifact),
-            [(0, Some("[name]".to_owned()), strings(&["outside"]))]
-        );
-        assert_eq!(
-            artifact.elements[0].lifecycle_signature,
-            r#"[["citry-on","[name]",["outside"],"resolveDirective:citry-on",null]]"#
-        );
-        let static_name = compile_template(r#"<div @name.outside="go">x</div>"#);
-        assert_ne!(
-            static_name.elements[0].lifecycle_signature,
-            artifact.elements[0].lifecycle_signature
+            inline.code
         );
     }
 
@@ -4143,13 +4140,6 @@ mod tests {
                 Some("mouseup".to_owned()),
                 strings(&["middle", "outside"])
             )]
-        );
-        // A dynamic name is renamed in the browser, so the compiler keeps
-        // the modifiers and writes the name as authored.
-        let dynamic = compile_template(r#"<div @[name].right.window="h">x</div>"#);
-        assert_eq!(
-            citry_on_directives(&dynamic),
-            [(0, Some("[name]".to_owned()), strings(&["right", "window"]))]
         );
         // Another event keeps its name.
         let other = compile_template(r#"<div @keydown.right.window="h">x</div>"#);

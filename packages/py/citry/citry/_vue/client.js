@@ -1489,8 +1489,10 @@
     let event = binding.arg;
     const modifiers = Object.keys(binding.modifiers || {}).sort();
     if (typeof event !== "string" || event === "") return null;
-    // Vue renames these two for a static event name; the compiler did that
-    // already, and a dynamic name gets the same renaming here.
+    // The compiler writes only event names authored in the template, and it
+    // has already applied Vue's renaming of these two; the runtime repeats it,
+    // and accepts any `binding.arg`, so a directive written another way still
+    // listens for what Vue would.
     if (event === "click" && modifiers.includes("right")) event = "contextmenu";
     else if (event === "click" && modifiers.includes("middle")) event = "mouseup";
     return {event, modifiers, signature: event + "\0" + modifiers.join(".")};
@@ -1499,8 +1501,8 @@
     const handler = state.vnode.props?.["onCitryOn" + state.id];
     const instance = state.binding.instance?.$ ?? null;
     if (typeof handler !== "function" && !Array.isArray(handler)) {
-      // The compiler always writes the handler, so this means a spread or a
-      // dynamic name put something else under its key. Vue's own reporting
+      // The compiler always writes the handler, so this means something else
+      // was put under its key. Vue's own reporting
       // reaches the app's error handler when there is one and logs otherwise.
       const error = new TypeError("Citry listener 'onCitryOn" + state.id + "' is not a function");
       V.handleError(error, instance, NATIVE_EVENT_HANDLER);
@@ -1517,7 +1519,7 @@
       root: null,
       startListener: null, startVisible: new WeakMap()};
     byId.set(state.id, state);
-    // A dynamic event name of null attaches nothing, as Vue does for `@[name]`.
+    // A missing event name attaches nothing, as Vue does for `@[name]`.
     if (spec === null) return;
     const {event, modifiers} = spec;
     const has = name => modifiers.includes(name);
@@ -4208,7 +4210,7 @@
         const state = citryListeners.get(element)?.get(id);
         const spec = citryListenerSpec(binding);
         // A pending debounced call survives an update; only a new event name
-        // (a dynamic one) moves the listener and drops what was pending.
+        // or set of modifiers moves the listener and drops what was pending.
         if (state && (state.spec?.signature ?? null) === (spec?.signature ?? null)) return;
         detachCitryListener(element, id);
         attachCitryListener(element, binding, vnode);

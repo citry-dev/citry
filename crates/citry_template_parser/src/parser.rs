@@ -3111,6 +3111,16 @@ fn validate_vue_binding_python_conflicts(
 /// in Vue's shared helpers): `citry-on-0` and `citryOn0` both give
 /// `onCitryOn0`.
 fn vue_handler_key(event: &str) -> String {
+    let camel = vue_camelize(event);
+    let mut characters = camel.chars();
+    match characters.next() {
+        Some(first) => format!("on{}{}", first.to_uppercase(), characters.as_str()),
+        None => "on".to_owned(),
+    }
+}
+
+/// Vue's `camelize`: a letter after `-` becomes uppercase, and the `-` goes.
+fn vue_camelize(event: &str) -> String {
     let mut camel = String::with_capacity(event.len());
     let mut upper_next = false;
     for character in event.chars() {
@@ -3129,11 +3139,7 @@ fn vue_handler_key(event: &str) -> String {
         // Vue's `camelize` keeps a trailing hyphen.
         camel.push('-');
     }
-    let mut characters = camel.chars();
-    match characters.next() {
-        Some(first) => format!("on{}{}", first.to_uppercase(), characters.as_str()),
-        None => "on".to_owned(),
-    }
+    camel
 }
 
 /// Whether a props key is one Citry's Vue compiler writes for a listener
@@ -3159,18 +3165,36 @@ fn validate_reserved_citry_names(node: &Node, context: &ParserContext) -> Result
             .strip_prefix("v-on:")
             .or_else(|| name.strip_prefix('@'))
         {
-            // A dynamic event name is known only in the browser, where the
-            // directive checks that it finds a function.
+            // A dynamic event name has no props key to check here. Citry
+            // does not support a plain one (it fails when the component
+            // renders), and one with a Citry modifier is refused by
+            // `validate_citry_listener_modifiers`.
             if event.starts_with('[') {
                 continue;
             }
+            // An Events binding `@c-<event>` becomes a Vue listener for
+            // `<event>`, so its props key is the one that event would get.
+            let events_binding = name.starts_with("@c-");
+            let event = if events_binding {
+                &event["c-".len()..]
+            } else {
+                event
+            };
             vue_handler_key(event.split('.').next().unwrap_or(""))
         } else {
             let bound = name
                 .strip_prefix("v-bind:")
                 .or_else(|| name.strip_prefix(':'))
                 .unwrap_or(name);
-            bound.split('.').next().unwrap_or("").to_owned()
+            let mut parts = bound.split('.');
+            let key = parts.next().unwrap_or("");
+            // `.camel` makes Vue camelize the name, so `:on-citry-on-0.camel`
+            // sets `onCitryOn0`.
+            if parts.any(|modifier| modifier == "camel") {
+                vue_camelize(key)
+            } else {
+                key.to_owned()
+            }
         };
         if !is_citry_listener_key(&props_key) {
             continue;
@@ -3240,16 +3264,49 @@ fn validate_citry_listener_modifiers(
             format!("'{name}' on <{tag_name}> (line {line}, column {col}) {problem}"),
         ))
     };
-    let component =
-        has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG);
+    // Vue reads a tag that starts with a capital letter, such as
+    // `<MyThing>`, as a component, the same as Citry's own `c-` tags.
+    let capitalized = |tag: &str| tag.starts_with(|character: char| character.is_uppercase());
+    if capitalized(tag_name) {
+        return fail(
+            "uses a Citry listener modifier on a tag that starts with a capital letter, which Vue reads as a component. Put the listener on an HTML element, written in lowercase.".to_owned(),
+        );
+    }
+    // `<c-element>` writes the element its `is` names, so a static `is` of a
+    // component or Vue built-in counts as that tag.
+    let written_tag = if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        node.attrs()
+            .iter()
+            .find(|attr| attr.key.content == "is")
+            .and_then(|attr| attr.inner_value.as_ref())
+            .map_or(tag_name, |value| value.content.as_str())
+    } else {
+        tag_name
+    };
+    let component = (has_citry_component_prefix(written_tag)
+        && !citry_component_tag_eq(written_tag, C_ELEMENT_TAG))
+        || capitalized(written_tag);
     if component
-        || ["template", "slot", "component"].contains(&tag_name.to_ascii_lowercase().as_str())
+        || ["template", "slot", "component"].contains(&written_tag.to_ascii_lowercase().as_str())
     {
         // A listener on a component tag receives the component's emitted
         // events, which do not come from the DOM, so a window, document,
         // outside or timed listener has no meaning there.
         return fail(
             "uses a Citry listener modifier, which works only on HTML elements. Put the listener on an element inside the component, or handle the timing in the method.".to_owned(),
+        );
+    }
+    // The event name must be written in the template. A name in brackets
+    // comes from a value at run time, which would let data decide what the
+    // listener on the window or document hears; plain `@[name]` is not
+    // supported either.
+    if name
+        .strip_prefix("v-on:")
+        .or_else(|| name.strip_prefix('@'))
+        .is_some_and(|event| event.starts_with('['))
+    {
+        return fail(
+            "gives the event name in brackets. Citry's listener modifiers need the event name written out, as in '@click.outside'.".to_owned(),
         );
     }
     let has = |modifier: &str| modifiers.contains(&modifier);
