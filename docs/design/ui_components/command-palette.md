@@ -1006,8 +1006,12 @@ The stable production limits are:
 
 | Asset | Raw | gzip | Brotli |
 |---|---:|---:|---:|
-| Complete Command Palette JavaScript, including shared dependencies | `< 112 KiB` | `< 20 KiB` | `< 17 KiB` |
+| Complete Command Palette JavaScript, including shared dependencies | `< 112 KiB` | `< 21.5 KiB` | `< 18.5 KiB` |
 | Complete Command Palette CSS, including shared dependencies | `< 10 KiB` | `< 2.25 KiB` | `< 2 KiB` |
+
+The gzip and Brotli limits rose by 1.5 KiB when a closing command's
+`onAction` moved after the close, which added about 2.3 KiB of raw
+JavaScript to a family that had under 0.1 KiB of headroom.
 
 The asset report and focused tests are authoritative for current measurements.
 Volatile implementation snapshots are not duplicated here. Behavior, trust

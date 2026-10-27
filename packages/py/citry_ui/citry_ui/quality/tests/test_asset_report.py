@@ -470,8 +470,11 @@ def test_command_palette_assets_stay_within_the_family_budgets():
     assert incremental["javascript"]["gzip"] < 10 * 1024
     assert incremental["javascript"]["brotli"] < 9 * 1024
     assert family["javascript"]["raw"] < 112 * 1024
-    assert family["javascript"]["gzip"] < 20 * 1024
-    assert family["javascript"]["brotli"] < 17 * 1024
+    # Running a closing command's onAction after the close (#420), with its
+    # handling of owner errors, reopening and unmounting, adds about 2.3 KiB
+    # raw (0.6 KiB gzip) to a family that had under 0.1 KiB of headroom.
+    assert family["javascript"]["gzip"] < int(21.5 * 1024)
+    assert family["javascript"]["brotli"] < int(18.5 * 1024)
     assert family["css"]["raw"] < 10 * 1024
     assert family["css"]["gzip"] < int(2.25 * 1024)
     assert family["css"]["brotli"] < 2 * 1024

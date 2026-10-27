@@ -1542,9 +1542,8 @@ class CCommandPalette(LibraryComponent):
           let actionGeneration = 0;
           let closeGeneration = 0;
           let pendingControlledClose = null;
-          // A command that closes the palette runs onAction once the close has
-          // applied, so the page outside the modal is no longer inert and the
-          // owner can move focus there. This holds that call until then.
+          // A closing command's onAction waits here until the close applies,
+          // so the owner's focus() outside the modal works.
           let pendingAction = null;
           let formGuard = null;
           let effectStarted = false;
@@ -1720,19 +1719,15 @@ class CCommandPalette(LibraryComponent):
               notifyQuery("", "close", reason, source, false);
             }
             if (generation !== closeGeneration) return;
-            // This close can be applied from inside the palette's reactive
-            // effect, where the owner's onAction would make the effect track
-            // every reactive value onAction reads and run again when one
-            // changes. A queued microtask runs it after the effect and its
-            // attribute updates have finished.
+            // Run onAction outside the reactive effect, so the effect does
+            // not track what it reads.
             if (pendingAction !== null) queue(runPendingAction);
           };
           const runAction = (value, detail) => {
             try {
               callbacks.action?.(value, detail);
             } catch (error) {
-              // The close was already requested, so an error here cannot undo
-              // it; report it the way the browser reports an uncaught error.
+              // The close is already requested; report the error as uncaught.
               if (typeof globalThis.reportError === "function") {
                 globalThis.reportError(error);
               } else {
@@ -1781,12 +1776,9 @@ class CCommandPalette(LibraryComponent):
                 ) {
                   pendingControlledClose = null;
                 }
-                // When onOpenChange set open=false synchronously, Vue queued its
-                // update before this microtask, so that update has run by now.
-                // Whatever the owner did (accepted, kept the palette open,
-                // released control, or a callback threw while the close
-                // applied), a command waiting for this close runs here, so it
-                // never waits for a later close.
+                // Vue queued the owner's synchronous open=false before this
+                // task, so it has applied. Whatever the owner did, the waiting
+                // command runs now and never on a later close.
                 runPendingAction();
               });
               return false;
@@ -1855,8 +1847,7 @@ class CCommandPalette(LibraryComponent):
               event,
               closeOnAction: close,
             };
-            // An earlier command still waiting for its close runs first, so
-            // the owner sees actions in the order they were chosen.
+            // Keep actions in the order they were chosen.
             runPendingAction();
             if (!close) {
               callbacks.action?.(command.value, detail);
@@ -1867,24 +1858,17 @@ class CCommandPalette(LibraryComponent):
             try {
               requestVisibility(false, "action", option);
             } catch (error) {
-              // An owner callback threw during the close, so the close may never
-              // settle and the microtask that runs the waiting action after
-              // onOpenChange may never be queued.
-              // Run this action now rather than on some later close. In
-              // controlled mode wait one microtask first, so an open=false the
-              // owner set before throwing has been applied.
+              // An owner callback threw, so no settle may run this action.
+              // Controlled mode waits a microtask for an open=false set first.
               if (pendingAction === pending) {
                 if (openControlled) queue(runPendingAction);
                 else runPendingAction();
               }
               throw error;
             }
-            // An uncontrolled close applies at once, and so does a controlled one
-            // whose open was already false when onOpenChange returned. Nothing
-            // is left to wait for, so run the action now, still inside the
-            // user's event. An uncontrolled owner may have reopened the palette
-            // in onOpenChange; the action still runs here rather than on a
-            // later close.
+            // An uncontrolled close (or an already applied controlled one)
+            // leaves nothing to wait for: run now, inside the user's event,
+            // even if onOpenChange reopened the palette.
             if (
               generation === actionGeneration
               && pendingAction === pending
@@ -2195,9 +2179,8 @@ class CCommandPalette(LibraryComponent):
             actionGeneration += 1;
             compositionGeneration += 1;
             closeGeneration += 1;
-            // A command chosen before this cleanup still reaches the owner, for
-            // example when the owner unmounts the palette while closing it. Its
-            // onAction runs in a microtask after the cleanup.
+            // A waiting command still reaches the owner after cleanup, for
+            // example when the owner unmounts the palette while closing it.
             const leftoverAction = pendingAction;
             pendingAction = null;
             if (leftoverAction !== null) {
