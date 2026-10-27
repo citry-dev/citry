@@ -21,16 +21,17 @@ from typing import Any, cast
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _safe_class_text, _static_class_namespace_copy
 from citry._input_types import _CHECKS_ATTR
+from citry._model_base import ModelBase, dataclass_options
 from citry._nested_declarations import (
     _CONST_SCHEMA_DEFAULTS_ATTR,
     _SYNTHESIZED_DECLARATION_ATTR,
     _SYNTHESIZED_FIELD_OWNERS_ATTR,
     NestedClassDeclaration,
-    _convert_to_slotted_dataclass,
     _dropped_field_names,
     _dropped_fields_sentence,
     _replaced_parent_schema,
     _warn_nested_schema_replaced,
+    convert_plain_declaration,
 )
 
 # The full State meta surface. Every other underscore attribute on a State
@@ -146,7 +147,7 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
                 raise ValueError(msg)
 
 
-def convert_state_class(comp_name: str, user_cls: type) -> type:
+def convert_state_class(comp_name: str, user_cls: type, model_base: ModelBase | None = None) -> type:
     """
     Rebuild a State declaration as a mutable ``dataclass(slots=True)``.
 
@@ -160,6 +161,16 @@ def convert_state_class(comp_name: str, user_cls: type) -> type:
     The class the user wrote is never modified. The generated dataclass
     inherits the authored declaration, preserving methods, descriptors,
     zero-argument ``super()``, and source identity in its MRO.
+
+    With ``model_base`` (the setting), a dataclass base gives the generated
+    State its options. A Pydantic base leaves State a generated dataclass,
+    and a NamedTuple or frozen dataclass base is an error, because Citry
+    assigns to State.
+
+    Raises:
+        ValueError: State is frozen, or ``model_base`` names a kind Citry
+            cannot assign to.
+
     """
     frozen_msg = (
         f"Component {comp_name}: State is a frozen dataclass. State must stay mutable"
@@ -172,7 +183,29 @@ def convert_state_class(comp_name: str, user_cls: type) -> type:
         if user_cls.__dataclass_params__.frozen:  # type: ignore[attr-defined]
             raise ValueError(frozen_msg)
         return user_cls
-    converted = _convert_to_slotted_dataclass(user_cls)
+    # `class State(Parent.State):` keeps its parent's dataclass, as any child
+    # schema keeps its parent's kind, so the setting's kind does not apply.
+    if any("__dataclass_fields__" in klass.__dict__ for klass in user_cls.__mro__):
+        model_base = model_base if model_base is not None and model_base.kind == "dataclass" else None
+        if model_base is not None and dataclass_options(model_base).get("frozen"):
+            model_base = None
+    if model_base is not None and model_base.kind == "namedtuple":
+        msg = (
+            f"Component {comp_name}: State cannot be generated as a NamedTuple, because Citry assigns to State."
+            " Decorate State with @dataclass to keep it a dataclass, or set model_base to a Pydantic model or a"
+            " dataclass that is not frozen."
+        )
+        raise ValueError(msg)
+    if model_base is not None and model_base.kind == "dataclass" and dataclass_options(model_base).get("frozen"):
+        msg = (
+            f"Component {comp_name}: State cannot be generated from the frozen dataclass model_base"
+            f" {model_base.base.__qualname__}, because Citry assigns to State. Decorate State with @dataclass to"
+            " keep it a mutable dataclass, or set model_base to a Pydantic model or a dataclass that is not frozen."
+        )
+        raise ValueError(msg)
+    # State stays a generated dataclass under a Pydantic base (see #172).
+    dataclass_base = model_base if model_base is not None and model_base.kind == "dataclass" else None
+    converted = convert_plain_declaration(user_cls, model_base=dataclass_base)
     # A plain State based on a frozen dataclass inherits the frozen flag.
     if converted.__dataclass_params__.frozen:  # type: ignore[attr-defined]
         raise ValueError(frozen_msg)

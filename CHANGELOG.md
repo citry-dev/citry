@@ -10,6 +10,12 @@
 
 ### Added
 
+- You can make every plain `class Kwargs:`, `TemplateData`, `JsData`,
+  `CssData`, and Events `data` class a Pydantic model that subclasses your
+  own `BaseModel` subclass, so its `model_config` applies to all of them:
+  pass it as `Citry(model_base=MyModel)`. A dataclass base or
+  `typing.NamedTuple` works too
+  ([details](https://citry.dev/concepts/inputs-and-validation/#model-base)).
 - Citry now supports Python 3.15.
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
