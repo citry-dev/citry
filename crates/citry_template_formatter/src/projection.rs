@@ -733,11 +733,19 @@ fn python_comments(source: &str, tokens: &Tokens) -> Vec<String> {
                 .iter()
                 .find(|token| is_python_anchor_token(token.kind()));
             let comment = &source[range.start().to_usize()..range.end().to_usize()];
-            let same_line = previous.is_some_and(|token| {
-                let token_range = token.as_tuple().1;
-                !source[token_range.end().to_usize()..range.start().to_usize()]
-                    .contains(['\n', '\r'])
-            });
+            // Judged against the code just before the comment, a closing
+            // parenthesis included, as in `python::comment_fingerprint`.
+            let same_line = tokens[..index]
+                .iter()
+                .rev()
+                .find(|token| {
+                    is_python_anchor_token(token.kind()) || token.kind() == TokenKind::Rpar
+                })
+                .is_some_and(|token| {
+                    let token_range = token.as_tuple().1;
+                    !source[token_range.end().to_usize()..range.start().to_usize()]
+                        .contains(['\n', '\r'])
+                });
             Some(format!(
                 "{}|{:?}|{same_line}|{:?}",
                 comment.strip_prefix('#').unwrap_or(comment).trim(),
@@ -748,10 +756,14 @@ fn python_comments(source: &str, tokens: &Tokens) -> Vec<String> {
         .collect()
 }
 
+/// Whether a comment's position is judged against this token. Parentheses do
+/// not count, for the reason `python::is_anchor_token` gives.
 fn is_python_anchor_token(kind: TokenKind) -> bool {
     !matches!(
         kind,
-        TokenKind::Comment
+        TokenKind::Lpar
+            | TokenKind::Rpar
+            | TokenKind::Comment
             | TokenKind::Newline
             | TokenKind::NonLogicalNewline
             | TokenKind::Indent

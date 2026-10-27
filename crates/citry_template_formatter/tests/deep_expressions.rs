@@ -93,3 +93,23 @@ fn the_deepest_accepted_c_for_clause_formats() {
         }
     }
 }
+
+#[test]
+fn a_multiline_expression_at_the_depth_limit_settles() {
+    // When Ruff's output would nest past the parser's limit, the formatter
+    // keeps the author's text. It must keep the bytes as they are: indenting
+    // the kept text again on every pass would never settle.
+    let accepted = |terms: usize| {
+        let template = format!("<p>{{{{ a\n{} }}}}</p>", "+a\n".repeat(terms));
+        citry_template_parser::parser::parse_template(&template, None, None)
+            .is_ok()
+            .then_some(template)
+    };
+    let mut terms = 1;
+    while accepted(terms + 1).is_some() {
+        terms += 1;
+    }
+    let template = accepted(terms).expect("a short expression parses");
+    let formatted = format_template(&template).unwrap_or_else(|error| panic!("{terms}: {error}"));
+    assert_eq!(format_template(&formatted).unwrap(), formatted);
+}

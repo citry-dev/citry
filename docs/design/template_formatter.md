@@ -687,6 +687,26 @@ It preserves whole bindings, field order, aliases, and final `**rest`, using a
 compact `{field, source as target, **rest}` form when it fits. It never sends
 that Citry grammar to Ruff. `c-fill fallback` remains exact.
 
+An expression also keeps its exact authored bytes, without the template
+indentation described above, when the formatter cannot show that its output
+keeps the expression's meaning and comments:
+
+- it contains a string that spans lines, and re-indenting the expression
+  would change the string;
+- the provider's output would nest past the parser's depth limit;
+- the provider moved a comment to another place in the expression, for
+  example from after a `c-for` target to the end of the clause.
+
+The comparison of comment positions anchors each comment to its neighboring
+tokens, not counting parentheses. The provider removes parentheses it finds
+redundant, as in `(a + b)  # c` to `a + b  # c`, and Citry reads each
+expression inside parentheses of its own. Removing or adding parentheses does
+not move a comment, so the comparison ignores them. Whether a comment ends a line of code is
+judged against the code just before it, a closing parenthesis included. Comments the
+provider joined, split or spaced differently also keep the author's text. A
+changed syntax tree, or a comment whose words the provider dropped, added or
+changed, is still a provider failure and stops the format.
+
 If formatted text cannot be represented by an unquoted attribute or would
 conflict with its enclosing quote delimiter, that region remains unchanged.
 Verbatim bodies, alternate languages, and formatter-suppressed ranges likewise
