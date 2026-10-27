@@ -11,6 +11,8 @@
 //! The model also holds the fingerprints the formatter checks its own output
 //! against, which is why it is built for the source and again for the result.
 
+use std::collections::BTreeMap;
+
 use citry_template_parser::{
     Comment, FillDataPattern, ForeignSpan, HtmlAttr, HtmlAttrKind, HtmlStartTag, Node,
     ParseOptions, Template, TemplateElement, Token, parse_template, parse_template_with_options,
@@ -25,6 +27,7 @@ use crate::html::{
 };
 use crate::layout::{ElementLayout, ItemEdges, analyze_elements};
 use crate::newline::{detect_newline, normalize_to_lf};
+use crate::printer::{Edit, plan_start_tag, span_intersects_protected};
 use crate::python::{
     expression_is_provider_suppressed, for_clause_is_provider_suppressed, format_expression,
     format_for_clause,
@@ -148,6 +151,110 @@ pub(crate) struct SourceModel {
     embedded_bodies: Vec<EmbeddedBodyModel>,
     verbatim_bodies: Vec<String>,
     comments: CommentMap,
+    planned: PlannedEdits,
+}
+
+/// The edits one pass has decided so far, kept while the walk builds the
+/// model, so a layout decision can read the column an item will have once the
+/// pass's edits land.
+///
+/// An element that starts right after its parent's start tag sits wherever the
+/// parent's `>` ends up. When the parent breaks across lines, that column
+/// changes in the same pass, so the child's layout has to be measured against
+/// the planned text. Measured that way, one pass lays out every level of a deep
+/// chain.
+///
+/// The walk visits elements in source order, so every edit before an element
+/// is already recorded when the walk reaches it.
+#[derive(Clone, Default)]
+struct PlannedEdits {
+    /// Only the format loop measures planned columns. Other model builds, such
+    /// as the one the verification step makes of its result, read the source.
+    active: bool,
+    /// The line break the printer uses in this source, found once so that
+    /// recording a gap does not scan the source for it each time.
+    newline: &'static str,
+    /// Each edit's end offset and replacement, by start offset.
+    by_start: BTreeMap<usize, (usize, String)>,
+}
+
+impl PlannedEdits {
+    /// Record an edit the printer will make, unless it changes nothing.
+    fn record(&mut self, source: &str, span: Span, replacement: &str) {
+        if !self.active || source.get(span.start..span.end) == Some(replacement) {
+            return;
+        }
+        // Starts are unique because the gaps, tag-internal spans and
+        // expression spans of one pass never share a start offset, so an
+        // insert that replaces an entry would mean a recorded edit was lost.
+        let replaced = self
+            .by_start
+            .insert(span.start, (span.end, replacement.to_string()));
+        debug_assert!(
+            replaced.is_none(),
+            "two planned edits start at {}",
+            span.start
+        );
+    }
+
+    /// Record the line break and indent the printer puts in a body gap.
+    ///
+    /// The text is built here, after the `active` check, so a model build that
+    /// reads source columns pays nothing for a gap it never reads.
+    fn record_gap(&mut self, source: &str, span: Span, indent: usize) {
+        if !self.active {
+            return;
+        }
+        let replacement = format!("{}{}", self.newline, " ".repeat(indent));
+        self.record(source, span, &replacement);
+    }
+
+    /// The column `at` will have once the edits recorded before it land.
+    ///
+    /// It walks back from `at` through the recorded edits and the source
+    /// between them until it meets a line break. An edit inside a protected
+    /// range is skipped, because the printer leaves those bytes as they are.
+    fn column(
+        &self,
+        source: &str,
+        at: usize,
+        protected: &[ProtectedRange],
+    ) -> Result<usize, FormatError> {
+        if !self.active {
+            return source_column(source, at);
+        }
+        let mut width = 0;
+        let mut cursor = at;
+        for (&start, (end, replacement)) in self.by_start.range(..at).rev() {
+            // An edit that reaches past the cursor overlaps text already
+            // counted, so it cannot describe what comes before it.
+            if *end > cursor || span_intersects_protected(Span { start, end: *end }, protected) {
+                continue;
+            }
+            let between = source.get(*end..cursor).ok_or_else(|| {
+                FormatError::invalid_span("layout position is not valid UTF-8 source", at..at)
+            })?;
+            if let Some(line) = last_line_width(between) {
+                return Ok(width + line);
+            }
+            width += between.chars().count();
+            if let Some(line) = last_line_width(replacement) {
+                return Ok(width + line);
+            }
+            width += replacement.chars().count();
+            cursor = start;
+        }
+        let before = source.get(..cursor).ok_or_else(|| {
+            FormatError::invalid_span("layout position is not valid UTF-8 source", at..at)
+        })?;
+        Ok(width + last_line_width(before).unwrap_or_else(|| before.chars().count()))
+    }
+}
+
+/// The width of the text after the last line break, or `None` without one.
+fn last_line_width(text: &str) -> Option<usize> {
+    text.rfind(['\n', '\r'])
+        .map(|index| text[index + 1..].chars().count())
 }
 
 impl SourceModel {
@@ -160,6 +267,28 @@ impl SourceModel {
         template: &Template,
         options: &ParseOptions,
     ) -> Result<Self, FormatError> {
+        Self::build_measuring(source, template, options, false)
+    }
+
+    /// Build the model one format pass works from.
+    ///
+    /// Layout reads each element's column from the text this pass will
+    /// produce (see [`PlannedEdits`]). The other builds read the column in
+    /// `source`, which is the same for text the formatter already settled.
+    pub(crate) fn build_for_pass(
+        source: &str,
+        template: &Template,
+        options: &ParseOptions,
+    ) -> Result<Self, FormatError> {
+        Self::build_measuring(source, template, options, true)
+    }
+
+    fn build_measuring(
+        source: &str,
+        template: &Template,
+        options: &ParseOptions,
+        measure_planned_columns: bool,
+    ) -> Result<Self, FormatError> {
         let mut model = Self {
             tags: Vec::new(),
             body_gaps: Vec::new(),
@@ -168,6 +297,13 @@ impl SourceModel {
             embedded_bodies: Vec::new(),
             verbatim_bodies: Vec::new(),
             comments: CommentMap::new(source, &template.comments)?,
+            planned: PlannedEdits {
+                active: measure_planned_columns,
+                // Found once per model, so recording a gap never rescans the
+                // source for its line break.
+                newline: detect_newline(source),
+                by_start: BTreeMap::new(),
+            },
         };
         visit_template(
             &VisitContext {
@@ -194,6 +330,8 @@ impl SourceModel {
         // means the walk missed a region, and formatting a template the model
         // does not fully describe is how comments get lost.
         model.comments.validate_complete()?;
+        // The planned edits only served the walk; the printer plans its own.
+        model.planned = PlannedEdits::default();
         // Nested templates are visited inside their parent, so the lists come
         // back out of source order. The printer needs them sorted, and
         // overlapping protected ranges are merged so containment tests are a
@@ -270,6 +408,10 @@ struct ParentLayout<'a> {
 #[derive(Clone, Copy)]
 struct NodeLayout {
     column: usize,
+    /// Whether `column` is where the element sits, rather than an indent the
+    /// layout gives it. Such a column is measured again from the planned text
+    /// when the walk reaches the element.
+    column_from_position: bool,
     body_editable: bool,
 }
 
@@ -325,10 +467,23 @@ fn visit_template(
     for (index, element) in template.elements.iter().enumerate() {
         match element {
             TemplateElement::Node(node) => {
+                let mut layout = node_layouts[index];
+                // The elements before this one have been visited by now, so
+                // their edits are recorded and the planned column is final.
+                if layout.column_from_position {
+                    layout.column = model
+                        .planned
+                        .column(
+                            context.root_source,
+                            element_span(element).offset(context.base).start,
+                            &model.protected,
+                        )
+                        .unwrap_or(layout.column);
+                }
                 visit_node(
                     context,
                     node,
-                    node_layouts[index],
+                    layout,
                     suppression.element_enabled[index],
                     model,
                 )?;
@@ -353,7 +508,10 @@ fn visit_template(
                     && !is_protected(span, &model.protected)
                     && !expression_is_provider_suppressed(&expr.value.content)
                 {
-                    let source_column = source_column(context.root_source, span.start)?;
+                    let source_column =
+                        model
+                            .planned
+                            .column(context.root_source, span.start, &model.protected)?;
                     let column = parent
                         .filter(|_| span.start == context.base + body_span.start)
                         .map_or(source_column, |layout| layout.column);
@@ -363,15 +521,16 @@ fn visit_template(
                         PREFERRED_WIDTH.saturating_sub(column + 6 + suffix_width),
                         detect_newline(context.root_source),
                     )?;
-                    model.expressions.push(ExpressionModel {
-                        span,
-                        canonical: format_template_expression(
-                            &formatted,
-                            column,
-                            detect_newline(context.root_source),
-                            expr.token.content.contains(['\n', '\r']),
-                        ),
-                    });
+                    let canonical = format_template_expression(
+                        &formatted,
+                        column,
+                        detect_newline(context.root_source),
+                        expr.token.content.contains(['\n', '\r']),
+                    );
+                    // Recorded so a later element's column can be measured in
+                    // the text this pass will produce.
+                    model.planned.record(context.root_source, span, &canonical);
+                    model.expressions.push(ExpressionModel { span, canonical });
                 }
             }
             TemplateElement::Text(text) => validate_token(
@@ -474,10 +633,35 @@ fn visit_node_on_stack(
     if context.editable
         && let Some(start_tag_model) = start_tag_model
     {
+        if model.planned.active {
+            // The printer lays out this tag later from the same model, so plan
+            // it now as well: whether it breaks across lines decides the column
+            // its body starts at. If planning fails here, the printer fails the
+            // same way on this tag and reports the error, so this pass records
+            // nothing for it.
+            let mut edits: Vec<Edit> = Vec::new();
+            if plan_start_tag(
+                context.root_source,
+                &start_tag_model,
+                model.planned.newline,
+                &model.protected,
+                &mut edits,
+            )
+            .is_ok()
+            {
+                for edit in edits {
+                    // Recorded for later columns (see `PlannedEdits`).
+                    model
+                        .planned
+                        .record(context.root_source, edit.span, &edit.replacement);
+                }
+            }
+        }
         model.tags.push(start_tag_model);
     }
 
     if context.provider_editable {
+        let first_new = model.expressions.len();
         collect_attribute_provider_edits(
             context,
             start_tag,
@@ -485,6 +669,15 @@ fn visit_node_on_stack(
             &model.protected,
             &mut model.expressions,
         )?;
+        // Recorded for later columns (see `PlannedEdits`); model builds that
+        // read source columns skip it.
+        if model.planned.active {
+            for expression in &model.expressions[first_new..] {
+                model
+                    .planned
+                    .record(context.root_source, expression.span, &expression.canonical);
+            }
+        }
     }
 
     for (attr_index, attr) in start_tag.attrs.iter().enumerate() {
@@ -1167,14 +1360,14 @@ fn collect_body_layout(
             && class == WhitespaceClass::Structural
             && (!all_rendered_items_are_protected || index == 0 || index == items.len())
         {
-            model.body_gaps.push(BodyGapModel {
-                span,
-                indent: if index == items.len() {
-                    closing_indent
-                } else {
-                    child_indent
-                },
-            });
+            let indent = if index == items.len() {
+                closing_indent
+            } else {
+                child_indent
+            };
+            // Recorded for later columns (see `PlannedEdits`).
+            model.planned.record_gap(context.root_source, span, indent);
+            model.body_gaps.push(BodyGapModel { span, indent });
         }
         gap_classes.push(class);
         if let Some(item) = items.get(index) {
@@ -1192,6 +1385,7 @@ fn collect_body_layout(
             )
             .ok()
             .unwrap_or(child_indent),
+            column_from_position: true,
             body_editable: true,
         })
         .collect::<Vec<_>>();
@@ -1205,6 +1399,7 @@ fn collect_body_layout(
             || (parent.is_none() && context.root_layout_column.is_some())
         {
             nodes[element_index].column = child_indent;
+            nodes[element_index].column_from_position = false;
         }
         let ElementLayout {
             edges,

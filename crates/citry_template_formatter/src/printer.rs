@@ -165,7 +165,7 @@ impl EditPlan {
 ///
 /// Returns whether the tag went multiline, which the caller uses to decide the
 /// layout of what follows.
-fn plan_start_tag(
+pub(crate) fn plan_start_tag(
     source: &str,
     tag: &StartTagModel,
     newline: &str,
@@ -407,7 +407,7 @@ fn validate_edits(
     Ok(())
 }
 
-fn span_intersects_protected(span: Span, protected: &[ProtectedRange]) -> bool {
+pub(crate) fn span_intersects_protected(span: Span, protected: &[ProtectedRange]) -> bool {
     protected.iter().any(|range| {
         // An empty span is an insertion point, not an overlap, so it needs the
         // range's own rule about whether text may be inserted there. Plain

@@ -159,12 +159,33 @@ fn format_once_with_options(
     source: &str,
     options: &ParseOptions,
 ) -> Result<(String, SourceModel, ParseOptions), FormatError> {
+    let settled = settle(source, options)?;
+    Ok((settled.text, settled.model, settled.options))
+}
+
+/// The result of running the pass loop to its fixed point.
+struct Settled {
+    text: String,
+    /// The model built from the original source, for the fingerprint checks.
+    model: SourceModel,
+    options: ParseOptions,
+    /// How many plans the loop built, the last one empty. Tests read it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    passes: usize,
+}
+
+/// Run edit passes until the text stops changing.
+///
+/// Each pass measures an element's column in the text it will produce (see
+/// `SourceModel::build_for_pass`), so a chain of tags nested one inside the
+/// next settles in a few passes, however deep it is.
+fn settle(source: &str, options: &ParseOptions) -> Result<Settled, FormatError> {
     // Parsing first is what makes the rest safe: only spans the parse
     // identified are ever edited, so a `{# fmt: on #}` sitting inside an
     // attribute value or a `<c-raw>` body stays ordinary text.
     let template =
         parse_with_options(source, options).map_err(|error| FormatError::from_parse(&error))?;
-    let mut model = SourceModel::build_with_options(source, &template, options)?;
+    let mut model = SourceModel::build_for_pass(source, &template, options)?;
     let before_model = model.clone();
     // Layout columns and one-line fit can change after an earlier structural,
     // tag, or expression edit. Those dependencies point forward in source
@@ -178,7 +199,7 @@ fn format_once_with_options(
     let mut current = source.to_string();
     let mut current_options = options.clone();
 
-    for _ in 0..max_passes {
+    for pass in 0..max_passes {
         let plan = EditPlan::build(&current, &model)?;
         // Check the plan against the protected ranges before touching anything,
         // so an edit that would reach into suppressed bytes never runs.
@@ -188,7 +209,12 @@ fn format_once_with_options(
         // A pass that changes nothing is the fixed point: everything that could
         // move has moved, and the columns it depended on have settled.
         if candidate == current {
-            return Ok((candidate, before_model, candidate_options));
+            return Ok(Settled {
+                text: candidate,
+                model: before_model,
+                options: candidate_options,
+                passes: pass + 1,
+            });
         }
 
         // Edits shift every offset after them, so the model is rebuilt from the
@@ -201,7 +227,7 @@ fn format_once_with_options(
                 "an intermediate formatter pass did not reparse: {error}"
             ))
         })?;
-        model = SourceModel::build_with_options(&current, &template, &current_options).map_err(
+        model = SourceModel::build_for_pass(&current, &template, &current_options).map_err(
             |error| {
                 FormatError::invariant(format!(
                     "an intermediate formatter pass failed source validation: {error}"
@@ -234,7 +260,20 @@ fn parse_with_options(
 mod tests {
     use crate::error::FormatErrorKind;
 
-    use super::{format, format_once, verify_candidate};
+    use citry_template_parser::ParseOptions;
+
+    use super::{format, format_once, settle, verify_candidate};
+
+    /// A chain of `depth` tags nested one inside the next, each with a `c-for`.
+    ///
+    /// The chain is written on one line, so every tag past the line width has
+    /// to break, and each break moves the start of the tag inside it.
+    fn for_chain(depth: usize) -> String {
+        let open: String = (0..depth)
+            .map(|level| format!("<div c-for=\"row{level} in rows\">"))
+            .collect();
+        open + "{{ n }}" + &"</div>".repeat(depth)
+    }
 
     #[test]
     fn structural_formatting_recurses_into_nested_template_values() {
@@ -390,6 +429,39 @@ mod tests {
             "</main>",
         );
 
+        assert_eq!(format(source).unwrap(), expected);
+        assert_eq!(format(expected).unwrap(), expected);
+    }
+
+    #[test]
+    fn a_deep_chain_settles_in_a_few_passes() {
+        // Each pass measures an element's column in the text it will produce,
+        // so a chain settles in a few passes however deep it is.
+        let settled = settle(&for_chain(200), &ParseOptions::default()).unwrap();
+        assert!(settled.passes <= 8, "took {} passes", settled.passes);
+        assert_eq!(format(&settled.text).unwrap(), settled.text);
+    }
+
+    #[test]
+    fn a_multiline_expression_settles_with_planned_columns() {
+        let source = concat!(
+            r#"<c-for each="segment in segments">"#,
+            r#"<c-if cond="segment['type'] == 'text'">{{ segment["value"] }}</c-if>"#,
+            r#"<c-else><bdi dir="auto">{{ segment["value"] }}</bdi></c-else></c-for>"#,
+        );
+        // The first expression's closing line keeps the rest of the source
+        // line, so its width budget is zero and Ruff splits the subscript. The
+        // second expression is the first item in `<bdi>`'s body, so it is
+        // measured at `<bdi>`'s column, where it fits on one line.
+        let expected = concat!(
+            r#"<c-for each="segment in segments"><c-if cond="segment['type'] == 'text'">{{"#,
+            "\n",
+            "                                    segment[\n",
+            "                                      \"value\"\n",
+            "                                    ]\n",
+            "                                  }}</c-if>",
+            r#"<c-else><bdi dir="auto">{{ segment["value"] }}</bdi></c-else></c-for>"#,
+        );
         assert_eq!(format(source).unwrap(), expected);
         assert_eq!(format(expected).unwrap(), expected);
     }
