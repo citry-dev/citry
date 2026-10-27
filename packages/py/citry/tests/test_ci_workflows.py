@@ -58,6 +58,36 @@ def test_pull_request_workflows_cancel_only_stale_pull_request_runs() -> None:
     }
 
 
+# The workflows whose PR runs take runners. Each one cancels a PR's runs when
+# the PR merges or closes; the notification and relock workflows do not run
+# checks, so they are left out.
+_CHECK_WORKFLOWS_CANCELLED_ON_CLOSE = {
+    "py--examples--tests.yml",
+    "py--tests.yml",
+    "repo--check.yml",
+    "repo--codeql.yml",
+    "repo--docs-check.yml",
+    "repo--docs-lighthouse.yml",
+    "repo--generated.yml",
+    "repo--security.yml",
+    "rust--tests.yml",
+}
+
+
+def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
+    for name in sorted(_CHECK_WORKFLOWS_CANCELLED_ON_CLOSE):
+        workflow = _load_workflow(name)
+        # A `closed` run joins the PR's concurrency group, and the group's
+        # cancel-in-progress (checked above) cancels the PR's earlier runs.
+        assert workflow["on"]["pull_request"]["types"] == ["opened", "synchronize", "reopened", "closed"], name
+        for job_name, job in workflow["jobs"].items():
+            # A job with `needs` is skipped with the job it needs, so only the
+            # jobs that start a run need the condition. Without it, the
+            # cancelling run would itself queue for runners.
+            if "needs" not in job:
+                assert job.get("if") == "github.event.action != 'closed'", f"{name}: {job_name}"
+
+
 def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> None:
     workflow = _load_workflow("py--diagnostic.yml")
     dispatch = workflow["on"]["workflow_dispatch"]

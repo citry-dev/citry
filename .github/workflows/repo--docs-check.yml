@@ -40,6 +40,10 @@ on:
       - ".github/workflows/repo--docs-check.yml"
       - ".gitmodules"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "docs_site/**"
       - "CHANGELOG.md"
@@ -85,6 +89,7 @@ env:
 
 jobs:
   docs-check:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:
@@ -164,6 +169,7 @@ jobs:
   # Needs the root-owned `docs` extra (to build the site), the `citry`
   # package's `e2e` group (for Playwright), and the browser binary.
   docs-e2e:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:

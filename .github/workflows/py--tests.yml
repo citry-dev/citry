@@ -40,6 +40,10 @@ on:
       - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "packages/py/**"
       - "packages/js/citry-client/**"
@@ -91,6 +95,7 @@ env:
 
 jobs:
   i18n-release-qualification:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -140,6 +145,7 @@ jobs:
           if-no-files-found: error
 
   test:
+    if: github.event.action != 'closed'
     runs-on: ${{ matrix.os }}
     strategy:
       # A failure on one interpreter must not hide portability results from
@@ -204,6 +210,7 @@ jobs:
           ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11') && '--python-render-path' || '' }}
 
   reload-servers:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -239,6 +246,7 @@ jobs:
           --durations 10
 
   windows-contracts:
+    if: github.event.action != 'closed'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -286,6 +294,7 @@ jobs:
   # the same paths on all three engines. The `test` job above excludes `e2e`
   # explicitly and does not sync that dependency group.
   e2e:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -401,6 +410,7 @@ jobs:
           if-no-files-found: error
 
   citry-ui-wheel-build:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -725,6 +735,7 @@ jobs:
   # pull requests. The scheduled cross-browser workflow retains the broader
   # all-e2e sweep.
   vue-conformance:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
