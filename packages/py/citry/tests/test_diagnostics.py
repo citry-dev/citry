@@ -12,6 +12,7 @@ from citry._diagnostics import (
     render_diagnostic,
 )
 from citry._linting import TemplateLintInfo
+from citry.settings import CitrySettings
 
 
 def test_catalog_definition_and_documentation_url() -> None:
@@ -24,6 +25,9 @@ def test_catalog_definition_and_documentation_url() -> None:
     )
 
 
+# Codes whose severity follows an application setting other than a
+# `LintSettings` rule, mapped to that setting.
+_SETTING_SWITCHED_CODES = {"citry.template.csp-incompatible": "security_csp"}
 # Each LintSettings severity setting and the catalog code it controls.
 _LINT_RULE_CODES = {
     "rule_unknown_template_variable": "citry.template.unknown-variable",
@@ -73,7 +77,11 @@ def test_catalog_default_severities_match_the_lint_settings_defaults() -> None:
     configurable_codes = {code for code, item in DIAGNOSTICS.items() if item.get("configurableSeverity")}
     # A new rule must be added to the mapping, so it cannot skip this check.
     assert set(settings_rules) == set(_LINT_RULE_CODES)
-    assert configurable_codes == set(_LINT_RULE_CODES.values())
+    # A rule that an application setting other than `LintSettings` turns on
+    # is off by default and has no `rule_*` field.
+    assert configurable_codes == set(_LINT_RULE_CODES.values()) | set(_SETTING_SWITCHED_CODES)
+    assert {diagnostic_definition(code).default_severity for code in _SETTING_SWITCHED_CODES} == {"ignore"}
+    assert set(_SETTING_SWITCHED_CODES.values()) <= {field.name for field in dataclasses.fields(CitrySettings)}
     assert {name: diagnostic_definition(code).default_severity for name, code in _LINT_RULE_CODES.items()} == (
         settings_rules
     )

@@ -3524,6 +3524,64 @@ def test_template_lint_diagnostics_apply_owner_policy_to_the_html_rules(tmp_path
     assert codes("counter.html") == []
 
 
+_CSP_TEMPLATE = """\
+<button onclick="save()">Save</button>
+<a href="javascript:go()">Go</a>
+<script>run()</script>
+<p :title="x" @click="go">ok</p>
+"""
+
+
+@pytest.mark.parametrize(
+    ("mode", "severity"),
+    [("warn", types.DiagnosticSeverity.Warning), ("strict", types.DiagnosticSeverity.Error), ("off", None)],
+)
+def test_template_lint_diagnostics_report_strict_csp_problems_with_the_engines_severity(tmp_path, mode, severity):
+    (tmp_path / "card.html").write_text(_CSP_TEMPLATE, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        f"engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, security_csp={mode!r})\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState((tmp_path / "card.html").as_uri(), "citry-html", _CSP_TEMPLATE, 1)
+    document.update(_CSP_TEMPLATE, 1, project)
+
+    diagnostics = [
+        item
+        for item in template_lint_diagnostics(document, project, {document.uri: document})
+        if item.code == "citry.template.csp-incompatible"
+    ]
+
+    if severity is None:
+        assert diagnostics == []
+        return
+    # The editor underlines the attribute name, the javascript: value, and the tag name.
+    assert [(item.severity, item.range) for item in diagnostics] == [
+        (severity, types.Range(_position(_CSP_TEMPLATE, "onclick"), _position(_CSP_TEMPLATE, "onclick", 7))),
+        (
+            severity,
+            types.Range(_position(_CSP_TEMPLATE, "javascript:go()"), _position(_CSP_TEMPLATE, "javascript:go()", 15)),
+        ),
+        (severity, types.Range(_position(_CSP_TEMPLATE, "script>run"), _position(_CSP_TEMPLATE, "script>run", 6))),
+    ]
+    assert diagnostics[0].message.startswith("A strict Content Security Policy blocks the inline event attribute")
+    assert diagnostics[0].source == "citry"
+
+
+@pytest.mark.parametrize("mode", ["off", "warn", "strict"])
+def test_editor_passes_the_lint_records_security_csp_to_the_markup_lint(mode):
+    lint = TemplateAnalysis.from_dict(Citry(autodiscover=False, security_csp=mode).template_analysis().to_dict()).lint
+
+    consumer = engine_module._markup_lint_consumer(lint, root_may_receive_attributes=True)
+
+    assert consumer.csp == mode
+
+
 def test_template_lint_diagnostics_read_directives_and_inherit_attrs_from_the_owner_javascript(tmp_path):
     templates = {
         "plain.html": '<img src="a.png">',

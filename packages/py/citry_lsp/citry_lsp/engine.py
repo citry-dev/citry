@@ -1037,6 +1037,8 @@ def _markup_lint_consumer(lint: TemplateLintInfo, *, root_may_receive_attributes
     return MarkupLintConsumer(
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
         root_may_receive_attributes=root_may_receive_attributes,
+        # The app worker sends the engine's CSP policy in the lint record.
+        csp=lint.security_csp,
     )
 
 

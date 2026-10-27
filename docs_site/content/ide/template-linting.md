@@ -45,6 +45,7 @@ them. There is no separate editor setting.
 | [`citry.template.invalid-nesting`](/ide/diagnostics/#citry.template.invalid-nesting) | A block such as `<div>` inside a `<p>` | error |
 | [`citry.template.duplicate-id`](/ide/diagnostics/#citry.template.duplicate-id) | Two elements with the same `id` | error |
 | [`citry.template.missing-image-alt`](/ide/diagnostics/#citry.template.missing-image-alt) | An `<img>` without alt text | warning |
+| [`citry.template.csp-incompatible`](/ide/diagnostics/#citry.template.csp-incompatible) | A `<script>`, `<style>`, `on*` attribute, or `javascript:` URL that a strict Content Security Policy blocks | off; follows `security_csp` |
 | [`citry.browser.missing-component-key`](/ide/diagnostics/#citry.browser.missing-component-key) | A component that `<c-for>` repeats without `#c-key`, on a page that uses Vue | error |
 | [`citry.browser.prop-assignment`](/ide/diagnostics/#citry.browser.prop-assignment) | A component that assigns to one of its own props | error |
 | [`citry.browser.unknown-server-event-field`](/ide/diagnostics/#citry.browser.unknown-server-event-field) | A key in `@c-*` arguments that the handler does not accept | error |
@@ -270,8 +271,9 @@ Citry checks the list when the class is defined:
 ## Change rule severity { #change-how-strict-a-rule-is }
 
 Each rule has a `rule_*` setting on `LintSettings` that accepts `"ignore"`,
-`"warning"`, or `"error"`. Warnings are shown but do not fail `citry check`;
-errors do, and `"ignore"` turns the rule off. These are the defaults:
+`"warning"`, or `"error"`. The [strict CSP rule](#find-csp-problems) is
+the exception: it follows `security_csp`. Warnings are shown but do not
+fail `citry check`; errors do, and `"ignore"` turns the rule off. These are the defaults:
 
 ```python
 from citry import Citry, LintSettings
@@ -993,6 +995,75 @@ An `inheritAttrs` value that Citry cannot read, such as
 `inheritAttrs: settings.inherit`, counts as passing `alt` on, so the
 image is not reported.
 
+## Strict CSP problems { #find-csp-problems }
+
+A strict Content Security Policy blocks inline scripts and styles, inline
+event handlers, and `javascript:` URLs. The browser skips them, and the
+page shows no error, only a message in the browser console. When your app
+sets [`security_csp`](/security/#choose-a-csp-compatibility-mode) to
+`"warn"`, the editor and `citry check` report these as warnings. With
+`"strict"` they are errors, so `citry check` fails:
+
+```citry-html
+{# Error: A strict Content Security Policy blocks the
+   inline event attribute 'onclick'. #}
+<button onclick="save()">Save</button>
+
+{# Error: ... blocks the javascript: URL in 'href'. #}
+<a href="javascript:void(0)">Open</a>
+
+{# Error: ... blocks this inline <script>. #}
+<script>startTour()</script>
+
+{# Right #}
+<button @click="save">Save</button>
+<a href="/tour">Open</a>
+```
+
+Citry reports:
+
+- a `<script>` or `<style>` element;
+- an attribute with a fixed value (not a binding such as `:onclick`)
+  whose name is longer than two characters and starts with `on`, in any
+  letter case;
+- a `javascript:` URL in `action`, `formaction`, `href`, `src`,
+  `xlink:href`, or `data` on `<object>`, also when it is written with
+  character references such as `java&#115;cript:`.
+
+Move a script or style into the component's `js` or `css`, or into a
+`Script` or `Style` dependency. Citry also checks the content of
+`<c-raw>`, which it writes to the page unchanged, and the element that
+`<c-element is="...">` names.
+
+Citry uses the same rules when it checks a page as it renders it (see
+[Check output for CSP](/security/#choose-a-csp-compatibility-mode)). A
+page that Vue builds in the browser is the exception: the render-time
+check never sees what Vue writes, so for such a page this check is the
+only one.
+
+A custom attribute such as `online` or `onboarding-step` is reported too,
+because browsers and the policy treat every `on*` attribute as a possible
+event handler. Rename it, for example to `data-online`.
+
+The check reads only fixed text in the template. Citry checks Citry
+bindings such as `c-href` and `c-bind`, and HTML passed to a component in
+an attribute, when it renders the page. Vue bindings such as `:href` and
+`v-bind` get their values in the browser, so neither check sees them.
+
+It skips attributes on component tags, including a capitalized tag such
+as `<Card>` that may be a Vue component. It also skips the content of
+`<noscript>`, `<iframe>`, `<xmp>`, `<noembed>`, `<noframes>`, and
+`<plaintext>`, which the browser reads as text, and markup inside an SVG
+`<title>` or `<style>`, which Citry's template parser reads as text.
+
+The rule follows your app's `security_csp` setting, so it has no `rule_*`
+setting, and a component's `Lint` class cannot change it. It reports
+nothing while `security_csp` is `"off"`, the default, and nothing in
+`citry check --static` or in an editor that has not loaded your app,
+because those do not know the setting. Passing `security_csp` to one
+`serialize()` call does not change what the editor and `citry check`
+report.
+
 ## Loops without `#c-key` { #find-repeated-components-without-keys }
 
 On a page that uses Vue, each component that `<c-for>` repeats needs a
@@ -1647,8 +1718,10 @@ which reads each child's `emits`, and the rules for
 [misspelled CSS classes](#find-misspelled-css-classes),
 [classes without CSS](#find-classes-without-css),
 [unset CSS variables](#find-unset-css-variables),
-[links](#find-links-to-missing-pages), and
-[keys nothing provides](#find-unknown-inject-keys).
+[links](#find-links-to-missing-pages),
+[keys nothing provides](#find-unknown-inject-keys), and
+[strict CSP problems](#find-csp-problems), which needs your app's
+`security_csp`.
 
 They still run every rule that reads only the template: the Alpine,
 attribute-value, and misspelled-directive rules, and the rules for

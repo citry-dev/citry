@@ -6,6 +6,12 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Added
 
+- With your application's `security_csp` set to `"warn"` or `"strict"`,
+  the editor marks an inline `<script>` or `<style>`, an `on*` attribute
+  such as `onclick`, or a `javascript:` URL in a template: a warning with
+  `"warn"`, an error with `"strict"`. Use it with a `citry` of the same
+  release; an older citry-lsp rejects the project's lint data once
+  `security_csp` is set.
 - The editor suggests `:row="..."` on `<c-slot>` and `v-slot="{ row }"` on
   `<c-fill>`, for passing Vue data from a slot to its fill.
 - citry-lsp now supports Python 3.15.

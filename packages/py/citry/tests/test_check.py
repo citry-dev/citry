@@ -2808,6 +2808,92 @@ def test_registry_check_reports_the_template_only_rules_with_the_application_set
     assert findings == sorted(expected, key=lambda item: (item[2], item[0]))
 
 
+def _csp_findings(report) -> list[tuple[str, int | None, int | None, int | None, int | None]]:
+    return sorted(
+        (item.severity, item.line, item.column, item.end_line, item.end_column)
+        for item in report.findings
+        if item.code == "citry.template.csp-incompatible"
+    )
+
+
+def _csp_engine_components(engine: Citry) -> None:
+    """Define the two components whose templates the CSP tests check."""
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <button onclick="save()">Save</button>
+          <a href="javascript:go()">Go</a>
+          <script>run()</script>
+          <c-raw><b onclick="x">c</b></c-raw>
+        """
+
+    class Plain(Component):
+        citry = engine
+        # The non-ASCII letter shows that columns count characters, not bytes.
+        template = '<p>é <i onclick="y"></i></p>'
+
+
+@pytest.mark.parametrize(
+    ("mode", "severity"),
+    [("warn", "warning"), ("strict", "error")],
+)
+def test_registry_check_reports_strict_csp_problems_with_the_engines_severity(tmp_path, mode, severity):
+    engine = Citry(autodiscover=False, security_csp=mode)
+    _csp_engine_components(engine)
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # Each finding spans the attribute name, the javascript: value, or the tag
+    # name; <c-raw> content is read as the HTML that comes out.
+    assert _csp_findings(report) == [
+        (severity, 0, 8, 0, 15),
+        (severity, 1, 8, 1, 15),
+        (severity, 2, 9, 2, 24),
+        (severity, 3, 1, 3, 7),
+        (severity, 4, 10, 4, 17),
+    ]
+
+
+def test_registry_check_reports_nothing_about_csp_while_the_engine_has_it_off(tmp_path):
+    engine = Citry(autodiscover=False)
+    _csp_engine_components(engine)
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    assert _csp_findings(report) == []
+
+
+def test_registry_check_leaves_a_registered_components_attributes_out_of_the_csp_check(tmp_path):
+    engine = Citry(autodiscover=False, security_csp="strict")
+
+    class Inner(Component):
+        citry = engine
+        template = "<b>inner</b>"
+
+    class Outer(Component):
+        citry = engine
+        template = '<c-inner onclick="x" href="javascript:y" /><c-unknown onclick="x" />'
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    assert _csp_findings(report) == []
+
+
+def test_static_check_reports_nothing_about_csp_because_it_has_no_engine_settings(tmp_path):
+    (tmp_path / "card.py").write_text(
+        "from citry import Component\n"
+        "class Card(Component):\n"
+        '    template = \'<div titel="x" onclick="y"></div><script>z()</script>\'\n',
+        encoding="utf-8",
+    )
+
+    report = check_project(CheckAppSelection(), tmp_path)
+
+    # The misspelled attribute shows that the template was read.
+    assert [item.code for item in report.findings] == ["citry.template.misspelled-attribute"]
+
+
 def test_registry_check_reports_only_an_ordinary_component_inside_a_vue_v_for(tmp_path):
     engine = Citry(autodiscover=False)
 
