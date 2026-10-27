@@ -272,6 +272,9 @@
 
 ### Fixes
 
+- `citry format` and the editor's format command no longer add trailing
+  spaces to blank lines in a component's `template`, `js`, or `css` string
+  in a Python file, which Ruff flags as `W293`.
 - Without a configured cache, the stylesheets that `css_data()` produces
   no longer pile up in memory, one per distinct set of values, for the
   life of the process. They now count toward `vue_asset_max_bytes`, and
