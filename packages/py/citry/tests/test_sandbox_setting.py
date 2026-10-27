@@ -10,6 +10,7 @@ sandbox rejects succeeds when the sandbox is off.
 
 import re
 import sys
+from types import MappingProxyType
 
 import pytest
 
@@ -102,16 +103,32 @@ def test_sandbox_off_allows_what_the_sandbox_blocks():
     assert Open(obj=holder).render().serialize() == "hidden"
 
 
-def test_unsandboxed_evaluation_exposes_no_builtins_and_cannot_plant_them():
-    # Unsandboxed evaluation exposes no builtins (matching the sandbox), and the
-    # builtins mapping is read-only and shared, so one expression cannot mutate
-    # __builtins__ to leak a fake builtin into another expression's evaluation.
+def _eval_hides_builtins() -> bool:
+    """Whether this interpreter's ``eval`` finds no builtins behind an empty ``__builtins__`` mapping."""
+    try:
+        eval("len", {"__builtins__": MappingProxyType({})})  # noqa: S307
+    except NameError:
+        return True
+    return False
+
+
+def test_unsandboxed_evaluation_cannot_change_the_shared_builtins_mapping():
+    # Every unsandboxed evaluation gets the same __builtins__ mapping, and it
+    # is read-only, so an expression cannot change it for the next one.
     plant = compile_expr("__builtins__.update({'len': lambda x: 999})", sandboxed=False)
     with pytest.raises(AttributeError):
         plant({})  # the read-only mapping refuses mutation
+
+
+@pytest.mark.skipif(
+    not _eval_hides_builtins(),
+    reason="this interpreter's eval still finds builtins when __builtins__ is an empty mapping",
+)
+def test_unsandboxed_evaluation_exposes_no_builtins():
+    # On CPython an empty __builtins__ hides every builtin, matching the sandbox.
     use = compile_expr("len([1, 2, 3])", sandboxed=False)
     with pytest.raises(NameError):
-        use({})  # len is still not a builtin here
+        use({})
 
 
 # The template text holds the six characters `\ud800`, an escape for a lone

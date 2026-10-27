@@ -356,9 +356,14 @@ from citry import Citry
 app = Citry(sandbox_expressions=False)
 ```
 
-A successful render gives the same output either way. Builtins are still
-missing, and a walrus assignment (`:=`) still writes into the template's
-variables. Only the blocked accesses behave differently.
+A successful render gives the same output either way, and a walrus
+assignment (`:=`) still writes into the template's variables. On CPython,
+builtins are still missing, so only the blocked accesses behave
+differently. On PyPy, every builtin is available with the sandbox off,
+including `open` and `__import__`, so `{{ len(items) }}` renders there
+while CPython and the sandbox reject it. This does not change who you can
+trust: with the sandbox off, a template can already reach any Python
+object.
 
 ## Keep secrets server-side { #keep-secrets-on-the-server }
 
