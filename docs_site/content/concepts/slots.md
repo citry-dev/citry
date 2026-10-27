@@ -247,6 +247,28 @@ insert that variable in the fill:
 
 `{{ original }}` renders the slot's fallback content at that point.
 
+!!! note "Limits with Vue"
+
+    A page uses Vue when any component on it has component JavaScript,
+    `js_data()` that returns data, an `Events` class, or a Vue attribute
+    such as `:title` in its template. On such a page, Citry builds the
+    fallback that `{{ original }}` shows as part of your template, not
+    Card's. That fallback can hold components, including `<c-provide>` and
+    components marked `transparent = True`, and `c-` bindings such as
+    `c-title` work in it. Your template cannot reach Card's slots, Vue
+    data, or event handlers, so Card's fallback cannot hold:
+
+    - a `<c-slot>`;
+    - a component, other than `<c-provide>` or a transparent one, with
+      content between its tags;
+    - a Vue attribute that uses Vue data, such as `:title="message"`,
+      `@click="open = true"`, or `ref`;
+    - a `@c-` event handler.
+
+    Rendering then fails with a `TypeError` that names what the fallback
+    holds. Move that content into the fill itself, or leave the slot
+    unfilled so Card shows its own fallback.
+
 ## `Slots` default fills
 
 A default other than `None` in the `Slots` class acts as a fill that the

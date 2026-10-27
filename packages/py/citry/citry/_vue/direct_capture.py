@@ -352,6 +352,21 @@ class _FillFragment:
 
 
 @dataclass(frozen=True, slots=True)
+class _CallerFallback:
+    """
+    A receiver's slot fallback that a caller's ``<c-fill fallback=...>`` shows.
+
+    The caller's template compiles that fallback. The walk over it carries
+    this record so an error can name the receiver, the caller, and the slot
+    when content in the fallback needs something only the receiver has.
+    """
+
+    receiver_owner: str
+    caller_owner: str
+    slot_name: str
+
+
+@dataclass(frozen=True, slots=True)
 class _LeafDefinitionArtifact:
     definition_id: str
     compile_input: DefinitionCompileInput
@@ -729,6 +744,17 @@ def assemble_typed_render(
             f"handlers are not "
             f"available. {fix}, and define the Vue data there. Content that shows only Python values, such as "
             f"{{{{ title }}}}, works from any component."
+        )
+
+    def describe_caller_fallback(fallback: _CallerFallback, what: str) -> str:
+        receiver = class_name_of(None, fallback.receiver_owner)
+        caller = class_name_of(None, fallback.caller_owner)
+        return (
+            f"In a component that uses Vue, {caller} shows the fallback of {receiver}'s '{fallback.slot_name}' slot"
+            f" through '<c-fill fallback=...>', so that fallback cannot hold {what}. Citry compiles the fallback"
+            f" in {caller}'s template, which cannot reach {receiver}'s slots, Vue data, or event handlers. Write"
+            f" that content in {caller}'s fill itself, or leave the slot unfilled so {receiver} shows its own"
+            " fallback."
         )
 
     def note_attribute_reads(owner_id: str, tag: str, attrs: Sequence[PreparedAttribute]) -> None:
@@ -1586,8 +1612,18 @@ def assemble_typed_render(
             # values of parts another occurrence wrote are copied into its
             # data, which its template reads.
             definition_owner_id: str = occurrence_id,
+            # Set while walking a receiver's slot fallback that a caller's
+            # `<c-fill fallback=...>` shows: the body is compiled in the
+            # caller's template, so only content that template can show is
+            # allowed in it.
+            caller_fallback: _CallerFallback | None = None,
         ) -> Generator[Call, Any, _DefinitionFragment]:
             nonlocal dynamic_site_index, inline_depth, inline_frames
+            # Every walk records its component calls in the data of the
+            # component whose template it builds, so the two owners differ
+            # only if a walk was started with the wrong one.
+            if call_owner_id != definition_owner_id:
+                raise AssertionError("a walk records component calls outside the template it builds")
             output = _DefinitionFragment.empty()
             dynamic_stack: list[tuple[str, str]] = []
             element_stack = list(parent_element_stack)
@@ -1609,18 +1645,16 @@ def assemble_typed_render(
             active_projected_data_containers.append(projected_containers)
             active_definition_owners.append(definition_owner_id)
 
-            def refuse_compiled_elsewhere(what: str) -> None:
+            def refuse_in_caller_fallback(what: str) -> None:
                 # A receiver's slot fallback that `<c-fill fallback=...>`
-                # shows is compiled in the caller's template, but its calls
-                # and slot choices are recorded in the receiver's data, which
-                # that template does not read.
-                if call_owner_id != definition_owner_id:
-                    raise UnsupportedPreparedView(
-                        "In a component that uses Vue, a slot's fallback that a caller shows through"
-                        f" '<c-fill fallback=...>' cannot hold {what}, which Vue cannot show there. Write that"
-                        " content in the fill itself, or leave the slot unfilled so the receiving component shows"
-                        " its own fallback."
-                    )
+                # shows is compiled in the caller's template. Its component
+                # calls are recorded in the caller's data, which that template
+                # reads, but a `<c-slot>` outlet in it would choose its content
+                # from the receiver's slots, and a component given fills would
+                # pass them on through a `<slot>` in the caller's template,
+                # which the caller's call does not supply.
+                if caller_fallback is not None:
+                    raise UnsupportedPreparedView(describe_caller_fallback(caller_fallback, what))
 
             # A projected body keeps the lexical data owner for values, but its
             # component declarations and prepared call bindings belong to the
@@ -1667,6 +1701,7 @@ def assemble_typed_render(
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
                             definition_owner_id=definition_owner_id,
+                            caller_fallback=caller_fallback,
                         )
                     )
                 if parts:
@@ -1853,7 +1888,15 @@ def assemble_typed_render(
                     flattened_transparent_receiver = (
                         not nested_template
                         and part.receiver_render_id in flattened_transparent_receivers
-                        and lexical_owner == call_owner_id
+                        # In a receiver's fallback that a caller's fill shows,
+                        # the template being built is the caller's, but the
+                        # fills that this fallback gives its transparent
+                        # components were written by the receiver, whose data
+                        # this walk reads, so they are copied in place too.
+                        and (
+                            lexical_owner == call_owner_id
+                            or (caller_fallback is not None and lexical_owner == data_owner_id)
+                        )
                     )
                     # Otherwise the template being built belongs to another
                     # component. When the author encloses the receiver, the
@@ -1878,7 +1921,7 @@ def assemble_typed_render(
                         # A transparent component's own outlet is copied in
                         # place, but any other outlet records which content
                         # it shows in a receiver's data.
-                        refuse_compiled_elsewhere("a '<c-slot>' outlet")
+                        refuse_in_caller_fallback("a '<c-slot>' outlet")
                     # Calls inside this body are counted and keyed in the
                     # lexical owner's namespace, so two receivers that share
                     # one slot name must still give their bodies different
@@ -1936,31 +1979,42 @@ def assemble_typed_render(
                     body_stays_here = flattened_transparent_receiver or (
                         not nested_template and receiver_owner == output_owner and lexical_owner == output_owner
                     )
+                    # A fill handed on as a Vue slot is compiled in its
+                    # author's definition.
+                    body_definition_owner = definition_owner_id if body_stays_here else lexical_owner
+                    # A receiver's fallback that a caller's fill shows stays in
+                    # the caller's template although the receiver wrote it, so
+                    # its calls are recorded in the caller's data. Vue data and
+                    # Citry event handlers in it would be read from the caller,
+                    # so the walk below watches for them, as it does for a fill
+                    # copied outside its author.
+                    body_caller_fallback = caller_fallback
+                    if (
+                        caller_fallback is None
+                        and not flattened_transparent_receiver
+                        and body_definition_owner != lexical_owner
+                    ):
+                        body_caller_fallback = _CallerFallback(lexical_owner, body_definition_owner, part.public_name)
+                    watches_reads = copied_outside_author or body_caller_fallback is not caller_fallback
                     fill_reads: list[str] = []
-                    if copied_outside_author:
+                    if watches_reads:
                         browser_read_trackers.append((lexical_owner, call_owner_id, fill_reads))
                     walker = transform_parts(
                         _projected_content(part, placed_outputs),
                         placement_route=(*placement_route, body_route_step),
                         data_owner_id=lexical_owner,
-                        # A flattened transparent receiver contributes its
-                        # selected body directly to the fragment being built,
-                        # which belongs to this fragment's call owner (the fill
-                        # author when this body sits inside a fill).  A real
-                        # receiver instead carries a supplied fill back to its
-                        # lexical caller, where Vue creates the slot closure.
-                        # Keep those destinations separate from the lexical
-                        # value owner: using the intermediate receiver here
-                        # makes every forwarded call declaration land in the
-                        # wrong $citryPrepared.calls table.
-                        call_owner_id=call_owner_id if flattened_transparent_receiver else lexical_owner,
+                        # The body's component calls are recorded in the data of
+                        # the component whose template compiles it. Using the
+                        # intermediate receiver here would put every forwarded
+                        # call declaration in the wrong $citryPrepared.calls
+                        # table.
+                        call_owner_id=body_definition_owner,
                         containing_slot=part,
                         project_root_markers=project_root_markers and dom_depth == 0,
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
-                        # A fill handed on as a Vue slot is compiled in its
-                        # author's definition.
-                        definition_owner_id=definition_owner_id if body_stays_here else lexical_owner,
+                        definition_owner_id=body_definition_owner,
+                        caller_fallback=body_caller_fallback,
                     )
                     # Every slot a page shows passes through here, so this site runs
                     # the walker without `nested`'s extra frame and call, under
@@ -1975,12 +2029,18 @@ def assemble_typed_render(
                             inline_frames -= 1
                     else:
                         selected = yield from by_driver(walker)
-                    if copied_outside_author:
+                    if watches_reads:
                         browser_read_trackers.pop()
-                        if fill_reads:
-                            raise UnsupportedPreparedView(
-                                describe_fill_outside_author(part, lexical_owner, receiver_owner, fill_reads[0])
+                    if fill_reads and copied_outside_author:
+                        raise UnsupportedPreparedView(
+                            describe_fill_outside_author(part, lexical_owner, receiver_owner, fill_reads[0])
+                        )
+                    if fill_reads and body_caller_fallback is not None:
+                        raise UnsupportedPreparedView(
+                            describe_caller_fallback(
+                                body_caller_fallback, f"content that uses Vue data or event handlers ({fill_reads[0]})"
                             )
+                        )
                     if flattened_transparent_receiver:
                         output.extend(selected)
                         continue
@@ -2031,6 +2091,7 @@ def assemble_typed_render(
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
                         definition_owner_id=definition_owner_id,
+                        caller_fallback=caller_fallback,
                     )
                     wrapped = _DefinitionFragment.empty()
                     wrapped.extend(
@@ -2046,6 +2107,7 @@ def assemble_typed_render(
                                 parent_element_stack=tuple(element_stack),
                                 parent_element_keys=tuple(element_keys),
                                 definition_owner_id=definition_owner_id,
+                                caller_fallback=caller_fallback,
                             )
                         )
                     )
@@ -2076,6 +2138,7 @@ def assemble_typed_render(
                                 parent_element_stack=tuple(element_stack),
                                 parent_element_keys=tuple(element_keys),
                                 definition_owner_id=definition_owner_id,
+                                caller_fallback=caller_fallback,
                             )
                         )
                     )
@@ -2095,6 +2158,7 @@ def assemble_typed_render(
                                 parent_element_stack=tuple(element_stack),
                                 parent_element_keys=tuple(element_keys),
                                 definition_owner_id=definition_owner_id,
+                                caller_fallback=caller_fallback,
                             )
                         )
                     )
@@ -2209,6 +2273,7 @@ def assemble_typed_render(
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
                             definition_owner_id=definition_owner_id,
+                            caller_fallback=caller_fallback,
                         )
                         # Every transparent component passes through here, so this site
                         # runs the walker without `nested`'s extra frame and call,
@@ -2278,7 +2343,6 @@ def assemble_typed_render(
                         explicit_key = metadata.explicit_key
                     run_group = run_first.get(part_index)
                     if run_group is not None:
-                        refuse_compiled_elsewhere("a component")
                         run_values = call_values.setdefault("callRuns", {})
                         if type(run_values) is not dict:
                             raise AssertionError("prepared callRuns container changed type")
@@ -2344,7 +2408,6 @@ def assemble_typed_render(
                                 }
                             )
                             continue
-                        refuse_compiled_elsewhere("a component")
                         calls = call_values["calls"]
                         if type(calls) is not dict:
                             raise AssertionError("prepared calls container changed type")
@@ -2418,7 +2481,6 @@ def assemble_typed_render(
                             yield from by_driver(child_walker)
                     finally:
                         inline_depth, inline_frames = saved_counts
-                    refuse_compiled_elsewhere("a component")
                     calls = call_values["calls"]
                     if type(calls) is not dict:
                         raise AssertionError("prepared calls container changed type")
@@ -2641,6 +2703,8 @@ def assemble_typed_render(
                     output.append(">")
                     opening_end = output.byte_length
                     fills = tuple(supplied_fills.pop(child_id, ()))
+                    if fills:
+                        refuse_in_caller_fallback("a component with fill content")
                     append_child_fills(
                         output,
                         fills,
