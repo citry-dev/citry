@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- On PyPy, `import citry` no longer fails with `No module named
+  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
+  values and template types less fully, and both print a note saying so.
+
 ### Added
 
 - Citry now supports Python 3.15.

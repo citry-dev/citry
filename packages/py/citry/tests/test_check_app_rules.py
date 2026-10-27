@@ -8,6 +8,7 @@ mistakes (``benchmarks/errors/cases``) must be reported, and realistic
 neighbors must stay silent.
 """
 
+import ast
 import re
 import sys
 import types
@@ -31,6 +32,7 @@ from citry._registry_lint import (
     root_relative_path,
     server_event_payload_from_description,
 )
+from citry._symbol_table import symtable
 from citry.ext.dependencies import Style
 from citry.ext.events import event
 from citry.util.html import Markup
@@ -1518,6 +1520,10 @@ class ShadowedApiPage(Component):
         return {"apiBase": API_BASE}
 
 
+requires_symtable = pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
+
+
+@requires_symtable
 def test_a_module_constant_the_browser_cannot_receive_is_reported(tmp_path):
     findings = _report(_JS_DATA_ENGINE, tmp_path).findings
 
@@ -1527,6 +1533,34 @@ def test_a_module_constant_the_browser_cannot_receive_is_reported(tmp_path):
         (_JS_DATA, "warning", f"({__name__}.ApiPage.js_data)"),
     ]
     assert "API_BASE holds a value of type PurePosixPath" in findings[0].message
+
+
+def test_without_symtable_no_js_data_module_value_is_read(tmp_path, monkeypatch):
+    # PyPy has no `_symtable`. The checker then cannot tell which names a
+    # js_data() method binds, so it reads no module value and reports nothing.
+    monkeypatch.setattr("citry._symbol_table.symtable", None)
+    monkeypatch.setattr("citry._checker.symtable", None)
+    monkeypatch.setattr("citry._template_python.symtable", None)
+
+    assert _report(_JS_DATA_ENGINE, tmp_path).findings == ()
+
+
+@requires_symtable
+def test_function_local_names_lists_the_names_a_function_binds():
+    source = "def js_data(self, kwargs):\n    API_BASE = 1\n    return API_BASE\n"
+    function = ast.parse(source).body[0]
+
+    assert citry_checker._function_local_names(source, function) == {"self", "kwargs", "API_BASE"}
+
+
+def test_function_local_names_has_no_answer_without_symtable(monkeypatch):
+    monkeypatch.setattr("citry._symbol_table.symtable", None)
+    monkeypatch.setattr("citry._checker.symtable", None)
+    monkeypatch.setattr("citry._template_python.symtable", None)
+    source = "def js_data(self, kwargs):\n    API_BASE = 1\n    return API_BASE\n"
+    function = ast.parse(source).body[0]
+
+    assert citry_checker._function_local_names(source, function) is None
 
 
 _STDLIB_ENGINE = Citry(autodiscover=False)
@@ -1547,6 +1581,7 @@ class StdlibValuesPage(Component):
         }
 
 
+@requires_symtable
 def test_module_constants_of_standard_library_types_and_their_dict_keys_are_reported(tmp_path):
     # Their classes list Python's own attribute lookup, which cannot make
     # them pass for a dict, list, or string.

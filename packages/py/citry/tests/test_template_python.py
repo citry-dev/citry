@@ -6,6 +6,8 @@ import textwrap
 
 import pytest
 
+from citry._symbol_table import symtable
+from citry._template_python import _method_bound_names, _renamable_method_locals
 from citry.analysis import (
     TemplatePythonControl,
     TemplatePythonQuery,
@@ -19,6 +21,8 @@ from citry.analysis import (
     template_static_input_queries,
 )
 from citry_core.template_parser import parse_template
+
+requires_symtable = pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
 
 
 def _query(source: str, marker: str):
@@ -336,6 +340,7 @@ def test_template_python_root_rejects_executable_type_displays(display: str) -> 
         TemplatePythonRoot("request", "always", "analysis", type_display=display)
 
 
+@requires_symtable
 def test_inferred_shadow_evaluates_query_at_each_method_return() -> None:
     module_source = textwrap.dedent(
         """
@@ -364,6 +369,76 @@ def test_inferred_shadow_evaluates_query_at_each_method_return() -> None:
     assert len(shadow.copies) == 2
     assert all(shadow.source[item.shadow_start : item.shadow_end] == query.source for item in shadow.copies)
     assert shadow.source.count("__citry_data['method']") == 2
+
+
+def _shadow_source_without_symtable(
+    monkeypatch: pytest.MonkeyPatch,
+    module_source: str,
+    query: TemplatePythonQuery,
+) -> str | None:
+    """Build the shadow as an interpreter with no symbol table (PyPy) would."""
+    # Both helpers cache by source text, so clear them before and after the
+    # patch to keep each answer tied to the symtable state that produced it.
+    _renamable_method_locals.cache_clear()
+    _method_bound_names.cache_clear()
+    monkeypatch.setattr("citry._template_python.symtable", None)
+    try:
+        shadow = build_inferred_template_shadow(module_source, "Card", (TemplatePythonRoot("value", "always"),), query)
+    finally:
+        monkeypatch.undo()
+        _renamable_method_locals.cache_clear()
+        _method_bound_names.cache_clear()
+    return None if shadow is None else shadow.source
+
+
+@requires_symtable
+@pytest.mark.parametrize(
+    "module_source",
+    [
+        # The method binds no template name.
+        "class Card:\n    def template_data(self, kwargs):\n        other = 'a'\n        return {'value': other}\n",
+        # The method only reads `len`, which the template also reads; a read is never a local.
+        "class Card:\n    def template_data(self, kwargs):\n        return {'value': str(len([1]))}\n",
+    ],
+)
+def test_shadow_without_symtable_matches_cpython_when_the_method_binds_no_template_name(
+    monkeypatch: pytest.MonkeyPatch,
+    module_source: str,
+) -> None:
+    query = TemplatePythonQuery("len(value)", 0, 10, "interpolation")
+    with_table = build_inferred_template_shadow(module_source, "Card", (TemplatePythonRoot("value", "always"),), query)
+
+    assert with_table is not None
+    assert _shadow_source_without_symtable(monkeypatch, module_source, query) == with_table.source
+
+
+@requires_symtable
+@pytest.mark.parametrize(
+    "module_source",
+    [
+        "class Card:\n    def template_data(self, kwargs):\n        value = 'a'\n        return {'value': value}\n",
+        # A function named like the class must not be read in the class's place.
+        (
+            "def Card():\n"
+            "    def template_data():\n"
+            "        pass\n"
+            "class Card:\n"
+            "    def template_data(self, kwargs):\n"
+            "        value = 'a'\n"
+            "        return {'value': value}\n"
+        ),
+    ],
+)
+def test_shadow_without_symtable_gives_no_answer_when_the_method_binds_a_template_name(
+    monkeypatch: pytest.MonkeyPatch,
+    module_source: str,
+) -> None:
+    query = TemplatePythonQuery("value.lower()", 0, 13, "interpolation")
+
+    # CPython renames the clashing local and answers; without the table the
+    # local cannot be renamed safely, so there is no answer at all.
+    assert build_inferred_template_shadow(module_source, "Card", (TemplatePythonRoot("value", "always"),), query)
+    assert _shadow_source_without_symtable(monkeypatch, module_source, query) is None
 
 
 def test_inferred_shadow_ignores_a_return_after_an_unconditional_return() -> None:
@@ -898,6 +973,7 @@ def test_value_check_is_added_at_each_inferred_template_data_return() -> None:
     ast.parse(shadow.source)
 
 
+@requires_symtable
 def test_inferred_shadow_renames_method_locals_that_template_names_reuse() -> None:
     module_source = textwrap.dedent(
         """
@@ -941,6 +1017,43 @@ def test_inferred_shadow_renames_method_locals_that_template_names_reuse() -> No
     assert "for resolved in [resolved for resolved in items]:" in method
 
 
+@pytest.fixture
+def _fresh_renamable_locals():
+    # The function caches by source text, so a stale answer from another
+    # symtable state would hide what these tests check.
+    _renamable_method_locals.cache_clear()
+    yield
+    _renamable_method_locals.cache_clear()
+
+
+_RENAMABLE_LOCALS_SOURCE = textwrap.dedent(
+    """
+    class Board:
+        def template_data(self, kwargs, slots):
+            resolved = [1]
+            label = "x"
+            return {"items": resolved, "label": label}
+    """
+)
+
+
+@requires_symtable
+@pytest.mark.usefixtures("_fresh_renamable_locals")
+def test_renamable_method_locals_lists_the_locals_when_symtable_is_present() -> None:
+    names = _renamable_method_locals(_RENAMABLE_LOCALS_SOURCE, "Board")
+
+    assert names == {"self", "kwargs", "slots", "resolved", "label"}
+
+
+@pytest.mark.usefixtures("_fresh_renamable_locals")
+def test_renamable_method_locals_has_no_answer_when_symtable_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # PyPy has no `_symtable`, so the module global is None there.
+    monkeypatch.setattr("citry._template_python.symtable", None)
+
+    assert _renamable_method_locals(_RENAMABLE_LOCALS_SOURCE, "Board") is None
+
+
+@requires_symtable
 def test_inferred_shadow_keeps_locals_that_cannot_be_renamed_safely() -> None:
     module_source = textwrap.dedent(
         """
@@ -995,6 +1108,7 @@ def test_inferred_shadow_reads_present_optional_keys_by_subscript() -> None:
     assert "extra = __citry_data.get('extra')" in shadow.source
 
 
+@requires_symtable
 @pytest.mark.parametrize(
     ("method_body", "kept"),
     [
@@ -1031,6 +1145,7 @@ def test_inferred_shadow_keeps_a_local_that_nested_code_binds_or_reads_globally(
 
 
 @pytest.mark.skipif(sys.version_info < (3, 12), reason="generic class syntax needs Python 3.12")
+@requires_symtable
 def test_inferred_shadow_renames_locals_in_a_generic_class() -> None:
     module_source = (
         "class Board[T]:\n"
@@ -1052,6 +1167,7 @@ def test_inferred_shadow_renames_locals_in_a_generic_class() -> None:
     assert "__citry_local_item: list[int] = [1]" in shadow.source
 
 
+@requires_symtable
 def test_inferred_shadow_reads_a_returned_root_through_the_copy() -> None:
     # `data` is both the returned variable and a template root, and a nested
     # `nonlocal` keeps it from being renamed, so reading the other roots from

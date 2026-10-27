@@ -57,6 +57,18 @@ Citry writes the same pages on every interpreter. On standard CPython it
 renders [`simple = "vue"` components faster](/performance/#faster-simple-vue-rows-on-cpython)
 than on PyPy, Pyodide, or free-threaded builds.
 
+On PyPy, `citry check` and the editor check less. PyPy has no `_symtable`
+module, which two of their analyses use. So the editor and
+`citry check --types` give no types to a template that uses a name its
+`template_data()` method assigns. And `citry check` does not read the
+module-level values that `js_data()` sends, so it misses a `Secret` or
+`Path` constant sent to the browser. `citry check` prints a note saying so, and the
+editor shows a warning when it starts. Rendering is the same, and Citry still
+refuses a `Secret` in `js_data()` while it renders. For the full check, run
+`citry check` on CPython. Issue
+[#434](https://github.com/citry-dev/citry/issues/434) tracks giving PyPy the
+same answers.
+
 ## Build from source { #building-from-source }
 
 When PyPI has no wheel for your platform, pip downloads the source of

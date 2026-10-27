@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -14,6 +16,7 @@ from pygls.exceptions import JsonRpcInvalidParams
 from pytest_lsp import ClientServerConfig, LanguageClient
 
 import citry_lsp.server as server_module
+from citry._symbol_table import EDITOR_NOTE, symtable
 from citry_lsp.engine import BrowserProjection, CompletionResult, DocumentState, HtmlProjection, TemplateVariableHover
 from citry_lsp.formatting import PreparedComponentAssets, prepare_component_assets
 from citry_lsp.project import ProjectState
@@ -77,6 +80,41 @@ async def test_declined_formatting_registration_does_not_abort_initialization(tm
 
     register.assert_awaited_once()
     assert "declined dynamic formatting registration" in caplog.text
+
+
+def _initialized_server() -> SimpleNamespace:
+    """A stand-in server whose project is healthy, so only the interpreter note can be shown."""
+    return SimpleNamespace(
+        dynamic_formatting=False,
+        project=SimpleNamespace(status=ProjectStatus(mode="registry", message=None)),
+        protocol=Mock(),
+        window_show_message=Mock(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_initialized_warns_once_when_symtable_is_missing(monkeypatch):
+    # PyPy has no `_symtable`, so the module global is None there.
+    for module in ("citry._symbol_table", "citry._checker", "citry._template_python"):
+        monkeypatch.setattr(f"{module}.symtable", None)
+    language_server = _initialized_server()
+
+    await server_module.initialized(language_server, types.InitializedParams())
+
+    language_server.window_show_message.assert_called_once()
+    (params,) = language_server.window_show_message.call_args.args
+    assert params.type == types.MessageType.Warning
+    assert params.message == EDITOR_NOTE
+
+
+@pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
+@pytest.mark.asyncio
+async def test_initialized_shows_no_interpreter_warning_when_symtable_is_present():
+    language_server = _initialized_server()
+
+    await server_module.initialized(language_server, types.InitializedParams())
+
+    language_server.window_show_message.assert_not_called()
 
 
 def test_workspace_uri_preserves_a_symlink_root(tmp_path):
@@ -1967,3 +2005,26 @@ async def test_stdio_component_assets_round_trip_through_client(lsp_client: Lang
     assert result.providers == []
     assert result.embeddedFormatting.providerSelection == "vscode-first-result"
     assert result.embeddedFormatting.providerIdentity is None
+
+
+def test_modules_import_when_the_symtable_module_is_blocked():
+    # Setting a module to None in sys.modules makes `import _symtable` raise
+    # ImportError, as on PyPy, so this proves the guarded import in a clean process.
+    code = (
+        "import sys; sys.modules['_symtable'] = None; "
+        "import citry, citry._checker, citry._template_python, citry_lsp.server; "
+        "from citry._symbol_table import symtable_missing; print(symtable_missing())"
+    )
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "True"
