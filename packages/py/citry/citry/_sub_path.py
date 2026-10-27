@@ -45,8 +45,10 @@ def normalize_sub_path(value: object) -> str:
     """
     if not isinstance(value, str) or not value.startswith("/") or value.startswith("//"):
         return ""
-    # The characters RFC 3986 allows in a path, plus "%".
-    return quote(value.rstrip("/"), safe="/:@!$&'()*+,;=%")
+    # The characters RFC 3986 allows in a path, plus "%", except "'": the
+    # page's attribute writer and its runtime-present check escape "'"
+    # differently, so it is percent-encoded to keep both the same.
+    return quote(value.rstrip("/"), safe="/:@!$&()*+,;=%")
 
 
 def request_sub_path() -> str | None:

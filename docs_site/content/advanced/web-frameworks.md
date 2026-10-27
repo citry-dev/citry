@@ -282,6 +282,19 @@ app's setting:
 | Flask | the request's `script_root`, from the server's `SCRIPT_NAME` or `ProxyFix` | `APPLICATION_ROOT` |
 | Django | `FORCE_SCRIPT_NAME` when set, otherwise the request's `SCRIPT_NAME` (WSGI) or `root_path` (ASGI) | the script prefix Django last set, `FORCE_SCRIPT_NAME` after `django.setup()` |
 
+The sub-path decides where the page loads Citry's scripts from, so it
+must come from your own deployment, never from a visitor. Set it with
+`uvicorn --root-path`, `FastAPI(root_path=...)`, your server's
+`SCRIPT_NAME`, or Django's `FORCE_SCRIPT_NAME`. If a proxy passes it in a
+header such as `X-Forwarded-Prefix`, read that header only from the proxy
+you run, for example with Werkzeug's `ProxyFix(x_prefix=1)` behind exactly
+one trusted proxy, and make sure the proxy sets or removes that header on
+every request, replacing any value the visitor sent. Otherwise a visitor
+can make the page load scripts from another path on your site, and a
+shared HTTP cache that ignores the header can serve that page to others.
+With [`security_script_integrity="citry"`](/security/#pin-citry-managed-scripts-with-sri),
+the browser also refuses a Citry script whose content does not match.
+
 A trailing `/` is ignored, and `/` (Flask's default `APPLICATION_ROOT`)
 means the site root. Citry ignores a sub-path that does not start with a
 single `/`, such as `shop` or `//shop`, and writes its URLs from the site

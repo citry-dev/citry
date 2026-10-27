@@ -502,6 +502,7 @@ class TestRenderCache:
         # Already encoded, and characters a path may hold, stay as they are.
         ("/my%20shop", "/my%20shop"),
         ("/@team", "/@team"),
+        ("/o'brien", "/o%27brien"),
     ],
 )
 def test_a_sub_path_is_read_as_a_url_path(value, expected):
