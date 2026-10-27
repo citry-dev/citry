@@ -358,6 +358,9 @@ Assign the whole field instead:
 Calls from one app are now sent in order, and an unknown option, or
 `wait: false`, makes the call reject. For live search, where only the
 newest call matters, declare the handler with `@event(latest_wins=True)`.
+Releases after 0.6.0 accept `wait: false` again for a handler declared
+with `@event(detached=True)`; see
+[Skip the call queue](/events/actions/#skip-the-queue-for-a-read-only-call).
 
 ### Wait for `citry:ready`
 

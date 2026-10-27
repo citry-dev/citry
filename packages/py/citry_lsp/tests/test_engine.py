@@ -1372,7 +1372,7 @@ def test_init_callback_context_fields_have_types_and_documentation_links(tmp_pat
         " * @property {(name?: CitryServerEventName) => boolean} loading",
         " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
         " * @property {CitryI18nService | null} i18n",
-        "=> Promise<any>} sendEvent",
+        " * @property {CitrySendEvent} sendEvent",
         "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>, "
         "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>}",
     ):
@@ -7178,6 +7178,8 @@ def test_component_js_types_accept_page_plugins_async_initializers_and_send_opti
         await component.$sendEvent('save', {}, { timeout: 500 });
         Citry.vue.use(42);
         await sendEvent('save', {}, { wait: false });
+        await sendEvent('peek', {}, { wait: false });
+        await component.$sendEvent('peek', {}, { wait: false, timeout: 500 });
         return () => undefined;
       },
     });
@@ -7187,6 +7189,7 @@ def test_component_js_types_accept_page_plugins_async_initializers_and_send_opti
     js_file.write_text(js_source, encoding="utf8")
     app_source = """from pathlib import Path
 from citry import Citry, Component
+from citry.ext.events import event
 engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
 class Card(Component):
     citry = engine
@@ -7194,6 +7197,10 @@ class Card(Component):
     js_file = 'card.js'
     class Events:
         def save(self):
+            return None
+
+        @event(detached=True)
+        def peek(self):
             return None
 """
     (tmp_path / "app.py").write_text(app_source, encoding="utf8")
@@ -7239,7 +7246,8 @@ class Card(Component):
     def line_of(snippet: str) -> int:
         return projection.source[: projection.source.index(snippet)].count("\n") + 2
 
-    # Exactly the two wrong calls are reported: a number is not a plugin, and `wait` accepts only true.
+    # Exactly the two wrong calls are reported: a number is not a plugin, and `wait: false` needs a
+    # handler declared `@event(detached=True)`, which `peek` is and `save` is not.
     assert {int(line.split("(")[1].split(",")[0]) for line in errors} == {
         line_of("Citry.vue.use(42)"),
         line_of("{ wait: false }"),

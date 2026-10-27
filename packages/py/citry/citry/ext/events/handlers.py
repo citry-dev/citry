@@ -100,8 +100,8 @@ class EventOptions:
 
     ``None`` means the key was not given, so the component-level config (and
     below it, the engine and factory defaults) applies. The queue knobs
-    ``latest_wins`` and ``bundle`` have no component level (they are
-    per-handler on purpose, design 3.5), so they hold plain booleans whose
+    ``latest_wins``, ``bundle`` and ``detached`` have no component level (they
+    are per-handler on purpose, design 3.5), so they hold plain booleans whose
     defaults match an undecorated handler.
     """
 
@@ -113,6 +113,7 @@ class EventOptions:
     throttle: int | None = None
     latest_wins: bool = False
     bundle: bool = True
+    detached: bool = False
 
 
 def event_options(func: Callable[..., Any]) -> EventOptions | None:
@@ -197,7 +198,7 @@ def validate_timing_value(source: str, value: Any) -> int | None:
 
 def validate_bool_value(source: str, value: Any) -> bool:
     """
-    Check a ``latest_wins`` / ``bundle`` value: a plain bool.
+    Check a ``latest_wins`` / ``bundle`` / ``detached`` value: a plain bool.
 
     The queue knobs exist at the handler level only (design 3.5), so unlike
     the validators above, only the ``@event`` decorator calls this.
@@ -281,6 +282,7 @@ def event(
     throttle: int | None = None,
     latest_wins: bool = False,
     bundle: bool = True,
+    detached: bool = False,
 ) -> Callable[[_F], _F]: ...
 
 
@@ -296,6 +298,7 @@ def event(
     throttle: int | None = None,
     latest_wins: bool = False,
     bundle: bool = True,
+    detached: bool = False,
 ) -> _F | Callable[[_F], _F]:
     """
     Per-handler configuration for one event handler.
@@ -305,9 +308,11 @@ def event(
     to the component's underscore config
     (``_methods``, ``_guard``, ``_csrf``, ``_debounce``, ``_throttle``),
     which itself falls back to ``extensions_defaults["events"]`` and then the
-    built-in defaults. The queue knobs ``latest_wins`` and ``bundle`` are the
-    exception: they exist per handler only, so a call site that needs
-    different queue semantics names a different handler.
+    built-in defaults. The queue knobs ``latest_wins``, ``bundle`` and
+    ``detached`` are the exception: they exist per handler only, so a call
+    site that needs different queue semantics names a different handler. A
+    detached handler also needs the call site to pass ``wait: false``; a
+    call without it waits its turn.
 
     Args:
         func: The handler, when used as a bare ``@event`` (no arguments).
@@ -336,6 +341,19 @@ def event(
             same moment. Pass ``False`` for a handler that should always
             travel alone, e.g. a slow export that fast toggles should not
             wait on.
+        detached: Let browser code call this handler without waiting for
+            the app's other calls, with
+            ``$sendEvent(name, args, {wait: false})``. In exchange, the
+            handler must not render or change State: it may return data,
+            dispatch an event, redirect, update the URL, or return a
+            ``Download``, and it may read State. A detached handler that
+            renders or changes State fails with a ``handler_error``. It
+            reads State from the token the browser sends with the call:
+            browser State changes not yet sent stay in the browser for the
+            next call to a handler that is not detached, so pass values the
+            user is still editing as arguments. Its calls can run on
+            the server at the same time as the app's other calls, so do not
+            rely on what those calls write. Off by default.
 
     Returns:
         The handler itself (the decorator only attaches the configuration).
@@ -353,6 +371,10 @@ def event(
                 @event(methods=("GET",))
                 def word_count(self, data: WordCountIn) -> dict:
                     return {"words": count_words(data.doc_id)}
+
+                @event(detached=True)
+                def spell_check(self, data: SpellCheckIn) -> dict:
+                    return {"typos": find_typos(data.text)}
         ```
 
     Raises:
@@ -375,6 +397,7 @@ def event(
         throttle=validate_timing_value("@event(throttle=...)", throttle),
         latest_wins=validate_bool_value("@event(latest_wins=...)", latest_wins),
         bundle=validate_bool_value("@event(bundle=...)", bundle),
+        detached=validate_bool_value("@event(detached=...)", detached),
     )
 
     def wrap(handler: _F) -> _F:

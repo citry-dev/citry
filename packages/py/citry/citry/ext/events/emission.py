@@ -103,6 +103,7 @@ def build_events_manifest(
                 throttle_milliseconds=handler.throttle,
                 latest_call_wins=options is not None and options.latest_wins,
                 allow_batching=options is None or options.bundle,
+                detached=options is not None and options.detached,
             )
         writable = (
             info.state_meta.model

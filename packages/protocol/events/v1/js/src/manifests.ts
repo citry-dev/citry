@@ -28,6 +28,7 @@ const HANDLER_FIELDS = new Set([
 	"throttleMilliseconds",
 	"latestCallWins",
 	"allowBatching",
+	"detached",
 ]);
 const INSTANCE_FIELDS = new Set([
 	"renderId",
@@ -145,6 +146,13 @@ export const validateHandlerDescriptor = (
 			path: pointer(path, "allowBatching"),
 			category: "enum",
 			message: "The allowBatching hint has its non-default literal value.",
+		};
+	}
+	if (hasOwn(value, "detached") && value.detached !== true) {
+		return {
+			path: pointer(path, "detached"),
+			category: "enum",
+			message: "The detached hint has its non-default literal value.",
 		};
 	}
 	return null;

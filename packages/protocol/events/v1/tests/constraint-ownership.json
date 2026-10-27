@@ -53,8 +53,8 @@
       "pythonValidators": ["python/citry_events/manifests.py:validate_handler_descriptor"],
       "javascriptValidators": ["js/src/manifests.ts:validateHandlerDescriptor"],
       "tests": ["tests/descriptors/index.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_package.py"],
-      "constraintCount": 12,
-      "constraintSha256": "3d4e1ce15a2bb79eabe83dd5b287c736ab22f625fedc660a79d989ac5b5e3250"
+      "constraintCount": 13,
+      "constraintSha256": "97fd36d46f620fdfb39b0bd8cdb05a5c9a904972c2bf98af4c470065e82e99cb"
     },
     {
       "id": "events-manifest-envelope",
@@ -75,8 +75,8 @@
       "pythonValidators": ["python/citry_events/manifests.py:validate_descriptor", "python/citry_events/manifests.py:validate_handler_descriptor"],
       "javascriptValidators": ["js/src/manifests.ts:validateDescriptor", "js/src/manifests.ts:validateHandlerDescriptor"],
       "tests": ["tests/manifests/index.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
-      "constraintCount": 24,
-      "constraintSha256": "9b2ee4a772694890a630d82af73fdae731c9d25c02c061d1f7df6adf56d4337f"
+      "constraintCount": 25,
+      "constraintSha256": "6febe427b2fabb125b6352d813a9dd777e4af9ea419f86d2ee30c7e918be1a2d"
     },
     {
       "id": "events-manifest-component-instance",

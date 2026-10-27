@@ -3797,7 +3797,8 @@
       plain(checkedArgs, "Citry Events arguments");
       const source = sources.get(record.occurrenceId);
       if (!source) throw new Error("Citry Events call has no mounted Vue owner");
-      // The bridge checks the options (an unknown key or `wait: false` rejects) and copies them.
+      // The bridge checks the options and copies them. An unknown key rejects, and so does
+      // `wait: false` unless the handler is declared detached.
       return ensureEventsBridge().send({source, handler, args: checkedArgs, options: opts});
     };
     ownedApp.resolvePublicTarget = sourceForTarget;
@@ -3808,7 +3809,8 @@
       requireEventHandler(mounted.record, handler);
       const checkedArgs = args === undefined ? {} : args;
       plain(checkedArgs, "Citry Events arguments");
-      // The bridge checks the options (an unknown key or `wait: false` rejects) and copies them.
+      // The bridge checks the options and copies them. An unknown key rejects, and so does
+      // `wait: false` unless the handler is declared detached.
       return ensureEventsBridge().send({source, handler, args: checkedArgs, options: opts});
     };
     ownedApp.publicApplyActions = (actions, source) => ensureEventsBridge().applyActions(actions, source);

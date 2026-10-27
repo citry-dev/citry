@@ -361,6 +361,8 @@ class SourceEventRecord:
     # so the editor can see whether that class has unsaved edits.
     data_file: Path | None = None
     data_qualname: str | None = None
+    # Declared `@event(detached=True)`, so browser code may send it `wait: false`.
+    detached: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -737,7 +739,7 @@ def _source_event_info(
     handlers: list[SourceEventRecord] = []
     names: set[str] = set()
     for raw_handler in raw_handlers or []:
-        if type(raw_handler) is not dict or set(raw_handler) - {"data_class"} != {
+        if type(raw_handler) is not dict or set(raw_handler) - {"data_class", "detached"} != {
             "name",
             "method_name",
             "module",
@@ -764,8 +766,20 @@ def _source_event_info(
             raise ValueError(f"source analysis for {definition_id!r} has a relative event source")
         names.add(name)
         data_file, data_qualname = _source_data_class(raw_handler.get("data_class"), definition_id)
+        # The worker writes the key only for a detached handler, so its one valid value is `true`.
+        if "detached" in raw_handler and raw_handler["detached"] is not True:
+            raise ValueError(f"source analysis for {definition_id!r} has an invalid detached flag")
         handlers.append(
-            SourceEventRecord(name, method_name, module, qualname, path.resolve(), data_file, data_qualname)
+            SourceEventRecord(
+                name,
+                method_name,
+                module,
+                qualname,
+                path.resolve(),
+                data_file,
+                data_qualname,
+                detached="detached" in raw_handler,
+            )
         )
     if raw_state is not None and type(raw_state) is not list:
         raise ValueError(f"source analysis for {definition_id!r} has invalid State fields")

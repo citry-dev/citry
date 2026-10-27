@@ -57,7 +57,7 @@ JavaScript:
 
 | Helper | Use |
 |---|---|
-| [`$state`][$state] | Read State, or replace a field the browser may change. The change is sent with the next call from this component, unless that call uses GET (see [Event routes](/events/routes/)). |
+| [`$state`][$state] | Read State, or replace a field the browser may change. The change is sent with the next call from this component that does not use GET (see [Event routes](/events/routes/)) and does not go to a handler declared with `@event(detached=True)`. |
 | [`$loading()`][$loading] | True while any call from this component is waiting or running. |
 | [`$loading('save')`][$loading] | The same, for the `save` handler only. |
 | [`$error()`][$error] | The newest error from any of this component's handlers, or `null`. |

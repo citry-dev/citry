@@ -143,16 +143,25 @@ export interface VueEventSend {
   options?: unknown;
 }
 
+/** Name a value for an error message without a step that could throw on it, as JSON.stringify can. */
+const describeValue = (value: unknown): string =>
+  typeof value === "string" ? JSON.stringify(value) : typeof value === "number" ? String(value) : `a ${typeof value}`;
+
+/** The `opts` values the bridge keeps after `checkSendOptions` accepted them. */
+interface CheckedSendOptions {
+  timeout?: number;
+  /** `false` sends the call at once, outside the queue; only a detached handler accepts it. */
+  wait?: false;
+}
+
 /**
  * Check the `opts` a page passed to `$sendEvent` or `Citry.events.send` and copy the values the
  * bridge reads, so a caller that changes its object while the call waits in line changes nothing.
  *
- * Only `wait: true` (the default) is accepted. Each server render is built on the app revision the
- * browser held when it sent the call, and each call carries the State token the previous call
- * returned, so a call that skipped ahead of queued calls would come back built on a page state
- * that no longer exists. Rejecting the option says so at the call site instead of ignoring it.
+ * `wait` is `true` (the default) or `false`. This function checks only the type: `send` checks that
+ * the handler is declared `@event(detached=True)`, because only `send` has the handler's descriptor.
  */
-const checkSendOptions = (value: unknown): { timeout?: number } | undefined => {
+const checkSendOptions = (value: unknown): CheckedSendOptions | undefined => {
   if (value === undefined) return undefined;
   if (value === null || typeof value !== "object" || Array.isArray(value))
     throw new TypeError("Citry Events send options must be an object, such as {timeout: 5000}.");
@@ -161,16 +170,30 @@ const checkSendOptions = (value: unknown): { timeout?: number } | undefined => {
       throw new TypeError(`Citry Events send got an unknown option '${key}'; the options are 'timeout' and 'wait'.`);
   }
   const { timeout, wait } = value as { timeout?: unknown; wait?: unknown };
-  if (wait !== undefined && wait !== true)
-    throw new TypeError(
-      "Citry Events option 'wait' accepts only true. Calls from one Vue app are sent one at a time, " +
-        "in the order they were made, so a call cannot skip ahead of earlier ones. Remove 'wait'; to " +
-        "replace an older call to the same handler, declare the handler with @event(latest_wins=True).",
-    );
+  if (wait !== undefined && wait !== true && wait !== false)
+    throw new TypeError(`Citry Events option 'wait' must be true or false; got ${describeValue(wait)}.`);
   if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0))
     throw new Error("Citry Events timeout must be a positive finite number.");
-  return timeout === undefined ? {} : { timeout };
+  const checked: CheckedSendOptions = {};
+  if (timeout !== undefined) checked.timeout = timeout;
+  if (wait === false) checked.wait = false;
+  return checked;
 };
+
+/**
+ * The TypeError for `wait: false` on a handler that may render or change State. Queued calls go
+ * out one at a time because each server render is built on the app revision the browser held when
+ * it sent the call, and each call carries the State token the previous call returned. A call that
+ * skipped ahead could come back built on a page state that no longer exists.
+ */
+const queuedHandlerError = (handler: string): TypeError =>
+  new TypeError(
+    `Citry Events option 'wait: false' needs a detached handler, and '${handler}' is not one. Calls ` +
+      "from one Vue app are sent one at a time, in order, because each render and State change builds " +
+      "on the one before it. Remove 'wait: false', or declare the handler with @event(detached=True) " +
+      "if it never renders or changes State. To replace an older call to the same handler instead, " +
+      "declare it with @event(latest_wins=True).",
+  );
 
 export interface VueEventActivity {
   enqueue(handler: string): unknown;
@@ -324,8 +347,9 @@ const saveAttachment = (blob: Blob, filename: string): void => {
 };
 
 /**
- * Create the prepared-tree bridge. Calls serialize, while
- * wait:false actions remain detached and cannot deadlock a callback send.
+ * Create the prepared-tree bridge. Queued calls go out one at a time. A call made with
+ * `wait: false` to a detached handler goes out at once, outside the queue. An action the server
+ * marked `wait: false` runs on its own, so a callback that sends a new call cannot wait on itself.
  */
 export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   const reportableFailures = new WeakSet<object>();
@@ -361,7 +385,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     // the call's remaining actions start.
     cancelError?: Error;
     // How many of the call's `wait: false` actions are scheduled and have not finished yet.
-    detachedPending: number;
+    noWaitPending: number;
+    // The handler is declared `@event(detached=True)`; set once the call is sent.
+    detachedHandler?: boolean;
     cancelled: Promise<never>;
     cancel(error: Error): void;
     resolve(value: JsonValue | undefined): void;
@@ -383,7 +409,10 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   const externalJobs = new Set<Job>();
   // Calls, finished or not, whose `wait: false` actions have not finished yet. A newer call under
   // `latestCallWins` cancels these too, so those actions never start.
-  const detachedJobs = new Set<Job>();
+  const jobsWithNoWaitActions = new Set<Job>();
+  // Calls sent with `wait: false` to a detached handler that have not settled yet. They run outside
+  // the queue, so `active` never names them, and retire, dispose and supersede reach them here.
+  const detachedCalls = new Set<Job>();
   let running = false;
   let disposed = false;
 
@@ -394,7 +423,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       job.input.source.generation === input.source.generation &&
       job.input.handler === input.handler;
     // Each pending action of these calls reports its own `stale` when its delay is cancelled.
-    for (const job of detachedJobs) if (sameCall(job)) job.cancel(error);
+    for (const job of jobsWithNoWaitActions) if (sameCall(job)) job.cancel(error);
+    // A detached call in flight reports its own `stale` when its send rejects.
+    for (const job of detachedCalls) if (sameCall(job)) job.cancel(error);
     for (let index = queue.length - 1; index >= 0; index -= 1) {
       const job = queue[index];
       if (
@@ -661,12 +692,18 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     for (const [index, action] of result.actions.entries()) {
       if (hoisted.has(index)) continue;
       const run = async () => {
-        if (typeof action.delay === "number" && action.delay > 0) await delay(action.delay * 1000, state, job);
+        const seconds = typeof action.delay === "number" ? action.delay : 0;
+        const delayed = seconds > 0;
+        if (delayed) await delay(seconds * 1000, state, job);
+        // A detached result renders nothing and changes no State, so a queued result accepted between
+        // its actions does not replace it, and its actions without a delay still run. An action that
+        // waited on a delay follows the usual newer-result rule.
+        const actionEpoch = job.detachedHandler && !delayed ? state.acceptedEpoch : epoch;
         await applyOne(
           action,
           source,
           state,
-          epoch,
+          actionEpoch,
           (value) => {
             data = value;
           },
@@ -675,8 +712,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         );
       };
       if ("wait" in action && action.wait === false) {
-        job.detachedPending += 1;
-        detachedJobs.add(job);
+        job.noWaitPending += 1;
+        jobsWithNoWaitActions.add(job);
         void run()
           .catch((error) => {
             if (error instanceof VueEventStale) {
@@ -687,11 +724,11 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
             if (!(error instanceof VueEventCancellation)) {
               lifecycle("error", source, job.input.handler, { error: activityError(error) as JsonObject });
             }
-            console.error("[Citry] applying a detached Vue event action failed:", error);
+            console.error("[Citry] applying a Vue event action marked wait: false failed:", error);
           })
           .finally(() => {
-            job.detachedPending -= 1;
-            if (job.detachedPending === 0) detachedJobs.delete(job);
+            job.noWaitPending -= 1;
+            if (job.noWaitPending === 0) jobsWithNoWaitActions.delete(job);
           });
       } else await run();
     }
@@ -711,6 +748,10 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     if (!Object.prototype.hasOwnProperty.call(context.descriptor.eventHandlers, input.handler))
       throw new Error(`Unknown event handler '${input.handler}'.`);
     const handlerOptions = context.descriptor.eventHandlers[input.handler];
+    // A detached handler can neither replace the caller's HTML nor its State, so its result never
+    // counts as a newer result for the caller, whether the call went out queued or not.
+    const detachedHandler = handlerOptions.detached === true;
+    job.detachedHandler = detachedHandler;
     job.callerRenderId = context.serverRenderId;
     job.lifecycleStarted = true;
     if (!lifecycle("before", input.source, input.handler))
@@ -725,9 +766,12 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
           : "";
     const routes = configuredEventRoutes(runtimeConfig.url ?? "", configuredEndpoint, options.eventBaseUrl);
     if (useGet && input.stateUpdates !== undefined) throw new Error("GET events cannot send pending State updates.");
-    const taken = useGet
-      ? undefined
-      : (input.stateUpdates ?? options.host.takePendingState?.(input.source, input.handler));
+    // A detached handler returns no new State token, so pending browser State writes stay pending
+    // for the next call to a handler that is not detached instead of riding on this one and being lost.
+    const taken =
+      useGet || detachedHandler
+        ? undefined
+        : (input.stateUpdates ?? options.host.takePendingState?.(input.source, input.handler));
     job.stateUpdates = taken === undefined ? undefined : structuredClone(taken);
     state.sendSequence += 1;
     correlation += 1;
@@ -859,8 +903,10 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     ]).finally(() => globalThis.clearTimeout(timeoutId));
     if ("attachment" in received) {
       stillCurrent(input.source, state);
-      state.acceptedEpoch += 1;
-      acceptAtSpot(input.source, job);
+      if (!detachedHandler) {
+        state.acceptedEpoch += 1;
+        acceptAtSpot(input.source, job);
+      }
       continuationCurrent(input.source, state, state.acceptedEpoch, job);
       saveAttachment(received.attachment, received.filename);
       return undefined;
@@ -871,14 +917,25 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     // The host may freeze and keep the result it is given. The browser's fetch parses a fresh object
     // for this call, but code behind a custom transport may still hold its object, so copy that one.
     const [result] = received.transported ? copyJson(checked.results) : checked.results;
+    if (detachedHandler && result.ok) {
+      // Checked before any action runs: the server should never send these, and applying one
+      // would replace HTML or a State token that a queued call may already have changed.
+      const forbidden = result.actions.find((action) => action.action === "render" || action.action === "state");
+      if (forbidden)
+        throw new Error(
+          `Invalid Events response: detached handler '${input.handler}' returned a '${forbidden.action}' action.`,
+        );
+    }
     stillCurrent(input.source, state);
     validateTargets(result, input.source, context.serverRenderId);
     const preparedResult = options.host.preflightResult?.(result, input.source) ?? { result };
     // Preflight runs page code, which may supersede this call. Checked before the counts move, so
     // a cancelled result does not count as a newer result for the component.
     if (job.cancelError) throw job.cancelError;
-    state.acceptedEpoch += 1;
-    acceptAtSpot(input.source, job);
+    if (!detachedHandler) {
+      state.acceptedEpoch += 1;
+      acceptAtSpot(input.source, job);
+    }
     // The server has consumed the dequeued State draft once the complete
     // response/result/target preflight succeeds.  Mark that transaction
     // accepted before interpreting its actions: a later action may fail after
@@ -896,6 +953,54 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     );
   };
 
+  // Sends one call and settles its promise. The queue runs queued calls through it one at a time,
+  // and `send` runs a detached call through it at once.
+  const runJob = async (job: Job): Promise<void> => {
+    try {
+      job.activity?.start(job.intent);
+      const value = await sendNow(job);
+      // A call cancelled after its last action ran still reports as cancelled, not as a
+      // success: its caller's promise has already rejected.
+      if (job.cancelError) throw job.cancelError;
+      job.stateAccepted = true;
+      job.activity?.succeed(job.intent);
+      if (job.lifecycleStarted) lifecycle("after", job.input.source, job.input.handler, { ok: true });
+      job.resolve(value);
+    } catch (error) {
+      if (!job.stateAccepted && job.stateUpdates !== undefined)
+        options.host.restorePendingState?.(job.input.source, job.stateUpdates);
+      if (job.lifecycleStarted) {
+        if (error instanceof VueEventStale) {
+          lifecycle("stale", job.input.source, job.input.handler, { reason: error.reason });
+        } else if (!(error instanceof VueEventCancellation)) {
+          // The server answers `stale_state` when the page's State token no longer verifies, which is
+          // what a deploy does to an open page. Reported before `error`, and a listener may cancel it
+          // to replace the reload prompt; the call still rejects with the server's error either way.
+          if (
+            activityError(error).code === "stale_state" &&
+            lifecycle("stale", job.input.source, job.input.handler, { reason: "version" })
+          )
+            options.host.promptReload?.();
+          lifecycle("error", job.input.source, job.input.handler, {
+            error: activityError(error) as JsonObject,
+          });
+        }
+        lifecycle("after", job.input.source, job.input.handler, { ok: false });
+      }
+      if (!(error instanceof VueEventCancellation)) {
+        job.activity?.fail(job.intent, activityError(error));
+        if (job.activity && error !== null && typeof error === "object" && reportableFailures.has(error))
+          handledFailures.add(error);
+      }
+      job.reject(error);
+    } finally {
+      if (!job.activityFinished) {
+        job.activityFinished = true;
+        job.activity?.finish(job.intent);
+      }
+    }
+  };
+
   const runQueue = async (): Promise<void> => {
     if (running) return;
     running = true;
@@ -905,47 +1010,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         if (!job || job.settled) continue;
         active = job;
         try {
-          job.activity?.start(job.intent);
-          const value = await sendNow(job);
-          // A call cancelled after its last action ran still reports as cancelled, not as a
-          // success: its caller's promise has already rejected.
-          if (job.cancelError) throw job.cancelError;
-          job.stateAccepted = true;
-          job.activity?.succeed(job.intent);
-          if (job.lifecycleStarted) lifecycle("after", job.input.source, job.input.handler, { ok: true });
-          job.resolve(value);
-        } catch (error) {
-          if (!job.stateAccepted && job.stateUpdates !== undefined)
-            options.host.restorePendingState?.(job.input.source, job.stateUpdates);
-          if (job.lifecycleStarted) {
-            if (error instanceof VueEventStale) {
-              lifecycle("stale", job.input.source, job.input.handler, { reason: error.reason });
-            } else if (!(error instanceof VueEventCancellation)) {
-              // The server answers `stale_state` when the page's State token no longer verifies, which is
-              // what a deploy does to an open page. Reported before `error`, and a listener may cancel it
-              // to replace the reload prompt; the call still rejects with the server's error either way.
-              if (
-                activityError(error).code === "stale_state" &&
-                lifecycle("stale", job.input.source, job.input.handler, { reason: "version" })
-              )
-                options.host.promptReload?.();
-              lifecycle("error", job.input.source, job.input.handler, {
-                error: activityError(error) as JsonObject,
-              });
-            }
-            lifecycle("after", job.input.source, job.input.handler, { ok: false });
-          }
-          if (!(error instanceof VueEventCancellation)) {
-            job.activity?.fail(job.intent, activityError(error));
-            if (job.activity && error !== null && typeof error === "object" && reportableFailures.has(error))
-              handledFailures.add(error);
-          }
-          job.reject(error);
+          await runJob(job);
         } finally {
-          if (!job.activityFinished) {
-            job.activityFinished = true;
-            job.activity?.finish(job.intent);
-          }
           active = null;
         }
       }
@@ -961,6 +1027,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     let activity: VueEventActivity | undefined;
     let intent: unknown;
     let input = given;
+    let outsideQueue = false;
     try {
       // Checked before the call is queued, so a bad option rejects without reaching the server.
       input = { ...given, options: checkSendOptions(given.options) };
@@ -972,9 +1039,15 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         throw new Error(
           `Event handler '${input.handler}' uses HTTP ${method}, which is server-transport-only and cannot be sent by the browser bridge.`,
         );
+      const handlerOptions = context.descriptor.eventHandlers[input.handler];
+      outsideQueue = (input.options as CheckedSendOptions | undefined)?.wait === false;
+      if (outsideQueue && handlerOptions.detached !== true) throw queuedHandlerError(input.handler);
+      // The server would refuse these, since a detached handler cannot change State.
+      if (handlerOptions.detached === true && input.stateUpdates !== undefined)
+        throw new TypeError(`Event handler '${input.handler}' is detached, so a call to it cannot send State updates.`);
       activity = options.activity?.(input.source, context.descriptor);
       intent = activity?.enqueue(input.handler);
-      if (context.descriptor.eventHandlers[input.handler].latestCallWins === true) supersedeEarlier(input);
+      if (handlerOptions.latestCallWins === true) supersedeEarlier(input);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -992,7 +1065,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const job: Job = {
       input,
       acceptedRemount: false,
-      detachedPending: 0,
+      noWaitPending: 0,
       activity,
       intent,
       activityFinished: false,
@@ -1027,8 +1100,13 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         rejectPromise(error);
       },
     };
-    queue.push(job);
-    void runQueue();
+    if (outsideQueue) {
+      detachedCalls.add(job);
+      void runJob(job).finally(() => detachedCalls.delete(job));
+    } else {
+      queue.push(job);
+      void runQueue();
+    }
     return promise;
   };
 
@@ -1072,7 +1150,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const job = {
       input: { source, handler: "__external__" },
       acceptedRemount: false,
-      detachedPending: 0,
+      noWaitPending: 0,
       activityFinished: true,
       lifecycleStarted: true,
       external: true,
@@ -1132,6 +1210,10 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         job.cancel(error);
       }
     }
+    // A detached call never renders, so its own render cannot be what retired the source.
+    for (const job of detachedCalls)
+      if (job.input.source.stableId === source.stableId && job.input.source.generation === source.generation)
+        job.cancel(error);
     for (const job of externalJobs) {
       if (
         acceptedTransaction !== undefined &&
@@ -1181,6 +1263,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       job.cancel(error);
     }
     active?.cancel(error);
+    for (const job of detachedCalls) job.cancel(error);
   };
 
   const isDeclarativeFailureHandled = (error: unknown): boolean =>

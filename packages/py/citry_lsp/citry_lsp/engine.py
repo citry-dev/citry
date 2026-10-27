@@ -2338,6 +2338,7 @@ def _component_js_projection_parts(
         props,
         tuple(events),
         state_roots,
+        detached_event_names=_detached_event_names(consumers, project),
         binding_types=component_globals,
         include_root_variables=False,
         component_js=True,
@@ -2401,6 +2402,7 @@ def _template_scope(
         () if instance is None else instance.props,
         tuple(events),
         state_roots,
+        detached_event_names=_detached_event_names(consumers, project),
         component_analysis=None if instance is None else instance.analysis,
         writable_state_names=_shared_writable_state_names(consumers, project),
         i18n=project.i18n,
@@ -9582,9 +9584,10 @@ _ALPINE_API_SPECS = {
         "function",
         (
             "(name: CitryServerEventName, args?: Record<string, unknown>, "
-            "opts?: {timeout?: number; wait?: true}) => Promise<unknown>"
+            "opts?: {timeout?: number; wait?: boolean}) => Promise<unknown>"
         ),
-        "Call one of this component's declared server event handlers.",
+        "Call one of this component's declared server event handlers. `wait: false` sends the call at once "
+        "and needs a handler declared with `@event(detached=True)`.",
         f"{_BROWSER_APIS_URL}#send-event",
     ),
     "$onEvent": _BrowserApiSpec(
@@ -9647,9 +9650,10 @@ _COMPONENT_CONTEXT_SPECS = {
         "parameter",
         (
             "(name: CitryServerEventName, args?: Record<string, unknown>, "
-            "opts?: {timeout?: number; wait?: true}) => Promise<unknown>"
+            "opts?: {timeout?: number; wait?: boolean}) => Promise<unknown>"
         ),
-        "Call one of this component's declared server event handlers, like `component.$sendEvent`.",
+        "Call one of this component's declared server event handlers, like `component.$sendEvent`. "
+        "`wait: false` sends the call at once and needs a handler declared with `@event(detached=True)`.",
         f"{_BROWSER_APIS_URL}#send-event",
     ),
     "loading": _BrowserApiSpec(
@@ -9891,8 +9895,8 @@ def _instance_helpers_typedef(i18n: Any | None, *, has_state: bool) -> tuple[str
     lines = [
         "/** @typedef {Object} CitryInstanceHelpers",
         f" * @property {{CitryEventsState}} $state {state_text} {_BROWSER_APIS_URL}#state",
-        " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: CitrySendOptions) "
-        "=> Promise<any>} $sendEvent Call one of this component's declared Citry server event handlers. "
+        " * @property {CitrySendEvent} $sendEvent Call one of this component's declared Citry server event "
+        "handlers. "
         f"{_BROWSER_APIS_URL}#send-event",
         " * @property {(name?: CitryServerEventName) => boolean} $loading Check whether any Citry server "
         f"handler, or one named handler, is queued or running. {_BROWSER_APIS_URL}#loading",
@@ -9944,6 +9948,7 @@ def _browser_preamble(
     instance_names: frozenset[str] = frozenset(),
     root_element_type: str = "Node",
     template_instance: bool = False,
+    detached_event_names: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     """
     Render collision-tolerant JSDoc facts for VS Code's JS provider.
@@ -10036,6 +10041,11 @@ def _browser_preamble(
         else "{}"
     )
     event_type = " | ".join(_js_string_literal(name) for name in event_names) or "string"
+    # Only a handler declared `@event(detached=True)` accepts `wait: false`, so those names get
+    # their own call signature; `never` leaves just the queued one when there are none.
+    detached_type = (
+        " | ".join(_js_string_literal(name) for name in event_names if name in detached_event_names) or "never"
+    )
     vue_import = f"import({_js_string_literal(vue_types)})"
     # Slots, local components, directives, exposed names and template refs
     # keep Vue's defaults; the last argument types `$el`.
@@ -10086,6 +10096,11 @@ def _browser_preamble(
             "context: CitryComponentContext<I>) => void | CitryCleanup | Promise<void | CitryCleanup>} "
             "CitryComponentInitializer */",
             "/** @typedef {{timeout?: number, wait?: true}} CitrySendOptions */",
+            f"/** @typedef {{{detached_type}}} CitryDetachedEventName */",
+            "/** @typedef {{timeout?: number, wait?: boolean}} CitryDetachedSendOptions */",
+            "/** @typedef {{(name: CitryDetachedEventName, args?: Record<string, unknown>, "
+            "opts?: CitryDetachedSendOptions): Promise<any>; (name: CitryServerEventName, "
+            "args?: Record<string, unknown>, opts?: CitrySendOptions): Promise<any>}} CitrySendEvent */",
             "/**",
             " * @template [I=CitryComponentPublicInstance]",
             " * @typedef {Object} CitryComponentContext",
@@ -10095,8 +10110,7 @@ def _browser_preamble(
             " * @property {string | null} id",
             " * @property {Element[]} els",
             " * @property {CitryEventsState | null} state",
-            " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: CitrySendOptions) "
-            "=> Promise<any>} sendEvent",
+            " * @property {CitrySendEvent} sendEvent",
             " * @property {(name?: CitryServerEventName) => boolean} loading",
             " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
             " * @property {CitryI18nService | null} i18n",
@@ -10175,12 +10189,8 @@ def _browser_preamble(
     if not component_js:
         lines.extend(
             (
-                "/** @param {CitryServerEventName} name @param {Record<string, unknown>=} args "
-                "@param {CitrySendOptions=} opts @returns {Promise<any>} */",
-                "function sendEvent(name, args, opts) { return Promise.resolve(); }",
-                "/** @param {CitryServerEventName} name @param {Record<string, unknown>=} args "
-                "@param {CitrySendOptions=} opts @returns {Promise<any>} */",
-                "function $sendEvent(name, args, opts) { return Promise.resolve(); }",
+                "/** @type {CitrySendEvent} */ var sendEvent = /** @type {any} */ (function () {});",
+                "/** @type {CitrySendEvent} */ var $sendEvent = /** @type {any} */ (function () {});",
                 "/** @param {string} name @param {(detail: any) => void} fn @returns {CitryCleanup} */",
                 "function onEvent(name, fn) { return function () {}; }",
                 "/** @param {string} name @param {(detail: any) => void} fn @returns {CitryCleanup} */",
@@ -11234,6 +11244,23 @@ def _event_contract(
         name: _sorted_locations([consumer_handlers[name] for consumer_handlers in per_consumer])
         for name in sorted(common)
     }
+
+
+def _detached_event_names(consumers: tuple[ComponentRecord, ...], project: ProjectState) -> frozenset[str]:
+    """
+    The handler names every consumer declares with `@event(detached=True)`.
+
+    A shared asset types `wait: false` as allowed only when each component
+    that uses it would accept the call, as the browser checks per component.
+    """
+    if not consumers or project.source_analysis is None:
+        return frozenset()
+    common: set[str] | None = None
+    for component in consumers:
+        handlers = project.source_analysis.event_handlers(component) or ()
+        names = {handler.name for handler in handlers if handler.detached}
+        common = names if common is None else common & names
+    return frozenset(common or ())
 
 
 def _event_handler_location(
