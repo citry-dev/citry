@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from lsprotocol import types
 
 from citry import LspPosition, LspRange
+from citry._authored_expression import parse_authored_expression
 from citry._browser_expressions import _normalized_dynamic_slot_source, _vue_hyphenated_prop_name, _vue_prop_name
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
@@ -1194,12 +1195,11 @@ def _i18n_call_findings(
     template: bool,
     known_types: Mapping[str, str] | None = None,
 ) -> list[tuple[int, int, str, str]]:
-    # Multiline interpolation queries retain the indentation before their
-    # closing delimiter. It is outside the expression and must not make an
-    # otherwise valid formatter call fail Python parsing.
-    parsed_source = source.rstrip() if template else source
     try:
-        tree = ast.parse(parsed_source, mode="eval" if template else "exec")
+        # A template expression is parsed the way Citry runs it, so one split
+        # across lines without parentheses, or followed by the indentation
+        # before its closing delimiter, is read like its one-line spelling.
+        tree: ast.AST = parse_authored_expression(source) if template else ast.parse(source)
     except (SyntaxError, TypeError, ValueError):
         return []
     findings: list[tuple[int, int, str, str]] = []
@@ -1463,8 +1463,9 @@ def _literal_trans_values(attribute: Any | None) -> dict[str, ast.expr] | None:
     if attribute is None or attribute.inner_value is None:
         return {}
     try:
-        expression = ast.parse(attribute.inner_value.content, mode="eval").body
-    except SyntaxError:
+        # The value may start on an indented line of a multi-line attribute.
+        expression = parse_authored_expression(attribute.inner_value.content).body
+    except (SyntaxError, ValueError):
         return None
     if not isinstance(expression, ast.Dict) or not all(
         key is not None and isinstance(key, ast.Constant) and type(key.value) is str for key in expression.keys
@@ -3560,11 +3561,10 @@ def _python_i18n_uses(
     template: bool,
 ) -> list[tuple[str, str, str | None, str | None, str | None, str | None, int, int]]:
     """Extract direct Python/template calls with exact string-token spans."""
-    # The removed suffix is only template indentation after the expression,
-    # so every retained AST byte offset still maps to the authored source.
-    parsed_source = source.rstrip() if template else source
     try:
-        tree = ast.parse(parsed_source, mode="eval" if template else "exec")
+        # Parse a template expression the way Citry runs it; the helper's
+        # positions point into `source`.
+        tree: ast.AST = parse_authored_expression(source) if template else ast.parse(source)
     except (SyntaxError, TypeError, ValueError):
         return []
     uses: list[tuple[str, str, str | None, str | None, str | None, str | None, int, int]] = []
@@ -3939,7 +3939,7 @@ def _trans_i18n_uses(template: Any, region: TemplateRegion) -> Generator[Call, A
 def _literal_trans_value_spans(source: str) -> tuple[tuple[str, int, int], ...]:
     """Return literal mapping keys from one ``c-values`` expression."""
     try:
-        expression = ast.parse(source, mode="eval").body
+        expression = parse_authored_expression(source).body
     except (SyntaxError, TypeError, ValueError):
         return ()
     if not isinstance(expression, ast.Dict):
@@ -5405,12 +5405,18 @@ def _query_slot_data_types(
     return found
 
 
+def _parse_query_host(source: str, *, loop: bool) -> ast.Expression:
+    """Parse a template expression, or a loop clause, the way Citry runs it."""
+    # A loop clause is read inside a generator, which already allows newlines;
+    # any other expression is read inside `(\n...\n)`.
+    return ast.parse(f"[\nNone for {source}\n]", mode="eval") if loop else parse_authored_expression(source)
+
+
 def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:
     """Return whether one complete Python host mutates the render context."""
     source = query.source.rstrip()
-    framed = f"[\nNone for {source}\n]" if query.host_kind == "loop" else source
     try:
-        tree = ast.parse(framed, mode="eval")
+        tree = _parse_query_host(source, loop=query.host_kind == "loop")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return True
     return any(isinstance(node, ast.NamedExpr) for node in ast.walk(tree))
@@ -5419,9 +5425,8 @@ def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:
 def _query_contains_lambda_named_expression(query: TemplatePythonQuery) -> bool:
     """Detect Citry's context-leaking lambda assignment special case."""
     source = query.source.rstrip()
-    framed = f"[\nNone for {source}\n]" if query.host_kind == "loop" else source
     try:
-        tree = ast.parse(framed, mode="eval")
+        tree = _parse_query_host(source, loop=query.host_kind == "loop")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return True
     return any(
@@ -7583,7 +7588,8 @@ def _root_completion_context(
 def _python_name_at(source: str, cursor: int) -> bool:
     """Return whether a complete expression has a name at the cursor."""
     try:
-        tree = ast.parse(source, mode="eval")
+        # Positions still point into `source`; see `parse_authored_expression`.
+        tree = parse_authored_expression(source)
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return False
     lines = source_lines(source)

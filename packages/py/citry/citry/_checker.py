@@ -26,6 +26,7 @@ from types import (
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message
+from citry._authored_expression import parse_authored_expression
 from citry._class_introspection import (
     _safe_class_import_path,
     _safe_class_text,
@@ -1720,8 +1721,10 @@ def _trans_contract_findings(
     if values_attr is not None and values_attr.inner_value is not None:
         values = None
         try:
-            expression = ast.parse(values_attr.inner_value.content, mode="eval").body
-        except SyntaxError:
+            # The value may start on an indented line of a multi-line
+            # attribute, which only the wrapped parse accepts.
+            expression = parse_authored_expression(values_attr.inner_value.content).body
+        except (SyntaxError, ValueError):
             expression = None
         if isinstance(expression, ast.Dict) and all(
             key is not None and isinstance(key, ast.Constant) and type(key.value) is str for key in expression.keys
@@ -3120,7 +3123,9 @@ def _names_sent_as_written(value_source: str) -> list[_SentName]:
     value.
     """
     try:
-        node = ast.parse(value_source.strip(), mode="eval").body
+        # The value may come from inside a dict literal, where it can span
+        # lines without parentheses of its own.
+        node = parse_authored_expression(value_source.strip()).body
     except (SyntaxError, ValueError):
         return []
     names: list[_SentName] = []

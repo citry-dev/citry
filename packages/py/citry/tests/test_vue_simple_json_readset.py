@@ -236,3 +236,14 @@ def test_plain_json_paths_and_conditions_are_compiled():
 
     assert expression is not None
     assert expression.kind == "if"
+
+
+def test_an_expression_split_across_lines_compiles_like_one_line():
+    # Citry runs a template expression inside `(\n...\n)`, so an author may
+    # put the `else` on its own line without parentheses. It must take the
+    # same fast path as the one-line spelling, not fall back.
+    one_line = _compile_simple_json_expr("row['a'] if flag else 'none'", ("row", "flag"))
+    split = _compile_simple_json_expr("row['a'] if flag\nelse 'none'  # fallback", ("row", "flag"))
+
+    assert split is not None
+    assert split == one_line

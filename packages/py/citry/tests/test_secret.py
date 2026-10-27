@@ -805,6 +805,11 @@ class SecretSentFormsPage(Component):
             "starred": ["public", *TOKENS],
             "branch": None if kwargs.get("anonymous") else SECRET_TOKEN,
             "marked": Const(SECRET_TOKEN),
+            # Inside the dict the value may span lines with no parentheses
+            # of its own, and the check must still read it.
+            "splitBranch": None
+            if kwargs.get("anonymous")  # an anonymous page sends nothing
+            else SECRET_TOKEN,
         }
 
 
@@ -833,6 +838,7 @@ def test_check_reads_a_secret_through_attributes_unpacking_branches_and_const(tm
         _secret_finding("fromModule", "secret_settings.API_TOKEN"),
         _secret_finding("fromObject", "SETTINGS.auth.token"),
         _secret_finding("marked", "SECRET_TOKEN"),
+        _secret_finding("splitBranch", "SECRET_TOKEN"),
         _secret_finding("starred", "TOKENS[0]"),
     ]
 

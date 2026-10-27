@@ -13,6 +13,14 @@
   `<c-slot>` passes when the server knows them. Such a fill used to be left
   for the browser to build.
 
+### Fixed
+
+- `format_template()` now formats a Python expression that is valid only
+  inside parentheses, such as a `{{ ... }}` split across lines with its
+  `else` parts on their own lines, or `{{ x for x in items }}`. It used to
+  fail with "Citry accepted a Python expression that the formatter provider
+  rejected".
+
 ## v1.9.0
 
 ### Changed
