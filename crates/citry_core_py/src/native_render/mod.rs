@@ -9,6 +9,14 @@
 //! call-run ids); `runs.rs` holds level B1 (one object per call run);
 //! `walk.rs` holds level C2 (the loop walk of a call run); `leaf_json.rs`
 //! holds level B2 (the JSON of ordinary components' leaf data).
+//!
+//! Unlike the deep entry points in the other modules, these do not start with
+//! the template parser's stack guard (`with_enough_stack`): they read and
+//! create Python objects as they go, and CPython 3.14 and later check the
+//! stack pointer against the thread's own stack, so the work cannot run on
+//! a stack segment taken from the heap. Their stack use has to stay small
+//! on its own, and when Python has left only its last few KiB of stack, a
+//! call here can still overflow it.
 
 mod leaf_json;
 mod rows;

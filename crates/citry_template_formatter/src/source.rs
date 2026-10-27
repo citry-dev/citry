@@ -399,7 +399,23 @@ fn visit_template(
     Ok(suppression.terminal_enabled)
 }
 
+// Each nested element adds a few frames here, and the parser accepts nesting
+// deeper than a small thread's stack can hold, so every level checks that
+// enough stack is left. The walk is pure Rust, so it can run on a stack
+// segment taken from the heap.
 fn visit_node(
+    context: &VisitContext<'_>,
+    node: &Node,
+    layout: NodeLayout,
+    initial_formatting_enabled: bool,
+    model: &mut SourceModel,
+) -> Result<(), FormatError> {
+    citry_template_parser::stack::with_enough_stack(|| {
+        visit_node_on_stack(context, node, layout, initial_formatting_enabled, model)
+    })
+}
+
+fn visit_node_on_stack(
     context: &VisitContext<'_>,
     node: &Node,
     layout: NodeLayout,

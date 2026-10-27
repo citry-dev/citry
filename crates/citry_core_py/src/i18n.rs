@@ -4,6 +4,11 @@ use citry_i18n::{
     CatalogCompiler as RustCatalogCompiler, CompilerError, I18nRuntime as RustCompiledCatalog,
     SCHEMA_VERSION, TextCatalog,
 };
+// Compiling and resolving messages walk Fluent's nested syntax trees, so the
+// entry points below start with the template parser's stack guard. Message
+// lookups run on every render, so they use the variant that skips the guard
+// on wasm32, where it would allocate on every call.
+use citry_template_parser::stack::{with_enough_stack, with_enough_stack_where_measurable};
 use icu_locale::{Direction, Locale, LocaleCanonicalizer, LocaleDirectionality};
 use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
@@ -67,7 +72,7 @@ pub struct PyTextCatalog {
 impl PyTextCatalog {
     #[new]
     fn new(locale: &str, source: String, origin: String) -> PyResult<Self> {
-        let catalog = TextCatalog::compile(locale, source, origin)
+        let catalog = with_enough_stack(|| TextCatalog::compile(locale, source, origin))
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         Ok(Self { catalog })
     }
@@ -86,8 +91,7 @@ impl PyTextCatalog {
 
     #[pyo3(signature = (message_id, attribute=None))]
     fn format(&self, message_id: &str, attribute: Option<&str>) -> PyResult<String> {
-        self.catalog
-            .format(message_id, attribute)
+        with_enough_stack_where_measurable(|| self.catalog.format(message_id, attribute))
             .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 }
@@ -108,11 +112,9 @@ impl PyCatalogCompiler {
     }
 
     fn compile(&self, py: Python<'_>, request_json: &str) -> PyResult<PyCompiledCatalog> {
-        let artifact_json = self
-            .compiler
-            .compile(request_json)
+        let artifact_json = with_enough_stack(|| self.compiler.compile(request_json))
             .map_err(|error| i18n_error_to_py(py, error))?;
-        let catalog = RustCompiledCatalog::new(&artifact_json)
+        let catalog = with_enough_stack(|| RustCompiledCatalog::new(&artifact_json))
             .map_err(|error| i18n_error_to_py(py, error))?;
         Ok(PyCompiledCatalog {
             artifact_json,
@@ -121,21 +123,19 @@ impl PyCatalogCompiler {
     }
 
     fn compile_link_unit(&self, py: Python<'_>, request_json: &str) -> PyResult<String> {
-        self.compiler
-            .compile_link_unit(request_json)
+        with_enough_stack(|| self.compiler.compile_link_unit(request_json))
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
     fn analyze_source(&self, py: Python<'_>, path: &str, source: &str) -> PyResult<String> {
-        self.compiler
-            .analyze_source(path, source)
+        with_enough_stack(|| self.compiler.analyze_source(path, source))
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
     fn clear(&self, py: Python<'_>) -> PyResult<()> {
-        self.compiler
-            .clear()
-            .map_err(|error| i18n_error_to_py(py, error))
+        // Clearing frees the cached syntax trees, which nest like the
+        // messages they came from.
+        with_enough_stack(|| self.compiler.clear()).map_err(|error| i18n_error_to_py(py, error))
     }
 }
 
@@ -173,14 +173,14 @@ impl PyCompiledCatalog {
         locale: &str,
         request_json: &str,
     ) -> PyResult<String> {
-        self.catalog
-            .browser_artifact_json(locale, request_json)
-            .map_err(|error| i18n_error_to_py(py, error))
+        with_enough_stack_where_measurable(|| {
+            self.catalog.browser_artifact_json(locale, request_json)
+        })
+        .map_err(|error| i18n_error_to_py(py, error))
     }
 
     fn browser_parser_artifact_json(&self, py: Python<'_>, locale: &str) -> PyResult<String> {
-        self.catalog
-            .browser_parser_artifact_json(locale)
+        with_enough_stack_where_measurable(|| self.catalog.browser_parser_artifact_json(locale))
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
@@ -193,9 +193,11 @@ impl PyCompiledCatalog {
         args_json: &str,
         attribute: Option<&str>,
     ) -> PyResult<String> {
-        self.catalog
-            .format(locale, message_id, args_json, attribute)
-            .map_err(|error| i18n_error_to_py(py, error))
+        with_enough_stack_where_measurable(|| {
+            self.catalog
+                .format(locale, message_id, args_json, attribute)
+        })
+        .map_err(|error| i18n_error_to_py(py, error))
     }
 
     #[pyo3(signature = (locale, message_id, args_json="{}", attribute=None))]
@@ -207,9 +209,11 @@ impl PyCompiledCatalog {
         args_json: &str,
         attribute: Option<&str>,
     ) -> PyResult<String> {
-        self.catalog
-            .resolve_json(locale, message_id, args_json, attribute)
-            .map_err(|error| i18n_error_to_py(py, error))
+        with_enough_stack_where_measurable(|| {
+            self.catalog
+                .resolve_json(locale, message_id, args_json, attribute)
+        })
+        .map_err(|error| i18n_error_to_py(py, error))
     }
 
     #[pyo3(signature = (locale, message_id, args_json="{}", attribute=None))]
@@ -221,9 +225,11 @@ impl PyCompiledCatalog {
         args_json: &str,
         attribute: Option<&str>,
     ) -> PyResult<(String, String, bool)> {
-        self.catalog
-            .resolve_parts(locale, message_id, args_json, attribute)
-            .map_err(|error| i18n_error_to_py(py, error))
+        with_enough_stack_where_measurable(|| {
+            self.catalog
+                .resolve_parts(locale, message_id, args_json, attribute)
+        })
+        .map_err(|error| i18n_error_to_py(py, error))
     }
 
     #[pyo3(signature = (locale, message_id, args_json, slot_names_json, attribute=None))]
@@ -236,9 +242,16 @@ impl PyCompiledCatalog {
         slot_names_json: &str,
         attribute: Option<&str>,
     ) -> PyResult<String> {
-        self.catalog
-            .resolve_rich_json(locale, message_id, args_json, slot_names_json, attribute)
-            .map_err(|error| i18n_error_to_py(py, error))
+        with_enough_stack_where_measurable(|| {
+            self.catalog.resolve_rich_json(
+                locale,
+                message_id,
+                args_json,
+                slot_names_json,
+                attribute,
+            )
+        })
+        .map_err(|error| i18n_error_to_py(py, error))
     }
 
     fn format_number(

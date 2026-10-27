@@ -61,6 +61,15 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
 - **Every `#[pyclass]` / `#[pyfunction]` exposed here must be mirrored** in
   [`packages/py/citry_core/citry_core/_rust.pyi`](../../packages/py/citry_core/citry_core/_rust.pyi).
   The stub is hand-written and is the IDE/type-check contract.
+- **An entry point that does deep work starts with a stack guard.** Wrap its
+  Rust work, after the arguments are converted, in
+  `citry_template_parser::stack::with_enough_stack`. CPython lets a call
+  through with only about 20 KiB of stack left, so the work's first frames
+  need the guard. An entry point that runs on every render uses
+  `with_enough_stack_where_measurable`, which skips the guard on wasm32. The
+  work inside must not touch Python objects, because it may run on a stack
+  segment taken from the heap. The native render entry points call Python as
+  they go, so they cannot be wrapped (see `src/native_render/mod.rs`).
 
 ## Verifying changes
 

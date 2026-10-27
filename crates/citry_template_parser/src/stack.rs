@@ -16,9 +16,11 @@
 //!
 //! On wasm32 (Pyodide), `stacker` cannot tell how much stack is left, so
 //! every guarded call not already running on a new segment takes a 1 MiB
-//! block from the heap and frees it afterwards. The fill check runs for each
-//! closed tag from the main parse loop, so that is about one block per closed
-//! tag.
+//! block from the heap and frees it afterwards. When Python calls the
+//! parser, the Python bindings' own guard takes one block for the whole
+//! call, and the guards inside reuse it. When Rust code calls the parser
+//! with no guard around it, the fill check that runs for each closed tag
+//! takes about one block per closed tag.
 
 /// Run the work on a new segment when less stack than this is left: enough
 /// for the largest frames between two guarded calls, about 18 KB per
@@ -34,10 +36,35 @@ const NEW_SEGMENT: usize = 1024 * 1024;
 
 /// Run `work` with at least `RED_ZONE` bytes of stack available.
 ///
+/// The Python bindings (`citry_core_py`) also run the Rust work of each
+/// entry point Python calls that does deep work through it. CPython lets a call
+/// into an extension through with only about 20 KiB of stack left, and the
+/// large frames of a debug build can use more than that before the first
+/// guard inside the work, so the guard comes first.
+///
 /// The work must not call into Python: CPython 3.14 and later check the stack
 /// pointer against the thread's own stack, and a heap segment is outside it.
-pub(crate) fn with_enough_stack<T>(work: impl FnOnce() -> T) -> T {
+pub fn with_enough_stack<T>(work: impl FnOnce() -> T) -> T {
     stacker::maybe_grow(RED_ZONE, NEW_SEGMENT, work)
+}
+
+/// Run `work` like [`with_enough_stack`], but only where `stacker` can
+/// measure the stack.
+///
+/// The Python bindings use this for entry points that run on every render,
+/// such as the output HTML checks, message lookups and browser expression
+/// analysis. On wasm32, `stacker` cannot measure the stack, so a guard there
+/// would take a 1 MiB block from the heap on every call; there the work runs
+/// on the current stack, unchecked.
+pub fn with_enough_stack_where_measurable<T>(work: impl FnOnce() -> T) -> T {
+    #[cfg(target_arch = "wasm32")]
+    {
+        work()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        with_enough_stack(work)
+    }
 }
 
 /// Run the work of parsing one embedded expression with enough stack.

@@ -1,4 +1,11 @@
 /// Python interface for the citry_html_transform crate.
+// Each entry point below that parses HTML runs its Rust work through the
+// template parser's stack guard first, so the work's frames run on a stack
+// segment taken from the heap when Python has left little stack. The work
+// reads only Rust data. All of them use the variant that skips the guard on
+// wasm32, because several run on every render, where it would allocate on
+// every call.
+use citry_template_parser::stack::with_enough_stack_where_measurable;
 use std::collections::HashSet;
 
 use pyo3::exceptions::PyValueError;
@@ -36,7 +43,9 @@ pub fn browser_fragment_matches_elements(
             attributes,
         })
         .collect::<Vec<_>>();
-    browser_fragment_matches_elements_rust(html, context, &expected)
+    with_enough_stack_where_measurable(|| {
+        browser_fragment_matches_elements_rust(html, context, &expected)
+    })
 }
 
 /// Check that the browser builds the expected nodes from an HTML fragment.
@@ -99,9 +108,9 @@ pub fn browser_fragment_matches_nodes(
             Ok(event)
         })
         .collect::<PyResult<Vec<_>>>()?;
-    Ok(browser_fragment_matches_nodes_rust(
-        html, context, &expected,
-    ))
+    Ok(with_enough_stack_where_measurable(|| {
+        browser_fragment_matches_nodes_rust(html, context, &expected)
+    }))
 }
 
 /// Count the top-level nodes (elements, texts and comments) the browser
@@ -112,17 +121,18 @@ pub fn browser_fragment_matches_nodes(
 /// block's nodes when the server already wrote them into the page.
 #[pyfunction]
 pub fn static_html_node_count(html: &str) -> usize {
-    static_html_node_count_rust(html)
+    with_enough_stack_where_measurable(|| static_html_node_count_rust(html))
 }
 
 #[pyfunction]
 pub fn validate_html_fragment_boundary(html: &str) -> PyResult<()> {
-    validate_html_fragment_boundary_rust(html).map_err(PyValueError::new_err)
+    with_enough_stack_where_measurable(|| validate_html_fragment_boundary_rust(html))
+        .map_err(PyValueError::new_err)
 }
 
 #[pyfunction]
 pub fn scan_output_html(py: Python, html: &str) -> PyResult<Py<PyAny>> {
-    let output = scan_output_html_rust(html)
+    let output = with_enough_stack_where_measurable(|| scan_output_html_rust(html))
         .into_iter()
         .map(|tag| {
             let item = PyDict::new(py);
@@ -207,7 +217,9 @@ pub fn mark_html(
     root_attributes: Vec<String>,
     placeholder_attr: &str,
 ) -> PyResult<Py<PyTuple>> {
-    let result = mark_html_rust(html, &root_attributes, placeholder_attr);
+    let result = with_enough_stack_where_measurable(|| {
+        mark_html_rust(html, &root_attributes, placeholder_attr)
+    });
 
     let segments = result.segments;
     let placeholders: Vec<(String, String, Vec<String>)> = result
@@ -292,7 +304,7 @@ pub fn transform_html(
         track_added_attributes_for_tags_with_this_attribute,
     );
 
-    match transform_html_rust(&config, html) {
+    match with_enough_stack_where_measurable(|| transform_html_rust(&config, html)) {
         Ok((html, captured)) => {
             // Convert captured attributes to a Python dictionary
             let captured_dict = PyDict::new(py);
@@ -370,8 +382,10 @@ pub fn check_output_html(
     // A panic becomes an ordinary ValueError, so the validators report the
     // page as unreadable (and warn modes still serve it) instead of
     // `serialize()` aborting with PyO3's BaseException-derived error.
-    let report = catch_panic(|| check_output_html_rust(html, &options))
-        .map_err(|detail| PyValueError::new_err(format!("citry output check failed: {detail}")))?;
+    let report = catch_panic(|| {
+        with_enough_stack_where_measurable(|| check_output_html_rust(html, &options))
+    })
+    .map_err(|detail| PyValueError::new_err(format!("citry output check failed: {detail}")))?;
     let events = PyList::empty(py);
     for event in report.events {
         let item = match event {
