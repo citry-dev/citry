@@ -13,6 +13,12 @@
   `<c-slot>` passes when the server knows them. Such a fill used to be left
   for the browser to build.
 
+### Fixed
+
+- `format_template()` now wraps a start tag's attributes when the text after
+  the tag on the same line, such as `{{ label }}</span>`, would make that
+  line longer than 100 columns. It used to measure only the tag.
+
 ## v1.9.0
 
 ### Changed
