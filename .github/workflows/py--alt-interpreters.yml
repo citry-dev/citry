@@ -14,11 +14,6 @@ on:
     # Mondays at 05:17 UTC, away from the top of the hour when runners are busiest.
     - cron: "17 5 * * 1"
   workflow_dispatch:
-  # TEMPORARY for the trial run on this branch: workflow_dispatch works only
-  # once the file is on the default branch. Removed before merge.
-  push:
-    branches:
-      - "ci/alt-interpreters"
 
 permissions:
   contents: read
@@ -89,6 +84,10 @@ jobs:
           -n 4
           --dist loadfile
           --durations 30
+          # Print the failure summary, and the stack of any test still running
+          # after 10 minutes, so a hang or a killed runner still names the test.
+          -rfE
+          -o faulthandler_timeout=600
 
       # A free-threaded build keeps the GIL on once citry_core loads, so this
       # step turns it off to run the render, serialize, Events and thread tests
