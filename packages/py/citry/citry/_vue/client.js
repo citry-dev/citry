@@ -4856,6 +4856,21 @@
     }
   }
 
+  // An input method composes text in the focused field between compositionstart and
+  // compositionend, and `composingTarget` holds that field meanwhile. Chromium keeps a composition
+  // when a script sets the range, but other browsers or input methods may end it, so the restore
+  // below leaves the range alone while one is active. A field that loses focus (Chromium blurs a
+  // field Vue moves) can end the composition without a compositionend, so a focusout on that field
+  // clears `composingTarget` too.
+  let composingTarget = null;
+  if (typeof global.document?.addEventListener === "function") {
+    global.document.addEventListener("compositionstart", event => { composingTarget = event.target; }, true);
+    global.document.addEventListener("compositionend", () => { composingTarget = null; }, true);
+    global.document.addEventListener("focusout", event => {
+      if (event.target === composingTarget) composingTarget = null;
+    }, true);
+  }
+
   // Vue moves a keyed element with insertBefore, and the browser drops focus from an element that
   // leaves the document even for that instant. A server revision that reorders rows would then
   // take the focus and caret away from the field the user is typing in, so remember them here.
@@ -4869,9 +4884,13 @@
     } catch {
       // Inputs such as email or number have no selection API; focus alone is restored for them.
     }
-    return {element, selection};
+    // The text is kept so the restore can tell whether the field was rewritten during the patch.
+    return {element, selection, value: element.value};
   }
   function restoreFocus(focus) {
+    // A composing field removed from the document gets no compositionend in some browsers, so
+    // forget it here rather than keep the removed node alive.
+    if (composingTarget && !composingTarget.isConnected) composingTarget = null;
     // Only an element Vue kept, and only when nothing else took the focus: the page may have moved
     // it on purpose, and an element Vue replaced is a new field.
     if (!focus || !focus.element.isConnected) return;
@@ -4880,9 +4899,14 @@
       if (current && current !== global.document.body) return;
       focus.element.focus({preventScroll: true});
     }
-    // Reapply the range even when the field kept focus: restoring a dirty native value after the
-    // publication writes `.value`, which moves the caret to the end.
-    if (focus.selection) {
+    // Reapply the range even when the field kept focus: when the server changed a typed field's
+    // text, the native-control restore that runs just before this writes `.value`, which moves the
+    // caret to the end. Skip this while an input method composes in the field, because it owns
+    // the range until compositionend. A write that changed the text ends the composition without
+    // a compositionend in Chromium, so the runtime treats the field as no longer composing and sets
+    // the range.
+    if (composingTarget === focus.element && focus.element.value !== focus.value) composingTarget = null;
+    if (focus.selection && composingTarget !== focus.element) {
       try {
         focus.element.setSelectionRange(...focus.selection);
       } catch {
@@ -4967,7 +4991,11 @@
       const owned = nativeOwnedProperties(element);
       if (owned.has(snapshot.kind)) continue;
       if (snapshot.kind === "value" && "value" in element) {
-        element.value = element.defaultValue === snapshot.baseline ? snapshot.value : element.defaultValue;
+        // Skip the write when the field already shows this text: there is nothing to restore, and
+        // an extra write could disturb an input method in some browsers. A write that changes the
+        // text moves the caret to the end; restoreFocus puts it back.
+        const value = element.defaultValue === snapshot.baseline ? snapshot.value : element.defaultValue;
+        if (element.value !== value) element.value = value;
       }
       else if (snapshot.kind === "checked" && "checked" in element) {
         element.checked = element.defaultChecked === snapshot.baseline ? snapshot.value : element.defaultChecked;
