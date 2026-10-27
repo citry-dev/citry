@@ -460,6 +460,11 @@ working in a worktree follow these rules to keep that from happening:
 
 - Run `df -h /` before starting a Rust build, and do not start one with less
   than 6 GB free.
+- Give each worktree its own `target/`, and do not point several worktrees
+  at one shared folder through `CARGO_TARGET_DIR`. Cargo identifies the
+  workspace's own crates by their path inside the workspace, which is the
+  same in every worktree, so a build in one worktree can reuse crates that
+  were compiled from another worktree's source and test the wrong code.
 - Build with `CARGO_INCREMENTAL=0` and
   `CARGO_PROFILE_DEV_DEBUG=line-tables-only`, and export both in every shell
   that builds, including `uv sync`. Cargo's incremental cache (saved state for
