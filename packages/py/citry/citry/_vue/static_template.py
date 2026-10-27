@@ -67,7 +67,7 @@ from .capture import (
     coalesce_prepared_static_nodes,
     static_element_opening,
 )
-from .compiler import _guard_template_braces
+from .compiler import _authored_vue_attr, _guard_template_braces
 from .direct_capture import (
     _append_element_open,
     _append_opaque_html,
@@ -153,6 +153,10 @@ class StaticVueTemplate:
     # Where each component call known to be an ordinary call starts in the
     # Vue template; only such a call is reported inside a Vue `v-for`.
     ordinary_calls: frozenset[int]
+    # Fills with `v-slot` passed to a component that copies them in place,
+    # where no Vue slot function receives the props, so every render
+    # refuses them: `(start, end, message)` in authored bytes.
+    scoped_fill_refusals: tuple[tuple[int, int, str], ...] = ()
 
     def authored_range(self, start: int, end: int) -> tuple[int, int] | None:
         """
@@ -251,6 +255,7 @@ def static_vue_template(
         tuple(writer.else_directives),
         tuple(writer.elements),
         frozenset(writer.ordinary_calls),
+        tuple(writer.scoped_fill_refusals),
     )
 
 
@@ -273,6 +278,7 @@ class _Writer:
     else_directives: list[ElseDirective] = field(default_factory=list)
     elements: list[tuple[str, int, int, int]] = field(default_factory=list)
     ordinary_calls: set[int] = field(default_factory=set)
+    scoped_fill_refusals: list[tuple[int, int, str]] = field(default_factory=list)
     # The elements open at this point, as `(tag, start of the opening tag)`.
     open_elements: list[tuple[str, int]] = field(default_factory=list)
     # Data keys only need to be distinct within one template.
@@ -488,19 +494,42 @@ class _Writer:
         if end > cursor:
             self.segments.append(SourceSegment(cursor, end, span[0], span[1], authored=False))
 
+    def refuse_scoped_fills(self, node: ComponentNode) -> None:
+        """Record each fill with `v-slot` that this in-place component would copy into the template."""
+        # A built-in passes no Vue slot props at all; a component of the
+        # author's own could stop copying its content in place.
+        fix = (
+            f"<c-{node.name}> passes no Vue slot props; remove 'v-slot' from the fill."
+            if node.name in _BUILTIN_NAMES
+            else "Remove 'v-slot' from the fill and read Python slot data with 'data=\"...\"', or remove "
+            f"transparent = True or simple = True from {node.name}."
+        )
+        for _site_id, span, _body, pattern in _fills(node):
+            if pattern is not None:
+                self.scoped_fill_refusals.append(
+                    (
+                        span[0],
+                        span[1],
+                        f"<c-{node.name}> copies this fill into the template around it, so "
+                        f"'v-slot=\"{pattern}\"' has no Vue slot to read from, and the page fails to render. " + fix,
+                    )
+                )
+
     def write_component(self, node: ComponentNode) -> Generator[Call, Any, None]:
         # A built-in is decided by its name; only another component's kind
         # comes from the caller, which may count a built-in as transparent.
         in_place = node.name in _IN_PLACE_BODIES or (
             node.name not in _BUILTIN_NAMES and self.renders_in_place is not None and self.renders_in_place(node.name)
         )
+        if in_place or node.name == "element":
+            self.refuse_scoped_fills(node)
         if node.name in _NO_VUE_SOURCE or (in_place and node.name not in _IN_PLACE_BODIES):
             # Its own template decides what renders here, and this module
             # does not have it.
             return
         if in_place:
             # The render copies the body into the caller's template.
-            for _site_id, _span, body in _fills(node):
+            for _site_id, _span, body, _pattern in _fills(node):
                 yield Call(self.write_nodes, body)
             return
         if node.name == "element":
@@ -510,7 +539,9 @@ class _Writer:
             start = self.output.byte_length
             self.output.append("<template>")
             self.mark_generated(start, node.position)
-            yield Call(self.write_nodes, node.body)
+            # Its fills render in place, as a `<c-provide>` body does.
+            for _site_id, _span, body, _pattern in _fills(node):
+                yield Call(self.write_nodes, body)
             start = self.output.byte_length
             self.output.append("</template>")
             self.mark_generated(start, node.position)
@@ -535,9 +566,13 @@ class _Writer:
         self.output.append(">")
         opening_end = self.output.byte_length
         self.mark_generated(start, node.position)
-        for site_id, span, body in _fills(node):
+        for site_id, span, body, vue_pattern in _fills(node):
             start = self.output.byte_length
-            self.output.append(_fill_opening(site_id))
+            # The pattern binds the fill's Vue slot props, so the compiler sees
+            # them as the fill's own names, as it does on a render.
+            self.output.append(
+                _fill_opening(site_id, "" if vue_pattern is None else _authored_vue_attr("", vue_pattern))
+            )
             self.mark_generated(start, span)
             yield Call(self.write_nodes, body)
             start = self.output.byte_length
@@ -603,7 +638,10 @@ class _Writer:
         self.elements.extend(fallback.elements)
         start = self.output.byte_length
         name = _static_attr(node, "name") or "default"
-        _append_slot_outlet(self.output, _site_id(name), fallback.output)
+        # The outlet carries the slot's Vue props, so the compiler checks
+        # their expressions in this component's scope, as on a render.
+        props = "".join(" " + _authored_vue_attr(key, value) for key, value in node.vue_props)
+        _append_slot_outlet(self.output, _site_id(name), fallback.output, props)
         end = self.output.byte_length
         if not fallback.output.chunks:
             self.mark_generated(start, node.position)
@@ -623,6 +661,7 @@ class _Writer:
             for item in fallback.else_directives
         )
         self.ordinary_calls.update(start + offset for start in fallback.ordinary_calls)
+        self.scoped_fill_refusals.extend(fallback.scoped_fill_refusals)
         self.segments.append(
             SourceSegment(
                 offset + fallback.output.byte_length, end, node.position[0], node.position[1], authored=False
@@ -643,9 +682,9 @@ def _site_id(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]", "_", name)
 
 
-def _fills(node: ComponentNode) -> list[tuple[str, tuple[int, int], Sequence[BodyItem]]]:
+def _fills(node: ComponentNode) -> list[tuple[str, tuple[int, int], Sequence[BodyItem], str | None]]:
     """
-    List the fills a component call passes, as `(site id, span, body)`.
+    List the fills a component call passes, as `(site id, span, body, v-slot pattern or None)`.
 
     A render passes the fills of the `<c-if>` branch it picks; every branch's
     fills are listed here. Two fills for one slot in different branches get
@@ -666,15 +705,17 @@ def _fills(node: ComponentNode) -> list[tuple[str, tuple[int, int], Sequence[Bod
         # Content without `<c-fill>` is the default fill.
         # A render passes any content, a comment included, but not whitespace alone.
         if any(not isinstance(item, PreparedSourceTextNode) or item.text.strip() for item in node.body):
-            return [("default", node.position, node.body)]
+            return [("default", node.position, node.body, None)]
         return []
     seen: dict[str, int] = {}
-    listed: list[tuple[str, tuple[int, int], Sequence[BodyItem]]] = []
+    listed: list[tuple[str, tuple[int, int], Sequence[BodyItem], str | None]] = []
     for fill in fills:
         site_id = _site_id(_static_attr(fill, "name") or "default")
         count = seen.get(site_id, 0)
         seen[site_id] = count + 1
-        listed.append((site_id if count == 0 else f"{site_id}-{count + 1}", fill.position, fill.body))
+        listed.append(
+            (site_id if count == 0 else f"{site_id}-{count + 1}", fill.position, fill.body, fill.vue_pattern)
+        )
     return listed
 
 

@@ -136,7 +136,9 @@ Sometimes the component holds data that the fill should format. A list
 component can hand each item and its position to the fill, and let the page
 decide how a row looks.
 
-Extra attributes on `<c-slot>` become data for the fill. Use the `c-` prefix
+Extra attributes on `<c-slot>` become data for the fill, except `:` slot
+props such as `:row="row"`, which pass Vue data (see
+[Scoped slots](/vue/slots/#scoped-slots)). Use the `c-` prefix
 to pass the value of a Python expression:
 
 ```citry

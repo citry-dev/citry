@@ -1,5 +1,14 @@
 # Release notes
 
+## Unreleased
+
+### Added
+
+- `parse_template()` accepts a Vue slot prop such as `:row="row"` on
+  `<c-slot>`, and a `v-slot="{ row }"` pattern on `<c-fill>`. Other forms,
+  such as `:[key]` or `v-slot="a, b"`, still fail, with a message that
+  names the form to write.
+
 ## v1.9.0
 
 ### Changed

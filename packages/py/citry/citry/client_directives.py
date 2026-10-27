@@ -294,10 +294,12 @@ def unsupported_component_tag_directive_hint(key: str) -> str | None:
 
 # What to write instead of a Vue directive on `<c-slot>`, by directive name.
 # The template parser reports the same wording for attributes written
-# directly in a template.
-_SLOT_DATA_HINT = (
-    "Vue slot props are not supported. Pass Python slot data as a plain attribute ('item=\"text\"') or a "
-    "'c-' attribute ('c-item=\"expr\"')."
+# directly in a template. A `:` binding never reaches this table: one from
+# `c-bind` gets `_C_BIND_SLOT_PROP_MESSAGE`, because Python data chose it.
+_C_BIND_SLOT_PROP_MESSAGE = (
+    "Vue directive {key!r} is not supported on '<c-slot>' through 'c-bind', because Python data must not choose "
+    "the code the browser runs. Write a ':' slot prop such as ':row=\"row\"' on the '<c-slot>' in the template. "
+    "For Python slot data, use a plain attribute ('item=\"text\"') or a 'c-' attribute ('c-item=\"expr\"')."
 )
 _SLOT_TAG_DIRECTIVE_HINTS = {
     "if": _SLOT_CONDITION_HINT,
@@ -306,10 +308,7 @@ _SLOT_TAG_DIRECTIVE_HINTS = {
     "for": "Repeat the slot with '<c-for>'.",
     "show": "Wrap the slot in an element that carries 'v-show'.",
     "slot": "Name the slot with 'name=\"...\"'; the caller fills it with '<c-fill name=\"...\">'.",
-    "bind": _SLOT_DATA_HINT,
     "on": "Put the listener on an element around the slot or inside the fill.",
-    "prop": _SLOT_DATA_HINT,
-    "attr": _SLOT_DATA_HINT,
 }
 _OTHER_SLOT_DIRECTIVE_HINT = "Put the directive on an element around the slot or inside its fallback content."
 
@@ -318,11 +317,13 @@ def unsupported_slot_tag_directive_message(key: Any) -> str | None:
     """
     Explain why a Vue directive cannot sit on `<c-slot>`.
 
-    Every `<c-slot>` attribute other than its name and `required` becomes
-    Python slot data, so a Vue directive there would reach the fill as a data
-    key and never reach the browser. Returns ``None`` for any other key. The
-    template parser reports the same wording for directly authored attributes;
-    this covers keys that only appear at render time through `c-bind`.
+    Every `<c-slot>` attribute other than its name, `required`, and the
+    ``:row``-style slot props written in the template becomes Python slot
+    data, so a Vue directive there would reach the fill as a data key and
+    never reach the browser. Returns ``None`` for any other key. This covers
+    keys that only appear at render time through `c-bind`, where even a
+    ``:row`` slot prop is rejected, because Python data must not choose the
+    Vue code the browser runs.
     """
     if not isinstance(key, str):
         return None
@@ -336,11 +337,14 @@ def unsupported_slot_tag_directive_message(key: Any) -> str | None:
         directive = _vue_directive_name(key)
     if directive is None:
         return None
+    # A written `:row` is a slot prop, so a `c-bind` one gets its own reason.
+    if directive.lower() in {"bind", "prop", "attr"}:
+        return _C_BIND_SLOT_PROP_MESSAGE.format(key=key)
     # Every directive is rejected here, so `V-IF` gets the same advice as `v-if`.
     hint = _SLOT_TAG_DIRECTIVE_HINTS.get(directive.lower(), _OTHER_SLOT_DIRECTIVE_HINT)
     return (
-        f"Vue directive {key!r} is not supported on '<c-slot>'. Its attributes other than 'name' and 'required' "
-        f"become Python slot data, which the browser never sees. {hint}"
+        f"Vue directive {key!r} is not supported on '<c-slot>'. Its attributes other than 'name', 'required', "
+        f"and ':' slot props become Python slot data, which the browser never sees. {hint}"
     )
 
 
