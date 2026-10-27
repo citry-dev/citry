@@ -43,6 +43,16 @@ done without them.
   subagent, run the session at that effort (or pick an agent/model tier that
   matches). When the delegated work is simply lookup, enumeration, or another
   simple task, lower the effort to match.
+- **Routine work runs on the latest Sonnet model.** Hand these tasks to an
+  agent on the newest Sonnet model (`model: "sonnet"` on the Agent tool or a
+  Workflow `agent()` call) instead of the main reasoning model: writing or
+  updating tests, linting, formatting, renames, small fixes, and running
+  checks (`scripts/check.py`, CI reruns) and fixing what they report. The
+  main reasoning model keeps the work that needs judgement: design,
+  debugging an unknown cause, review, and anything in a high-risk area
+  below. A routine task that turns out to need a design decision or an
+  unclear root cause goes back to the main model rather than being guessed
+  at.
 
 ## What this project is
 
