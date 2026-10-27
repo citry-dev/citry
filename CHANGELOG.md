@@ -246,6 +246,16 @@
   bundled Node.js does not trust the affected emSign root certificate when
   `playwright install` downloads browsers. After upgrading, run
   `playwright install chromium` again to fetch the matching browser.
+- In a component that uses Vue, a slot's fallback that a caller shows
+  through `<c-fill fallback="...">` now raises an error when it holds a
+  `@c-` event handler or a Vue attribute that uses Vue data, such as
+  `:title="message"` or `ref`. These used to read the caller's Vue data
+  and run the caller's handler of the same name. To fix it, leave the
+  slot unfilled so the receiving component shows its own fallback. Or
+  pass the value with a `c-` binding such as `c-title`, which reads the
+  receiving component's Python values. Or put the Vue binding on an
+  element in the caller's fill around `{{ fallback }}`, where it reads
+  the caller's Vue data.
 
 ### Fixes
 
@@ -277,12 +287,9 @@
   values, not the caller's values with the same names, and no longer fails
   when a value is `Markup`. A fallback shown this way can now hold
   components, including inside a `<c-provide>` or a component marked
-  `transparent = True`. One that holds a `<c-slot>`, a component other
-  than those with content between its tags, a Vue attribute that uses
-  Vue data, such as `:title="message"` or `ref`, or a `@c-` event handler
-  raises an error. Such a fallback used to drop that content, fail with
-  an unrelated error, or read the caller's Vue data and run the caller's
-  event handler of the same name.
+  `transparent = True`. One that holds a `<c-slot>`, or any other
+  component with content between its tags, raises an error, where it
+  used to drop that content or fail with an unrelated error.
 - In a component that uses Vue, content passed through a captured `Slot`
   to another component no longer shows the page's own text in its place.
 - In a component that uses Vue, `{{ }}` expressions, `c-` bindings such
