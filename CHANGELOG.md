@@ -4,6 +4,20 @@
 
 ### Fixed
 
+- Apps served below a sub-path, such as `/shop`, now load Citry's
+  scripts and styles and reach its Events endpoints. Citry's URLs start
+  with the sub-path each request was served under, whether a proxy,
+  `uvicorn --root-path`, a WSGI mount, or Django's `FORCE_SCRIPT_NAME`
+  sets it. With FastAPI and Starlette, `mount()` adds a middleware that
+  reads each request's `root_path`
+  ([details](https://citry.dev/advanced/web-frameworks/#serve-below-a-sub-path)).
+  The render cache keeps separate entries per sub-path. To delete an entry
+  from a background job when only your server sets the sub-path, pass it
+  to `component_cache_key()` or `fragment_cache_key()` as `sub_path=`.
+  If you worked around this by passing the sub-path to
+  `set_mounted_prefix()` in a process that also calls `mount()` or
+  `urlpatterns()`, remove the sub-path there, or the URLs start with it
+  twice.
 - On PyPy, `import citry` no longer fails with `No module named
   '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
   values and template types less fully, and both print a note saying so.

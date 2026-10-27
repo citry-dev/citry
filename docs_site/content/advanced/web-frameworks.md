@@ -107,6 +107,14 @@ app = FastAPI(lifespan=lifespan)
 mount(app, citry)
 ```
 
+`mount()` also adds a middleware to `app`. It reads each request's
+`root_path`, so Citry's URLs include the sub-path your app is served
+below (see [Serve below a sub-path](#serve-below-a-sub-path)). Call
+`mount()` before the server starts the app, for example at module level
+as above, not inside `lifespan`. Starlette accepts middleware only until
+then, so a later `mount()` skips the middleware, and Citry's URLs use
+`app.root_path` only.
+
 ## Flask
 
 `mount()` sends requests under the prefix to Citry and every other request
@@ -176,7 +184,8 @@ restart (see [Hot reload](/guides/hot-reload/#enable-in-django)).
 On any other ASGI or WSGI stack, mount Citry's sub-app yourself. These
 sub-apps do not know where you mounted them, so also call
 `set_mounted_prefix()` with the same path. Without it, building fragment
-URLs fails.
+URLs fails. Below a sub-path, include it in that path, as
+[Serve below a sub-path](#serve-below-a-sub-path) shows.
 
 ```python
 # Any ASGI app, here Starlette
@@ -253,6 +262,53 @@ from citry import citry
 # The same prefix the web app mounts at.
 citry.set_mounted_prefix("/citry")
 ```
+
+## Serve below a sub-path
+
+When a proxy or your server serves the app below a sub-path, such as
+`/shop`, Citry starts every URL it writes with that sub-path. The browser
+then loads Citry's scripts and styles, and sends event calls, under
+`/shop/citry/`. The adapters above read the sub-path for you, so most
+apps need no change. At the site root, the URLs stay as they are.
+
+Inside a request, each adapter reads the sub-path from the request.
+Outside one, such as a page rendered in a script or a test, it reads the
+app's setting:
+
+| Framework | Inside a request | Outside a request |
+| --- | --- | --- |
+| FastAPI | the request's `root_path`, set by `uvicorn --root-path`, `FastAPI(root_path=...)`, or your middleware | `app.root_path` |
+| Starlette | the request's `root_path` | the site root |
+| Flask | the request's `script_root`, from the server's `SCRIPT_NAME` or `ProxyFix` | `APPLICATION_ROOT` |
+| Django | `FORCE_SCRIPT_NAME` when set, otherwise the request's `SCRIPT_NAME` (WSGI) or `root_path` (ASGI) | the script prefix Django last set, `FORCE_SCRIPT_NAME` after `django.setup()` |
+
+A trailing `/` is ignored, and `/` (Flask's default `APPLICATION_ROOT`)
+means the site root. Citry ignores a sub-path that does not start with a
+single `/`, such as `shop` or `//shop`, and writes its URLs from the site
+root. A value such as `//shop` would otherwise point the page's scripts
+at another site.
+
+Some setups need care:
+
+- **Your own threads.** A page rendered in a thread you start with
+  `loop.run_in_executor()` or `threading.Thread` cannot see the request,
+  so its URLs use the app's setting. Use `asyncio.to_thread()` or
+  Starlette's `run_in_threadpool()`, which pass the request along.
+- **Flask streamed responses.** A generator response sees the sub-path
+  only when you wrap it with `stream_with_context()`. Without it, the
+  streamed page's URLs use `APPLICATION_ROOT`, and its scripts fail to
+  load.
+- **The render cache** keeps separate entries for each sub-path. To
+  delete one entry from a background job when only your server sets the
+  sub-path, pass `sub_path=` to `component_cache_key()` or
+  `fragment_cache_key()`, as [Caching](/performance/caching/) shows.
+- **Render-only workers and the bare sub-apps.** A
+  [render-only worker](#render-only-workers) and the bare ASGI and WSGI
+  sub-apps cannot see the sub-path, so give `set_mounted_prefix()` the
+  full path: `citry.set_mounted_prefix("/shop/citry")`. Do this only in
+  a process that never calls `mount()` or `urlpatterns()`. Those already
+  add the sub-path from the app's setting, so the URLs would start with
+  `/shop/shop`.
 
 ## URLs Citry serves
 

@@ -60,6 +60,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from citry._django_startup import start_django
 from citry._path_checks import PathLookup, register_path_checker
+from citry._sub_path import normalize_sub_path
 from citry.contrib._path_lookup import files_beside
 from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes, normalize_mount_prefix
 
@@ -195,10 +196,21 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
     if prefix is not None:
         citry_instance.set_mounted_prefix(prefix)
+    # Django sets the script prefix for each request (FORCE_SCRIPT_NAME when
+    # set, else SCRIPT_NAME) and once at django.setup(), so Citry's URLs
+    # start with the same sub-path as the project's reverse() URLs.
+    citry_instance._set_sub_path_reader(_django_sub_path)
     # Registered with the patterns, after every route was accepted, so a
     # rejected call leaves the instance without a checker too.
     register_path_checker(citry_instance, _django_path_checker(), host=_DJANGO_PROJECT)
     return patterns
+
+
+def _django_sub_path() -> str:
+    """Return the sub-path the project is served below for the current request, such as ``/shop``."""
+    from django.urls import get_script_prefix  # noqa: PLC0415
+
+    return normalize_sub_path(get_script_prefix())
 
 
 def _django_path_checker() -> PathChecker:

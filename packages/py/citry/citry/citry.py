@@ -351,6 +351,11 @@ class Citry:
         # (docs/design/dependencies.md section 9.3); None means no
         # integration is mounted, and URL building raises with guidance.
         self._mounted_prefix: str | None = None
+        # Returns the sub-path the host app is served below for the current
+        # request, such as "/shop", which every URL Citry builds starts with.
+        # The integration's mount() registers it (citry/_sub_path.py); None
+        # means the app is served at the site root.
+        self._sub_path_reader: Callable[[], str] | None = None
         # Functions the web framework integrations register to answer whether
         # the host app serves a path, so `citry check` and the editor can
         # report a link to a missing page or file (citry/_path_checks.py).
@@ -1607,8 +1612,11 @@ class Citry:
         An absolute URL path for one of this instance's routes.
 
         ``path`` is the route's full path (no leading slash), e.g.
-        ``"cache/Table_a1b2c3.js"``. Raises ``RuntimeError`` when no web
-        integration is mounted, since the URL would point nowhere.
+        ``"cache/Table_a1b2c3.js"``. When the host app is served below a
+        sub-path, such as ``/shop``, the URL starts with that sub-path. The
+        integration that ``mount()`` set up reads it from the current
+        request. Raises ``RuntimeError`` when no web integration is
+        mounted, since the URL would point nowhere.
         """
         if self._mounted_prefix is None:
             msg = (
@@ -1617,7 +1625,23 @@ class Citry:
                 " or call set_mounted_prefix() in processes that only build URLs."
             )
             raise RuntimeError(msg)
-        return f"{self._mounted_prefix}/{path}"
+        # The browser resolves the URL from the site root, so an app served
+        # below a sub-path needs the sub-path in front of the mount prefix.
+        return f"{self._current_sub_path()}{self._mounted_prefix}/{path}"
+
+    def _current_sub_path(self) -> str:
+        """Return the sub-path the host app is served below for the current request, or ``""`` at the site root."""
+        return "" if self._sub_path_reader is None else self._sub_path_reader()
+
+    def _set_sub_path_reader(self, reader: Callable[[], str] | None) -> None:
+        """
+        Record the function that returns the host app's sub-path for the current request.
+
+        Each web integration's ``mount()`` calls this, so ``build_url()``
+        writes URLs the browser can reach when the app is served below a
+        sub-path such as ``/shop``. Mounting into another app replaces it.
+        """
+        self._sub_path_reader = reader
 
     def get_component_by_class_id(self, class_id: str) -> type[Component]:
         """
