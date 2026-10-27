@@ -66,16 +66,10 @@ jobs:
         with:
           key: ${{ matrix.python }}
 
-      # The browser test tools are left out: the non-browser suite does not
-      # use them, and greenlet, which Playwright needs, does not build on
-      # PyPy.
+      # The default dependency groups leave out the browser test tools, which
+      # the non-browser suite does not use.
       - name: Install the workspace
-        run: >-
-          uv sync --locked --all-packages
-          --python ${{ matrix.python }}
-          --no-install-package playwright
-          --no-install-package pytest-playwright
-          --no-install-package greenlet
+        run: uv sync --locked --all-packages --python ${{ matrix.python }}
 
       - name: Show the interpreter
         run: >-
@@ -88,7 +82,6 @@ jobs:
           uv run --no-sync pytest
           -m "not e2e and not qualification"
           --ignore packages/py/citry/tests/test_server_reload.py
-          -p no:playwright
           -n 4
           --dist loadfile
           --durations 30
