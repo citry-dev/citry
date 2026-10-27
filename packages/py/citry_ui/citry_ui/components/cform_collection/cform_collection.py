@@ -554,7 +554,8 @@ class CInternalFormCollectionItem(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        # A read-only Mapping, so the parent's dict of narrower values fits it.
+        item: Mapping[str, object]
         action_name: str | None
         button_type: str
         allow_remove: bool

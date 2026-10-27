@@ -515,7 +515,8 @@ class CInternalSortableItem(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        # A read-only Mapping, so the parent's dict of narrower values fits it.
+        item: Mapping[str, object]
         name: str | None
         form: str | None
         disabled: bool
