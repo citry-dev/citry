@@ -64,6 +64,11 @@ def _list_and_page(registry: Citry, fill: str) -> type[Component]:
     return Page
 
 
+def _host_html(page: str) -> str:
+    """The HTML the server wrote inside the Vue host, without the scripts after it."""
+    return page.split("<script", 1)[0]
+
+
 def _opening(template: str) -> str:
     [opening] = re.findall(r"<template v-slot:\['citrySlot[0-9a-f]+'\][^>]*>", template)
     return opening.split("]", 1)[1]
@@ -515,6 +520,49 @@ def test_an_events_render_writes_the_same_props_and_pattern(monkeypatch: pytest.
 
     assert re.search(r'name="citrySlot[0-9a-f]+" :row="row" v-bind:row-index="row.id"></slot>', receiver)
     assert _opening(author) == '="{ row }">'
+
+
+@pytest.mark.parametrize(
+    ("fill", "expected"),
+    [
+        ('v-slot="{ row }"><b v-text="row.title"></b>', "<b>A</b>"),
+        ('v-slot="{ row: item }"><b v-text="item.title"></b>', "<b>A</b>"),
+        ('v-slot="props"><b v-text="props.row.title + props.rowIndex"></b>', "<b>A1</b>"),
+    ],
+)
+def test_the_server_writes_a_fill_with_the_props_its_slot_passes(fill: str, expected: str) -> None:
+    registry = Citry(autodiscover=False)
+    page = _list_and_page(registry, f'<c-fill name="item" {fill}</c-fill>')
+
+    html = _host_html(page().render().serialize())
+
+    # The rows come from js_data, so the server reads them and writes the
+    # fill; the render parity check (`scripts/vue_render_parity/check.py`)
+    # compares this HTML with Vue's own render.
+    assert f"<li><!--[-->{expected}<!--]--></li>" in html
+    assert "data-allow-mismatch" not in html
+
+
+def test_the_server_writes_a_fill_a_middle_component_passes_on() -> None:
+    registry = Citry(autodiscover=False)
+    _list_and_page(registry, "")
+
+    class Middle(Component):
+        citry = registry
+        template = """
+          <c-List><c-fill name="item" v-slot="p"><c-slot name="cell" :row="p.row" /></c-fill></c-List>
+        """
+
+    class Root(Component):
+        citry = registry
+        template = """
+          <main><c-Middle><c-fill name="cell" v-slot="{ row }"><b v-text="row.title"></b></c-fill></c-Middle></main>
+        """
+
+    html = _host_html(Root().render().serialize())
+
+    assert "<b>A</b>" in html
+    assert "data-allow-mismatch" not in html
 
 
 def test_a_cached_slot_part_keeps_its_props_and_pattern() -> None:

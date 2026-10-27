@@ -143,13 +143,14 @@ follows it.
 such as `{ row }`, or one name, such as `props`, which then holds every
 prop. Other forms fail; see [Slot syntax errors](#scoped-slot-errors).
 
-On a page that uses Vue, the server leaves a `v-slot` fill out of the HTML it sends, so its place
-stays empty until Vue starts. Vue then builds the contents of the element
-around the component tag, such as a `<div>` around `<c-FilteredList>`, in
-the browser. Wrap the tag in its own element so the rest of the page keeps
-the server's HTML. Without one, Vue builds the whole page in the browser.
-See
+When the server knows the values the slot passes, such as rows from
+`js_data()`, it writes the fill with them, so the page shows the fill
+before Vue starts. A part of the fill that reads a value only the browser
+knows is built in the browser instead; see
 [Browser-built parts](/vue/server-rendering/#parts-vue-builds-in-the-browser).
+A `v-slot` pattern that nests one pattern in another, such as
+`{ row: { title } }`, or gives a default, such as `{ row = {} }`, makes Vue
+build the element around the `<c-slot>` in the browser.
 
 ### Pass Python data { #pass-python-data }
 
