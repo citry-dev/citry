@@ -282,6 +282,18 @@
 
 ### Fixes
 
+- In a component that uses Vue, when `<c-fill fallback=...>` shows a
+  fallback whose `<c-slot>` the receiving component placed inside content
+  it passes to another component, the error now says what to change
+  instead of reporting an internal error. When a fallback shown this way
+  prints a `Slot`, such as `{{ icon }}`, the error now names it as slot
+  content instead of calling it a `<c-slot>` outlet.
+- In a component that uses Vue, when your fill puts `{{ fallback }}` inside
+  a component that is not transparent, such as
+  `<c-Box>{{ fallback }}</c-Box>`, the error now says what to change
+  instead of reporting an internal error. When the receiving component is
+  transparent, this used to render without the fallback and now fails with
+  the same error.
 - A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
   modifier now fails when the template loads and says what to write
   instead. Vue matches none of these names, so the listener never ran.

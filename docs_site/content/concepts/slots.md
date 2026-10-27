@@ -260,7 +260,8 @@ insert that variable in the fill:
     `c-title` work in it. Your template cannot reach Card's slots, Vue
     data, or event handlers, so Card's fallback cannot hold:
 
-    - a `<c-slot>`;
+    - a `<c-slot>`, or a `Slot` that the fallback prints as a value, such
+      as `{{ icon }}` where `template_data()` returns `slots["icon"]`;
     - a component, other than `<c-provide>` or a transparent one, with
       content between its tags;
     - a Vue attribute that uses Vue data, such as `:title="message"`,
@@ -270,6 +271,18 @@ insert that variable in the fill:
     Rendering then fails with a `TypeError` that names what the fallback
     holds. Move that content into the fill itself, or leave the slot
     unfilled so Card shows its own fallback.
+
+    Rendering also fails, even when the fallback is plain HTML, in two
+    more cases:
+
+    - Card puts the `<c-slot>` itself inside content it passes to another
+      component, such as
+      `<c-Panel><c-slot name="title">...</c-slot></c-Panel>`. Move that
+      `<c-slot>` out of the content Card passes to Panel.
+    - Your fill puts `{{ original }}` inside a component that is not
+      transparent, such as `<c-Box>{{ original }}</c-Box>`. Put an HTML
+      element such as `<div>` in place of Box, or mark Box with
+      `transparent = True` if it only wraps content.
 
 ## `Slots` default fills
 

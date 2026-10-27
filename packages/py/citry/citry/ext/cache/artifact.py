@@ -198,6 +198,14 @@ class ArtifactDirectSlotPart:
     # Vue slot outlet and slot function as the live render.
     vue_props: tuple[tuple[str, str], ...] = ()
     fill_vue_pattern: str | None = None
+    # Whether a `<c-slot>` outlet rendered this part, rather than a Slot
+    # printed as a value, so a replay's errors name it the same way.
+    from_outlet: bool = False
+    # The slot name the fill itself was written for, when it differs from
+    # `public_name`, the outlet's slot. A fallback printed inside another
+    # component's slot carries that component's slot name, and error
+    # messages need the fill's own name.
+    fill_public_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -674,6 +682,8 @@ def _part_to_wire(part: ArtifactPart) -> list[object]:
             part.origin,
             [[key, value] for key, value in part.vue_props],
             part.fill_vue_pattern,
+            part.from_outlet,
+            part.fill_public_name,
         ]
     if type(part) is ArtifactDirectCallRunPart:
         return ["direct_call_run", part.frame, part.child_class_id, part.source, list(part.span)]
@@ -996,7 +1006,7 @@ def _part_from_wire(value: object, path: str) -> ArtifactPart:
             typed,
             static,
         )
-    if tag == "direct_slot" and len(part) == 17:
+    if tag == "direct_slot" and len(part) == 19:
         parent = part[3]
         source = _require_string(part[12], f"{path}[12]")
         return ArtifactDirectSlotPart(
@@ -1016,6 +1026,8 @@ def _part_from_wire(value: object, path: str) -> ArtifactPart:
             _require_optional_nonempty_string(part[14], f"{path}[14]"),
             _require_slot_vue_props(part[15], f"{path}[15]"),
             _require_fill_vue_pattern(part[16], f"{path}[16]"),
+            _require_bool(part[17], f"{path}[17]"),
+            _require_optional_nonempty_string(part[18], f"{path}[18]"),
         )
     if tag == "direct_call_run" and len(part) == 5:
         source = _require_string(part[3], f"{path}[3]")
