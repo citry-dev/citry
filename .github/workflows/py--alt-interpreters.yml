@@ -71,11 +71,15 @@ jobs:
       - name: Install the workspace
         run: uv sync --locked --all-packages --python ${{ matrix.python }}
 
+      # citry_core declares that it needs the GIL (#433), so on a free-threaded
+      # build importing it turns the GIL back on; the second line shows whether
+      # the suite below runs with it.
       - name: Show the interpreter
         run: >-
           uv run --no-sync python -c
           "import sys, sysconfig; print(sys.version);
-          print('GIL disabled build:', bool(sysconfig.get_config_var('Py_GIL_DISABLED')))"
+          print('GIL disabled build:', bool(sysconfig.get_config_var('Py_GIL_DISABLED')));
+          import citry; print('GIL enabled after import citry:', getattr(sys, '_is_gil_enabled', lambda: True)())"
 
       - name: Run Python tests
         run: >-
@@ -85,6 +89,26 @@ jobs:
           -n 4
           --dist loadfile
           --durations 30
+
+      # A free-threaded build keeps the GIL on once citry_core loads, so this
+      # step turns it off to run the render, serialize, Events and thread tests
+      # truly in parallel. Citry already renders on the Python path there
+      # (native_render.py refuses the Rust path on such builds), so a failure
+      # here is a Python-level race. It only reports until #433 makes
+      # citry_core declare it is safe without the GIL.
+      - name: Run the render, serialize, Events and thread tests without the GIL
+        if: ${{ matrix.python == '3.14t' && !cancelled() }}
+        continue-on-error: true
+        env:
+          PYTHON_GIL: "0"
+        run: >-
+          uv run --no-sync pytest
+          -m "not e2e and not qualification"
+          -n 4
+          --dist loadfile
+          -W "ignore:The global interpreter lock:RuntimeWarning"
+          packages/py/citry/tests
+          -k "render or serialize or events or thread"
 
   report-failure:
     # Only the weekly run reports: a manual run's author is already watching.
@@ -111,3 +135,4 @@ jobs:
           else
             gh issue create --title "$TITLE" --body "$body"
           fi
+
