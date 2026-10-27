@@ -51,14 +51,14 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # side of the native render levels (`_vue/native_render.py`,
 # `_vue/native_walk.py`, `_vue/native_leaf_json.py`). It also carries the
 # driver that runs recursive template walks without one Python call per level
-# (`_walk.py`). The bug fixes and render-speed changes merged on 2026-10-24
-# and 2026-10-25 added about 120 KB of Python source (about 33 KB compressed)
-# and no data files. That put the CI wheel at about 1,440,000 bytes, about
-# 18 KB under this cap (estimated from a local build, which comes out about
-# 4 KB smaller than CI's).
+# (`_walk.py`), and the helper that copies deeply nested js_data() without a
+# Python call per level (`util/deep_json.py`). Between #380 (2026-10-25) and
+# 2026-10-27 the merged fixes and features added about 26 KB of compressed
+# Python source and no data files, so the CI wheel measured 1,463,548 bytes on
+# main at 9f8ee0d7d. This cap leaves about 19 KB above that.
 # A sizeable addition should raise the cap on purpose rather than use up the
 # headroom unnoticed.
-MAX_WHEEL_BYTES: Final = 1_424 * 1024
+MAX_WHEEL_BYTES: Final = 1_448 * 1024
 
 
 def _citry_core_version() -> str:
