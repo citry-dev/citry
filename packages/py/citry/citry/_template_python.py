@@ -1048,7 +1048,10 @@ def _root_binding_lines(
             # Analysis-only globals do not come from the copied TemplateData
             # carrier. The caller has canonicalized this expression-shaped
             # annotation, so ty can read it without retaining the runtime value.
-            value = f"__citry_cast({root.type_display}, None)" if root.type_display is not None else "__citry_Unknown"
+            # A root with no known type gets a value typed Any, not the Any
+            # special form itself, which ty would type as `<special-form Any>`.
+            unknown_type = root.type_display if root.type_display is not None else "__citry_Unknown"
+            value = f"__citry_cast({unknown_type}, None)"
         elif (
             root.access == "attribute" and direct_attribute_owner is not None and root_owner == direct_attribute_owner
         ):
@@ -1093,8 +1096,9 @@ def _root_type_imports(
     references = {
         owner: owner[1] if owner[0] == source_module else f"{module_aliases[owner]}.{owner[1]}" for owner in owners
     }
-    needs_cast = bool(references) or any(root.access == "analysis" and root.type_display for root in roots)
     needs_unknown = any(root.access == "analysis" and root.type_display is None for root in roots)
+    # Every analysis root, typed or not, is written as a cast.
+    needs_cast = bool(references) or any(root.access == "analysis" for root in roots)
     if not needs_cast and not needs_unknown:
         return [], {}
     imports: list[str] = []

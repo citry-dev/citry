@@ -2239,6 +2239,36 @@ _SIZED_CARD = (
 
 
 @pytest.mark.asyncio
+async def test_listed_template_data_key_of_unknown_type_is_typed_any_not_the_special_form(tmp_path: Path) -> None:
+    # `template_data()` returns a helper's dict, so Citry cannot read its keys
+    # or types. `Lint.template_data_keys` names `loading`, which gets no type.
+    module_source = (
+        "from __future__ import annotations\n"
+        "from pathlib import Path\n"
+        "from typing import Any\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "def _build(component: Any) -> dict[str, Any]:\n"
+        "    return {'loading': True}\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    class Lint:\n"
+        "        template_data_keys = ('loading',)\n"
+        "    def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:\n"
+        "        return _build(self)\n"
+    )
+    template_source = "<p c-title=\"'' if loading else None\"></p>\n"
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # The name must hold a value typed `Any`. When it held the `Any` special
+    # form itself, ty reported that the condition "is always truthy".
+    assert [code for code, _text, _message in findings if "redundant" in str(code)] == []
+    assert findings == []
+
+
+@pytest.mark.asyncio
 async def test_template_loop_variable_does_not_take_a_same_named_template_data_local(tmp_path: Path) -> None:
     # `resolved` is also a declared local of template_data. The template loop
     # variable is one row, not the list the local is declared as.
