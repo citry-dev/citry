@@ -446,8 +446,8 @@ score, fuzzy rank, diacritic folding, token AND/OR language, or result limit.
 | open | owner changes query | commit supplied value without notification | synchronize input and filter; preserve caret only when the value is unchanged |
 | open | Arrow Down/Up outside composition | internal commit | move active to next/previous enabled visible command; optionally wrap; scroll it into view; keep DOM focus in input |
 | open | Home/End, Left/Right, editing keys | native | no collection action; browser edits or moves caret |
-| open with active | unmodified Enter outside composition | action transaction | prevent ancestor Form submission; call `onAction`; optionally request close after survival recheck |
-| open | plain primary option click/tap | action transaction | make that enabled visible option active, call `onAction`, optionally request close |
+| open with active | unmodified Enter outside composition | action transaction | prevent ancestor Form submission; a command that keeps the palette open calls `onAction`; a closing command requests the close and calls `onAction` after it |
+| open | plain primary option click/tap | action transaction | make that enabled visible option active; call `onAction` at once, or after the close for a closing command |
 | open | modified or secondary option pointer/click | none | do not invoke or close; preserve native event behavior |
 | open | Escape outside composition | close request | shared Dialog policy; after an accepted close, clear/query-request empty |
 | open | built-in close or accepted outside dismissal | close request | shared Dialog policy; after an accepted close, clear/query-request empty |
@@ -472,14 +472,39 @@ accepted effective query, never from rejected browser text. An input whose
 controlled query is `"a"` and whose attempted `"ab"` request is declined
 therefore remains `"a"` on every observable surface and later release.
 
-Uncontrolled action order is exact: validate owner token and option, set the
-internal active value, call `onAction(value, detail)` synchronously, revalidate
-the same owner/record/open generation, then request close if the effective
-command policy is true. Controlled close reports `onOpenChange(false, ...)`
-without mutating supplied `open`. Callback return values are ignored. An
-exception stops the transaction before close, leaves a structurally valid
-palette open, and is reported through the normal browser error path without
-logging callback/event/DOM objects.
+Action order is exact. The runtime validates the owner token and option and
+sets the internal active value. Any earlier command still waiting for its
+close runs first. A command whose effective policy keeps the palette open then
+calls `onAction(value, detail)` synchronously. A command that closes the
+palette requests the close first and then calls `onAction`, so when the close
+has applied the page outside the modal is no longer inert and an owner's
+`focus()` there works. An uncontrolled close applies synchronously, so its
+`onAction` runs inside the user's event, right after the close; it runs there
+even if the owner's `onOpenChange(false)` reopened the palette.
+
+Controlled close reports `onOpenChange(false, ...)` without mutating supplied
+`open`. The runtime runs the waiting `onAction` one microtask after
+`onOpenChange` returns, outside the palette's reactive effect. When the owner
+set `open=false` synchronously inside `onOpenChange`, Vue queued its update
+before that microtask, so the close has applied by then. An owner that closes
+later (after an `await`, in `nextTick`, or in a `.then()` callback) gets
+`onAction` while the palette is still modal, so its `focus()` does nothing. Whatever the owner did by that point (accepted,
+kept `open=true`, set it to `false` only later, or released control with
+`null`), the waiting `onAction` runs there, with the palette closed or still
+open, and never waits for a later close.
+
+If an owner callback throws during the close request, the error propagates
+(or, for a controlled close, Vue reports an error thrown during its update),
+and the waiting `onAction` still runs: at once when uncontrolled, and one
+microtask later when controlled, so an `open=false` set before the throw has
+applied. If the palette is cleaned up before a waiting `onAction` runs (for
+example, the owner unmounts it while closing it), that `onAction` runs in a
+microtask after the cleanup. Callback return values are ignored. An exception
+from `onAction` is reported through the normal browser error path
+(`reportError`) without logging callback/event/DOM objects; the palette does
+not reopen. To keep the palette open after a command, set
+`close_on_action=False` on the palette or the command, or, in controlled mode,
+keep `open=true` in `onOpenChange`.
 
 Query clears only after visibility actually commits closed. At that edge the
 runtime first sets its uncontrolled fallback query to `""` and clears active
@@ -491,13 +516,14 @@ release while closed starts from the already-cleared fallback. An already
 empty query does not notify. A declined controlled close neither clears the
 fallback nor requests a query change.
 
-Action-close order depends on open ownership. Uncontrolled order is
-`onAction`, close commit, `onOpenChange(false, ...)`, then the close-driven
-query commit and `onQueryChange("", ...)`. Controlled order is `onAction`,
+Action-close order depends on open ownership. Uncontrolled order is close
+commit, `onOpenChange(false, ...)`, the close-driven query commit and
+`onQueryChange("", ...)`, then `onAction`. Controlled order is
 `onOpenChange(false, ...)` request, a later matching owner `open=false` commit,
-then the close-driven query commit/request. A controlled decline retains
-`open=true` and performs no reset. An independent owner-driven `open=false` has
-no open callback but still performs the accepted-close query reset. Equal
+the close-driven query commit/request, then `onAction`. A controlled decline
+retains `open=true`, performs no reset, and then calls `onAction`. An
+independent owner-driven `open=false` has no open callback but still performs
+the accepted-close query reset. Equal
 retained handoff is not a close. Changed-root replacement, removal cleanup,
 and invalid initialization emit no callback; a real disabled, native,
 descendant-ancestor, or ordinary dismissal close does reset. Each close
@@ -554,7 +580,7 @@ identity, and action behavior cannot be replaced.
 |---|---|---|---|---|---|
 | `onOpenChange` | `(requested_open, detail)` | activator, Escape, outside, close Button, action, native close, or disabled transition | after uncontrolled commit; before controlled owner commit except unavoidable native close | supplied `open` remains authoritative | return ignored; retain controlled value to decline ordinary request |
 | `onQueryChange` | `(requested_query, detail)` | user input after composition commits or an accepted close clears query | after uncontrolled commit; before controlled owner commit | supplied `query` remains authoritative; rejected text never filters | return ignored; retain controlled value to decline |
-| `onAction` | `(value, detail)` | accepted Enter or plain primary click/tap | synchronous before optional close request | independent of controlled query/open; later close is a separate request | return ignored; use disabled or `close_on_action` policy |
+| `onAction` | `(value, detail)` | accepted Enter or plain primary click/tap | at once for a command that keeps the palette open; after the close for a closing command | a closing command runs one microtask after `onOpenChange`; it runs with the palette open if the owner keeps `open=true` or sets `false` only later | return ignored; use disabled or `close_on_action` policy |
 
 `CCommandPaletteOpenChangeDetail` is `{reason, controlled, source}`. `source`
 is the owned activator/close/option Element or event origin when available.

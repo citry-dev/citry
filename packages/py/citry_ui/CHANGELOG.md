@@ -62,6 +62,14 @@
 
 ### Changed
 
+- **Breaking:** in `CCommandPalette`, a command that closes the palette
+  now calls `onAction` after the palette closes, and after `onOpenChange`
+  and `onQueryChange`, so `onAction` can move focus anywhere on the page
+  once the palette has closed. If you pass `open`, set it to `false`
+  inside `onOpenChange` itself; when you close it later, `onAction` runs
+  while the palette is still open. An error thrown in `onAction` no longer
+  keeps the palette open; to keep it open, set `close_on_action=False` on
+  the palette or on the command.
 - **Breaking:** Citry UI now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing Citry UI 0.3.0.
 - The default `change_label` of `CDateRange`, and its

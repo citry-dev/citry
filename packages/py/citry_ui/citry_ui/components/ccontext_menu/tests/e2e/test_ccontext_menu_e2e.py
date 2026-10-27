@@ -2012,3 +2012,107 @@ def test_quality_scenario_reports_open_reason_point_and_submenu_action_path(page
     page.get_by_role("button", name="External open").click()
     page.wait_for_function(f"document.querySelector('{controlled_menu}').matches(':popover-open')")
     assert errors == []
+
+
+# A small page for owner focus moves: the menu's target and a separate
+# `#target` button outside it. The callbacks call `window.__ownerFocus(kind)`,
+# and each test sets that hook before it closes the menu.
+def _owner_focus_page(*, controlled: bool) -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(ComponentLibrary("citry-ui-context-menu-focus-e2e", _COMPONENTS))
+    open_binding = ':open="menuOpen"' if controlled else ""
+    # A controlled owner accepts the close first, then runs its own hook, the
+    # order an application normally uses.
+    close_step = "menuOpen = false;" if controlled else ""
+
+    class FocusPage(Component):
+        citry = app
+        js = """
+          $component({
+            data() {
+              return { menuOpen: false };
+            },
+          });
+        """
+        template = (
+            """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /></head>
+            <body>
+              <c-CContextMenu
+                id="owner"
+                aria_label="Owner focus"
+                OPEN_BINDING
+                :onOpenChange="(next, detail) => {
+                    if (next) {
+                      MENU_OPEN_STEP
+                      return true;
+                    }
+                    CLOSE_STEP
+                    window.__ownerFocus('onOpenChange');
+                  }"
+                :onAction="(value, detail) => window.__ownerFocus('onAction')"
+              >
+                <c-fill name="target" data="{ target_attrs }">
+                  <button
+                    type="button"
+                    c-bind="target_attrs"
+                  >Context target</button>
+                </c-fill>
+                <c-fill name="menu">
+                  <c-CMenuItem value="rename">Rename</c-CMenuItem>
+                  <c-CMenuItem value="duplicate">Duplicate</c-CMenuItem>
+                </c-fill>
+              </c-CContextMenu>
+              <button id="target" type="button">Owner target</button>
+              <c-js />
+            </body>
+          </html>
+        """.replace("OPEN_BINDING", open_binding)
+            .replace("CLOSE_STEP", close_step)
+            .replace("MENU_OPEN_STEP", "menuOpen = true;" if controlled else "")
+        )
+
+    return str(FocusPage())
+
+
+_OWNER_FOCUS_CASES = [
+    pytest.param("onAction", "item", id="onAction-item"),
+    pytest.param("onOpenChange", "escape", id="onOpenChange-escape"),
+    pytest.param("onOpenChange", "item", id="onOpenChange-item"),
+]
+
+
+@pytest.mark.parametrize("controlled", [False, True], ids=["uncontrolled", "controlled"])
+@pytest.mark.parametrize(("callback", "close"), _OWNER_FOCUS_CASES)
+def test_owner_focus_move_in_a_callback_survives_the_menu_closing(
+    page, callback: str, close: str, controlled: bool
+) -> None:
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_owner_focus_page(controlled=controlled), wait_until="load")
+    page.wait_for_selector("[data-citry-context-menu-initialized]")
+    # The hook moves focus only for the callback under test.
+    page.evaluate(
+        """callback => {
+          window.__ownerFocus = (kind) => {
+            if (kind === callback) document.getElementById('target').focus();
+          };
+        }""",
+        callback,
+    )
+
+    page.locator("#owner-target").click(button="right")
+    page.wait_for_function("document.querySelector('#owner-menu')?.matches(':popover-open')")
+    page.keyboard.press("Enter" if close == "item" else "Escape")
+    page.wait_for_function("!document.querySelector('#owner-menu')?.matches(':popover-open')")
+    # Two frames let any deferred focus-return step run before we look.
+    final = page.evaluate(
+        """() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(
+          () => resolve(document.activeElement && document.activeElement.id)
+        )))"""
+    )
+    assert final == "target"
+    assert errors == []

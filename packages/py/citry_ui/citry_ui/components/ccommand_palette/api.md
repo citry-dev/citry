@@ -108,17 +108,32 @@ controlled close preserves it. Releasing a controlled value with `null` or by
 omitting it continues from the last accepted fallback, never rejected browser
 text or the original server seed.
 
-## Choose action and close policy
+## Run a command
 
-`onAction(value, detail)` runs synchronously before an optional close request.
-The root `close_on_action` default can be overridden by one command. Callback
-return values are ignored. If the callback throws, the close step does not run.
-If it deliberately moves focus, that connected focus destination wins over
-Dialog return-focus behavior.
+By default, choosing a command closes the palette. Set
+`close_on_action=False` on the palette, or on one command, to keep it open.
+
+- **For a command that keeps the palette open,** the palette calls
+  `onAction(value, detail)` right away, while it is still open.
+- **For a command that closes the palette,** the palette closes first. It
+  calls `onOpenChange(false)`, clears the query (or, when you pass
+  `query`, asks you to clear it through `onQueryChange`), and only then
+  calls `onAction`. So `onAction` can move focus to any element on the
+  page, and the palette does not move it back.
+
+If you pass `open`, set it to `false` inside `onOpenChange` itself. The
+palette then closes and calls `onAction`. If you keep `open` at `true`, or
+set it to `false` only later (after an `await`, in `nextTick`, or in a
+`.then()` callback), the palette calls `onAction` while it is still open,
+and a `focus()` call there does nothing.
+
+If `onAction` throws, the browser reports the error like any uncaught
+error. A palette that closed does not reopen. The palette ignores what
+`onAction` returns.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/ccommand_palette/snippets/command_actions.py"
-  title="Choose action and close policy"
+  title="Run a command"
 />
 
 ## Own global shortcuts in the application
@@ -153,10 +168,14 @@ never calls `requestSubmit()` or changes FormData.
 
 ## Compose with modal and anchored layers
 
-CommandPalette uses the same native Dialog controller as `CDialog`. A nested
-Dialog becomes the topmost focus owner. Popovers opened from a command close
-before the palette. Escape closes only the deepest owned layer, and ordinary
-close restores the eligible deep-focus invoker.
+CommandPalette uses the same native Dialog controller as `CDialog`. A Dialog
+opened from a command that keeps the palette open stacks over it and
+becomes the topmost focus owner. A Popover opened from such a command
+closes before the palette. A closing command runs `onAction` after the
+palette has closed, unless a controlled owner kept it open or closed it
+only later, so what it opens does not stack over the palette. Escape
+closes only the deepest owned layer, and an ordinary close returns focus
+to the element that opened the palette, when it can still take focus.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/ccommand_palette/snippets/palette_layers.py"

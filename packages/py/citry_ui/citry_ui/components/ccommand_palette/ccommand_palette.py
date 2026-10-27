@@ -1542,6 +1542,10 @@ class CCommandPalette(LibraryComponent):
           let actionGeneration = 0;
           let closeGeneration = 0;
           let pendingControlledClose = null;
+          // A command that closes the palette runs onAction once the close has
+          // applied, so the page outside the modal is no longer inert and the
+          // owner can move focus there. This holds that call until then.
+          let pendingAction = null;
           let formGuard = null;
           let effectStarted = false;
           const queue = (work) => {
@@ -1716,6 +1720,30 @@ class CCommandPalette(LibraryComponent):
               notifyQuery("", "close", reason, source, false);
             }
             if (generation !== closeGeneration) return;
+            // This close can be applied from inside the palette's reactive
+            // effect, where the owner's onAction would make the effect track
+            // every reactive value onAction reads and run again when one
+            // changes. A queued microtask runs it after the effect and its
+            // attribute updates have finished.
+            if (pendingAction !== null) queue(runPendingAction);
+          };
+          const runAction = (value, detail) => {
+            try {
+              callbacks.action?.(value, detail);
+            } catch (error) {
+              // The close was already requested, so an error here cannot undo
+              // it; report it the way the browser reports an uncaught error.
+              if (typeof globalThis.reportError === "function") {
+                globalThis.reportError(error);
+              } else {
+                queueMicrotask(() => { throw error; });
+              }
+            }
+          };
+          const runPendingAction = () => {
+            const action = pendingAction;
+            pendingAction = null;
+            if (action !== null) runAction(action.value, action.detail);
           };
           const commitVisibility = (nextOpen, reason, source, { notify = false } = {}) => {
             const next = Boolean(nextOpen) && !configuration.disabled;
@@ -1750,7 +1778,16 @@ class CCommandPalette(LibraryComponent):
                   pendingControlledClose === closeRequest
                   && logicalOpen
                   && props.open === logicalOpen
-                ) pendingControlledClose = null;
+                ) {
+                  pendingControlledClose = null;
+                }
+                // When onOpenChange set open=false synchronously, Vue queued its
+                // update before this microtask, so that update has run by now.
+                // Whatever the owner did (accepted, kept the palette open,
+                // released control, or a callback threw while the close
+                // applied), a command waiting for this close runs here, so it
+                // never waits for a later close.
+                runPendingAction();
               });
               return false;
             }
@@ -1811,20 +1848,50 @@ class CCommandPalette(LibraryComponent):
               input.focus({ preventScroll: true });
             }
             const close = command.closeOnAction ?? configuration.closeOnAction;
-            callbacks.action?.(command.value, {
+            const detail = {
               query,
               source,
               item: option,
               event,
               closeOnAction: close,
-            });
+            };
+            // An earlier command still waiting for its close runs first, so
+            // the owner sees actions in the order they were chosen.
+            runPendingAction();
+            if (!close) {
+              callbacks.action?.(command.value, detail);
+              return;
+            }
+            const pending = { value: command.value, detail };
+            pendingAction = pending;
+            try {
+              requestVisibility(false, "action", option);
+            } catch (error) {
+              // An owner callback threw during the close, so the close may never
+              // settle and the microtask that runs the waiting action after
+              // onOpenChange may never be queued.
+              // Run this action now rather than on some later close. In
+              // controlled mode wait one microtask first, so an open=false the
+              // owner set before throwing has been applied.
+              if (pendingAction === pending) {
+                if (openControlled) queue(runPendingAction);
+                else runPendingAction();
+              }
+              throw error;
+            }
+            // An uncontrolled close applies at once, and so does a controlled one
+            // whose open was already false when onOpenChange returned. Nothing
+            // is left to wait for, so run the action now, still inside the
+            // user's event. An uncontrolled owner may have reopened the palette
+            // in onOpenChange; the action still runs here rather than on a
+            // later close.
             if (
-              generation !== actionGeneration
-              || !active
-              || host[ownerKey] !== owner
-              || !option.isConnected
-            ) return;
-            if (close) requestVisibility(false, "action", option);
+              generation === actionGeneration
+              && pendingAction === pending
+              && (!openControlled || !logicalOpen)
+            ) {
+              runPendingAction();
+            }
           };
 
           collection = activeRuntime.create({
@@ -2128,6 +2195,14 @@ class CCommandPalette(LibraryComponent):
             actionGeneration += 1;
             compositionGeneration += 1;
             closeGeneration += 1;
+            // A command chosen before this cleanup still reaches the owner, for
+            // example when the owner unmounts the palette while closing it. Its
+            // onAction runs in a microtask after the cleanup.
+            const leftoverAction = pendingAction;
+            pendingAction = null;
+            if (leftoverAction !== null) {
+              queueMicrotask(() => runAction(leftoverAction.value, leftoverAction.detail));
+            }
             removeFormGuard();
             tasks.clear();
             watcher?.cleanup();
