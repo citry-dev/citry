@@ -270,7 +270,9 @@ def test_a_secret_jsdata_field_fails_the_render():
     class Page(Component):
         citry = engine
         template = "<p></p>"
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class JsData:
             token: Secret[str]
@@ -462,7 +464,9 @@ def test_a_vue_component_may_use_a_secret_in_template_data():
         template = """
             <p>{{ token }} {{ count }}</p>
         """
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         def template_data(self, kwargs, slots):
             return {"token": SECRET_TOKEN, "count": len(SECRET_TOKEN.get_secret_value())}
@@ -497,7 +501,9 @@ def test_a_secret_passed_to_a_child_component_stays_on_the_server():
         template = """
             <span>{{ token }}</span>
         """
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class Kwargs:
             token: Secret[str]
@@ -566,7 +572,9 @@ def test_a_plain_value_in_a_secret_jsdata_field_says_to_remove_the_field():
     class Page(Component):
         citry = engine
         template = "<p></p>"
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class JsData:
             token: Secret[str]
@@ -1022,7 +1030,9 @@ class ServerOnlyBoard(Component):
     template = """
         <c-SecretBadge c-token="token" />
     """
-    js = _COMPONENT_JS
+    js = """
+      $component({});
+    """
 
     class JsData:
         title: str
