@@ -2,12 +2,6 @@
 
 ## Unreleased
 
-### Fixed
-
-- On PyPy, `import citry` no longer fails with `No module named
-  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
-  values and template types less fully, and both print a note saying so.
-
 ### Added
 
 - You can make every plain `class Kwargs:`, `TemplateData`, `JsData`,
@@ -589,6 +583,10 @@
   `id` of a control inside it now leave that part to the browser. Such a
   form now leaves its parent, or the whole page when the form is at the
   page root, to the browser.
+
+- On PyPy, `import citry` no longer fails with `No module named
+  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
+  values and template types less fully, and both print a note saying so.
 
 ### Performance
 
