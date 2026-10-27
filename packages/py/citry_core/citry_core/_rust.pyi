@@ -282,6 +282,17 @@ class html_transform:
         inline event attribute, 4 for a `javascript:` URL in a URL attribute.
         """
     @staticmethod
+    def _csp_attribute_problem(
+        tag: str, name: str, raw_value: str | None
+    ) -> Literal["native-event", "javascript-url"] | None:
+        """
+        What a strict CSP would block in one literal template attribute. Private to `citry`.
+
+        `raw_value` is the value as written, before character references are
+        decoded, or `None` for an attribute without a value. Uses the same
+        rules as `_check_output_html`.
+        """
+    @staticmethod
     def _is_javascript_url(value: str) -> bool:
         """Whether a URL starts with `javascript:`, read without entity decoding. Private to `citry`."""
     _JAVASCRIPT_MIME_TYPES: frozenset[str]

@@ -7,6 +7,7 @@ from citry_core.html_transform import (
     _JAVASCRIPT_MIME_TYPES,
     _check_output_html,
     _classify_dependency_attribute,
+    _csp_attribute_problem,
     _is_javascript_url,
     _script_type_is_executable,
     browser_fragment_matches_nodes,
@@ -288,3 +289,44 @@ def test_the_shared_output_predicates() -> None:
     assert _classify_dependency_attribute("link", "href", " java\tscript:x") == 4
     assert _is_javascript_url("\x00JAVA\u017fCRIPT:x")
     assert "text/javascript" in _JAVASCRIPT_MIME_TYPES
+
+
+@pytest.mark.parametrize(
+    ("tag", "name", "raw_value", "expected"),
+    [
+        ("button", "OnClick", "go()", "native-event"),
+        ("button", "onclick", None, "native-event"),
+        ("a", "href", "java&#115;cript:go()", "javascript-url"),
+        ("A", "HREF", " java\tscript:go()", "javascript-url"),
+        ("object", "data", "javascript:go()", "javascript-url"),
+        ("div", "data", "javascript:go()", None),
+        ("a", "href", None, None),
+        ("a", "href", "/home", None),
+    ],
+)
+def test_a_template_attribute_gets_the_problem_the_page_check_reports(
+    tag: str, name: str, raw_value: str | None, expected: str | None
+) -> None:
+    assert _csp_attribute_problem(tag, name, raw_value) == expected
+    # The same attribute in a finished page must give the same answer, so
+    # `citry check` and the render-time check agree.
+    attribute = name if raw_value is None else f'{name}="{raw_value}"'
+    events, _cleaned = _check_output_html(
+        f"<{tag} {attribute}></{tag}>",
+        pre_extension=False,
+        csp=True,
+        javascript=None,
+        marker_prefix=None,
+        trusted_tag_starts=frozenset(),
+        omit_handler_marker=None,
+    )
+    from_page = [event[0].removeprefix("csp-") for event in events if event[0].startswith("csp-")]
+    assert from_page == ([] if expected is None else [expected])
+
+
+def test_a_lone_surrogate_in_a_template_attribute_matches_no_rule() -> None:
+    # The page check never sees one, because a page must be valid UTF-8, but
+    # a template's text comes from Python and can hold one. It reads as
+    # U+FFFD, which is not one of the characters skipped before a scheme.
+    assert _csp_attribute_problem("a", "href", "\ud800javascript:go()") is None
+    assert _csp_attribute_problem("a", "on\ud800", None) == "native-event"
