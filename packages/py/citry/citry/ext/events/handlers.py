@@ -36,11 +36,12 @@ INJECTABLE_PARAMS = ("data", "state", "context", "request", "event")
 # ``extensions_defaults["events"]``. Any other underscore attribute that is
 # not a ``def`` fails at declaration time (``EventsExtension.
 # validate_config_fields``), which is what makes config typos loud.
-# ``_max_envelope_bytes`` (the transport byte cap, design 3.5) and
+# ``_max_body_bytes`` (the largest request body, design 3.5),
+# ``_max_form_fields`` (the most fields in one form post), and
 # ``_csrf_field_names`` (the host CSRF fields the server drops from an event
-# call's arguments, design 3.5 and security_csrf.md 4.4) are the engine-wide names: both apply before any
-# component's config is read, so they are settings-only and a component
-# declaring one fails at class definition.
+# call's arguments, design 3.5 and security_csrf.md 4.4) are the engine-wide
+# names: they apply before any component's config is read, so they are
+# settings-only and a component declaring one fails at class definition.
 CONFIG_NAMES = (
     "_guard",
     "_context",
@@ -49,13 +50,14 @@ CONFIG_NAMES = (
     "_debounce",
     "_throttle",
     "_topics",
-    "_max_envelope_bytes",
+    "_max_body_bytes",
+    "_max_form_fields",
     "_csrf_field_names",
 )
 
 # The engine-wide config names, which only ``extensions_defaults["events"]``
 # may set.
-ENGINE_CONFIG_NAMES = frozenset({"_max_envelope_bytes", "_csrf_field_names"})
+ENGINE_CONFIG_NAMES = frozenset({"_max_body_bytes", "_max_form_fields", "_csrf_field_names"})
 
 # The hidden field Django's ``{% csrf_token %}`` and its own forms write. A
 # page that keeps it inside a form sending a server event would otherwise

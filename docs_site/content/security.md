@@ -250,6 +250,59 @@ data. Citry makes sure the call uses the declared HTTP method, but it cannot
 tell whether your Python code changes anything. Declare a handler as `GET`
 only when calling it twice has the same effect as calling it once.
 
+## Limit request sizes { #limit-event-request-sizes }
+
+Anyone can post to Citry's event endpoints, so Citry stops reading a
+request that is too large and rejects it before it parses it:
+
+| Setting | What it limits | Default |
+| --- | --- | --- |
+| `_max_body_bytes` | the request body, in bytes | 1 MiB (1,048,576) |
+| `_max_form_fields` | the fields of one form post (the kind a plain HTML form sends) | 1,000 |
+
+One request also carries at most 16 event calls, and more fail the same
+way. You cannot change that limit.
+
+Citry stops reading a body once it passes `_max_body_bytes`, even when the
+request's `Content-Length` is wrong or missing. A request over either
+limit fails with the error code `payload_too_large`: an event call made
+from the page fails with that code, and a plain HTML form post gets HTTP
+status 413. Both limits apply to the whole app, so set them in
+`Citry(extensions_defaults=...)`, not on a component's `Events` class:
+
+```python
+citry = Citry(
+    extensions_defaults={
+        "events": {
+            "_max_body_bytes": 4 * 1024 * 1024,
+            "_max_form_fields": 2000,
+        },
+    },
+)
+```
+
+`Citry(...)` raises `ValueError` when either value is not a positive whole
+number, and setting either one on a component's `Events` class raises
+`ValueError` when the class is defined.
+
+On Django, Citry reads event requests itself, so `_max_body_bytes`
+applies to them in place of `DATA_UPLOAD_MAX_MEMORY_SIZE`. A few setups
+read the body before Citry sees it:
+
+- **Django middleware.** A form post or upload that middleware such as
+  `CsrfViewMiddleware` parses first has already been read whole; Citry
+  still rejects it when its declared size is over `_max_body_bytes`.
+- **Servers and frameworks that buffer the body.** Some read the whole
+  body before Citry sees it (Django's ASGI handler writes it to a
+  temporary file), so also set a limit in your server or proxy.
+- **Chunked bodies on WSGI.** On a WSGI server that does not mark where a
+  chunked body ends, Citry reads such a body as empty.
+
+Citry does not accept file uploads by default. If you add your own code
+that turns the request into
+[`UploadedFile`][citry.ext.events.UploadedFile] values, the files come
+from the same body, so `_max_body_bytes` limits them too.
+
 ## Sandbox template code { #sandbox-python-template-expressions }
 
 Anything inside `{{ }}` or a `c-*` attribute is a Python expression. Citry

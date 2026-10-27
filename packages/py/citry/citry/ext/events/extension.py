@@ -90,9 +90,13 @@ def _config_name_hint(name: str) -> str:
 
 def _validate_engine_config_value(name: str, value: Any) -> None:
     """Reject an engine-wide Events setting whose value Citry could not use."""
-    if name == "_max_envelope_bytes":
+    if name == "_max_body_bytes":
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-            msg = f"'_max_envelope_bytes' must be a positive int (a byte count); got {value!r}."
+            msg = f"'_max_body_bytes' must be a positive int (a byte count); got {value!r}."
+            raise ValueError(msg)
+    elif name == "_max_form_fields":
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            msg = f"'_max_form_fields' must be a positive int (a field count); got {value!r}."
             raise ValueError(msg)
     elif name == "_csrf_field_names":
         # A single string would be read one character at a time, so it is
@@ -294,7 +298,7 @@ class EventsExtension(Extension):
         Underscore names are configuration and must be one of the recognized
         config attributes (``_guard``, ``_context``, ``_csrf``, ``_methods``,
         ``_debounce``, ``_throttle``, ``_topics``, plus the engine-wide
-        ``_max_envelope_bytes`` and ``_csrf_field_names``, which only
+        ``_max_body_bytes``, ``_max_form_fields``, and ``_csrf_field_names``, which only
         ``extensions_defaults`` may set);
         on a component's ``Events`` class an underscore ``def`` is a private
         helper and is exempt.

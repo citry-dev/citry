@@ -893,10 +893,10 @@ class TestPerEventRoute:
         )
         assert response.status_code == 200
 
-    def test_envelope_size_cap_is_configured_per_engine(self):
+    def test_body_size_cap_is_configured_per_engine(self):
         # The byte cap rides extensions_defaults["events"] (design 3.5);
-        # routes.MAX_ENVELOPE_BYTES is only the unconfigured default.
-        c = _citry(extensions_defaults={"events": {"_max_envelope_bytes": 64}})
+        # routes.MAX_BODY_BYTES is only the unconfigured default.
+        c = _citry(extensions_defaults={"events": {"_max_body_bytes": 64}})
         greeter = _greeter(c)
         client = _mounted(c)
         big = {"protocol": "citry-events/1", "requestId": "r1", "calls": [{"args": {"text": "x" * 200}}]}
@@ -904,7 +904,7 @@ class TestPerEventRoute:
         assert response.status_code == 413
         error = response.json()["results"][0]["error"]
         assert error["code"] == "payload_too_large"
-        assert "the cap is 64" in error["message"]
+        assert "larger than 64 bytes" in error["message"]
 
 
 class TestGetHandlers:
@@ -1916,12 +1916,12 @@ class TestFormAndQueryTypedFields:
 ################################################
 
 
-class TestEnvelopeCapConfig:
+class TestBodyCapConfig:
     """
-    ``_max_envelope_bytes`` is engine-wide: the cap guards the transport
+    ``_max_body_bytes`` is engine-wide: the cap guards the transport
     before any component resolves, so only ``extensions_defaults["events"]``
     may set it (the HTTP effect is covered by
-    ``TestPerEventRoute.test_envelope_size_cap_is_configured_per_engine``).
+    ``TestPerEventRoute.test_body_size_cap_is_configured_per_engine``).
     """
 
     def test_component_level_declaration_fails_at_class_definition(self):
@@ -1933,20 +1933,20 @@ class TestEnvelopeCapConfig:
                 template = "<div>c</div>"
 
                 class Events:
-                    _max_envelope_bytes = 64
+                    _max_body_bytes = 64
 
                     def go(self):
                         return None
 
         assert (
-            "'_max_envelope_bytes' is engine-wide configuration; set it in"
+            "'_max_body_bytes' is engine-wide configuration; set it in"
             " extensions_defaults['events'], not on a component's Events class." in str(err.value)
         )
 
     def test_bad_value_fails_at_engine_construction(self):
-        with pytest.raises(ValueError, match="_max_envelope_bytes") as err:
-            _citry(extensions_defaults={"events": {"_max_envelope_bytes": "big"}})
-        assert "'_max_envelope_bytes' must be a positive int (a byte count); got 'big'." in str(err.value)
+        with pytest.raises(ValueError, match="_max_body_bytes") as err:
+            _citry(extensions_defaults={"events": {"_max_body_bytes": "big"}})
+        assert "'_max_body_bytes' must be a positive int (a byte count); got 'big'." in str(err.value)
 
 
 ################################################

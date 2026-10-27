@@ -53,6 +53,7 @@ called.
 from __future__ import annotations
 
 import inspect
+import io
 import posixpath
 import re
 from pathlib import Path
@@ -62,7 +63,7 @@ from citry._django_startup import start_django
 from citry._path_checks import PathLookup, register_path_checker
 from citry._sub_path import normalize_sub_path
 from citry.contrib._path_lookup import files_beside
-from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes, normalize_mount_prefix
+from citry.util.routing import RouteHeaders, RouteRequest, body_read_limit, flatten_routes, normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -86,7 +87,53 @@ def _to_django_path(path: str) -> str:
     return _PARAM_RE.sub(r"<str:\1>", path)
 
 
-def _build_request(request: Any) -> RouteRequest:
+def _read_body(request: Any, limit: int | None) -> bytes:
+    """
+    Read Django's request body, at most ``limit`` bytes when a limit is set.
+
+    ``request.body`` reads the whole body into memory, and refuses one larger
+    than Django's ``DATA_UPLOAD_MAX_MEMORY_SIZE``. With a route limit, Citry
+    reads from the stream instead and stops one byte past it, so the route's
+    own limit governs the request in place of Django's.
+    """
+    if limit is None:
+        return bytes(request.body)
+    # Something (often middleware reading request.POST) already holds the
+    # body in memory, so take it from there.
+    if hasattr(request, "_body"):
+        return bytes(request.body[:limit])
+    if getattr(request, "_read_started", False):
+        # Middleware (such as CsrfViewMiddleware on a multipart upload) has
+        # already parsed the stream into POST and FILES, so no body bytes are
+        # left to read. Django has no total limit for uploaded files, so check
+        # the size the client declared, and hand the route a body one byte
+        # past its limit when it is over, so the route rejects the request as
+        # it would any oversized body.
+        try:
+            declared = int(request.META.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            declared = 0
+        return bytes(limit) if declared >= limit else b""
+    chunks: list[bytes] = []
+    received = 0
+    # read(n) may return fewer bytes than asked for; Django's stream already
+    # stops at Content-Length.
+    while received < limit:
+        chunk = request.read(limit - received)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        received += len(chunk)
+    data = b"".join(chunks)
+    # Leave the request as Django's own `request.body` would, so a guard, a
+    # handler, or a payload codec can still read `request.native.body`,
+    # `POST`, or `FILES`. For a body over the limit these hold the bytes read.
+    request._body = data
+    request._stream = io.BytesIO(data)
+    return data
+
+
+def _build_request(request: Any, body_limit: int | None = None) -> RouteRequest:
     """Read Django's ``HttpRequest`` into a framework-neutral request."""
     headers = RouteHeaders(request.headers.items())
     return RouteRequest(
@@ -94,7 +141,7 @@ def _build_request(request: Any) -> RouteRequest:
         path=request.path,
         query={key: tuple(values) for key, values in request.GET.lists()},
         headers=headers,
-        body=request.body,
+        body=_read_body(request, body_limit),
         content_type=headers.get("content-type", ""),
         native=request,
     )
@@ -120,7 +167,7 @@ def _make_view(route: URLRoute) -> Any:
         assert handler is not None  # noqa: S101 - flatten_routes only yields handler routes
         # urlpatterns() rejected async handlers up front, so the call returns
         # a concrete RouteResponse.
-        response = cast("RouteResponse", handler(_build_request(request), **kwargs))
+        response = cast("RouteResponse", handler(_build_request(request, body_read_limit(route)), **kwargs))
         http_response = HttpResponse(content=response.body, content_type=response.content_type, status=response.status)
         # Django's response object holds one value per header name, so a
         # repeated name (e.g. two Set-Cookie lines) cannot be represented.

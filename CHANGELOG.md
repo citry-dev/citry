@@ -4,6 +4,11 @@
 
 ### Added
 
+- An extension's route can cap its request body with
+  `URLRoute(max_body_bytes=...)`, a function Citry calls on each request.
+  Citry reads at most one byte past the limit, so the handler must reject
+  a longer body
+  ([details](https://citry.dev/advanced/extensions/#serve-extension-routes)).
 - You can write an Events `State` as a Pydantic v2 or v1 model, by hand or
   through `model_base`. A handler that sets a field to a value the model
   rejects fails that call, before Citry stores it
@@ -303,6 +308,17 @@
 
 ### Fixes
 
+- An oversized request to Citry's event endpoints no longer fills the
+  server's memory: by default Citry stops reading a body past 1 MiB and
+  rejects a form post with more than 1,000 fields, both with
+  `payload_too_large`. Change the limits
+  with `_max_body_bytes` and `_max_form_fields` in
+  `extensions_defaults["events"]`
+  ([details](https://citry.dev/security/#limit-event-request-sizes)). On
+  Django, these limits now govern event requests in place of
+  `DATA_UPLOAD_MAX_MEMORY_SIZE`. If you set the undocumented
+  `_max_envelope_bytes`, `Citry(...)` now raises `ValueError`; rename it
+  to `_max_body_bytes`.
 - Apps served below a sub-path, such as `/shop`, now load Citry's
   scripts and styles and reach its Events endpoints. Citry's URLs start
   with the sub-path each request was served under, whether a proxy,
