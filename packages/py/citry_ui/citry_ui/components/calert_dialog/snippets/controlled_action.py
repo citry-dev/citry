@@ -51,6 +51,10 @@ class ControlledArchive(Component):
                 this.result = 'Record archived';
               }, 500);
             } else {
+              // While the record is archiving, decline Escape and every other
+              // close request, as the disabled Cancel button does, so the
+              // dialog cannot report a cancel for work that still finishes.
+              if (this.pending) return;
               // Apply every other request as it comes, and note a cancel
               // when the dialog closes.
               this.open = next;

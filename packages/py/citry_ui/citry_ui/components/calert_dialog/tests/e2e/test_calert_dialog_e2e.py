@@ -272,3 +272,26 @@ def test_controlled_action_snippet_keeps_the_dialog_open_until_archiving_finishe
     page.wait_for_function("!document.querySelector('#archive-record').open")
     assert result.text_content() == "Record archived"
     assert errors == []
+
+
+def test_controlled_action_snippet_ignores_escape_while_archiving(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    # Escape during the archive work must not report a cancel for a record
+    # that is archived a moment later.
+    errors = _open_snippet(page, serve_citry_ui_live, "controlled_action")
+    page.get_by_role("button", name="Archive record").click()
+    page.wait_for_function("document.querySelector('#archive-record').open")
+    page.get_by_role("alertdialog", name="Archive this record?").get_by_role("button", name="Archive").click()
+    page.wait_for_function("document.querySelector('p[aria-live=polite]').textContent === 'Archiving...'")
+
+    page.keyboard.press("Escape")
+    # Two frames give the dialog time to apply a close it accepted.
+    page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    assert page.evaluate("document.querySelector('#archive-record').open") is True
+    assert page.locator("p[aria-live=polite]").text_content() == "Archiving..."
+
+    page.wait_for_function("!document.querySelector('#archive-record').open")
+    assert page.locator("p[aria-live=polite]").text_content() == "Record archived"
+    assert errors == []
