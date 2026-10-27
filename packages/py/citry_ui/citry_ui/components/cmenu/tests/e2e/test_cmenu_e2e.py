@@ -9,7 +9,10 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 from citry import Citry, Component, ComponentLibrary
+from citry import citry as default_citry
 from citry_ui.components.cmenu import (
     CMenu,
     CMenuCheckboxItem,
@@ -25,6 +28,8 @@ from citry_ui.components.cmenu.cmenu import (
     CInternalMenuContent,
     CInternalMenuSurface,
 )
+from citry_ui.components.cmenu.snippets import item_content
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -1415,6 +1420,7 @@ def test_open_nested_menu_has_no_serious_or_critical_axe_findings(page):
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file(), "run `pnpm install` at the repository root before Citry UI axe tests"
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => {
           const result = await axe.run(document, { resultTypes: ['violations'] });
@@ -2553,4 +2559,49 @@ def test_server_rerender_keeps_the_authors_trigger_disabled(
             )
         observed.append(disabled_after_settle())
     assert observed == expected
+    assert errors == []
+
+
+class MenuSnippetDocument(Component):
+    citry = default_citry
+
+    class Kwargs:
+        content: object
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
+        return {"content": kwargs.content}
+
+    template = """
+      <!doctype html>
+      <html lang="en">
+        <head><meta charset="utf-8" /><title>Menu snippet</title><c-css /></head>
+        <body><main>{{ content }}</main><c-js /></body>
+      </html>
+    """
+
+
+def test_item_content_snippet_shortcut_hints_run_the_items_they_name(page, serve_citry_ui_live):
+    errors = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    html = MenuSnippetDocument(content=item_content.preview).render().serialize()
+    page.goto(serve_citry_ui_live(default_citry, html) + "/", wait_until="networkidle")
+    output = page.locator("output")
+
+    # Each hint's key works even while the menu is closed.
+    page.keyboard.press("Alt+Shift+KeyF")
+    expect(output).to_have_text("Last command: search")
+    page.keyboard.press("Alt+Shift+KeyP")
+    expect(output).to_have_text("Last command: bookmark")
+
+    # Choosing the item reports the same value as its key.
+    page.get_by_role("button", name="Catalog tools").click()
+    page.get_by_role("menuitem", name="Mark this passage").click()
+    expect(output).to_have_text("Last command: bookmark")
+    page.get_by_role("button", name="Catalog tools").click()
+    page.get_by_role("menuitem", name="Search illuminated texts").click()
+    expect(output).to_have_text("Last command: search")
     assert errors == []

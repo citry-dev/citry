@@ -1,5 +1,6 @@
 import pytest
 
+from citry_ui.quality.accessibility import exclusion_manifest
 from citry_ui.quality.exit_record import qualification_record
 
 
@@ -21,6 +22,7 @@ def test_exit_record_distinguishes_configured_passed_manual_and_unavailable_work
     assert manual["assistive-technology"]["instructions"].endswith("#assistive-technology-sessions")
     assert manual["real-devices"]["instructions"].endswith("#real-device-and-environmental-sessions")
     assert record["environment"]["chromium"] == "not-inspected"
+    assert record["axe_rule_exclusions"] == exclusion_manifest()
     assert record["known_limitations"][0] == (
         "The bundled catalog supplies en-US source messages; applications provide any additional locale catalogs."
     )

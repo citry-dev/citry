@@ -128,6 +128,7 @@ attributes:
       - {id: option-role, name: role, element: Command row, type: '"option"', meaning: Exposes one callback-only command candidate.}
       - {id: aria-selected, name: aria-selected, element: Command row, type: '"true" | "false"', meaning: Mirrors transient active-descendant state rather than an application value.}
       - {id: aria-disabled, name: aria-disabled, element: Command row, type: '"true" | absent', meaning: Exposes an unavailable command.}
+      - {id: aria-keyshortcuts, name: aria-keyshortcuts, element: Command row, type: 'ARIA key combination | absent', meaning: 'Exposes the `shortcut` hint to assistive technology, such as `Control+,` for `Ctrl ,`; absent when the hint is not one key combination or the command is disabled.'}
       - {id: data-active, name: data-active, element: Command row, type: present | absent, meaning: Mirrors internal active state.}
       - {id: data-disabled, name: data-disabled, element: Command row, type: present | absent, meaning: Mirrors immutable command disabledness.}
       - {id: data-intent, name: data-intent, element: Command row, type: {display: '"default" | "danger"', interfaces: [CCommandPaletteIntent]}, meaning: Mirrors immutable visual intent.}
@@ -178,7 +179,7 @@ interfaces:
       - {id: label, name: label, type: non-whitespace str, meaning: Visible owned command label and accessible name.}
       - {id: description, name: description, type: 'str | None', meaning: Optional visible owned supporting description.}
       - {id: keywords, name: keywords, type: 'tuple[str, ...]', meaning: Immutable search-only aliases; default is empty.}
-      - {id: shortcut, name: shortcut, type: 'str | None', meaning: Optional accessibility-hidden visual hint with no listener; default is null.}
+      - {id: shortcut, name: shortcut, type: 'str | None', meaning: 'Optional visual hint, hidden from assistive technology and exposed as `aria-keyshortcuts` instead; the component adds no listener, so set it only for a combination the application handles; default is null.'}
       - {id: disabled, name: disabled, type: bool, meaning: Immutable unavailable state; default is false.}
       - {id: close-on-action, name: close_on_action, type: 'bool | None', meaning: Optional per-command close override; null uses the root policy.}
       - {id: intent, name: intent, type: {display: CCommandPaletteIntent, interfaces: [CCommandPaletteIntent]}, meaning: Visual default or danger emphasis; default is default.}

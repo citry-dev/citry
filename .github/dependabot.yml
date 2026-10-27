@@ -95,14 +95,6 @@ updates:
           - "version-update:semver-major"
           - "version-update:semver-minor"
           - "version-update:semver-patch"
-      # axe-core 4.14 turns on its label-in-name check, which citry-ui does not
-      # pass yet. Remove this entry once the components pass it:
-      # https://github.com/citry-dev/citry/issues/190
-      - dependency-name: "axe-core"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
     groups:
       # Storybook releases its packages together, so they update together.
       storybook:

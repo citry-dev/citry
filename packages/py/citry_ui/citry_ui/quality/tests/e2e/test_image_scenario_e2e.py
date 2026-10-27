@@ -10,6 +10,7 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 from citry_ui.quality.routes import build_scenario, render_scenario
 
 pytestmark = pytest.mark.e2e
@@ -83,6 +84,7 @@ def _axe_serious_or_critical(page: Any) -> list[dict[str, object]]:
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file(), "run `pnpm install` before the Image quality axe test"
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     return page.evaluate(
         """async () => (await axe.run(document, {resultTypes:['violations']})).violations
           .filter((finding) => ['serious','critical'].includes(finding.impact))"""

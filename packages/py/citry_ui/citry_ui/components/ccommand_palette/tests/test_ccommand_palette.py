@@ -223,6 +223,93 @@ def test_group_separator_and_command_semantics_preserve_order() -> None:
     assert "Moves the draft to Trash" in html
 
 
+@pytest.mark.parametrize(
+    ("shortcut", "keyshortcuts"),
+    [
+        ("Ctrl ,", "Control+,"),
+        ("Ctrl+Shift+P", "Control+Shift+P"),
+        ("ctrl m", "Control+M"),
+        ("\N{PLACE OF INTEREST SIGN}\N{UPWARDS WHITE ARROW}K", "Meta+Shift+K"),
+        ("Alt F4", "Alt+F4"),
+        ("Esc", "Escape"),
+        ("Option \N{UPWARDS ARROW}", "Alt+ArrowUp"),
+        # The symbols a Mac menu prints for non-character keys.
+        ("\N{PLACE OF INTEREST SIGN}\N{LEFTWARDS ARROW WITH HOOK}", "Meta+Enter"),
+        ("\N{UP ARROWHEAD}\N{UP ARROWHEAD BETWEEN TWO HORIZONTAL BARS}", "Control+Enter"),
+        ("\N{PLACE OF INTEREST SIGN}\N{ERASE TO THE RIGHT}", "Meta+Delete"),
+        # macOS menus do not print the ⎆ symbol, so it maps to no key.
+        ("\N{ENTER SYMBOL}", None),
+        ("\N{PLACE OF INTEREST SIGN}\N{BROKEN CIRCLE WITH NORTHWEST ARROW}", "Meta+Escape"),
+        ("\N{OPTION KEY}\N{RIGHTWARDS ARROW TO BAR}", "Alt+Tab"),
+        ("\N{PLACE OF INTEREST SIGN}\N{UPWARDS ARROW WITH DOUBLE STROKE}", "Meta+PageUp"),
+        ("\N{PLACE OF INTEREST SIGN}\N{DOWNWARDS ARROW WITH DOUBLE STROKE}", "Meta+PageDown"),
+        ("\N{PLACE OF INTEREST SIGN}\N{NORTH WEST ARROW}", "Meta+Home"),
+        ("\N{PLACE OF INTEREST SIGN}\N{SOUTH EAST ARROW}", "Meta+End"),
+        ("\N{PLACE OF INTEREST SIGN}\N{OPEN BOX}", "Meta+Space"),
+        # A character key must be printable ASCII, since a character outside
+        # ASCII may name no key on the keyboard.
+        ("\N{LATIN SMALL LETTER SHARP S}", None),
+        ("Ctrl \N{LATIN SMALL LETTER SHARP S}", None),
+        ("Ctrl+\N{LATIN SMALL LETTER DOTLESS I}", None),
+        # ARIA names the key pressed, not the character Shift produces.
+        ("Shift ?", None),
+        ("Shift 5", "Shift+5"),
+        ("Shift a", "Shift+A"),
+        # A hint that is not one key combination shows without exposing
+        # a shortcut that could be wrong.
+        ("Ctrl K, Ctrl S", None),
+        ("Ctrl +", None),
+        ("Ctrl Shift", None),
+        ("Shift Ctrl Shift A", None),
+        ("Press Ctrl", None),
+    ],
+)
+def test_a_shortcut_hint_is_exposed_as_aria_keyshortcuts(shortcut: str, keyshortcuts: str | None) -> None:
+    # The hint itself is aria-hidden, so assistive technology learns the
+    # shortcut from aria-keyshortcuts, in a top-level command and a grouped one.
+    command = CCommandPaletteCommand("settings", "Open settings", shortcut=shortcut)
+    grouped = CCommandPaletteCommand("theme", "Change theme", shortcut=shortcut)
+    html = _render(
+        CCommandPalette(
+            label="Workspace commands",
+            entries=(command, CCommandPaletteGroup(label="Look", commands=(grouped,))),
+        )
+    )
+
+    options = re.findall(r'<div[^>]*role="option"[^>]*>', html)
+    assert len(options) == 2
+    for option in options:
+        if keyshortcuts is None:
+            assert "aria-keyshortcuts" not in option
+        else:
+            assert f'aria-keyshortcuts="{keyshortcuts}"' in option
+
+
+def test_a_disabled_command_has_no_aria_keyshortcuts() -> None:
+    # A disabled command cannot run, so it must not expose a shortcut,
+    # while an enabled command beside it still does.
+    html = _render(
+        CCommandPalette(
+            label="Workspace commands",
+            entries=(
+                CCommandPaletteCommand("off", "Open settings", shortcut="Ctrl ,", disabled=True),
+                CCommandPaletteCommand("on", "Change theme", shortcut="Ctrl M"),
+            ),
+        )
+    )
+
+    disabled, enabled = re.findall(r'<div[^>]*role="option"[^>]*>', html)
+    assert 'aria-disabled="true"' in disabled
+    assert "aria-keyshortcuts" not in disabled
+    assert 'aria-keyshortcuts="Control+M"' in enabled
+
+
+def test_a_command_without_a_shortcut_has_no_aria_keyshortcuts() -> None:
+    html = _render(CCommandPalette(label="Workspace commands", entries=(CCommandPaletteCommand("a", "A"),)))
+
+    assert "aria-keyshortcuts" not in html
+
+
 def test_template_and_python_renderer_slots_receive_frozen_item_data() -> None:
     observed: list[tuple[str, str, bool]] = []
 
