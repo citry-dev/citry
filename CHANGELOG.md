@@ -17,6 +17,10 @@
   ([details](https://citry.dev/vue/slots/#scoped-slots)). When the server
   knows the slot's values, it writes the fill's HTML with them.
 - Citry now supports Python 3.15.
+- You can now use `.outside`, `.window`, `.document`, `.debounce`, and
+  `.throttle` on Vue listeners such as `@click` on HTML elements, as in
+  `@click.outside="open = false"` or `@input.debounce.300ms="search()"`
+  ([details](https://citry.dev/syntax/vue/#listener-modifiers)).
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
   spell check no longer waits behind the app's slower calls. A detached
@@ -278,6 +282,9 @@
 
 ### Fixes
 
+- A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
+  modifier now fails when the template loads and says what to write
+  instead. Vue matches none of these names, so the listener never ran.
 - In a component that uses Vue, a fill that holds a Citry component now
   fails at render, with an error that names both components, when the
   receiving component's `<c-slot>` sits inside a Vue `v-for`. The page used
