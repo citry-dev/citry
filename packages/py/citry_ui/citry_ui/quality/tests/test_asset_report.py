@@ -1,3 +1,4 @@
+import gzip
 import json
 
 import pytest
@@ -5,7 +6,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui.components.ccommand_palette import CCommandPaletteCommand
-from citry_ui.quality.asset_report import _family_asset_payloads, _family_assets, asset_report
+from citry_ui.quality.asset_report import _family_asset_payloads, _family_assets, _measure, asset_report
 
 
 def _render_split_button_instances(count: int) -> str:
@@ -459,6 +460,14 @@ def test_image_assets_stay_within_the_family_budgets():
     assert family["css"]["raw"] < 6 * 1024
     assert family["css"]["gzip"] < int(1.25 * 1024)
     assert family["css"]["brotli"] < 1024
+
+
+def test_gzip_sizes_use_level_9_on_every_python():
+    # The budgets were set at level 9. Python 3.15 lowered gzip's default to
+    # 6, which made the same bytes measure larger there.
+    payload = b"const palette = { open: false, query: '' };\n" * 64
+
+    assert _measure(payload).gzip == len(gzip.compress(payload, compresslevel=9, mtime=0))
 
 
 def test_command_palette_assets_stay_within_the_family_budgets():
