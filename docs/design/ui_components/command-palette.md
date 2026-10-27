@@ -602,7 +602,10 @@ provides the correct landmark for filtering commands.
 
 Each group uses `role="group"` and `aria-labelledby` pointing to visible group
 text. Each command uses `role="option"`, an owned label, and optional owned
-description. Shortcut and visual slots are accessibility-hidden. Separators
+description. Shortcut and visual slots are accessibility-hidden. A command
+whose shortcut hint is one key combination also gets `aria-keyshortcuts` in
+the ARIA format (for example `Control+,` for `Ctrl ,`); a hint that is not one
+combination, and a disabled command, get none. Separators
 are visual `<hr aria-hidden="true">` nodes with no accessibility role or node;
 the listbox accessibility tree therefore owns only options and labelled groups.
 The empty result is a concise `role="status"` message outside the listbox.

@@ -11,6 +11,8 @@ pytest.importorskip("pytest_playwright")
 
 from playwright.sync_api import expect
 
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
+
 pytestmark = pytest.mark.e2e
 
 
@@ -49,6 +51,7 @@ def test_tabs_overview_accessibility_and_keyboard_contract(page: Any, open_scena
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file(), "run `pnpm install` at the repository root before Citry UI axe tests"
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => {
           const result = await axe.run(document, { resultTypes: ['violations'] });

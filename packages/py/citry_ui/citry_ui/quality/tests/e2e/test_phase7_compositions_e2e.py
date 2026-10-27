@@ -11,6 +11,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -380,6 +381,7 @@ def test_representative_page_has_no_serious_or_critical_axe_violations(page: Any
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file(), "run `pnpm install` at the repository root before Citry UI axe tests"
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
 
     def serious_or_critical() -> list[dict[str, object]]:
         result = page.evaluate(

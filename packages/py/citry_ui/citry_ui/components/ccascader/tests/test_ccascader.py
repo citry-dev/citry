@@ -73,13 +73,50 @@ def test_schemas_registration_path_labels_and_native_inputs() -> None:
 def test_empty_hierarchy_and_unselected_server_focus_are_useful_without_client_runtime() -> None:
     empty = _render('<c-CCascader aria_label="Empty taxonomy" />', static_fallback=True)
     assert "No options" in empty
-    assert 'aria-label="Empty taxonomy"' in empty
+    # `aria_label` becomes a hidden element; the trigger's name is that label
+    # followed by the visible value (WCAG 2.5.3).
+    assert re.search(r'<span id="([^"]+)-aria-label" hidden>Empty taxonomy</span>', empty)
+    assert re.search(r'aria-labelledby="([^"]+)-aria-label \1-value"', empty)
     assert re.search(r'<ul[^>]+hidden[^>]+data-citry-ui-part="tree"', empty)
 
     options = _render(f"<c-CCascader>{_OPTIONS}</c-CCascader>", static_fallback=True)
     world = re.search(r'<li[^>]+data-value="world"[^>]*>', options)
     assert world is not None
     assert 'tabindex="0"' in world.group(0)
+
+
+@pytest.mark.parametrize(
+    ("label_attrs", "trigger_name", "tree_name", "hidden_label"),
+    [
+        ('aria_labelledby="ext"', "ext c-value", "ext", False),
+        ('aria_label="Place"', "c-aria-label c-value", "c-aria-label", True),
+        ("", None, "c-trigger", False),
+        # `aria_labelledby` wins, so the hidden label would be unused and is not rendered.
+        ('aria_label="Place" aria_labelledby="ext"', "ext c-value", "ext", False),
+    ],
+    ids=["labelledby", "label", "neither", "both"],
+)
+def test_trigger_and_tree_names_follow_the_label_given(
+    label_attrs: str, trigger_name: str | None, tree_name: str, hidden_label: bool
+) -> None:
+    html = _render(f'<c-CCascader id="c" {label_attrs}>{_OPTIONS}</c-CCascader>', static_fallback=True)
+
+    trigger = re.search(r'<button[^>]*data-citry-ui-part="trigger"[^>]*>', html)
+    tree = re.search(r'<ul role="tree"[^>]*data-citry-ui-part="tree"[^>]*>', html)
+    assert trigger is not None
+    assert tree is not None
+    # Without a label the trigger keeps the name its visible content gives it.
+    if trigger_name is None:
+        assert "aria-labelledby" not in trigger.group(0)
+    else:
+        assert f'aria-labelledby="{trigger_name}"' in trigger.group(0)
+    assert f'aria-labelledby="{tree_name}"' in tree.group(0)
+    # The hidden label exists only when it is the label in use, and its id
+    # never appears twice.
+    assert html.count('id="c-aria-label"') == (1 if hidden_label else 0)
+    assert (re.search(r'<span id="c-aria-label" hidden>Place</span>', html) is not None) is hidden_label
+    ids = re.findall(r'\sid="([^"]+)"', html)
+    assert len(ids) == len(set(ids))
 
 
 def test_parent_selection_policy_and_explicit_messages() -> None:

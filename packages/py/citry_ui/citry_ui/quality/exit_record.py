@@ -11,7 +11,7 @@ from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from citry_ui.quality.accessibility import disposition_manifest
+from citry_ui.quality.accessibility import disposition_manifest, exclusion_manifest
 from citry_ui.quality.capture_visuals import capture_plan
 from citry_ui.quality.scenarios import manifest_json
 
@@ -124,6 +124,7 @@ def qualification_record(
             for entry in capture_plan()
         ],
         "axe_incomplete_dispositions": disposition_manifest(),
+        "axe_rule_exclusions": exclusion_manifest(),
         "profiles": profiles,
         "manual_tasks": [
             {

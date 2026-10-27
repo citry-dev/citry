@@ -45,11 +45,32 @@
   the pointer leaves a submenu trigger or the menu re-renders. The menu
   scrolls its own list to show the focused item, and scrolls the page only
   after a key press moves focus to an item that is off screen.
+- A `CCascader` trigger's accessible name is now its label followed by
+  the path it shows, such as "Place Europe / Slovakia", instead of only
+  "Place", so voice control users can say what they see. With
+  `aria_label`, the trigger now takes its name through `aria-labelledby`
+  from a hidden element and has no `aria-label` attribute, so a selector
+  such as `button[aria-label="Place"]` no longer finds it.
+
+### Added
+
+- A `CCommandPalette` command with a `shortcut` now exposes it to
+  assistive technology as `aria-keyshortcuts`, for example `Control+,`
+  for "Ctrl ,". A hint that is not one key combination, such as
+  `Ctrl K, Ctrl S`, and a disabled command get no `aria-keyshortcuts`.
+  Set `shortcut` only for a combination your application handles.
 
 ### Changed
 
 - **Breaking:** Citry UI now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing Citry UI 0.3.0.
+- The default `change_label` of `CDateRange`, and its
+  `citry-ui-date-range-change` message, now read "Change date range,
+  {start} – {end}" instead of "… {start} to {end}". The trigger's name
+  then contains the dates exactly as the trigger shows them, which voice
+  control needs. If you set your own `change_label` or translate the
+  message, write the dates as `{start} – {end}`, as the trigger shows
+  them.
 - Citry UI components work with Citry's new check that raises
   `TypeError` for an input of the wrong type, and accept the same values
   as before, such as `heading_level="2"`. Earlier Citry UI releases

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
@@ -115,6 +116,7 @@ class _ResolvedCommand:
     option_id: str
     label_id: str
     description_id: str | None
+    keyshortcuts: str | None
     slot_data: CCommandPaletteItemSlotData
 
 
@@ -230,6 +232,123 @@ def _plain_choice(component: str, field: str, value: object, allowed: tuple[str,
         expected = ", ".join(repr(item) for item in allowed)
         raise ValueError(f"{component} {field} must be one of {expected}.")
     return plain
+
+
+# `aria-keyshortcuts` names keys by their UI Events `key` values, with the
+# modifiers first. These are the spellings people write in a shortcut hint.
+_ARIA_MODIFIER_KEYS = {
+    "ctrl": "Control",
+    "control": "Control",
+    "ctl": "Control",
+    "\N{UP ARROWHEAD}": "Control",
+    "cmd": "Meta",
+    "command": "Meta",
+    "\N{PLACE OF INTEREST SIGN}": "Meta",
+    "meta": "Meta",
+    "win": "Meta",
+    "super": "Meta",
+    "alt": "Alt",
+    "option": "Alt",
+    "opt": "Alt",
+    "\N{OPTION KEY}": "Alt",
+    "shift": "Shift",
+    "\N{UPWARDS WHITE ARROW}": "Shift",
+}
+_ARIA_NAMED_KEYS = {
+    "esc": "Escape",
+    "escape": "Escape",
+    "enter": "Enter",
+    "return": "Enter",
+    "\N{RETURN SYMBOL}": "Enter",
+    "tab": "Tab",
+    "space": "Space",
+    "backspace": "Backspace",
+    "\N{ERASE TO THE LEFT}": "Backspace",
+    "del": "Delete",
+    "delete": "Delete",
+    "ins": "Insert",
+    "insert": "Insert",
+    "home": "Home",
+    "end": "End",
+    "pageup": "PageUp",
+    "pgup": "PageUp",
+    "pagedown": "PageDown",
+    "pgdn": "PageDown",
+    "up": "ArrowUp",
+    "\N{UPWARDS ARROW}": "ArrowUp",
+    "down": "ArrowDown",
+    "\N{DOWNWARDS ARROW}": "ArrowDown",
+    "left": "ArrowLeft",
+    "\N{LEFTWARDS ARROW}": "ArrowLeft",
+    "right": "ArrowRight",
+    "\N{RIGHTWARDS ARROW}": "ArrowRight",
+    # The symbols that macOS menus and keyboard hints use for these keys.
+    "\N{LEFTWARDS ARROW WITH HOOK}": "Enter",
+    "\N{UP ARROWHEAD BETWEEN TWO HORIZONTAL BARS}": "Enter",
+    "\N{ERASE TO THE RIGHT}": "Delete",
+    "\N{BROKEN CIRCLE WITH NORTHWEST ARROW}": "Escape",
+    "\N{RIGHTWARDS ARROW TO BAR}": "Tab",
+    "\N{UPWARDS ARROW WITH DOUBLE STROKE}": "PageUp",
+    "\N{DOWNWARDS ARROW WITH DOUBLE STROKE}": "PageDown",
+    "\N{NORTH WEST ARROW}": "Home",
+    "\N{SOUTH EAST ARROW}": "End",
+    "\N{OPEN BOX}": "Space",
+}
+_GLUED_MODIFIER_SYMBOLS = re.compile(
+    "([\N{UP ARROWHEAD}\N{PLACE OF INTEREST SIGN}\N{OPTION KEY}\N{UPWARDS WHITE ARROW}])"
+)
+
+
+def _aria_keyshortcuts(shortcut: str | None) -> str | None:
+    """
+    Write a shortcut hint such as ``Ctrl ,`` or ``⌘K`` as an ``aria-keyshortcuts`` value.
+
+    Returns None when the hint is not one key combination this function can
+    convert, such as a key sequence (``Ctrl K, Ctrl S``), a ``+`` key, or a
+    character that Shift produces (``Shift ?``), so the command shows its hint
+    without exposing a shortcut that might be wrong.
+    """
+    if shortcut is None:
+        return None
+    # A Mac hint glues its modifier symbols to the key (`⌘⇧P`), so split
+    # them off before splitting on spaces and `+`.
+    text = _GLUED_MODIFIER_SYMBOLS.sub(r" \1 ", shortcut)
+    # A `+` that is the key itself cannot be told from the separator.
+    if re.search(r"\+\s*$|\+\s*\+|^\s*\+", text):
+        return None
+    tokens = [token for token in re.split(r"[\s+]+", text) if token]
+    modifiers: list[str] = []
+    key: str | None = None
+    for token in tokens:
+        modifier = _ARIA_MODIFIER_KEYS.get(token.lower())
+        if modifier is not None:
+            # A modifier after the key, or one written twice, is not one
+            # combination ARIA can name.
+            if key is not None or modifier in modifiers:
+                return None
+            modifiers.append(modifier)
+            continue
+        if key is not None:
+            return None
+        named = _ARIA_NAMED_KEYS.get(token.lower())
+        if named is not None:
+            key = named
+        elif re.fullmatch(r"[Ff](?:[1-9]|1[0-9]|2[0-4])", token):
+            key = token.upper()
+        elif len(token) == 1 and token.isascii() and token.isprintable() and not token.isspace():
+            # ARIA writes a letter key in upper case, as in `Control+P`. A
+            # character outside ASCII may name no key on the keyboard (`ß`).
+            key = token.upper()
+        else:
+            return None
+    if key is None:
+        return None
+    # ARIA names the key that is pressed, not the character it produces, so
+    # `Shift ?` would have to be written as the key under the `?`, which
+    # depends on the keyboard layout.
+    if "Shift" in modifiers and len(key) == 1 and not key.isalnum():
+        return None
+    return "+".join((*modifiers, key))
 
 
 def _copy_attrs(
@@ -576,6 +695,10 @@ class CCommandPalette(LibraryComponent):
                 option_id=option_id,
                 label_id=label_id,
                 description_id=description_id,
+                # Tell assistive technology about the shortcut the hint
+                # shows. The application must handle that key combination,
+                # and a disabled command offers no shortcut.
+                keyshortcuts=None if command_disabled else _aria_keyshortcuts(shortcut),
                 slot_data=slot_data,
             )
 
@@ -850,6 +973,7 @@ class CCommandPalette(LibraryComponent):
                     aria-selected="false"
                     c-aria-labelledby="entry.command.label_id"
                     c-aria-describedby="entry.command.description_id"
+                    c-aria-keyshortcuts="entry.command.keyshortcuts"
                     c-aria-disabled="'true' if entry.command.disabled else None"
                     c-data-value="entry.command.value"
                     c-data-disabled="'' if entry.command.disabled else None"
@@ -941,6 +1065,7 @@ class CCommandPalette(LibraryComponent):
                       aria-selected="false"
                       c-aria-labelledby="command.label_id"
                       c-aria-describedby="command.description_id"
+                      c-aria-keyshortcuts="command.keyshortcuts"
                       c-aria-disabled="'true' if command.disabled else None"
                       c-data-value="command.value"
                       c-data-disabled="'' if command.disabled else None"
