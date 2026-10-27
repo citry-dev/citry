@@ -1496,6 +1496,10 @@ link with your routes as if the app were at the site root, so a correct
 `/api/about` link is reported. Turn the rule off for such an app. A
 Django app that sets its sub-path with `FORCE_SCRIPT_NAME` needs no
 change, because Citry removes the sub-path before it asks Django.
+If only the server running Django sets the sub-path, through
+`SCRIPT_NAME`, Citry cannot see it, so correct links that start with
+the sub-path are reported. Set `FORCE_SCRIPT_NAME` to the same
+sub-path, or turn the rule off for that app.
 
 Citry also reports a path that another server answers, such as a
 reverse proxy in front of your app. That is why the rule is a warning
