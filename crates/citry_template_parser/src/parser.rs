@@ -721,6 +721,12 @@ fn process_expression(
     value_span: Option<pest::Span>,
     context: &ParserContext,
 ) -> Result<(Vec<Token>, Vec<Comment>), ParseError> {
+    // A blank attribute value has no expression to parse. The checks that run
+    // once the tag is read report it with a message that names the attribute,
+    // which the expression parser cannot.
+    if value_span.is_none() && value_token.content.trim().is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
     // An invalid expression's error path needs more stack than the tree
     // passes leave room for.
     let transform_result = crate::stack::with_stack_for_expression(|| {
@@ -1438,8 +1444,14 @@ fn parse_html_attribute(
                             .to_string(),
                     ));
                 }
-                let (used_variables, comments) =
-                    process_expression(inner_value_ref, None, context)?;
+                // A shorthand `c-for` value is a loop clause, not an
+                // expression: `x in items if x` is not valid Python on its
+                // own. The pass that reads loop clauses parses it later.
+                let (used_variables, comments) = if key.content == C_FOR_TAG {
+                    (Vec::new(), Vec::new())
+                } else {
+                    process_expression(inner_value_ref, None, context)?
+                };
                 (
                     HtmlAttrKind::Expression,
                     used_variables,
@@ -4356,10 +4368,10 @@ fn validate_binding_site(
 ///   attributes are not `c-` prefixed, so attribute parsing classifies them as
 ///   `Static` and skips variable tracking. They are upgraded to `Expression`
 ///   with their used variables populated.
-/// - The shorthand `c-for` attribute (on any element) is parsed as a generic
-///   expression, so its used variables wrongly include the loop targets (e.g.
-///   `c-for="x in xs"` reports both `x` and `xs`). They are recomputed as the
-///   loop's free variables (`xs`), matching the explicit `each` form.
+/// - The shorthand `c-for` attribute (on any element) is a loop clause, not an
+///   expression, so the generic attribute branch leaves it alone and this pass
+///   parses it, giving the loop's free variables (`xs` for `c-for="x in xs"`),
+///   as for the explicit `each` form. Like `each`, it records no comments.
 ///
 /// The returned vector is the node's introduced variables: the loop targets for
 /// a `c-for` (explicit or shorthand) and the data/fallback variables for a

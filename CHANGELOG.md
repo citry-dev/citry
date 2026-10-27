@@ -282,6 +282,9 @@
 
 ### Fixes
 
+- A `<c-for>` whose clause ends with a comment, such as
+  `each="item in items  # every item"`, now renders. It used to fail with
+  "unexpected EOF while parsing".
 - A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
   modifier now fails when the template loads and says what to write
   instead. Vue matches none of these names, so the listener never ran.

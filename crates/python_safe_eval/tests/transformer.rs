@@ -94,35 +94,75 @@ mod tests {
     fn test_multiple_lines_escape_1() {
         let result = transform_expression_string("x)\n\nimport os; os.path.join('a', 'b')\n\n(")
             .unwrap_err();
-        assert_eq!(
-            result,
-            "Parse error: Unexpected token at the end of an expression at byte range 4..10: 'import'"
-        );
+        // Python's own message for the text, as `eval()` gives it.
+        assert_eq!(result, "Parse error: unmatched ')' at byte range 1..2: ')'");
     }
 
-    // This is the most that the logic can be "exploited" - constructing an expression
-    // that makes use of the hidden parentheses.
-    // So while `lambda x: x + 2)(5` would raise a syntax error in Python, since we wrap it
-    // in parentheses, we actually end up with `(lambda x: x + 2)(5)`, which is valid.
+    // Closing the hidden parenthesis early, as in `lambda x: x + 2)(5`, would
+    // make the wrapped text `(lambda x: x + 2)(5)`, a valid call, although the
+    // authored text is not one expression. It is rejected the way Python
+    // rejects it on its own.
     #[test]
     fn test_multiple_lines_escape_2() {
-        _test_transformation(
-            "lambda x: x + 2)(5",
-            "call(context, source, (0, 20), lambda x: x + 2, 5)",
-            vec![],
-            vec![],
-        );
+        for (source, error) in [
+            (
+                "lambda x: x + 2)(5",
+                "Parse error: unmatched ')' at byte range 15..16: ')'",
+            ),
+            (
+                "a) or (b",
+                "Parse error: unmatched ')' at byte range 1..2: ')'",
+            ),
+            (
+                "a\n) + (b",
+                "Parse error: unmatched ')' at byte range 2..3: ')'",
+            ),
+            (
+                "[a] ) , ( b",
+                "Parse error: unmatched ')' at byte range 4..5: ')'",
+            ),
+            (
+                "a] or [b",
+                "Parse error: unmatched ']' at byte range 1..2: ']'",
+            ),
+        ] {
+            assert_eq!(transform_expression_string(source).unwrap_err(), error);
+        }
+        // Brackets the author opens and closes are unaffected, wherever they
+        // sit, including inside f-strings.
+        for source in [
+            "(a) or (b)",
+            "f(a)(b)",
+            "[x for x in (a)]",
+            "f'{(a)}' + (b)",
+        ] {
+            assert!(transform_expression_string(source).is_ok(), "{source}");
+        }
     }
 
-    // However, it's still not possible to construct an expression that contains a statement,
-    // as this test shows.
+    // A statement cannot be built this way either. Python's tokenizer finds
+    // the unmatched `)` first, so that is the message.
     #[test]
     fn test_multiple_lines_escape_3() {
         let result = transform_expression_string("def fn(x): x + 2)(5").unwrap_err();
         assert_eq!(
             result,
-            "Parse error: Expected an identifier, but found a keyword `def` that cannot be used here at byte range 0..3: 'def'"
+            "Parse error: unmatched ')' at byte range 16..17: ')'"
         );
+    }
+
+    // Text with no expression in it would parse as the empty tuple inside the
+    // hidden parentheses. Python rejects it on its own.
+    #[test]
+    fn test_an_empty_or_comment_only_expression_is_an_error() {
+        for source in ["", "  ", "# note", "\n  # note\n"] {
+            assert_eq!(
+                transform_expression_string(source).unwrap_err(),
+                "Parse error: expected an expression, found none",
+                "{source:?}"
+            );
+        }
+        assert!(transform_expression_string("()").is_ok());
     }
 
     #[test]

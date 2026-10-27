@@ -137,7 +137,9 @@ def lower_loop(targets: tuple[str, ...], clause: str) -> tuple[str, Path] | None
     if len(targets) != 1 or not _plain_name(targets[0]):
         return None
     target = targets[0]
-    source = f"(({target},) for {clause})"
+    # The newline keeps a trailing `# comment` in the clause from hiding the
+    # closing parenthesis, as in `ForNode.iter_bodies`.
+    source = f"(({target},) for {clause}\n)"
     parsed = _parsed_body(source)
     if parsed is None or not _sandbox_compiles(source):
         return None
