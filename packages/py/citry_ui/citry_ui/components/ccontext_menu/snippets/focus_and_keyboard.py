@@ -19,10 +19,7 @@ class ContextMenuFocusAndKeyboard(Component):
           v-bind="{
             onOpenChange:(next,detail)=>last=
               `${next ? 'opened' : 'closed'} by ${detail.reason}`,
-            onAction:(value)=>{
-              if (value === 'disable-invoker') disableInvoker=true;
-              if (value === 'remove-invoker') invokerRemoved=true;
-            },
+            onAction:changeReturnTarget,
           }"
         >
           <c-fill name="target" data="{ target_attrs }">
@@ -104,7 +101,18 @@ class ContextMenuFocusAndKeyboard(Component):
     """
 
     js = r"""
-      $component({data(){return {disableInvoker:false,invokerRemoved:false,last:'No close yet'};}});
+      $component({
+        data(){return {disableInvoker:false,invokerRemoved:false,last:'No close yet'};},
+        methods: {
+          // Two commands disable or remove the nested Button, so the reader
+          // can try the menu's focus return without it. Other commands leave
+          // the Button as it is.
+          changeReturnTarget(value) {
+            if (value === 'disable-invoker') this.disableInvoker = true;
+            if (value === 'remove-invoker') this.invokerRemoved = true;
+          },
+        },
+      });
     """
 
     css = """

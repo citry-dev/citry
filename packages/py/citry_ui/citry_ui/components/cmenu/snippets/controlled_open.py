@@ -15,10 +15,7 @@ class ControlledMenu(Component):
             open,
             disabled,
             size,
-            onOpenChange: (nextOpen, detail) => {
-              lastReason = detail.reason;
-              if (!locked) open = nextOpen;
-            },
+            onOpenChange: applyOpenRequest,
           }"
         >
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
@@ -37,6 +34,13 @@ class ControlledMenu(Component):
       $component({
         data(){return {open: false, disabled: false, locked: false, size: 'md', lastReason: 'none'};},
         methods: {
+          // Show every request's reason, but change `open` only while
+          // requests are not locked, so a declined request leaves the Menu
+          // as is.
+          applyOpenRequest(nextOpen, detail) {
+            this.lastReason = detail.reason;
+            if (!this.locked) this.open = nextOpen;
+          },
           applyPreviewControls(event) {
             Object.assign(this, event.detail);
           },
