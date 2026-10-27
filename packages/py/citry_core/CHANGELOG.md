@@ -123,6 +123,10 @@
 
 ### Performance
 
+- `template_formatter.format_template()` is much faster on deeply nested tags
+  that break across lines: 400 nested `<div c-for>` tags took about 42 seconds
+  and now take well under a second. A few templates get a slightly different
+  layout the first time you format them with this version.
 - `template_parser.parse_template()` is much faster on large templates: a
   92 KB template that took more than a second now parses in about 10 ms.
 - `template_parser.parse_template()` now reports an error that covers many
