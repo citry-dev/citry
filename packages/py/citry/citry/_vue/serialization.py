@@ -305,7 +305,8 @@ class HydrationDecline:
     ``component-attrs``
     (attributes passed to a component), ``component-lookup`` (a component
     whose occurrence or render program is missing, including one whose render
-    function could not be read), ``slot-props`` (a scoped slot),
+    function could not be read), ``slot-props`` (a ``v-slot`` pattern that nests a pattern or gives a
+    default),
     ``dynamic-slots``, ``dynamic-component``, ``dynamic-attribute-name``,
     ``render-shape``, ``render-helper``, ``nesting-depth`` and ``host-root``
     (text directly inside the Vue host element).

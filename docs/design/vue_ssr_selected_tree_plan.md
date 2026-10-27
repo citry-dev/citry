@@ -203,8 +203,9 @@ render is a single text node (Vue steps over one DOM node per component, so
 merged or empty text would shift its siblings), a component called with
 extra attributes, listeners, `v-model` (a `modelValue` prop and its update
 listener), `v-show`, or a custom directive (the server does not apply the
-caller's directives to the child's root element), scoped and dynamically
-built slots, HTML Python hands over as a finished string (`<c-raw>` contents
+caller's directives to the child's root element), slots built
+conditionally or in a loop, fills whose `v-slot` pattern nests a pattern or
+gives a default, HTML Python hands over as a finished string (`<c-raw>` contents
 or trusted `Markup` with tags) when one of the cases in "Raw HTML blocks"
 declines it, style values the browser could read differently from the server's text (see
 "Attributes" below), custom directives on elements, text with a carriage return or NUL, `<textarea>` or
@@ -433,9 +434,19 @@ skipped, and these vnode shapes run:
 | `_withDirectives(vnode, [[_vShow, value]])` | the element, with `style="display: none;"` only when the value is known to be false; an element that also has its own `style` and a false value is declined |
 | a `textContent` prop (what `v-text` compiles to) on a non-void element with no children | the value as the element's text, escaped, when `toDisplayString` of it is known (see the expression rules below). Hydration neither reads nor compares that text (`hydrateElement` in runtime-core 3.5.42 checks children only when the vnode has some) and sets the prop itself when the render lists it as dynamic, so an unknown value, or text the parser would change (a carriage return, text in a table part, a leading newline in `<pre>`), is written as an empty element with no decline. A `textContent` key from a `v-bind` object is not dynamic, so hydration keeps the server's text: it is written exactly, and text the parser would change is declined (`text-value`), which makes the parent the shell. With authored children, the children are written: hydration either compares the DOM with them (text children, or an empty value) or skips them (element children with a non-empty value), then sets the prop |
 
-Slot fills must be an object literal of `name: _withCtx(() => [...])`
-entries; `createSlots` (conditional or looped slots) is not run, and a fill
-with slot parameters (a scoped slot) is declined when it renders.
+Slot fills must be an object literal of `name: _withCtx(params => [...])`
+entries; `createSlots` (conditional or looped slots) is not run. A fill's
+slot function takes no parameter, one name, or one flat object pattern such
+as `{ $i18n, row, row: item, key: citrySlotKey, ...rest }`. The renderer
+evaluates the outlet's `renderSlot` props with the outlet component's data
+and binds them as the fill's locals: a props object passed on with
+`v-bind` arrives through `_normalizeProps(_guardReactiveProps(x))`, a prop
+the outlet does not pass is `undefined`, and a prop the server cannot read
+binds as unknown, so only the parts that read it become shells. Props built
+with `_mergeProps`, or a value that is not an object, make every prop
+unknown. A nested pattern or a default is declined (`slot-props`) when the
+fill renders; its names still bind, as unknown, so the fill never reads an
+outer value of the same name.
 
 Props are an object literal with fixed keys, `_mergeProps(...)`,
 `_normalizeProps(x)`, `_guardReactiveProps(x)`, or a spread value

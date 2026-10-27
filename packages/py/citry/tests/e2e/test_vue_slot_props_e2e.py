@@ -96,3 +96,74 @@ def test_a_fill_reads_vue_slot_props_with_its_authors_data_and_python_slot_data(
     page.wait_for_function("document.querySelectorAll('li').length === 1")
     assert [cell.strip() for cell in page.locator("li").all_inner_texts()] == ["#2:Banana-Py"]
     assert errors == []
+
+
+@pytest.mark.e2e
+def test_a_fill_the_server_writes_with_slot_props_hydrates_without_a_mismatch(page: Any, serve_live: Any) -> None:
+    engine = Citry(autodiscover=False)
+
+    class Rows(Component):
+        citry = engine
+        template = """
+            <ul class="rows">
+              <li
+                  v-for="row in rows"
+                  :key="row.id"
+              >
+                <c-slot name="item" :row="row" />
+              </li>
+            </ul>
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"rows": [{"id": 1, "title": "Apple"}, {"id": 2, "title": "Banana"}]}
+
+    class Page(Component):
+        citry = engine
+        template = """
+            <main>
+              <c-Rows>
+                <c-fill name="item" v-slot="{ row }">
+                  <span
+                      class="cell"
+                      :data-id="row.id"
+                      v-text="row.title"
+                  ></span>
+                </c-fill>
+              </c-Rows>
+              <c-Rows>
+                <c-fill name="item" v-slot="props">
+                  <span class="whole" v-text="props.row.id"></span>
+                </c-fill>
+              </c-Rows>
+            </main>
+        """
+
+    html = Page().render().serialize()
+    # The server reads the rows, so it writes the fills itself.
+    assert '<span class="cell" data-id="1">Apple</span>' in html
+    assert '<span class="whole">2</span>' in html
+
+    # Vue reports a hydration mismatch through the console, so a warning or
+    # error there fails the test, as it may mean the two renders disagreed.
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "console",
+        lambda message: faults.append(message.text) if message.type in {"error", "warning"} else None,
+    )
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    page.goto(serve_live(engine, html, "") + "/")
+    page.wait_for_function("window.__citryHydrationReport !== undefined")
+    report = page.evaluate("window.__citryHydrationReport")
+    assert report["mountError"] is None, report
+    assert report["mismatchCount"] == 0, report
+    # Vue adopts every element the server wrote, the fills included.
+    assert report["replacedElementCount"] == 0, report
+    assert report["reusedElementCount"] == report["beforeElementCount"], report
+    assert page.locator(".cell").all_inner_texts() == ["Apple", "Banana"]
+    # Hydration compares attributes, so a slot prop the server read wrongly
+    # would have been reported above.
+    assert [cell.get_attribute("data-id") for cell in page.locator(".cell").all()] == ["1", "2"]
+    assert page.locator(".whole").all_inner_texts() == ["1", "2"]
+    assert faults == []

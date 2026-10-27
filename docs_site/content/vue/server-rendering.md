@@ -261,7 +261,9 @@ The same happens for:
 - a component called with extra attributes, listeners, `v-model`,
   `v-show`, or a custom directive, and a component whose template is only
   text;
-- a scoped slot, or slots created conditionally or in a loop;
+- a `v-slot` fill whose pattern nests one pattern in another, such as
+  `{ row: { title } }`, or gives a default, such as `{ row = {} }`, or
+  slots created conditionally or in a loop;
 - HTML inserted as one finished block, such as `<c-raw>` contents or a
   `Markup` value with tags, when the browser's parser would rearrange it
   where it sits (a `<p>` inside a `<p>`), when it holds a `<script>`, or

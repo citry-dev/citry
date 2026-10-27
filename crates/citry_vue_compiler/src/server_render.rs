@@ -141,6 +141,9 @@ enum Node {
     /// `renderSlot($slots, name, props, fallback)`.
     Slot {
         name: String,
+        /// The props the outlet passes to the fill, read in the outlet's
+        /// own component; `None` when it passes none.
+        props: Option<Expr>,
         fallback: Option<Vec<Node>>,
     },
     Unsupported(&'static str),
@@ -173,9 +176,10 @@ impl Node {
             Node::Component { props, slots, .. } => {
                 props.as_ref().is_none_or(PropsExpr::fully_supported)
                     && slots.as_ref().is_ok_and(|slots| {
-                        slots
-                            .iter()
-                            .all(|slot| slot.body.iter().all(Node::fully_supported))
+                        slots.iter().all(|slot| {
+                            !matches!(slot.params, SlotParams::Unsupported)
+                                && slot.body.iter().all(Node::fully_supported)
+                        })
                     })
             }
             Node::Fragment(nodes) => nodes.iter().all(Node::fully_supported),
@@ -186,9 +190,14 @@ impl Node {
                 otherwise,
             } => test.fully_supported() && then.fully_supported() && otherwise.fully_supported(),
             Node::Text(expr) => expr.fully_supported(),
-            Node::Slot { fallback, .. } => fallback
-                .as_ref()
-                .is_none_or(|nodes| nodes.iter().all(Node::fully_supported)),
+            Node::Slot {
+                props, fallback, ..
+            } => {
+                props.as_ref().is_none_or(Expr::fully_supported)
+                    && fallback
+                        .as_ref()
+                        .is_none_or(|nodes| nodes.iter().all(Node::fully_supported))
+            }
             Node::Null | Node::Comment(_) => true,
         }
     }
@@ -213,9 +222,32 @@ enum Directives {
 #[derive(Debug)]
 struct SlotDef {
     name: String,
-    /// Number of slot-prop parameters; scoped slots are not evaluated.
-    params: usize,
+    /// How the fill's slot function takes the props its outlet passes.
+    params: SlotParams,
+    /// Every name the parameter binds. A declined pattern still binds them,
+    /// as unknown, so the body never reads an outer name of the same spelling.
+    names: Vec<String>,
     body: Vec<Node>,
+}
+
+/// The parameter of a fill's slot function, which receives the props object
+/// the slot's outlet passes.
+#[derive(Debug)]
+enum SlotParams {
+    /// `() => [...]`: the fill reads no slot props.
+    None,
+    /// `(props) => [...]`: one name holds the whole props object.
+    Name(String),
+    /// `({ row, row: item, ...rest }) => [...]`: each `(prop, local name)`
+    /// pair, and the name that collects the remaining props.
+    Pattern {
+        props: Vec<(String, String)>,
+        rest: Option<String>,
+    },
+    /// A nested pattern, a default, or a computed key that is not a string:
+    /// the server declines the fill (`slot-props`), and the element around
+    /// its outlet becomes a shell.
+    Unsupported,
 }
 
 /// A props argument: an object literal, a data object spread with `v-bind`,
@@ -698,7 +730,8 @@ impl Reader {
 
     fn render_slot(&self, arguments: &[Argument<'_>], locals: &[String]) -> Node {
         // `renderSlot(_ctx.$slots, "name", props?, fallback?)`: the slots of
-        // this component instance, a literal name, and ignored vnode props.
+        // this component instance, a literal name, and the props the fill's
+        // slot function receives.
         let slots_object = argument(arguments, 0).map(strip);
         let own_slots = matches!(
             slots_object,
@@ -715,6 +748,27 @@ impl Reader {
         if !own_slots {
             return Node::Unsupported("render-shape");
         }
+        let props = match argument(arguments, 2).map(strip) {
+            None => None,
+            // `<slot v-bind="obj">`, which Citry writes to pass a received
+            // props object on, arrives wrapped in Vue's props helpers.
+            Some(Expression::CallExpression(call))
+                if callee(&call.callee) == Some("_normalizeProps") && call.arguments.len() == 1 =>
+            {
+                match argument(&call.arguments, 0).map(strip) {
+                    Some(Expression::CallExpression(inner))
+                        if callee(&inner.callee) == Some("_guardReactiveProps")
+                            && inner.arguments.len() == 1 =>
+                    {
+                        argument(&inner.arguments, 0).map(|value| self.expr(value, locals))
+                    }
+                    // `normalizeProps` would also normalize a class or style
+                    // the server does not; Citry writes only the form above.
+                    _ => Some(Expr::Unsupported("render-helper")),
+                }
+            }
+            Some(other) => Some(self.expr(other, locals)),
+        };
         let fallback = match argument(arguments, 3) {
             None => None,
             Some(function) => match arrow(function) {
@@ -727,6 +781,7 @@ impl Reader {
         };
         Node::Slot {
             name: name.to_owned(),
+            props,
             fallback,
         }
     }
@@ -759,15 +814,18 @@ impl Reader {
                 return Err("render-shape");
             }
             let function = argument(&call.arguments, 0).ok_or("render-shape")?;
-            let (params, body) = arrow(function).ok_or("render-shape")?;
+            let (params, names, body) = slot_function(function).ok_or("render-shape")?;
+            // The body reads the names its parameter binds as locals,
+            // because Vue's compiler writes them without the `_ctx.` prefix.
             let mut inner = locals.to_vec();
-            inner.extend(params.iter().cloned());
+            inner.extend(names.iter().cloned());
             let Expression::ArrayExpression(array) = strip(body) else {
                 return Err("render-shape");
             };
             output.push(SlotDef {
                 name,
-                params: params.len(),
+                params,
+                names,
                 body: self.array(&array.elements, &inner),
             });
         }
@@ -1008,6 +1066,98 @@ fn arrow<'b, 'a>(function: &'b Expression<'a>) -> Option<(Vec<String>, &'b Expre
         body => body.as_expression()?,
     };
     Some((params, body))
+}
+
+/// Read a fill's slot function: how it takes its props, every name its
+/// parameter binds, and the expression it returns.
+fn slot_function<'b, 'a>(
+    function: &'b Expression<'a>,
+) -> Option<(SlotParams, Vec<String>, &'b Expression<'a>)> {
+    let Expression::ArrowFunctionExpression(arrow) = strip(function) else {
+        return None;
+    };
+    if arrow.params.rest.is_some() || arrow.params.items.len() > 1 {
+        return None;
+    }
+    let mut names = Vec::new();
+    let params = match arrow.params.items.first() {
+        None => SlotParams::None,
+        Some(param) => {
+            binding_names(&param.pattern, &mut names);
+            if param.initializer.is_some() {
+                SlotParams::Unsupported
+            } else {
+                match &param.pattern {
+                    BindingPattern::BindingIdentifier(id) => SlotParams::Name(id.name.to_string()),
+                    BindingPattern::ObjectPattern(object) => slot_pattern(object),
+                    _ => SlotParams::Unsupported,
+                }
+            }
+        }
+    };
+    let body = match &arrow.body {
+        ArrowFunctionBody::FunctionBody(body) => match body.statements.as_slice() {
+            [Statement::ReturnStatement(statement)] => statement.argument.as_ref()?,
+            _ => return None,
+        },
+        body => body.as_expression()?,
+    };
+    Some((params, names, body))
+}
+
+/// The flat object patterns Citry writes, such as `{ $i18n, row: item,
+/// ...rest }`. Anything nested, defaulted or computed is left to Vue.
+fn slot_pattern(object: &oxc_ast::ast::ObjectPattern<'_>) -> SlotParams {
+    let mut props = Vec::new();
+    for property in &object.properties {
+        let BindingPattern::BindingIdentifier(local) = &property.value else {
+            return SlotParams::Unsupported;
+        };
+        let Some(key) = property_name(&property.key, property.computed) else {
+            return SlotParams::Unsupported;
+        };
+        props.push((key, local.name.to_string()));
+    }
+    let rest = match &object.rest {
+        None => None,
+        Some(rest) => match &rest.argument {
+            BindingPattern::BindingIdentifier(id) => Some(id.name.to_string()),
+            _ => return SlotParams::Unsupported,
+        },
+    };
+    SlotParams::Pattern { props, rest }
+}
+
+/// Every name a parameter pattern binds, so the body reads each as a local
+/// even when the pattern is one the server leaves to Vue.
+fn binding_names(pattern: &BindingPattern<'_>, names: &mut Vec<String>) {
+    // A pattern nests as deep as its author wrote it.
+    crate::stack::with_enough_stack(|| collect_binding_names(pattern, names));
+}
+
+fn collect_binding_names(pattern: &BindingPattern<'_>, names: &mut Vec<String>) {
+    match pattern {
+        BindingPattern::BindingIdentifier(id) => names.push(id.name.to_string()),
+        BindingPattern::ObjectPattern(object) => {
+            for property in &object.properties {
+                collect_binding_names(&property.value, names);
+            }
+            if let Some(rest) = &object.rest {
+                collect_binding_names(&rest.argument, names);
+            }
+        }
+        BindingPattern::ArrayPattern(array) => {
+            for element in array.elements.iter().flatten() {
+                collect_binding_names(element, names);
+            }
+            if let Some(rest) = &array.rest {
+                collect_binding_names(&rest.argument, names);
+            }
+        }
+        BindingPattern::AssignmentPattern(assignment) => {
+            collect_binding_names(&assignment.left, names);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2780,9 +2930,18 @@ impl<'a> Writer<'a> {
             Node::Component { tag, props, slots } => {
                 self.component(tag, props.as_ref(), slots, instance, locals, cx)
             }
-            Node::Slot { name, fallback } => {
-                self.slot(name, fallback.as_deref(), instance, locals, cx)
-            }
+            Node::Slot {
+                name,
+                props,
+                fallback,
+            } => self.slot(
+                name,
+                props.as_ref(),
+                fallback.as_deref(),
+                instance,
+                locals,
+                cx,
+            ),
             Node::Unsupported(reason) => Err(Fail::new(reason, "render", component)),
         }
     }
@@ -3298,9 +3457,11 @@ impl<'a> Writer<'a> {
         true
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn slot(
         &mut self,
         name: &str,
+        props: Option<&'a Expr>,
         fallback: Option<&'a [Node]>,
         instance: &Rc<Instance<'a>>,
         locals: &Scope<'a>,
@@ -3316,12 +3477,19 @@ impl<'a> Writer<'a> {
             .iter()
             .find(|binding| binding.def.name == name)
         {
-            if binding.def.params != 0 {
+            // The props are read with the outlet's own data, then bound in
+            // the scope the fill was written in.
+            let passed = props.map_or_else(
+                || Val::Object(Rc::new(Vec::new())),
+                |props| eval(props, instance, locals),
+            );
+            let (scope, read) = bind_slot_props(binding.def, passed, &binding.locals);
+            if !read {
                 return Err(Fail::new("slot-props", name, component));
             }
             let mark = self.mark();
             for child in &binding.def.body {
-                valid |= self.node(child, &binding.owner, &binding.locals, inner)?;
+                valid |= self.node(child, &binding.owner, &scope, inner)?;
             }
             if !valid {
                 // Only comments or empty Fragments: `ensureValidVNode`
@@ -3336,6 +3504,75 @@ impl<'a> Writer<'a> {
         }
         self.comment("]");
         Ok(valid)
+    }
+}
+
+/// Bind the props an outlet passed as the names a fill's slot function
+/// takes, in front of the fill's own scope, and say whether the server read
+/// the parameter. A declined parameter binds each of its names as unknown,
+/// so the fill never reads an outer value of the same name. A prop the
+/// server cannot read binds as unknown, so only the parts that read it are
+/// left to the browser.
+fn bind_slot_props<'a>(def: &'a SlotDef, passed: Val<'a>, scope: &Scope<'a>) -> (Scope<'a>, bool) {
+    let bind = |scope: Scope<'a>, name: &'a str, value: Val<'a>| {
+        Some(Rc::new(Locals {
+            name,
+            value,
+            parent: scope,
+        }))
+    };
+    match &def.params {
+        SlotParams::None => (scope.clone(), true),
+        SlotParams::Name(name) => (bind(scope.clone(), name, passed), true),
+        SlotParams::Pattern { props, rest } => {
+            let mut bound = scope.clone();
+            for (key, local) in props {
+                bound = bind(bound, local, slot_prop(&passed, key));
+            }
+            if let Some(rest) = rest {
+                let value = match &passed {
+                    Val::Object(entries) => Val::Object(Rc::new(
+                        entries
+                            .iter()
+                            .filter(|(name, _)| props.iter().all(|(key, _)| key != name))
+                            .cloned()
+                            .collect(),
+                    )),
+                    Val::Unknown(reason) => Val::Unknown(reason),
+                    // Citry never passes a prepared-data object as slot
+                    // props, so the server does not build a rest from one
+                    // and leaves it to the browser.
+                    _ => Val::Unknown("browser-value"),
+                };
+                bound = bind(bound, rest, value);
+            }
+            (bound, true)
+        }
+        SlotParams::Unsupported => {
+            let mut bound = scope.clone();
+            for name in &def.names {
+                bound = bind(bound, name, Val::Unknown("slot-props"));
+            }
+            (bound, false)
+        }
+    }
+}
+
+/// One prop of the object an outlet passed, read as JavaScript would.
+fn slot_prop<'a>(passed: &Val<'a>, key: &str) -> Val<'a> {
+    match passed {
+        Val::Object(entries) => match entries.iter().find(|(name, _)| name == key) {
+            Some((_, value)) => value.clone(),
+            None if OBJECT_PROTOTYPE_NAMES.contains(&key) => Val::Unknown("browser-value"),
+            None => Val::Undefined,
+        },
+        Val::Data(Json::Object(map)) => match map.get(key) {
+            Some(value) => Val::from_json(value),
+            None if OBJECT_PROTOTYPE_NAMES.contains(&key) => Val::Unknown("browser-value"),
+            None => Val::Undefined,
+        },
+        Val::Unknown(reason) => Val::Unknown(reason),
+        _ => Val::Unknown("browser-value"),
     }
 }
 
@@ -3541,17 +3778,27 @@ impl<'a> StaticWriter<'a> {
             Node::Component { tag, props, slots } => {
                 self.component(tag, props.as_ref(), slots, instance, locals);
             }
-            Node::Slot { name, fallback } => {
+            Node::Slot {
+                name,
+                props,
+                fallback,
+            } => {
                 let before = self.html.len();
                 if let Some(binding) = instance
                     .slots
                     .iter()
                     .find(|binding| binding.def.name == *name)
                 {
-                    // A scoped slot's parameters are only known in the
-                    // browser, so what reads them is left out.
+                    // The fill's names are bound as in `Writer::slot`; when its
+                    // pattern is declined they bind as unknown, so they still
+                    // hide outer names, and what reads them is left out.
+                    let passed = props.as_ref().map_or_else(
+                        || Val::Object(Rc::new(Vec::new())),
+                        |props| eval(props, instance, locals),
+                    );
+                    let (scope, _read) = bind_slot_props(binding.def, passed, &binding.locals);
                     for child in &binding.def.body {
-                        self.node(child, &binding.owner, &binding.locals);
+                        self.node(child, &binding.owner, &scope);
                     }
                 }
                 if self.html.len() == before
@@ -4230,6 +4477,210 @@ mod tests {
         assert_eq!(
             html(&result),
             "<main><section><!--[--><b>fill X</b><!--]--><!--[--><u>fallback</u><!--]--><!--[--><!--]--></section></main>"
+        );
+    }
+
+    /// Render a Root that fills Child's default slot with `fill`, and a Child
+    /// whose template loops over `rows` around `slot`.
+    fn with_scoped_child(fill: &str, slot: &str) -> HydrationRender {
+        let parent = format!(
+            r#"<main><citry-child :citry-id="$citryPrepared.child">{fill}</citry-child></main>"#
+        );
+        let child = format!(r#"<ul><li v-for="row in $citryPrepared.rows">{slot}</li></ul>"#);
+        render(
+            &[
+                (
+                    "Root",
+                    parent.as_str(),
+                    json!({"child": "occ-Child"}),
+                    json!({}),
+                ),
+                (
+                    "Child",
+                    child.as_str(),
+                    json!({"rows": ["a", "b"]}),
+                    json!({}),
+                ),
+            ],
+            0,
+        )
+    }
+
+    #[test]
+    fn a_fill_reads_the_props_its_outlet_passes() {
+        const ROWS: &str = "<main><ul><!--[--><li><!--[--><b>a</b><!--]--></li><li><!--[--><b>b</b><!--]--></li><!--]--></ul></main>";
+        // The outlet's props are read with the child's data; each form of
+        // slot function Citry writes binds them.
+        for fill in [
+            r#"<template #default="{ row }"><b>{{ row }}</b></template>"#,
+            r#"<template #default="{ row: item }"><b>{{ item }}</b></template>"#,
+            r#"<template #default="p"><b>{{ p.row }}</b></template>"#,
+            // An i18n page puts its context names first; they read as
+            // unknown, which only matters to a part that uses them.
+            r#"<template #default="{ $i18n, row }"><b>{{ row }}</b></template>"#,
+        ] {
+            let result = with_scoped_child(fill, r#"<slot :row="row"></slot>"#);
+            assert_eq!(html(&result), ROWS, "{fill}");
+        }
+        // Citry's pattern binds the `key` Vue adds to a `v-if` outlet to its
+        // own name, so the rest does not collect it.
+        let result = with_scoped_child(
+            r#"<template #default="{ key: citrySlotKey, ...p }"><b>{{ p.row }}</b></template>"#,
+            r#"<slot v-if="true" :row="row"></slot>"#,
+        );
+        assert_eq!(html(&result), ROWS);
+    }
+
+    #[test]
+    fn a_slot_prop_the_server_cannot_read_leaves_only_its_reader_to_the_browser() {
+        let result = with_scoped_child(
+            r#"<template #default="{ row }"><b>{{ row }}</b></template>"#,
+            r#"<slot :row="missing"></slot>"#,
+        );
+        assert_eq!(
+            html(&result),
+            r#"<main><ul><!--[--><li><!--[--><b data-allow-mismatch="children"></b><!--]--></li><li><!--[--><b data-allow-mismatch="children"></b><!--]--></li><!--]--></ul></main>"#
+        );
+        assert_eq!(
+            declines(&result),
+            [
+                ("browser-value", "text", Some("b")),
+                ("browser-value", "text", Some("b"))
+            ]
+        );
+        // A prop the outlet does not pass is `undefined`, as in Vue.
+        let result = with_scoped_child(
+            r#"<template #default="{ row }"><b>{{ row }}</b></template>"#,
+            "<slot></slot>",
+        );
+        assert_eq!(
+            html(&result),
+            "<main><ul><!--[--><li><!--[--><b></b><!--]--></li><li><!--[--><b></b><!--]--></li><!--]--></ul></main>"
+        );
+    }
+
+    #[test]
+    fn a_fill_inside_a_shell_reads_its_own_slot_props_not_an_outer_fills() {
+        // List and Inner both pass `row`; the inner fill sits in a shell
+        // (its `v-if` is browser-only), whose contents must still show the
+        // inner value. A declined inner pattern shows neither value.
+        let cases = [
+            (
+                "{ row }",
+                r#"<main><section><!--[--><div><!--[--><p data-allow-mismatch="children"><s data-t="INNER">x</s></p><!--]--></div><!--]--></section></main>"#,
+            ),
+            (
+                "{ row = 'd' }",
+                r#"<main><section><!--[--><div data-allow-mismatch="children"><p><s>x</s></p></div><!--]--></section></main>"#,
+            ),
+        ];
+        for (inner_fill, expected) in cases {
+            let root = format!(
+                r#"<main><citry-list :citry-id="$citryPrepared.list"><template #default="{{ row }}"><citry-inner :citry-id="$citryPrepared.inner"><template #default="{inner_fill}"><p><s v-if="browserOnly" :data-t="row.title">x</s></p></template></citry-inner></template></citry-list></main>"#
+            );
+            let result = render(
+                &[
+                    (
+                        "Root",
+                        root.as_str(),
+                        json!({"list": "occ-List", "inner": "occ-Inner"}),
+                        json!({}),
+                    ),
+                    (
+                        "List",
+                        r#"<section><slot :row="$citryPrepared.r"></slot></section>"#,
+                        json!({"r": {"title": "OUTER"}}),
+                        json!({}),
+                    ),
+                    (
+                        "Inner",
+                        r#"<div><slot :row="{ title: 'INNER' }"></slot></div>"#,
+                        json!({}),
+                        json!({}),
+                    ),
+                ],
+                0,
+            );
+            assert_eq!(html(&result), expected, "{inner_fill}");
+        }
+    }
+
+    #[test]
+    fn slot_props_read_the_outlets_data_and_a_rest_holds_only_the_others() {
+        // Both components have a `label`; the outlet's own one is passed.
+        let result = render(
+            &[
+                (
+                    "Root",
+                    r#"<main><citry-child :citry-id="$citryPrepared.child"><template #default="{ text, ...rest }"><b v-if="rest.text">bad</b><b v-else>{{ text }}{{ rest.other }}</b></template></citry-child></main>"#,
+                    json!({"child": "occ-Child"}),
+                    json!({"label": "parent"}),
+                ),
+                (
+                    "Child",
+                    r#"<div><slot :text="label" other="o"></slot></div>"#,
+                    json!({}),
+                    json!({"label": "child"}),
+                ),
+            ],
+            0,
+        );
+        assert_eq!(
+            html(&result),
+            "<main><div><!--[--><b>childo</b><!--]--></div></main>"
+        );
+    }
+
+    #[test]
+    fn a_nested_slot_pattern_is_left_to_the_browser() {
+        let result = with_scoped_child(
+            r#"<template #default="{ row: { title } }"><b>{{ title }}</b></template>"#,
+            r#"<slot :row="row"></slot>"#,
+        );
+        assert_eq!(
+            html(&result),
+            r#"<main><ul><!--[--><li data-allow-mismatch="children"><b></b></li><li data-allow-mismatch="children"><b></b></li><!--]--></ul></main>"#
+        );
+        assert_eq!(
+            declines(&result),
+            [
+                ("slot-props", "default", Some("li")),
+                ("slot-props", "default", Some("li"))
+            ]
+        );
+    }
+
+    #[test]
+    fn a_middle_component_passes_the_whole_props_object_on() {
+        // Middle receives List's props as one object and hands it to the
+        // Root's fill with `v-bind`, as Citry writes a fill that one
+        // component passes on to another.
+        let result = render(
+            &[
+                (
+                    "Root",
+                    r#"<main><citry-middle :citry-id="$citryPrepared.middle"><template #cell="{ row }"><b>{{ row }}</b></template></citry-middle></main>"#,
+                    json!({"middle": "occ-Middle"}),
+                    json!({}),
+                ),
+                (
+                    "Middle",
+                    r#"<citry-list :citry-id="$citryPrepared.list"><template #default="citrySlotProps"><slot name="cell" v-bind="citrySlotProps"></slot></template></citry-list>"#,
+                    json!({"list": "occ-List"}),
+                    json!({}),
+                ),
+                (
+                    "List",
+                    r#"<ul><li v-for="row in $citryPrepared.rows"><slot :row="row"></slot></li></ul>"#,
+                    json!({"rows": ["a"]}),
+                    json!({}),
+                ),
+            ],
+            0,
+        );
+        assert_eq!(
+            html(&result),
+            "<main><ul><!--[--><li><!--[--><!--[--><b>a</b><!--]--><!--]--></li><!--]--></ul></main>"
         );
     }
 

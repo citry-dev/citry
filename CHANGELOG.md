@@ -14,7 +14,8 @@
   `<c-slot name="item" :row="row" />`, and read it in the fill with
   `<c-fill name="item" v-slot="{ row }">`. Python slot data (`c-item`,
   `data="..."`) works beside it
-  ([details](https://citry.dev/vue/slots/#scoped-slots)).
+  ([details](https://citry.dev/vue/slots/#scoped-slots)). When the server
+  knows the slot's values, it writes the fill's HTML with them.
 - Citry now supports Python 3.15.
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
