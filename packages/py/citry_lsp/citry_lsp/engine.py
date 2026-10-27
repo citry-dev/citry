@@ -10962,10 +10962,13 @@ def _accepts_citry_listener_modifiers(tag_name: str) -> bool:
     This mirrors the parser's rule: the parser rejects them on component
     tags, where the listener may receive the component's emitted events
     rather than DOM events, and on Vue's `<template>`, `<slot>` and
-    `<component>`, which render no element of their own. `<c-element>`
-    renders a plain HTML element, so it accepts them.
+    `<component>`, which render no element of their own. A tag that starts
+    with a capital letter, such as `<MyThing>`, is a Vue component too.
+    `<c-element>` renders a plain HTML element, so it accepts them.
     """
     if tag_name.startswith("c-") and tag_name[2:].lower() != "element":
+        return False
+    if tag_name[:1].isupper():
         return False
     return tag_name.lower() not in {"template", "slot", "component"}
 
@@ -11042,7 +11045,9 @@ def _vue_listener_modifier_completion_result(
     used = {text for index, (_start, _end, text) in enumerate(segments) if index != current and text}
 
     items: list[types.CompletionItem] = []
-    citry_modifiers = _accepts_citry_listener_modifiers(tag_name)
+    # Citry's modifiers need the event name written out, so a dynamic name
+    # (`@[name]`) gets Vue's own modifiers only.
+    citry_modifiers = _accepts_citry_listener_modifiers(tag_name) and event is not None
     # A duration already follows this segment, and the parser accepts it
     # only right after `.debounce` or `.throttle`, so nothing else fits.
     before_duration = following is not None and _CITRY_TIME_SEGMENT.fullmatch(following) is not None

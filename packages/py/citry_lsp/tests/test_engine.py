@@ -1900,7 +1900,8 @@ _TIMING_DURATIONS = {".100ms", ".250ms", ".300ms", ".500ms", ".1s"}
         ("<div @keydown.></div>", "@keydown.", _VUE_OWN_MODIFIERS | _KEY_MODIFIERS | _CITRY_LISTENER_MODIFIERS),
         # Only the browser knows a dynamic event, so no key names are
         # offered, and Vue reads `.left` and `.right` there as keys too.
-        ("<div @[name].></div>", "@[name].", _VUE_OWN_MODIFIERS | {".middle"} | _CITRY_LISTENER_MODIFIERS),
+        # Citry's modifiers need the event name written out.
+        ("<div @[name].></div>", "@[name].", _VUE_OWN_MODIFIERS | {".middle"}),
         (
             "<div @input.debounce.></div>",
             "debounce.",
@@ -2011,6 +2012,8 @@ def test_vue_listener_modifier_completion_before_a_duration(template, current, e
         "<template @click.></template>",
         "<slot @click.></slot>",
         "<component @click.></component>",
+        # Vue reads a tag that starts with a capital letter as a component.
+        "<MyThing @click.></MyThing>",
     ],
 )
 def test_vue_listener_modifier_completion_leaves_citry_modifiers_off_non_elements(source):
@@ -2169,7 +2172,6 @@ def test_vue_listener_hover_keeps_the_listener_help_for_the_event_and_unknown_ke
     [
         ('@click.outside.window="close"', "combines '.outside' and '.window'"),
         ('@click.window.document="close"', "combines '.window' and '.document'"),
-        ('@[name].window.document="close"', "combines '.window' and '.document'"),
         ('@click.outside.self="close"', "combines '.outside' with '.self'"),
         ('@click.outside.capture="close"', "combines '.outside' with '.capture'"),
         ('@click.outside.once="close"', "combines '.outside' with '.once'"),
