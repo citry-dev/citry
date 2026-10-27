@@ -24,10 +24,11 @@ must render, and the cached component must replay from the cache.
 
 The test also measures how many frames a render needs: the deepest stack at
 the limit may be at most 20 frames above the deepest stack at depth 8, or,
-with Vue, at depth 128 (see `VUE_COMPARISON_DEPTH`). A chain of four
-components that pass a slot on may cost at most 12 frames per extra
-component. It prints every number, so the measured margin is on record in
-the CI log.
+with Vue, at depth 128 (see `VUE_COMPARISON_DEPTH`), plus the fixed cost of
+copying the first levels of the data Vue receives (`VUE_DIRECT_JSON_FRAMES`).
+A chain of four components that pass a slot on may cost at most 12 frames
+per extra component. It prints every number, so the measured margin is on
+record in the CI log.
 
 Each render path runs in its own subprocess, so the lowered recursion limit
 never reaches the pytest process, and in its own test file, so CI runs the
@@ -56,6 +57,7 @@ import pytest
 from citry import Citry, Component
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
+from citry._vue.json_data import _DIRECT_JSON_DEPTH
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -79,6 +81,13 @@ FRAMES_PER_HOP = 12
 # between depth 64 and 128, so with Vue the peak at the limit is compared
 # with the peak at this depth instead of at `SHALLOW`.
 VUE_COMPARISON_DEPTH = 128
+# The data a Vue component sends the browser is copied with direct calls
+# for its first `_DIRECT_JSON_DEPTH` (32) levels, and with a loop below
+# that, so it is another fixed cost. Some fixtures' data only gets that deep
+# between `VUE_COMPARISON_DEPTH` and the limit, so with Vue the deepest
+# stack may grow by that many frames more. On 3.11 each of those levels is
+# two frames, because a comprehension runs in a frame of its own there.
+VUE_DIRECT_JSON_FRAMES = _DIRECT_JSON_DEPTH * (2 if sys.version_info < (3, 12) else 1)
 
 
 # The two test files mark their test with this.
@@ -411,6 +420,7 @@ def _measure(
         "expects_innermost": expects_innermost,
         "cached_renders": normal["cached_renders"],
         "comparison_depth": comparison_depth,
+        "uses_vue": uses_vue,
         "comparison_peak": _peak_frames(lambda: _render_twice(build(comparison_depth)[1])),
         "deep_peak": _peak_frames(lambda: _render_twice(build(LOGIC_LIMIT)[1])),
     }
@@ -495,7 +505,8 @@ def check_render_path(render_path: str) -> None:
     grew = {
         name: (numbers["comparison_depth"], numbers["comparison_peak"], numbers["deep_peak"])
         for name, numbers in results.items()
-        if numbers["deep_peak"] - numbers["comparison_peak"] > ALLOWED_GROWTH
+        if numbers["deep_peak"] - numbers["comparison_peak"]
+        > ALLOWED_GROWTH + (VUE_DIRECT_JSON_FRAMES if numbers["uses_vue"] else 0)
     }
     assert not grew, f"(depth compared, frames there, frames at {LOGIC_LIMIT}): {grew}"
     for variant in ("html", "vue"):
