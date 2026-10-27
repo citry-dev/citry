@@ -10,7 +10,7 @@ everything else reads. Design: ``docs/design/events.md`` section 3.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from difflib import get_close_matches
 from types import FunctionType
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -54,6 +54,7 @@ from citry.ext.events.state import (
     check_replaced_state,
     convert_state_class,
     resolve_state_meta,
+    state_field_names,
     validate_state_class,
 )
 from citry.ext.events.view_events import view_events_routes
@@ -691,7 +692,7 @@ class EventsExtension(Extension):
             f"Component {comp_name}: Events._throttle",
             self._resolve_config_value(raw_events, "_throttle", defaults),
         )
-        state_fields = tuple(f.name for f in fields(state_cls)) if state_cls is not None else None
+        state_fields = state_field_names(state_cls) if state_cls is not None else None
         topics = validate_topics_value(
             f"Component {comp_name}: Events._topics",
             self._resolve_config_value(raw_events, "_topics", defaults),
