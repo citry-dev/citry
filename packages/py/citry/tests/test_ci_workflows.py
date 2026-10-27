@@ -51,6 +51,7 @@ def test_pull_request_workflows_cancel_only_stale_pull_request_runs() -> None:
         "repo--discord-pr.yml",
         "repo--docs-check.yml",
         "repo--docs-lighthouse.yml",
+        "repo--dom-members.yml",
         "repo--generated.yml",
         "repo--security.yml",
         "rust--tests.yml",

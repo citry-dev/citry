@@ -565,6 +565,14 @@
   The same rendered component id was encountered more than once`, and on
   a Vue page it failed even for a component used on its own, as did a
   hook that returns `result` unchanged.
+- In a component that uses Vue, a static attribute that the element has
+  no property for, or whose property mirrors the attribute as text, such as
+  `foo="1"`, is now written by the server, where the element around it
+  used to be rendered in the browser. `inert`, `autofocus` outside form
+  controls, `<dialog open>`, and a `<form>` attribute that may match the `name` or
+  `id` of a control inside it now leave that part to the browser. Such a
+  form now leaves its parent, or the whole page when the form is at the
+  page root, to the browser.
 
 ### Performance
 
