@@ -201,7 +201,9 @@ def test_registered_name_beginning_with_component_prefix_resolves_once():
 
 def test_inherited_file_template_is_projected_onto_each_registered_consumer(tmp_path: Path):
     source_path = tmp_path / "shared.html"
-    source_path.write_text("<c-leaf />\n", encoding="utf-8")
+    # CR LF line endings, with the reference after the first line break, so the
+    # offsets only match if each line break counts as one byte.
+    source_path.write_text("<p></p>\n<c-leaf />\n", encoding="utf-8", newline="\r\n")
     app = Citry(autodiscover=False)
 
     class Leaf(Component):
@@ -230,7 +232,10 @@ def test_inherited_file_template_is_projected_onto_each_registered_consumer(tmp_
             f"{__name__}.test_inherited_file_template_is_projected_onto_each_registered_consumer.<locals>.Base"
         )
         assert reference.location.declared_on == expected_owner
-        assert source_path.read_bytes()[reference.location.start_index : reference.location.end_index] == b"c-leaf"
+        # The offsets count each line break as one "\n" byte, as Python reads a
+        # text file, so slice the text as Python reads it, not the raw bytes.
+        text = source_path.read_text(encoding="utf-8")
+        assert text.encode("utf-8")[reference.location.start_index : reference.location.end_index] == b"c-leaf"
     assert app._file_index == {}
 
 
