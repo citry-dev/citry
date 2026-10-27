@@ -292,7 +292,9 @@ an `int`.
 
 ### Slot data in fills
 
-Once your app is loaded, Citry checks each use of a fill's `data` name
+When a child component's slot passes data, `<c-fill data="card">` gives
+that data the name `card`. Once your app is
+[connected](#connect-your-app), the editor checks each use of `card`
 against the fields of the slot's data class. When the child declares
 `footer: SlotInput[FooterData]` in its `Slots`, a misspelled field or a
 wrong use of one is an error:
@@ -309,11 +311,16 @@ wrong use of one is an error:
 </c-Card>
 ```
 
-`card` stays a read-only mapping, as it is at runtime, so `card["aria-label"]`
-and `len(card)` are not errors. A field named like a mapping method, such as
-`items`, is read with brackets, as at runtime. A fill for a slot whose name
-is computed with `c-name`, or whose data class is an open type such as
-`dict[str, Any]`, is not checked.
+`card` is a read-only mapping, as it is at runtime, so `card["aria-label"]`
+and `len(card)` are not errors. Read a field with brackets, such as
+`card["items"]`, when its name is also a mapping method or starts with
+`_`. At runtime `card.items` is the mapping's own method, and
+`card._id` is an error.
+
+The editor does not check a fill whose slot name is set with `c-name` or
+`c-bind`, or a fill for a slot whose data type lists no fields, such as
+`SlotInput[dict[str, Any]]`. `citry check --types` reports the same
+errors.
 
 ## Vue and component JS { #complete-vue-expressions-and-component-javascript }
 
