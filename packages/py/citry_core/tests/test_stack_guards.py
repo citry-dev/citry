@@ -25,6 +25,8 @@ import textwrap
 
 import pytest
 
+from citry_core import _rust
+
 pytestmark = pytest.mark.skipif(
     sys.version_info < (3, 14), reason="only CPython 3.14 and later check the stack left before a call"
 )
@@ -79,9 +81,13 @@ thread.start()
 thread.join()
 """
 
+# A `<div c-for>` is two levels, the tag and the loop around it, so this
+# many of them reach both nesting limits at once: 512 tags, 256 of them
+# Citry logic.
+_LOOPS = _rust.template_parser._MAX_LOGIC_NESTING
 _DEEP_TEMPLATE = (
-    "''.join(f'<div c-for=\"row{level} in rows\">' for level in range(256))"
-    " + '<div>' * 144 + '{{ n }}' + '</div>' * 144 + '</div>' * 256"
+    f"''.join(f'<div c-for=\"row{{level}} in rows\">' for level in range({_LOOPS}))"
+    f" + '{{{{ n }}}}' + '</div>' * {_LOOPS}"
 )
 
 WORK = {
@@ -136,8 +142,10 @@ def test_entry_points_start_with_little_stack_left(name: str) -> None:
     )
     # Exit code 0 means no crash, and "done" means the loop finished.
     assert result.returncode == 0, result.stderr[-2000:]
-    word, closest = result.stdout.split()
-    assert word == "done", result.stderr[-2000:]
+    # An exception other than the ones the harness expects ends the thread
+    # without printing, so the exit code alone does not show it.
+    assert result.stdout.startswith("done"), result.stderr[-2000:]
+    _word, closest = result.stdout.split()
     # Each level of the probe uses about 0.7 KiB (measured on macOS arm64),
     # and CPython refuses a call with about 20 KiB left. So a call that
     # returned within 40 levels of the limit started with less than about

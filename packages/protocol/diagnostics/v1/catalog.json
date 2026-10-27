@@ -66,6 +66,40 @@
       "documentationPath": "/ide/diagnostics/#citry.parse.value"
     },
     {
+      "code": "citry.parse.too-deep",
+      "constant": "PARSE_TOO_DEEP",
+      "title": "Template nested too deeply",
+      "summary": "The template nests tags deeper than Citry allows, so it does not render.",
+      "when": "A tag would sit more than 512 levels deep, or more than 256 Citry logic levels deep: every c- tag except <c-raw>, and each c-if=, c-elif=, c-else, c-for= or c-empty attribute. A template inside an attribute counts from the depth of the tag that holds it.",
+      "fix": "Move the inner part into its own component's template, which starts counting from zero. Markup passed to a component between its tags still counts toward the template that writes it.",
+      "defaultSeverity": "error",
+      "surfaces": [
+        "parser",
+        "formatter",
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Parser-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
+      "examples": [
+        {
+          "title": "Tags of any kind past the total limit",
+          "language": "citry-html",
+          "source": "<div>\n  <div>\n    <!-- ... 510 more nested <div> tags ... -->\n    <p>Too deep</p>\n  </div>\n</div>"
+        },
+        {
+          "title": "Logic tags past the logic limit",
+          "language": "citry-html",
+          "source": "<c-if cond=\"a\">\n  <c-for each=\"item in items\">\n    <!-- ... 254 more nested logic tags ... -->\n    <c-if cond=\"b\">Too deep</c-if>\n  </c-for>\n</c-if>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.parse.too-deep"
+    },
+    {
       "code": "citry.parse.configuration",
       "constant": "PARSE_CONFIGURATION",
       "title": "Template parser setup failed",

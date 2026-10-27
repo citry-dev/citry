@@ -167,8 +167,27 @@ pub fn compile_prepared_template(
         ));
     }
     let lang_impl = selected.to_lang_impl();
+    check_template_depth(&template)?;
     let body_items = compile_template_body_with_mode(template, CompileMode::Prepared)?;
     lang_impl.compile(body_items).map_err(CompileError::Generic)
+}
+
+/// Reject a tree that nests past the parser's limits before the compiler
+/// walks it.
+///
+/// The parser already stops at those limits, so this matters only for a
+/// tree built by hand. It walks the tree on its own stack, so it is safe at
+/// any depth, and it uses the parser's own counting and wording.
+pub fn check_template_depth(template: &Template) -> Result<(), CompileError> {
+    match crate::nesting::first_too_deep_tag(template) {
+        Some((token, message)) => {
+            let (line, column) = token.line_col;
+            Err(CompileError::Syntax(format!(
+                "{message} The tag starts at line {line}, column {column}."
+            )))
+        }
+        None => Ok(()),
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -210,6 +229,7 @@ pub fn compile_template_with_custom_lang(
 }
 
 pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>, CompileError> {
+    check_template_depth(&template)?;
     compile_template_body_with_mode(template, CompileMode::Html)
 }
 

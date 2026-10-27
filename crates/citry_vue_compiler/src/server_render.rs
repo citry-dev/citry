@@ -484,8 +484,8 @@ struct Reader {
 /// leaves the rest unread for the browser to build.
 ///
 /// A plain element costs one level and an element with `v-if` or `v-for`
-/// two, so the render code of a template at the nesting limits planned in
-/// #272 (512 nested tags, 256 of them control flow) reads about 770 levels
+/// two, so the render code of a template at the nesting limits from
+/// #272 (512 nested tags, 256 of them Citry logic) reads about 770 levels
 /// deep (measured). Each level runs through `with_enough_stack`, so the cap
 /// does not protect the stack. It stops much deeper render code, such as a
 /// chain of thousands of interpolations, and it bounds the depth of the
@@ -2362,7 +2362,7 @@ fn render_page(request: &RenderRequest<'_>) -> HydrationRender {
 }
 
 /// How deep a page's manifest may nest and still be rendered on the server.
-/// The data of a template at the nesting limits planned in #272 nests about
+/// The data of a template at the nesting limits from #272 nests about
 /// 520 levels (256 nested `<c-for>` tags); deeper data makes the page mount
 /// in the browser. The count includes the manifest's own three outer levels.
 const MAX_MANIFEST_DEPTH: usize = 2048;
@@ -2570,8 +2570,8 @@ struct Cx {
 /// mounts in the browser when there is none).
 ///
 /// An element costs two levels (its node and its children) and `v-if` or
-/// `v-for` on it one more, so a template at the nesting limits planned in
-/// #272 (512 nested tags, 256 of them control flow) writes about 1,300
+/// `v-for` on it one more, so a template at the nesting limits from
+/// #272 (512 nested tags, 256 of them Citry logic) writes about 1,300
 /// levels deep (measured). Each level runs through `with_enough_stack`, so
 /// the cap does not protect the stack; it stops much deeper output.
 /// `MAX_ELEMENT_DEPTH` usually stops nested elements first.

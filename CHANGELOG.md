@@ -176,6 +176,13 @@
   `--include-libraries`, or set `LintSettings(include_libraries=True)`, to
   report them
   ([details](https://citry.dev/advanced/cli/#check-library-components)).
+- **Breaking:** a template can now nest tags at most 512 levels deep, and
+  at most 256 of those levels can be Citry logic: every `c-` tag except
+  `<c-raw>`, and each `c-if=`, `c-elif=`, `c-else`, `c-for=` or `c-empty`
+  attribute. A deeper template raises `SyntaxError` at the tag that goes
+  too deep, and `citry check` reports it as `citry.parse.too-deep`; move
+  the inner part into its own component. Plain elements nested more than
+  512 deep used to render.
 - Output that an `on_render` hook passes to another component, as in
   `return Frame(body=result)`, or that an `on_component_rendered` hook
   passes on as `ctx.render`, no longer carries the component's own

@@ -167,6 +167,16 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_submodule(&template_parser_mod)?;
     // Functions
     template_parser_mod.add_function(wrap_pyfunction!(parse_template, &template_parser_mod)?)?;
+    // The nesting limits, private and read by Python tests, so the tests and
+    // the parser cannot drift apart.
+    template_parser_mod.add(
+        "_MAX_TAG_NESTING",
+        citry_template_parser::nesting::MAX_TAG_NESTING,
+    )?;
+    template_parser_mod.add(
+        "_MAX_LOGIC_NESTING",
+        citry_template_parser::nesting::MAX_LOGIC_NESTING,
+    )?;
     template_parser_mod.add_function(wrap_pyfunction!(compile_template, &template_parser_mod)?)?;
     template_parser_mod.add_function(wrap_pyfunction!(
         compile_prepared_template,

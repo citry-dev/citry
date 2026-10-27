@@ -242,8 +242,8 @@ fn _extract_free_variables_from_comp_expr(
 //
 // The passes below walk the tree with loops over a flat node list and
 // explicit work lists, not recursion, so walking a deeper template needs no
-// more Rust stack. (Dropping the tree afterwards still recurses, as the
-// derived `Drop` of `LangSpecArgument` does everywhere.)
+// more Rust stack. Dropping the tree afterwards frees it from a list too
+// (the `Drop` of `LangSpecArgument` in `lang.rs`).
 
 /// The most open brackets one generated statement may hold.
 ///

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
@@ -11,6 +11,7 @@ use crate::error::ParseError;
 use crate::foreign::ForeignSpan;
 use crate::grammar::Rule;
 use crate::lang::lang::LangImpl;
+use crate::nesting::NestingDepth;
 use crate::utils::line_index::LineIndex;
 
 /// Attribute validation rules for special tags
@@ -139,6 +140,17 @@ pub struct ParserContext {
     foreign_spans: Rc<Vec<ForeignSpan>>,
     /// Claims already attached to exactly one supported semantic locus.
     claimed_foreign: Rc<RefCell<HashSet<(String, usize)>>>,
+    /// Where this template's nesting depth starts: zero for a whole
+    /// template, and the owning tag's depth for a template written in an
+    /// attribute, so the combined depth is what the limits check.
+    pub(crate) depth_base: NestingDepth,
+    /// The depth of the tags open around the element being parsed. The parse
+    /// loop sets it before it reads each tag.
+    open_depth: Cell<NestingDepth>,
+    /// The depth of the start tag whose attributes are being parsed: its
+    /// open depth plus the tag itself. A template in one of its attributes
+    /// starts counting from here.
+    owner_depth: Cell<NestingDepth>,
 }
 
 impl ParserContext {
@@ -155,6 +167,9 @@ impl ParserContext {
             nested_template_bindings: Rc::new(RefCell::new(HashMap::new())),
             foreign_spans: Rc::new(Vec::new()),
             claimed_foreign: Rc::new(RefCell::new(HashSet::new())),
+            depth_base: NestingDepth::default(),
+            open_depth: Cell::new(NestingDepth::default()),
+            owner_depth: Cell::new(NestingDepth::default()),
         }
     }
 
@@ -216,7 +231,28 @@ impl ParserContext {
             nested_template_bindings: Rc::clone(&self.nested_template_bindings),
             foreign_spans: Rc::clone(&self.foreign_spans),
             claimed_foreign: Rc::clone(&self.claimed_foreign),
+            // A template in an attribute is nested inside the tag that holds
+            // it, so its depth continues from that tag's.
+            depth_base: self.owner_depth.get(),
+            open_depth: Cell::new(self.owner_depth.get()),
+            owner_depth: Cell::new(self.owner_depth.get()),
         }
+    }
+
+    /// Record the depth of the tags open around the element about to be read.
+    pub(crate) fn set_open_depth(&self, depth: NestingDepth) {
+        self.open_depth.set(depth);
+    }
+
+    /// Record that the start tag `tag_name` is being read, so a template in
+    /// one of its attributes counts from below it. Its shorthand attributes
+    /// are not known yet, so only the tag itself is added.
+    pub(crate) fn enter_start_tag(&self, tag_name: &str) {
+        let tag = NestingDepth {
+            total: 1,
+            logic: usize::from(crate::nesting::is_logic_tag(tag_name)),
+        };
+        self.owner_depth.set(self.open_depth.get().plus(tag));
     }
 
     /// Return a byte-length-preserving parse copy whose foreign bytes are
@@ -464,6 +500,79 @@ impl ParserContext {
     /// Build an error from a token whose indices are already root-absolute.
     pub(crate) fn error_from_token(&self, token: &Token, message: String) -> ParseError {
         self.error_from_absolute_range(token.start_index, token.end_index, message)
+    }
+
+    /// Build the error for a tag that nests too deeply, at that tag's token.
+    ///
+    /// It is built like `error_from_token`, from root-source positions, so it
+    /// points at the right place inside a template written in an attribute
+    /// too. A span that does not fit the source falls back to
+    /// `ParseError::Value`, as `error_from_token` does.
+    pub(crate) fn too_deep_from_token(&self, token: &Token, message: String) -> ParseError {
+        match self.error_from_token(token, message.clone()) {
+            ParseError::Syntax(error) => {
+                let frame = self.trimmed_frame(token, message);
+                ParseError::TooDeep(error, frame)
+            }
+            other => other,
+        }
+    }
+
+    /// Render the error frame from the part of a long line around `token`,
+    /// or return `None` when the line is short enough to show whole.
+    ///
+    /// The frame is rendered by Pest from a copy that holds only that part
+    /// of the line, cut at character boundaries and marked with `…` where it
+    /// was cut. The copy starts with as many line breaks as come before the
+    /// line, so the line number in the frame is the real one, and the
+    /// column in its `-->` header is set back to the real column.
+    fn trimmed_frame(&self, token: &Token, message: String) -> Option<String> {
+        /// Lines up to this many bytes are shown whole.
+        const MAX_SHOWN_LINE: usize = 240;
+        /// Bytes kept on each side of the tag's start.
+        const CONTEXT: usize = 80;
+
+        let source = self.root_source.as_str();
+        let start = token.start_index;
+        let line_start = source[..start].rfind('\n').map_or(0, |index| index + 1);
+        let line_end = source[start..]
+            .find('\n')
+            .map_or(source.len(), |index| start + index);
+        if line_end - line_start <= MAX_SHOWN_LINE {
+            return None;
+        }
+        let floor = |mut index: usize| {
+            while !source.is_char_boundary(index) {
+                index -= 1;
+            }
+            index
+        };
+        let window_start = floor(start.saturating_sub(CONTEXT).max(line_start));
+        let window_end = floor((start + CONTEXT).min(line_end));
+        let cut_before = if window_start > line_start { "…" } else { "" };
+        let cut_after = if window_end < line_end { "…" } else { "" };
+        let (line, column) = token.line_col;
+        let prefix = "\n".repeat(line - 1);
+        let copy = format!(
+            "{prefix}{cut_before}{}{cut_after}",
+            &source[window_start..window_end]
+        );
+        let copy_start = prefix.len() + cut_before.len() + (start - window_start);
+        let copy_end =
+            prefix.len() + cut_before.len() + (token.end_index.min(window_end) - window_start);
+        let span = pest::Span::new(&copy, copy_start, copy_end)?;
+        let rendered = pest::error::Error::<Rule>::new_from_span(
+            pest::error::ErrorVariant::CustomError { message },
+            span,
+        )
+        .to_string();
+        let copy_column =
+            cut_before.chars().count() + source[window_start..start].chars().count() + 1;
+        Some(rendered.replacen(
+            &format!("--> {line}:{copy_column}"),
+            &format!("--> {line}:{column}"),
+            1,
+        ))
     }
 
     /// Build an error spanning the complete outer source.

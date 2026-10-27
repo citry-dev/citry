@@ -1572,11 +1572,12 @@ $component({});
     assert _declines(_admission(rendered)) == [("text-value", "title", "shell", "main", "Card")]
 
 
-# The nesting limits planned in #272: 512 nested tags, 256 of them control
-# flow. The server writes elements up to 400 deep inside the host, because
-# Chrome's parser moves elements nested past about 510 out of their parents.
-_TAG_NESTING = 512
-_LOGIC_NESTING = 256
+# The nesting limits from #272, read from the parser: 512 nested tags, 256
+# of them Citry logic. The server writes elements up to 400 deep inside the
+# host, because Chrome's parser moves elements nested past about 510 out of
+# their parents.
+_TAG_NESTING = _rust.template_parser._MAX_TAG_NESTING
+_LOGIC_NESTING = _rust.template_parser._MAX_LOGIC_NESTING
 _ELEMENT_NESTING = 400
 
 
@@ -1608,10 +1609,12 @@ _DEEP_TEMPLATES = {
     "elements": "<div>" * _ELEMENT_NESTING + "{{ n }}" + "</div>" * _ELEMENT_NESTING,
     # `<c-if>` writes no element, so all 512 tags fit.
     "c-if tags": _around_divs(lambda _level: '<c-if cond="n">', "</c-if>", _TAG_NESTING - _LOGIC_NESTING),
-    "c-if attributes": _around_divs(lambda _level: '<div c-if="n">', "</div>", _ELEMENT_NESTING - _LOGIC_NESTING),
+    # A `<div>` with a shorthand is two levels, the tag and the `c-if` around
+    # it, so 256 of them reach both limits with no room for more elements.
+    "c-if attributes": _around_divs(lambda _level: '<div c-if="n">', "</div>", _TAG_NESTING - 2 * _LOGIC_NESTING),
     # Each level needs its own loop variable.
     "c-for attributes": _around_divs(
-        lambda level: f'<div c-for="row{level} in rows">', "</div>", _ELEMENT_NESTING - _LOGIC_NESTING
+        lambda level: f'<div c-for="row{level} in rows">', "</div>", _TAG_NESTING - 2 * _LOGIC_NESTING
     ),
 }
 
@@ -1627,7 +1630,9 @@ def test_deep_templates_are_written_whole_on_the_server(template: str) -> None:
 
 
 def test_elements_nested_past_what_browsers_parse_become_a_shell() -> None:
-    page = _nested_page("<main>" + "<div>" * _TAG_NESTING + "{{ n }}" + "</div>" * _TAG_NESTING + "</main>")
+    # `<main>` and 511 `<div>` elements: the deepest a template may nest.
+    divs = _TAG_NESTING - 1
+    page = _nested_page("<main>" + "<div>" * divs + "{{ n }}" + "</div>" * divs + "</main>")
 
     host, admission = _hydrated_host(page)
 

@@ -52,7 +52,7 @@ const FREE_RED_ZONE: usize = 1024 * 1024;
 
 /// The stack for work in `with_large_stack`. A debug build needed about
 /// 9.3 MiB to compile 512 nested `<div v-for>` elements (measured on macOS
-/// arm64), the depth the nesting limits planned in #272 allow, so this
+/// arm64), the depth the nesting limits from #272 allow, so this
 /// leaves a margin of about 70%. A release build needs less.
 const LARGE_STACK: usize = 16 * 1024 * 1024;
 
