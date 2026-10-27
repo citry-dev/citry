@@ -422,6 +422,9 @@ def test_releasing_loading_restores_native_click_submitter_and_reset_behavior(pa
     page.locator("#toggle-loading").click()
     page.wait_for_function("!document.querySelector('#submit-action').hasAttribute('data-loading')")
 
+    # Attribute writes are skipped when unchanged, but a removal must still happen.
+    assert button.get_attribute("aria-busy") is None
+    assert button.get_attribute("aria-disabled") is None
     button.click()
 
     assert page.evaluate("window.__buttonClicks") == 1
@@ -444,6 +447,7 @@ def test_disabled_client_prop_uses_native_disabled_semantics(page):
     assert button.is_disabled()
     assert button.get_attribute("data-disabled") == ""
     assert button.get_attribute("aria-disabled") == "true"
+    assert button.get_attribute("aria-busy") is None
     page.evaluate("document.querySelector('#submit-action').click()")
     assert page.evaluate("window.__buttonClicks || 0") == 0
     assert page.evaluate("window.__buttonSubmits || 0") == 0

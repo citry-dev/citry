@@ -2254,6 +2254,78 @@ def test_correlated_rerender_distinguishes_retained_anonymous_commands_and_recov
     assert errors == []
 
 
+def test_open_menu_with_a_focused_submenu_item_is_idle(page: Any) -> None:
+    errors = _load(page)
+    _open_deepest_submenu(page)
+    # Let the open animation and the first geometry samples finish.
+    page.wait_for_timeout(700)
+    page.evaluate(
+        """() => {
+          // An idle open menu must not call focus() or write attributes. A
+          // write that changes nothing still reports a change, and the
+          // observer would reconcile and refocus. A spy is the only way to
+          // see that: the menu looks and works the same.
+          const spy = window.__menuIdle = { focus: 0, attributes: {} };
+          const focus = HTMLElement.prototype.focus;
+          HTMLElement.prototype.focus = function (...args) {
+            spy.focus += 1;
+            return focus.apply(this, args);
+          };
+          new MutationObserver((records) => {
+            for (const record of records) {
+              if (record.target.closest?.('#library-menu')) {
+                spy.attributes[record.attributeName] = (spy.attributes[record.attributeName] || 0) + 1;
+              }
+            }
+          }).observe(document, { subtree: true, attributes: true });
+        }"""
+    )
+    page.wait_for_timeout(1000)
+    spy = page.evaluate("window.__menuIdle")
+
+    assert spy["focus"] == 0
+    assert spy["attributes"] == {}
+    assert errors == []
+
+
+def test_correlated_rerender_does_not_blur_the_focused_item_a_second_time(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    app, html = _events_menu_page()
+    base = serve_citry_ui_live(app, html)
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(f"[pageerror] {error}"))
+    page.goto(base + "/")
+    page.wait_for_function("document.querySelector('#events-menu')?.hasAttribute('data-citry-menu-initialized')")
+    page.get_by_role("button", name="Library workspace").click()
+    archive = page.get_by_role("menuitem", name="Archive shelf")
+    archive.focus()
+    # Count blurs of the focused item. Chromium blurs it once when Vue moves
+    # it ("Delete shelf" is inserted before it) and Firefox not at all.
+    # Making the surface inert during setup would blur the item a second time.
+    archive.evaluate(
+        """element => {
+          window.__archiveBlurs = 0;
+          element.addEventListener('focusout', () => { window.__archiveBlurs += 1; });
+        }"""
+    )
+
+    page.locator(".advance-menu").evaluate("element => element.click()")
+    page.wait_for_function(
+        "document.querySelector('#events-menu [role=menuitem]').textContent.includes('Delete shelf')"
+    )
+    # Give a late second blur time to happen: two frames plus one task.
+    page.evaluate(
+        "() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))"
+    )
+
+    assert archive.evaluate("element => element === document.activeElement")
+    assert page.evaluate("window.__archiveBlurs") <= 1
+    assert errors == []
+
+
 def _close_animation_page() -> str:
     app = Citry(autodiscover=False)
     app.register_library(ComponentLibrary("citry-ui-menu-close-animation-e2e", _MENU_COMPONENTS))

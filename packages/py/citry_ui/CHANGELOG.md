@@ -8,6 +8,13 @@
 
 ### Fixed
 
+- An open `CMenu`, `CContextMenu`, or `CSplitButton` menu that contains a
+  submenu no longer moves focus to its current item again and again, and an
+  idle `CSplitButton` or `CTimePicker` no longer rewrites its own markup
+  hundreds of times a second. Both loops cost CPU and battery on an idle
+  page.
+- When a server re-render updates an open `CMenu`, the focused item keeps
+  focus.
 - `CTooltip` now opens or closes when a re-render changes its server `open`
   input, as the other popups do. Disabling an open tooltip, from the server
   or with the client `disabled` prop, closes it and calls

@@ -13,7 +13,9 @@ FORM_CONTROL_RUNTIME_DEPENDENCY = Script(
         const key=Symbol.for('citry-ui:form-control-runtime'),prior=globalThis[key];
         if(prior){if(prior.generation!==1)throw new Error('[citry-ui] cannot replace an incompatible form-control runtime; reload the page.');return}
         const resetKey=Symbol.for('citry-ui:form-control-reset-registry');
-        const attr=(element,name,value)=>value==null||value===''?element.removeAttribute(name):element.setAttribute(name,String(value));
+        // Skip a write whose value is already in place: it would still report an attribute change, and a
+        // control that renders again from an observer would never go idle.
+        const attr=(element,name,value)=>{if(value==null||value===''){element.removeAttribute(name);return}const text=String(value);if(element.getAttribute(name)!==text)element.setAttribute(name,text)};
         const attrs=(elements,values)=>[...elements].forEach(element=>Object.entries(values).forEach(([name,value])=>attr(element,name,value)));
         const states=(element,values)=>Object.entries(values).forEach(([name,value])=>element.toggleAttribute(`data-${name}`,Boolean(value)));
         const idrefs=(...items)=>{const out=[];items.filter(item=>typeof item==='string').forEach(item=>item.split(/\s+/).filter(Boolean).forEach(token=>{if(!out.includes(token))out.push(token)}));return out.join(' ')||null};
