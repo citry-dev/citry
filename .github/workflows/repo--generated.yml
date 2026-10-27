@@ -44,6 +44,11 @@ jobs:
         with:
           node-version: "22"
           cache: "pnpm"
+          # tools/dom-members is its own pnpm root, so its lockfile is not
+          # part of the default cache key.
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            tools/dom-members/pnpm-lock.yaml
 
       # The bundles below depend on the exact dependency versions, so install
       # them from the lockfile as the full gate does.
@@ -76,6 +81,24 @@ jobs:
         run: |
           pnpm --dir packages/editors/vscode run compile
           node packages/editors/vscode/scripts/check-built-output.mjs
+
+      # The DOM member table's generator is outside the pnpm workspace, with
+      # its own lockfile, so the install above does not reach it.
+      - name: Install the DOM member table generator
+        id: install-dom-members
+        run: pnpm --dir tools/dom-members install --frozen-lockfile
+
+      # Fails when the committed table differs from what its pinned web
+      # standards and browser data produce.
+      - name: Check the DOM member table
+        if: ${{ !cancelled() && steps.install-dom-members.outcome == 'success' }}
+        run: node tools/dom-members/generate.mjs --check
+
+      # Fails when the generator's own rules (inheritance, browser floor, the
+      # reviewed lists) stop matching the cases the tests spell out.
+      - name: Test the DOM member table generator
+        if: ${{ !cancelled() && steps.install-dom-members.outcome == 'success' }}
+        run: node --test tools/dom-members/test/generator.test.mjs
 
       - name: Set up Python
         if: ${{ !cancelled() }}

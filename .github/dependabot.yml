@@ -119,6 +119,23 @@ updates:
           - "minor"
           - "patch"
 
+  # JS - tools/dom-members, the generator for the DOM member table that the Vue
+  # server renderer reads. It is its own pnpm root (pnpm-workspace.yaml lists no
+  # packages there), so the root entry above does not reach it.
+  #
+  # Only playwright is allowed: its version fixes the browser builds that the
+  # table is tested against (repo--dom-members.yml). Every other package is left
+  # out on purpose. The web standards data and the older browser-data copies
+  # must move together with a regenerated table, which `pnpm --dir
+  # tools/dom-members run refresh` does, and @vue/runtime-dom moves with the
+  # root `vue` pin in the change that bumps Vue.
+  - package-ecosystem: "npm"
+    directory: "/tools/dom-members"
+    schedule:
+      interval: "weekly"
+    allow:
+      - dependency-name: "playwright"
+
   # GitHub Actions
   - package-ecosystem: github-actions
     # This actually targets ./.github/workflows/
