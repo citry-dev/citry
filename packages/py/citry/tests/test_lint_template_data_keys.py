@@ -104,7 +104,9 @@ class Card(Component):
 def test_a_literal_key_the_list_leaves_out_is_a_warning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Citry reads the method from its file, so the component lives in one.
     module_file = tmp_path / "citry_tests_drift_card.py"
-    module_file.write_text(_DRIFT_MODULE, encoding="utf-8")
+    # CR LF line endings on every platform, so a Windows checkout is not the
+    # only place that exercises how the finding counts line breaks.
+    module_file.write_text(_DRIFT_MODULE, encoding="utf-8", newline="\r\n")
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.delitem(sys.modules, "citry_tests_drift_card", raising=False)
     module = importlib.import_module("citry_tests_drift_card")
@@ -121,7 +123,17 @@ def test_a_literal_key_the_list_leaves_out_is_a_warning(tmp_path: Path, monkeypa
     assert finding.origin == f"{module_file} (citry_tests_drift_card.Card.template_data)"
     # The range points at the key in the component's Python file.
     assert finding.source_kind == "file"
-    assert module_file.read_bytes()[finding.start_index : finding.end_index] == b'"badge"'
+    assert b"\r\n" in module_file.read_bytes()
+    # The offsets count each line break as one "\n" byte, as Python reads a text
+    # file, so slice the text as Python reads it, not the raw bytes on disk.
+    text = module_file.read_text(encoding="utf-8")
+    assert text.encode("utf-8")[finding.start_index : finding.end_index] == b'"badge"'
+    # The module is ASCII, so the character index of the key is also its UTF-16 column.
+    key_index = text.index('"badge"')
+    assert finding.line == text.count("\n", 0, key_index)
+    assert finding.column == key_index - (text.rfind("\n", 0, key_index) + 1)
+    assert finding.end_line == finding.line
+    assert finding.end_column == finding.column + len('"badge"')
     assert report.exit_code == 0
     sys.modules.pop("citry_tests_drift_card", None)
 
