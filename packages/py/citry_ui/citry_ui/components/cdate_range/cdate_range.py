@@ -201,7 +201,7 @@ class CDateRange(LibraryComponent):
         fixed_weeks: bool = True
         placeholder: str = "Choose dates"
         range_label: str = "Choose date range"
-        change_label: str = "Change date range, {start} to {end}"
+        change_label: str = "Change date range, {start} \N{EN DASH} {end}"
         start_label: str = "Start date"
         end_label: str = "End date"
         clear_label: str = "Clear date range"
@@ -941,7 +941,7 @@ class CDateRange(LibraryComponent):
       citry-ui-date-range-label = Choose date range
       # @param {str} $start - Locale-formatted start date.
       # @param {str} $end - Locale-formatted end date.
-      citry-ui-date-range-change = Change date range, { $start } to { $end }
+      citry-ui-date-range-change = Change date range, { $start } \N{EN DASH} { $end }
       citry-ui-date-range-start-label = Start date
       citry-ui-date-range-end-label = End date
       citry-ui-date-range-clear = Clear date range

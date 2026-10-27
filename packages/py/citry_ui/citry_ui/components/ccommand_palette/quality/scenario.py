@@ -22,7 +22,7 @@ def _baseline_entries() -> tuple[object, ...]:
                     value="open-settings",
                     label="Open settings",
                     keywords=("preferences", "configuration"),
-                    shortcut="Ctrl ,",
+                    shortcut="Alt Shift O",
                 ),
                 CCommandPaletteCommand(value="create-project", label="Create project"),
                 CCommandPaletteCommand(
@@ -45,7 +45,9 @@ def _baseline_entries() -> tuple[object, ...]:
                     value="managed-command",
                     label="Managed command",
                     disabled=True,
-                    shortcut="Ctrl M",
+                    # Alt+Shift+G is deliberately not handled: a disabled
+                    # command's hint must not run it.
+                    shortcut="Alt Shift G",
                 ),
                 CCommandPaletteCommand(
                     value="delete-draft",
@@ -68,7 +70,7 @@ def _changed_entries() -> tuple[object, ...]:
                     value="open-settings",
                     label="Open workspace settings",
                     keywords=("preferences", "appearance"),
-                    shortcut="Ctrl ,",
+                    shortcut="Alt Shift O",
                 ),
                 CCommandPaletteCommand(
                     value="archive-project",
@@ -436,9 +438,44 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                 this.shortcutOpens++;
                 this.basicOpen = true;
               },
+              // Every palette here shows this hint; the key reports to
+              // the Workspace commands output. The palette shows the
+              // hint but never listens for the key, so the page handles
+              // it and records the same action as choosing "Open
+              // settings". The disabled command's hint has no case here
+              // on purpose. Few browsers use Alt+Shift+letter. On macOS,
+              // Option+Shift types a character such as Ø, so the code
+              // falls back to the key's position. In the search box this
+              // also stops macOS Option+Shift from typing that
+              // character, so an application should pick keys its users
+              // do not need to type there.
+              handleCommandShortcut(event) {
+                const target = event.target;
+                const letter = /^[a-z]$/i.test(event.key)
+                  ? event.key.toUpperCase()
+                  : event.code.replace(/^Key/, '');
+                // Leave text fields alone (input, textarea, select and
+                // contenteditable), except a combobox such as the
+                // palette's search box. A checkbox takes no typing and
+                // keeps focus after a click, so the key still works
+                // while one is focused.
+                const typing = target.matches(
+                  'textarea, select, input:not([type=checkbox])'
+                ) || target.isContentEditable;
+                if (
+                  letter !== 'O'
+                  || !event.altKey || !event.shiftKey
+                  || event.ctrlKey || event.metaKey
+                  || event.isComposing
+                  || (typing && target.getAttribute('role') !== 'combobox')
+                ) return;
+                event.preventDefault();
+                this.basicAction = 'open-settings';
+              },
             },
             mounted() {
               window.addEventListener("keydown", this.handleShortcut);
+              window.addEventListener("keydown", this.handleCommandShortcut);
               this.$nextTick(() => {
                 const host = this.$refs.shadowHost;
                 const fixture = this.$refs.shadowFixture;
@@ -449,6 +486,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
             },
             beforeUnmount() {
               window.removeEventListener("keydown", this.handleShortcut);
+              window.removeEventListener("keydown", this.handleCommandShortcut);
             },
           });
         """

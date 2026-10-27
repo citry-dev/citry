@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from lsprotocol import types
 
+from citry._symbol_table import symtable
+from citry._template_python import _method_bound_names, _renamable_method_locals
 from citry.analysis import (
     TemplatePythonQuery,
     TemplatePythonRoot,
@@ -2238,6 +2240,87 @@ _SIZED_CARD = (
 )
 
 
+_LOOP_NAME_REUSE_MODULE = (
+    f"{_SIZED_CARD}"
+    "class Board(Component):\n"
+    "    citry = engine\n"
+    "    template_file = 'board.html'\n"
+    "    def template_data(self, kwargs, slots):\n"
+    "        resolved: list[int] = [1]\n"
+    "        return {'items': [1, 2]}\n"
+)
+_LOOP_NAME_REUSE_TEMPLATE = '<c-for each="resolved in items"><p c-title="resolved + 1"></p></c-for>\n'
+
+
+@pytest.fixture
+def _fresh_symbol_table_caches():
+    # Both functions cache by source text, so an answer computed under another
+    # symtable state would hide what these tests check.
+    _renamable_method_locals.cache_clear()
+    _method_bound_names.cache_clear()
+    yield
+    _renamable_method_locals.cache_clear()
+    _method_bound_names.cache_clear()
+
+
+@pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
+@pytest.mark.usefixtures("_fresh_symbol_table_caches")
+@pytest.mark.asyncio
+async def test_loop_variable_reusing_a_local_name_has_no_false_error(tmp_path: Path) -> None:
+    findings = await _python_findings_in(tmp_path, _LOOP_NAME_REUSE_TEMPLATE, _LOOP_NAME_REUSE_MODULE)
+
+    assert findings == []
+
+
+@pytest.mark.usefixtures("_fresh_symbol_table_caches")
+@pytest.mark.asyncio
+async def test_loop_variable_reusing_a_local_name_gets_no_type_answer_without_symtable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Each module imported the name, so each holds its own binding. The
+    # helper builds the shadow in-process, so the patch is seen (the fixture
+    # clears both caches the shadow reads).
+    for module in ("citry._symbol_table", "citry._checker", "citry._template_python"):
+        monkeypatch.setattr(f"{module}.symtable", None)
+
+    findings = await _python_findings_in(tmp_path, _LOOP_NAME_REUSE_TEMPLATE, _LOOP_NAME_REUSE_MODULE)
+
+    # The method binds `resolved`, which the template loop also binds, so
+    # the template is not typed: no `unsupported-operator` from `list[int] + 1`.
+    assert not [item for item in findings if "unsupported-operator" in str(item[0])]
+
+
+@pytest.mark.asyncio
+async def test_listed_template_data_key_of_unknown_type_is_typed_any_not_the_special_form(tmp_path: Path) -> None:
+    # `template_data()` returns a helper's dict, so Citry cannot read its keys
+    # or types. `Lint.template_data_keys` names `loading`, which gets no type.
+    module_source = (
+        "from __future__ import annotations\n"
+        "from pathlib import Path\n"
+        "from typing import Any\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "def _build(component: Any) -> dict[str, Any]:\n"
+        "    return {'loading': True}\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    class Lint:\n"
+        "        template_data_keys = ('loading',)\n"
+        "    def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:\n"
+        "        return _build(self)\n"
+    )
+    template_source = "<p c-title=\"'' if loading else None\"></p>\n"
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # The name must hold a value typed `Any`. When it held the `Any` special
+    # form itself, ty reported that the condition "is always truthy".
+    assert [code for code, _text, _message in findings if "redundant" in str(code)] == []
+    assert findings == []
+
+
 @pytest.mark.asyncio
 async def test_template_loop_variable_does_not_take_a_same_named_template_data_local(tmp_path: Path) -> None:
     # `resolved` is also a declared local of template_data. The template loop
@@ -2268,6 +2351,7 @@ async def test_template_loop_variable_does_not_take_a_same_named_template_data_l
     assert [(code, text) for code, text, _message in findings] == [("citry.python.invalid-assignment", "1")]
 
 
+@pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
 @pytest.mark.asyncio
 async def test_c_value_check_keeps_each_returned_key_type(tmp_path: Path) -> None:
     module_source = (

@@ -141,6 +141,9 @@ enum Node {
     /// `renderSlot($slots, name, props, fallback)`.
     Slot {
         name: String,
+        /// The props the outlet passes to the fill, read in the outlet's
+        /// own component; `None` when it passes none.
+        props: Option<Expr>,
         fallback: Option<Vec<Node>>,
     },
     Unsupported(&'static str),
@@ -173,9 +176,10 @@ impl Node {
             Node::Component { props, slots, .. } => {
                 props.as_ref().is_none_or(PropsExpr::fully_supported)
                     && slots.as_ref().is_ok_and(|slots| {
-                        slots
-                            .iter()
-                            .all(|slot| slot.body.iter().all(Node::fully_supported))
+                        slots.iter().all(|slot| {
+                            !matches!(slot.params, SlotParams::Unsupported)
+                                && slot.body.iter().all(Node::fully_supported)
+                        })
                     })
             }
             Node::Fragment(nodes) => nodes.iter().all(Node::fully_supported),
@@ -186,9 +190,14 @@ impl Node {
                 otherwise,
             } => test.fully_supported() && then.fully_supported() && otherwise.fully_supported(),
             Node::Text(expr) => expr.fully_supported(),
-            Node::Slot { fallback, .. } => fallback
-                .as_ref()
-                .is_none_or(|nodes| nodes.iter().all(Node::fully_supported)),
+            Node::Slot {
+                props, fallback, ..
+            } => {
+                props.as_ref().is_none_or(Expr::fully_supported)
+                    && fallback
+                        .as_ref()
+                        .is_none_or(|nodes| nodes.iter().all(Node::fully_supported))
+            }
             Node::Null | Node::Comment(_) => true,
         }
     }
@@ -213,9 +222,32 @@ enum Directives {
 #[derive(Debug)]
 struct SlotDef {
     name: String,
-    /// Number of slot-prop parameters; scoped slots are not evaluated.
-    params: usize,
+    /// How the fill's slot function takes the props its outlet passes.
+    params: SlotParams,
+    /// Every name the parameter binds. A declined pattern still binds them,
+    /// as unknown, so the body never reads an outer name of the same spelling.
+    names: Vec<String>,
     body: Vec<Node>,
+}
+
+/// The parameter of a fill's slot function, which receives the props object
+/// the slot's outlet passes.
+#[derive(Debug)]
+enum SlotParams {
+    /// `() => [...]`: the fill reads no slot props.
+    None,
+    /// `(props) => [...]`: one name holds the whole props object.
+    Name(String),
+    /// `({ row, row: item, ...rest }) => [...]`: each `(prop, local name)`
+    /// pair, and the name that collects the remaining props.
+    Pattern {
+        props: Vec<(String, String)>,
+        rest: Option<String>,
+    },
+    /// A nested pattern, a default, or a computed key that is not a string:
+    /// the server declines the fill (`slot-props`), and the element around
+    /// its outlet becomes a shell.
+    Unsupported,
 }
 
 /// A props argument: an object literal, a data object spread with `v-bind`,
@@ -703,7 +735,8 @@ impl Reader {
 
     fn render_slot(&self, arguments: &[Argument<'_>], locals: &[String]) -> Node {
         // `renderSlot(_ctx.$slots, "name", props?, fallback?)`: the slots of
-        // this component instance, a literal name, and ignored vnode props.
+        // this component instance, a literal name, and the props the fill's
+        // slot function receives.
         let slots_object = argument(arguments, 0).map(strip);
         let own_slots = matches!(
             slots_object,
@@ -720,6 +753,27 @@ impl Reader {
         if !own_slots {
             return Node::Unsupported("render-shape");
         }
+        let props = match argument(arguments, 2).map(strip) {
+            None => None,
+            // `<slot v-bind="obj">`, which Citry writes to pass a received
+            // props object on, arrives wrapped in Vue's props helpers.
+            Some(Expression::CallExpression(call))
+                if callee(&call.callee) == Some("_normalizeProps") && call.arguments.len() == 1 =>
+            {
+                match argument(&call.arguments, 0).map(strip) {
+                    Some(Expression::CallExpression(inner))
+                        if callee(&inner.callee) == Some("_guardReactiveProps")
+                            && inner.arguments.len() == 1 =>
+                    {
+                        argument(&inner.arguments, 0).map(|value| self.expr(value, locals))
+                    }
+                    // `normalizeProps` would also normalize a class or style
+                    // the server does not; Citry writes only the form above.
+                    _ => Some(Expr::Unsupported("render-helper")),
+                }
+            }
+            Some(other) => Some(self.expr(other, locals)),
+        };
         let fallback = match argument(arguments, 3) {
             None => None,
             Some(function) => match arrow(function) {
@@ -732,6 +786,7 @@ impl Reader {
         };
         Node::Slot {
             name: name.to_owned(),
+            props,
             fallback,
         }
     }
@@ -764,15 +819,18 @@ impl Reader {
                 return Err("render-shape");
             }
             let function = argument(&call.arguments, 0).ok_or("render-shape")?;
-            let (params, body) = arrow(function).ok_or("render-shape")?;
+            let (params, names, body) = slot_function(function).ok_or("render-shape")?;
+            // The body reads the names its parameter binds as locals,
+            // because Vue's compiler writes them without the `_ctx.` prefix.
             let mut inner = locals.to_vec();
-            inner.extend(params.iter().cloned());
+            inner.extend(names.iter().cloned());
             let Expression::ArrayExpression(array) = strip(body) else {
                 return Err("render-shape");
             };
             output.push(SlotDef {
                 name,
-                params: params.len(),
+                params,
+                names,
                 body: self.array(&array.elements, &inner),
             });
         }
@@ -1013,6 +1071,98 @@ fn arrow<'b, 'a>(function: &'b Expression<'a>) -> Option<(Vec<String>, &'b Expre
         body => body.as_expression()?,
     };
     Some((params, body))
+}
+
+/// Read a fill's slot function: how it takes its props, every name its
+/// parameter binds, and the expression it returns.
+fn slot_function<'b, 'a>(
+    function: &'b Expression<'a>,
+) -> Option<(SlotParams, Vec<String>, &'b Expression<'a>)> {
+    let Expression::ArrowFunctionExpression(arrow) = strip(function) else {
+        return None;
+    };
+    if arrow.params.rest.is_some() || arrow.params.items.len() > 1 {
+        return None;
+    }
+    let mut names = Vec::new();
+    let params = match arrow.params.items.first() {
+        None => SlotParams::None,
+        Some(param) => {
+            binding_names(&param.pattern, &mut names);
+            if param.initializer.is_some() {
+                SlotParams::Unsupported
+            } else {
+                match &param.pattern {
+                    BindingPattern::BindingIdentifier(id) => SlotParams::Name(id.name.to_string()),
+                    BindingPattern::ObjectPattern(object) => slot_pattern(object),
+                    _ => SlotParams::Unsupported,
+                }
+            }
+        }
+    };
+    let body = match &arrow.body {
+        ArrowFunctionBody::FunctionBody(body) => match body.statements.as_slice() {
+            [Statement::ReturnStatement(statement)] => statement.argument.as_ref()?,
+            _ => return None,
+        },
+        body => body.as_expression()?,
+    };
+    Some((params, names, body))
+}
+
+/// The flat object patterns Citry writes, such as `{ $i18n, row: item,
+/// ...rest }`. Anything nested, defaulted or computed is left to Vue.
+fn slot_pattern(object: &oxc_ast::ast::ObjectPattern<'_>) -> SlotParams {
+    let mut props = Vec::new();
+    for property in &object.properties {
+        let BindingPattern::BindingIdentifier(local) = &property.value else {
+            return SlotParams::Unsupported;
+        };
+        let Some(key) = property_name(&property.key, property.computed) else {
+            return SlotParams::Unsupported;
+        };
+        props.push((key, local.name.to_string()));
+    }
+    let rest = match &object.rest {
+        None => None,
+        Some(rest) => match &rest.argument {
+            BindingPattern::BindingIdentifier(id) => Some(id.name.to_string()),
+            _ => return SlotParams::Unsupported,
+        },
+    };
+    SlotParams::Pattern { props, rest }
+}
+
+/// Every name a parameter pattern binds, so the body reads each as a local
+/// even when the pattern is one the server leaves to Vue.
+fn binding_names(pattern: &BindingPattern<'_>, names: &mut Vec<String>) {
+    // A pattern nests as deep as its author wrote it.
+    crate::stack::with_enough_stack(|| collect_binding_names(pattern, names));
+}
+
+fn collect_binding_names(pattern: &BindingPattern<'_>, names: &mut Vec<String>) {
+    match pattern {
+        BindingPattern::BindingIdentifier(id) => names.push(id.name.to_string()),
+        BindingPattern::ObjectPattern(object) => {
+            for property in &object.properties {
+                collect_binding_names(&property.value, names);
+            }
+            if let Some(rest) = &object.rest {
+                collect_binding_names(&rest.argument, names);
+            }
+        }
+        BindingPattern::ArrayPattern(array) => {
+            for element in array.elements.iter().flatten() {
+                collect_binding_names(element, names);
+            }
+            if let Some(rest) = &array.rest {
+                collect_binding_names(&rest.argument, names);
+            }
+        }
+        BindingPattern::AssignmentPattern(assignment) => {
+            collect_binding_names(&assignment.left, names);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1353,87 +1503,70 @@ const SPECIAL_BOOLEAN_ATTRIBUTES: [&str; 8] = [
     "readonly",
 ];
 
-/// Lowercase attribute names that are not DOM properties of any element
-/// (`key in el` is false), so Vue sets them with `setAttribute`.
-const ATTRIBUTE_ONLY: [&str; 18] = [
-    "for",
-    "colspan",
-    "rowspan",
-    "tabindex",
-    "maxlength",
-    "minlength",
-    "accesskey",
-    "contenteditable",
-    "enterkeyhint",
-    "inputmode",
-    "datetime",
-    "formaction",
-    "crossorigin",
-    // The DOM property is `fetchPriority`, so the lowercase key is not in
-    // the element and Vue writes the attribute.
-    "fetchpriority",
-    "referrerpolicy",
-    "usemap",
-    "itemprop",
-    "itemtype",
-];
-
-/// How a DOM property Vue sets reaches the element's attributes.
+/// What Vue's first client render leaves in the attribute for one element
+/// and lowercase name, in every supported browser.
+///
+/// Vue sets `el[key] = value` when `key in el` is true and calls
+/// `setAttribute` otherwise, and the server cannot run `key in el`. The
+/// answers come from the table `tools/dom-members` generates from the web
+/// platform IDL and MDN's browser data (`dom_members.rs`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Reflect {
-    /// A string property that mirrors its attribute.
-    String,
-    /// A boolean property present as `""` when true.
-    Boolean,
+pub(crate) enum DomAnswer {
+    /// The name is no member of the element, or a member that mirrors the
+    /// same-named attribute as a string, so both of Vue's paths leave the
+    /// same text.
+    WritesText,
+    /// A property that mirrors a boolean attribute, present as `""` when true.
+    ReflectBoolean,
+    /// Anything else, or any doubt: the server cannot tell what the browser
+    /// leaves, so it does not write the attribute.
+    Unknown,
 }
 
-/// Properties Vue sets with `el[key] = value` because `key in el` is true
-/// for this element, and how each mirrors its attribute. A key missing here
-/// and from [`ATTRIBUTE_ONLY`] is not written, because the server cannot
-/// tell which of Vue's two paths the browser takes for it.
-fn dom_property(tag: &str, key: &str) -> Option<Reflect> {
-    use Reflect::{Boolean, String};
-    match key {
-        "id" | "title" | "lang" | "dir" | "slot" | "role" => return Some(String),
-        "inert" | "autofocus" => return Some(Boolean),
-        _ => {}
+/// The element an attribute belongs to, as far as the answer depends on it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AttributeContext<'a> {
+    pub(crate) tag: &'a str,
+    /// Whether the element has an `is` prop. A customized built-in element
+    /// (`<button is="x-b">`) can define any property, so every name that
+    /// reaches Vue's `key in el` check is `Unknown` on it. Names Vue handles
+    /// before that check (`class`, `style`, `value`, and the ones it always
+    /// sets with `setAttribute`) are written as usual.
+    pub(crate) has_is: bool,
+}
+
+impl<'a> AttributeContext<'a> {
+    /// An element with no `is` prop, which is what most tests need.
+    #[cfg(test)]
+    pub(crate) fn plain(tag: &'a str) -> Self {
+        Self { tag, has_is: false }
     }
-    match (tag, key) {
-        ("a", "href" | "target" | "rel" | "download" | "hreflang" | "type" | "ping" | "name")
-        | ("area", "href" | "target" | "rel" | "download" | "alt" | "coords" | "shape")
-        | ("button", "name" | "type")
-        | (
-            "input",
-            "name" | "type" | "placeholder" | "min" | "max" | "step" | "pattern" | "accept" | "alt"
-            | "src" | "autocomplete",
-        )
-        | ("textarea", "name" | "placeholder" | "wrap" | "autocomplete")
-        | ("select", "name" | "autocomplete")
-        | ("option" | "optgroup", "label")
-        | ("form", "action" | "method" | "enctype" | "target" | "name" | "autocomplete" | "rel")
-        | ("fieldset" | "output", "name")
-        | ("img", "src" | "alt" | "srcset" | "sizes" | "loading" | "decoding")
-        | ("ol", "type")
-        | ("td" | "th", "headers")
-        | ("th", "abbr" | "scope")
-        | ("blockquote" | "q" | "del" | "ins", "cite")
-        | ("source", "src" | "type" | "srcset" | "sizes" | "media")
-        | ("track", "kind" | "src" | "srclang" | "label")
-        | ("video" | "audio", "src" | "preload")
-        | ("video", "poster")
-        | ("object", "data" | "type" | "name") => Some(String),
-        (
-            "button" | "fieldset" | "optgroup" | "option" | "select" | "textarea" | "input",
-            "disabled",
-        )
-        | ("input", "required" | "multiple")
-        | ("textarea" | "select", "required")
-        | ("select", "multiple")
-        | ("details" | "dialog", "open")
-        | ("ol", "reversed")
-        | ("track", "default")
-        | ("video" | "audio", "controls" | "autoplay" | "loop") => Some(Boolean),
-        _ => None,
+}
+
+/// Look up one lowercase name in the generated table.
+fn dom_answer(context: AttributeContext<'_>, key: &str) -> DomAnswer {
+    if context.has_is || crate::dom_members::ALL_UNKNOWN_TAGS.contains(&context.tag) {
+        return DomAnswer::Unknown;
+    }
+    // Every element has event handler properties, including ones no data
+    // records (Chrome's `onsearch`), and Vue sends a string `on*` value to
+    // `setAttribute` by a rule the server does not model.
+    if key.starts_with("on") {
+        return DomAnswer::Unknown;
+    }
+    // An element's own list holds only the answers that differ from the
+    // unknown-element chain every element starts from.
+    if let Ok(index) =
+        crate::dom_members::ELEMENTS.binary_search_by(|(tag, _)| (*tag).cmp(context.tag))
+        && let Ok(found) = crate::dom_members::ELEMENTS[index]
+            .1
+            .binary_search_by(|(name, _)| (*name).cmp(key))
+    {
+        return crate::dom_members::ELEMENTS[index].1[found].1;
+    }
+    match crate::dom_members::BASE.binary_search_by(|(name, _)| (*name).cmp(key)) {
+        Ok(found) => crate::dom_members::BASE[found].1,
+        Err(_) => DomAnswer::WritesText,
     }
 }
 
@@ -1887,7 +2020,12 @@ fn js_data_order(map: &serde_json::Map<String, Json>) -> Vec<(&str, &Json)> {
 
 /// The attribute one prop leaves on the element after Vue's first client
 /// render (`None`: no attribute), following `patchProp` in `runtime-dom`.
-fn client_attribute(tag: &str, key: &str, value: &Val<'_>) -> Result<Option<String>, &'static str> {
+fn client_attribute(
+    context: AttributeContext<'_>,
+    key: &str,
+    value: &Val<'_>,
+) -> Result<Option<String>, &'static str> {
+    let tag = context.tag;
     if let Val::Unknown(reason) = value {
         return Err(reason);
     }
@@ -1943,6 +2081,17 @@ fn client_attribute(tag: &str, key: &str, value: &Val<'_>) -> Result<Option<Stri
         (_, "value" | "checked" | "selected" | "muted" | "indeterminate" | "text") => {
             Err("unsupported-attribute")
         }
+        // Vue's `shouldSetAsProp` sends these to `setAttribute` explicitly.
+        (_, "spellcheck" | "draggable" | "translate" | "autocorrect" | "form")
+        | ("input", "list")
+        | ("textarea", "type")
+        | ("img" | "video" | "canvas" | "source", "width" | "height") => {
+            attribute_text(value, false)
+        }
+        // Every arm below reaches Vue's `key in el` check, and a customized
+        // built-in element's class (`<button is="x-b">`) can define any
+        // property, so the server cannot tell what the browser leaves.
+        _ if context.has_is => Err("unsupported-attribute"),
         // `el.hidden = value` accepts more than booleans; only the values
         // whose attribute is certain are written.
         (_, "hidden") => match value {
@@ -1951,25 +2100,21 @@ fn client_attribute(tag: &str, key: &str, value: &Val<'_>) -> Result<Option<Stri
             Val::Str(text) if text.is_empty() => Ok(Some(String::new())),
             _ => Err("unsupported-attribute"),
         },
-        _ if key.contains(['-', ':', '_']) || ATTRIBUTE_ONLY.contains(&key) => {
+        _ if key.contains(['-', ':', '_']) => {
             attribute_text(value, SPECIAL_BOOLEAN_ATTRIBUTES.contains(&key))
         }
-        // Vue's `shouldSetAsProp` sends these to `setAttribute` explicitly.
-        (_, "spellcheck" | "draggable" | "translate" | "autocorrect" | "form")
-        | ("input", "list")
-        | ("textarea", "type")
-        | ("img" | "video" | "canvas" | "source", "width" | "height") => {
-            attribute_text(value, false)
-        }
-        _ if SPECIAL_BOOLEAN_ATTRIBUTES.contains(&key) => attribute_text(value, true),
-        _ => match dom_property(tag, key) {
-            // A mirrored string property ends as `String(value)`, and null
-            // or undefined removes it: the same as `setAttribute`.
-            Some(Reflect::String) => attribute_text(value, false),
+        _ => match dom_answer(context, key) {
+            // An attribute Vue sets with `setAttribute`, or a mirrored string
+            // property, which ends as `String(value)` with null or undefined
+            // removing it: the same as `setAttribute`. A name in Vue's
+            // `isSpecialBooleanAttr` list is written as `""` or removed.
+            DomAnswer::WritesText => {
+                attribute_text(value, SPECIAL_BOOLEAN_ATTRIBUTES.contains(&key))
+            }
             // `el[key] = value` coerces with JavaScript truthiness, and ""
             // counts as true (Vue's `includeBooleanAttr`).
-            Some(Reflect::Boolean) => attribute_text(value, true),
-            None => Err("unsupported-attribute"),
+            DomAnswer::ReflectBoolean => attribute_text(value, true),
+            DomAnswer::Unknown => Err("unsupported-attribute"),
         },
     }
 }
@@ -2000,8 +2145,10 @@ enum PropVal<'a> {
 
 type Props<'a> = Vec<(Cow<'a, str>, PropVal<'a>)>;
 
-/// The attributes written for one element, and its `textContent` prop.
-type ElementAttributes<'a> = (Vec<(String, String)>, Option<TextContent<'a>>);
+/// The attributes written for one element, its `textContent` prop, and every
+/// key Vue patches on it, written or not (the form check needs the keys whose
+/// value removes the attribute too).
+type ElementAttributes<'a> = (Vec<(String, String)>, Option<TextContent<'a>>, Vec<String>);
 
 /// An element's `textContent` prop (what `v-text` compiles to).
 #[derive(Debug)]
@@ -2378,6 +2525,7 @@ fn write_page<'a>(
         declines: Vec::new(),
         depth: 0,
         open: Vec::new(),
+        forms: Vec::new(),
     };
     let result = match occurrences.get(root_id) {
         None => Err(Fail::new("component-lookup", "root", None)),
@@ -2599,6 +2747,52 @@ struct Writer<'a> {
     depth: usize,
     /// The DOM elements currently open around the write position.
     open: Vec<&'a str>,
+    /// The names that become properties of each `form` open around the
+    /// write position (see [`FormNames`]).
+    forms: Vec<FormNames>,
+}
+
+/// The `name` and `id` values a form's descendants turn into properties of
+/// the form.
+///
+/// An `HTMLFormElement` exposes its controls by `name` and `id` (a named
+/// getter). Vue mounts a form's children before it patches the form's own
+/// props, so `"foo" in form` is true for `<form foo="1"><input name="foo">`,
+/// and Vue then takes the property path where it would otherwise have
+/// written the attribute. The server writes the form only when it can see
+/// every control's name and none of them matches a form key that Vue checks
+/// with `key in el`.
+#[derive(Default)]
+struct FormNames {
+    names: Vec<String>,
+    /// Set when a descendant could add a name the server cannot see: a part
+    /// Vue builds in the browser, a `name` or `id` only the browser knows, or
+    /// `v-html` content.
+    unknown: bool,
+}
+
+/// Elements whose `name` and `id` become properties of their form.
+const FORM_NAMED_TAGS: [&str; 8] = [
+    "button", "fieldset", "img", "input", "object", "output", "select", "textarea",
+];
+
+/// Whether Vue checks `key in el` for this form key (`shouldSetAsProp`),
+/// which is where a named property can change the result.
+fn form_key_checks_members(key: &str) -> bool {
+    !matches!(
+        key,
+        "class"
+            | "style"
+            | "spellcheck"
+            | "draggable"
+            | "translate"
+            | "autocorrect"
+            | "form"
+            // Vue sets these as the element's content, never as attributes,
+            // so a control of the same name changes nothing the server writes.
+            | "innerHTML"
+            | "textContent"
+    )
 }
 
 /// A position to roll the writer back to when a subtree cannot be written.
@@ -2785,9 +2979,18 @@ impl<'a> Writer<'a> {
             Node::Component { tag, props, slots } => {
                 self.component(tag, props.as_ref(), slots, instance, locals, cx)
             }
-            Node::Slot { name, fallback } => {
-                self.slot(name, fallback.as_deref(), instance, locals, cx)
-            }
+            Node::Slot {
+                name,
+                props,
+                fallback,
+            } => self.slot(
+                name,
+                props.as_ref(),
+                fallback.as_deref(),
+                instance,
+                locals,
+                cx,
+            ),
             Node::Unsupported(reason) => Err(Fail::new(reason, "render", component)),
         }
     }
@@ -2886,7 +3089,7 @@ impl<'a> Writer<'a> {
             Directives::Show(expr) => eval(expr, instance, locals).truthy() == Some(false),
             Directives::Unsupported(reason) => return Err(Fail::new(reason, tag, component)),
         };
-        let (attributes, text_content) = self
+        let (attributes, text_content, patched_keys) = self
             .attributes(tag, props, dynamic_props, hidden_by_show, instance, locals)
             .map_err(|(reason, detail)| Fail::new(reason, detail, component))?;
         let void = VOID_TAGS.contains(&tag);
@@ -2928,6 +3131,17 @@ impl<'a> Writer<'a> {
             // and the children.
             Some(_) => return Err(Fail::new("unsupported-attribute", "textContent", component)),
         };
+        self.record_form_names(tag, &attributes, dynamic_props);
+        if tag == "form" {
+            // `v-html` on the form itself puts controls the server never sees
+            // inside it.
+            let innerhtml =
+                dynamic_props.is_some_and(|keys| keys.iter().any(|key| key == "innerHTML"));
+            self.forms.push(FormNames {
+                names: Vec::new(),
+                unknown: innerhtml,
+            });
+        }
         let mark = self.mark();
         self.open_tag(tag, &attributes, false);
         let content_start = self.html.len();
@@ -2965,6 +3179,28 @@ impl<'a> Writer<'a> {
         };
         self.depth -= 1;
         self.open.pop();
+        if tag == "form" {
+            let names = self.forms.pop().unwrap_or_default();
+            // A part Vue builds inside the form hides its names too, so a
+            // form that would become a shell has the same question.
+            let names_unknown = names.unknown || result.is_err();
+            // Every key Vue patches counts, including one whose null value
+            // leaves no attribute: a control's property makes Vue take the
+            // property path, which writes "null" for a key the form defines,
+            // such as `action`.
+            if let Some(key) = patched_keys.iter().find(|key| {
+                form_key_checks_members(key)
+                    && (names_unknown || names.names.iter().any(|name| name == *key))
+            }) {
+                return Err(Fail::new("form-named-property", key.clone(), component));
+            }
+        } else if result.is_err() {
+            // Vue builds this element's content in the browser, so a form
+            // around it cannot see the names inside.
+            for form in &mut self.forms {
+                form.unknown = true;
+            }
+        }
         if result.is_ok()
             && LEADING_NEWLINE_TAGS.contains(&tag)
             && self.html[content_start..].starts_with('\n')
@@ -3086,6 +3322,39 @@ impl<'a> Writer<'a> {
         }
     }
 
+    /// Add this element's `name` and `id` to every form open around it.
+    fn record_form_names(
+        &mut self,
+        tag: &str,
+        attributes: &[(String, String)],
+        dynamic_props: Option<&[String]>,
+    ) {
+        if self.forms.is_empty() {
+            return;
+        }
+        let dynamic =
+            |name: &str| dynamic_props.is_some_and(|keys| keys.iter().any(|key| key == name));
+        // `v-html` content can hold named controls the server never sees.
+        let mut unknown = dynamic("innerHTML");
+        let mut names = Vec::new();
+        if FORM_NAMED_TAGS.contains(&tag) {
+            // A dynamic `name` or `id` the server could not write is set by
+            // hydration, so its value is not among the written ones.
+            let written = |name: &str| attributes.iter().any(|(key, _)| key == name);
+            unknown |= (dynamic("name") && !written("name")) || (dynamic("id") && !written("id"));
+            names.extend(
+                attributes
+                    .iter()
+                    .filter(|(key, _)| key == "name" || key == "id")
+                    .map(|(_, value)| value.clone()),
+            );
+        }
+        for form in &mut self.forms {
+            form.unknown |= unknown;
+            form.names.extend(names.iter().cloned());
+        }
+    }
+
     /// The attributes the server writes for one element: what Vue's client
     /// render leaves, minus values only the browser knows that hydration
     /// sets itself. The element's `textContent` prop (what `v-text`
@@ -3109,8 +3378,13 @@ impl<'a> Writer<'a> {
         // Keys hydration applies itself instead of trusting the HTML
         // (`hydrateElement` in runtime-core).
         let force_patch = matches!(tag, "input" | "option");
+        let context = AttributeContext {
+            tag,
+            has_is: values.iter().any(|(key, _)| key.as_ref() == "is"),
+        };
         let mut attributes = Vec::with_capacity(values.len());
         let mut text_content = None;
+        let mut patched_keys = Vec::new();
         for (key, value) in &values {
             let key = key.as_ref();
             if is_reserved(key) {
@@ -3141,7 +3415,8 @@ impl<'a> Writer<'a> {
                 });
                 continue;
             }
-            match client_attribute(tag, key, value) {
+            patched_keys.push(key.to_owned());
+            match client_attribute(context, key, value) {
                 Ok(Some(text)) if text.contains(['\0', '\r']) => {
                     return Err(("text-value", key.to_owned()));
                 }
@@ -3159,7 +3434,7 @@ impl<'a> Writer<'a> {
             }
             attributes.push(("style".to_owned(), "display: none;".to_owned()));
         }
-        Ok((attributes, text_content))
+        Ok((attributes, text_content, patched_keys))
     }
 
     fn component(
@@ -3303,9 +3578,11 @@ impl<'a> Writer<'a> {
         true
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn slot(
         &mut self,
         name: &str,
+        props: Option<&'a Expr>,
         fallback: Option<&'a [Node]>,
         instance: &Rc<Instance<'a>>,
         locals: &Scope<'a>,
@@ -3321,12 +3598,19 @@ impl<'a> Writer<'a> {
             .iter()
             .find(|binding| binding.def.name == name)
         {
-            if binding.def.params != 0 {
+            // The props are read with the outlet's own data, then bound in
+            // the scope the fill was written in.
+            let passed = props.map_or_else(
+                || Val::Object(Rc::new(Vec::new())),
+                |props| eval(props, instance, locals),
+            );
+            let (scope, read) = bind_slot_props(binding.def, passed, &binding.locals);
+            if !read {
                 return Err(Fail::new("slot-props", name, component));
             }
             let mark = self.mark();
             for child in &binding.def.body {
-                valid |= self.node(child, &binding.owner, &binding.locals, inner)?;
+                valid |= self.node(child, &binding.owner, &scope, inner)?;
             }
             if !valid {
                 // Only comments or empty Fragments: `ensureValidVNode`
@@ -3341,6 +3625,75 @@ impl<'a> Writer<'a> {
         }
         self.comment("]");
         Ok(valid)
+    }
+}
+
+/// Bind the props an outlet passed as the names a fill's slot function
+/// takes, in front of the fill's own scope, and say whether the server read
+/// the parameter. A declined parameter binds each of its names as unknown,
+/// so the fill never reads an outer value of the same name. A prop the
+/// server cannot read binds as unknown, so only the parts that read it are
+/// left to the browser.
+fn bind_slot_props<'a>(def: &'a SlotDef, passed: Val<'a>, scope: &Scope<'a>) -> (Scope<'a>, bool) {
+    let bind = |scope: Scope<'a>, name: &'a str, value: Val<'a>| {
+        Some(Rc::new(Locals {
+            name,
+            value,
+            parent: scope,
+        }))
+    };
+    match &def.params {
+        SlotParams::None => (scope.clone(), true),
+        SlotParams::Name(name) => (bind(scope.clone(), name, passed), true),
+        SlotParams::Pattern { props, rest } => {
+            let mut bound = scope.clone();
+            for (key, local) in props {
+                bound = bind(bound, local, slot_prop(&passed, key));
+            }
+            if let Some(rest) = rest {
+                let value = match &passed {
+                    Val::Object(entries) => Val::Object(Rc::new(
+                        entries
+                            .iter()
+                            .filter(|(name, _)| props.iter().all(|(key, _)| key != name))
+                            .cloned()
+                            .collect(),
+                    )),
+                    Val::Unknown(reason) => Val::Unknown(reason),
+                    // Citry never passes a prepared-data object as slot
+                    // props, so the server does not build a rest from one
+                    // and leaves it to the browser.
+                    _ => Val::Unknown("browser-value"),
+                };
+                bound = bind(bound, rest, value);
+            }
+            (bound, true)
+        }
+        SlotParams::Unsupported => {
+            let mut bound = scope.clone();
+            for name in &def.names {
+                bound = bind(bound, name, Val::Unknown("slot-props"));
+            }
+            (bound, false)
+        }
+    }
+}
+
+/// One prop of the object an outlet passed, read as JavaScript would.
+fn slot_prop<'a>(passed: &Val<'a>, key: &str) -> Val<'a> {
+    match passed {
+        Val::Object(entries) => match entries.iter().find(|(name, _)| name == key) {
+            Some((_, value)) => value.clone(),
+            None if OBJECT_PROTOTYPE_NAMES.contains(&key) => Val::Unknown("browser-value"),
+            None => Val::Undefined,
+        },
+        Val::Data(Json::Object(map)) => match map.get(key) {
+            Some(value) => Val::from_json(value),
+            None if OBJECT_PROTOTYPE_NAMES.contains(&key) => Val::Unknown("browser-value"),
+            None => Val::Undefined,
+        },
+        Val::Unknown(reason) => Val::Unknown(reason),
+        _ => Val::Unknown("browser-value"),
     }
 }
 
@@ -3546,17 +3899,27 @@ impl<'a> StaticWriter<'a> {
             Node::Component { tag, props, slots } => {
                 self.component(tag, props.as_ref(), slots, instance, locals);
             }
-            Node::Slot { name, fallback } => {
+            Node::Slot {
+                name,
+                props,
+                fallback,
+            } => {
                 let before = self.html.len();
                 if let Some(binding) = instance
                     .slots
                     .iter()
                     .find(|binding| binding.def.name == *name)
                 {
-                    // A scoped slot's parameters are only known in the
-                    // browser, so what reads them is left out.
+                    // The fill's names are bound as in `Writer::slot`; when its
+                    // pattern is declined they bind as unknown, so they still
+                    // hide outer names, and what reads them is left out.
+                    let passed = props.as_ref().map_or_else(
+                        || Val::Object(Rc::new(Vec::new())),
+                        |props| eval(props, instance, locals),
+                    );
+                    let (scope, _read) = bind_slot_props(binding.def, passed, &binding.locals);
                     for child in &binding.def.body {
-                        self.node(child, &binding.owner, &binding.locals);
+                        self.node(child, &binding.owner, &scope);
                     }
                 }
                 if self.html.len() == before
@@ -3594,6 +3957,14 @@ impl<'a> StaticWriter<'a> {
             // A spread only the browser knows leaves the keys read so far.
             let _ = eval_props(props, instance, locals, &mut values);
         }
+        // Only an `is` the server can see counts here. A spread only the
+        // browser knows could hide one, but this static HTML is replaced
+        // when Vue builds the part, and a name the server cannot answer is
+        // still shown with its plain value (`static_attribute`).
+        let context = AttributeContext {
+            tag,
+            has_is: values.iter().any(|(key, _)| key.as_ref() == "is"),
+        };
         self.html.push('<');
         self.html.push_str(tag);
         let mut style = None;
@@ -3609,7 +3980,7 @@ impl<'a> StaticWriter<'a> {
             {
                 continue;
             }
-            let text = match (static_attribute(tag, key, value), key, props) {
+            let text = match (static_attribute(context, key, value), key, props) {
                 (Some(text), _, _) => text,
                 // A class or style with a browser-only part still shows the
                 // parts the server knows, such as a static `class` beside a
@@ -3760,8 +4131,8 @@ fn is_static_attribute_name(name: &str) -> bool {
 
 /// The attribute text Citry's static HTML shows for one prop, or `None`
 /// when the server does not know it or the attribute is absent.
-fn static_attribute(tag: &str, key: &str, value: &Val<'_>) -> Option<String> {
-    match client_attribute(tag, key, value) {
+fn static_attribute(context: AttributeContext<'_>, key: &str, value: &Val<'_>) -> Option<String> {
+    match client_attribute(context, key, value) {
         Ok(text) => text,
         // A name Vue sets through a path the hydration writer does not
         // model still shows its plain value here.
@@ -3848,8 +4219,8 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        HydrationRender, RenderRequest, ServerRenderProgram, Val, client_attribute,
-        parse_string_style, parser_moves, read_program, render_for_hydration,
+        AttributeContext, HydrationRender, RenderRequest, ServerRenderProgram, Val,
+        client_attribute, parse_string_style, parser_moves, read_program, render_for_hydration,
     };
     use crate::{CompileRequest, compile};
 
@@ -4289,6 +4660,210 @@ mod tests {
         );
     }
 
+    /// Render a Root that fills Child's default slot with `fill`, and a Child
+    /// whose template loops over `rows` around `slot`.
+    fn with_scoped_child(fill: &str, slot: &str) -> HydrationRender {
+        let parent = format!(
+            r#"<main><citry-child :citry-id="$citryPrepared.child">{fill}</citry-child></main>"#
+        );
+        let child = format!(r#"<ul><li v-for="row in $citryPrepared.rows">{slot}</li></ul>"#);
+        render(
+            &[
+                (
+                    "Root",
+                    parent.as_str(),
+                    json!({"child": "occ-Child"}),
+                    json!({}),
+                ),
+                (
+                    "Child",
+                    child.as_str(),
+                    json!({"rows": ["a", "b"]}),
+                    json!({}),
+                ),
+            ],
+            0,
+        )
+    }
+
+    #[test]
+    fn a_fill_reads_the_props_its_outlet_passes() {
+        const ROWS: &str = "<main><ul><!--[--><li><!--[--><b>a</b><!--]--></li><li><!--[--><b>b</b><!--]--></li><!--]--></ul></main>";
+        // The outlet's props are read with the child's data; each form of
+        // slot function Citry writes binds them.
+        for fill in [
+            r#"<template #default="{ row }"><b>{{ row }}</b></template>"#,
+            r#"<template #default="{ row: item }"><b>{{ item }}</b></template>"#,
+            r#"<template #default="p"><b>{{ p.row }}</b></template>"#,
+            // An i18n page puts its context names first; they read as
+            // unknown, which only matters to a part that uses them.
+            r#"<template #default="{ $i18n, row }"><b>{{ row }}</b></template>"#,
+        ] {
+            let result = with_scoped_child(fill, r#"<slot :row="row"></slot>"#);
+            assert_eq!(html(&result), ROWS, "{fill}");
+        }
+        // Citry's pattern binds the `key` Vue adds to a `v-if` outlet to its
+        // own name, so the rest does not collect it.
+        let result = with_scoped_child(
+            r#"<template #default="{ key: citrySlotKey, ...p }"><b>{{ p.row }}</b></template>"#,
+            r#"<slot v-if="true" :row="row"></slot>"#,
+        );
+        assert_eq!(html(&result), ROWS);
+    }
+
+    #[test]
+    fn a_slot_prop_the_server_cannot_read_leaves_only_its_reader_to_the_browser() {
+        let result = with_scoped_child(
+            r#"<template #default="{ row }"><b>{{ row }}</b></template>"#,
+            r#"<slot :row="missing"></slot>"#,
+        );
+        assert_eq!(
+            html(&result),
+            r#"<main><ul><!--[--><li><!--[--><b data-allow-mismatch="children"></b><!--]--></li><li><!--[--><b data-allow-mismatch="children"></b><!--]--></li><!--]--></ul></main>"#
+        );
+        assert_eq!(
+            declines(&result),
+            [
+                ("browser-value", "text", Some("b")),
+                ("browser-value", "text", Some("b"))
+            ]
+        );
+        // A prop the outlet does not pass is `undefined`, as in Vue.
+        let result = with_scoped_child(
+            r#"<template #default="{ row }"><b>{{ row }}</b></template>"#,
+            "<slot></slot>",
+        );
+        assert_eq!(
+            html(&result),
+            "<main><ul><!--[--><li><!--[--><b></b><!--]--></li><li><!--[--><b></b><!--]--></li><!--]--></ul></main>"
+        );
+    }
+
+    #[test]
+    fn a_fill_inside_a_shell_reads_its_own_slot_props_not_an_outer_fills() {
+        // List and Inner both pass `row`; the inner fill sits in a shell
+        // (its `v-if` is browser-only), whose contents must still show the
+        // inner value. A declined inner pattern shows neither value.
+        let cases = [
+            (
+                "{ row }",
+                r#"<main><section><!--[--><div><!--[--><p data-allow-mismatch="children"><s data-t="INNER">x</s></p><!--]--></div><!--]--></section></main>"#,
+            ),
+            (
+                "{ row = 'd' }",
+                r#"<main><section><!--[--><div data-allow-mismatch="children"><p><s>x</s></p></div><!--]--></section></main>"#,
+            ),
+        ];
+        for (inner_fill, expected) in cases {
+            let root = format!(
+                r#"<main><citry-list :citry-id="$citryPrepared.list"><template #default="{{ row }}"><citry-inner :citry-id="$citryPrepared.inner"><template #default="{inner_fill}"><p><s v-if="browserOnly" :data-t="row.title">x</s></p></template></citry-inner></template></citry-list></main>"#
+            );
+            let result = render(
+                &[
+                    (
+                        "Root",
+                        root.as_str(),
+                        json!({"list": "occ-List", "inner": "occ-Inner"}),
+                        json!({}),
+                    ),
+                    (
+                        "List",
+                        r#"<section><slot :row="$citryPrepared.r"></slot></section>"#,
+                        json!({"r": {"title": "OUTER"}}),
+                        json!({}),
+                    ),
+                    (
+                        "Inner",
+                        r#"<div><slot :row="{ title: 'INNER' }"></slot></div>"#,
+                        json!({}),
+                        json!({}),
+                    ),
+                ],
+                0,
+            );
+            assert_eq!(html(&result), expected, "{inner_fill}");
+        }
+    }
+
+    #[test]
+    fn slot_props_read_the_outlets_data_and_a_rest_holds_only_the_others() {
+        // Both components have a `label`; the outlet's own one is passed.
+        let result = render(
+            &[
+                (
+                    "Root",
+                    r#"<main><citry-child :citry-id="$citryPrepared.child"><template #default="{ text, ...rest }"><b v-if="rest.text">bad</b><b v-else>{{ text }}{{ rest.other }}</b></template></citry-child></main>"#,
+                    json!({"child": "occ-Child"}),
+                    json!({"label": "parent"}),
+                ),
+                (
+                    "Child",
+                    r#"<div><slot :text="label" other="o"></slot></div>"#,
+                    json!({}),
+                    json!({"label": "child"}),
+                ),
+            ],
+            0,
+        );
+        assert_eq!(
+            html(&result),
+            "<main><div><!--[--><b>childo</b><!--]--></div></main>"
+        );
+    }
+
+    #[test]
+    fn a_nested_slot_pattern_is_left_to_the_browser() {
+        let result = with_scoped_child(
+            r#"<template #default="{ row: { title } }"><b>{{ title }}</b></template>"#,
+            r#"<slot :row="row"></slot>"#,
+        );
+        assert_eq!(
+            html(&result),
+            r#"<main><ul><!--[--><li data-allow-mismatch="children"><b></b></li><li data-allow-mismatch="children"><b></b></li><!--]--></ul></main>"#
+        );
+        assert_eq!(
+            declines(&result),
+            [
+                ("slot-props", "default", Some("li")),
+                ("slot-props", "default", Some("li"))
+            ]
+        );
+    }
+
+    #[test]
+    fn a_middle_component_passes_the_whole_props_object_on() {
+        // Middle receives List's props as one object and hands it to the
+        // Root's fill with `v-bind`, as Citry writes a fill that one
+        // component passes on to another.
+        let result = render(
+            &[
+                (
+                    "Root",
+                    r#"<main><citry-middle :citry-id="$citryPrepared.middle"><template #cell="{ row }"><b>{{ row }}</b></template></citry-middle></main>"#,
+                    json!({"middle": "occ-Middle"}),
+                    json!({}),
+                ),
+                (
+                    "Middle",
+                    r#"<citry-list :citry-id="$citryPrepared.list"><template #default="citrySlotProps"><slot name="cell" v-bind="citrySlotProps"></slot></template></citry-list>"#,
+                    json!({"list": "occ-List"}),
+                    json!({}),
+                ),
+                (
+                    "List",
+                    r#"<ul><li v-for="row in $citryPrepared.rows"><slot :row="row"></slot></li></ul>"#,
+                    json!({"rows": ["a"]}),
+                    json!({}),
+                ),
+            ],
+            0,
+        );
+        assert_eq!(
+            html(&result),
+            "<main><ul><!--[--><li><!--[--><!--[--><b>a</b><!--]--><!--]--></li><!--]--></ul></main>"
+        );
+    }
+
     #[test]
     fn component_calls_with_extra_attributes_are_shells() {
         let result = with_child(
@@ -4360,58 +4935,341 @@ mod tests {
     fn attributes_follow_vues_property_and_attribute_paths() {
         let text = |value: &str| Val::Str(value.to_owned().into());
         assert_eq!(
-            client_attribute("div", "data-x", &Val::Bool(true)),
+            client_attribute(AttributeContext::plain("div"), "data-x", &Val::Bool(true)),
             Ok(Some("true".to_owned()))
         );
         assert_eq!(
-            client_attribute("form", "novalidate", &Val::Bool(true)),
+            client_attribute(
+                AttributeContext::plain("form"),
+                "novalidate",
+                &Val::Bool(true)
+            ),
             Ok(Some(String::new()))
         );
         assert_eq!(
-            client_attribute("form", "novalidate", &Val::Bool(false)),
+            client_attribute(
+                AttributeContext::plain("form"),
+                "novalidate",
+                &Val::Bool(false)
+            ),
             Ok(None)
         );
         // `playsinline` is one of Vue's special boolean attributes: `true`
         // writes it empty and `false` removes it.
         assert_eq!(
-            client_attribute("video", "playsinline", &Val::Bool(true)),
+            client_attribute(
+                AttributeContext::plain("video"),
+                "playsinline",
+                &Val::Bool(true)
+            ),
             Ok(Some(String::new()))
         );
         assert_eq!(
-            client_attribute("video", "playsinline", &Val::Bool(false)),
+            client_attribute(
+                AttributeContext::plain("video"),
+                "playsinline",
+                &Val::Bool(false)
+            ),
             Ok(None)
         );
         assert_eq!(
-            client_attribute("input", "disabled", &text("false")),
+            client_attribute(AttributeContext::plain("input"), "disabled", &text("false")),
             Ok(Some(String::new()))
         );
         assert_eq!(
-            client_attribute("input", "disabled", &Val::Num(0.0)),
+            client_attribute(AttributeContext::plain("input"), "disabled", &Val::Num(0.0)),
             Ok(None)
         );
-        assert_eq!(client_attribute("a", "href", &Val::Null), Ok(None));
         assert_eq!(
-            client_attribute("label", "for", &text("q")),
+            client_attribute(AttributeContext::plain("a"), "href", &Val::Null),
+            Ok(None)
+        );
+        assert_eq!(
+            client_attribute(AttributeContext::plain("label"), "for", &text("q")),
             Ok(Some("q".to_owned()))
         );
         assert_eq!(
-            client_attribute("div", "id", &Val::Num(3.0)),
+            client_attribute(AttributeContext::plain("div"), "id", &Val::Num(3.0)),
             Ok(Some("3".to_owned()))
         );
-        assert!(client_attribute("div", "id", &Val::Num(0.5)).is_err());
+        assert!(client_attribute(AttributeContext::plain("div"), "id", &Val::Num(0.5)).is_err());
         assert_eq!(
-            client_attribute("div", "style", &text("color: red")),
+            client_attribute(AttributeContext::plain("div"), "style", &text("color: red")),
             Ok(Some("color: red".to_owned()))
         );
         // A style object is written as Vue's server renderer writes it.
         assert_eq!(
-            client_attribute("div", "style", &Val::Data(&json!({"color": "red"}))),
+            client_attribute(
+                AttributeContext::plain("div"),
+                "style",
+                &Val::Data(&json!({"color": "red"}))
+            ),
             Ok(Some("color:red;".to_owned()))
         );
-        assert!(client_attribute("div", "style", &Val::Data(&json!({"color": 0.5}))).is_err());
-        assert!(client_attribute("div", "tabIndex", &Val::Num(1.0)).is_err());
-        assert!(client_attribute("textarea", "value", &text("x")).is_err());
-        assert!(client_attribute("div", "unknownprop", &text("x")).is_err());
+        assert!(
+            client_attribute(
+                AttributeContext::plain("div"),
+                "style",
+                &Val::Data(&json!({"color": 0.5}))
+            )
+            .is_err()
+        );
+        assert!(
+            client_attribute(AttributeContext::plain("div"), "tabIndex", &Val::Num(1.0)).is_err()
+        );
+        assert!(
+            client_attribute(AttributeContext::plain("textarea"), "value", &text("x")).is_err()
+        );
+        // A name no element has is an attribute in every browser (#346).
+        assert_eq!(
+            client_attribute(AttributeContext::plain("div"), "unknownprop", &text("x")),
+            Ok(Some("x".to_owned()))
+        );
+    }
+
+    #[test]
+    fn dom_answers_decide_text_boolean_and_declined_attributes() {
+        let text = |value: &str| Val::Str(value.to_owned().into());
+        let written =
+            |tag: &str, key: &str| client_attribute(AttributeContext::plain(tag), key, &text("x"));
+        // A name no element has: both of Vue's paths leave the text.
+        assert_eq!(written("p", "foo"), Ok(Some("x".to_owned())));
+        assert_eq!(written("div", "x"), Ok(Some("x".to_owned())));
+        // A string property that mirrors its attribute (`id` is marked
+        // `[Reflect]` on Element).
+        assert_eq!(written("div", "id"), Ok(Some("x".to_owned())));
+        assert_eq!(written("a", "href"), Ok(Some("x".to_owned())));
+        // Members the spec describes as mirroring only in prose, kept on
+        // the generator's reviewed list.
+        assert_eq!(written("input", "type"), Ok(Some("x".to_owned())));
+        assert_eq!(written("th", "scope"), Ok(Some("x".to_owned())));
+        // An unknown tag gets the `HTMLUnknownElement` chain, so it keeps
+        // the answers of `HTMLElement`.
+        assert_eq!(written("foo", "id"), Ok(Some("x".to_owned())));
+        assert_eq!(written("div", "title"), Ok(Some("x".to_owned())));
+        assert_eq!(written("div", "role"), Ok(Some("x".to_owned())));
+        // A reflected boolean: JavaScript truthiness decides, so the string
+        // "false" counts as true and is written as an empty attribute.
+        assert_eq!(
+            client_attribute(AttributeContext::plain("input"), "disabled", &text("false")),
+            Ok(Some(String::new()))
+        );
+        assert_eq!(
+            client_attribute(AttributeContext::plain("input"), "disabled", &Val::Num(0.0)),
+            Ok(None)
+        );
+        // `autofocus` is a boolean on every control since before the floor,
+        // which BCD records only as a partial implementation; the reviewed
+        // `SUPPORTED_AT_FLOOR` list makes it count.
+        assert_eq!(
+            client_attribute(
+                AttributeContext::plain("button"),
+                "autofocus",
+                &Val::Bool(true)
+            ),
+            Ok(Some(String::new()))
+        );
+        assert_eq!(
+            client_attribute(
+                AttributeContext::plain("button"),
+                "autofocus",
+                &Val::Bool(false)
+            ),
+            Ok(None)
+        );
+        // Methods, numbers and members some supported browser lacks at the
+        // floor leave a result the server cannot predict.
+        for (tag, key) in [
+            ("div", "focus"),
+            ("input", "size"),
+            ("div", "inert"),
+            ("div", "autofocus"),
+            ("object", "data"),
+            ("embed", "src"),
+            ("dialog", "open"),
+        ] {
+            assert_eq!(
+                written(tag, key),
+                Err("unsupported-attribute"),
+                "{tag} {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_is_prop_makes_every_name_that_reaches_key_in_el_unknown() {
+        let text = |value: &str| Val::Str(value.to_owned().into());
+        // A customized built-in element can define any property.
+        let customized = AttributeContext {
+            tag: "button",
+            has_is: true,
+        };
+        // Names that reach Vue's `key in el` check are unknown, whether
+        // the element defines them, an author writes them with a dash or an
+        // underscore, or `hidden` carries a value that is otherwise certain.
+        assert_eq!(
+            client_attribute(customized, "title", &text("x")),
+            Err("unsupported-attribute")
+        );
+        assert_eq!(
+            client_attribute(customized, "data-x", &text("x")),
+            Err("unsupported-attribute")
+        );
+        assert_eq!(
+            client_attribute(customized, "my_prop", &text("x")),
+            Err("unsupported-attribute")
+        );
+        assert_eq!(
+            client_attribute(customized, "hidden", &Val::Bool(true)),
+            Err("unsupported-attribute")
+        );
+        // Vue sends `spellcheck` to `setAttribute` and sets `value` as a
+        // property and an attribute, both before the `key in el` check.
+        assert_eq!(
+            client_attribute(customized, "spellcheck", &text("false")),
+            Ok(Some("false".to_owned()))
+        );
+        assert_eq!(
+            client_attribute(customized, "value", &text("v")),
+            Ok(Some("v".to_owned()))
+        );
+        // `class` and `style` never go through `key in el`.
+        assert_eq!(
+            client_attribute(customized, "class", &text("c")),
+            Ok(Some("c".to_owned()))
+        );
+        assert_eq!(
+            client_attribute(customized, "style", &text("color: red")),
+            Ok(Some("color: red".to_owned()))
+        );
+    }
+
+    #[test]
+    fn an_unknown_attribute_on_a_nested_element_is_written() {
+        // The case of #346: `foo` is no member of any element, so both of
+        // Vue's paths leave `foo="1"` and the page needs no shell.
+        let page = root(r#"<main><p foo="1">a</p></main>"#, json!({}));
+        assert_eq!(html(&page), r#"<main><p foo="1">a</p></main>"#);
+        assert!(declines(&page).is_empty());
+    }
+
+    #[test]
+    fn a_form_key_that_meets_a_control_name_is_declined() {
+        // No control shares a name with the form's own keys.
+        let clear = root(r#"<form action="/x"><input name="q"></form>"#, json!({}));
+        assert_eq!(html(&clear), r#"<form action="/x"><input name="q"></form>"#);
+        assert!(declines(&clear).is_empty());
+        // `action` is a name on the form and also a control name. The
+        // server declines any clash. For a string the browser keeps
+        // `action`, and only null differs.
+        let clash = root(
+            r#"<form action="/x"><input name="action"></form>"#,
+            json!({}),
+        );
+        assert_eq!(declines(&clash), [("form-named-property", "action", None)]);
+        // A form at the root has no parent to leave to Vue, so nothing is
+        // written.
+        assert_eq!(clash.html, None);
+        assert_eq!(clash.reason, Some("host-root"));
+        // Inside `main`, the declined form makes `main` a shell: the server
+        // writes the form as authored and leaves its children to Vue.
+        let nested = root(
+            r#"<main><form action="/x"><input name="action"></form></main>"#,
+            json!({}),
+        );
+        assert_eq!(
+            html(&nested),
+            r#"<main data-allow-mismatch="children"><form action="/x"><input name="action"></form></main>"#
+        );
+        assert_eq!(
+            declines(&nested),
+            [("form-named-property", "action", Some("main"))]
+        );
+        // Vue checks `key in el` for `data-x` too, so the clash counts
+        // although `client_attribute` writes the name as text.
+        let data = root(
+            r#"<form data-x="1"><input name="data-x"></form>"#,
+            json!({}),
+        );
+        assert_eq!(declines(&data), [("form-named-property", "data-x", None)]);
+        // `class` never goes through that check.
+        let class = root(r#"<form class="c"><input name="class"></form>"#, json!({}));
+        assert_eq!(
+            html(&class),
+            r#"<form class="c"><input name="class"></form>"#
+        );
+        assert!(declines(&class).is_empty());
+    }
+
+    #[test]
+    fn a_control_name_the_server_wrote_is_a_known_name() {
+        // The server writes the control's `name` from prepared data, so the
+        // form can compare it with its own keys and `action` stays clear.
+        let known = root(
+            r#"<main><form action="/x"><input :name="$citryPrepared.n"></form></main>"#,
+            json!({"n": "q"}),
+        );
+        assert_eq!(
+            html(&known),
+            r#"<main><form action="/x"><input name="q"></form></main>"#
+        );
+        assert!(declines(&known).is_empty());
+    }
+
+    #[test]
+    fn a_form_key_with_a_null_value_still_meets_a_control_name() {
+        // A null `action` leaves no attribute, but a control named `action`
+        // makes Vue take the property path, which writes "null". The check
+        // reads the keys Vue patches, not only the attributes written.
+        let null = root(
+            r#"<main><form :action="$citryPrepared.a"><input name="action"></form></main>"#,
+            json!({"a": null}),
+        );
+        assert_eq!(
+            html(&null),
+            r#"<main data-allow-mismatch="children"><form><input name="action"></form></main>"#
+        );
+        assert_eq!(
+            declines(&null),
+            [("form-named-property", "action", Some("main"))]
+        );
+    }
+
+    #[test]
+    fn v_html_on_a_form_hides_the_control_names_from_the_server() {
+        // The server never sees the controls inside `v-html`, so any form
+        // key that Vue checks as a member may meet one of their names.
+        let hidden = root(
+            r#"<main><form :id="$citryPrepared.i" v-html="$citryPrepared.h"></form></main>"#,
+            json!({"i": "f", "h": "<input name=\"id\">"}),
+        );
+        assert_eq!(
+            html(&hidden),
+            r#"<main data-allow-mismatch="children"><form id="f"></form></main>"#
+        );
+        assert_eq!(
+            declines(&hidden),
+            [("form-named-property", "id", Some("main"))]
+        );
+    }
+
+    #[test]
+    fn a_browser_only_spread_in_a_shell_keeps_the_keys_read_before_it() {
+        // `main` becomes a shell because of the `v-if`, and the shell shows
+        // the values the server has. The spread leaves the `data-x` read
+        // before it, written as the text Vue gives a `true` value.
+        let shell = root(
+            r#"<main><p v-if="open"><span :data-x="true" v-bind="extra">a</span></p></main>"#,
+            json!({}),
+        );
+        assert_eq!(
+            html(&shell),
+            r#"<main data-allow-mismatch="children"><p><span data-x="true">a</span></p></main>"#
+        );
+        assert_eq!(
+            declines(&shell),
+            [("browser-condition", "v-if", Some("main"))]
+        );
     }
 
     /// The anchors the server writes are the ones the compiler's hydration

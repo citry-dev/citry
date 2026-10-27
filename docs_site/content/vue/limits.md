@@ -152,8 +152,10 @@ A built-in tag that renders only its content, such as `<c-provide>`,
 accepts no Vue syntax. The render fails, and the error says to put the
 binding on an element inside the tag.
 
-`<c-slot>` accepts no Vue syntax either; see
-[`v-if` around a slot](/vue/slots/#v-if-around-a-slot).
+`<c-slot>` accepts no Vue syntax except `:` slot props such as
+`:row="row"`; see
+[`v-if` around a slot](/vue/slots/#v-if-around-a-slot) and
+[Pass Vue data](/vue/slots/#scoped-slots).
 
 ### `<template #name>` in a component tag { #vue-slot-syntax }
 

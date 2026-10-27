@@ -57,8 +57,18 @@ Matches keep their server order and are never fuzzy-ranked.
 ## Show disabled commands and shortcut hints
 
 Disabled commands remain visible and searchable, expose disabled option state,
-and are skipped by active navigation. `shortcut` is presentational text only.
-The component never registers that key combination.
+and are skipped by active navigation. `shortcut` is display text. The
+component never listens for that key combination; your application does.
+
+The shortcut text is hidden from assistive technology, so the command also
+gets an `aria-keyshortcuts` attribute that exposes it. Write the hint as
+one key combination, such as `Ctrl ,`, `Ctrl+Shift+P`, or `⌘K`, and the
+command gets `Control+,`, `Control+Shift+P`, or `Meta+K`. A hint that is
+not one combination, such as the sequence `Ctrl K, Ctrl S`, still shows,
+but the command gets no `aria-keyshortcuts`, and neither does a disabled
+command. Set `shortcut` only for a key combination your page handles and
+the browser does not already use, because `aria-keyshortcuts` tells
+assistive technology users that the key works.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/ccommand_palette/snippets/disabled_and_shortcuts.py"

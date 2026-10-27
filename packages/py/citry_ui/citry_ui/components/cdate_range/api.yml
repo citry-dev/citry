@@ -32,7 +32,7 @@ inputs:
       - {id: fixed-weeks, name: fixed_weeks, type: bool, default: {kind: literal, value: true}, effect: Uses six stable Calendar rows instead of the natural month row count.}
       - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Choose dates}, effect: Supplies visible empty-state text when explicitly overridden.}
       - {id: range-label, name: range_label, type: str, default: {kind: literal, value: Choose date range}, effect: Names the group popup and empty trigger when explicitly overridden.}
-      - {id: change-label, name: change_label, type: str, default: {kind: literal, value: 'Change date range, {start} to {end}'}, effect: Formats a committed trigger name and must retain both placeholders when explicitly overridden.}
+      - {id: change-label, name: change_label, type: str, default: {kind: literal, value: 'Change date range, {start} – {end}'}, effect: Formats a committed trigger name and must retain both placeholders when explicitly overridden.}
       - {id: start-label, name: start_label, type: str, default: {kind: literal, value: Start date}, effect: Names the native start input and Calendar start endpoint when explicitly overridden.}
       - {id: end-label, name: end_label, type: str, default: {kind: literal, value: End date}, effect: Names the native end input and Calendar end endpoint when explicitly overridden.}
       - {id: clear-label, name: clear_label, type: str, default: {kind: literal, value: Clear date range}, effect: Names the clear Button when explicitly overridden.}

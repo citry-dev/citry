@@ -1,5 +1,18 @@
 # Release notes
 
+## Unreleased
+
+### Added
+
+- `parse_template()` accepts a Vue slot prop such as `:row="row"` on
+  `<c-slot>`, and a `v-slot="{ row }"` pattern on `<c-fill>`. Other forms,
+  such as `:[key]` or `v-slot="a, b"`, still fail, with a message that
+  names the form to write.
+- In a component that uses Vue, the server now writes a fill that reads
+  Vue slot props, such as `v-slot="{ row }"`, with the values its
+  `<c-slot>` passes when the server knows them. Such a fill used to be left
+  for the browser to build.
+
 ## v1.9.0
 
 ### Changed
@@ -130,6 +143,10 @@
 
 ### Performance
 
+- `template_formatter.format_template()` is much faster on deeply nested tags
+  that break across lines: 400 nested `<div c-for>` tags took about 42 seconds
+  and now take well under a second. A few templates get a slightly different
+  layout the first time you format them with this version.
 - `template_parser.parse_template()` is much faster on large templates: a
   92 KB template that took more than a second now parses in about 10 ms.
 - `template_parser.parse_template()` now reports an error that covers many

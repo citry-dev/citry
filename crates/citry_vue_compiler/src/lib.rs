@@ -21,6 +21,7 @@ use vize_atelier_dom::{
 };
 use vize_s1::{SurfaceChild, SurfaceTree};
 
+mod dom_members;
 mod hydration;
 pub mod server_render;
 mod stack;

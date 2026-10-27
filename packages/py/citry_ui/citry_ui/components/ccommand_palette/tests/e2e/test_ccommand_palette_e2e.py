@@ -756,3 +756,51 @@ def test_controlled_snippet_declines_requests_until_the_owner_accepts_them(
     )
     assert palette.evaluate("element => element.open") is False
     assert errors == []
+
+
+def test_disabled_snippet_shortcuts_run_enabled_commands_only(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _open_snippet(page, serve_citry_ui_live, "disabled_and_shortcuts")
+    output = page.locator("output[aria-live=polite]")
+
+    page.keyboard.press("Alt+Shift+KeyV")
+    expect(output).to_have_text("Action: view-logs")
+    page.keyboard.press("Alt+Shift+KeyX")
+    expect(output).to_have_text("Action: delete-environment")
+    # The disabled command shows a hint, but its key must not run it.
+    page.keyboard.press("Alt+Shift+KeyD")
+    page.wait_for_timeout(100)
+    expect(output).to_have_text("Action: delete-environment")
+
+    # The palette's search box is a combobox, so a key pressed with focus in
+    # it still runs its command, even though other text fields are left alone.
+    palette_input = page.locator('[data-citry-ui-part="command-palette-input"]')
+    palette_input.focus()
+    palette_input.press("Alt+Shift+KeyV")
+    expect(output).to_have_text("Action: view-logs")
+
+    # A disabled palette's commands are unavailable, so their keys do nothing.
+    _set_inert_box(page, "Disable palette")
+    page.keyboard.press("Alt+Shift+KeyX")
+    page.wait_for_timeout(100)
+    expect(output).to_have_text("Action: view-logs")
+    assert errors == []
+
+
+def test_quality_scenario_shortcut_hint_runs_its_command_and_a_disabled_hint_does_not(
+    page: Any,
+    open_scenario: Any,
+) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    open_scenario("command-palette.states")
+    _wait_for_scenario_palettes(page)
+    # The spans read: open state, query, last action, shortcut opens.
+    basic = page.locator("#quality-command-palette-basic-output span")
+
+    page.keyboard.press("Alt+Shift+KeyO")
+    expect(basic).to_have_text(["closed", "empty", "open-settings", "0"])
+    # The disabled "Managed command" shows Alt Shift G, which must do nothing.
+    page.keyboard.press("Alt+Shift+KeyG")
+    page.wait_for_timeout(100)
+    expect(basic).to_have_text(["closed", "empty", "open-settings", "0"])
+    assert errors == []

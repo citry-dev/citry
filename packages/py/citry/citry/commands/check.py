@@ -10,6 +10,7 @@ from typing import Any, ClassVar, NoReturn, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message, load_app
 from citry._checker import CheckReport, _lsp_range_coordinates, _source_finding, check_project
+from citry._symbol_table import CHECK_NOTE, symtable_missing
 from citry.command import CommandArg
 from citry.extension import ExtensionCommand
 
@@ -126,6 +127,9 @@ class CheckCommand(ExtensionCommand):
                 selection = CheckAppSelection(spec=selection.spec, engine=engine)
 
         report = check_project(selection, Path.cwd(), include_libraries=include_libraries)
+        # Only a loaded app runs the two analyses that need a symbol table.
+        if symtable_missing() and selection.engine is not None and report.app_failure is None:
+            report = replace(report, notes=(*report.notes, CHECK_NOTE))
         if types and report.app_failure is None and selection.spec is not None:
             report = _with_type_findings(report, selection.spec, Path.cwd())
         elif types:

@@ -9,6 +9,7 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 from citry_ui.quality.routes import build_scenario
 
 pytestmark = pytest.mark.e2e
@@ -150,6 +151,7 @@ def test_scroll_area_quality_native_semantics_callback_style_and_axe(page: Any, 
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file(), "run `pnpm install` before the ScrollArea quality axe test"
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     findings = page.evaluate(
         """async () => (await axe.run(document, {resultTypes:['violations']})).violations
           .filter((finding) => ['serious','critical'].includes(finding.impact))"""

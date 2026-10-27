@@ -9,12 +9,12 @@ import copy
 import itertools
 import keyword
 import re
-import symtable
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._source_lines import source_lines
+from citry._symbol_table import symtable
 from citry._walk import Call, run
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement, parse_template
 
@@ -413,7 +413,17 @@ def build_inferred_template_shadow(
     # template loop `c-for="resolved in items"`, would lend its declared type
     # to the template name. Renaming those locals gives each template name its
     # own type, while the copied method computes the same value.
-    conflicts = _renamable_method_locals(module_source, class_qualname) & _template_bound_names(roots, query)
+    template_names = _template_bound_names(roots, query)
+    renamable = _renamable_method_locals(module_source, class_qualname)
+    if renamable is None:
+        # Without a symbol table (PyPy) the locals to rename are unknown. When
+        # the method binds none of the template's names, the CPython path would
+        # rename none of them either, so the copy below is exact; otherwise
+        # give no type answer rather than a wrong one.
+        if _method_bound_names(module_source, class_qualname) & template_names:
+            return None
+        renamable = frozenset()
+    conflicts = renamable & template_names
     prepared = _prepared_template_data_method(
         module_source,
         class_qualname,
@@ -865,7 +875,62 @@ def _prepared_template_data_method(
 
 
 @lru_cache(maxsize=32)
-def _renamable_method_locals(module_source: str, class_qualname: str) -> frozenset[str]:
+def _method_bound_names(module_source: str, class_qualname: str) -> frozenset[str]:
+    """
+    Return every name that one class's ``template_data`` method binds, or that the whole module binds.
+
+    This reads only the syntax tree, so it works where ``symtable`` does not.
+    It lists at least the method's locals: every name the method or code
+    nested in it assigns, deletes, imports, defines, takes as a parameter,
+    or declares ``global`` or ``nonlocal``. Names the method only reads are
+    left out, because Python never treats those as locals. When the class or
+    its one ``template_data`` function cannot be found, it lists the names
+    the whole module binds, so the caller gives no answer for more templates
+    rather than fewer. A module that does not parse gives an empty set; the
+    caller has already given no answer for that module.
+    """
+    try:
+        tree = ast.parse(module_source)
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        return frozenset()
+    # Find the method the same way the CPython path does: a class for each
+    # part of the qualname, so a function that happens to share a class's
+    # name is never read in its place.
+    scope: ast.AST = tree
+    class_node = _class_for_qualname(tree, class_qualname)
+    if class_node is not None:
+        methods = [
+            node
+            for node in class_node.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "template_data"
+        ]
+        if len(methods) == 1:
+            scope = methods[0]
+    names: set[str] = set()
+    for node in ast.walk(scope):
+        if isinstance(node, ast.Name):
+            # A read is never a local, so only a store or delete counts.
+            if isinstance(node.ctx, (ast.Store, ast.Del)):
+                names.add(node.id)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(node, ast.alias):
+            names.add((node.asname or node.name).split(".")[0])
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            names.update(node.names)
+        elif (isinstance(node, ast.ExceptHandler) and node.name) or (
+            isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name
+        ):
+            names.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            names.add(node.rest)
+    return frozenset(names)
+
+
+@lru_cache(maxsize=32)
+def _renamable_method_locals(module_source: str, class_qualname: str) -> frozenset[str] | None:
     """
     Return the names local to one class's ``template_data`` method that can be renamed safely.
 
@@ -877,7 +942,11 @@ def _renamable_method_locals(module_source: str, class_qualname: str) -> frozens
     a nested function called by keyword or a nested class's attribute. On
     Python 3.12 and later the table also lists a comprehension's loop
     variable as a method local, and the same rule covers it.
+
+    Returns None where the interpreter has no symbol table (PyPy).
     """
+    if symtable is None:
+        return None
     try:
         table = symtable.symtable(module_source, "<citry-template-data>", "exec")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
@@ -1048,7 +1117,10 @@ def _root_binding_lines(
             # Analysis-only globals do not come from the copied TemplateData
             # carrier. The caller has canonicalized this expression-shaped
             # annotation, so ty can read it without retaining the runtime value.
-            value = f"__citry_cast({root.type_display}, None)" if root.type_display is not None else "__citry_Unknown"
+            # A root with no known type gets a value typed Any, not the Any
+            # special form itself, which ty would type as `<special-form Any>`.
+            unknown_type = root.type_display if root.type_display is not None else "__citry_Unknown"
+            value = f"__citry_cast({unknown_type}, None)"
         elif (
             root.access == "attribute" and direct_attribute_owner is not None and root_owner == direct_attribute_owner
         ):
@@ -1093,8 +1165,9 @@ def _root_type_imports(
     references = {
         owner: owner[1] if owner[0] == source_module else f"{module_aliases[owner]}.{owner[1]}" for owner in owners
     }
-    needs_cast = bool(references) or any(root.access == "analysis" and root.type_display for root in roots)
     needs_unknown = any(root.access == "analysis" and root.type_display is None for root in roots)
+    # Every analysis root, typed or not, is written as a cast.
+    needs_cast = bool(references) or any(root.access == "analysis" for root in roots)
     if not needs_cast and not needs_unknown:
         return [], {}
     imports: list[str] = []

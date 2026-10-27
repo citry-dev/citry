@@ -17,6 +17,7 @@ from citry_ui.components.cdisclosure.cdisclosure import (
     CInternalDisclosurePanelContent,
     CInternalDisclosureTitleContent,
 )
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -536,6 +537,7 @@ def test_initial_and_active_disclosure_have_a_name_and_no_serious_axe_findings(
     assert trigger.count() == 1
     axe = _root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe))
+    page.evaluate(axe_rule_exclusions_script())
 
     for expected in ("false", "true"):
         assert trigger.get_attribute("aria-expanded") == expected

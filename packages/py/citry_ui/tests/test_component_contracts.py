@@ -478,6 +478,7 @@ FAMILIES = (
                 "aria-controls",
                 "aria-disabled",
                 "aria-expanded",
+                "aria-keyshortcuts",
                 "aria-labelledby",
                 "aria-selected",
                 "data-active",

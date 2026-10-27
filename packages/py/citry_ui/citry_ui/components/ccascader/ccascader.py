@@ -435,7 +435,9 @@ class CInternalCascader(LibraryComponent):
             "display",
             "form",
             "groups",
+            "hidden_label",
             "joined",
+            "label_id",
             "labels",
             "name",
             "open",
@@ -448,8 +450,11 @@ class CInternalCascader(LibraryComponent):
             "separator",
             "size",
             "status",
+            "tree_labelledby",
             "trigger_id",
+            "trigger_labelledby",
             "value",
+            "value_id",
             "variant",
         )
 
@@ -474,6 +479,10 @@ class CInternalCascader(LibraryComponent):
         texts = cast("dict[str, str]", data["labels"])
         root_id = cast("str", data["root_id"])
         self.unprovide(_CONTEXT)
+        # An app often gives its own label `{id}-label`, so the hidden label
+        # uses a suffix that an app is unlikely to pick.
+        label_id = f"{root_id}-aria-label"
+        value_id = f"{root_id}-value"
         return {
             **data,
             "roots": registry.roots,
@@ -483,6 +492,26 @@ class CInternalCascader(LibraryComponent):
             "display": joined or texts["placeholder"],
             "trigger_id": f"{root_id}-trigger",
             "popup_id": f"{root_id}-popup",
+            "label_id": label_id,
+            "value_id": value_id,
+            # `aria_labelledby` wins over `aria_label`, so the hidden label
+            # exists only when it is the label in use.
+            "hidden_label": data["aria_label"] if not data["aria_labelledby"] else None,
+            # The trigger shows the chosen path, so its name holds that text
+            # after the label (WCAG 2.5.3): a voice user says what they see.
+            # An `aria_label` becomes a hidden label element for the same
+            # reason, because `aria-label` would replace the visible text.
+            "trigger_labelledby": (
+                f"{data['aria_labelledby']} {value_id}"
+                if data["aria_labelledby"]
+                else f"{label_id} {value_id}"
+                if data["aria_label"]
+                else None
+            ),
+            # With a label, the tree is named by the label alone, not by the
+            # chosen path. With none, it takes the trigger's name, which is
+            # the path or the placeholder that the trigger shows.
+            "tree_labelledby": data["aria_labelledby"] or (label_id if data["aria_label"] else f"{root_id}-trigger"),
             "root_attrs": {
                 **cast("dict[str, object]", data["attrs"]),
                 "data-disabled": "" if data["disabled"] else None,
@@ -502,18 +531,26 @@ class CInternalCascader(LibraryComponent):
         c-bind="root_attrs"
         data-citry-ui-part="cascader"
       >
+        <c-if cond="hidden_label">
+          <span
+            c-id="label_id"
+            hidden
+          >{{ hidden_label }}</span>
+        </c-if>
         <button
           type="button"
           c-id="trigger_id"
           c-disabled="disabled"
-          c-aria-label="aria_label"
-          c-aria-labelledby="aria_labelledby"
+          c-aria-labelledby="trigger_labelledby"
           aria-haspopup="tree"
           c-aria-controls="popup_id"
           c-aria-expanded="'true' if open else 'false'"
           data-citry-ui-part="trigger"
         >
-          <span data-citry-ui-part="value">{{ tr('citry-ui-cascader-placeholder') if catalog_placeholder and not joined else display }}</span>
+          <span
+            c-id="value_id"
+            data-citry-ui-part="value"
+          >{{ tr('citry-ui-cascader-placeholder') if catalog_placeholder and not joined else display }}</span>
           <span aria-hidden="true" data-citry-ui-part="indicator">⌄</span>
         </button>
         <div
@@ -523,7 +560,7 @@ class CInternalCascader(LibraryComponent):
         >
           <ul
             role="tree"
-            c-aria-labelledby="trigger_id"
+            c-aria-labelledby="tree_labelledby"
             c-hidden="not roots"
             data-citry-cascader-column
             data-level="1"

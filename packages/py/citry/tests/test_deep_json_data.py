@@ -49,6 +49,26 @@ def _frames_left(room: int) -> Iterator[None]:
         sys.setrecursionlimit(limit)
 
 
+@contextmanager
+def _room_for_reference() -> Iterator[None]:
+    """
+    Raise the recursion limit so the standard library can handle ``DEEP`` levels.
+
+    On Python 3.11 the C code behind `json.dumps`, `json.loads` and `==` counts
+    each nested call against the recursion limit, so the reference result for
+    ``DEEP``-level data needs more room than the default of 1000. Python 3.12 and
+    later count those calls separately. Wrap only the reference computations and
+    comparisons in this; the Citry calls under test keep running under
+    ``_frames_left``.
+    """
+    limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(limit, DEEP * 4))
+    try:
+        yield
+    finally:
+        sys.setrecursionlimit(limit)
+
+
 def _nested(depth: int, leaf: object, *, wrap: Callable[[object, int], object] | None = None) -> object:
     """Build ``depth`` levels around ``leaf``, alternating dicts and lists unless ``wrap`` says otherwise."""
     value = leaf
@@ -68,7 +88,8 @@ def test_json_plain_copies_deep_data_in_bounded_frames() -> None:
     expected = _nested(DEEP, "bottom", wrap=lambda inner, level: [inner] if level % 3 == 0 else {"k": inner})
     with _frames_left(150):
         plain = _json_plain(value)
-    assert plain == expected
+    with _room_for_reference():
+        assert plain == expected
 
 
 def test_json_plain_returns_containers_it_built_itself() -> None:
@@ -141,7 +162,8 @@ def test_copy_evaluated_json_copies_deep_data_in_bounded_frames() -> None:
     value = _nested(DEEP, "bottom")
     with _frames_left(150):
         copy = _copy_evaluated_json(value)
-    assert copy == value
+    with _room_for_reference():
+        assert copy == value
     # Walk down level by level with a loop: every container is a new one.
     source, copied = value, copy
     for _ in range(DEEP):
@@ -201,7 +223,8 @@ def test_deep_json_dumps_writes_deep_data_in_bounded_frames() -> None:
     value = _nested(DEEP, "</b>")
     with _frames_left(150):
         text = deep_json.dumps(value, sort_keys=True, ensure_ascii=True)
-    assert text == json.dumps(value, separators=(",", ":"), sort_keys=True)
+    with _room_for_reference():
+        assert text == json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
 def test_script_json_writes_deep_data_in_bounded_frames() -> None:
@@ -210,7 +233,8 @@ def test_script_json_writes_deep_data_in_bounded_frames() -> None:
     value = _nested(DEEP, "</b>")
     with _frames_left(150):
         text = script_json(value, sort_keys=True)
-    assert text == json.dumps(value, separators=(",", ":"), sort_keys=True).replace("<", "\\u003c")
+    with _room_for_reference():
+        assert text == json.dumps(value, separators=(",", ":"), sort_keys=True).replace("<", "\\u003c")
 
 
 def test_script_json_writes_the_same_text_when_json_dumps_runs_out_of_frames(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -318,8 +342,9 @@ def test_deep_json_loads_reads_deep_text_in_bounded_frames() -> None:
     text = "[" * DEEP + '{"k": 1}' + "]" * DEEP
     with _frames_left(150):
         value = deep_json.loads(text)
-    expected = json.loads(text)
-    assert value == expected
+    with _room_for_reference():
+        expected = json.loads(text)
+        assert value == expected
 
 
 def _deep_data_page(*, vue: bool) -> type[Component]:
@@ -453,7 +478,10 @@ def test_a_vue_fragment_mount_reads_deep_prepared_data_back(monkeypatch: pytest.
     def loads_without_frames(text: object, **kwargs: object) -> object:
         raise RecursionError
 
-    text = json.dumps({"deep": _nested(DEEP, "bottom")})
-    expected = real_loads(text)
+    with _room_for_reference():
+        text = json.dumps({"deep": _nested(DEEP, "bottom")})
+        expected = real_loads(text)
     monkeypatch.setattr(json, "loads", loads_without_frames)
-    assert serialization._loads_own_json(text) == expected
+    value = serialization._loads_own_json(text)
+    with _room_for_reference():
+        assert value == expected

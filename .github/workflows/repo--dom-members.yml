@@ -1,0 +1,70 @@
+# Checks the generated DOM member table (crates/citry_vue_compiler/src/
+# dom_members.rs) against real browsers. The test mounts elements in
+# Chromium, Firefox and WebKit, runs Vue's own attribute code on them, and
+# fails when a browser keeps different attribute text than the table says the
+# server should write.
+#
+# It is path-filtered because only a change to the table or its inputs can
+# change the result. Those inputs include the Playwright version in
+# tools/dom-members/pnpm-lock.yaml, which fixes the browser builds. So it does
+# not run on other pull requests and does not run on a schedule.
+#
+# Because of the path filter, it cannot be a required check: GitHub never
+# reports a skipped path-filtered workflow, so a required check on one would
+# wait forever. The generated-table check in repo--generated.yml has no filter
+# and covers the table matching its inputs.
+name: DOM member table in browsers
+
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "crates/citry_vue_compiler/src/dom_members.rs"
+      - "tools/dom-members/**"
+      - ".github/workflows/repo--dom-members.yml"
+  pull_request:
+    paths:
+      - "crates/citry_vue_compiler/src/dom_members.rs"
+      - "tools/dom-members/**"
+      - ".github/workflows/repo--dom-members.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+
+jobs:
+  browsers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm goes first: setup-node's pnpm cache needs the pnpm binary. The
+      # action reads the pinned pnpm version from the root package.json.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          # tools/dom-members is its own pnpm root, outside the workspace.
+          cache-dependency-path: tools/dom-members/pnpm-lock.yaml
+
+      # The browser builds come from the Playwright version in this lockfile.
+      - name: Install the DOM member table tools
+        run: pnpm --dir tools/dom-members install --frozen-lockfile
+
+      - name: Install the browsers
+        run: pnpm --dir tools/dom-members exec playwright install --with-deps chromium firefox webkit
+
+      - name: Run the table against the browsers
+        env:
+          BROWSERS: chromium,firefox,webkit
+        run: pnpm --dir tools/dom-members run test:browser

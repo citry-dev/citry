@@ -7,11 +7,13 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Literal, TypeAlias, cast
 
 from citry._component_introspection import _installed_citry_version
 from citry._vue.compiler import HELPER_CONTRACT
 from citry._vue.leaf_program import LEAF_TEMPLATE_CONTRACT_DESCRIPTOR
+from citry_core.template_parser import HtmlAttr, TemplateElement, parse_template
 
 from .errors import CacheArtifactError, _CacheArtifactCompatibilityError, _CacheArtifactOversizedError
 from .limits import (
@@ -191,6 +193,11 @@ class ArtifactDirectSlotPart:
     source: str
     span: tuple[int, int]
     origin: str | None
+    # The receiving `<c-slot>`'s Vue slot props as `(attribute, expression)`
+    # pairs, and the fill's `v-slot` pattern, so a replay writes the same
+    # Vue slot outlet and slot function as the live render.
+    vue_props: tuple[tuple[str, str], ...] = ()
+    fill_vue_pattern: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -665,6 +672,8 @@ def _part_to_wire(part: ArtifactPart) -> list[object]:
             part.source,
             list(part.span),
             part.origin,
+            [[key, value] for key, value in part.vue_props],
+            part.fill_vue_pattern,
         ]
     if type(part) is ArtifactDirectCallRunPart:
         return ["direct_call_run", part.frame, part.child_class_id, part.source, list(part.span)]
@@ -987,7 +996,7 @@ def _part_from_wire(value: object, path: str) -> ArtifactPart:
             typed,
             static,
         )
-    if tag == "direct_slot" and len(part) == 15:
+    if tag == "direct_slot" and len(part) == 17:
         parent = part[3]
         source = _require_string(part[12], f"{path}[12]")
         return ArtifactDirectSlotPart(
@@ -1005,6 +1014,8 @@ def _part_from_wire(value: object, path: str) -> ArtifactPart:
             source,
             _require_source_span(part[13], source, f"{path}[13]"),
             _require_optional_nonempty_string(part[14], f"{path}[14]"),
+            _require_slot_vue_props(part[15], f"{path}[15]"),
+            _require_fill_vue_pattern(part[16], f"{path}[16]"),
         )
     if tag == "direct_call_run" and len(part) == 5:
         source = _require_string(part[3], f"{path}[3]")
@@ -1353,6 +1364,99 @@ def _require_attribute_origin(value: str, path: str) -> Literal["source", "data"
     if value == "data":
         return "data"
     raise CacheArtifactError(f"{path} has an unknown attribute origin.")
+
+
+def _require_vue_attribute_value(value: object, path: str) -> tuple[str, str]:
+    """
+    Read a Vue value Citry writes between one kind of quote, and return it with that quote.
+
+    The parser takes the value as written, and the runtime node refuses
+    `{{ ... }}` in it, so a stored value holding either cannot come from Citry.
+    """
+    text = _require_nonempty_string(value, path)
+    if ('"' in text and "'" in text) or "{{" in text:
+        raise CacheArtifactError(f"{path} is not a value the template parser accepts.")
+    return text, "'" if '"' in text else '"'
+
+
+def _parsed_attrs(source: str) -> list[HtmlAttr] | None:
+    """Return the attributes of the one tag `source` holds, or `None` when the parser refuses it."""
+    try:
+        template = parse_template(source)
+    except SyntaxError:
+        return None
+    elements = template.elements
+    if len(elements) != 1 or not isinstance(elements[0], TemplateElement.Node):
+        return None
+    return list(elements[0]._0.start_tag.attrs)
+
+
+# A parse costs about 100 microseconds, and every cache hit reads the same
+# few props and patterns again, so each answer is kept by its input text.
+@lru_cache(maxsize=1024)
+def _parser_accepts_slot_props(props: tuple[tuple[str, str, str], ...]) -> bool:
+    """Whether one `<c-slot>` holding all these `(key, expression, quote)` props parses to exactly them."""
+    written = "".join(f" {key}={quote}{expression}{quote}" for key, expression, quote in props)
+    # All props sit on one tag, so the parser's clash rules between them run too.
+    attrs = _parsed_attrs(f'<c-slot name="x"{written} />')
+    # A key holding a space or an `=` would parse as more than one attribute,
+    # so each attribute after `name` must be the matching prop.
+    return (
+        attrs is not None
+        and len(attrs) == len(props) + 1
+        and all(
+            attr.key.content == key and attr.inner_value is not None and attr.inner_value.content == expression
+            for attr, (key, expression, _quote) in zip(attrs[1:], props, strict=True)
+        )
+    )
+
+
+@lru_cache(maxsize=1024)
+def _parser_accepts_fill_pattern(pattern: str, quote: str) -> bool:
+    """Whether the parser accepts `pattern` as `v-slot` on `<c-fill>`."""
+    # The quote never appears in the pattern, so the attribute cannot end
+    # early, and parsing it applies exactly the parser's pattern rules.
+    return _parsed_attrs(f'<c-x><c-fill name="x" v-slot={quote}{pattern}{quote}>x</c-fill></c-x>') is not None
+
+
+def _require_slot_vue_props(value: object, path: str) -> tuple[tuple[str, str], ...]:
+    """
+    Read a slot's Vue props: a list of `[attribute, expression]` pairs.
+
+    A stored entry must hold only props the template parser accepts, so an
+    entry that was changed in the store is treated as unreadable (a cache
+    miss) instead of failing the render when Citry writes the outlet. The
+    check parses a `<c-slot>` holding the props, so it applies exactly the
+    parser's rules. The expressions themselves are Vue code written in the
+    template, which the cache stores as it stores every other piece of
+    compiled template text.
+    """
+    props: list[tuple[str, str]] = []
+    written: list[tuple[str, str, str]] = []
+    for index, item in enumerate(_require_list(value, path)):
+        pair = _require_list(item, f"{path}[{index}]")
+        if len(pair) != 2:
+            raise CacheArtifactError(f"{path}[{index}] must hold an attribute and its expression.")
+        key = _require_nonempty_string(pair[0], f"{path}[{index}][0]")
+        expression, quote = _require_vue_attribute_value(pair[1], f"{path}[{index}][1]")
+        props.append((key, expression))
+        written.append((key, expression, quote))
+    if written and not _parser_accepts_slot_props(tuple(written)):
+        raise CacheArtifactError(f"{path} holds Vue slot props the template parser does not accept.")
+    return tuple(props)
+
+
+def _require_fill_vue_pattern(value: object, path: str) -> str | None:
+    """Read a fill's `v-slot` pattern, which must be one the template parser accepts on `<c-fill>`."""
+    if value is None:
+        return None
+    pattern, quote = _require_vue_attribute_value(value, path)
+    # The render stores the pattern trimmed, and Citry merges its context
+    # names into it by its first and last character, so spaces around a
+    # stored pattern would write a broken slot function.
+    if pattern != pattern.strip() or not _parser_accepts_fill_pattern(pattern, quote):
+        raise CacheArtifactError(f"{path} is not a 'v-slot' pattern the template parser accepts.")
+    return pattern
 
 
 def _require_optional_nonempty_string(value: object, path: str) -> str | None:

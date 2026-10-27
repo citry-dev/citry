@@ -17,10 +17,18 @@ fn deeply_nested_elements_format_on_a_small_stack() {
     let control_depth = 250;
     let controls =
         "<c-if cond=\"x\">".repeat(control_depth) + "<p></p>" + &"</c-if>".repeat(control_depth);
+    // A chain of `c-for` tags written on one line covers tags that break
+    // across lines at every level, where each break moves the tag inside it.
+    let for_depth = 400;
+    let for_chain = (0..for_depth)
+        .map(|level| format!("<div c-for=\"row{level} in rows\">"))
+        .collect::<String>()
+        + "{{ n }}"
+        + &"</div>".repeat(for_depth);
     std::thread::Builder::new()
         .stack_size(256 * 1024)
         .spawn(move || {
-            for source in [elements, controls] {
+            for source in [elements, controls, for_chain] {
                 if let Err(error) = format_template(&source) {
                     panic!("{error}");
                 }

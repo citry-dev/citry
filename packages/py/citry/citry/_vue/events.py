@@ -1298,6 +1298,7 @@ def native_compile_view(
                     raise ValueError(_model_target_message(assembly, definition_id, error)) from error
                 raise
         check_directive_roots(assembly, compiled)
+        check_fills_in_vue_loops(assembly, compiled)
         return compiled
 
     return compile_view
@@ -1500,6 +1501,90 @@ def check_directive_roots(assembly: Assembly, compiled: Mapping[str, CompiledRen
                 f"{directive!r} on an element around <{tag}>."
             )
             raise RuntimeError(msg)
+
+
+def check_fills_in_vue_loops(assembly: Assembly, compiled: Mapping[str, CompiledRender]) -> None:
+    """
+    Reject a fill holding Citry components when its `<c-slot>` sits inside a Vue `v-for` the author wrote.
+
+    Vue calls such an outlet once per item, so it would mount each component
+    the server prepared once, which breaks the page in the browser with no
+    server error. `citry check` cannot see this, because the outlet and the
+    fill are in two components' templates. The slot names join the two: a
+    fill and the outlet it reaches share one generated name.
+
+    Raises:
+        RuntimeError: When a fill with components reaches an outlet in a `v-for`.
+
+    """
+    # Each looped outlet name, with the definition whose `v-for` repeats it
+    # and the definition whose `<c-slot>` wrote that outlet.
+    looped: dict[str, tuple[str, str]] = {}
+    for definition_id, render in compiled.items():
+        for name in render.looped_slot_outlets:
+            looped.setdefault(name, (definition_id, definition_id))
+    # Most pages have no outlet in a `v-for`.
+    if not looped:
+        return
+    fills = [
+        (definition_id, fill)
+        for definition_id, render in compiled.items()
+        for call in render.local_calls
+        for fill in _call_fills(call)
+    ]
+    # A fill that reaches a looped outlet repeats with it, and so does every
+    # outlet inside that fill, which a middle component uses to pass on a
+    # fill it received. Follow those until no new outlet is found.
+    changed = True
+    while changed:
+        changed = False
+        for definition_id, fill in fills:
+            reached = looped.get(str(fill.get("name")))
+            if reached is None:
+                continue
+            outlets = fill.get("slotOutlets")
+            for outlet in outlets if isinstance(outlets, list | tuple) else ():
+                if isinstance(outlet, str) and outlet not in looped:
+                    # The outlet sits in this fill, so the fill's author wrote it.
+                    looped[outlet] = (reached[0], definition_id)
+                    changed = True
+    for definition_id, fill in fills:
+        reached = looped.get(str(fill.get("name")))
+        if reached is None or not (fill.get("localDescendants") or fill.get("localDescendantRuns")):
+            continue
+        repeater_id, owner_id = reached
+        repeater = _definition_label(assembly, repeater_id)
+        author = _definition_label(assembly, definition_id)
+        # Name the component whose `<c-slot>` the fill reaches when that is
+        # a middle component passing it on, not the one with the `v-for`.
+        slot = "a <c-slot>" if owner_id == repeater_id else f"a <c-slot> of {_definition_label(assembly, owner_id)}"
+        msg = (
+            f"{author} passes a fill that holds Citry components to {slot} that {repeater} repeats "
+            "inside a Vue 'v-for'. Vue would render that fill once per item, but the server prepares each "
+            "component in it once, so the page would fail in the browser. Loop with Citry's 'c-for' "
+            "around the <c-slot> instead, or keep the fill to plain elements."
+        )
+        raise RuntimeError(msg)
+
+
+def _call_fills(call: Mapping[str, object]) -> list[Mapping[str, object]]:
+    """Return the fill records the compiler wrote for one component call."""
+    fills = call.get("fills", ())
+    return [fill for fill in fills if isinstance(fill, dict)] if isinstance(fills, list | tuple) else []
+
+
+def _definition_label(assembly: Assembly, definition_id: str) -> str:
+    """Name the component a compiled definition was written for, as `component 'List'`."""
+    type_keys = assembly.template_types(definition_id)
+    if not type_keys:
+        return "a component"
+    if assembly.component_for_type is not None:
+        try:
+            return f"component {assembly.component_for_type(type_keys[0]).__name__!r}"
+        except KeyError:
+            # A class unregistered since the render started keeps its key.
+            pass
+    return f"component {type_keys[0]!r}"
 
 
 def _validate_style_assets(styles: list[dict[str, object]], view: PreparedViewMetadata) -> None:
