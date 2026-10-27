@@ -4,6 +4,7 @@
 
 ### Added
 
+- Citry now supports Python 3.15.
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
   spell check no longer waits behind the app's slower calls. A detached

@@ -42,7 +42,8 @@
 
 ### Added
 
-- citry-core builds from source on Python 3.15 and free-threaded 3.15.
+- citry-core now supports Python 3.15. The prebuilt wheels install on it,
+  and Linux also gets a free-threaded CPython 3.15 wheel.
 - For text that does not parse, `analyze_browser_source()` returns the
   JavaScript parser's first error in `error`, with its message and
   position, and each reference's `written` says whether the code assigns

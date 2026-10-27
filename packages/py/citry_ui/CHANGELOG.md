@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Citry UI now supports Python 3.15.
+
 ### Fixed
 
 - `CTooltip` now opens or closes when a re-render changes its server `open`

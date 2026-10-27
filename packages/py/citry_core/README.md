@@ -191,7 +191,7 @@ _rust.html_transform.transform_html(...)
 ## Development
 
 Installing from the source distribution requires Rust 1.96 or newer. Regular
-CPython 3.11 through 3.14 installs a prebuilt wheel and needs no Rust
+CPython 3.11 through 3.15 installs a prebuilt wheel and needs no Rust
 toolchain. Free-threaded CPython and PyPy wheel coverage is
 narrower and currently targets the release workflow's Linux platforms; an
 interpreter/platform pair without a matching wheel falls back to the source

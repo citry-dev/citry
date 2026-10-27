@@ -138,6 +138,7 @@ def expected_release_filenames(version: str) -> set[str]:
     for platform in (*LINUX_PLATFORMS.values(), *MUSL_PLATFORMS.values()):
         wheels.add(f"citry_core-{version}-cp311-abi3-{platform}.whl")
         wheels.add(f"citry_core-{version}-cp314-cp314t-{platform}.whl")
+        wheels.add(f"citry_core-{version}-cp315-cp315t-{platform}.whl")
         wheels.add(f"citry_core-{version}-pp311-pypy311_pp73-{platform}.whl")
     for platform in (*WINDOWS_PLATFORMS, *MACOS_PLATFORMS):
         wheels.add(f"citry_core-{version}-cp311-abi3-{platform}.whl")

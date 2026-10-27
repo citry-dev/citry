@@ -290,7 +290,7 @@ def check() -> list[str]:
         )
     for interpreter_args in (
         "--features abi3-py311 --interpreter python3.11",
-        "--features abi3-py311 --interpreter python3.14t pypy3.11",
+        "--features abi3-py311 --interpreter python3.14t python3.15t pypy3.11",
     ):
         if publish.count(interpreter_args) != 2:
             errors.append(f"Linux and musllinux citry-core builders must each select {interpreter_args!r}")

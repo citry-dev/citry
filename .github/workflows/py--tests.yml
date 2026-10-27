@@ -146,14 +146,14 @@ jobs:
       # the other supported Windows and Linux versions.
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
         os: [ubuntu-latest, windows-latest]
         # macOS is a smoke pair (oldest + newest Python) rather than the full
         # matrix, since macOS runners are costly and the maintainer develops on
         # darwin. The publish workflow builds the full macOS wheel set.
         include:
           - { os: macos-latest, python-version: "3.11" }
-          - { os: macos-latest, python-version: "3.14" }
+          - { os: macos-latest, python-version: "3.15" }
 
     steps:
       - uses: actions/checkout@v7
@@ -490,7 +490,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.14"]
+        python-version: ["3.11", "3.15"]
     steps:
       - uses: actions/download-artifact@v8
         with:

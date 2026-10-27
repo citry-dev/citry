@@ -1494,10 +1494,14 @@ release that changes this setting cannot break CI before the pin moves; the
 setting is still marked experimental (`build-dependency-hashes`), so check
 uv's release notes when raising the pin.
 
-The pins cover the build backends of this repository's own packages. When uv
-has to build a third-party package from its sdist, because no wheel fits the
-interpreter (for example on a free-threaded Python), that backend has no pin
-and the build stops. Install a Python build that the package ships wheels for.
+The pins cover the build backends of this repository's own packages, plus
+the ones in `THIRD_PARTY_BUILD_REQUIREMENTS` in `scripts/build_constraints.py`:
+backends that a locked third-party package needs on a supported interpreter it
+ships no wheel for, such as Cython for PyYAML on CPython 3.15 and PyPy 3.11.
+When uv has to build some other third-party package from its sdist, that
+backend has no pin and the build stops with `Hash-checking is required, but no
+trusted hash was provided`. Add the backend to that list, then run
+`python scripts/build_constraints.py update && uv lock`.
 
 ### Root pyproject.toml Protection
 
@@ -2099,7 +2103,7 @@ pytest phase.
 
 **Configuration**:
 
-- Python versions: 3.11, 3.12, 3.13, 3.14
+- Python versions: 3.11, 3.12, 3.13, 3.14, 3.15
 - OS: ubuntu-latest and windows-latest, plus a macOS smoke pair (oldest and newest Python)
 - Requires Rust toolchain (`uv sync` builds the citry_core extension via maturin)
 - Uses Rust dependency caching
@@ -2144,7 +2148,7 @@ the Rust build entirely.
   `python scripts/check.py --profile full` (lint, types, coverage, validators,
   and single-environment portable tests)
 - **Dependencies**: Installed from the uv workspace lockfile; `--locked` keeps CI reproducible
-- **Matrix testing**: Python tests run across Python versions (3.11-3.14) and OSes
+- **Matrix testing**: Python tests run across Python versions (3.11-3.15) and OSes
 
 ### Publishing
 
@@ -2175,9 +2179,10 @@ The first publish from a configured pending publisher creates the project. The G
 
 Candidate preparation invokes `py--citry-core--publish.yml` on the exact
 `main` release commit. That qualification builds one source distribution and
-34 native wheels. Fourteen `cp311-abi3` wheels cover GIL-enabled CPython
+44 native wheels. Fourteen `cp311-abi3` wheels cover GIL-enabled CPython
 3.11 and newer across every supported platform. Linux and musllinux also carry
-one CPython 3.14 free-threaded wheel and one PyPy 3.11 wheel per architecture.
+one free-threaded wheel each for CPython 3.14 and 3.15, and one PyPy 3.11 wheel,
+per architecture.
 The workflow also builds one
 `cp314-cp314-pyemscripten_2026_0_wasm32` wheel for the exact Pyodide runtime
 pinned by the playground. That browser wheel is another build of
@@ -2197,7 +2202,7 @@ sdist job rebuilds outside the checkout with the declared Rust 1.96 minimum and
 exercises the resulting wheel before uploading the sdist.
 
 Each builder keeps its output in a separate directory. The final qualification
-job rejects duplicate filenames and requires the complete 36-file set before
+job rejects duplicate filenames and requires the complete 46-file set before
 it creates `verified-citry-core-distributions`. Every wheel is checked against
 the checkout for metadata, tags, Python payload, extension module, license,
 `RECORD`, and size. `release-inventory.json` records every filename, byte size,
@@ -2248,7 +2253,7 @@ Candidate preparation invokes `py--citry--publish.yml` on the exact release
 commit. The workflow builds one universal wheel and one source distribution,
 requires their package, metadata, license, entry-point, and `RECORD`
 inventories, rebuilds the sdist outside the checkout, and install-smokes both
-wheels on CPython 3.11 through 3.14. When selected alongside an unreleased
+wheels on CPython 3.11 through 3.15. When selected alongside an unreleased
 Citry Core, the smoke uses the qualified candidate dependency rather than
 waiting for public PyPI. The verified pair and `release-inventory.json` are
 retained for 30 days.
@@ -2268,7 +2273,7 @@ commit. The workflow builds one universal wheel and one source distribution,
 then requires that closed pair and its package, metadata, license,
 console-entry-point, and `RECORD` inventories. It rebuilds the source
 distribution outside the checkout and installs the wheel on CPython 3.11
-through 3.14.
+through 3.15.
 
 The installed-wheel smoke imports every shipped module, verifies Citry and the
 analyzer dependencies against the manifest requirements, checks `citry-lsp --help`, and starts the stdio
@@ -2301,7 +2306,7 @@ Candidate preparation invokes `py--citry-ui--publish.yml` on the exact release
 commit. The workflow builds one universal wheel and one source distribution,
 requires their closed runtime, metadata, license, and source inventories,
 rebuilds the source distribution outside the checkout, and install-smokes the
-wheel on CPython 3.11 through 3.14.
+wheel on CPython 3.11 through 3.15.
 
 The launch floor registers the library, renders representative Button and
 Pagination components with the bundled i18n catalog, and exercises Tabs in an
