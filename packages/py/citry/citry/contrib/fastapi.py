@@ -30,13 +30,13 @@ from typing import TYPE_CHECKING, Any
 
 from citry._path_checks import PathLookup, register_path_checker
 from citry._sub_path import normalize_sub_path, recording_sub_path, request_sub_path
-from citry.contrib._path_lookup import files_beside
+from citry.contrib._path_lookup import files_beside, path_below
 from citry.contrib.asgi import asgi_app
 from citry.util.routing import normalize_mount_prefix
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from citry._path_checks import PathChecker
     from citry.citry import Citry
@@ -90,7 +90,7 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     # host gets the mount without a checker, so `citry check` skips its
     # links rather than failing on every one.
     if hasattr(app, "routes"):
-        register_path_checker(citry_instance, _starlette_path_checker(app), host=app)
+        register_path_checker(citry_instance, _starlette_path_checker(app, sub_path), host=app)
 
 
 def _add_root_path_recorder(app: Any) -> None:
@@ -130,7 +130,7 @@ class _RecordRootPath:
             await self.app(scope, receive, send)
 
 
-def _starlette_path_checker(app: Any) -> PathChecker:
+def _starlette_path_checker(app: Any, sub_path: Callable[[], str]) -> PathChecker:
     """
     Build a path checker that answers from a Starlette or FastAPI ``app``'s routes.
 
@@ -147,13 +147,27 @@ def _starlette_path_checker(app: Any) -> PathChecker:
       because the checker cannot look inside it.
     - When nothing matches, the router redirects to the path with its
       trailing slash added or removed, so that path decides.
+
+    For a FastAPI app served below a sub-path, set as ``root_path``, the
+    links start with that sub-path, so the checker removes it before it
+    asks the routes, and reports a path that does not start with it.
     """
 
     def check(path: str) -> PathLookup:
-        found = _serves(app, path, follow_slash_redirect=True)
-        if found:
+        # The links start with the sub-path Citry starts its own URLs with:
+        # the same reader mount() registered, which outside a request reads
+        # FastAPI's `root_path` (a plain Starlette app has none). The routes
+        # are declared without it.
+        prefix = sub_path()
+        path_info = path_below(path, prefix)
+        # The sub-path alone reaches the routes as an empty path, which only
+        # the router's trailing-slash redirect serves.
+        if path_info is not None and _serves(app, path_info, follow_slash_redirect=True):
             return PathLookup(found=True)
-        return PathLookup(found=False, nearby=_nearby(app.routes, path, prefix=""))
+        # A link that does not start with the sub-path never reaches this
+        # app. Suggestions start with the sub-path, as the links do, so each
+        # is compared with the link as the template wrote it.
+        return PathLookup(found=False, nearby=_nearby(app.routes, path, prefix=prefix))
 
     return check
 

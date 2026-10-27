@@ -31,12 +31,12 @@ from urllib.parse import unquote, urlsplit
 
 from citry._path_checks import PathLookup, register_path_checker
 from citry._sub_path import normalize_sub_path, recording_sub_path, request_sub_path
-from citry.contrib._path_lookup import files_beside
+from citry.contrib._path_lookup import files_beside, path_below
 from citry.contrib.wsgi import wsgi_app
 from citry.util.routing import normalize_mount_prefix
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
     from citry._path_checks import PathChecker
     from citry.citry import Citry
@@ -112,7 +112,7 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     # mount without a checker, so `citry check` skips its links rather than
     # failing on every one.
     if hasattr(app, "url_map"):
-        register_path_checker(citry_instance, _flask_path_checker(app), host=app)
+        register_path_checker(citry_instance, _flask_path_checker(app, mount_path, sub_path), host=app)
 
 
 def _flask_script_root(app: Any) -> str | None:
@@ -136,7 +136,7 @@ def _flask_script_root(app: Any) -> str | None:
     return request.script_root
 
 
-def _flask_path_checker(app: Any) -> PathChecker:
+def _flask_path_checker(app: Any, mount_path: str, sub_path: Callable[[], str]) -> PathChecker:
     """
     Build a path checker that answers from the Flask ``app``'s URL map and static folders.
 
@@ -148,25 +148,45 @@ def _flask_path_checker(app: Any) -> PathChecker:
     redirect target is served. A path the app's ``static`` endpoint (or a
     blueprint's) accepts counts only when the file exists in that static
     folder.
+
+    For an app served below a sub-path, set in ``APPLICATION_ROOT``, the
+    links start with that sub-path, so the checker removes it before it
+    asks the URL map, and reports a path that does not start with it.
     """
 
     def check(path: str) -> PathLookup:
-        return _flask_lookup(app, path, follow_redirect=True)
+        # The links start with the sub-path Citry starts its own URLs with:
+        # the same reader mount() registered, which outside a request reads
+        # APPLICATION_ROOT.
+        return _flask_lookup(app, path, mount_path, sub_path(), follow_redirect=True)
 
     return check
 
 
-def _flask_lookup(app: Any, path: str, *, follow_redirect: bool) -> PathLookup:
-    """Answer for one path under every host the app's rules are bound to."""
+def _flask_lookup(app: Any, path: str, mount_path: str, sub_path: str, *, follow_redirect: bool) -> PathLookup:
+    """Answer for one link path under every host the app's rules are bound to."""
     # Imported here, not at module load: this module must import without
     # Flask installed, and only a Flask app ever registers this checker.
     from werkzeug.exceptions import HTTPException, MethodNotAllowed, NotFound  # noqa: PLC0415
     from werkzeug.routing import RequestRedirect  # noqa: PLC0415
 
-    nearby: set[str] = set(_literal_rules(app))
-    for host, adapter in _adapters(app):
+    # Suggestions start with the sub-path, as the links do.
+    nearby: set[str] = {sub_path + rule for rule in _literal_rules(app)}
+    path_info = path_below(path, sub_path)
+    if path_info is None:
+        # A link that does not start with the sub-path never reaches this app.
+        return PathLookup(found=False, nearby=tuple(sorted(nearby)))
+    if sub_path and (path_info == mount_path or path_info.startswith(f"{mount_path}/")):
+        # Citry's own routes are not in the URL map: `dispatch` in mount()
+        # sends their requests to Citry before Flask sees them. check_paths()
+        # finds a link to them before it calls this checker only when the
+        # link has no sub-path, so a link with the sub-path is found here.
+        return PathLookup(found=True)
+    for host, adapter in _adapters(app, sub_path):
         try:
-            endpoint, arguments = adapter.match(path, method="GET")
+            # The sub-path alone reaches the app with an empty path, which
+            # Werkzeug matches as its root.
+            endpoint, arguments = adapter.match(path_info or "/", method="GET")
         except MethodNotAllowed:
             # The path exists for another method, such as a POST-only form target.
             return PathLookup(found=True)
@@ -176,7 +196,9 @@ def _flask_lookup(app: Any, path: str, *, follow_redirect: bool) -> PathLookup:
             # browser follows a second redirect too, so both count as served.
             if not follow_redirect or target.netloc != host:
                 return PathLookup(found=True)
-            return _flask_lookup(app, unquote(target.path), follow_redirect=False)
+            # The target is a full link path, with the sub-path when the
+            # redirect stays inside the app, so it is checked like a link.
+            return _flask_lookup(app, unquote(target.path), mount_path, sub_path, follow_redirect=False)
         except NotFound:
             # Another host the app routes for may still serve the path.
             continue
@@ -187,6 +209,8 @@ def _flask_lookup(app: Any, path: str, *, follow_redirect: bool) -> PathLookup:
         folder = _static_folder(app, endpoint)
         if folder is None:
             return PathLookup(found=True)
+        # The link path as written, so the files suggested beside it keep
+        # the sub-path.
         lookup = _static_file_lookup(path, folder, str(arguments.get("filename", "")))
         if lookup.found:
             return lookup
@@ -194,26 +218,30 @@ def _flask_lookup(app: Any, path: str, *, follow_redirect: bool) -> PathLookup:
     return PathLookup(found=False, nearby=tuple(sorted(nearby)))
 
 
-def _adapters(app: Any) -> list[tuple[str, Any]]:
+def _adapters(app: Any, sub_path: str) -> list[tuple[str, Any]]:
     """
     Bind the app's URL map once for each host its rules are written for, paired with that host.
 
     A root-relative link goes to the host of the page that holds it, which
     the checker does not know. So a path counts as served when a rule for any
     of the app's hosts serves it, the same way the Starlette checker treats a
-    ``Host`` route.
+    ``Host`` route. Each is bound below ``sub_path``, so a redirect it
+    raises names the full link path, as a request's redirect does.
     """
     url_map = app.url_map
+    script_name = sub_path or "/"
     server_name = app.config.get("SERVER_NAME") or "localhost"
     rules = list(url_map.iter_rules())
     # A host or subdomain with a variable in it has no single name to bind
     # to, so its rules are left out rather than guessed at.
     if url_map.host_matching:
         hosts = sorted({rule.host for rule in rules if rule.host and "<" not in rule.host} | {server_name})
-        return [(host, url_map.bind(host)) for host in hosts]
-    adapters = [(server_name, url_map.bind(server_name))]
+        return [(host, url_map.bind(host, script_name=script_name)) for host in hosts]
+    adapters = [(server_name, url_map.bind(server_name, script_name=script_name))]
     for subdomain in sorted({rule.subdomain for rule in rules if rule.subdomain and "<" not in rule.subdomain}):
-        adapters.append((f"{subdomain}.{server_name}", url_map.bind(server_name, subdomain=subdomain)))
+        adapters.append(
+            (f"{subdomain}.{server_name}", url_map.bind(server_name, script_name=script_name, subdomain=subdomain))
+        )
     return adapters
 
 

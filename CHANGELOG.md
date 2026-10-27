@@ -114,6 +114,10 @@
   or `citry.contrib.django.urlpatterns()`, so point `--app` at the module
   that mounts Citry
   ([details](https://citry.dev/ide/template-linting/#find-links-to-missing-pages)).
+  Links such as `/shop/about`, in an app served below a sub-path such as
+  `/shop`, are checked too: `citry check` reads the sub-path from FastAPI's
+  `root_path`, Flask's `APPLICATION_ROOT`, or Django's
+  `FORCE_SCRIPT_NAME`.
 - With your application loaded, `citry check` now warns about a
   `self.inject("bord")` whose key no component above it provides, and
   suggests the key the page does provide, such as `board`
