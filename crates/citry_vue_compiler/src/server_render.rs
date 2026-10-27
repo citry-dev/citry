@@ -539,6 +539,11 @@ impl Reader {
             if first.and_then(callee) == Some("_directive_citry_vue_owned") {
                 continue;
             }
+            // `v-citry-on` attaches a listener with Citry's modifiers in the
+            // browser (`client.js`) and writes nothing into the HTML.
+            if first.and_then(callee) == Some("_directive_citry_on") {
+                continue;
+            }
             directives = match (first.and_then(callee), value, &directives) {
                 // Only one `v-show` per element, with no argument or modifiers.
                 (Some("_vShow"), Some(value), Directives::None) if entry.elements.len() == 2 => {
@@ -4088,6 +4093,57 @@ mod tests {
         assert_eq!(
             html(&shown),
             r#"<div><p style="display: none;">x</p><p>y</p></div>"#
+        );
+    }
+
+    #[test]
+    fn listeners_with_citry_modifiers_write_the_same_html_as_no_listener() {
+        // The compiler rewrites each of these into a plain listener plus a
+        // `v-citry-on` directive, which only the browser acts on. So the
+        // server writes the element as it does without the listener, with
+        // no decline and no shell.
+        for (with_listener, without) in [
+            (r#"<div @click.outside="h">x</div>"#, "<div>x</div>"),
+            (
+                r#"<main><p @keydown.escape.window="close">a</p><p @input.debounce.300ms="go">b</p></main>"#,
+                "<main><p>a</p><p>b</p></main>",
+            ),
+            (
+                r#"<div><button @click.right.document.throttle="h($event)" class="b">x</button></div>"#,
+                r#"<div><button class="b">x</button></div>"#,
+            ),
+            // A dynamic event name is a browser value, but the listener is
+            // applied by Vue while it hydrates.
+            (
+                r#"<div @[name].outside="open = false; count++">x</div>"#,
+                "<div>x</div>",
+            ),
+            (
+                r#"<input @input.debounce="h" value="v">"#,
+                r#"<input value="v">"#,
+            ),
+            // Next to `v-show`, whose known value still decides the style.
+            (
+                r#"<p @click.stop.outside="h" v-show="$citryPrepared.on">x</p>"#,
+                r#"<p style="display: none;">x</p>"#,
+            ),
+        ] {
+            let prepared = json!({"on": false});
+            let listener = root(with_listener, prepared.clone());
+            let plain = root(without.trim_end(), prepared);
+            assert_eq!(html(&listener), html(&plain), "{with_listener}");
+            assert!(
+                listener.declines.is_empty(),
+                "{with_listener}: {:?}",
+                listener.declines
+            );
+            assert_eq!(listener.shell_count, 0, "{with_listener}");
+            assert_eq!(listener.element_count, plain.element_count);
+            assert!(!html(&listener).contains("data-allow-mismatch"));
+        }
+        assert_eq!(
+            html(&root(r#"<div @click.outside="h">x</div>"#, json!({}))),
+            "<div>x</div>"
         );
     }
 

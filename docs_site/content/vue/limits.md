@@ -37,49 +37,27 @@ once, do it in `data()`. To keep an element's contents as the server
 first rendered them, use
 [`#c-ignore`](/syntax/attributes/#c-ignore-keep-contents-that-a-library-manages).
 
-### Alpine modifiers { #unknown-modifiers }
+### Alpine-only modifiers { #unknown-modifiers }
 
-`.outside`, `.window`, `.document`, `.debounce`, and `.throttle` are
-Alpine modifiers. Citry 0.6.0 moved from Alpine to Vue, which has none of
-these modifiers, so Citry rejects them on a Vue listener, and the error
-says how to write the same behavior in Vue:
+Citry 0.6.0 moved from Alpine to Vue. Citry supports Alpine's `.outside`,
+`.window`, `.document`, `.debounce`, and `.throttle` on Vue listeners on
+HTML elements; see
+[Extra listener modifiers](/syntax/vue/#listener-modifiers). It rejects
+these other Alpine modifiers on a Vue listener, and the error says what
+to write instead:
 
-```citry-html
-{# Fails: .outside is an Alpine modifier #}
-<div @click.outside="open = false;">...</div>
-```
+- `.away`: use `.outside`.
+- `.camel` and `.dot`: add the listener for the exact event name with
+  `addEventListener(...)` in `mounted()`, on an element you reach through
+  a `ref`, and remove it in `unmounted()`.
+- `.cmd` and `.super`: use Vue's `.meta`.
+- `.spacebar`: use Vue's `.space`.
+- `.period`, `.comma`, `.slash`, `.equal`, `.minus`, and `.underscore`:
+  check `$event.key` in the listener, as in
+  `@keydown="if ($event.key === '.') go();"`.
 
-For a click outside, listen for `click` on `document` in `mounted()`,
-skip clicks inside the component, and remove the listener in
-`unmounted()`:
-
-```js
-$component({
-  data() {
-    return { open: false };
-  },
-  methods: {
-    closeOnOutsideClick(event) {
-      // A click inside the component keeps it open.
-      if (!this.$refs.root?.contains(event.target)) {
-        this.open = false;
-      }
-    },
-  },
-  mounted() {
-    document.addEventListener("click", this.closeOnOutsideClick);
-  },
-  unmounted() {
-    document.removeEventListener("click", this.closeOnOutsideClick);
-  },
-});
-```
-
-Mark the element that counts as inside with `ref="root"` in the
-template.
-
-To call a Python event handler, use an `@c-*` attribute: it accepts
-`.debounce` and `.throttle`; see
+To call a Python event handler, use an `@c-*` attribute, which accepts
+`.debounce` and `.throttle` too; see
 [Bind events in templates](/events/bindings/). The
 [0.6.0 upgrade guide](/guides/upgrading-to-0-6-0/#rewrite-alpine-modifiers)
 covers the rest of the move from Alpine.

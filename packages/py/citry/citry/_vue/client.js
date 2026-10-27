@@ -1410,6 +1410,224 @@
   const eventTimingDirectives = new WeakMap();
   const runtimeEventTimingDirectives = new WeakMap();
   const MAX_TIMER_DELAY = 2_147_483_647;
+  // Listeners with Citry's own modifiers: `.outside`, `.window`, `.document`,
+  // `.debounce` and `.throttle`. Vue's modifiers are a fixed set inside its
+  // template compiler, so Citry's compiler rewrites `@event.mods="handler"`
+  // into a plain listener that Vue compiles and stores in the vnode's props
+  // as `onCitryOn<n>`, and `v-citry-on:event.mods="'<n>'"`, the directive
+  // below. The directive attaches the real listener where and when the
+  // modifiers say, and calls whatever handler the vnode holds at that moment.
+  const citryListeners = new WeakMap();
+  const CITRY_EVENT_OPTION_MODIFIERS = new Set(["capture", "once", "passive"]);
+  const CITRY_NON_KEY_MODIFIERS = new Set(["stop", "prevent", "self", "ctrl", "shift", "alt", "meta",
+    "exact", "middle"]);
+  const CITRY_PLACE_MODIFIERS = new Set(["outside", "window", "document"]);
+  // Vue's `ErrorCodes.NATIVE_EVENT_HANDLER`, so errors are reported as they
+  // are for Vue's own listeners.
+  const NATIVE_EVENT_HANDLER = 5;
+  const citryTiming = (modifiers, name) => {
+    const token = modifiers.find(item => item.startsWith(name + "-") && item.endsWith("ms"));
+    return token === undefined ? null : Number(token.slice(name.length + 1, -2));
+  };
+  // Whether the element shows: `checkVisibility()` with its default options,
+  // or, in browsers before it existed, whether the element has a box.
+  const citryElementVisible = element =>
+    typeof element.checkVisibility === "function" ? element.checkVisibility() : element.getClientRects().length > 0;
+  // The order in which events of each type started, so a listener can tell an
+  // event that began before it was attached, such as the click that mounted a
+  // popup, from a later one. Event times would do this, but browsers round
+  // them and test clocks replace them, so each event is numbered instead, in
+  // the capture phase, before any handler runs. The numbering listeners sit on
+  // `window`, on `document` (for events such as `load`, which never reach
+  // `window`), and on the root of each element that has a listener, such as a
+  // shadow root, whose own events may never leave it.
+  const citryEventOrder = new WeakMap();
+  const citryNumberedTypes = new WeakMap();
+  let citryEventCount = 0;
+  const numberCitryEvent = domEvent => {
+    if (!citryEventOrder.has(domEvent)) citryEventOrder.set(domEvent, ++citryEventCount);
+  };
+  function numberCitryEventsOn(target, type) {
+    let types = citryNumberedTypes.get(target);
+    if (!types) { types = new Set(); citryNumberedTypes.set(target, types); }
+    if (types.has(type)) return;
+    types.add(type);
+    // Passive, so a page-wide touch or wheel listener never delays scrolling.
+    target.addEventListener(type, numberCitryEvent, {capture: true, passive: true});
+  }
+  function numberCitryEvents(state) {
+    const type = state.spec.event;
+    numberCitryEventsOn(window, type);
+    numberCitryEventsOn(document, type);
+    state.root = state.element.getRootNode();
+    if (state.root !== document) numberCitryEventsOn(state.root, type);
+  }
+  // Whether an event started before the listener was attached.
+  function citryEventPredatesListener(state, domEvent) {
+    // The event that was being sent while Vue mounted or updated the element.
+    // Another script's capture listener on `window` can start that update
+    // before Citry's numbering listener there has run, so the event gets its
+    // number later, on `document`, and only this comparison catches it.
+    if (state.attachEvent !== undefined) {
+      if (domEvent === state.attachEvent) return true;
+      // Once that event has finished, it need not be kept alive.
+      if (state.attachEvent.eventPhase === 0) state.attachEvent = undefined;
+    }
+    const order = citryEventOrder.get(domEvent);
+    if (order !== undefined) return order <= state.attachedOrder;
+    // An element that moved to another root, such as by a `<Teleport>` whose
+    // target changed, gets numbering there. Its event came after the attach.
+    if (state.target === state.element && state.element.getRootNode() !== state.root) {
+      numberCitryEvents(state);
+      return false;
+    }
+    // Every event that reaches the listener passed a numbering listener,
+    // unless it started before that one was added.
+    return true;
+  }
+  function citryListenerSpec(binding) {
+    let event = binding.arg;
+    const modifiers = Object.keys(binding.modifiers || {}).sort();
+    if (typeof event !== "string" || event === "") return null;
+    // Vue renames these two for a static event name; the compiler did that
+    // already, and a dynamic name gets the same renaming here.
+    if (event === "click" && modifiers.includes("right")) event = "contextmenu";
+    else if (event === "click" && modifiers.includes("middle")) event = "mouseup";
+    return {event, modifiers, signature: event + "\0" + modifiers.join(".")};
+  }
+  function citryListenerHandler(state, event) {
+    const handler = state.vnode.props?.["onCitryOn" + state.id];
+    const instance = state.binding.instance?.$ ?? null;
+    if (typeof handler !== "function" && !Array.isArray(handler)) {
+      // The compiler always writes the handler, so this means a spread or a
+      // dynamic name put something else under its key. Vue's own reporting
+      // reaches the app's error handler when there is one and logs otherwise.
+      const error = new TypeError("Citry listener 'onCitryOn" + state.id + "' is not a function");
+      V.handleError(error, instance, NATIVE_EVENT_HANDLER);
+      return;
+    }
+    V.callWithAsyncErrorHandling(handler, instance, NATIVE_EVENT_HANDLER, [event]);
+  }
+  function attachCitryListener(element, binding, vnode) {
+    const spec = citryListenerSpec(binding);
+    let byId = citryListeners.get(element);
+    if (!byId) { byId = new Map(); citryListeners.set(element, byId); }
+    const state = {id: String(binding.value), binding, vnode, spec, element, timer: 0, last: -Infinity,
+      pending: null, target: null, listener: null, options: undefined, attachedOrder: 0, attachEvent: undefined,
+      root: null,
+      startListener: null, startVisible: new WeakMap()};
+    byId.set(state.id, state);
+    // A dynamic event name of null attaches nothing, as Vue does for `@[name]`.
+    if (spec === null) return;
+    const {event, modifiers} = spec;
+    const has = name => modifiers.includes(name);
+    const keyboard = /^key(down|up|press)$/.test(event);
+    const nonKey = [];
+    const keys = [];
+    for (const modifier of modifiers) {
+      if (CITRY_PLACE_MODIFIERS.has(modifier) || CITRY_EVENT_OPTION_MODIFIERS.has(modifier) ||
+          modifier.startsWith("debounce-") || modifier.startsWith("throttle-")) continue;
+      // `.left` and `.right` are keys on a keyboard event and mouse buttons
+      // on any other, as Vue's `resolveModifiers` decides.
+      if (CITRY_NON_KEY_MODIFIERS.has(modifier) || ((modifier === "left" || modifier === "right") && !keyboard))
+        nonKey.push(modifier);
+      else if (keyboard) keys.push(modifier);
+    }
+    const debounce = citryTiming(modifiers, "debounce");
+    const throttle = citryTiming(modifiers, "throttle");
+    // The timing follows `@c-*`: throttle runs the first event and drops the
+    // ones within its interval; debounce runs once, after the last event.
+    let call = domEvent => citryListenerHandler(state, domEvent);
+    if (throttle !== null || debounce !== null) {
+      const run = call;
+      call = domEvent => {
+        if (throttle !== null) {
+          const now = performance.now();
+          if (now - state.last < throttle) return;
+          state.last = now;
+        }
+        if (debounce === null) { run(domEvent); return; }
+        if (state.timer) clearTimeout(state.timer);
+        state.pending = domEvent;
+        scheduleDelay(state, debounce, () => {
+          const pending = state.pending;
+          state.pending = null;
+          run(pending);
+        });
+      };
+    }
+    // Vue's own helpers act on the event at once (`.stop`, `.prevent`, key
+    // and button checks), even when the handler runs later.
+    let listener = call;
+    if (nonKey.length) listener = V.withModifiers(listener, nonKey);
+    if (keys.length) listener = V.withKeys(listener, keys);
+    const outside = has("outside");
+    state.target = has("window") ? window : has("document") || outside ? document : element;
+    if (outside) {
+      // Vue applies a state change between two listeners of one click, so a
+      // toggle button outside a panel would show the panel before the
+      // outside listener runs, and the listener would close it again. The
+      // panel's visibility is therefore read when the event starts, in the
+      // capture phase, before any handler has run.
+      // The snapshot is kept per event, so an event dispatched from inside
+      // another one's handler does not replace the outer event's snapshot.
+      state.startListener = domEvent => {
+        // An event inside the element never runs the listener, so it needs
+        // no visibility check, which would make the browser recompute styles.
+        if (domEvent.composedPath().includes(element)) return;
+        state.startVisible.set(domEvent, citryElementVisible(element));
+      };
+      // Passive, because it only reads the page.
+      document.addEventListener(event, state.startListener, {capture: true, passive: true});
+    }
+    state.listener = domEvent => {
+      // Like Vue, ignore an event that started before the listener existed,
+      // so a popup that a click mounts does not see that same click.
+      if (citryEventPredatesListener(state, domEvent)) return;
+      if (outside) {
+        if (!element.isConnected || domEvent.composedPath().includes(element)) return;
+        // An event the capture listener missed, such as one that started
+        // before the listener was attached, falls back to a check now.
+        const snapshot = state.startVisible.get(domEvent);
+        state.startVisible.delete(domEvent);
+        if (!(snapshot ?? citryElementVisible(element))) return;
+      }
+      if (has("once")) {
+        // Removed by hand rather than with the browser's `once` option, so
+        // the click that mounted a window or document listener, which the
+        // check above ignores, does not use it up. The state stays, so an
+        // update does not attach it again.
+        removeCitryListener(state);
+      }
+      listener(domEvent);
+    };
+    // Browsers make touch and wheel listeners on window and document passive
+    // by default, which would make `.prevent` do nothing there.
+    const passive = has("passive") ? true : has("prevent") && state.target !== element ? false : undefined;
+    state.options = {capture: has("capture"), ...(passive === undefined ? {} : {passive})};
+    numberCitryEvents(state);
+    state.attachedOrder = citryEventCount;
+    // `window.event` is the event being sent right now, if any; browsers
+    // leave it unset for a listener inside a shadow root. Only an event of
+    // this type can reach the listener, so no other is kept alive.
+    state.attachEvent = window.event?.type === event ? window.event : undefined;
+    state.target.addEventListener(event, state.listener, state.options);
+  }
+  function removeCitryListener(state) {
+    if (state.target) state.target.removeEventListener(state.spec.event, state.listener, state.options);
+    if (state.startListener) document.removeEventListener(state.spec.event, state.startListener, {capture: true});
+  }
+  function detachCitryListener(element, id) {
+    const byId = citryListeners.get(element);
+    const state = byId?.get(id);
+    if (!state) return;
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = 0;
+    state.pending = null;
+    removeCitryListener(state);
+    byId.delete(id);
+    if (byId.size === 0) citryListeners.delete(element);
+  }
   function scheduleDelay(lifetime, milliseconds, callback) {
     let remaining = milliseconds;
     const schedule = () => {
@@ -3971,6 +4189,31 @@
       mounted(element, binding) { installRuntimeEvents(element, binding.value); },
       updated(element, binding) { installRuntimeEvents(element, binding.value); },
       beforeUnmount(element) { disposeRuntimeEvents(element); },
+    });
+    vueApp.directive("citry-on", {
+      mounted(element, binding, vnode) { attachCitryListener(element, binding, vnode); },
+      // The newest vnode is recorded before the patch, so an event during the
+      // update already calls the new handler.
+      beforeUpdate(element, binding, vnode) {
+        const id = String(binding.value);
+        // A listener whose number changed is a different listener, so the
+        // old one goes now, before any directive on this element attaches
+        // under that number in `updated`.
+        if (String(binding.oldValue) !== id) { detachCitryListener(element, String(binding.oldValue)); return; }
+        const state = citryListeners.get(element)?.get(id);
+        if (state) { state.vnode = vnode; state.binding = binding; }
+      },
+      updated(element, binding, vnode) {
+        const id = String(binding.value);
+        const state = citryListeners.get(element)?.get(id);
+        const spec = citryListenerSpec(binding);
+        // A pending debounced call survives an update; only a new event name
+        // (a dynamic one) moves the listener and drops what was pending.
+        if (state && (state.spec?.signature ?? null) === (spec?.signature ?? null)) return;
+        detachCitryListener(element, id);
+        attachCitryListener(element, binding, vnode);
+      },
+      beforeUnmount(element, binding) { detachCitryListener(element, String(binding.value)); },
     });
     vueApp.directive("citry-event-timing", {
       mounted(element, binding) { reconcileEventTimings(element, binding.value); },

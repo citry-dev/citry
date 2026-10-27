@@ -130,22 +130,31 @@ component's `Lint` class.
 
 ### Rewrite Alpine modifiers
 
-**What you see:** the template fails to load, and the error names the Vue
-way to write the listener.
+**What you see:** the template fails to load, and the error says what to
+write instead.
 
-Vue has no `.outside`, `.window`, `.document`, `.debounce`, or `.throttle`
-modifiers:
+Citry 0.6.0 rejects `.outside`, `.window`, `.document`, `.debounce`, and
+`.throttle` on Vue listeners. From the first release after 0.6.0, they
+work again on listeners on HTML elements; see
+[Extra listener modifiers](/syntax/vue/#listener-modifiers). On that
+release or later, keep them and fix only what the error names.
 
-```citry-html
-{# Fails: Vue has no .outside modifier #}
-<div @click.outside="open = false;">...</div>
-```
+Where Citry differs from Alpine, the template usually fails to load and
+the error names the fix, as for a time without its unit
+(`.debounce.500`) or a listener on a component tag. A few differences
+show no error, such as `.outside` treating an element with no size as
+visible, where Alpine skips it.
 
-Write that behavior in a method instead. For example, add a `mousedown`
-listener to `document` in `mounted()` and remove it in `unmounted()`.
+On 0.6.0 itself, follow the error's advice. For `.outside`, add a `click`
+listener to `document` in `mounted()`, check whether `this.$el` contains
+`event.target`, and remove the listener in `unmounted()`. To slow down
+calls to the server, the `@c-*` Events bindings accept `.debounce` and
+`.throttle`; see [Bind events in templates](/events/bindings/).
 
-To slow down calls to the server, the `@c-*` Events bindings still accept
-`.debounce` and `.throttle`; see [Bind events in templates](/events/bindings/).
+The other Alpine modifiers fail when the template loads, and the error
+says what to write instead, such as Vue's `.meta` for `.cmd`. On 0.6.0
+itself, `.minus`, `.underscore`, and `.spacebar` load without an error
+but never match a key, so check `$event.key` instead.
 
 A key modifier such as `.enter` works only on `keydown`, `keyup`, and
 `keypress` listeners. On another event, such as `@click.enter` or
@@ -971,9 +980,10 @@ argument.
 2. Run `citry check` to find leftover `x-*` attributes, and replace each
    with its Vue form.
 3. Move `x-data` state into `data()` or `js_data()`.
-4. Rewrite `.outside`, `.window`, `.document`, `.debounce`, and
-   `.throttle` modifiers on plain `@event` listeners. End a statement
-   listener such as `if (ok) save()` with `;`.
+4. Rewrite the Alpine modifiers on Vue listeners as the error says. In
+   0.6.0, that includes `.outside`, `.window`, `.document`, `.debounce`,
+   and `.throttle`; later releases accept these five on HTML elements.
+   End a statement listener such as `if (ok) save()` with `;`.
 5. Replace `$dispatch` with `$emit`, and declare `emits` in the child.
 6. Replace `$c-props` with `:name` props, declared in the child's `props`.
 7. Replace `data`, `scope`, `props`, `graph`, `effect`, `reactive`,

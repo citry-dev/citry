@@ -5,6 +5,10 @@
 ### Added
 
 - Citry now supports Python 3.15.
+- You can now use `.outside`, `.window`, `.document`, `.debounce`, and
+  `.throttle` on Vue listeners such as `@click` on HTML elements, as in
+  `@click.outside="open = false"` or `@input.debounce.300ms="search()"`
+  ([details](https://citry.dev/syntax/vue/#listener-modifiers)).
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
   spell check no longer waits behind the app's slower calls. A detached
@@ -266,6 +270,9 @@
 
 ### Fixes
 
+- A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
+  modifier now fails when the template loads and says what to write
+  instead. Vue matches none of these names, so the listener never ran.
 - Without a configured cache, the stylesheets that `css_data()` produces
   no longer pile up in memory, one per distinct set of values, for the
   life of the process. They now count toward `vue_asset_max_bytes`, and

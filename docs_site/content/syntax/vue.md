@@ -91,6 +91,109 @@ for every directive and modifier.
     and `v-If` as a custom directive named `If`. Names that start with `v-c-`
     or `v-citry-` fail too, because Citry keeps them for its own use.
 
+## Extra listener modifiers { #listener-modifiers }
+
+Some listeners need to react to events outside their element, or should
+not run on every keystroke. Citry adds five modifiers to Vue listeners on
+HTML elements for this:
+
+| Modifier | What it does |
+| --- | --- |
+| `.outside` | Runs the listener for an event that starts outside the element. |
+| `.window` | Listens on `window`, for events such as `resize` or a key pressed anywhere. |
+| `.document` | Listens on `document`, for events that bubble up from anywhere on the page. |
+| `.debounce` | Runs once, with the last event, after 250 ms with no new event. |
+| `.throttle` | Runs for the first event, then drops events for 250 ms, including the last one. |
+
+Citry adds the listener when the element appears and removes it when the
+element goes away. A listener that an event itself added, such as one on
+a `v-if` menu that a click opens, ignores that click.
+
+A menu that closes when you click elsewhere or press Escape:
+
+```citry-html
+<button type="button" @click="open = !open">
+  Menu
+</button>
+<ul
+  v-show="open"
+  @click.outside="open = false"
+  @keydown.escape.window="open = false"
+>
+  <li>Profile</li>
+</ul>
+```
+
+A search field that searches 300 ms after the user stops typing, and a
+scroll handler that runs at most once every 250 ms:
+
+```citry-html
+<input @input.debounce.300ms="search($event.target.value)">
+<div @scroll.throttle="track">...</div>
+```
+
+To wait another time, write it after the modifier, as in
+`.debounce.300ms` or `.throttle.2s`.
+
+### When `.outside` runs
+
+`.outside` skips an event if the element was hidden when the event began.
+So in the menu above, the click that opens the list does not close it
+again, and a click outside the open list closes it.
+
+- An event counts as inside when it starts in the element or in anything
+  inside it, including a shadow root. Content that `<Teleport>` moved
+  elsewhere counts as outside.
+- Hidden means: the element or an ancestor has `display: none` (as
+  `v-show` sets), the element is `display: contents`, or it sits inside a
+  closed `<details>` (outside its `<summary>`). An element with
+  `visibility: hidden`, with `opacity: 0`, or with no size still counts as
+  visible.
+- `.outside` listens on `document`, so a listener between the clicked
+  element and `document` that stops the event, such as `@click.stop` on a
+  button, keeps it from running.
+- `.outside` and `.document` hear only events that bubble up to
+  `document`, unless `.document` also has `.capture`. For focus, use
+  `focusin` and `focusout`.
+
+### Debounced listeners
+
+A debounced listener runs after the event has finished:
+
+- `$event.currentTarget` is `null` by then. Read what you need from
+  `$event.target`, such as `$event.target.value`.
+- Calling `$event.preventDefault()` or `$event.stopPropagation()` in the
+  listener does nothing. Put `.prevent` or `.stop` on the listener
+  instead; they act on the event at once.
+- If the element is removed before the wait ends, the listener does not
+  run.
+- If the component renders again during the wait, for example after a
+  server event, the wait goes on, and the listener from the newest render
+  runs.
+
+A listener can use both `.throttle` and `.debounce`: Citry drops the
+events inside the throttle wait, then debounces the rest.
+
+### Modifier load errors
+
+The template fails to load, with a message that names the problem, when a
+listener that uses one of these five modifiers:
+
+- sits on a component tag, `<template>`, `<slot>`, or `<component>` (put
+  it on an element inside instead);
+- combines two of `.outside`, `.window`, and `.document`;
+- combines `.outside` with `.self`, `.capture`, or `.once`;
+- combines `.passive` with `.prevent`;
+- gives a time anywhere but right after `.debounce` or `.throttle`;
+- gives a time that is not whole milliseconds or seconds, such as
+  `.300MS` or `.500`; write `.300ms` or `.2s`;
+- repeats a modifier;
+- writes one of the five in capitals, such as `.Outside`.
+
+Vue's own modifiers, such as `.stop`, `.prevent`, and key names like
+`.escape`, combine with these. To give a key such as `.5` together with
+`.debounce`, put the key first, as in `@keydown.5.debounce`.
+
 ## Choose `v-for` or `<c-for>`
 
 Use `v-for` and `v-if` for HTML that the browser adds, removes, or repeats
