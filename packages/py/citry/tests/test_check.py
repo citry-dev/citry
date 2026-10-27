@@ -22,11 +22,15 @@ from citry._checker import (
     check_project,
 )
 from citry._diagnostic_catalog import I18N_CATALOG_INVALID, I18N_MISSING_PARAM_TYPE, TEMPLATE_MARKER_NAME_INVALID
+from citry._symbol_table import CHECK_NOTE, symtable
 from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
 from citry.ext.i18n.extension import I18nExtension
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+requires_symtable = pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
 
 
 @pytest.fixture(autouse=True)
@@ -107,6 +111,65 @@ class TestModeSelection:
         output = capsys.readouterr().out
         assert "--static" in output
         assert "limited inline template candidates" in output
+
+
+class TestReducedAnalysisNote:
+    """On an interpreter without the `symtable` module a loaded app's report says it checks less."""
+
+    @staticmethod
+    def _write_clean_app(tmp_path: Path) -> str:
+        # A loaded app is what runs the analyses that read the symbol table.
+        return _write_app(
+            tmp_path,
+            "from citry import Citry, Component\n"
+            "engine = Citry(autodiscover=False)\n"
+            "class Fine(Component):\n"
+            "    citry = engine\n"
+            "    template = '<div></div>'\n",
+        )
+
+    @staticmethod
+    def _hide_symtable(monkeypatch: pytest.MonkeyPatch) -> None:
+        # Each module imported the name, so each holds its own binding.
+        for module in ("citry._symbol_table", "citry._checker", "citry._template_python"):
+            monkeypatch.setattr(f"{module}.symtable", None)
+
+    def test_text_output_carries_the_note_when_symtable_is_missing(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = self._write_clean_app(tmp_path)
+        self._hide_symtable(monkeypatch)
+
+        assert _run_main(["--app", spec, "check"]) == 0
+        assert f"citry check: note: {CHECK_NOTE}\n" in capsys.readouterr().err
+
+    def test_json_notes_carry_the_note_when_symtable_is_missing(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = self._write_clean_app(tmp_path)
+        self._hide_symtable(monkeypatch)
+
+        assert _run_main(["--app", spec, "check", "--format", "json"]) == 0
+        assert CHECK_NOTE in json.loads(capsys.readouterr().out)["notes"]
+
+    def test_static_output_has_no_note_when_symtable_is_missing(self, tmp_path, monkeypatch, capsys):
+        # Static mode loads no app, so neither symbol-table analysis runs.
+        monkeypatch.chdir(tmp_path)
+        self._write_clean_app(tmp_path)
+        self._hide_symtable(monkeypatch)
+
+        assert _run_main(["check", "--static", "--format", "json"]) == 0
+        captured = capsys.readouterr()
+        assert CHECK_NOTE not in json.loads(captured.out)["notes"]
+        assert "_symtable" not in captured.err
+
+    @requires_symtable
+    def test_no_note_when_symtable_is_present(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = self._write_clean_app(tmp_path)
+
+        assert _run_main(["--app", spec, "check", "--format", "json"]) == 0
+        captured = capsys.readouterr()
+        assert CHECK_NOTE not in json.loads(captured.out)["notes"]
+        assert "_symtable" not in captured.err
 
 
 class TestStaticMode:

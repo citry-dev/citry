@@ -25,12 +25,16 @@ from citry import Citry, Component, Const, Secret
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
 from citry._json_wire import json_wire_type_from_annotation
+from citry._symbol_table import symtable
 from citry.ext.cache import CacheKeyError
 
 try:
     import pydantic
 except ImportError:
     pydantic = None  # type: ignore[assignment]
+
+# `citry check` reads module values sent by js_data() through the symbol table.
+requires_symtable = pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
 
 # The m42 benchmark app's constants, with the token wrapped.
 API_BASE = "/api"
@@ -732,6 +736,7 @@ def _secret_finding(field: str, where: str) -> tuple[str, str]:
     )
 
 
+@requires_symtable
 def test_m42_check_reports_a_secret_module_constant(tmp_path):
     assert _findings(_M42_ENGINE, tmp_path) == [
         _secret_finding("secretToken", "SECRET_TOKEN"),
@@ -821,6 +826,7 @@ class SecretComputedPage(Component):
         }
 
 
+@requires_symtable
 def test_check_reads_a_secret_through_attributes_unpacking_branches_and_const(tmp_path):
     assert sorted(_findings(_SENT_FORMS_ENGINE, tmp_path)) == [
         _secret_finding("branch", "SECRET_TOKEN"),
@@ -924,6 +930,7 @@ class OpaqueValuesPage(Component):
         }
 
 
+@requires_symtable
 def test_check_runs_no_code_of_a_value_it_reads_and_skips_what_it_cannot_judge(tmp_path):
     _OPAQUE_CALLS.clear()
 
@@ -947,6 +954,7 @@ class DeepValuesPage(Component):
         return {"deep": DEEP_CONSTANT, "deepObject": DEEP_OBJECT}
 
 
+@requires_symtable
 def test_check_reports_values_nested_deeper_than_the_recursion_limit(tmp_path):
     findings = _findings(_DEEP_ENGINE, tmp_path)
 

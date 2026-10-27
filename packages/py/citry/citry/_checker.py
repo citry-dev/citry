@@ -6,7 +6,6 @@ import ast
 import hashlib
 import json
 import re
-import symtable
 import sys
 import textwrap
 import tokenize
@@ -102,6 +101,7 @@ from citry._registry_lint import (
     unknown_url_findings,
 )
 from citry._source_lines import line_break_count, source_lines
+from citry._symbol_table import symtable
 from citry._template_data_source import (
     TemplateDataSourceShape,
     analyze_css_data_source,
@@ -3496,10 +3496,13 @@ def _function_local_names(source: str, function: ast.FunctionDef | ast.AsyncFunc
     Python's own symbol table decides, so a parameter, an assignment, an
     import, an `except ... as` name, a `match` capture, and a nested `def`
     all count, while a `global` name does not. None means the source could
-    not be read.
+    not be read, or that this interpreter has no symbol table (PyPy).
     """
     text = ast.get_source_segment(source, function)
     if text is None:
+        return None
+    # No symbol table means no answer, so the caller reads no module values.
+    if symtable is None:
         return None
     try:
         table = symtable.symtable(textwrap.dedent(text), "<js_data>", "exec")
