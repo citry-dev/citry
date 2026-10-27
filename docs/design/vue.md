@@ -1401,18 +1401,21 @@ caller's `v-show` or custom directive to the child's root element, so it
 declines those calls (`unsupported-directive`). In each declined case the
 parent element is written as a shell that Vue fills in the browser.
 
-`<c-slot>` accepts no Vue directive at all. Every attribute other
-than `name` and `required` becomes Python slot data for the fill, so
-`<c-slot v-if="open">` would hand the fill a data key named `v-if` and the
-browser would never see the condition. The parser rejects every Vue form
-there, including the `:` and `@` shorthands that a component tag keeps,
-because Vue slot props are not supported yet. The message suggests a
-`<template v-if>` or an element with `v-show` around the slot, `<c-for>`
-for a loop, `name="..."` for `#name`, a listener on an element around the
-slot or inside the fill, and plain or `c-` attributes for slot data. A key
+`<c-slot>` accepts one Vue form: a slot prop with a fixed name, such as
+`:row="row"` or `v-bind:row="row"`, which passes a Vue value to the fill's `v-slot`.
+Every other attribute besides `name` and `required` becomes Python slot
+data for the fill, so `<c-slot v-if="open">` would hand the fill a data key
+named `v-if` and the browser would never see the condition. The parser
+rejects every other Vue form there, including `@` listeners, dynamic
+`:[name]`, modifiers, and the `v-bind="obj"` object form. The message
+suggests a `<template v-if>` or an element with `v-show` around the slot,
+`<c-for>` for a loop, `name="..."` for `#name`, a listener on an element
+around the slot or inside the fill, and a static `:row` for Vue data or
+plain or `c-` attributes for Python slot data. A key
 that reaches the slot only at render time, through `c-bind`, fails the
-render with the same wording (the render-time check lives in
-`client_directives.py`).
+render too. The wording matches the parser's, except that a `:` slot prop
+gets a message saying to write it in the template (the render-time check
+lives in `client_directives.py`).
 
 ### Plan for the Events rendering backend
 
@@ -2500,7 +2503,8 @@ slot analysis, rather than hand-maintaining Vue's internal `withCtx` flags.
 
 ### Scoped slot data has two languages
 
-A proposed browser-scoped slot could use:
+A Vue scoped slot passes a browser value from `<c-slot>` to the fill's
+`v-slot` pattern:
 
 ```citry-html
 <!-- Child -->
@@ -2512,17 +2516,18 @@ A proposed browser-scoped slot could use:
 </c-fill>
 ```
 
-This would transform to Vue's slot-prop binding. It is **proposed syntax**, not
-currently accepted Citry syntax. Existing `data="{ field as alias }"` binds
-Python slot data and must remain a separate channel. Silently interpreting that
+Citry writes this as Vue's slot-prop binding (issue #168; the user-facing
+rules are in `docs_site/content/vue/slots.md`, "Scoped slots"). The fill's
+`data="{ field as alias }"` binds Python slot data and stays a separate
+channel. Silently interpreting that
 Python pattern as JavaScript would change both the binding language and when
 the value exists. Python's callable `fallback` handle is richer than Vue's
 automatic fallback selection. Citry continues to evaluate it on the server and
 transforms its selected result while preserving nested Vue calls and fills.
 
 Dynamic names need the same split: `c-name` is selected by Python, whereas a Vue
-dynamic slot name is selected in JavaScript. The initial prototype should use
-static slot names and reject unsupported dynamic combinations with a source
+dynamic slot name is selected in JavaScript. Citry rejects a Vue dynamic slot
+name (`#[expr]`) and a dynamic prop name (`:[key]`), each with a source
 location.
 
 ### Small proof, and what it does not prove
@@ -2872,7 +2877,7 @@ yet; an explicit Vue mode would be necessary during migration.
 | `v-for`, `v-if` | Browser-selected plain Vue structure; `v-for` cannot contain Citry components, including through fills. Use `c-for` for component occurrences. |
 | `c-slot`, `c-fill` | Preserve composition and transform supported browser composition into Vue slots. |
 | `data="..."` on a fill | Python slot-data binding. |
-| `v-slot="..."` on a fill | Proposed JavaScript slot-prop binding. |
+| `v-slot="..."` on a fill | JavaScript slot-prop binding: reads the Vue slot props that `<c-slot :row="row">` passes. |
 | `#c-key="expression"` | Server-evaluated identity, transformed to a Vue key if the instance belongs to Vue. |
 | `:key="expression"` | Browser-evaluated identity. Conflicting key providers should be rejected. |
 
@@ -4166,9 +4171,9 @@ test.
 | Slot hook returns empty or multiple roots | The selected region contains the hook's final result. | Compile that result. A cache based only on the original authored body would miss the replacement. |
 
 Python slot data need not become JSON for repeated outlets: its effects can
-already be present in each prepared body. A separate browser-scoped slot API
-would require explicit JavaScript bindings and aliases. Existing Python
-`data="..."` bindings cannot silently acquire that meaning.
+already be present in each prepared body. Vue slot props use their own attributes,
+`:row` on `<c-slot>` and `v-slot` on `<c-fill>`, so
+Python `data="..."` bindings keep their Python meaning.
 
 A real fill invoking its `fallback="fb"` handle through `{{ fb }}` produces a
 caller-owned outer region containing a receiver-owned fallback region. The
@@ -4253,8 +4258,8 @@ for the current checkout.
 | `<c-Card>` | Most static attributes become Python kwargs. `@event` has special Alpine boundary-handler treatment. | Partition browser bindings before Python kwarg resolution. Preserve unprefixed Python kwargs, including user fields named `key`, `ref`, `class`, or `style`. |
 | `<c-component>` | `is`/`c-is` select a Python component. | Resolve that selection on the server. A Vue `:is` must not masquerade as a Python selector. |
 | `<c-element>` | `is`/`c-is` select an HTML tag; remaining attributes use HTML semantics. | Consume the selector and compile the selected element, subject to app-boundary and allowed-tag rules. |
-| `<c-slot>` | `name`/`c-name` select the Python slot; `required`/`c-required` enforce its requirement. Other plain and `c-` attributes become Python slot data; Vue directives, including `:name` and `@event`, fail to compile. | Keep those roles. Proposed Vue slot props would need a separate way to send their values to the browser. |
-| `<c-fill>` | Closed attribute rules allow its name, Python `data`/`fallback` bindings, and supported Python spread. Vue `v-slot` and `:name` are rejected. | Add any proposed JavaScript alias syntax deliberately. Retain Python bindings and lazy fallback behavior. |
+| `<c-slot>` | `name`/`c-name` select the Python slot; `required`/`c-required` enforce its requirement. A static `:row` or `v-bind:row` is a Vue slot prop, which Citry writes on the Vue `<slot>` element it generates for this slot. Other plain and `c-` attributes become Python slot data; other Vue directives, including `@event`, fail to compile. | Keep those roles. |
+| `<c-fill>` | Closed attribute rules allow its name, Python `data`/`fallback` bindings, a `v-slot` pattern that reads the Vue slot props, and supported Python spread. `#name`, `v-slot:name`, and every other Vue directive are rejected. | Retain Python bindings and lazy fallback behavior beside the Vue pattern. |
 | `<c-if>`, `<c-elif>`, `<c-else>`, `<c-for>`, `<c-empty>`, `<c-raw>` | Closed server-side structural rules. | Consume server control before Vue compilation. Do not rename Python control expressions to Vue directives. |
 | `<c-provide>` | Registered transparent Python component; `key` selects the provide entry and other kwargs provide Python values. | Execute its Python injection behavior. Its spelling alone does not require a browser Vue component. |
 | `<c-js>`, `<c-css>` | Registered transparent components that return dependency placeholders. | Preserve dependency collection and serializer placement; do not compile them as ordinary Vue calls or raw script/style content. |

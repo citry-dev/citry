@@ -213,6 +213,9 @@ class CompiledRender:
     # "empty", "fragment", "text", "opaque-html", or "unknown". A caller's `v-show` or custom
     # directive only reaches the page through an element root (see `events.check_directive_roots`).
     root_shape: str = "unknown"
+    # The `<slot>` outlets written inside an authored `v-for`, which Vue calls
+    # once per item. `events.check_fills_in_vue_loops` reads them.
+    looped_slot_outlets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -689,6 +692,16 @@ class NativeCompiler:
                 hydration_plan,
                 server_render,
                 str(root_shape),
+                looped_slot_outlets=tuple(
+                    sorted(
+                        {
+                            name
+                            for element in response.get("elements", [])
+                            if any(directive.get("name") == "for" for directive in element.get("directives", []))
+                            for name in element.get("slotOutlets", [])
+                        }
+                    )
+                ),
             )
             self._cache[cache_key] = compiled
             if len(self._cache) > 256:

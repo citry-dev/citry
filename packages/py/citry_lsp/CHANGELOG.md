@@ -6,6 +6,8 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Added
 
+- The editor suggests `:row="..."` on `<c-slot>` and `v-slot="{ row }"` on
+  `<c-fill>`, for passing Vue data from a slot to its fill.
 - citry-lsp now supports Python 3.15.
 - The editor accepts `$sendEvent(name, args, {wait: false})` for a handler
   declared with `@event(detached=True)`, and still marks `wait: false` as

@@ -4,6 +4,11 @@
 
 ### Added
 
+- A component can pass Vue data to a fill, as a Vue scoped slot: write
+  `<c-slot name="item" :row="row" />`, and read it in the fill with
+  `<c-fill name="item" v-slot="{ row }">`. Python slot data (`c-item`,
+  `data="..."`) works beside it
+  ([details](https://citry.dev/vue/slots/#scoped-slots)).
 - Citry now supports Python 3.15.
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
@@ -266,6 +271,12 @@
 
 ### Fixes
 
+- In a component that uses Vue, a fill that holds a Citry component now
+  fails at render, with an error that names both components, when the
+  receiving component's `<c-slot>` sits inside a Vue `v-for`. The page used
+  to fail in the browser once the list held more than one item. Loop with
+  `c-for` around the `<c-slot>` instead
+  ([details](https://citry.dev/vue/slots/#scoped-slot-limits)).
 - Without a configured cache, the stylesheets that `css_data()` produces
   no longer pile up in memory, one per distinct set of values, for the
   life of the process. They now count toward `vue_asset_max_bytes`, and

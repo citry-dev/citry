@@ -151,9 +151,20 @@ def lint_vue_compile(
         # rather than a guess.
         return ()
     errors = _compile_errors(written)
-    if not errors:
+    if not errors and not written.scoped_fill_refusals:
         return ()
     found: dict[tuple[int, int, str], MarkupLintFinding] = {}
+    # Vue's compiler accepts these, because the template written for Vue
+    # leaves the pattern out, as a render does, but every render fails on them.
+    for start, end, message in written.scoped_fill_refusals:
+        found[start, end, message] = MarkupLintFinding(
+            name="CITRY_SCOPED_FILL_IN_PLACE",
+            message=render_diagnostic(VUE_COMPILE_ERROR, detail=message),
+            code=VUE_COMPILE_ERROR,
+            severity=severity,
+            start_index=start,
+            end_index=end,
+        )
     explained: tuple[MarkupLintFinding, ...] | None = None
     without_paragraphs: set[tuple[str, str, int | None, int | None]] | None = None
 

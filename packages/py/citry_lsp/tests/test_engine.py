@@ -3957,8 +3957,12 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
     assert plain_by_label["c-for"].insert_text == 'c-for="${1:item} in ${2:items}"'
     assert plain_by_label["#c-key"].insert_text == '#c-key="${1:key}"'
     assert {item.label for item in conditional} == {"cond"}
-    assert {item.label for item in fill} == {"name", "c-name", "data", "fallback", "c-bind"}
-    assert {"c-if", "c-elif", "c-else", "c-for", "c-empty"} <= {item.label for item in slot}
+    # `v-slot` reads the Vue slot props, and `:` passes them.
+    assert {item.label for item in fill} == {"name", "c-name", "data", "fallback", "c-bind", "v-slot"}
+    assert {"c-if", "c-elif", "c-else", "c-for", "c-empty", ":"} <= {item.label for item in slot}
+    # The parser rejects a slot prop named `name`, so the snippets start from a name it accepts.
+    assert {item.label: item for item in slot}[":"].insert_text == ':${1:row}="${2:expression}"'
+    assert {item.label: item for item in fill}["v-slot"].insert_text == 'v-slot="{ ${1:row} }"'
     assert not {"#c-key", "#c-ignore"} & {item.label for item in slot}
     assert len(dynamic_component) == len({item.label for item in dynamic_component})
 

@@ -205,9 +205,9 @@ mod tests {
     }
 
     #[test]
-    fn slot_tags_reject_every_vue_directive_with_a_fix() {
-        // A `<c-slot>` attribute is Python slot data, so no Vue form has a
-        // meaning there, including the `:`/`@` shorthands a component keeps.
+    fn slot_tags_reject_every_vue_directive_but_a_slot_prop_with_a_fix() {
+        // A `<c-slot>` attribute other than a static `:name` slot prop is
+        // Python slot data, so no other Vue form has a meaning there.
         let cases = [
             (r#"<c-slot v-if="open" />"#, "'v-if'", "<c-if>"),
             (r#"<c-slot name="body" v-else />"#, "'v-else'", "<c-if>"),
@@ -217,17 +217,28 @@ mod tests {
                 "'v-show'",
                 "carries 'v-show'",
             ),
-            (r#"<c-slot :item="row" />"#, "':item'", "Vue slot props"),
-            (r#"<c-slot v-bind="props" />"#, "'v-bind'", "Vue slot props"),
+            (r#"<c-slot v-bind="props" />"#, "'v-bind'", "fixed name"),
+            (r#"<c-slot :[key]="row" />"#, "':[key]'", "fixed name"),
+            (
+                r#"<c-slot :item.prop="row" />"#,
+                "':item.prop'",
+                "no modifiers",
+            ),
+            (r#"<c-slot c-:item="row" />"#, "'c-:item'", "fixed name"),
+            (
+                r#"<c-slot V-BIND:item="row" />"#,
+                "'V-BIND:item'",
+                "fixed name",
+            ),
             (r#"<c-slot @click="go()" />"#, "'@click'", "inside the fill"),
-            (r#"<c-slot .value="text" />"#, "'.value'", "Vue slot props"),
+            (r#"<c-slot .value="text" />"#, "'.value'", "fixed name"),
             (r##"<c-slot #header />"##, "'#header'", "Name the slot with"),
             (r#"<c-slot v-focus />"#, "'v-focus'", "fallback content"),
             (r#"<c-slot c-v-if="open" />"#, "'c-v-if'", "<c-if>"),
             // HTML names are case-insensitive and `^title` sets an attribute
             // in Vue, so neither may become slot data.
             (r#"<c-slot V-IF="open" />"#, "'V-IF'", "<c-if>"),
-            (r#"<c-slot ^title="x" />"#, "'^title'", "Vue slot props"),
+            (r#"<c-slot ^title="x" />"#, "'^title'", "fixed name"),
             (r#"<c-slot c-V-FOR="rows" />"#, "'c-V-FOR'", "<c-for>"),
         ];
         for (source, name, hint) in cases {
@@ -240,13 +251,220 @@ mod tests {
             );
             assert!(message.contains(hint), "{source}: {message}");
         }
-        // Plain and `c-` attributes stay slot data.
+        // Plain and `c-` attributes stay slot data, beside Vue slot props.
         parse_template(
-            r#"<c-slot name="row" item="x" c-count="n" required />"#,
+            r#"<c-slot name="row" item="x" c-count="n" :row="row" v-bind:row-index="i" required />"#,
             None,
             None,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn slot_props_reject_names_and_values_the_fill_could_not_read() {
+        let cases = [
+            (
+                r#"<c-slot :name="n" />"#,
+                "Vue reads ':name' on a slot as the slot's own name",
+            ),
+            (r#"<c-slot :key="k" />"#, "Citry sets the slot's own 'key'"),
+            (
+                r#"<c-slot :$i18n="x" />"#,
+                "reserved for the props Citry passes to every fill",
+            ),
+            (
+                r#"<c-slot :_row="x" />"#,
+                "reserved for the props Citry passes to every fill",
+            ),
+            (
+                r#"<c-slot :citry-props="x" />"#,
+                "reserved for the props Citry passes to every fill",
+            ),
+            (r#"<c-slot :row />"#, "needs a Vue expression"),
+            (r#"<c-slot :row="  " />"#, "needs a Vue expression"),
+            (
+                r#"<c-slot :row-data="a" :rowData="b" />"#,
+                "pass the same slot prop 'rowData'",
+            ),
+            (
+                r#"<c-slot :row="a" c-row="b" />"#,
+                "both pass 'row' to the fill, once as Vue data and once as Python slot data",
+            ),
+            (
+                r#"<c-slot row-data="a" :rowData="b" />"#,
+                "both pass 'rowData' to the fill",
+            ),
+            // `bind="1"` is ordinary Python slot data; only `c-bind` spreads.
+            (
+                r#"<c-slot :bind="x" bind="1" />"#,
+                "both pass 'bind' to the fill",
+            ),
+            (
+                r#"<c-slot :c-value="x" />"#,
+                "names that start with 'c-' are Citry attributes",
+            ),
+            (r#"<c-slot :row="{{ x }}" />"#, "holds '{{'"),
+            (
+                r#"<c-slot c-:row="x" />"#,
+                "A 'c-' attribute takes a Python value",
+            ),
+        ];
+        for (source, expected) in cases {
+            let message = format!("{}", parse_template(source, None, None).unwrap_err());
+            assert!(message.contains(expected), "{source}: {message}");
+        }
+    }
+
+    #[test]
+    fn fill_tags_accept_one_slot_props_pattern() {
+        for source in [
+            r#"<c-child><c-fill name="row" v-slot="{ row }">x</c-fill></c-child>"#,
+            r#"<c-child><c-fill name="row" v-slot="{ row: item, index = 0, ...rest }">x</c-fill></c-child>"#,
+            r#"<c-child><c-fill name="row" v-slot="props" data="{ label }">x</c-fill></c-child>"#,
+            // A trailing comma inside the braces and a literal default merge safely.
+            r#"<c-child><c-fill name="row" v-slot="{ row, }">x</c-fill></c-child>"#,
+            r#"<c-child><c-fill name="row" v-slot="{ row = null, label = 'x' }">x</c-fill></c-child>"#,
+            r#"<c-child><c-fill name="row" v-slot="{ n = -1, v = void 0, list = [1, 'a'], o = { a: `t` } }">x</c-fill></c-child>"#,
+            "<c-child><c-fill name=\"row\" v-slot=\"{\n  row,\n  index\n}\">x</c-fill></c-child>",
+        ] {
+            parse_template(source, None, None).unwrap_or_else(|error| panic!("{source}: {error}"));
+        }
+    }
+
+    #[test]
+    fn fill_tags_reject_slot_props_they_could_not_merge_or_name() {
+        let wrap = |fill: &str| format!("<c-child>{fill}</c-child>");
+        let cases = [
+            (r#"<c-fill name="row" v-slot>x</c-fill>"#, "needs a pattern"),
+            (
+                r#"<c-fill name="row" v-slot="">x</c-fill>"#,
+                "needs a pattern",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="a, b">x</c-fill>"#,
+                "lists several parameters",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="[a]">x</c-fill>"#,
+                "is an array pattern",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="...p">x</c-fill>"#,
+                "starts with '...'",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="p = {}">x</c-fill>"#,
+                "has a default value",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row ">x</c-fill>"#,
+                "is not a valid JavaScript parameter",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="a) => (b">x</c-fill>"#,
+                "is not a valid JavaScript parameter",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ $i18n }">x</c-fill>"#,
+                "uses a reserved name",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row: citryRow }">x</c-fill>"#,
+                "uses a reserved name",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row }" data="{ row }">x</c-fill>"#,
+                "'row' is named by both 'v-slot' and the Python 'data' or 'fallback'",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ fb }" fallback="fb">x</c-fill>"#,
+                "'fb' is named by both 'v-slot'",
+            ),
+            (
+                r##"<c-fill name="row" #row="{ row }">x</c-fill>"##,
+                "Choose the slot with 'name=",
+            ),
+            (
+                r#"<c-fill name="row" v-slot:row="{ row }">x</c-fill>"#,
+                "Choose the slot with 'name=",
+            ),
+            (
+                r#"<c-fill name="row" V-SLOT="{ row }">x</c-fill>"#,
+                "written in lowercase",
+            ),
+            (
+                r#"<c-fill name="row" c-v-slot="p">x</c-fill>"#,
+                "A 'c-' attribute takes a Python value",
+            ),
+            (
+                r#"<c-fill name="row" v-slot.mod="p">x</c-fill>"#,
+                "without an argument or modifier",
+            ),
+            // Citry writes the pattern into a larger parameter, where any of
+            // these would change what the rest of it means.
+            (
+                r#"<c-fill name="row" v-slot="{ row },">x</c-fill>"#,
+                "has text around its one parameter",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="p,">x</c-fill>"#,
+                "has text around its one parameter",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row } /* c */">x</c-fill>"#,
+                "holds a comment",
+            ),
+            (
+                "<c-fill name=\"row\" v-slot=\"p // the props\n\">x</c-fill>",
+                "holds a comment",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row = &quot;x&quot; }">x</c-fill>"#,
+                "holds an '&' character",
+            ),
+            // Vue's compiler would read these names from the wrong scope.
+            (
+                r#"<c-fill name="row" v-slot="{ [k]: row }">x</c-fill>"#,
+                "has a computed key",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ ['k' + 'ey']: k }">x</c-fill>"#,
+                "has a computed key",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ cell, id = row.id }">x</c-fill>"#,
+                "has a default value that is not a literal",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row = function f() { return f } }">x</c-fill>"#,
+                "has a default value that is not a literal",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row: { cell = make() } }">x</c-fill>"#,
+                "has a default value that is not a literal",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row = '{{' }">x</c-fill>"#,
+                "holds '{{'",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ key }">x</c-fill>"#,
+                "reads 'key', which is not a slot prop",
+            ),
+            (
+                r#"<c-fill name="row" :title="t">x</c-fill>"#,
+                "inside the fill",
+            ),
+            (
+                r#"<c-fill name="row" v-if="ok">x</c-fill>"#,
+                "inside the fill",
+            ),
+        ];
+        for (fill, expected) in cases {
+            let source = wrap(fill);
+            let message = format!("{}", parse_template(&source, None, None).unwrap_err());
+            assert!(message.contains(expected), "{source}: {message}");
+        }
     }
 
     #[test]
