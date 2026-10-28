@@ -4,8 +4,12 @@
 
 ### Added
 
+- You can write an Events `State` as a Pydantic v2 or v1 model, by hand or
+  through `model_base`. A handler that sets a field to a value the model
+  rejects fails that call, before Citry stores it
+  ([details](https://citry.dev/events/state/#pydantic-state)).
 - You can make every plain `class Kwargs:`, `TemplateData`, `JsData`,
-  `CssData`, and Events `data` class a Pydantic model that subclasses your
+  `CssData`, `State`, and Events `data` class a Pydantic model that subclasses your
   own `BaseModel` subclass, so its `model_config` applies to all of them:
   pass it as `Citry(model_base=MyModel)`. A dataclass base or
   `typing.NamedTuple` works too

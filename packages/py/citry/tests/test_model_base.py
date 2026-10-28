@@ -399,11 +399,10 @@ def _counter(base: object) -> type[Component]:
 
 
 @pytest.mark.parametrize("base", [PlainBase, pydantic.BaseModel])
-def test_state_stays_a_dataclass_and_event_data_follows_the_setting(base: type) -> None:
+def test_state_and_event_data_follow_the_setting(base: type) -> None:
     counter = _counter(base)
 
-    # State stays a generated dataclass under a Pydantic base.
-    assert is_dataclass(counter.State)
+    assert issubclass(counter.State, base)
     info = _component_events_info(counter)
     assert info is not None
     data = info.handlers["bump"].data_schema

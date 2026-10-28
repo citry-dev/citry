@@ -37,7 +37,7 @@ import json
 import logging
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._input_types import _restore_json_tuples
@@ -79,7 +79,7 @@ from citry.ext.events.results import (
     warn_unreturned_actions,
 )
 from citry.ext.events.schemas import StringArgs, declared_field_names, validate_args
-from citry.ext.events.state import public_state_values
+from citry.ext.events.state import check_changed_state, public_state_values, restore_state, state_wire_values
 from citry.ext.events.tokens import (
     InvalidStateError,
     StaleStateError,
@@ -372,7 +372,7 @@ def _state_fingerprint(state: Any) -> str | None:
     step gets to raise its own pointed error.
     """
     try:
-        values = {state_field.name: getattr(state, state_field.name) for state_field in fields(state)}
+        values = state_wire_values(state)
         return json.dumps(values, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
     except (TypeError, ValueError):
         return None
@@ -798,8 +798,21 @@ class EventsDispatcher:
                 logger.debug(err.message)
                 return build_error_result(build_error(409, "stale_state", _MSG_STALE_STATE), send_sequence)
             try:
-                state = info.state_cls(**verified.state_kwargs)
-            except TypeError:
+                state = restore_state(info.state_cls, verified.state_kwargs)
+            except Exception as err:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
+                if not isinstance(err, (TypeError, ValueError)):
+                    # Not a value that no longer fits: a State validator
+                    # failed, which is the author's bug and answers 500.
+                    return self._unexpected_error(
+                        ctx, err, comp_cls=comp_cls, handler=handler, send_sequence=send_sequence
+                    )
+                # A model State validates its values here, and a
+                # ValidationError means the same as a dataclass's TypeError.
+                # The browser will offer a reload, so the server says why.
+                logger.warning(
+                    f"Component {comp_cls.__name__}: a verified State token no longer fits the State class, so the"
+                    f" call answers stale_state: {type(err).__name__}."
+                )
                 # The token verified but its fields no longer match the State
                 # class: the version-skew case (the class changed across a
                 # deploy), which is the stale-token story (design 4.5).
@@ -1020,6 +1033,24 @@ class EventsDispatcher:
         # is never built, which could already write server-stored State.
         if _is_detached(plan.handler) and any(isinstance(action, Render) for action in actions):
             raise ValueError(_detached_render_message(plan))
+        # A model State is validated once before anything signs or stores it,
+        # so a wrong value fails this call (500) instead of the next one (409).
+        # An unchanged State was validated when it was restored.
+        if plan.state is not None and self._state_changed(plan):
+            problem = check_changed_state(plan.state)
+            if problem is not None:
+                field, detail = problem
+                where = f" field {field!r}" if field is not None else ""
+                advice = (
+                    " Remove the field's serializer, or use a type whose JSON reads back as the same value."
+                    if "does not read back" in detail
+                    else " Assign a value of the field's declared type."
+                )
+                msg = (
+                    f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} left State{where}"
+                    f" with a value Citry cannot sign: {detail}.{advice}"
+                )
+                raise ValueError(msg)
         try:
             advertised_renderers = capabilities["renderers"]
             if ctx.response_mode == "compat":
