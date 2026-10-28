@@ -10,7 +10,8 @@ The ``citry-docs`` command line.
 - ``assemble``: assemble the multi-version deploy artifact (current version at
   the root, committed snapshots under ``/v/``).
 - ``versions-check``: validate the committed ``versions/`` tree (manifest,
-  aliases, build stamps, cross-version links, links to ``main``) without building.
+  aliases, build stamps, cross-version links, links to ``main``, shared
+  ``/static/`` files) without building.
 - ``build-all``: bootstrap / disaster-recovery rebuild of every version selected
   by ``docs_versions.yml`` (walks the git tags in throwaway worktrees).
 - ``build-tag``: build one release snapshot from its exact git tag in a
@@ -83,7 +84,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     vc_parser = sub.add_parser(
-        "versions-check", help="Validate the committed versions/ tree (manifest, aliases, stamps, links)."
+        "versions-check",
+        help="Validate the committed versions/ tree (manifest, aliases, stamps, links, /static/ files).",
     )
     vc_parser.add_argument("--strict", action="store_true", help="Also fail on warnings, not just errors.")
     vc_parser.add_argument(
