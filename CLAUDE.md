@@ -284,6 +284,11 @@ render, or an Events action), check its security before delivery, as follows:
 6. **Say in the docs when an input is author-only.** When a value is trusted
    because only the template author writes it, the page that documents the
    API must say so, so app authors know not to pass request data into it.
+7. **Record a pass that leaves no hole open.** After the change merges,
+   write a short record in [`docs/security/reviews/`](docs/security/reviews/README.md)
+   using the template in its README. A hole in a released version follows
+   step 5 and [`SECURITY.md`](SECURITY.md) instead, and gets a record only
+   after its fix is released and disclosed.
 
 ## Where new agent knowledge goes
 
