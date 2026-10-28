@@ -3383,10 +3383,12 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     happens in ``CitryRender.serialize()``.
 
     ``<c-if>`` and ``<c-for>`` nodes, and a ``<c-slot>`` that renders its
-    own fallback, render their bodies on this function's own stack, so
-    Python's call depth does not grow with how deeply they nest. Each one
-    adds a ``_NodeFrame`` and one ``_BodyFrame`` per body, and its part is
-    wrapped exactly as its ``render`` would wrap it. An error raised inside
+    own fallback or a template fill the component was given, render their
+    bodies on this function's own stack, so Python's call depth does not
+    grow with how deeply they nest, or with how many components a fill is
+    passed on through. Each one adds a ``_NodeFrame`` and one
+    ``_BodyFrame`` per body, and its part is wrapped exactly as its
+    ``render`` would wrap it. An error raised inside
     passes out through every frame in turn, innermost first: each body frame
     resets the value context, and each node frame closes its loop (or, for a
     slot, raises the error inside the slot's ``with`` blocks, which add the
@@ -3407,7 +3409,7 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
             direct_prepared = frame.direct_prepared
             tracing = frame.tracing
             pushed = False
-            # A StopIteration a slot's fallback carried out, raised below,
+            # A StopIteration a slot's steps carried out, raised below,
             # outside the `except`, so its context stays the one it had.
             stopped: StopIteration | None = None
             for item in frame.items:
@@ -3506,7 +3508,7 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
 
 def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> None:
     """
-    Add a finished ``<c-if>``, ``<c-for>`` or ``<c-slot>`` fallback part to the body that holds it.
+    Add a finished ``<c-if>``, ``<c-for>`` or ``<c-slot>`` part to the body that holds it.
 
     These are the same steps the main loop in ``_render_body`` takes, inline,
     for every other node's part; the two must stay alike.
@@ -3528,8 +3530,8 @@ def _unwind_body_frames(stack: list[_BodyFrame | _NodeFrame], err: BaseException
     A body frame resets its value context. A node frame closes its loop, so
     the loop's ``finally`` blocks run now, and adds its node's template
     position, as the node's ``render`` does when an error passes out of it.
-    A slot's fallback instead gets the error thrown in where it waits for
-    its body, so the ``with`` blocks it holds there see the error as they
+    A slot instead gets the error thrown in where it waits for its body,
+    so the ``with`` blocks it holds there see the error as they
     would around a ``Slot`` call; one of them adds the slot to the error's
     component path. Adding a position can replace the error with a clearer
     one; the replacement is raised from the original and passes through the

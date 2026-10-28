@@ -839,9 +839,10 @@ def _render_passes_through(kind: type[object]) -> bool:
 
     Only the built-in ``CitryRender`` does, and only while no code has
     registered it for a value protocol or patched the class.
-    ``SlotNode._render_steps`` asks this too before it hands a fallback to
-    the body renderer, so both give the same result. It is checked on every call, so a
-    registration or class change made after import still counts.
+    ``SlotNode._render_steps`` asks this too before it hands a fallback or
+    a passed template fill to the body renderer, so both give the same
+    result. It is checked on every call, so a registration or class change
+    made after import still counts.
     """
     return (
         kind is _DEFAULT_VALUE_TYPES[2]

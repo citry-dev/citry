@@ -1,7 +1,8 @@
-"""Contracts for pull-request cancellation and focused Python diagnostics."""
+"""Contracts for cancelling stale CI runs and for focused Python diagnostics."""
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import shlex
@@ -26,22 +27,62 @@ def _load_workflow(name: str) -> dict[str, Any]:
     return content
 
 
-def test_pull_request_workflows_cancel_only_stale_pull_request_runs() -> None:
+# The concurrency the check workflows use, apart from
+# `_CANCELS_ONLY_PULL_REQUEST_RUNS` below. A run joins the group of its pull
+# request, or of its branch when it comes from a push, so a newer run cancels
+# the older one. A scheduled or manual run is alone in a group named after its
+# own run ID, so nothing cancels it.
+_CHECK_CONCURRENCY = {
+    "group": (
+        "${{ github.workflow }}-${{ github.event.pull_request.number"
+        " || (github.event_name == 'push' && github.ref) || github.run_id }}"
+    ),
+    "cancel-in-progress": (
+        "${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target'"
+        " || github.event_name == 'push' }}"
+    ),
+}
+
+# The concurrency of a workflow where a newer run cancels an older one only for
+# the same pull request.
+_PULL_REQUEST_ONLY_CONCURRENCY = {
+    "group": "${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}",
+    "cancel-in-progress": "${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}",
+}
+
+# Workflows that run checks on a push to main but let no newer push cancel that
+# run, so every commit on main keeps a complete result. Release step 5 in
+# docs/codebase.md requires the repository Check to pass for the release
+# commit itself.
+_CANCELS_ONLY_PULL_REQUEST_RUNS = {"repo--check.yml"}
+
+# Workflows that run on a push to main but must finish once started, each
+# with the reason.
+_PUSH_WORKFLOWS_NEVER_CANCELLED = {
+    # Deploys the docs site. A cancelled deploy publishes nothing, so if the
+    # newer run then fails, the site stays on a deploy older than both.
+    "repo--docs-deploy.yml",
+    # Starts the publish workflows that qualify a release and waits for them;
+    # stopping it would leave those runs going with no candidate to collect.
+    "repo--release-candidate.yml",
+}
+
+
+def _workflows() -> list[tuple[str, dict[str, Any]]]:
+    paths = sorted([*_WORKFLOWS.glob("*.yml"), *_WORKFLOWS.glob("*.yaml")])
+    return [(path.name, _load_workflow(path.name)) for path in paths]
+
+
+def test_pull_request_workflows_cancel_only_stale_runs() -> None:
     checked: set[str] = set()
-    workflow_paths = [*_WORKFLOWS.glob("*.yml"), *_WORKFLOWS.glob("*.yaml")]
-    for path in workflow_paths:
-        workflow = _load_workflow(path.name)
+    for name, workflow in _workflows():
         events = workflow.get("on", {})
         if not isinstance(events, dict) or not {"pull_request", "pull_request_target"}.intersection(events):
             continue
 
-        assert workflow.get("concurrency") == {
-            "group": "${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}",
-            "cancel-in-progress": (
-                "${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}"
-            ),
-        }, path.name
-        checked.add(path.name)
+        expected = _PULL_REQUEST_ONLY_CONCURRENCY if name in _CANCELS_ONLY_PULL_REQUEST_RUNS else _CHECK_CONCURRENCY
+        assert workflow.get("concurrency") == expected, name
+        checked.add(name)
 
     assert checked == {
         "py--examples--tests.yml",
@@ -59,6 +100,82 @@ def test_pull_request_workflows_cancel_only_stale_pull_request_runs() -> None:
     }
 
 
+def _runs_on_push_to_main(events: object) -> bool:
+    """Whether these `on:` events start a run when someone pushes to main."""
+    if isinstance(events, str):
+        return events == "push"
+    if isinstance(events, list):
+        return "push" in events
+    if not isinstance(events, dict) or "push" not in events:
+        return False
+    push = events["push"] or {}
+    # A filter on tags alone leaves branch pushes out; no filter at all
+    # takes every branch.
+    if "branches" not in push and "branches-ignore" not in push and ("tags" in push or "tags-ignore" in push):
+        return False
+    # GitHub accepts one pattern written as a plain string. `!` patterns are
+    # not modelled, so a filter that uses them errs toward checking the
+    # workflow.
+    if "branches-ignore" in push:
+        ignored = push["branches-ignore"]
+        ignored = [ignored] if isinstance(ignored, str) else ignored
+        return not any(fnmatch.fnmatchcase("main", pattern) for pattern in ignored)
+    branches = push.get("branches", ["**"])
+    branches = [branches] if isinstance(branches, str) else branches
+    return any(fnmatch.fnmatchcase("main", pattern) for pattern in branches)
+
+
+def _never_cancels(concurrency: Any) -> bool:
+    # A bare string group, or one without `cancel-in-progress`, never cancels
+    # a started run; it only replaces a waiting one.
+    return concurrency is None or isinstance(concurrency, str) or concurrency.get("cancel-in-progress", False) is False
+
+
+def test_a_newer_push_to_main_cancels_the_older_run_except_check_docs_deploy_and_release_candidate() -> None:
+    cancelled: set[str] = set()
+    never_cancelled: set[str] = set()
+    for name, workflow in _workflows():
+        # Every workflow a push to main can start is checked, so a new one
+        # must either use the shared concurrency or join the exceptions above.
+        if not _runs_on_push_to_main(workflow.get("on")):
+            continue
+        concurrency = workflow.get("concurrency")
+        if name in _PUSH_WORKFLOWS_NEVER_CANCELLED:
+            assert isinstance(concurrency, dict), name
+            assert concurrency.get("cancel-in-progress") is False, name
+            never_cancelled.add(name)
+        elif name in _CANCELS_ONLY_PULL_REQUEST_RUNS:
+            assert concurrency == _PULL_REQUEST_ONLY_CONCURRENCY, name
+            never_cancelled.add(name)
+        else:
+            assert concurrency == _CHECK_CONCURRENCY, name
+            cancelled.add(name)
+
+    assert never_cancelled == _PUSH_WORKFLOWS_NEVER_CANCELLED | _CANCELS_ONLY_PULL_REQUEST_RUNS
+    # Guards against the loop finding nothing because the trigger shape changed.
+    assert {"py--tests.yml", "rust--tests.yml"} <= cancelled
+
+
+def test_publish_and_release_workflows_are_never_cancelled_by_a_newer_run() -> None:
+    checked: set[str] = set()
+    for name, workflow in _workflows():
+        if not (name.endswith("--publish.yml") or "release" in name):
+            continue
+        checked.add(name)
+        # A run that stops halfway can leave a package or tag half published,
+        # so a group here may queue a newer run but never cancel a started one.
+        assert _never_cancels(workflow.get("concurrency")), name
+        for job_name, job in workflow["jobs"].items():
+            assert _never_cancels(job.get("concurrency")), f"{name}: {job_name}"
+    assert {
+        "py--citry--publish.yml",
+        "repo--docs-release.yml",
+        "repo--release.yml",
+        "repo--release-candidate.yml",
+        "vscode--citry--publish.yml",
+    } <= checked
+
+
 # Workflows that run on pull requests but run no checks, so a closed PR has
 # nothing of theirs worth cancelling: a notification and a lockfile refresh.
 _PR_WORKFLOWS_WITHOUT_CHECKS = {"repo--discord-pr.yml", "repo--dependabot-relock.yml"}
@@ -66,16 +183,14 @@ _PR_WORKFLOWS_WITHOUT_CHECKS = {"repo--discord-pr.yml", "repo--dependabot-relock
 
 def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
     checked: set[str] = set()
-    for path in sorted([*_WORKFLOWS.glob("*.yml"), *_WORKFLOWS.glob("*.yaml")]):
-        workflow = _load_workflow(path.name)
+    for name, workflow in _workflows():
         events = workflow.get("on", {})
         # Every check workflow that runs on pull requests is covered, so a new
         # one cannot leave its runs going after the PR merges.
         if not isinstance(events, dict) or "pull_request" not in events:
             continue
-        if path.name in _PR_WORKFLOWS_WITHOUT_CHECKS:
+        if name in _PR_WORKFLOWS_WITHOUT_CHECKS:
             continue
-        name = path.name
         checked.add(name)
         # A `closed` run joins the PR's concurrency group, and the group's
         # cancel-in-progress (checked above) cancels the PR's earlier runs.

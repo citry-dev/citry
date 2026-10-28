@@ -943,6 +943,11 @@ sits inside, any of these:
 So `c-if` and `c-else` branches may share an id. `v-show` does not count,
 because a hidden element is still in the page.
 
+Inside an element with `v-pre`, Vue leaves `v-if` and `v-for` as written
+and treats a PascalCase tag as a plain element. None of these count
+there, so both elements of a `v-if`/`v-else` pair are in the page and a
+repeated `id` on them is reported.
+
 The same id in two different templates is not reported, even when both
 render on one page. Development mode reports that case when Citry
 turns the page into HTML; see
