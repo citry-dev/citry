@@ -832,20 +832,25 @@ starts Citry, whose public dependency must then resolve to those exact bytes.
 Each workflow that runs on pull requests or on pushes to `main` and `dev`
 puts a run in a concurrency group (GitHub runs one run of a group at a time)
 named after the workflow and either the pull request or, for a push, the
-branch. Two workflows that run on a push to `main` are exceptions, listed
+branch. Three workflows that run on a push to `main` are exceptions, listed
 below. A newer run then cancels the older one still going in that group:
 
 - A new commit on a pull request cancels the checks for the previous commit.
 - A new push to `main` (or `dev`) cancels the checks still running for the
-  previous push. The older commit then has no complete CI result of its own.
+  previous push. The older commit then has no complete result from those
+  checks, though the repository Check still finishes.
   The newer commit's run tests the older commit's changes too, so a failure
   the older commit introduced shows up on the newer one. Release step 5 below
   says how to get a result for the release commit itself.
 - A scheduled or manual run gets a group of its own, named after its run ID,
   so no other run cancels it.
 
-Two workflows that run on a push to `main` never cancel a started run:
+Three workflows that run on a push to `main` never let a newer push cancel a
+push run:
 
+- `repo--check.yml`, because release step 5 requires a complete repository
+  Check result for the release commit itself. It still cancels an older run
+  for the same pull request.
 - `repo--docs-deploy.yml`, because a cancelled deploy publishes nothing, so
   if the newer run then fails, the site stays on a deploy older than both
   commits. Its `pages` group still keeps at most one newer run waiting.
@@ -1827,12 +1832,14 @@ Prepare a release as follows:
    on `main`. If `main` advances before dispatch, prepare a new candidate on
    current `main`.
 
-   A newer push to `main` cancels the checks still running for the older
-   commit (see
+   No newer push cancels the repository Check, so every commit on `main`
+   keeps its own Check result. A newer push to `main` cancels the other
+   checks still running for the older commit (see
    [Cancelling stale runs and targeted diagnostics](#cancelling-stale-runs-and-targeted-diagnostics)),
    so hold merges to `main` until the release commit's checks finish. If a
-   newer push already cancelled them, push a temporary branch at the release
-   commit and start each check on that branch with **Run workflow**. A manual
+   newer push already cancelled some of them, push a temporary branch at the
+   release commit and start each cancelled check on that branch with
+   **Run workflow**. A manual
    run tests the tip of the branch it is started on, gets a group of its own,
    and is never cancelled. Delete the branch afterwards.
 6. Start the only publication entry point, **Release qualified packages**, and
