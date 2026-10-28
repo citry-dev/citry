@@ -1171,6 +1171,539 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(
     assert faults == []
 
 
+_SPY_ON_PLAIN_FIELDS = """(tag) => {
+  const spy = {selection: [], values: [], focus: []};
+  globalThis.__spy = spy;
+  const inputs = Object.fromEntries(
+    ['a', 'b'].map(key => [key, document.querySelector(`[data-key="${key}"] ${tag}`)]),
+  );
+  const proto = tag === 'textarea' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  // Wrap the prototype methods and record only calls on these two fields. Each test clears the
+  // lists after its own setup calls, so what is left is what the runtime did.
+  const select = proto.setSelectionRange;
+  proto.setSelectionRange = function (...args) {
+    for (const [key, input] of Object.entries(inputs)) if (this === input) spy.selection.push([key, ...args]);
+    return select.apply(this, args);
+  };
+  const focus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (...args) {
+    for (const [key, input] of Object.entries(inputs)) if (this === input) spy.focus.push(key);
+    return focus.apply(this, args);
+  };
+  // The `value` accessor lives on the prototype, so shadow it on each field to count writes.
+  const accessor = Object.getOwnPropertyDescriptor(proto, 'value');
+  for (const [key, input] of Object.entries(inputs)) {
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get() { return accessor.get.call(this); },
+      set(next) { spy.values.push([key, next]); accessor.set.call(this, next); },
+    });
+  }
+}"""
+
+
+def _plain_input_rows_page(engine: Citry, *, multiline: bool = False) -> Component:
+    """
+    Build a page whose keyed rows each hold a plain `<input>` (no `v-model`).
+
+    With `multiline`, each row holds a `<textarea>` instead. The page's
+    `#swap` button asks the server to render the rows in the opposite order,
+    so each click reorders them. Its `#bump` button asks for the same rows
+    with a different `#note` text, so the rows stay where they are.
+    """
+    engine.set_mounted_prefix("/citry")
+    order = ["a", "b"]
+    bumps = 0
+    target_render_id = ""
+
+    class Row(Component):
+        citry = engine
+        template = """
+            <label c-data-key="value">
+                <c-if cond="multiline">
+                    <textarea></textarea>
+                </c-if>
+                <c-else>
+                    <input type="text">
+                </c-else>
+            </label>
+        """
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+    class Rows(Component):
+        citry = engine
+        template = """
+            <section id="rows">
+                <c-for each="value in values">
+                    <c-Row #c-key="value" c-value="value" c-multiline="multiline" />
+                </c-for>
+                <p id="note">{{ note }}</p>
+            </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            nonlocal target_render_id
+            target_render_id = self.id
+            return kwargs
+
+    class Controller(Component):
+        citry = engine
+        template = """
+            <button id="swap" @c-click="swap">swap</button>
+            <button id="bump" @c-click="bump">bump</button>
+        """
+
+        class Events:
+            def swap(self):
+                order.reverse()
+                return actions.Render(
+                    Rows(values=list(order), multiline=multiline, note=f"bump {bumps}"),
+                    target=f"render:{target_render_id}",
+                )
+
+            def bump(self):
+                nonlocal bumps
+                bumps += 1
+                return actions.Render(
+                    Rows(values=list(order), multiline=multiline, note=f"bump {bumps}"),
+                    target=f"render:{target_render_id}",
+                )
+
+    target = Rows(values=list(order), multiline=multiline, note="bump 0")
+
+    class Page(Component):
+        citry = engine
+        template = """
+            <main>{{ controller }}{{ target }}</main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"controller": Controller(), "target": target}
+
+    dispatcher_for(engine)
+    return Page()
+
+
+def _default_text_page(engine: Citry) -> Component:
+    """
+    Build a page with one plain `<input>` whose default text the server changes.
+
+    Each click on `#change` asks the server to render the field with the next
+    text from `texts`, so a field the user typed in gets a new default.
+    """
+    engine.set_mounted_prefix("/citry")
+    texts = iter(["second default text, longer", "third default text, longer still"])
+    target_render_id = ""
+
+    class Field(Component):
+        citry = engine
+        template = """
+            <section id="field-box">
+                <input id="field" type="text" c-value="text">
+            </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            nonlocal target_render_id
+            target_render_id = self.id
+            return kwargs
+
+    class Controller(Component):
+        citry = engine
+        template = """
+            <button id="change" @c-click="change">change</button>
+        """
+
+        class Events:
+            def change(self):
+                return actions.Render(Field(text=next(texts)), target=f"render:{target_render_id}")
+
+    target = Field(text="first default text")
+
+    class Page(Component):
+        citry = engine
+        template = """
+            <main>{{ controller }}{{ target }}</main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"controller": Controller(), "target": target}
+
+    dispatcher_for(engine)
+    return Page()
+
+
+def _click_and_wait(page: Any, button: str, revision: int) -> None:
+    # Dispatch the click inside the page so a field the test focused keeps its focus and selection.
+    page.evaluate(f"document.querySelector('{button}').dispatchEvent(new MouseEvent('click', {{bubbles: true}}))")
+    page.wait_for_function(
+        f"""() => {{
+          const app = [...__citryRuntime._apps.values()][0];
+          return app.revision === {revision} && !app.busy;
+        }}""",
+        timeout=5000,
+    )
+
+
+def _row_order(page: Any) -> str:
+    return page.evaluate("[...document.querySelectorAll('#rows label')].map(label => label.dataset.key).join(',')")
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("tag", ["input", "textarea"])
+def test_events_revision_leaves_selection_and_value_alone_while_input_method_composes(
+    tag: str, page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
+    engine = Citry(secret="vue-composition-secret", autodiscover=False)  # noqa: S106
+    page_component = _plain_input_rows_page(engine, multiline=tag == "textarea")
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    open_citry_page(serve_live(engine, page_component.render().serialize(), "") + "/")
+    page.locator(f'[data-key="a"] {tag}').fill("hello world")
+    page.locator(f'[data-key="b"] {tag}').fill("other text")
+    page.evaluate(_SPY_ON_PLAIN_FIELDS, tag)
+
+    # An input method is composing in field a, which keeps the focus while the revision applies.
+    page.evaluate(
+        """(tag) => {
+          const input = document.querySelector(`[data-key="a"] ${tag}`);
+          input.focus();
+          input.setSelectionRange(2, 6, 'backward');
+          input.dispatchEvent(new CompositionEvent('compositionstart', {bubbles: true}));
+          globalThis.__spy.selection.length = 0;
+          globalThis.__spy.focus.length = 0;
+        }""",
+        tag,
+    )
+    _click_and_wait(page, "#swap", 1)
+
+    assert _row_order(page) == "b,a"
+    read_field = """(tag) => {
+          const input = document.querySelector(`[data-key="a"] ${tag}`);
+          return {
+            focused: document.activeElement === input,
+            start: input.selectionStart,
+            end: input.selectionEnd,
+            direction: input.selectionDirection,
+            value: input.value,
+            spy: globalThis.__spy,
+          };
+        }"""
+    state = page.evaluate(read_field, tag)
+    # Vue moved field b and left a in place, so a never lost focus and needed no focus() call. The
+    # runtime neither reapplied the range nor wrote the text.
+    assert state["focused"] is True
+    assert state["spy"]["focus"] == []
+    assert (state["start"], state["end"], state["direction"]) == (2, 6, "backward")
+    assert state["spy"]["selection"] == []
+    assert state["spy"]["values"] == []
+    assert state["value"] == "hello world"
+
+    # Once compositionend fires, the runtime reapplies the range. The `#bump` revision changes only
+    # the note text, so field a stays in place and keeps its focus. With nothing moving the field,
+    # the compositionend listener is the only thing that can have cleared `composingTarget`.
+    page.evaluate(
+        """(tag) => {
+          const input = document.querySelector(`[data-key="a"] ${tag}`);
+          input.dispatchEvent(new CompositionEvent('compositionend', {bubbles: true}));
+          input.setSelectionRange(1, 4, 'forward');
+          globalThis.__spy.selection.length = 0;
+          globalThis.__spy.focus.length = 0;
+        }""",
+        tag,
+    )
+    _click_and_wait(page, "#bump", 2)
+
+    assert _row_order(page) == "b,a"
+    assert page.locator("#note").text_content() == "bump 1"
+    state = page.evaluate(read_field, tag)
+    assert state["focused"] is True
+    assert state["spy"]["focus"] == []
+    assert (state["start"], state["end"], state["direction"]) == (1, 4, "forward")
+    assert state["spy"]["selection"] == [["a", 1, 4, "forward"]]
+    assert state["spy"]["values"] == []
+    assert faults == []
+
+
+@pytest.mark.e2e
+def test_events_revision_reapplies_the_range_after_a_composing_field_loses_focus(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
+    engine = Citry(secret="vue-composition-blur-secret", autodiscover=False)  # noqa: S106
+    page_component = _plain_input_rows_page(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    open_citry_page(serve_live(engine, page_component.render().serialize(), "") + "/")
+    page.locator('[data-key="a"] input').fill("hello world")
+    page.locator('[data-key="b"] input').fill("other text")
+    page.evaluate(_SPY_ON_PLAIN_FIELDS, "input")
+
+    # Chromium can drop a composition without a compositionend when Vue moves the field.
+    # Blurring the field after compositionstart stands in for that: the runtime sees only focusout.
+    page.evaluate(
+        """() => {
+          const input = document.querySelector('[data-key="a"] input');
+          input.focus();
+          input.dispatchEvent(new CompositionEvent('compositionstart', {bubbles: true}));
+          input.blur();
+          // The user comes back to the field and selects a range, with no composition active.
+          input.focus();
+          input.setSelectionRange(1, 4, 'forward');
+          globalThis.__spy.selection.length = 0;
+        }"""
+    )
+    _click_and_wait(page, "#swap", 1)
+
+    assert _row_order(page) == "b,a"
+    state = page.evaluate(
+        """() => {
+          const input = document.querySelector('[data-key="a"] input');
+          return {
+            focused: document.activeElement === input,
+            start: input.selectionStart,
+            end: input.selectionEnd,
+            direction: input.selectionDirection,
+            value: input.value,
+            spy: globalThis.__spy,
+          };
+        }"""
+    )
+    # The flag left by the dropped composition does not block the restore: the range is reapplied and the text is kept.
+    assert state["focused"] is True
+    assert state["spy"]["selection"] == [["a", 1, 4, "forward"]]
+    assert (state["start"], state["end"], state["direction"]) == (1, 4, "forward")
+    assert state["spy"]["values"] == []
+    assert state["value"] == "hello world"
+    assert faults == []
+
+
+@pytest.mark.e2e
+def test_events_revision_restores_the_caret_after_the_server_changes_a_composing_fields_text(
+    page: Any, serve_live: Any, open_citry_page: Any, browser_name: str
+) -> None:
+    if browser_name != "chromium":
+        pytest.skip("Input.imeSetComposition is a Chrome DevTools Protocol command")
+    engine = Citry(secret="vue-real-composition-secret", autodiscover=False)  # noqa: S106
+    page_component = _default_text_page(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    open_citry_page(serve_live(engine, page_component.render().serialize(), "") + "/")
+    cdp = page.context.new_cdp_session(page)
+    read_field = """() => {
+      const input = document.querySelector('#field');
+      return {
+        focused: document.activeElement === input,
+        value: input.value,
+        defaultValue: input.defaultValue,
+        start: input.selectionStart,
+        end: input.selectionEnd,
+      };
+    }"""
+
+    # The user types in the field, then an input method starts composing "ab" in the middle of it.
+    page.locator("#field").fill("hello world")
+    page.evaluate(
+        "() => { const input = document.querySelector('#field'); input.focus(); input.setSelectionRange(5, 5); }"
+    )
+    cdp.send("Input.imeSetComposition", {"text": "ab", "selectionStart": 2, "selectionEnd": 2})
+    composing = page.evaluate(read_field)
+    assert composing["value"] == "helloab world"
+    # The caret sits inside the field, away from the end that a rewrite of `.value` would pick.
+    assert composing["start"] == composing["end"] < len("second default text, longer")
+
+    # The server changes the default text of the field while the composition is open. Chromium ends
+    # the composition when the runtime rewrites `.value`, and sends no compositionend for it.
+    _click_and_wait(page, "#change", 1)
+    after_revision = page.evaluate(read_field)
+    assert after_revision["value"] == "second default text, longer"
+    assert after_revision["focused"] is True
+    assert (after_revision["start"], after_revision["end"]) == (composing["start"], composing["end"])
+
+    # The input method commits "Z" at that caret, which makes the field dirty again.
+    cdp.send("Input.insertText", {"text": "Z"})
+    committed = page.evaluate(read_field)
+    assert committed["value"] == "second Zdefault text, longer"
+
+    # No composition is active now, so the next revision, which changes the text again, restores
+    # the caret the user placed.
+    page.evaluate("() => document.querySelector('#field').setSelectionRange(2, 2)")
+    _click_and_wait(page, "#change", 2)
+    final = page.evaluate(read_field)
+    assert final["value"] == "third default text, longer still"
+    assert final["focused"] is True
+    assert (final["start"], final["end"]) == (2, 2)
+    assert faults == []
+
+
+@pytest.mark.e2e
+def test_events_revision_does_not_rewrite_a_typed_field_that_still_holds_its_value(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
+    engine = Citry(secret="vue-unchanged-field-secret", autodiscover=False)  # noqa: S106
+    page_component = _plain_input_rows_page(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    open_citry_page(serve_live(engine, page_component.render().serialize(), "") + "/")
+    page.locator('[data-key="a"] input').fill("typed in a")
+    page.locator('[data-key="b"] input').fill("typed in b")
+    page.evaluate(_SPY_ON_PLAIN_FIELDS, "input")
+    # The runtime captures a field only when its text differs from its default, so check that both
+    # fields qualify before the swap and keep the nodes to prove the swap moved the same ones.
+    dirty = page.evaluate(
+        """() => {
+          const fields = Object.fromEntries(
+            ['a', 'b'].map(key => [key, document.querySelector(`[data-key="${key}"] input`)]),
+          );
+          globalThis.__fields = fields;
+          return Object.values(fields).map(input => input.value !== input.defaultValue);
+        }"""
+    )
+    assert dirty == [True, True]
+
+    _click_and_wait(page, "#swap", 1)
+
+    assert _row_order(page) == "b,a"
+    state = page.evaluate(
+        """() => ({
+          values: ['a', 'b'].map(key => document.querySelector(`[data-key="${key}"] input`).value),
+          kept: ['a', 'b'].map(
+            key => document.querySelector(`[data-key="${key}"] input`) === globalThis.__fields[key],
+          ),
+          spy: globalThis.__spy,
+        })"""
+    )
+    # Both fields were typed in, so the runtime captured them, yet the runtime wrote neither value back.
+    assert state["values"] == ["typed in a", "typed in b"]
+    assert state["kept"] == [True, True]
+    assert state["spy"]["values"] == []
+    assert faults == []
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("drop_focus", [False, True])
+@pytest.mark.parametrize("mode", ["removed", "closed", "closed_modal"])
+def test_events_revision_leaves_focus_out_of_a_dialog_it_closes(
+    mode: str, drop_focus: bool, page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
+    engine = Citry(secret="vue-closing-dialog-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+    removable = mode == "removed"
+    target_render_id = ""
+
+    class Panel(Component):
+        citry = engine
+        template = """
+            <section id="panel">
+                <c-if cond="show or not removable">
+                    <dialog id="dlg" c-open="show">
+                        <input id="dlg-input" type="text">
+                    </dialog>
+                </c-if>
+            </section>
+        """
+        js = """
+            $component({
+                updated() {
+                    // A page script that drops the focus while the revision applies.
+                    if (globalThis.__blurDuringRender) document.activeElement?.blur();
+                },
+            });
+        """
+
+        def template_data(self, kwargs, slots):
+            nonlocal target_render_id
+            target_render_id = self.id
+            return kwargs
+
+    class Controller(Component):
+        citry = engine
+        template = """
+            <button id="opener" type="button">opener</button>
+            <button id="close" @c-click="close_dialog">close</button>
+        """
+
+        class Events:
+            def close_dialog(self):
+                return actions.Render(
+                    Panel(show=False, removable=removable),
+                    target=f"render:{target_render_id}",
+                )
+
+    target = Panel(show=True, removable=removable)
+
+    class Page(Component):
+        citry = engine
+        template = """
+            <main>{{ controller }}{{ target }}</main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"controller": Controller(), "target": target}
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
+    page.evaluate(
+        """([modal, dropFocus]) => {
+          const dialog = document.querySelector('#dlg');
+          // A modal dialog remembers the element focused when it opened, to return focus there.
+          document.querySelector('#opener').focus();
+          if (modal) { dialog.close(); dialog.showModal(); }
+          globalThis.__blurDuringRender = dropFocus;
+          const input = dialog.querySelector('input');
+          input.value = 'typed';
+          input.focus();
+          input.setSelectionRange(1, 3);
+          globalThis.__dialogInput = input;
+          globalThis.__focusCalls = [];
+          const focus = HTMLElement.prototype.focus;
+          HTMLElement.prototype.focus = function (...args) {
+            if (this === input) globalThis.__focusCalls.push(args);
+            return focus.apply(this, args);
+          };
+        }""",
+        [mode == "closed_modal", drop_focus],
+    )
+    assert page.evaluate("document.activeElement?.id") == "dlg-input"
+
+    page.evaluate("document.querySelector('#close').dispatchEvent(new MouseEvent('click', {bubbles: true}))")
+    page.wait_for_function(
+        "[...__citryRuntime._apps.values()][0].revision === 1 && ![...__citryRuntime._apps.values()][0].busy",
+        timeout=5000,
+    )
+    page.wait_for_timeout(200)
+    state = page.evaluate(
+        """() => {
+          const input = globalThis.__dialogInput;
+          const dialog = document.querySelector('#dlg');
+          return {
+            active: document.activeElement?.tagName + '#' + document.activeElement?.id,
+            inputConnected: input.isConnected,
+            dialogPresent: dialog !== null,
+            dialogOpen: dialog?.open ?? null,
+            focusCalls: globalThis.__focusCalls.length,
+            value: input.value,
+          };
+        }"""
+    )
+    # This test locks behavior the runtime already has: nothing ends up focused inside the closed
+    # dialog, and the typed text is untouched. A modal dialog that loses its `open` attribute does
+    # not hand focus back to the opener either, so the focus lands on the body.
+    assert state["active"] == "BODY#"
+    assert state["value"] == "typed"
+    assert state["inputConnected"] is (not removable)
+    assert state["dialogPresent"] is (not removable)
+    assert state["dialogOpen"] is (None if removable else False)
+    # When the page drops the focus, a field Vue kept gets one focus() call from the runtime. The
+    # browser ignores it because a field in a closed dialog is not rendered. A removed field is
+    # disconnected, so the runtime does not call focus() on it at all.
+    assert state["focusCalls"] == (1 if drop_focus and not removable else 0)
+    assert faults == []
+
+
 @pytest.mark.e2e
 def test_template_v_for_keyed_model_nodes_reorder_and_remove(
     page: Any, serve_document: Any, open_citry_page: Any
