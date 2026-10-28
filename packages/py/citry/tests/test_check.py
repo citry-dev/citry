@@ -1760,6 +1760,24 @@ def test_byte_offsets_map_to_lines_and_columns_as_editors_count_them():
     assert at("f") == (3, 2)
 
 
+def test_byte_offsets_between_cr_and_lf_or_past_the_end_keep_their_positions():
+    # These are the edge cases of the line-start lookup. An offset between
+    # the CR and LF of a CR LF counts the CR as a line break, a lone CR ends
+    # a line too, and offsets outside the source count as its nearest end.
+    source = "ab\r\ncd"
+
+    assert _byte_offset_coordinates(source, 2) == (0, 2)
+    assert _byte_offset_coordinates(source, 3) == (1, 0)
+    assert _byte_offset_coordinates(source, 4) == (1, 0)
+    assert _byte_offset_coordinates(source, 6) == (1, 2)
+    assert _byte_offset_coordinates(source, 99) == (1, 2)
+    assert _byte_offset_coordinates(source, -5) == (0, 0)
+    assert _byte_offset_coordinates("a\rb", 3) == (1, 1)
+    # An offset inside a character has no column.
+    with pytest.raises(UnicodeDecodeError):
+        _byte_offset_coordinates("é", 1)
+
+
 def test_type_checker_ranges_count_bytes_as_python_reads_the_file():
     # ty and TypeScript read a file's raw text, CR LF included. Their range
     # keeps its lines and columns, and its byte offsets count each line

@@ -110,7 +110,7 @@ from citry._slot_props import (
     slot_outlets,
     unknown_slot_props_for,
 )
-from citry._source_lines import line_break_count, source_lines
+from citry._source_lines import byte_offset_position, source_lines
 from citry._symbol_table import symtable
 from citry._template_data_source import (
     TemplateDataSourceShape,
@@ -4063,13 +4063,9 @@ def _byte_offset_coordinates(source: str, offset: int) -> tuple[int, int]:
     finding range whose text the checker holds goes through here, which keeps
     all rules on one numbering.
     """
-    prefix = source.encode("utf-8")[:offset].decode("utf-8")
     # Lines end where Python and editors end them (CR LF, CR, or LF), so a
     # Python file and the template inside it count lines the same way.
-    current = source_lines(prefix)[-1] if prefix else ""
-    if current.endswith(("\n", "\r")):
-        current = ""
-    return line_break_count(prefix), len(current.encode("utf-16-le")) // 2
+    return byte_offset_position(source, offset)
 
 
 def _byte_range_coordinates(source: str, start_index: int, end_index: int) -> tuple[int, int, int, int, int, int]:

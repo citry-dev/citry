@@ -444,7 +444,7 @@ fn compile_on_stack(request: CompileRequest) -> CompileArtifact {
         citry_listeners: 0,
         v_pre_depth: 0,
     };
-    walk(&root.children, &[], false, &mut walk_state);
+    walk(&root.children, &[], &Sha256::new(), false, &mut walk_state);
     for item in &request.dynamic_elements {
         if !walk_state.matched_dynamic_aliases.contains(&item.alias) {
             walk_state.diagnostics.push(diag(
@@ -1265,9 +1265,13 @@ fn normalize_model_helpers(
     true
 }
 
+/// Record the metadata of `children` and their descendants. `parent` is the
+/// path of the element that holds them, and `parent_hash` is the SHA-256
+/// state after reading that path joined with `/`.
 fn walk(
     children: &[TemplateChildNode<'_>],
     parent: &[String],
+    parent_hash: &Sha256,
     inside_v_for: bool,
     state: &mut WalkState<'_>,
 ) {
@@ -1287,11 +1291,22 @@ fn walk(
         // a `v-pre` subtree.
         let opens_v_pre = opening_tag_has_v_pre(state.source, element);
         let in_v_pre = opens_v_pre || state.v_pre_depth > 0;
-        let mut path = parent.to_vec();
-        path.push(match &static_key {
+        let segment = match &static_key {
             Some(key) => format!("k:{}:{}", hex(key.as_bytes()), hex(element.tag.as_bytes())),
             None => format!("i:{ordinal}:{}", hex(element.tag.as_bytes())),
-        });
+        };
+        // The site id is the SHA-256 of the path joined with `/`. Each element
+        // copies its parent's hash state and adds only its own segment, so
+        // each segment is hashed once and a deep template costs time in
+        // proportion to its size.
+        let mut path_hash = parent_hash.clone();
+        // A top-level element has no parent segment, so no `/` goes before it.
+        if !parent.is_empty() {
+            path_hash.update(b"/");
+        }
+        path_hash.update(segment.as_bytes());
+        let mut path = parent.to_vec();
+        path.push(segment);
         ordinal += 1;
         if element.tag.starts_with("citry-dynamic-") {
             let declared = state.dynamic_by_start.get(&element.loc.span.start).copied();
@@ -1322,10 +1337,7 @@ fn walk(
                 ));
             }
         }
-        let site_id = format!(
-            "citryDirective{}",
-            hex(&Sha256::digest(path.join("/").as_bytes()))
-        );
+        let site_id = format!("citryDirective{}", hex(&path_hash.clone().finalize()));
         let local_call_site = state
             .calls_by_span
             .get(&(element.loc.span.start, element.loc.span.end))
@@ -1595,6 +1607,7 @@ fn walk(
         walk(
             &element.children,
             &path,
+            &path_hash,
             inside_v_for || element_v_for,
             state,
         );
@@ -4159,6 +4172,27 @@ mod tests {
                 .iter()
                 .any(|item| item.code == "DYNAMIC_ELEMENT_MISMATCH")
         );
+    }
+
+    #[test]
+    fn site_ids_hash_the_whole_path_joined_with_slashes() {
+        // Python and the generated code name an element by its site id, so
+        // the walk's step-by-step hash must equal the hash of the joined path.
+        let artifact =
+            compile_template(r#"<main><ul><li key="a">x</li><li>y</li></ul></main><p>z</p>"#);
+        assert_eq!(artifact.elements.len(), 5);
+        // One fixed value, the hash of `i:0:6d61696e/i:0:756c/k:61:6c69`, so
+        // a change to how the path itself is spelled fails here too.
+        assert_eq!(
+            artifact.elements[2].site_id,
+            "citryDirective1a15b0bc71c5545d899c924dca274eb267c847654705db636ea83fbd6e78bd93"
+        );
+        for element in &artifact.elements {
+            assert_eq!(
+                element.site_id,
+                format!("citryDirective{}", hash(&element.path.join("/")))
+            );
+        }
     }
 
     fn compile_template(template: &str) -> CompileArtifact {
