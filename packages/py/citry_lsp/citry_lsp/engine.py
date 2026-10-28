@@ -4208,7 +4208,7 @@ def completion_result(
     modifier_result = _citry_binding_modifier_completion_result(document, position)
     if modifier_result is not None:
         return modifier_result
-    listener_modifier_result = _vue_listener_modifier_completion_result(document, position)
+    listener_modifier_result = _vue_listener_modifier_completion_result(document, position, project)
     if listener_modifier_result is not None:
         return listener_modifier_result
     browser_result = _browser_data_completion_result(document, position, project, open_documents)
@@ -4364,6 +4364,7 @@ def completion_result(
         authored_attrs,
         edit_range=attribute_context.edit_range,
         preserve_value=attribute_context.preserve_value,
+        vue=not _cursor_inside_v_pre(document, region, source, cursor, project),
     )
     if component is None:
         return CompletionResult(tuple(items), is_incomplete=True)
@@ -4608,6 +4609,15 @@ def hover(
     # structural tag makes the otherwise recognizable document invalid.
     if syntax_reference is None:
         syntax_reference = _syntax_reference_from_source(source, cursor)
+    # Vue leaves an element with `v-pre` as written, so its `v-if` or `@click`
+    # there is a plain attribute with nothing to explain. `v-pre` itself has
+    # no entry in `_VUE_SYNTAX`, so no hover is lost here.
+    if (
+        syntax_reference is not None
+        and syntax_reference.spec in _VUE_SYNTAX
+        and _cursor_inside_v_pre(document, region, source, cursor, project)
+    ):
+        syntax_reference = None
     if syntax_reference is not None:
         # A listener's modifier gets its own explanation over its own span.
         modifier_hover = _vue_listener_modifier_hover(source, syntax_reference, parser_index)
@@ -7453,6 +7463,7 @@ def _directive_attribute_completions(
     *,
     edit_range: types.Range,
     preserve_value: bool,
+    vue: bool = True,
 ) -> list[types.CompletionItem]:
     normalized_tag = tag_name.lower()
     semantic_component = _is_semantic_component_tag(tag_name, registered_component)
@@ -7465,7 +7476,9 @@ def _directive_attribute_completions(
     else:
         i18n_specs = () if semantic_component or normalized_tag.startswith("c-") else _I18N_BINDING_DIRECTIVES
         specs = (*_GENERAL_DIRECTIVES, *(_CLIENT_PROP_DIRECTIVES if semantic_component else ()), *i18n_specs)
-    specs = (*specs, *_vue_completion_specs(tag_name, semantic_component=semantic_component))
+    # Under `v-pre`, Vue leaves its own attributes as written, so none is offered.
+    if vue:
+        specs = (*specs, *_vue_completion_specs(tag_name, semantic_component=semantic_component))
 
     control_if_present = bool(authored_attrs & {"c-if", "c-elif", "c-else"})
     control_for_present = bool(authored_attrs & {"c-for", "c-empty"})
@@ -8518,6 +8531,130 @@ def _parent_component(source: str, cursor: int, catalog: CatalogIndex) -> Compon
         if component is not None:
             return component
     return None
+
+
+# `v-pre` as an attribute name, matched in a tag's text after `_without_quoted_values`
+# blanks its quoted values.
+_V_PRE_ATTRIBUTE = re.compile(r"\sv-pre(?=[\s=/>]|$)", re.IGNORECASE)
+
+
+def _cursor_inside_v_pre(
+    document: DocumentState,
+    region: TemplateRegion,
+    source: str,
+    cursor: int,
+    project: ProjectState,
+) -> bool:
+    """
+    Return whether the cursor sits on or inside an element with `v-pre`, where Vue leaves its syntax as written.
+
+    The parsed template answers exactly, including an element inside a
+    template-valued attribute. While the template does not parse, as it often
+    does while an attribute is being typed, the text around the cursor is read
+    instead.
+    """
+    parsed = document.parsed.get(region.key)
+    if parsed is None:
+        return _inside_v_pre_text(source, cursor)
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    index = len(source[:cursor].encode("utf-8"))
+    return run(_v_pre_encloses(parsed.template, index, parser, base_index=0))
+
+
+def _v_pre_encloses(template: Any, index: int, parser: Any, *, base_index: int) -> Generator[Call, Any, bool]:
+    """Return whether an element with `v-pre` contains a byte offset of the template, searching nested templates."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node: Any = element._0
+        end_tag = getattr(node, "end_tag", None)
+        start = base_index + node.start_tag.token.start_index
+        end = base_index + (end_tag.token.end_index if end_tag is not None else node.start_tag.token.end_index)
+        if not start <= index <= end:
+            continue
+        if any(attr.key.content.lower() == "v-pre" for attr in node.start_tag.attrs):
+            return True
+        for attr in node.start_tag.attrs:
+            inner = attr.inner_value
+            if attr.kind != HtmlAttrKind.Template or inner is None:
+                continue
+            if not base_index + inner.start_index <= index <= base_index + inner.end_index:
+                continue
+            nested = _parse_nested_template_source(inner.content, parser)
+            if nested is not None:
+                nested_template, nested_start, _nested_source = nested
+                return (
+                    yield Call(
+                        _v_pre_encloses,
+                        nested_template,
+                        index,
+                        parser,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+                )
+        body = getattr(node, "body", None)
+        return False if body is None else (yield Call(_v_pre_encloses, body, index, parser, base_index=base_index))
+    return False
+
+
+def _without_quoted_values(tag_text: str) -> str:
+    """Blank out quoted attribute values, so a name such as `v-pre` is found only where it is an attribute."""
+    kept: list[str] = []
+    quote = None
+    for char in tag_text:
+        if quote is not None:
+            kept.append(" ")
+            if char == quote:
+                quote = None
+        elif char in {'"', "'"}:
+            quote = char
+            kept.append(" ")
+        else:
+            kept.append(char)
+    return "".join(kept)
+
+
+def _inside_v_pre_text(source: str, cursor: int) -> bool:
+    """
+    Return whether the cursor sits on or inside an element with `v-pre`, reading the template text around it.
+
+    Used only while the template does not parse. An element inside a
+    template-valued attribute is not seen here.
+    """
+    current = source[:cursor]
+    open_tag = _open_start_tag(current)
+    # The cursor's own tag counts in full, since `v-pre` may come after the
+    # attribute being hovered or typed, as in `<div v-if="a" v-pre>`.
+    if open_tag is not None and _V_PRE_ATTRIBUTE.search(
+        _without_quoted_values(open_tag[1] + _rest_of_start_tag(source, cursor))
+    ):
+        return True
+    stack: list[tuple[str, str]] = []
+    tags = sorted(_complete_tags(current), key=lambda item: item[0])
+    for _start, tag_text, closing, name, self_closing in tags:
+        if closing:
+            for position in range(len(stack) - 1, -1, -1):
+                if stack[position][0].lower() == name.lower():
+                    del stack[position:]
+                    break
+        elif not self_closing and name.lower() not in HTML_VOID_ELEMENTS:
+            stack.append((name, tag_text))
+    return any(_V_PRE_ATTRIBUTE.search(_without_quoted_values(tag_text)) for _name, tag_text in stack)
+
+
+def _rest_of_start_tag(source: str, cursor: int) -> str:
+    """Return the text from the cursor to the end of the start tag it sits in, skipping `>` inside quotes."""
+    quote = None
+    for index in range(cursor, len(source)):
+        char = source[index]
+        if quote is not None:
+            if char == quote:
+                quote = None
+        elif char in {'"', "'"}:
+            quote = char
+        elif char in {">", "<"}:
+            return source[cursor:index]
+    return source[cursor:]
 
 
 def _token_at(source: str, cursor: int) -> tuple[str, int, int] | None:
@@ -11014,6 +11151,7 @@ def _vue_listener_modifier_allowed(name: str, used: set[str]) -> bool:
 def _vue_listener_modifier_completion_result(
     document: DocumentState,
     position: types.Position,
+    project: ProjectState,
 ) -> CompletionResult | None:
     """Complete the modifier segment of a Vue listener such as `@click.`."""
     active = _attribute_name_at_cursor(document, position)
@@ -11036,7 +11174,9 @@ def _vue_listener_modifier_completion_result(
     # fits there; the attribute names the general completion would offer
     # do not belong after a dot either.
     semantic_component = _is_semantic_component_tag(tag_name)
-    if _VUE_SYNTAX_BY_LABEL["v-on"] not in _vue_completion_specs(tag_name, semantic_component=semantic_component):
+    if _VUE_SYNTAX_BY_LABEL["v-on"] not in _vue_completion_specs(
+        tag_name, semantic_component=semantic_component
+    ) or _cursor_inside_v_pre(document, region, source, cursor, project):
         return CompletionResult((), is_incomplete=True)
     segment_start, segment_end, _text = segments[current]
     edit_range = _mapped_template_range(

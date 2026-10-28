@@ -1916,6 +1916,50 @@ def test_registry_check_accepts_known_send_event_and_keeps_dynamic_and_on_event_
     assert not [finding for finding in report.findings if finding.code == "citry.browser.unknown-server-event"]
 
 
+def test_registry_check_reads_no_vue_variables_under_v_pre_but_reports_its_duplicate_id(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = """
+        <div v-pre>
+          <p v-if="a" id="same"></p>
+          <p v-else id="same"></p>
+        </div>
+        """
+        js = """
+        $component({});
+        """
+
+    class Plain(Component):
+        citry = engine
+        template = """
+        <div>
+          <p v-if="a"></p>
+        </div>
+        """
+        js = """
+        $component({});
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # Vue leaves `v-if` under `v-pre` as written, so only the component
+    # without `v-pre` reads `a`. Both `<p>` elements are on the page, so the
+    # repeated id is real.
+    assert sorted((item.origin.rsplit(".", 2)[-2], item.code) for item in report.findings) == [
+        ("Card", "citry.template.duplicate-id"),
+        ("Plain", "citry.vue.unknown-variable"),
+    ]
+    messages = {item.code: item.message for item in report.findings}
+    assert messages == {
+        "citry.template.duplicate-id": (
+            "Another element in this template already has id 'same'. An id must be unique in the page."
+        ),
+        "citry.vue.unknown-variable": "Vue variable 'a' is not available in this component.",
+    }
+
+
 def test_registry_check_reports_unknown_alpine_roots_and_respects_component_policy(tmp_path):
     engine = Citry(autodiscover=False)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from citry._browser_expressions import BrowserExpression, browser_component_prop_sites
+from citry._browser_expressions import BrowserExpression, browser_component_prop_sites, enclosing_vue_loops
 from citry.analysis import (
     VUE_AMBIENT_NAMES,
     AlpineAttributeLintConsumer,
@@ -299,6 +299,173 @@ def test_only_whole_dynamic_slot_arguments_create_name_expressions():
             dynamic.start_index + len("slots[名".encode()),
         ),
     ]
+
+
+# `v-pre` makes Vue leave an element and everything inside it as written. The
+# tests below cover an element that carries `v-pre` and one nested inside it.
+_V_PRE_VUE_SYNTAX = [
+    # On the element itself.
+    '<p v-pre v-if="a" :title="t" @click="go()" v-text="x"></p>',
+    '<p v-pre v-for="x in xs" :title="x"></p>',
+    '<template v-pre #[slots[名]].tail="{ item }"></template>',
+    '<template v-pre v-slot="{ item }"></template>',
+    # Inside an element that carries it.
+    '<div v-pre><p v-if="a" :title="t" @click="go()" v-text="x"></p></div>',
+    '<div v-pre><section><p v-for="x in xs" :title="x"></p></section></div>',
+    '<div v-pre><template #[slots[名]].tail="{ item }"><b :title="item"></b></template></div>',
+    '<div v-pre><template v-slot="{ item }"><b :title="item"></b></template></div>',
+    # In a template-valued attribute, whether `v-pre` is inside or outside it.
+    "<c-card c-header=\"<><p v-pre v-for='x in xs' :title='x'></p></>\" />",
+    "<div v-pre><c-card c-header=\"<><p v-for='x in xs' :title='x'></p></>\" /></div>",
+]
+
+
+@pytest.mark.parametrize("source", _V_PRE_VUE_SYNTAX)
+def test_browser_expressions_skip_vue_syntax_at_and_inside_v_pre(source):
+    assert not browser_expressions(parse_template(source))
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<p v-pre v-if="a" :title="t"></p><i :title="out"></i>',
+        '<div v-pre><p v-if="a" :title="t"></p></div><i :title="out"></i>',
+        "<c-card c-header=\"<><p v-pre :title='t'></p><i :title='out'></i></>\" />",
+    ],
+)
+def test_browser_expressions_keep_vue_syntax_outside_v_pre(source):
+    expressions = browser_expressions(parse_template(source))
+
+    assert [(item.attribute, item.source, item.host) for item in expressions] == [(":title", "out", "vue")]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<p v-pre @c-click="go()" $c-tr="m"></p>',
+        '<div v-pre><p @c-click="go()" $c-tr="m"></p></div>',
+    ],
+)
+def test_browser_expressions_keep_citry_hosts_at_and_inside_v_pre(source):
+    expressions = browser_expressions(parse_template(source))
+
+    assert [(item.attribute, item.source, item.host) for item in expressions] == [
+        ("@c-click", "", "citry-event-args"),
+        ("$c-tr", "m", "citry-i18n-values"),
+    ]
+
+
+def test_browser_expressions_keep_citry_hosts_in_a_template_valued_attribute_inside_v_pre():
+    source = "<div v-pre><c-card c-header=\"<><p :title='t' @c-click='go()'></p></>\" /></div>"
+
+    expressions = browser_expressions(parse_template(source))
+
+    assert [(item.attribute, item.host) for item in expressions] == [("@c-click", "citry-event-args")]
+
+
+def test_browser_expressions_keep_a_dynamic_slot_name_outside_v_pre():
+    source = (
+        '<div v-pre><template #[slots[名]].tail="{ item }"><b :title="item"></b></template></div>'
+        '<template #[slots[名]].tail="{ item }"><b :title="item"></b></template>'
+    )
+
+    expressions = browser_expressions(parse_template(source))
+
+    # Only the second template, outside `v-pre`, is read, and it declares `item`.
+    assert [(item.attribute, item.source) for item in expressions] == [
+        ("#[slots[名]].tail", "slots[名]].tail"),
+        ("#[slots[名]].tail", "{ item }"),
+        (":title", "item"),
+    ]
+    # The kept name points at the second template, past the `v-pre` one.
+    name = expressions[0]
+    assert source.encode()[name.start_index : name.end_index].decode() == name.source
+    assert name.start_index > source.encode().index(b"</div>")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<p v-pre v-for="x in xs"></p>',
+        '<template v-pre v-slot="{ item }"></template>',
+        '<div v-pre><p v-for="x in xs"></p></div>',
+        '<div v-pre><template v-slot="{ item }"><b :title="item"></b></template></div>',
+        "<c-card c-header=\"<><p v-pre v-for='x in xs'></p></>\" />",
+        "<div v-pre><c-card c-header=\"<><p v-for='x in xs'></p></>\" /></div>",
+    ],
+)
+def test_browser_bindings_declare_nothing_at_and_inside_v_pre(source):
+    assert not browser_bindings(parse_template(source))
+
+
+def test_browser_bindings_still_declare_names_outside_v_pre():
+    template = parse_template('<div v-pre><p v-for="a in xs"></p></div><p v-for="x in xs"></p>')
+
+    assert [(item.name, item.kind) for item in browser_bindings(template)] == [("x", "v-for")]
+
+
+def test_enclosing_vue_loops_stop_at_the_first_v_pre_element():
+    def loops(source: str, marker: str) -> list[tuple[str, str]]:
+        start = source.index(marker)
+        found = enclosing_vue_loops(parse_template(source), start, start + 1)
+        return [(item.binding.name, item.tag) for item in found]
+
+    # The element that carries `v-pre` does not run its own `v-for`.
+    assert loops('<div v-pre v-for="i in xs"><span>S</span></div>', "S") == []
+    # A loop inside a `v-pre` element is text, so it is not in scope.
+    assert loops('<div v-pre><div v-for="i in xs"><span>S</span></div></div>', "S") == []
+    # A loop outside `v-pre` is still in scope, and one nested inside is not.
+    assert loops('<div v-for="i in xs"><div v-pre><span>S</span></div></div>', "S") == [("i", "div")]
+    assert loops(
+        '<div v-for="i in xs"><div v-pre><div v-for="j in ys"><span>S</span></div></div></div>',
+        "S",
+    ) == [("i", "div")]
+    # Loops that sit between the outer loop and `v-pre` stay in scope.
+    assert loops(
+        '<div v-for="i in xs"><section v-for="j in ys"><div v-pre><b>S</b></div></section></div>',
+        "S",
+    ) == [("i", "div"), ("j", "section")]
+
+
+def test_component_prop_sites_skip_calls_inside_v_pre():
+    def tags(source: str) -> list[tuple[str, list[str]]]:
+        encoded = source.encode()
+        return [
+            (encoded[site.tag_start_index : site.tag_end_index].decode(), [item.name for item in site.contributions])
+            for site in browser_component_prop_sites(parse_template(source))
+        ]
+
+    assert tags('<c-card :a="x"></c-card>') == [("c-card", ["a"])]
+    assert tags('<div v-pre><c-card :a="x"></c-card></div>') == []
+    assert tags("<div v-pre><c-card c-header=\"<><c-card :b='y'></c-card></>\" :a='x' /></div>") == []
+    assert tags("<c-card c-header=\"<><i v-pre><c-card :b='y'></c-card></i></>\" />") == [("c-card", [])]
+    # A call after the `v-pre` element is outside it.
+    assert tags("<section v-pre></section><c-card :a='x' />") == [("c-card", ["a"])]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<p v-pre v-if="a"></p>',
+        '<div v-pre><p v-if="a"></p></div>',
+        '<div v-pre><p v-for="x in xs" :title="x + a"></p></div>',
+    ],
+)
+def test_unknown_vue_lint_reports_nothing_at_and_inside_v_pre(source):
+    findings = lint_unknown_vue_variables(
+        browser_expressions(parse_template(source)),
+        (VueLintConsumer(frozenset(), "error"),),
+    )
+
+    assert not findings
+
+
+def test_unknown_vue_lint_still_reports_outside_v_pre():
+    template = parse_template('<div v-pre><p v-if="a"></p></div><p v-if="b"></p>')
+
+    findings = lint_unknown_vue_variables(browser_expressions(template), (VueLintConsumer(frozenset(), "error"),))
+
+    assert [item.name for item in findings] == ["b"]
 
 
 def test_default_v_slot_modifier_form_still_introduces_bindings():
@@ -1356,6 +1523,49 @@ def test_attribute_value_lint_tells_a_bound_boolean_string_to_bind_a_boolean():
         "'disabled' on <button> is on whenever it is present, so the string 'false' still turns it on. "
         'Bind a JavaScript boolean instead, such as :disabled="false".'
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves a binding under `v-pre` as an attribute literally named
+        # `:dir`, so no `dir` or `hidden` is set.
+        "<p v-pre :dir=\"'rlt'\" :hidden=\"'false'\"></p>",
+        "<p v-pre v-bind:dir=\"'rlt'\"></p>",
+        "<div v-pre><p :dir=\"'rlt'\" :hidden=\"'false'\"></p></div>",
+        "<div v-pre><section><button :disabled=\"'false'\"></button></section></div>",
+        # In a template-valued attribute, whether `v-pre` is inside or outside it.
+        "<c-card c-header='<><p v-pre :dir=\"`rlt`\"></p></>' />",
+        "<div v-pre><c-card c-header='<><p :dir=\"`rlt`\"></p></>' /></div>",
+    ],
+)
+def test_attribute_value_lint_reads_no_vue_binding_at_or_inside_v_pre(source):
+    assert _attribute_values(source) == []
+
+
+def test_attribute_value_lint_keeps_vue_bindings_outside_v_pre():
+    source = (
+        "<p :dir=\"'rlt'\" :hidden=\"'false'\"></p>"
+        "<div v-pre></div><p :dir=\"'rlt'\"></p>"
+        "<div v-pre><b></b></div><p :hidden=\"'false'\"></p>"
+    )
+    assert _attribute_values(source) == [
+        ("dir", "warning", "'rlt'"),
+        ("hidden", "warning", "'false'"),
+        ("dir", "warning", "'rlt'"),
+        ("hidden", "warning", "'false'"),
+    ]
+
+
+def test_attribute_value_lint_keeps_a_vue_binding_in_a_template_valued_attribute_outside_v_pre():
+    source = "<c-card c-header='<><p :dir=\"`rlt`\"></p></>' />"
+    assert _attribute_values(source) == [("dir", "warning", "`rlt`")]
+
+
+def test_attribute_value_lint_still_checks_plain_attributes_at_and_inside_v_pre():
+    # A plain `dir="rlt"` is the attribute the browser reads, whether or not Vue does.
+    source = '<p v-pre dir="rlt"></p><div v-pre><p dir="rlt" :hidden="\'false\'"></p></div>'
+    assert _attribute_values(source) == [("dir", "warning", "rlt"), ("dir", "warning", "rlt")]
 
 
 def test_attribute_value_lint_accepts_a_boolean_attributes_own_name_and_enumerated_false():

@@ -1258,6 +1258,7 @@ def _collect_attribute_values(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
+    vue_skipped: bool = False,
 ) -> Generator[Call, Any, None]:
     """Check each static attribute of each HTML element in one template and its nested templates."""
     for element in template.elements:
@@ -1272,8 +1273,11 @@ def _collect_attribute_values(
         # Vue resolves only lowercase names as native tags; `<Button>` may be
         # a component, and a custom element or `c-*` tag has its own attributes.
         checked = tag in _HTML_ELEMENTS
+        # Under `v-pre`, Vue leaves `:dir="'rlt'"` as an attribute literally
+        # named `:dir`, which sets no `dir`, so only plain attributes count.
+        inside_v_pre = vue_skipped or any(_ascii_lower(attr.key.content) == "v-pre" for attr in node.start_tag.attrs)
         for attr in node.start_tag.attrs:
-            if checked:
+            if checked and not (inside_v_pre and _is_vue_attribute_name(attr.key.content)):
                 finding = _attribute_value_finding(tag, attr, severity, base_index)
                 if finding is not None:
                     found.append(finding)
@@ -1291,12 +1295,29 @@ def _collect_attribute_values(
                         severity,
                         parse_nested=parse_nested,
                         base_index=base_index + inner.start_index + nested_start,
+                        vue_skipped=inside_v_pre,
                     )
         body = getattr(node, "body", None)
         if body is not None:
             yield Call(
-                _collect_attribute_values, body, found, severity, parse_nested=parse_nested, base_index=base_index
+                _collect_attribute_values,
+                body,
+                found,
+                severity,
+                parse_nested=parse_nested,
+                base_index=base_index,
+                vue_skipped=inside_v_pre,
             )
+
+
+def _is_vue_attribute_name(name: str) -> bool:
+    """
+    Return whether an attribute name is in Vue's syntax: a binding, a listener, a directive, or a slot shorthand.
+
+    Citry's `@c-*`, `:c-*` and `#c-*` match too. None of those has an HTML
+    value to check, so treating them alike changes nothing here.
+    """
+    return name.startswith((":", "v-bind:", "@", "v-", "#"))
 
 
 def _attribute_value_finding(
