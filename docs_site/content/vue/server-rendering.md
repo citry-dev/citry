@@ -280,6 +280,11 @@ The same happens for:
   semicolon, quote, backslash, brace, comment, or unbalanced parenthesis, a
   vendor-prefixed name such as `WebkitTransition`, or a list of fallback
   values;
+- an attribute the server cannot be sure how the browser stores, such as
+  `inert`, `autofocus` outside a form control, `<dialog open>`, or a
+  `<form>` attribute that may match the `name` or `id` of a control
+  inside it (such a form leaves its parent, or the whole page when the
+  form is at the page root, to the browser);
 - custom directives on elements.
 
 Such an element is sent empty when its contents would hold something the
@@ -287,6 +292,13 @@ browser would run or load twice, such as a `<script>`, an `<iframe>`,
 `<object>` or `<embed>`, a custom element, an `on*` attribute such as
 `onerror`, or an `autofocus` or `autoplay` attribute. A `<textarea>` or
 `<title>` whose text depends on browser state is sent empty too.
+
+The server decides which attributes it can write from what browsers
+define on each HTML element. A page script or polyfill that adds a
+lowercase property to HTML elements, such as `HTMLElement.prototype.foo`,
+is unknown to the server. For an attribute of that name, the server
+writes the attribute, but Vue sets the property, so the attribute in the
+HTML may not match the one Vue would have built.
 
 ### Hydration differences { #hydration-differences }
 

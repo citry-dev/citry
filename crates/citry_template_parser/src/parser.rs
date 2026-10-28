@@ -1792,6 +1792,7 @@ fn validate_node(
     validate_meta_attr_placement(node, context)?;
     validate_ignored_element_contents(node, tag_stack, context)?;
     validate_vue_listener_modifiers(node, context)?;
+    validate_reserved_citry_names(node, context)?;
     validate_element_once_memo(node, context)?;
     validate_element_vue_directives(node, context)?;
     validate_vue_builtin_component_tag(node, context)?;
@@ -1993,7 +1994,9 @@ fn component_tag_directive_hint(directive: &str) -> &'static str {
         "if" | "else-if" | "else" => {
             "Write 'v-if', 'v-else-if', and 'v-else' without an argument or modifiers."
         }
-        "for" => "A browser 'v-for' cannot create Citry components. Repeat the component with '<c-for>'.",
+        "for" => {
+            "A browser 'v-for' cannot create Citry components. Repeat the component with '<c-for>'."
+        }
         "slot" => "Pass slot content with '<c-fill name=\"...\">' inside the component tag.",
         "html" | "text" => {
             "This directive would replace the child's own content. Pass the value as a prop or through '<c-fill>' and render it inside the child."
@@ -2126,7 +2129,9 @@ fn slot_tag_directive_hint(directive: &str) -> &'static str {
         }
         "for" => "Repeat the slot with '<c-for>'.",
         "show" => "Wrap the slot in an element that carries 'v-show'.",
-        "slot" => "Name the slot with 'name=\"...\"'; the caller fills it with '<c-fill name=\"...\">'.",
+        "slot" => {
+            "Name the slot with 'name=\"...\"'; the caller fills it with '<c-fill name=\"...\">'."
+        }
         "on" => "Put the listener on an element around the slot or inside the fill.",
         "bind" | "prop" | "attr" => {
             "To pass Vue data, write ':row=\"row\"' or 'v-bind:row=\"row\"' (lowercase 'v-bind'), with a fixed name and no modifiers. To pass Python slot data, write a plain attribute ('item=\"text\"') or a 'c-' attribute ('c-item=\"expr\"')."
@@ -2713,23 +2718,13 @@ fn non_key_modifier_hint(modifier: &str) -> String {
 /// one of these silently ignores it or never runs, depending on the event.
 fn alpine_only_modifier_hint(modifier: &str) -> Option<&'static str> {
     Some(match modifier {
-        "outside" | "away" => {
-            "Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted()."
-        }
-        "window" => {
-            "Add the listener with window.addEventListener(...) in mounted() and remove it in unmounted()."
-        }
-        "document" => {
-            "Add the listener with document.addEventListener(...) in mounted() and remove it in unmounted()."
-        }
-        "debounce" | "throttle" => {
-            "Delay the work inside the method instead, for example with setTimeout. To call a server event handler, a '@c-*' binding such as '@c-input.debounce' accepts this modifier."
-        }
+        "away" => "Use Citry's '.outside' modifier instead.",
         "camel" | "dot" => {
             "Add the listener for the exact event name with addEventListener(...) in mounted(), on an element you reach through a 'ref', and remove it in unmounted()."
         }
         "cmd" | "super" => "Use Vue's '.meta' modifier instead.",
-        "period" | "comma" | "slash" | "equal" => {
+        "spacebar" => "Use Vue's '.space' modifier instead.",
+        "period" | "comma" | "slash" | "equal" | "minus" | "underscore" => {
             "Vue matches key modifiers against the key's name, so check the key in the listener instead, for example @keydown=\"if ($event.key === '.') go();\"."
         }
         _ => return None,
@@ -3042,6 +3037,222 @@ fn validate_vue_binding_python_conflicts(
     Ok(())
 }
 
+/// The props key Vue stores a listener under (`toHandlerKey(camelize(event))`
+/// in Vue's shared helpers): `citry-on-0` and `citryOn0` both give
+/// `onCitryOn0`.
+fn vue_handler_key(event: &str) -> String {
+    let mut camel = String::with_capacity(event.len());
+    let mut upper_next = false;
+    for character in event.chars() {
+        if character == '-' {
+            upper_next = true;
+            continue;
+        }
+        if upper_next {
+            camel.extend(character.to_uppercase());
+            upper_next = false;
+        } else {
+            camel.push(character);
+        }
+    }
+    if upper_next {
+        // Vue's `camelize` keeps a trailing hyphen.
+        camel.push('-');
+    }
+    let mut characters = camel.chars();
+    match characters.next() {
+        Some(first) => format!("on{}{}", first.to_uppercase(), characters.as_str()),
+        None => "on".to_owned(),
+    }
+}
+
+/// Whether a props key is one Citry's Vue compiler writes for a listener
+/// that uses a Citry modifier (`onCitryOn` followed by digits).
+fn is_citry_listener_key(key: &str) -> bool {
+    key.strip_prefix("onCitryOn").is_some_and(|digits| {
+        !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+    })
+}
+
+/// Reject an attribute that would write the props key Citry's compiler
+/// gives a listener.
+///
+/// The Vue compiler rewrites a listener with a Citry modifier into a plain
+/// listener stored under `onCitryOn<n>` and a `v-citry-on` directive that
+/// finds it there. An authored attribute with the same props key would be
+/// merged into that listener. Authored `v-citry-*` directives are refused
+/// with the other reserved directive names (`validate_element_vue_directives`).
+fn validate_reserved_citry_names(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    for attr in node.attrs() {
+        let name = attr.key.content.as_str();
+        let props_key = if let Some(event) = name
+            .strip_prefix("v-on:")
+            .or_else(|| name.strip_prefix('@'))
+        {
+            // A dynamic event name is known only in the browser, where the
+            // directive checks that it finds a function.
+            if event.starts_with('[') {
+                continue;
+            }
+            vue_handler_key(event.split('.').next().unwrap_or(""))
+        } else {
+            let bound = name
+                .strip_prefix("v-bind:")
+                .or_else(|| name.strip_prefix(':'))
+                .unwrap_or(name);
+            bound.split('.').next().unwrap_or("").to_owned()
+        };
+        if !is_citry_listener_key(&props_key) {
+            continue;
+        }
+        let (line, col) = attr.token.line_col;
+        return Err(context.error_from_token(
+            &attr.token,
+            format!(
+                "'{name}' on <{}> (line {line}, column {col}) uses a name Citry's compiler writes for itself. Rename the attribute or event.",
+                node.tag_name()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The modifiers Citry adds to Vue listeners on HTML elements. The Vue
+/// compiler turns a listener that uses one into Citry's `v-citry-on` runtime
+/// directive (see `citry_vue_compiler`), because Vue's own modifiers are a
+/// fixed set inside its template compiler.
+const CITRY_LISTENER_MODIFIERS: [&str; 5] =
+    ["outside", "window", "document", "debounce", "throttle"];
+
+/// The largest time a `.debounce` or `.throttle` segment may give: the
+/// largest integer a JavaScript number holds exactly, as for `@c-*` bindings.
+const MAX_LISTENER_TIME_MS: u128 = (1 << 53) - 1;
+
+/// The milliseconds a time segment such as `300ms` or `2s` names, or `None`
+/// when the segment is not a time.
+fn listener_time_ms(segment: &str) -> Option<u128> {
+    let (digits, factor) = if let Some(digits) = segment.strip_suffix("ms") {
+        (digits, 1)
+    } else {
+        (segment.strip_suffix('s')?, 1000)
+    };
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    // A long run of digits saturates instead of overflowing, so the limit
+    // check reports it.
+    Some(
+        digits
+            .parse::<u128>()
+            .unwrap_or(u128::MAX)
+            .saturating_mul(factor),
+    )
+}
+
+/// Check a listener that uses one of Citry's own modifiers (`.outside`,
+/// `.window`, `.document`, `.debounce`, `.throttle`).
+///
+/// They work only on HTML elements, and some combinations would either do
+/// nothing or stop every click on the page, so those are load errors.
+fn validate_citry_listener_modifiers(
+    node: &Node,
+    name: &str,
+    modifiers: &[&str],
+    location: (usize, usize),
+    attr: &HtmlAttr,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let (line, col) = location;
+    let tag_name = node.tag_name();
+    let fail = |problem: String| {
+        Err(context.error_from_token(
+            &attr.token,
+            format!("'{name}' on <{tag_name}> (line {line}, column {col}) {problem}"),
+        ))
+    };
+    let component =
+        has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG);
+    if component
+        || ["template", "slot", "component"].contains(&tag_name.to_ascii_lowercase().as_str())
+    {
+        // A listener on a component tag receives the component's emitted
+        // events, which do not come from the DOM, so a window, document,
+        // outside or timed listener has no meaning there.
+        return fail(
+            "uses a Citry listener modifier, which works only on HTML elements. Put the listener on an element inside the component, or handle the timing in the method.".to_owned(),
+        );
+    }
+    let has = |modifier: &str| modifiers.contains(&modifier);
+    let places = ["outside", "window", "document"]
+        .into_iter()
+        .filter(|place| has(place))
+        .collect::<Vec<_>>();
+    if places.len() > 1 {
+        return fail(format!(
+            "combines '.{}' and '.{}'. A listener listens in one place: the element, the window or the document.",
+            places[0], places[1]
+        ));
+    }
+    for (other, why) in [
+        (
+            "self",
+            "the element can never be the target of an event that starts outside it",
+        ),
+        (
+            "capture",
+            "'.outside' listens on the document after the event's own handlers have run, and the capture phase would run it first",
+        ),
+        (
+            "once",
+            "'.once' removes the listener after its first event, and a document listener sees every click, so a click inside the element would use it up",
+        ),
+    ] {
+        if has("outside") && has(other) {
+            return fail(format!("combines '.outside' with '.{other}': {why}."));
+        }
+    }
+    if has("passive") && has("prevent") {
+        return fail(
+            "combines '.passive' with '.prevent'. A passive listener cannot cancel the event."
+                .to_owned(),
+        );
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    for (index, modifier) in modifiers.iter().enumerate() {
+        let after_timing = index > 0 && matches!(modifiers[index - 1], "debounce" | "throttle");
+        if after_timing
+            && modifier.starts_with(|character: char| character.is_ascii_digit())
+            && listener_time_ms(modifier).is_none()
+        {
+            // A mistyped unit such as `.1m` or `.300MS` would otherwise be
+            // read as a key name and do nothing. A bare number is refused
+            // too, because Vue reads `.5` as the key `5`.
+            let timing = modifiers[index - 1];
+            return fail(format!(
+                "gives '.{modifier}' as a time. Write the time in milliseconds or seconds, such as '.300ms' or '.2s'. To name a key, put it before '.{timing}'."
+            ));
+        }
+        if let Some(milliseconds) = listener_time_ms(modifier) {
+            if !after_timing {
+                return fail(format!(
+                    "has the time '.{modifier}' without '.debounce' or '.throttle' right before it."
+                ));
+            }
+            if milliseconds > MAX_LISTENER_TIME_MS {
+                return fail(format!(
+                    "gives '.{modifier}', which is longer than JavaScript can hold exactly."
+                ));
+            }
+            continue;
+        }
+        if seen.contains(modifier) {
+            return fail(format!("repeats '.{modifier}'. Give each modifier once."));
+        }
+        seen.push(modifier);
+    }
+    Ok(())
+}
+
 /// Reject event modifiers on a Vue listener (`@event` or `v-on:event`) that
 /// Vue would silently drop, or that would stop the listener from running.
 ///
@@ -3084,10 +3295,36 @@ fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Resu
             }
         };
         let (line, col) = attr.token.line_col;
-        for modifier in modifiers.split('.').skip(1) {
-            // Vue compares modifiers case-sensitively, so `.OUTSIDE` is an
+        let parts = modifiers.split('.').skip(1).collect::<Vec<_>>();
+        if parts
+            .iter()
+            .any(|part| CITRY_LISTENER_MODIFIERS.contains(part))
+        {
+            validate_citry_listener_modifiers(node, name, &parts, (line, col), attr, context)?;
+        }
+        for (index, &modifier) in parts.iter().enumerate() {
+            // Citry's own modifiers and the time after `.debounce` or
+            // `.throttle` are not key names; the compiler handles them.
+            if CITRY_LISTENER_MODIFIERS.contains(&modifier)
+                || (listener_time_ms(modifier).is_some()
+                    && index > 0
+                    && matches!(parts[index - 1], "debounce" | "throttle"))
+            {
+                continue;
+            }
+            let lowercase = modifier.to_ascii_lowercase();
+            if CITRY_LISTENER_MODIFIERS.contains(&lowercase.as_str()) {
+                // Vue compares modifiers case-sensitively, and so does Citry.
+                return Err(context.error_from_token(
+                    &attr.token,
+                    format!(
+                        "'{name}' (line {line}, column {col}) uses '.{modifier}'. Write it in lowercase, '.{lowercase}'."
+                    ),
+                ));
+            }
+            // Vue compares modifiers case-sensitively, so `.AWAY` is an
             // unknown modifier too and Vue would read it as a key name.
-            if let Some(hint) = alpine_only_modifier_hint(&modifier.to_ascii_lowercase()) {
+            if let Some(hint) = alpine_only_modifier_hint(&lowercase) {
                 return Err(context.error_from_token(
                     &attr.token,
                     format!(

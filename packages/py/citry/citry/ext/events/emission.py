@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import fields
 from typing import TYPE_CHECKING, NamedTuple
 
 from citry._protocol.events import (
@@ -14,7 +13,7 @@ from citry._protocol.events import (
 )
 from citry.constness import const_value
 from citry.ext.events.handlers import event_options
-from citry.ext.events.state import public_state_values
+from citry.ext.events.state import public_state_values, state_field_names
 from citry.ext.events.tokens import mint_state_token
 
 if TYPE_CHECKING:
@@ -43,8 +42,8 @@ def capture_instance(extension: EventsExtension, ctx: OnComponentDataContext) ->
         return
     if info.state_cls is not None and info.state_meta is not None:
         state = extension.build_state(ctx.component)
-        for state_field in fields(state):
-            setattr(state, state_field.name, const_value(getattr(state, state_field.name)))
+        for name in state_field_names(type(state)):
+            setattr(state, name, const_value(getattr(state, name)))
         meta = info.state_meta
         token = mint_state_token(
             state,

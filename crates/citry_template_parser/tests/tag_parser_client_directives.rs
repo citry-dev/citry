@@ -538,35 +538,27 @@ mod tests {
 
     #[test]
     fn alpine_only_listener_modifiers_are_rejected_with_the_vue_form() {
+        // `.away` is Alpine's name for what Citry spells `.outside`, so the
+        // hint points at Citry's modifier.
         assert_parse_error(
-            r#"<div @click.outside="open = false;">x</div>"#,
-            "'@click.outside' (line 1, column 6) uses '.outside', which is not a Vue event modifier. Vue would read '.outside' as a key name, so the listener would not do what '.outside' asks. Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted().",
+            r#"<div @click.away="open = false;">x</div>"#,
+            "'@click.away' (line 1, column 6) uses '.away', which is not a Vue event modifier. Vue would read '.away' as a key name, so the listener would not do what '.away' asks. Use Citry's '.outside' modifier instead.",
         );
         for (input, modifier, hint) in [
             (
-                r#"<div @click.away="x = 1;"></div>"#,
+                r#"<div @click.AWAY="x = 1;"></div>"#,
+                "AWAY",
+                "Use Citry's '.outside' modifier instead.",
+            ),
+            (
+                r#"<div @[name].away="x = 1;"></div>"#,
                 "away",
-                "this.$el contains event.target",
+                "Use Citry's '.outside' modifier instead.",
             ),
             (
-                r#"<div @resize.window="x = 1;"></div>"#,
-                "window",
-                "window.addEventListener",
-            ),
-            (
-                r#"<div v-on:keyup.document="x = 1;"></div>"#,
-                "document",
-                "document.addEventListener",
-            ),
-            (
-                r#"<input @input.debounce.500ms="x = 1;" />"#,
-                "debounce",
-                "'@c-input.debounce'",
-            ),
-            (
-                r#"<input @input.throttle="x = 1;" />"#,
-                "throttle",
-                "setTimeout",
+                r#"<c-Card @close.away="x = 1;" />"#,
+                "away",
+                "Use Citry's '.outside' modifier instead.",
             ),
             (
                 r#"<div @custom-event.camel="x = 1;"></div>"#,
@@ -580,24 +572,31 @@ mod tests {
             ),
             (r#"<input @keydown.cmd.enter="x = 1;" />"#, "cmd", "'.meta'"),
             (
+                r#"<input @keydown.super.enter="x = 1;" />"#,
+                "super",
+                "'.meta'",
+            ),
+            (
                 r#"<input @keydown.period="x = 1;" />"#,
                 "period",
                 "$event.key === '.'",
             ),
+            // Alpine's names for these keys match no key in Vue, so the
+            // listener would load and never run.
             (
-                r#"<div @[name].outside="x = 1;"></div>"#,
-                "outside",
-                "this.$el",
+                r#"<input @keydown.minus="x = 1;" />"#,
+                "minus",
+                "$event.key === '.'",
             ),
             (
-                r#"<c-Card @close.window="x = 1;" />"#,
-                "window",
-                "window.addEventListener",
+                r#"<input @keydown.underscore="x = 1;" />"#,
+                "underscore",
+                "$event.key === '.'",
             ),
             (
-                r#"<div @click.OUTSIDE="x = 1;"></div>"#,
-                "OUTSIDE",
-                "this.$el contains",
+                r#"<input @keydown.spacebar="x = 1;" />"#,
+                "spacebar",
+                "'.space'",
             ),
         ] {
             assert_parse_error(
@@ -605,6 +604,327 @@ mod tests {
                 &format!("uses '.{modifier}', which is not a Vue event modifier"),
             );
             assert_parse_error(input, hint);
+        }
+    }
+
+    #[test]
+    fn citry_listener_modifiers_parse_alone_and_with_vue_modifiers() {
+        for input in [
+            // Each modifier alone, in both spellings of a listener.
+            r#"<div @click.outside="open = false;"></div>"#,
+            r#"<div v-on:click.outside="open = false;"></div>"#,
+            r#"<div @resize.window="go();"></div>"#,
+            r#"<div v-on:keyup.document="go();"></div>"#,
+            r#"<input @input.debounce="go();" />"#,
+            r#"<input @input.throttle="go();" />"#,
+            // A time after `.debounce` or `.throttle`, in ms and in s, up to
+            // the largest integer JavaScript holds exactly.
+            r#"<input @input.debounce.300ms="go();" />"#,
+            r#"<input @scroll.throttle.2s="go();" />"#,
+            r#"<input @input.debounce.0ms="go();" />"#,
+            r#"<input @input.debounce.9007199254740991ms="go();" />"#,
+            r#"<input @input.debounce.9007199254740s="go();" />"#,
+            // With Vue's own modifiers.
+            r#"<div @click.outside.stop.prevent="go();"></div>"#,
+            r#"<div @click.stop.prevent.window="go();"></div>"#,
+            r#"<div @keydown.escape.window="go();"></div>"#,
+            r#"<div @keydown.enter.exact.outside="go();"></div>"#,
+            r#"<div @keyup.ctrl.shift.a.document="go();"></div>"#,
+            r#"<div @click.right.document.throttle="go();"></div>"#,
+            r#"<div @click.capture.window="go();"></div>"#,
+            r#"<div @click.passive.window="go();"></div>"#,
+            // `.once` with a timing modifier or a non-outside place.
+            r#"<input @input.once.debounce.300ms="go();" />"#,
+            r#"<input @input.debounce.300ms.once="go();" />"#,
+            r#"<div @click.once.window="go();"></div>"#,
+            // `.self` has a meaning for `.window` and `.document`: the event
+            // target is the window or document itself.
+            r#"<div @selectionchange.self.document="go();"></div>"#,
+            r#"<div @click.self.window="go();"></div>"#,
+            // Both timing modifiers, each with its own time, and both
+            // together with a place.
+            r#"<input @input.debounce.1s.throttle.2s="go();" />"#,
+            r#"<input @input.throttle.debounce.1s="go();" />"#,
+            r#"<div @keydown.escape.window.debounce.300ms.stop.prevent="go();"></div>"#,
+            // A dynamic event name takes the modifiers after the brackets.
+            r#"<div @[name].window="go();"></div>"#,
+            r#"<div @[name].outside.stop="go();"></div>"#,
+            r#"<div v-on:[name].debounce.1s="go();"></div>"#,
+        ] {
+            parse_template(input, None, None).unwrap_or_else(|error| {
+                panic!("expected {input} to parse, got: {error}");
+            });
+        }
+    }
+
+    #[test]
+    fn citry_listener_modifiers_parse_on_dynamic_elements() {
+        // `<c-element>` writes a plain HTML element, so it is not a
+        // component tag here.
+        for input in [
+            r#"<c-element is="div" @click.outside="go();" />"#,
+            r#"<c-element is="div" @keydown.escape.window="go();"></c-element>"#,
+            r#"<c-element is="input" @input.debounce.300ms="go();" />"#,
+            r#"<c-element is="div" @scroll.throttle.1s.document="go();" />"#,
+        ] {
+            parse_template(input, None, None).unwrap_or_else(|error| {
+                panic!("expected {input} to parse, got: {error}");
+            });
+        }
+        // The rules about combinations still apply to it.
+        assert_parse_error(
+            r#"<c-element is="div" @click.outside.once="go();" />"#,
+            "'@click.outside.once' on <c-element> (line 1, column 21) combines '.outside' with '.once'",
+        );
+    }
+
+    #[test]
+    fn citry_listener_modifiers_are_rejected_off_html_elements() {
+        // On a component tag the listener receives emitted values, not DOM
+        // events, so a window, document, outside, or timed listener has no
+        // meaning there. The same holds for the Vue built-ins that write no
+        // element of their own.
+        let message = "uses a Citry listener modifier, which works only on HTML elements. Put the listener on an element inside the component, or handle the timing in the method.";
+        for (input, tag) in [
+            (r#"<c-Card @close.window="x = 1;" />"#, "c-Card"),
+            (r#"<c-card @close.outside="x = 1;"></c-card>"#, "c-card"),
+            (r#"<c-card v-on:close.document="x = 1;" />"#, "c-card"),
+            (r#"<c-card @close.debounce="x = 1;" />"#, "c-card"),
+            (r#"<c-card @close.throttle.1s="x = 1;" />"#, "c-card"),
+            // A Vue modifier next to the Citry one does not change that.
+            (r#"<c-card @close.stop.window="x = 1;" />"#, "c-card"),
+            (
+                r#"<template @click.outside="x = 1;"></template>"#,
+                "template",
+            ),
+            (r#"<slot @click.throttle="x = 1;"></slot>"#, "slot"),
+            (
+                r#"<component @click.document="x = 1;"></component>"#,
+                "component",
+            ),
+        ] {
+            assert_parse_error(input, &format!("on <{tag}> (line 1, column"));
+            assert_parse_error(input, message);
+        }
+        assert_parse_error(
+            r#"<c-Card @close.window="x = 1;" />"#,
+            "'@close.window' on <c-Card> (line 1, column 9) uses a Citry listener modifier",
+        );
+        // A component tag still takes the listeners it took before.
+        for input in [
+            r#"<c-card @close="x = 1;" />"#,
+            r#"<c-card @close.once="x = 1;" />"#,
+            r#"<template @click.stop="x = 1;"></template>"#,
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
+    }
+
+    #[test]
+    fn conflicting_citry_listener_modifiers_are_rejected_with_their_reason() {
+        for (input, message) in [
+            // Two places to listen.
+            (
+                r#"<div @click.outside.window="x = 1;"></div>"#,
+                "'@click.outside.window' on <div> (line 1, column 6) combines '.outside' and '.window'. A listener listens in one place: the element, the window or the document.",
+            ),
+            (
+                r#"<div @click.window.document="x = 1;"></div>"#,
+                "combines '.window' and '.document'. A listener listens in one place",
+            ),
+            (
+                r#"<div @click.document.outside="x = 1;"></div>"#,
+                "combines '.outside' and '.document'. A listener listens in one place",
+            ),
+            // Rules about the event itself.
+            (
+                r#"<div @click.outside.self="x = 1;"></div>"#,
+                "combines '.outside' with '.self': the element can never be the target of an event that starts outside it.",
+            ),
+            (
+                r#"<div @click.capture.outside="x = 1;"></div>"#,
+                "combines '.outside' with '.capture': '.outside' listens on the document after the event's own handlers have run, and the capture phase would run it first.",
+            ),
+            (
+                r#"<div @click.outside.once="x = 1;"></div>"#,
+                "combines '.outside' with '.once': '.once' removes the listener after its first event, and a document listener sees every click, so a click inside the element would use it up.",
+            ),
+            (
+                r#"<div @click.passive.prevent.window="x = 1;"></div>"#,
+                "combines '.passive' with '.prevent'. A passive listener cannot cancel the event.",
+            ),
+            (
+                r#"<input @input.prevent.debounce.passive="x = 1;" />"#,
+                "combines '.passive' with '.prevent'.",
+            ),
+            // Counts and order.
+            (
+                r#"<input @input.debounce.100ms.debounce.200ms="x = 1;" />"#,
+                "'@input.debounce.100ms.debounce.200ms' on <input> (line 1, column 8) repeats '.debounce'. Give each modifier once.",
+            ),
+            (
+                r#"<input @input.throttle.throttle="x = 1;" />"#,
+                "repeats '.throttle'. Give each modifier once.",
+            ),
+            (
+                r#"<div @click.window.stop.window="x = 1;"></div>"#,
+                "repeats '.window'. Give each modifier once.",
+            ),
+            (
+                r#"<div @click.stop.outside.stop="x = 1;"></div>"#,
+                "repeats '.stop'. Give each modifier once.",
+            ),
+            (
+                r#"<input @input.300ms.window="x = 1;" />"#,
+                "'@input.300ms.window' on <input> (line 1, column 8) has the time '.300ms' without '.debounce' or '.throttle' right before it.",
+            ),
+            (
+                r#"<input @input.window.300ms="x = 1;" />"#,
+                "has the time '.300ms' without '.debounce' or '.throttle' right before it.",
+            ),
+            // A time belongs to one timing modifier only.
+            (
+                r#"<input @input.debounce.1s.1s="x = 1;" />"#,
+                "has the time '.1s' without '.debounce' or '.throttle' right before it.",
+            ),
+            (
+                r#"<div @click.debounce.1.5s="x = 1;"></div>"#,
+                "gives '.1' as a time. Write the time in milliseconds or seconds, such as '.300ms' or '.2s'. To name a key, put it before '.debounce'.",
+            ),
+            (
+                r#"<div @keydown.debounce.1m="x = 1;"></div>"#,
+                "gives '.1m' as a time. Write the time in milliseconds or seconds, such as '.300ms' or '.2s'. To name a key, put it before '.debounce'.",
+            ),
+            (
+                r#"<div @click.throttle.200="x = 1;"></div>"#,
+                "gives '.200' as a time. Write the time in milliseconds or seconds, such as '.300ms' or '.2s'. To name a key, put it before '.throttle'.",
+            ),
+            (
+                r#"<input @keydown.window.300ms="x = 1;" />"#,
+                "has the time '.300ms' without '.debounce' or '.throttle' right before it.",
+            ),
+            // A time past the largest integer JavaScript holds exactly.
+            (
+                r#"<input @input.debounce.9007199254740992ms="x = 1;" />"#,
+                "gives '.9007199254740992ms', which is longer than JavaScript can hold exactly.",
+            ),
+            (
+                r#"<input @input.throttle.9007199254741s="x = 1;" />"#,
+                "gives '.9007199254741s', which is longer than JavaScript can hold exactly.",
+            ),
+            // Too many digits for any integer type.
+            (
+                r#"<input @input.debounce.99999999999999999999999999999999999999999999999999ms="x = 1;" />"#,
+                "which is longer than JavaScript can hold exactly.",
+            ),
+        ] {
+            assert_parse_error(input, message);
+        }
+    }
+
+    #[test]
+    fn citry_listener_modifiers_must_be_lowercase() {
+        for (input, written, lowercase) in [
+            (
+                r#"<div @click.Outside="x = 1;"></div>"#,
+                "Outside",
+                "outside",
+            ),
+            (
+                r#"<div @click.OUTSIDE="x = 1;"></div>"#,
+                "OUTSIDE",
+                "outside",
+            ),
+            (r#"<div @resize.WINDOW="x = 1;"></div>"#, "WINDOW", "window"),
+            (
+                r#"<div @click.Document="x = 1;"></div>"#,
+                "Document",
+                "document",
+            ),
+            (
+                r#"<input @input.Debounce.1s="x = 1;" />"#,
+                "Debounce",
+                "debounce",
+            ),
+            (
+                r#"<input @input.THROTTLE="x = 1;" />"#,
+                "THROTTLE",
+                "throttle",
+            ),
+            (r#"<div @[name].Window="x = 1;"></div>"#, "Window", "window"),
+        ] {
+            assert_parse_error(
+                input,
+                &format!("uses '.{written}'. Write it in lowercase, '.{lowercase}'."),
+            );
+        }
+        assert_parse_error(
+            r#"<div @click.Outside="x = 1;"></div>"#,
+            "'@click.Outside' (line 1, column 6) uses '.Outside'. Write it in lowercase, '.outside'.",
+        );
+    }
+
+    #[test]
+    fn names_the_compiler_writes_for_a_rewritten_listener_are_reserved() {
+        // Vue's `camelize` turns `-0` into `0`, so these all give the props
+        // key `onCitryOn0`, which the compiler writes for a listener.
+        let message =
+            "uses a name Citry's compiler writes for itself. Rename the attribute or event.";
+        for (input, name, tag) in [
+            (r#"<div @citry-on-0="go();"></div>"#, "@citry-on-0", "div"),
+            (r#"<div @citry-on0="go();"></div>"#, "@citry-on0", "div"),
+            (
+                r#"<div v-on:citry-on-0="go();"></div>"#,
+                "v-on:citry-on-0",
+                "div",
+            ),
+            (r#"<div :onCitryOn0="go();"></div>"#, ":onCitryOn0", "div"),
+            (
+                r#"<div v-bind:onCitryOn0="go();"></div>"#,
+                "v-bind:onCitryOn0",
+                "div",
+            ),
+            (r#"<div onCitryOn0="go();"></div>"#, "onCitryOn0", "div"),
+            // More digits, a Vue modifier, and a component tag.
+            (r#"<div @citry-on-12="go();"></div>"#, "@citry-on-12", "div"),
+            (
+                r#"<div @citry-on-12.stop="go();"></div>"#,
+                "@citry-on-12.stop",
+                "div",
+            ),
+            (
+                r#"<div v-bind:onCitryOn12.prop="go();"></div>"#,
+                "v-bind:onCitryOn12.prop",
+                "div",
+            ),
+            (r#"<c-card @citry-on-0="go();" />"#, "@citry-on-0", "c-card"),
+            (
+                r#"<c-element is="div" @citry-on-0="go();" />"#,
+                "@citry-on-0",
+                "c-element",
+            ),
+            // The reserved name still counts when a Citry modifier follows.
+            (
+                r#"<div @citry-on-0.outside="go();"></div>"#,
+                "@citry-on-0.outside",
+                "div",
+            ),
+        ] {
+            assert_parse_error(input, &format!("'{name}' on <{tag}> (line 1, column"));
+            assert_parse_error(input, message);
+        }
+        // The key is `onCitryOnline`, not `onCitryOn` plus digits.
+        for input in [
+            r#"<div @citry-online="go();"></div>"#,
+            r#"<div @citry-on="go();"></div>"#,
+            r#"<div @citry-on-x="go();"></div>"#,
+            r#"<div :onCitryOnline="go();"></div>"#,
+            // A dynamic name is known only in the browser.
+            r#"<div @[citry-on-0]="go();"></div>"#,
+        ] {
+            parse_template(input, None, None).unwrap_or_else(|error| {
+                panic!("expected {input} to parse, got: {error}");
+            });
         }
     }
 
@@ -697,6 +1017,9 @@ mod tests {
     fn element_directives_with_reserved_names_are_rejected() {
         for input in [
             r#"<div v-citry-control="a">x</div>"#,
+            // The directive the Vue compiler writes for a listener with a
+            // Citry modifier.
+            r#"<div v-citry-on:click="go();">x</div>"#,
             r#"<div v-c-tr="a">x</div>"#,
             r#"<c-element c-is="tag" v-Citry-x="a">x</c-element>"#,
         ] {

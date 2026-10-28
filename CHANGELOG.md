@@ -2,14 +2,18 @@
 
 ## Unreleased
 
-### Fixed
-
-- On PyPy, `import citry` no longer fails with `No module named
-  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
-  values and template types less fully, and both print a note saying so.
-
 ### Added
 
+- You can write an Events `State` as a Pydantic v2 or v1 model, by hand or
+  through `model_base`. A handler that sets a field to a value the model
+  rejects fails that call, before Citry stores it
+  ([details](https://citry.dev/events/state/#pydantic-state)).
+- You can make every plain `class Kwargs:`, `TemplateData`, `JsData`,
+  `CssData`, `State`, and Events `data` class a Pydantic model that subclasses your
+  own `BaseModel` subclass, so its `model_config` applies to all of them:
+  pass it as `Citry(model_base=MyModel)`. A dataclass base or
+  `typing.NamedTuple` works too
+  ([details](https://citry.dev/concepts/inputs-and-validation/#model-base)).
 - A component can pass Vue data to a fill, as a Vue scoped slot: write
   `<c-slot name="item" :row="row" />`, and read it in the fill with
   `<c-fill name="item" v-slot="{ row }">`. Python slot data (`c-item`,
@@ -17,6 +21,10 @@
   ([details](https://citry.dev/vue/slots/#scoped-slots)). When the server
   knows the slot's values, it writes the fill's HTML with them.
 - Citry now supports Python 3.15.
+- You can now use `.outside`, `.window`, `.document`, `.debounce`, and
+  `.throttle` on Vue listeners such as `@click` on HTML elements, as in
+  `@click.outside="open = false"` or `@input.debounce.300ms="search()"`
+  ([details](https://citry.dev/syntax/vue/#listener-modifiers)).
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
   spell check no longer waits behind the app's slower calls. A detached
@@ -282,6 +290,12 @@
   the value spans several lines without parentheses, such as a conditional
   with its `else` on its own line, and it checks a `c-values` that starts
   on an indented line. It used to skip both.
+- `citry format` and the editor's format command no longer add trailing
+  spaces to blank lines in a component's `template`, `js`, or `css` string
+  in a Python file, which Ruff flags as `W293`.
+- A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
+  modifier now fails when the template loads and says what to write
+  instead. Vue matches none of these names, so the listener never ran.
 - In a component that uses Vue, a fill that holds a Citry component now
   fails at render, with an error that names both components, when the
   receiving component's `<c-slot>` sits inside a Vue `v-for`. The page used
@@ -569,6 +583,18 @@
   The same rendered component id was encountered more than once`, and on
   a Vue page it failed even for a component used on its own, as did a
   hook that returns `result` unchanged.
+- In a component that uses Vue, a static attribute that the element has
+  no property for, or whose property mirrors the attribute as text, such as
+  `foo="1"`, is now written by the server, where the element around it
+  used to be rendered in the browser. `inert`, `autofocus` outside form
+  controls, `<dialog open>`, and a `<form>` attribute that may match the `name` or
+  `id` of a control inside it now leave that part to the browser. Such a
+  form now leaves its parent, or the whole page when the form is at the
+  page root, to the browser.
+
+- On PyPy, `import citry` no longer fails with `No module named
+  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
+  values and template types less fully, and both print a note saying so.
 
 ### Performance
 
