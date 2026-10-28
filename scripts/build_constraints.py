@@ -52,9 +52,10 @@ OLDEST_PYTHON: Final = "3.11"
 # A few locked third-party packages publish no wheel for some supported
 # interpreter, so uv builds them from their sdist, and require-build-hashes
 # refuses that build unless its backend is pinned here too. PyYAML has no wheel
-# for CPython 3.15 or PyPy 3.11 and builds with Cython (setuptools, its other
+# for CPython 3.15 or PyPy 3.11 and builds with Cython, and Brotli has none for
+# free-threaded CPython 3.14 and builds with pkgconfig (setuptools, their other
 # backend, is already pinned for the workspace packages).
-THIRD_PARTY_BUILD_REQUIREMENTS: Final = ("Cython>=3.0",)
+THIRD_PARTY_BUILD_REQUIREMENTS: Final = ("Cython>=3.0", "pkgconfig")
 
 _ENTRY = re.compile(r'\{\s*requirement\s*=\s*"(?P<requirement>[^"]+)"\s*,\s*hashes\s*=\s*\[(?P<hashes>[^\]]*)\]\s*\}')
 _HASH = re.compile(r'"(?P<hash>sha256:[0-9a-f]{64})"')

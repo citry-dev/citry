@@ -24,6 +24,7 @@ from citry._browser_expressions import (
 )
 from citry._diagnostic_catalog import (
     BROWSER_INVALID_MODEL_TARGET,
+    TEMPLATE_CSP_INCOMPATIBLE,
     TEMPLATE_DUPLICATE_ID,
     TEMPLATE_INVALID_NESTING,
     TEMPLATE_MISSING_IMAGE_ALT,
@@ -43,18 +44,25 @@ from citry._html_attribute_values import (
     OBSOLETE_ELEMENTS,
     SVG_ELEMENTS,
 )
+from citry._output_policy import check_output_html
 from citry._walk import Call, run
+from citry.settings import _ALLOWED_SECURITY_CSP_MODES
 from citry.util.html import decode_attribute_entities
+from citry_core.html_transform import _csp_attribute_problem
 from citry_core.template_parser import HtmlAttr, HtmlAttrKind, TemplateElement
 from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Sequence
 
+    from citry.settings import SecurityCspMode
     from citry_core.template_parser import Template
 
 _Severity = Literal["ignore", "warning", "error"]
 _SEVERITIES = frozenset({"ignore", "warning", "error"})
+# The key of the strict-CSP rule among the active severities. It is not a
+# `rule_*` field, because the engine's `security_csp` sets its severity.
+_CSP_RULE = "csp"
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +99,11 @@ class MarkupLintConsumer:
             ``inheritAttrs: false``, so an ``<img>`` root may get its ``alt``
             from the parent. The default, ``True``, is for a check that
             cannot tell.
+        csp: The engine's ``security_csp``. ``"warn"`` and ``"strict"``
+            report, as a warning or an error, what a strict Content Security
+            Policy blocks: a raw ``<script>`` or ``<style>``, an ``on*``
+            attribute, or a ``javascript:`` URL. The default, ``"off"``,
+            reports nothing, as the engine's own default does.
 
     """
 
@@ -105,6 +118,7 @@ class MarkupLintConsumer:
     rule_invalid_vue_expression: _Severity = "error"
     rule_vue_compile_error: _Severity = "error"
     root_may_receive_attributes: bool = True
+    csp: SecurityCspMode = "off"
 
     def __post_init__(self) -> None:
         for rule_name in MARKUP_LINT_RULES:
@@ -115,6 +129,9 @@ class MarkupLintConsumer:
         if type(self.root_may_receive_attributes) is not bool:
             msg = "MarkupLintConsumer.root_may_receive_attributes must be a bool"
             raise TypeError(msg)
+        if type(self.csp) is not str or self.csp not in _ALLOWED_SECURITY_CSP_MODES:
+            msg = f"Unknown csp mode: {self.csp!r}"
+            raise ValueError(msg)
 
 
 # The severity fields of MarkupLintConsumer, in the order the LintSettings
@@ -172,7 +189,9 @@ def lint_markup(
     - a literal ``id`` that two elements always render;
     - an ``<img>`` with no ``alt`` text;
     - ``v-model`` on an element that holds no value;
-    - a misspelled DOM event in a listener, such as ``@clik``.
+    - a misspelled DOM event in a listener, such as ``@clik``;
+    - when a consumer's ``csp`` is not ``"off"``, what a strict Content
+      Security Policy blocks.
 
     A typing slip is two neighboring letters swapped, one letter typed
     twice, or one letter left out. A replaced letter does not count, because
@@ -453,6 +472,13 @@ def _active_severities(consumers: Sequence[MarkupLintConsumer]) -> dict[str, Lit
         active = [severity for severity in active if severity != "ignore"]
         if active:
             severities[rule_name] = "error" if "error" in active else "warning"
+    # The engine's policy decides the strict-CSP rule: an error when any
+    # owner's engine is strict, a warning when one only warns.
+    modes = {consumer.csp for consumer in consumers}
+    if "strict" in modes:
+        severities[_CSP_RULE] = "error"
+    elif "warn" in modes:
+        severities[_CSP_RULE] = "warning"
     return severities
 
 
@@ -548,6 +574,12 @@ _MODEL_TARGETS = frozenset({"input", "select", "textarea"})
 _EVENT_LOOKALIKE_WORDS = frozenset({"scrolled", "touched"})
 # A name this short is too likely to be another word to read as a typo.
 _MIN_TYPO_LENGTH = 3
+# Elements whose content the page's CSP check reads as text, as the browser
+# does, so the tags written inside them are not checked here either.
+_CSP_TEXT_CONTENT_TAGS = frozenset({"noscript", "xmp", "iframe", "noembed", "noframes", "plaintext"})
+# Element names the browser knows in any letter case. A capitalized tag with
+# one of these names is that element; any other may be a Vue component.
+_CSP_ELEMENT_TAGS = _KNOWN_LOWERCASE_TAGS - _VUE_BUILTIN_TAGS
 
 
 @dataclass(slots=True)
@@ -564,6 +596,9 @@ class _Context:
     # On or inside an element with `v-pre`, which Vue leaves as written, so
     # the rules about Vue directives and listeners do not apply.
     vue_skipped: bool = False
+    # Inside an element whose content the browser reads as text, such as
+    # `<noscript>`, so the page check sees no tags there.
+    csp_hidden: bool = False
 
 
 @dataclass(slots=True)
@@ -606,6 +641,10 @@ class _MarkupWalker:
             component = not foreign and (tag != lower or (lower.startswith("c-") and lower != "c-element"))
             if not foreign:
                 self._check_element_name(node, tag, base_index)
+            # `v-pre` does not hide anything here: Vue still sets the
+            # attributes it leaves as written, and the browser applies them.
+            if not context.csp_hidden:
+                self._check_csp_element(node, tag, lower, attrs, component=component, base_index=base_index)
             # Obsolete block elements such as `<center>` close a paragraph too.
             block = not foreign and (html or tag in OBSOLETE_ELEMENTS)
             if block and context.in_paragraph and lower in _P_CLOSING_TAGS:
@@ -647,7 +686,15 @@ class _MarkupWalker:
                         yield Call(
                             self._walk,
                             parsed,
-                            _Context(foreign=foreign, may_repeat=True, vue_skipped=vue_skipped),
+                            _Context(
+                                foreign=foreign,
+                                may_repeat=True,
+                                vue_skipped=vue_skipped,
+                                # Where a nested template's HTML lands is up
+                                # to the code that renders it, so the
+                                # render-time check judges it.
+                                csp_hidden=True,
+                            ),
                             base_index=base_index + inner.start_index + nested_start,
                         )
             if (
@@ -667,6 +714,7 @@ class _MarkupWalker:
                         and not foreign,
                         may_repeat=may_repeat,
                         vue_skipped=vue_skipped,
+                        csp_hidden=context.csp_hidden or lower in _CSP_TEXT_CONTENT_TAGS,
                     ),
                     base_index=base_index,
                     # A root inside a top-level condition is still the
@@ -686,6 +734,149 @@ class _MarkupWalker:
         # A component renders markup the check cannot see, and an element
         # that closes the paragraph is already reported.
         return not (component or lower == "c-element" or lower in _P_SCOPE_BOUNDARIES or lower in _P_CLOSING_TAGS)
+
+    def _check_csp_element(
+        self,
+        node: object,
+        tag: str,
+        lower: str,
+        attrs: Sequence[HtmlAttr],
+        *,
+        component: bool,
+        base_index: int,
+    ) -> None:
+        """Report what a strict Content Security Policy blocks in one element's own text."""
+        if _CSP_RULE not in self.severities:
+            return
+        # `<c-raw>` writes its content out unchanged, so that content is
+        # read as the HTML the browser gets.
+        if lower == "c-raw":
+            self._check_csp_raw_content(node, base_index)
+            return
+        # A component's attributes are inputs, not HTML, so only the
+        # render-time check can see what the component writes. The browser
+        # ignores letter case in tag names, so `<BUTTON>` and `<Script>` are
+        # the HTML elements; only a capitalized name that is no element,
+        # such as `<Card>`, may be a Vue component.
+        element_tag = tag
+        if lower == "c-element":
+            # `<c-element is="object">` renders an `<object>`, so the rules
+            # that depend on the element use the name `is` gives as text.
+            written_is = next(
+                (
+                    attr.inner_value.content
+                    for attr in attrs
+                    if attr.kind == HtmlAttrKind.Static
+                    and not attr.foreign_parts
+                    and _ascii_lower(attr.key.content) == "is"
+                    and attr.inner_value is not None
+                ),
+                None,
+            )
+            # The value is used as written, as the template compiler reads it.
+            element_tag = written_is if written_is is not None else tag
+        elif component and (lower.startswith("c-") or lower not in _CSP_ELEMENT_TAGS):
+            return
+        name = node.start_tag.name  # type: ignore[attr-defined]
+        if _ascii_lower(element_tag) in {"script", "style"}:
+            self._report(
+                _CSP_RULE,
+                TEMPLATE_CSP_INCOMPATIBLE,
+                tag,
+                render_diagnostic(TEMPLATE_CSP_INCOMPATIBLE, variant="raw-tag", tag=element_tag),
+                name.start_index,
+                name.end_index,
+                base_index,
+            )
+        for attr in attrs:
+            # Only an attribute with a fixed value is known before the page
+            # renders. A binding, a directive, and a listener are not plain
+            # attributes. Their names start with a prefix such as `c-`,
+            # `:`, `@`, `v-`, `#`, or `$`; any other name is the attribute
+            # the browser gets, even one with a dot such as `onclick.x`.
+            if attr.kind != HtmlAttrKind.Static:
+                continue
+            written = attr.key.content
+            if written.startswith(("c-", ":", "@", "v-", "#", "$", ".", "[")):
+                continue
+            inner = attr.inner_value
+            # The value goes in as written, character references and all,
+            # because the shared rule decodes it as the page check does.
+            problem = _csp_attribute_problem(element_tag, written, None if inner is None else inner.content)
+            if problem is None:
+                continue
+            # A value that holds extension syntax is known only after the
+            # extension runs, so only the name, which decides an event
+            # handler, can be judged here.
+            if problem == "javascript-url" and attr.foreign_parts:
+                continue
+            # A javascript: URL is in the value; an event handler is the name.
+            start, end = (
+                (inner.start_index, inner.end_index)
+                if problem == "javascript-url" and inner is not None
+                else (attr.key.start_index, attr.key.end_index)
+            )
+            self._report(
+                _CSP_RULE,
+                TEMPLATE_CSP_INCOMPATIBLE,
+                written,
+                render_diagnostic(TEMPLATE_CSP_INCOMPATIBLE, variant=problem, name=written),
+                start,
+                end,
+                base_index,
+            )
+
+    def _check_csp_raw_content(self, node: object, base_index: int) -> None:
+        """Report what a strict Content Security Policy blocks in ``<c-raw>`` content, using the page check."""
+        body = getattr(node, "body", None)
+        if body is None:
+            return
+        for element in body.elements:
+            if not isinstance(element, TemplateElement.Text):
+                continue
+            token = element._0.token
+            check = check_output_html(token.content, csp=True)
+            written_bytes = token.content.encode()
+            # Content the page check cannot read is reported when the page
+            # renders, with the reason, so nothing is guessed here.
+            if check.error is not None:
+                continue
+            for event in check.events:
+                # Offsets in the events are UTF-8 bytes into the content, as
+                # the template's own offsets are bytes into the template.
+                if event[0] == "element":
+                    _, _, _, name_start, name_end, _, trusted, *_ = event
+                    if trusted:
+                        continue
+                    # The page check names elements in lowercase; the
+                    # message shows the name as the template writes it.
+                    raw_tag = written_bytes[name_start:name_end].decode()
+                    self._report(
+                        _CSP_RULE,
+                        TEMPLATE_CSP_INCOMPATIBLE,
+                        raw_tag,
+                        render_diagnostic(TEMPLATE_CSP_INCOMPATIBLE, variant="raw-tag", tag=raw_tag),
+                        token.start_index + name_start,
+                        token.start_index + name_end,
+                        base_index,
+                    )
+                    continue
+                rule, _, attribute, start, end, *_ = event
+                variant = {"csp-native-event": "native-event", "csp-javascript-url": "javascript-url"}.get(rule)
+                if variant is None:
+                    continue
+                # A native event finding spans the name, a URL finding the
+                # value, so the written name comes from the event's own name.
+                attribute = _written_attribute_name(written_bytes, start, attribute)
+                self._report(
+                    _CSP_RULE,
+                    TEMPLATE_CSP_INCOMPATIBLE,
+                    attribute,
+                    render_diagnostic(TEMPLATE_CSP_INCOMPATIBLE, variant=variant, name=attribute),
+                    token.start_index + start,
+                    token.start_index + end,
+                    base_index,
+                )
 
     def _check_element_name(self, node: object, tag: str, base_index: int) -> None:
         """Report a lowercase tag that is one typing slip from an HTML element."""
@@ -962,6 +1153,23 @@ def _single_root_starts(template: Template) -> Generator[Call, Any, frozenset[in
     if len(nodes) == 1:
         return frozenset({nodes[0].start_tag.token.start_index})
     return frozenset()
+
+
+def _written_attribute_name(content: bytes, start: int, lowered: str) -> str:
+    """
+    Return an attribute name as ``<c-raw>`` content writes it, given the page check's lowercase name.
+
+    The page check reports a native event attribute by its name and a
+    ``javascript:`` URL by its value, so the name is looked for at ``start``
+    first and otherwise just before the value.
+    """
+    size = len(lowered.encode())
+    if _ascii_lower(content[start : start + size].decode(errors="replace")) == lowered:
+        return content[start : start + size].decode(errors="replace")
+    # The value follows `name=` and an optional quote; search back from it.
+    before = content[:start].decode(errors="replace")
+    index = _ascii_lower(before).rfind(lowered)
+    return before[index : index + len(lowered)] if index >= 0 else lowered
 
 
 def _split_attribute_prefix(written: str) -> tuple[str, str | None]:

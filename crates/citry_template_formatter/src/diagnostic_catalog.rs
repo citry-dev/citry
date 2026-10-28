@@ -3,6 +3,7 @@
 
 pub(crate) const PARSE_SYNTAX: &str = "citry.parse.syntax";
 pub(crate) const PARSE_VALUE: &str = "citry.parse.value";
+pub(crate) const PARSE_TOO_DEEP: &str = "citry.parse.too-deep";
 pub(crate) const FORMAT_SYNTAX: &str = "citry.format.syntax";
 pub(crate) const FORMAT_SUPPRESSION: &str = "citry.format.suppression";
 pub(crate) const FORMAT_INVARIANT: &str = "citry.format.invariant";

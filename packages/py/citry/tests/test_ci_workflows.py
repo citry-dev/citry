@@ -58,6 +58,66 @@ def test_pull_request_workflows_cancel_only_stale_pull_request_runs() -> None:
     }
 
 
+# Workflows that run on pull requests but run no checks, so a closed PR has
+# nothing of theirs worth cancelling: a notification and a lockfile refresh.
+_PR_WORKFLOWS_WITHOUT_CHECKS = {"repo--discord-pr.yml", "repo--dependabot-relock.yml"}
+
+
+def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
+    checked: set[str] = set()
+    for path in sorted([*_WORKFLOWS.glob("*.yml"), *_WORKFLOWS.glob("*.yaml")]):
+        workflow = _load_workflow(path.name)
+        events = workflow.get("on", {})
+        # Every check workflow that runs on pull requests is covered, so a new
+        # one cannot leave its runs going after the PR merges.
+        if not isinstance(events, dict) or "pull_request" not in events:
+            continue
+        if path.name in _PR_WORKFLOWS_WITHOUT_CHECKS:
+            continue
+        name = path.name
+        checked.add(name)
+        # A `closed` run joins the PR's concurrency group, and the group's
+        # cancel-in-progress (checked above) cancels the PR's earlier runs.
+        assert workflow["on"]["pull_request"]["types"] == ["opened", "synchronize", "reopened", "closed"], name
+        for job_name, job in workflow["jobs"].items():
+            # A job with `needs` is skipped with the job it needs, so only the
+            # jobs that start a run need the condition. Without it, the
+            # cancelling run would itself queue for runners.
+            if "needs" not in job:
+                assert job.get("if") == "github.event.action != 'closed'", f"{name}: {job_name}"
+    # Guards against the loop finding nothing because the trigger shape changed.
+    assert {"repo--check.yml", "py--tests.yml"} <= checked
+
+
+def test_the_python_matrix_leaves_out_only_the_cell_the_check_workflow_runs() -> None:
+    matrix = _load_workflow("py--tests.yml")["jobs"]["test"]["strategy"]["matrix"]
+    check_job = _load_workflow("repo--check.yml")["jobs"]["check"]
+    check_python = next(
+        step["with"]["python-version"]
+        for step in check_job["steps"]
+        if step.get("uses", "").startswith("actions/setup-python")
+    )
+
+    # The Check workflow runs the same non-browser suite on every pull request,
+    # so the matrix drops exactly that one OS and Python pair. If Check moves to
+    # another Python, this fails until the dropped cell moves with it.
+    assert check_job["runs-on"] == "ubuntu-latest"
+    assert matrix["exclude"] == [{"os": "ubuntu-latest", "python-version": check_python}]
+    assert check_python in matrix["python-version"]
+    # That only holds while Check runs on every pull request: no path filter on
+    # its trigger and no condition on the step that runs check.py.
+    check_events = _load_workflow("repo--check.yml")["on"]
+    assert not (check_events.get("pull_request") or {}).get("paths")
+    gate = next(step for step in check_job["steps"] if "scripts/check.py --profile full" in step.get("run", ""))
+    assert "if" not in gate
+    # And while both select the same tests: the matrix runs every non-browser
+    # test except the reload file, which check.py runs in its own phase.
+    tests_steps = {step.get("name"): step for step in _load_workflow("py--tests.yml")["jobs"]["test"]["steps"]}
+    matrix_run = tests_steps["Run Python tests"]["run"]
+    assert '-m "not e2e"' in matrix_run
+    assert matrix_run.count("--ignore") == 1
+
+
 def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> None:
     workflow = _load_workflow("py--diagnostic.yml")
     dispatch = workflow["on"]["workflow_dispatch"]

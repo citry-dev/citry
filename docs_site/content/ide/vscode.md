@@ -263,6 +263,35 @@ For `<c-element>`, a literal tag such as `is="form"` gets the attribute help
 for `<form>`. With a dynamic `c-is` or `c-bind`, only global HTML attributes
 are offered, because the final tag is not known.
 
+### Listener modifiers
+
+Type a dot after a Vue listener, such as `@click.` or `v-on:keydown.`, to
+see the modifiers that work on it. The list has Vue's own modifiers, such
+as `.stop`, and Citry's
+[extra listener modifiers](/syntax/vue/#listener-modifiers), such as
+`.outside`. On a keyboard event it also has key names, such as `.enter`.
+Hover a modifier to see what it does.
+
+After `.debounce` or `.throttle`, the list offers durations such as
+`.300ms`.
+
+The list leaves out:
+
+- a modifier the listener already has;
+- a modifier that conflicts with one already on it, such as `.window`
+  after `.outside`;
+- Citry's modifiers on a component tag, `<template>`, `<slot>`, or
+  `<component>`, where they cannot work;
+- `.ctrl`, `.shift`, `.alt`, `.meta`, `.exact`, and the mouse buttons on
+  events that carry no held keys or mouse button, such as `input`,
+  `scroll`, or `focus`;
+- anything but `.debounce` or `.throttle` right before a duration you
+  already typed.
+
+If you type a combination Citry rejects, such as `@click.outside.window`
+or `.outside` on a component tag, the editor underlines the whole
+attribute and the message says what to change.
+
 ## Check component inputs
 
 A `c-*` value on a component tag is a Python keyword argument, so Citry checks
@@ -292,7 +321,9 @@ an `int`.
 
 ### Slot data in fills
 
-Once your app is loaded, Citry checks each use of a fill's `data` name
+When a child component's slot passes data, `<c-fill data="card">` gives
+that data the name `card`. Once your app is
+[connected](#connect-your-app), the editor checks each use of `card`
 against the fields of the slot's data class. When the child declares
 `footer: SlotInput[FooterData]` in its `Slots`, a misspelled field or a
 wrong use of one is an error:
@@ -309,11 +340,16 @@ wrong use of one is an error:
 </c-Card>
 ```
 
-`card` stays a read-only mapping, as it is at runtime, so `card["aria-label"]`
-and `len(card)` are not errors. A field named like a mapping method, such as
-`items`, is read with brackets, as at runtime. A fill for a slot whose name
-is computed with `c-name`, or whose data class is an open type such as
-`dict[str, Any]`, is not checked.
+`card` is a read-only mapping, as it is at runtime, so `card["aria-label"]`
+and `len(card)` are not errors. Read a field with brackets, such as
+`card["items"]`, when its name is also a mapping method or starts with
+`_`. At runtime `card.items` is the mapping's own method, and
+`card._id` is an error.
+
+The editor does not check a fill whose slot name is set with `c-name` or
+`c-bind`, or a fill for a slot whose data type lists no fields, such as
+`SlotInput[dict[str, Any]]`. `citry check --types` reports the same
+errors.
 
 ## Vue and component JS { #complete-vue-expressions-and-component-javascript }
 

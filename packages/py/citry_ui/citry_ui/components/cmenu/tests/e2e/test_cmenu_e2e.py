@@ -951,7 +951,7 @@ def test_scrolling_the_page_while_a_submenu_is_open_keeps_its_position(page):
 
 
 @pytest.mark.parametrize("keys", [("Enter", "End"), ("ArrowUp",)], ids=["end", "open-on-last"])
-def test_a_key_scrolls_the_page_to_an_item_below_the_screen(page, keys):
+def test_a_key_shows_an_item_that_starts_below_the_screen(page, keys):
     errors = _load(page)
     # At high zoom the menu is taller than the space around its trigger,
     # so its last item can sit below the bottom of the screen.
@@ -965,10 +965,34 @@ def test_a_key_scrolls_the_page_to_an_item_below_the_screen(page, keys):
         page.wait_for_function("document.querySelector('#library-menu').matches(':popover-open')")
     page.wait_for_function("document.activeElement.closest('#library-menu') !== null")
 
-    # The menu takes the keys a reader would scroll with, so the page
-    # scrolls to show the item the key moved to. The menu follows its
-    # trigger to the new place on the next frame.
-    page.wait_for_function("window.scrollY > 0")
+    # Browsers place a menu that does not fit below its trigger in different
+    # ways. Chromium keeps it below the trigger and lets it overflow the
+    # screen, so the page has to scroll to show the item. Firefox shifts the
+    # menu up so it fits inside the screen, overlapping the trigger, so the
+    # item is already shown and no scroll is needed. Record which placement
+    # this browser chose as soon as the key has focused the item.
+    menu_sits_below_trigger = page.evaluate(
+        """() => {
+          const menu = document.querySelector('#library-menu').getBoundingClientRect();
+          const trigger = document.querySelector('[aria-controls="library-menu"]').getBoundingClientRect();
+          return menu.top >= trigger.bottom - 0.5;
+        }"""
+    )
+
+    # The menu takes the keys a reader would scroll with, so a menu that
+    # overflows the screen makes the page scroll to show the item the key
+    # moved to. A menu that fits needs no scroll, but must be shown whole.
+    if menu_sits_below_trigger:
+        page.wait_for_function("window.scrollY > 0")
+    else:
+        page.wait_for_function(
+            """() => {
+              const menu = document.querySelector('#library-menu').getBoundingClientRect();
+              return menu.top >= -0.5 && menu.bottom <= innerHeight + 0.5;
+            }"""
+        )
+    # Either way the focused item ends inside the screen. The menu follows
+    # its trigger to the new place on the next frame.
     page.wait_for_function(
         """() => {
           const item = document.activeElement.getBoundingClientRect();
@@ -987,13 +1011,15 @@ def test_keyboard_moves_reveal_items_inside_a_menu_that_scrolls(page):
     _trigger(page).click()
     surface = _surface(page)
     page.wait_for_function("(menu => menu.scrollHeight > menu.clientHeight)(document.querySelector('#library-menu'))")
-    # The item must sit inside the menu's border, where it can be seen.
+    # The item must sit inside the menu's border, where it can be seen. WebKit
+    # drops the fraction from scroll offsets, so the item can stick out past
+    # the edge by up to 1 px.
     focused_item_is_shown = """() => {
       const menu = document.querySelector('#library-menu');
       const outer = menu.getBoundingClientRect();
       const top = outer.top + menu.clientTop;
       const item = document.activeElement.getBoundingClientRect();
-      return item.top >= top - 0.5 && item.bottom <= top + menu.clientHeight + 0.5;
+      return item.top >= top - 1 && item.bottom <= top + menu.clientHeight + 1;
     }"""
     page.keyboard.press("End")
 

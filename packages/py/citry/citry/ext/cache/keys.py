@@ -44,6 +44,11 @@ class _CacheKeyContext:
     engine_id: str | None
     revision: int
     extensions: tuple[_ExtensionCacheCompatibility, ...]
+    # The sub-path the host app is served below for the current request,
+    # such as "/shop", or "" at the site root. Cached HTML can hold URLs
+    # built with it (an `events.url()` in template_data), so a request
+    # below another sub-path must not get that entry.
+    sub_path: str = ""
 
 
 @dataclass(slots=True)
@@ -58,6 +63,7 @@ def component_cache_key(
     *,
     vary: object,
     version: int | str = 1,
+    sub_path: str | None = None,
 ) -> str:
     """
     Build the exact physical key for one component variation.
@@ -66,17 +72,27 @@ def component_cache_key(
     component's ``Cache.vary()`` method. Callers supply the already-computed semantic
     variation value.
 
+    An app served below a sub-path, such as ``/shop``, stores its entries
+    under keys that include it, because a cached render can hold URLs that
+    start with it. Inside a request the key uses the request's sub-path.
+    Outside one, such as in a background job, it uses the app's setting
+    (FastAPI's ``root_path``, Flask's ``APPLICATION_ROOT``, Django's
+    ``FORCE_SCRIPT_NAME``), so pass ``sub_path`` when only the server sets
+    the sub-path.
+
     Args:
         component: Component class whose stable class ID identifies the entry.
         vary: Semantic variation accepted by Citry's canonical key encoder.
         version: Author-controlled exact integer or non-empty string version.
+        sub_path: The sub-path the app is served below, such as ``"/shop"``,
+            or ``""`` for the site root. ``None`` reads the current one.
 
     Returns:
         A short ASCII key suitable for deleting one exact backend entry.
 
     Raises:
         TypeError: If ``component`` is not a Component class.
-        ValueError: If ``version`` is invalid.
+        ValueError: If ``version`` or ``sub_path`` is invalid.
         CacheKeyError: If ``vary`` cannot be encoded safely.
 
     """
@@ -86,7 +102,7 @@ def component_cache_key(
         msg = f"component_cache_key() requires a Component class; got {component!r}."
         raise TypeError(msg)
     return _build_component_cache_key(
-        cast("Any", component.citry.extensions.get_extension("cache"))._key_context(),
+        cast("Any", component.citry.extensions.get_extension("cache"))._key_context(sub_path=sub_path),
         component.class_id,
         vary=vary,
         version=version,
@@ -99,25 +115,31 @@ def fragment_cache_key(
     *,
     vary: object = (),
     version: int | str = 1,
+    sub_path: str | None = None,
 ) -> str:
     """
     Build the exact physical key for one named fragment variation.
 
     Like ``<c-cache>``, this unwraps an outer ``Const`` marker from ``key``,
-    ``vary``, and ``version`` before validation and encoding.
+    ``vary``, and ``version`` before validation and encoding. The key
+    includes the sub-path the app is served below, as
+    [`component_cache_key()`][citry.ext.cache.component_cache_key]
+    describes.
 
     Args:
         citry: Engine whose cache scope and local revision apply.
         key: Exact non-empty semantic fragment name.
         vary: Semantic variation accepted by Citry's canonical key encoder.
         version: Author-controlled exact integer or non-empty string version.
+        sub_path: The sub-path the app is served below, such as ``"/shop"``,
+            or ``""`` for the site root. ``None`` reads the current one.
 
     Returns:
         A short ASCII key suitable for deleting one exact backend entry.
 
     Raises:
         TypeError: If ``citry`` is not a Citry instance.
-        ValueError: If ``key`` or ``version`` is invalid.
+        ValueError: If ``key``, ``version``, or ``sub_path`` is invalid.
         CacheKeyError: If ``vary`` cannot be encoded safely.
 
     """
@@ -134,7 +156,7 @@ def fragment_cache_key(
         raise ValueError(msg)
     _validate_utf8_text(normalized_key, source="fragment cache key")
     return _build_fragment_cache_key(
-        cast("Any", citry.extensions.get_extension("cache"))._key_context(),
+        cast("Any", citry.extensions.get_extension("cache"))._key_context(sub_path=sub_path),
         normalized_key,
         vary=normalized_vary,
         version=normalized_version,
@@ -183,6 +205,7 @@ def _build_physical_key(
         ("cache namespace", context.namespace),
         ("cache generation", context.generation),
         ("cache engine_id", context.engine_id),
+        ("cache sub_path", context.sub_path or None),
     ):
         if value is not None:
             record_content_bytes = _add_record_content(
@@ -252,7 +275,15 @@ def _build_physical_key(
     record: list[Any] = [
         "citry-render-key",
         _KEY_SCHEMA_VERSION,
-        [context.scope_kind, context.namespace, context.generation, context.engine_id],
+        # The sub-path joins the key only for an app served below one, so keys
+        # at the site root keep their current value.
+        [
+            context.scope_kind,
+            context.namespace,
+            context.generation,
+            context.engine_id,
+            *([context.sub_path] if context.sub_path else []),
+        ],
         ["i", hex(context.revision)],
         kind,
         identity,

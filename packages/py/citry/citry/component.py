@@ -851,14 +851,18 @@ class Component(metaclass=ComponentMeta):
     """Optional typed values that survive between server event calls.
 
     Define ``State`` as a plain nested class with type annotations. The Events
-    extension converts it to a mutable, slotted dataclass automatically::
+    extension turns it into a mutable dataclass, or into a Pydantic model
+    when ``model_base`` names one::
 
         class Search(Component):
             class State:
                 query: str = ""
                 page: int = 1
 
-    State must contain only JSON-serializable values. By default, every field
+    ``State`` can also be a Pydantic v2 or v1 model written by hand, which
+    Pydantic then checks; see "Pydantic State" in the Events
+    State guide. State must contain only JSON-serializable values, or, for a
+    model State, values Pydantic can write as JSON. By default, every field
     is readable and writable in the browser. Use ``_public`` to choose which
     fields the browser may read and ``_model`` to choose which public fields
     it may change. ``_storage`` is ``"signed"`` by default and may be set to

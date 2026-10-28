@@ -29,6 +29,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/install-rust/**"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -40,6 +41,10 @@ on:
       - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "packages/py/**"
       - "packages/js/citry-client/**"
@@ -62,6 +67,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/install-rust/**"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -91,6 +97,7 @@ env:
 
 jobs:
   i18n-release-qualification:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -109,9 +116,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -140,6 +145,7 @@ jobs:
           if-no-files-found: error
 
   test:
+    if: github.event.action != 'closed'
     runs-on: ${{ matrix.os }}
     strategy:
       # A failure on one interpreter must not hide portability results from
@@ -154,6 +160,12 @@ jobs:
         include:
           - { os: macos-latest, python-version: "3.11" }
           - { os: macos-latest, python-version: "3.15" }
+        # The Check workflow (repo--check.yml) runs this same suite on Linux,
+        # with the Python its setup step names, on every pull request, so that
+        # cell is left out here rather than run twice (test_ci_workflows.py
+        # keeps the two in step).
+        exclude:
+          - { os: ubuntu-latest, python-version: "3.14" }
 
     steps:
       - uses: actions/checkout@v7
@@ -175,10 +187,7 @@ jobs:
       # Rust is needed because `uv sync` builds the citry_core extension through
       # the maturin backend, so the toolchain must be in place before the sync.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -188,6 +197,10 @@ jobs:
       - name: Install the workspace
         run: uv sync --locked --all-packages
 
+      # The real-server reload tests start development servers, so they run
+      # once, in one process rather than across the four pytest workers, in
+      # check.py's "pytest reload servers" phase in the Check workflow.
+      #
       # The Linux 3.11 cell renders with Citry's Python render path, the one
       # PyPy, Pyodide and free-threaded builds use, because no job runs the
       # suite on those interpreters. Every other cell keeps the native path.
@@ -203,89 +216,12 @@ jobs:
           --durations 30
           ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11') && '--python-render-path' || '' }}
 
-  reload-servers:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          prune-cache: true
-          version: "0.13.5"
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install the workspace
-        run: uv sync --locked --all-packages
-
-      - name: Run real-server reload tests serially
-        run: >-
-          uv run --no-sync pytest
-          packages/py/citry/tests/test_server_reload.py
-          --durations 10
-
-  windows-contracts:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          prune-cache: true
-          version: "0.13.5"
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install the workspace
-        run: uv sync --locked --all-packages
-
-      - name: Check Windows editor paths and server startup
-        run: >-
-          uv run --no-sync pytest
-          packages/py/citry_lsp/tests/test_uri.py
-          packages/py/citry_lsp/tests/test_catalog.py
-          packages/py/citry_lsp/tests/test_server.py
-
-      - name: Check Windows formatter provider ownership
-        run: >-
-          uv run --no-sync pytest
-          packages/py/citry/tests/test_embedded_provider.py
-          packages/py/citry/tests/test_format_command.py::test_windows_cli_accepts_a_native_provider
-          packages/py/citry/tests/test_format_command.py::test_cli_closes_an_initialized_provider_when_the_next_provider_fails
-
   # Browser end-to-end tests, including Citry UI's co-located component tests,
   # run in Chromium for PR-time speed. The weekly cross-browser workflow runs
   # the same paths on all three engines. The `test` job above excludes `e2e`
   # explicitly and does not sync that dependency group.
   e2e:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -304,10 +240,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -401,6 +334,7 @@ jobs:
           if-no-files-found: error
 
   citry-ui-wheel-build:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -419,9 +353,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Build the Citry UI wheel and source distribution
         run: uv build --package citry-ui --out-dir dist
@@ -725,6 +657,7 @@ jobs:
   # pull requests. The scheduled cross-browser workflow retains the broader
   # all-e2e sweep.
   vue-conformance:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -747,10 +680,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

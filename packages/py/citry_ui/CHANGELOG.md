@@ -6,6 +6,48 @@
 
 - Citry UI now supports Python 3.15.
 
+
+- A `CCommandPalette` command with a `shortcut` now exposes it to
+  assistive technology as `aria-keyshortcuts`, for example `Control+,`
+  for "Ctrl ,". A hint that is not one key combination, such as
+  `Ctrl K, Ctrl S`, and a disabled command get no `aria-keyshortcuts`.
+  Set `shortcut` only for a combination your application handles.
+
+### Changed
+
+- **Breaking:** in `CCommandPalette`, a command that closes the palette
+  now calls `onAction` after the palette closes, and after `onOpenChange`
+  and `onQueryChange`, so `onAction` can move focus anywhere on the page
+  once the palette has closed. If you pass `open`, set it to `false`
+  inside `onOpenChange` itself; when you close it later, `onAction` runs
+  while the palette is still open. An error thrown in `onAction` no longer
+  keeps the palette open; to keep it open, set `close_on_action=False` on
+  the palette or on the command.
+- **Breaking:** Citry UI now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing Citry UI 0.3.0.
+- The default `change_label` of `CDateRange`, and its
+  `citry-ui-date-range-change` message, now read "Change date range,
+  {start} – {end}" instead of "… {start} to {end}". The trigger's name
+  then contains the dates exactly as the trigger shows them, which voice
+  control needs. If you set your own `change_label` or translate the
+  message, write the dates as `{start} – {end}`, as the trigger shows
+  them.
+- Citry UI components work with Citry's new check that raises
+  `TypeError` for an input of the wrong type, and accept the same values
+  as before, such as `heading_level="2"`. Earlier Citry UI releases
+  reject some valid inputs under that check, so upgrade Citry UI and
+  Citry together.
+- `heading_level` on `CAccordion` and `CDisclosure` now accepts only
+  `2` to `6` and the same numbers as text, so `"02"` and `2.0` raise
+  `ValueError`.
+- **Breaking:** A wrong input to most Citry UI components now raises
+  Citry's `TypeError`, which names the input and the expected type. This
+  includes a value outside a listed choice, such as `variant="bogus"`,
+  which used to raise `ValueError`, so code that catches `ValueError`
+  there must catch `TypeError`. `CAccordion`, `CDisclosure`, `CIcon`,
+  `CAlert`, `CCalendar`, `CDatePicker`, and `CDateRange` keep Citry UI's
+  own errors on all their inputs.
+
 ### Fixed
 
 - `CTooltip` now opens or closes when a re-render changes its server `open`
@@ -51,49 +93,6 @@
   `aria_label`, the trigger now takes its name through `aria-labelledby`
   from a hidden element and has no `aria-label` attribute, so a selector
   such as `button[aria-label="Place"]` no longer finds it.
-
-### Added
-
-- A `CCommandPalette` command with a `shortcut` now exposes it to
-  assistive technology as `aria-keyshortcuts`, for example `Control+,`
-  for "Ctrl ,". A hint that is not one key combination, such as
-  `Ctrl K, Ctrl S`, and a disabled command get no `aria-keyshortcuts`.
-  Set `shortcut` only for a combination your application handles.
-
-### Changed
-
-- **Breaking:** in `CCommandPalette`, a command that closes the palette
-  now calls `onAction` after the palette closes, and after `onOpenChange`
-  and `onQueryChange`, so `onAction` can move focus anywhere on the page
-  once the palette has closed. If you pass `open`, set it to `false`
-  inside `onOpenChange` itself; when you close it later, `onAction` runs
-  while the palette is still open. An error thrown in `onAction` no longer
-  keeps the palette open; to keep it open, set `close_on_action=False` on
-  the palette or on the command.
-- **Breaking:** Citry UI now requires Python 3.11 or newer. On Python
-  3.10, pip keeps installing Citry UI 0.3.0.
-- The default `change_label` of `CDateRange`, and its
-  `citry-ui-date-range-change` message, now read "Change date range,
-  {start} – {end}" instead of "… {start} to {end}". The trigger's name
-  then contains the dates exactly as the trigger shows them, which voice
-  control needs. If you set your own `change_label` or translate the
-  message, write the dates as `{start} – {end}`, as the trigger shows
-  them.
-- Citry UI components work with Citry's new check that raises
-  `TypeError` for an input of the wrong type, and accept the same values
-  as before, such as `heading_level="2"`. Earlier Citry UI releases
-  reject some valid inputs under that check, so upgrade Citry UI and
-  Citry together.
-- `heading_level` on `CAccordion` and `CDisclosure` now accepts only
-  `2` to `6` and the same numbers as text, so `"02"` and `2.0` raise
-  `ValueError`.
-- **Breaking:** A wrong input to most Citry UI components now raises
-  Citry's `TypeError`, which names the input and the expected type. This
-  includes a value outside a listed choice, such as `variant="bogus"`,
-  which used to raise `ValueError`, so code that catches `ValueError`
-  there must catch `TypeError`. `CAccordion`, `CDisclosure`, `CIcon`,
-  `CAlert`, `CCalendar`, `CDatePicker`, and `CDateRange` keep Citry UI's
-  own errors on all their inputs.
 
 ## [0.3.0] - 2026-10-19
 

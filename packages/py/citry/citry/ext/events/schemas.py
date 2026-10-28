@@ -58,6 +58,7 @@ from citry._nested_declarations import _is_plain_field_family, convert_plain_dec
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.state import convert_state_class
+from citry.util.logger import logger
 
 if TYPE_CHECKING:
     from citry._model_base import ModelBase
@@ -463,6 +464,13 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], prefix: str
             location = ".".join(str(part) for part in entry["loc"])
             key = prefix + location if location else prefix.rstrip(".")
             errors.setdefault(key, str(entry["msg"]))
+        return _INVALID
+    except Exception:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
+        # Pydantic turns only ValueError and AssertionError in a validator
+        # into a ValidationError; another exception is the author's bug, and
+        # answers this one call 422 rather than failing the whole envelope.
+        logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
+        errors.setdefault(prefix.rstrip(".") or "_args", "The value could not be checked.")
         return _INVALID
 
 

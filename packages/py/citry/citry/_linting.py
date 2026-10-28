@@ -17,9 +17,11 @@ from citry._nested_declarations import _active_nested_class_declarations
 from citry._schema_introspection import _format_annotation
 from citry.introspection import _is_utf8_string
 from citry.settings import (
+    _ALLOWED_SECURITY_CSP_MODES,
     _TEMPLATE_RULE_FIELDS,
     LintSettings,
     LintSeverity,
+    SecurityCspMode,
     _is_vue_variable_name,
     _replaced_lint_settings_hint,
 )
@@ -176,7 +178,9 @@ class VueVariableInfo:
 # the record's first release, and the app worker can import a different
 # citry than the language server, for example when the project's environment
 # file puts another copy on PYTHONPATH.
-_OPTIONAL_LINT_INFO_FIELDS = frozenset({"rule_misspelled_directive", "template_data_keys", *_TEMPLATE_RULE_FIELDS})
+_OPTIONAL_LINT_INFO_FIELDS = frozenset(
+    {"rule_misspelled_directive", "template_data_keys", "security_csp", *_TEMPLATE_RULE_FIELDS}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +229,9 @@ class TemplateLintInfo:
     # The nearest `Lint.template_data_keys`, from the component or a base
     # class, sorted, or None when no Lint class sets it.
     template_data_keys: tuple[str, ...] | None = None
+    # The engine's `security_csp`. The template rule that reports what a
+    # strict Content Security Policy blocks takes its severity from it.
+    security_csp: SecurityCspMode = "off"
 
     def __post_init__(self) -> None:
         if (
@@ -320,6 +327,9 @@ class TemplateLintInfo:
         ):
             msg = "TemplateLintInfo.template_data_keys must be None or a sorted tuple of unique template names"
             raise ValueError(msg)
+        if type(self.security_csp) is not str or self.security_csp not in _ALLOWED_SECURITY_CSP_MODES:
+            msg = f"Unknown security_csp mode: {self.security_csp!r}"
+            raise ValueError(msg)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-ready detached copy."""
@@ -343,6 +353,8 @@ class TemplateLintInfo:
             # Left out when unset, so a language server from a citry that has
             # no such field still reads the record.
             **({} if self.template_data_keys is None else {"template_data_keys": list(self.template_data_keys)}),
+            # Left out while off, for the same reason.
+            **({} if self.security_csp == "off" else {"security_csp": self.security_csp}),
         }
 
     @classmethod
@@ -473,6 +485,7 @@ def _application_lint_info(citry: Citry) -> TemplateLintInfo:
         rule_i18n_cross_language_fallback=citry.settings.lint.rule_i18n_cross_language_fallback,
         rule_misspelled_directive=citry.settings.lint.rule_misspelled_directive,
         **{rule_name: getattr(citry.settings.lint, rule_name) for rule_name in _TEMPLATE_RULE_FIELDS},
+        security_csp=citry.settings.security_csp,
     )
 
 
@@ -565,6 +578,8 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
             for rule_name in _TEMPLATE_RULE_FIELDS
         },
         template_data_keys=overrides.template_data_keys,
+        # The policy is the engine's; a component cannot set its own.
+        security_csp=application.security_csp,
     )
 
 

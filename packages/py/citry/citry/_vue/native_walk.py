@@ -39,6 +39,7 @@ import ast
 from keyword import iskeyword
 from typing import TypeAlias, TypeGuard
 
+from citry._authored_expression import parse_authored_expression
 from citry_core.safe_eval import compile_expr
 
 PathSteps: TypeAlias = tuple[str | int, ...]
@@ -95,7 +96,7 @@ def _parsed_body(source: str) -> ast.expr | None:
     """Return Python's parse of ``source``, wrapped as the unsandboxed evaluator wraps it, or None."""
     try:
         # compile_expr wraps the text the same way, so a trailing comment parses alike.
-        return ast.parse(f"(\n{source}\n)", mode="eval").body
+        return parse_authored_expression(source).body
     except (SyntaxError, ValueError):
         # ValueError covers text Python cannot encode, such as a lone surrogate.
         return None
@@ -137,7 +138,9 @@ def lower_loop(targets: tuple[str, ...], clause: str) -> tuple[str, Path] | None
     if len(targets) != 1 or not _plain_name(targets[0]):
         return None
     target = targets[0]
-    source = f"(({target},) for {clause})"
+    # The newline keeps a trailing `# comment` in the clause from hiding the
+    # closing parenthesis, as in `ForNode.iter_bodies`.
+    source = f"(({target},) for {clause}\n)"
     parsed = _parsed_body(source)
     if parsed is None or not _sandbox_compiles(source):
         return None

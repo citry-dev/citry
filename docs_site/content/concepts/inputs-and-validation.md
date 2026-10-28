@@ -288,8 +288,8 @@ base's `model_config` sets `extra="forbid"`, so without it a misspelled
 input passed from Python is dropped silently.
 
 The setting applies to the plain declarations of `Kwargs`,
-`TemplateData`, `JsData`, `CssData`, and Events `data` classes. `State`
-follows a dataclass base and stays a dataclass under a Pydantic base. A
+`TemplateData`, `JsData`, `CssData`, `State`, and Events `data` classes
+(see [Pydantic State](/events/state/#pydantic-state)). A
 class that is, or inherits, a dataclass or a model keeps that type, so a
 child component's `class Kwargs(Parent.Kwargs):` keeps its parent's.
 `Slots`, Citry's own components, and the components of a library you
@@ -339,8 +339,8 @@ the component:
   default, a field with `field(default_factory=...)`, and a list,
   dictionary, or set written as a default. A child
   `Kwargs` cannot add fields to its parent's named tuple either.
-- `State` under a frozen dataclass base or `typing.NamedTuple`, because
-  Citry assigns to `State`.
+- `State` under a frozen dataclass base, a frozen model base, or
+  `typing.NamedTuple`, because handlers change `State`.
 - An Events `data` class under `typing.NamedTuple` or a Pydantic v1 base,
   because Events validation reads dataclasses and Pydantic v2 models.
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import itertools
 import re
+import sys
 from typing import Any
 
 import pytest
@@ -26,10 +27,26 @@ from citry import Citry, Component
 from citry._vue import leaf_program
 from citry._vue.serialization import hydration_admission
 from citry.citry_render import CitryRender, SimpleVueRecord
+from citry.util import html as html_module
 
 # Every case runs on both render paths: the native (Rust) one and the Python
 # one that PyPy, Pyodide and free-threaded builds use.
 pytestmark = pytest.mark.usefixtures("render_path")
+
+# Citry turns the row HTML writer on only while markupsafe's C escaper is in
+# use, because it is the one escaper Citry can check has not been replaced.
+# PyPy's markupsafe has no C speedups, so there every row takes the per-row
+# serialize path and these tests check that path's output instead of the
+# writer's pieces.
+ROW_HTML_WRITER = html_module._CACHEABLE_ESCAPE_BACKEND
+NO_ROW_HTML_WRITER = "markupsafe's C escaper (markupsafe._speedups) is not in use, so the row HTML writer is off"
+
+
+def test_cpython_detects_markupsafes_c_escaper() -> None:
+    # The tests below follow ROW_HTML_WRITER, so a CPython that stopped
+    # detecting the C escaper would quietly test only the per-row path.
+    assert ROW_HTML_WRITER is (sys.implementation.name == "cpython")
+
 
 # One row exercising the supported shapes: a c-bind spread on the root next
 # to an authored attribute, Python text and attribute values, c-if/c-else
@@ -218,7 +235,7 @@ def test_row_html_matches_ordinary_and_per_row_serialize(
     records = _simple_records(simple_render)
     assert len(records) == 8
     # The row HTML writer can write every row.
-    assert all(record.leaf.row_html_segments is not None for record in records)
+    assert all((record.leaf.row_html_segments is not None) is ROW_HTML_WRITER for record in records)
     simple_html = simple_render.serialize(ssr=ssr, deps_strategy=deps_strategy)
 
     # With row HTML switched off, serialize rebuilds and scans each row
@@ -248,6 +265,7 @@ def test_row_html_matches_ordinary_and_per_row_serialize(
         assert simple_html.count("data-cid-r") >= 8
 
 
+@pytest.mark.skipif(not ROW_HTML_WRITER, reason=NO_ROW_HTML_WRITER)
 def test_serialize_skips_per_row_work_for_admitted_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     """The per-row materialization and marker scan run a fixed number of times, not once per row."""
     counts = {"row_static_leaf_parts": 0, "mark_html": 0}
@@ -539,7 +557,7 @@ def test_hydrated_direct_root_writes_vue_html_and_static_output_reuses_row_html(
         assert (leaf not in row_parts_built) is row_html
         return rendered.serialize(ssr=True), static_html
 
-    hydrated, static_html = serialize_root(row_html=True)
+    hydrated, static_html = serialize_root(row_html=ROW_HTML_WRITER)
 
     # The host holds the HTML Vue renders: the listener is attached by Vue,
     # not written, and the host carries no render-id marker.
@@ -598,7 +616,7 @@ def test_multiple_roots_each_get_their_marker(monkeypatch: pytest.MonkeyPatch) -
     records = _simple_records(simple_render)
 
     # One piece before, between, and after each of the three roots.
-    assert all(len(record.leaf.row_html_segments or ()) == 4 for record in records)
+    assert all(len(record.leaf.row_html_segments or ()) == (4 if ROW_HTML_WRITER else 0) for record in records)
     static_html = simple_render.serialize(ssr=False, deps_strategy="simple")
     assert static_html == _build(simple=False, row_template=row_template)(groups=groups).render().serialize(
         ssr=False, deps_strategy="simple"
@@ -632,7 +650,8 @@ def test_css_variable_marker_rows_match_ordinary(monkeypatch: pytest.MonkeyPatch
     built.clear()
     simple_render = _build(simple="vue", document=True, css_tone=True)(groups=groups).render()
     records = _simple_records(simple_render)
-    assert all(record.root_markers and record.leaf.row_html_segments is not None for record in records)
+    assert all(record.root_markers for record in records)
+    assert all((record.leaf.row_html_segments is not None) is ROW_HTML_WRITER for record in records)
 
     assert simple_render.serialize(ssr=False, deps_strategy=deps_strategy) == ordinary_html
     # A row with its own marker keeps the Group frames built, as an ordinary
@@ -701,8 +720,10 @@ def test_unprintable_int_attribute_still_fails_at_serialize() -> None:
     simple_render = _build(simple="vue", row_template=row_template)(groups=groups).render()
     records = _simple_records(simple_render)
 
-    # Only the row holding the huge value lost its row HTML.
-    assert [record.leaf.row_html_segments is None for record in records].count(True) == 1
+    # Only the row holding the huge value lost its row HTML. Without the
+    # writer no row has any, and serialize must still raise the same error.
+    lost = [record.leaf.row_html_segments is None for record in records].count(True)
+    assert lost == (1 if ROW_HTML_WRITER else len(records))
     with pytest.raises(ValueError, match="integer string conversion") as ordinary_error:
         ordinary_render.serialize(ssr=False, deps_strategy="simple")
     with pytest.raises(ValueError, match="integer string conversion") as simple_error:

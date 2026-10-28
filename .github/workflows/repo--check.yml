@@ -12,6 +12,10 @@ on:
       - "main"
       - "dev"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 concurrency:
@@ -19,6 +23,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 jobs:
   check:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:
@@ -41,11 +46,7 @@ jobs:
       # Rust is needed for the cargo fmt/clippy/test phases and to build the
       # citry_core extension during `uv sync`.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
-          components: rustfmt, clippy
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

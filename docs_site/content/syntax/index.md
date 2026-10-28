@@ -124,3 +124,32 @@ the output unchanged.
 
 Citry has no Django or Jinja block tags. Text such as
 `{% include "menu.html" %}` stays in the page as written.
+
+
+## Nesting limits { #nesting-limits }
+
+Tags inside tags can go at most 512 levels deep. At most 256 of those
+levels can be Citry logic levels: every `c-` tag except `<c-raw>`, and
+each `c-if=`, `c-elif=`, `c-else`, `c-for=` or `c-empty` attribute. Each
+tag is one level, and each of those attributes on it adds one more, so
+this `<div>` is three levels, two of them logic:
+
+```citry-html
+<div c-if="visible" c-for="item in items">{{ item }}</div>
+```
+
+Rendering a template that goes one level past either limit raises
+`SyntaxError`, pointing at the tag that goes too deep, and `citry check`
+reports the same problem without rendering. To go deeper, move the inner
+part into its own component's `template`, which starts counting again
+from zero. Markup you pass to a component between its tags, or in an
+attribute, still counts toward the template that writes it.
+
+When a component passes its slot content on to another component's slot,
+and that one passes it on again, each component in the chain uses some of
+Python's stack, so a long chain can raise `RecursionError`.
+
+In a component that uses Vue, the server writes at most 400 levels of
+elements inside the component, which leaves room in Chrome for the page
+around it. Past that depth, the server writes a preview of the deeper
+part, and Vue renders that part again when it starts in the browser.

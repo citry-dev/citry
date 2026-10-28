@@ -1,7 +1,7 @@
 """
 Check that templates at the logic nesting limit render within a fixed Python frame budget.
 
-The planned nesting limit (#272) lets a template nest 256 of Citry's logic
+The nesting limit lets a template nest 256 of Citry's logic
 levels: control-flow tags and attributes, slots, fills and component tags.
 This test confirms that this leaves room for the application around Citry.
 A web framework, middleware, a view and a test runner already sit on the
@@ -34,8 +34,9 @@ Each render path runs in its own subprocess, so the lowered recursion limit
 never reaches the pytest process, and in its own test file, so CI runs the
 two paths on separate workers. The Rust path takes about a minute and a
 half and the Python path, which also runs ``citry check``, about six
-minutes, so they are qualification tests that run only in the Linux
-version-matrix jobs: frame counts depend on the Python version, not the
+minutes, so they are qualification tests that run only on Linux, in
+the version-matrix jobs and, for the Check workflow's Python, in Check's
+qualification phase: frame counts depend on the Python version, not the
 operating system.
 The fast local gate does not run them; set
 ``CITRY_FRAME_BUDGET_ANY_OS=1`` to run them on another system.
@@ -58,14 +59,14 @@ from citry import Citry, Component
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
 from citry._vue.json_data import _DIRECT_JSON_DEPTH
+from citry_core import _rust
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import FrameType
 
-# The logic nesting limit. The parser's private `_MAX_LOGIC_NESTING`
-# replaces this literal once the limit ships.
-LOGIC_LIMIT = 256
+# The logic nesting limit, read from the parser so the two cannot disagree.
+LOGIC_LIMIT = _rust.template_parser._MAX_LOGIC_NESTING
 # Frames the application holds below Citry when it renders.
 HOST_FRAMES = 200
 # Frames Citry's own work may use above the host.

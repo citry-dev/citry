@@ -22,6 +22,7 @@ use crate::foreign::ParseOptions;
 use crate::grammar::{GrammarParser, Rule};
 use crate::lang::lang::{ForLoopVars, Lang, LangImpl};
 use crate::lang::python::PYTHON_LANG;
+use crate::nesting::{start_tag_levels, too_deep_message, NestingDepth};
 use crate::parser_context::{ParserContext, TagRules};
 use crate::utils::pest::unwrap_pair;
 use crate::utils::template_fragment::template_fragment;
@@ -73,6 +74,9 @@ struct TagStackEntry {
     introduced_variables: Vec<Token>,
     /// Slots declared inside nested-template attributes on the start tag.
     attribute_slots: Vec<StaticNamedSlot>,
+    /// The nesting depth inside this tag, counted from the outermost
+    /// template, this tag and its shorthand wrappers included.
+    depth: NestingDepth,
     /// Whether the body already holds a `<c-fill>` as a direct child.
     /// `validate_fill_exclusivity` needs this for every closed child, and
     /// keeping it here saves searching all earlier siblings each time.
@@ -374,12 +378,22 @@ fn process_template_element(
             push_text_with_foreign(template, text, context)?;
         }
         Rule::html_raw => {
-            let template = get_current_template(tag_stack, root_template);
+            // `<c-raw>` counts like any tag, and a template in one of its
+            // attributes counts from here.
+            let open_depth = current_open_depth(tag_stack, context);
+            context.set_open_depth(open_depth);
             let node = process_html_raw(inner, context)?;
+            check_nesting_depth(node.start_tag(), open_depth, context)?;
+            let template = get_current_template(tag_stack, root_template);
             template.elements.push(TemplateElement::Node(node));
         }
         Rule::html_text_container => {
+            // `<script>`, `<style>`, `<textarea>` and `<title>` count like
+            // any tag, with their shorthand attributes.
+            let open_depth = current_open_depth(tag_stack, context);
+            context.set_open_depth(open_depth);
             let (node, attribute_slots) = process_html_text_container(inner, context)?;
+            check_nesting_depth(node.start_tag(), open_depth, context)?;
             finalize_node(
                 node,
                 attribute_slots,
@@ -410,10 +424,18 @@ fn process_template_element(
         Rule::html_tag => {
             // Handle HTML tags (start/end/self-closing)
             let tag_span = inner.as_span();
+            // The depth of the tags around this one. A template in one of
+            // its attributes counts from here, so it is recorded before the
+            // tag is read.
+            let open_depth = current_open_depth(tag_stack, context);
+            context.set_open_depth(open_depth);
             let tag_result = process_html_tag(inner, context)?;
             match tag_result {
                 // Push as body element of the current layer
                 HtmlTagResult::SelfClosing(node, attribute_slots) => {
+                    // A self-closing tag is never pushed, but it and its
+                    // shorthand wrappers still count.
+                    check_nesting_depth(node.start_tag(), open_depth, context)?;
                     finalize_node(
                         node,
                         attribute_slots,
@@ -429,6 +451,9 @@ fn process_template_element(
                     introduced_variables,
                     attribute_slots,
                 }) => {
+                    // Checked before anything walks the tag, so the walks only
+                    // ever see a depth within the limits.
+                    let depth = check_nesting_depth(&start_tag, open_depth, context)?;
                     // Check if this is an HTML void element (br, img, input, etc.)
                     // These don't need closing tags and are treated as self-closing
                     let tag_name = start_tag.name.content.as_str();
@@ -473,6 +498,7 @@ fn process_template_element(
                             introduced_variables,
                             attribute_slots,
                             holds_fill: false,
+                            depth,
                         });
                     }
                 }
@@ -515,6 +541,7 @@ fn process_template_element(
                         introduced_variables,
                         attribute_slots,
                         holds_fill: _,
+                        depth: _,
                     } = tag_stack.pop().unwrap();
 
                     // `introduced_variables` was computed when the start tag was
@@ -545,6 +572,33 @@ fn process_template_element(
         }
     }
     Ok(())
+}
+
+/// The depth of the tags around the element being read: the innermost open
+/// tag's, or for a template in an attribute, the depth of the tag that holds
+/// it.
+fn current_open_depth(tag_stack: &[TagStackEntry], context: &ParserContext) -> NestingDepth {
+    tag_stack
+        .last()
+        .map_or(context.depth_base, |entry| entry.depth)
+}
+
+/// Check that `start_tag`, inside tags at `open_depth`, stays within both
+/// nesting limits, and return the depth inside it.
+///
+/// The error points at the tag. The parse stops here, before the passes that
+/// call themselves once per level run, so a template far past the limit
+/// costs one read of its text and nothing that grows with its depth.
+fn check_nesting_depth(
+    start_tag: &HtmlStartTag,
+    open_depth: NestingDepth,
+    context: &ParserContext,
+) -> Result<NestingDepth, ParseError> {
+    let depth = open_depth.plus(start_tag_levels(start_tag));
+    if let Some(message) = too_deep_message(&start_tag.name.content, depth) {
+        return Err(context.too_deep_from_token(&start_tag.token, message));
+    }
+    Ok(depth)
 }
 
 /// Logic that runs when we construct a Node (either from SelfClosing, or finished with bodied Node).
@@ -721,6 +775,12 @@ fn process_expression(
     value_span: Option<pest::Span>,
     context: &ParserContext,
 ) -> Result<(Vec<Token>, Vec<Comment>), ParseError> {
+    // A blank attribute value has no expression to parse. The checks that run
+    // once the tag is read report it with a message that names the attribute,
+    // which the expression parser cannot.
+    if value_span.is_none() && value_token.content.trim().is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
     // An invalid expression's error path needs more stack than the tree
     // passes leave room for.
     let transform_result = crate::stack::with_stack_for_expression(|| {
@@ -891,6 +951,8 @@ fn process_html_start_tag(
     )?;
 
     let name = context.create_token(&name_pair);
+    // A template in one of this tag's attributes nests inside the tag.
+    context.enter_start_tag(&name.content);
     let name_rule = name_pair.as_rule();
 
     // Check if this is a forbidden tag name (skip for html_raw_tag_name which is expected)
@@ -1026,6 +1088,8 @@ fn process_html_self_closing_tag(
     })?;
     assert_rule(&name_pair, Rule::html_tag_name)?;
     let name = context.create_token(&name_pair);
+    // A template in one of this tag's attributes nests inside the tag.
+    context.enter_start_tag(&name.content);
 
     // Check if this is a forbidden tag name
     if FORBIDDEN_HTML_TAG_NAMES.contains(&name.content.as_str()) {
@@ -1438,8 +1502,14 @@ fn parse_html_attribute(
                             .to_string(),
                     ));
                 }
-                let (used_variables, comments) =
-                    process_expression(inner_value_ref, None, context)?;
+                // A shorthand `c-for` value is a loop clause, not an
+                // expression: `x in items if x` is not valid Python on its
+                // own. The pass that reads loop clauses parses it later.
+                let (used_variables, comments) = if key.content == C_FOR_TAG {
+                    (Vec::new(), Vec::new())
+                } else {
+                    process_expression(inner_value_ref, None, context)?
+                };
                 (
                     HtmlAttrKind::Expression,
                     used_variables,
@@ -4356,10 +4426,10 @@ fn validate_binding_site(
 ///   attributes are not `c-` prefixed, so attribute parsing classifies them as
 ///   `Static` and skips variable tracking. They are upgraded to `Expression`
 ///   with their used variables populated.
-/// - The shorthand `c-for` attribute (on any element) is parsed as a generic
-///   expression, so its used variables wrongly include the loop targets (e.g.
-///   `c-for="x in xs"` reports both `x` and `xs`). They are recomputed as the
-///   loop's free variables (`xs`), matching the explicit `each` form.
+/// - The shorthand `c-for` attribute (on any element) is a loop clause, not an
+///   expression, so the generic attribute branch leaves it alone and this pass
+///   parses it, giving the loop's free variables (`xs` for `c-for="x in xs"`),
+///   as for the explicit `each` form. Like `each`, it records no comments.
 ///
 /// The returned vector is the node's introduced variables: the loop targets for
 /// a `c-for` (explicit or shorthand) and the data/fallback variables for a

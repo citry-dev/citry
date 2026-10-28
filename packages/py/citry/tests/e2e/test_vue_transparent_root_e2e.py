@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 pytest.importorskip("pytest_playwright")
@@ -10,6 +12,17 @@ from citry import Citry, Component
 from citry.slots import Slot
 
 pytestmark = pytest.mark.e2e
+
+
+def _logged_error_text(message: Any) -> str:
+    """Return the text of the error a page logged with `console.error`."""
+    # Chromium's `message.text` includes a logged Error's message, but Firefox
+    # prints `JSHandle@object`. The last argument is the Error itself, so ask
+    # the browser for its message. This must run outside the console event
+    # handler, where Playwright cannot wait for a browser round trip.
+    if not message.args:
+        return message.text
+    return message.args[-1].evaluate("error => String(error?.message ?? error)")
 
 
 def test_python_slot_keeps_nested_authored_fill_in_its_lexical_vue_scope(
@@ -129,11 +142,100 @@ def test_prepared_component_without_events_unmounts_cleanly(page, serve_document
     assert errors == []
 
 
+def _check_a_cancelled_late_script_is_requested_again(page, errors, wait_for_count) -> None:
+    # A fragment whose host goes away while its script loads must request
+    # the script again when the fragment is loaded once more.
+    late_script_routes = []
+    page.route("**/late-extension-script.js", lambda route: late_script_routes.append(route))
+    page.evaluate("""() => {
+      __citryRuntime.registerBrowserPlugin('fragment_test', 1, () => ({
+        install() {}, prepareRevision() { return {}; }, activateRevision() {}, commitRevision() {},
+        abortRevision() {}, rollbackRevision() {}, dispose() {},
+      }));
+      const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
+      const manifest = structuredClone(source);
+      const appId = 'fragment-late-script-' + source.vue.appId;
+      const host = document.createElement('div');
+      host.id = appId;
+      document.body.append(host);
+      manifest.vue.appId = appId;
+      manifest.vue.host = '#' + appId;
+      manifest.vue.prepared.host = '#' + appId;
+      manifest.vue.prepared.manifest.appId = appId;
+      manifest.vue.prepared.manifest.styles = [];
+      manifest.vue.prepared.manifest.extensions = {
+        fragment_test: {payload: {}, schemaVersion: 1, templateContextNames: []},
+      };
+      manifest.vue.prepared.manifest.scripts = [{
+        lazyAllowed: true, registersOptions: false,
+        owner: {kind: 'extension', extensionName: 'fragment_test'},
+        source: {kind: 'external', url: '/late-extension-script.js', attrs: {}},
+      }];
+      manifest.vue.prepared.manifest.scripts.push(
+        structuredClone(manifest.vue.prepared.manifest.scripts[0]),
+      );
+      globalThis.__lateScriptManifest = manifest;
+      globalThis.__lateScriptHost = host;
+      globalThis.__lateScriptAppId = appId;
+      globalThis.__lateScriptFirst = Citry.fragments.load(manifest).then(() => 'mounted', error => String(error));
+    }""")
+    page.wait_for_function(
+        "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
+    )
+    page.evaluate("""() => {
+      globalThis.__lateScriptElement = document.querySelector('script[src$="/late-extension-script.js"]');
+      globalThis.__lateScriptOnerror = __lateScriptElement.onerror;
+      __lateScriptHost.remove();
+    }""")
+    assert "host changed while mounting" in page.evaluate("() => __lateScriptFirst")
+    # The script element exists before its request reaches the route handler,
+    # so the list can still be empty here.
+    wait_for_count(late_script_routes, 1)
+    late_script_routes[0].abort()
+    # Route abort delivery and the script element's error cleanup are separate
+    # browser tasks. Wait for the cancelled request's actual script cleanup
+    # before mounting the replacement, otherwise both script elements can
+    # remain visible while the retry is waiting for its one deduplicated asset.
+    page.wait_for_function("() => !__lateScriptElement.isConnected")
+    page.evaluate("""() => {
+      const host = document.createElement('div');
+      host.id = __lateScriptAppId;
+      document.body.append(host);
+      globalThis.__lateScriptSecond = Citry.fragments.load(structuredClone(__lateScriptManifest));
+    }""")
+    page.wait_for_function(
+        "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
+    )
+    wait_for_count(late_script_routes, 2)
+    # Chromium reports the aborted request in the console, Firefox does not,
+    # so the browser message is allowed to be absent.
+    expected_abort_errors = [error for error in errors if "net::ERR_FAILED" in error]
+    assert len(expected_abort_errors) <= 1
+    for error in expected_abort_errors:
+        errors.remove(error)
+    page.evaluate("() => __lateScriptOnerror(new Event('error'))")
+    late_script_routes[1].fulfill(body="", content_type="application/javascript")
+    page.evaluate("() => __lateScriptSecond")
+    assert len(late_script_routes) == 2
+    assert page.evaluate("() => __citryRuntime._apps.has(__lateScriptAppId)") is True
+    page.evaluate("() => document.getElementById(__lateScriptAppId).remove()")
+    page.wait_for_function("() => !__citryRuntime._apps.has(__lateScriptAppId)")
+
+
 def test_fragment_manager_loads_and_mounts_python_composed_component(
-    page, serve_live, wait_for_citry_ready, wait_for_count
+    page, serve_live, wait_for_citry_ready, wait_for_count, browser_name
 ) -> None:
     errors: list[str] = []
-    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    # Keep the message objects too: when the product logs an Error object,
+    # only the message's arguments give the same error text in every browser.
+    console_messages: list[Any] = []
+
+    def collect_console_error(message: Any) -> None:
+        if message.type == "error":
+            errors.append(message.text)
+            console_messages.append(message)
+
+    page.on("console", collect_console_error)
     page.on("pageerror", lambda error: errors.append(str(error)))
     app = Citry(autodiscover=False)
     app.set_mounted_prefix("/citry")
@@ -387,78 +489,12 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
     page.evaluate("() => document.getElementById(__cancelledAppId).remove()")
     page.wait_for_function("() => !__citryRuntime._apps.has(__cancelledAppId)")
 
-    late_script_routes = []
-    page.route("**/late-extension-script.js", lambda route: late_script_routes.append(route))
-    page.evaluate("""() => {
-      __citryRuntime.registerBrowserPlugin('fragment_test', 1, () => ({
-        install() {}, prepareRevision() { return {}; }, activateRevision() {}, commitRevision() {},
-        abortRevision() {}, rollbackRevision() {}, dispose() {},
-      }));
-      const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
-      const manifest = structuredClone(source);
-      const appId = 'fragment-late-script-' + source.vue.appId;
-      const host = document.createElement('div');
-      host.id = appId;
-      document.body.append(host);
-      manifest.vue.appId = appId;
-      manifest.vue.host = '#' + appId;
-      manifest.vue.prepared.host = '#' + appId;
-      manifest.vue.prepared.manifest.appId = appId;
-      manifest.vue.prepared.manifest.styles = [];
-      manifest.vue.prepared.manifest.extensions = {
-        fragment_test: {payload: {}, schemaVersion: 1, templateContextNames: []},
-      };
-      manifest.vue.prepared.manifest.scripts = [{
-        lazyAllowed: true, registersOptions: false,
-        owner: {kind: 'extension', extensionName: 'fragment_test'},
-        source: {kind: 'external', url: '/late-extension-script.js', attrs: {}},
-      }];
-      manifest.vue.prepared.manifest.scripts.push(
-        structuredClone(manifest.vue.prepared.manifest.scripts[0]),
-      );
-      globalThis.__lateScriptManifest = manifest;
-      globalThis.__lateScriptHost = host;
-      globalThis.__lateScriptAppId = appId;
-      globalThis.__lateScriptFirst = Citry.fragments.load(manifest).then(() => 'mounted', error => String(error));
-    }""")
-    page.wait_for_function(
-        "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
-    )
-    page.evaluate("""() => {
-      globalThis.__lateScriptElement = document.querySelector('script[src$="/late-extension-script.js"]');
-      globalThis.__lateScriptOnerror = __lateScriptElement.onerror;
-      __lateScriptHost.remove();
-    }""")
-    assert "host changed while mounting" in page.evaluate("() => __lateScriptFirst")
-    # The script element exists before its request reaches the route handler,
-    # so the list can still be empty here.
-    wait_for_count(late_script_routes, 1)
-    late_script_routes[0].abort()
-    # Route abort delivery and the script element's error cleanup are separate
-    # browser tasks. Wait for the cancelled request's actual script cleanup
-    # before mounting the replacement, otherwise both script elements can
-    # remain visible while the retry is waiting for its one deduplicated asset.
-    page.wait_for_function("() => !__lateScriptElement.isConnected")
-    page.evaluate("""() => {
-      const host = document.createElement('div');
-      host.id = __lateScriptAppId;
-      document.body.append(host);
-      globalThis.__lateScriptSecond = Citry.fragments.load(structuredClone(__lateScriptManifest));
-    }""")
-    page.wait_for_function(
-        "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
-    )
-    wait_for_count(late_script_routes, 2)
-    expected_abort_errors = [error for error in errors if "net::ERR_FAILED" in error]
-    assert len(expected_abort_errors) == 1
-    errors.remove(expected_abort_errors[0])
-    page.evaluate("() => __lateScriptOnerror(new Event('error'))")
-    late_script_routes[1].fulfill(body="", content_type="application/javascript")
-    page.evaluate("() => __lateScriptSecond")
-    assert len(late_script_routes) == 2
-    assert page.evaluate("() => __citryRuntime._apps.has(__lateScriptAppId)") is True
-    page.evaluate("() => document.getElementById(__lateScriptAppId).remove()")
-    page.wait_for_function("() => !__citryRuntime._apps.has(__lateScriptAppId)")
+    # In WebKit, after the test aborts the routed request for a script,
+    # Playwright fails the next load of that URL at once without calling the
+    # route. A real server does get the second request in WebKit, so this
+    # check runs only where the route sees it.
+    if browser_name != "webkit":
+        _check_a_cancelled_late_script_is_requested_again(page, errors, wait_for_count)
 
     page.evaluate("""async () => {
       const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
@@ -488,9 +524,13 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
     }""")
     page.wait_for_function("() => !__citryRuntime._apps.has(__followingId)")
     assert page.evaluate("() => __citryRuntime._apps.has(__throwingId)") is True
-    expected_dispose_errors = [error for error in errors if "expected fragment dispose failure" in error]
+    # Read the logged error's message outside the console handler. Chromium's
+    # `message.text` includes it, but Firefox prints `JSHandle@object`.
+    expected_dispose_errors = [
+        message for message in console_messages if "expected fragment dispose failure" in _logged_error_text(message)
+    ]
     assert len(expected_dispose_errors) == 1
-    errors.remove(expected_dispose_errors[0])
+    errors.remove(expected_dispose_errors[0].text)
     page.evaluate("""() => {
       __restoreThrowingUnmount();
       __citryRuntime._apps.delete(__throwingId);
@@ -576,9 +616,12 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     import json
     import time
 
-    console_errors: list[str] = []
+    # Keep the message objects: the product logs an Error object, and only
+    # its arguments give the same error text in every browser (see
+    # `_logged_error_text`).
+    console_errors: list[Any] = []
     page_errors: list[str] = []
-    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.on("console", lambda message: console_errors.append(message) if message.type == "error" else None)
     page.on("pageerror", lambda error: page_errors.append(str(error)))
     app = Citry(autodiscover=False)
     app.set_mounted_prefix("/citry")
@@ -671,4 +714,4 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     assert page.locator(".slow-replacement").evaluate("node => getComputedStyle(node).color") == "rgb(4, 5, 6)"
     assert page_errors == []
     assert len(console_errors) == 1
-    assert "Vue fragment host changed while mounting" in console_errors[0]
+    assert "Vue fragment host changed while mounting" in _logged_error_text(console_errors[0])

@@ -43,11 +43,34 @@ for (const name of browsers) {
         const { writeFile } = await import("node:fs/promises");
         await writeFile(process.env.PROBLEMS_FILE, problems.join("\n"));
       }
-      assert.deepEqual(problems, []);
+      assert.deepEqual(summarize(name, problems), []);
     } finally {
       await browser.close();
     }
   });
+}
+
+/**
+ * One line per name, value and result, saying which browser reported it and
+ * on which elements, so a name a browser adds to every element reads as one
+ * finding rather than one line per tag. Every element is listed, because CI
+ * keeps no other record of which ones drifted.
+ */
+function summarize(browser, problems) {
+  const groups = new Map();
+  const other = [];
+  for (const problem of problems) {
+    const match = /^([a-z0-9-]+)\.([a-z0-9]+=[^:]*): (.*)$/.exec(problem);
+    if (!match) {
+      other.push(`${browser}: ${problem}`);
+      continue;
+    }
+    const [, tag, nameAndValue, result] = match;
+    const key = `${nameAndValue}: ${result}`;
+    groups.set(key, [...(groups.get(key) ?? []), tag]);
+  }
+  const lines = [...groups].map(([key, tags]) => `${browser}: ${key} (on ${tags.join(", ")})`);
+  return [...lines, ...other];
 }
 
 /**

@@ -595,7 +595,9 @@ fn project_attr(
             if mode == ProjectionCapability::PythonExpressions
                 && (key == "c-for" || (tag_name == "c-for" && key == "each")) =>
         {
-            project_python(
+            // The clause gets the parser's own generator wrapper, not the
+            // `(\n...\n)` one, which would add to its nesting count.
+            project_wrapped_python(
                 &format!("(None for {}\n)", inner_value.content),
                 "c-for clause",
             )?
@@ -681,22 +683,32 @@ fn project_expression(expr: &Expr, mode: ProjectionCapability) -> Result<String,
 /// Comments are carried separately because they are not part of the tree, so
 /// comparing trees alone would let a provider drop one unnoticed.
 fn project_python(source: &str, kind: &'static str) -> Result<AttrValueProjection, ContractError> {
+    // Parse the text the way the template parser does, inside `(\n...\n)`, so
+    // an expression that is valid only inside parentheses is accepted here too.
+    project_wrapped_python(&crate::python::wrap_authored_expression(source), kind)
+}
+
+/// Project Python text that already carries the parser's wrapper.
+fn project_wrapped_python(
+    wrapped: &str,
+    kind: &'static str,
+) -> Result<AttrValueProjection, ContractError> {
     // The tree comparison and its `Debug` text call themselves once per tree
     // level, so they need the same stack guarantee as formatting.
-    with_enough_stack(|| project_python_on_stack(source, kind))
+    with_enough_stack(|| project_python_on_stack(wrapped, kind))
 }
 
 fn project_python_on_stack(
-    source: &str,
+    wrapped: &str,
     kind: &'static str,
 ) -> Result<AttrValueProjection, ContractError> {
-    let parsed = parse_expression(source).map_err(|error| ContractError::Python {
+    let parsed = parse_expression(wrapped).map_err(|error| ContractError::Python {
         kind,
         message: error.to_string(),
     })?;
     Ok(AttrValueProjection::Python {
         syntax: format!("{:?}", ComparableExpr::from(parsed.syntax().body.as_ref())),
-        comments: python_comments(source, parsed.tokens()),
+        comments: python_comments(wrapped, parsed.tokens()),
     })
 }
 

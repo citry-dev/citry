@@ -54,11 +54,14 @@ SHAPES: dict[str, Callable[[int], str]] = {
     "slot_fallbacks": lambda d: (
         "<c-Row />" + "".join(f'<c-slot name="s{level}">' for level in range(d)) + "{{ n }}" + "</c-slot>" * d
     ),
+    # Each step is three logic levels (a component, a fill and a <c-if>), so
+    # it takes half as many steps, to stay within the 256 logic levels a
+    # template may nest.
     "fills_under_control_flow": lambda d: (
         "<c-Row />"
-        + '<c-Card><c-fill name="default"><c-if cond="flag">' * d
+        + '<c-Card><c-fill name="default"><c-if cond="flag">' * (d // 2)
         + "{{ n }}"
-        + "</c-if></c-fill></c-Card>" * d
+        + "</c-if></c-fill></c-Card>" * (d // 2)
     ),
 }
 

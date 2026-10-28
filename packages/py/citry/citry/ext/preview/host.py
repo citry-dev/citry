@@ -133,6 +133,7 @@ class PreviewServer:
         self._failure: BaseException | None = None
         self._claimed = False
         self._previous_prefix: str | None = None
+        self._previous_sub_path_reader: Callable[[], str] | None = None
 
     def __enter__(self) -> Self:
         # The dependency is optional: HTML rendering and imports never require it.
@@ -148,6 +149,7 @@ class PreviewServer:
             _ACTIVE_ENGINES.add(self.citry)
             self._claimed = True
         self._previous_prefix = self.citry.mounted_prefix
+        self._previous_sub_path_reader = self.citry._sub_path_reader
         try:
             self.citry.initialize()
             # Bind before changing the mount so a port conflict leaves it untouched.
@@ -155,6 +157,9 @@ class PreviewServer:
             self._socket.bind(("127.0.0.1", self.port))
             self._socket.listen(128)
             self.citry.set_mounted_prefix(_MOUNT)
+            # The preview server is served at its own site root, so the host
+            # app's sub-path must not reach the preview's URLs.
+            self.citry._set_sub_path_reader(None)
             self.port = self._socket.getsockname()[1]
             self.base_url = f"http://127.0.0.1:{self.port}{_MOUNT}"
             config = uvicorn.Config(
@@ -234,6 +239,7 @@ class PreviewServer:
         try:
             if self._previous_prefix is not None:
                 self.citry.set_mounted_prefix(self._previous_prefix or "/")
+            self.citry._set_sub_path_reader(self._previous_sub_path_reader)
         finally:
             with _HOST_LOCK:
                 _ACTIVE_ENGINES.discard(self.citry)

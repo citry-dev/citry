@@ -53,6 +53,7 @@ called.
 from __future__ import annotations
 
 import inspect
+import io
 import posixpath
 import re
 from pathlib import Path
@@ -60,8 +61,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 from citry._django_startup import start_django
 from citry._path_checks import PathLookup, register_path_checker
-from citry.contrib._path_lookup import files_beside
-from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes, normalize_mount_prefix
+from citry._sub_path import normalize_sub_path
+from citry.contrib._path_lookup import files_beside, path_below
+from citry.util.routing import RouteHeaders, RouteRequest, body_read_limit, flatten_routes, normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -85,7 +87,53 @@ def _to_django_path(path: str) -> str:
     return _PARAM_RE.sub(r"<str:\1>", path)
 
 
-def _build_request(request: Any) -> RouteRequest:
+def _read_body(request: Any, limit: int | None) -> bytes:
+    """
+    Read Django's request body, at most ``limit`` bytes when a limit is set.
+
+    ``request.body`` reads the whole body into memory, and refuses one larger
+    than Django's ``DATA_UPLOAD_MAX_MEMORY_SIZE``. With a route limit, Citry
+    reads from the stream instead and stops one byte past it, so the route's
+    own limit governs the request in place of Django's.
+    """
+    if limit is None:
+        return bytes(request.body)
+    # Something (often middleware reading request.POST) already holds the
+    # body in memory, so take it from there.
+    if hasattr(request, "_body"):
+        return bytes(request.body[:limit])
+    if getattr(request, "_read_started", False):
+        # Middleware (such as CsrfViewMiddleware on a multipart upload) has
+        # already parsed the stream into POST and FILES, so no body bytes are
+        # left to read. Django has no total limit for uploaded files, so check
+        # the size the client declared, and hand the route a body one byte
+        # past its limit when it is over, so the route rejects the request as
+        # it would any oversized body.
+        try:
+            declared = int(request.META.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            declared = 0
+        return bytes(limit) if declared >= limit else b""
+    chunks: list[bytes] = []
+    received = 0
+    # read(n) may return fewer bytes than asked for; Django's stream already
+    # stops at Content-Length.
+    while received < limit:
+        chunk = request.read(limit - received)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        received += len(chunk)
+    data = b"".join(chunks)
+    # Leave the request as Django's own `request.body` would, so a guard, a
+    # handler, or a payload codec can still read `request.native.body`,
+    # `POST`, or `FILES`. For a body over the limit these hold the bytes read.
+    request._body = data
+    request._stream = io.BytesIO(data)
+    return data
+
+
+def _build_request(request: Any, body_limit: int | None = None) -> RouteRequest:
     """Read Django's ``HttpRequest`` into a framework-neutral request."""
     headers = RouteHeaders(request.headers.items())
     return RouteRequest(
@@ -93,7 +141,7 @@ def _build_request(request: Any) -> RouteRequest:
         path=request.path,
         query={key: tuple(values) for key, values in request.GET.lists()},
         headers=headers,
-        body=request.body,
+        body=_read_body(request, body_limit),
         content_type=headers.get("content-type", ""),
         native=request,
     )
@@ -119,7 +167,7 @@ def _make_view(route: URLRoute) -> Any:
         assert handler is not None  # noqa: S101 - flatten_routes only yields handler routes
         # urlpatterns() rejected async handlers up front, so the call returns
         # a concrete RouteResponse.
-        response = cast("RouteResponse", handler(_build_request(request), **kwargs))
+        response = cast("RouteResponse", handler(_build_request(request, body_read_limit(route)), **kwargs))
         http_response = HttpResponse(content=response.body, content_type=response.content_type, status=response.status)
         # Django's response object holds one value per header name, so a
         # repeated name (e.g. two Set-Cookie lines) cannot be represented.
@@ -195,10 +243,21 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
     if prefix is not None:
         citry_instance.set_mounted_prefix(prefix)
+    # Django sets the script prefix for each request (FORCE_SCRIPT_NAME when
+    # set, else SCRIPT_NAME) and once at django.setup(), so Citry's URLs
+    # start with the same sub-path as the project's reverse() URLs.
+    citry_instance._set_sub_path_reader(_django_sub_path)
     # Registered with the patterns, after every route was accepted, so a
     # rejected call leaves the instance without a checker too.
     register_path_checker(citry_instance, _django_path_checker(), host=_DJANGO_PROJECT)
     return patterns
+
+
+def _django_sub_path() -> str:
+    """Return the sub-path the project is served below for the current request, such as ``/shop``."""
+    from django.urls import get_script_prefix  # noqa: PLC0415
+
+    return normalize_sub_path(get_script_prefix())
 
 
 def _django_path_checker() -> PathChecker:
@@ -246,12 +305,18 @@ def _django_path_checker() -> PathChecker:
         static_url = _site_prefix(django_settings.STATIC_URL, script_prefix)
         if static_url is not None and path.startswith(static_url) and apps.is_installed("django.contrib.staticfiles"):
             return _static_file_lookup(path, path[len(static_url) :])
+        # The links start with the sub-path Citry starts its own URLs with,
+        # read the same way; a link to the sub-path alone, such as "/shop",
+        # reaches the project's root too.
+        sub_path = _django_sub_path()
         # Suggestions are written the way a link writes them, with the sub-path.
-        nearby = tuple(sorted({script_prefix.rstrip("/") + route for route in _literal_routes()}))
-        if not path.startswith(script_prefix):
+        nearby = tuple(sorted({sub_path + route for route in _literal_routes()}))
+        below = path_below(path, sub_path)
+        if below is None:
             # A path outside the sub-path never reaches this project.
             return PathLookup(found=False, nearby=nearby)
-        path_info = "/" + path[len(script_prefix) :]
+        # Django serves an empty path as its root.
+        path_info = below or "/"
         if _resolve_match(path_info) is not None or _redirects_to_slash(path_info):
             return PathLookup(found=True)
         return PathLookup(found=False, nearby=nearby)

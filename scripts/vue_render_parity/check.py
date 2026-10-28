@@ -441,7 +441,7 @@ def vue_render(pages: list[dict[str, Any]]) -> dict[str, Any]:
         # Node comes from PATH, as `pnpm` does for the check gate.
         # Vue's server renderer calls itself several times per nested
         # element, and V8 stops at about 984 KB of stack by default, which a
-        # template at the nesting limits planned in #272 passes. A browser
+        # template at the nesting limits from #272 passes. A browser
         # mounts the same tree (checked in headless Chrome with 512 nested
         # elements, and 256 `v-for` levels around 256 elements), so only this
         # check needs more. 4,000 KB stays well inside the 8 MB main-thread

@@ -13,11 +13,12 @@ from citry_ui.quality.qualify_wheel import (
     MAX_I18N_COMPRESSED_BYTES,
     WheelQualificationError,
     qualify_wheel,
+    source_i18n_files,
+    source_runtime_files,
 )
 
 _THIRD_PARTY_NOTICE = (Path(__file__).parents[3] / "THIRD_PARTY_LICENSES.md").read_bytes()
 _LICENSE = (Path(__file__).parents[3] / "LICENSE").read_bytes()
-_RUNTIME_PACKAGE = Path(__file__).parents[2]
 
 
 def _wheel(tmp_path, *, extra=()):
@@ -60,87 +61,79 @@ def test_qualify_wheel_accepts_the_runtime_boundary(tmp_path):
     assert report.i18n_compressed_bytes >= 0
 
 
-def test_runtime_boundary_matches_every_shipped_python_module():
-    excluded_parts = {"quality", "snippets", "tests", "tools"}
-    shipped_python = {
-        path.relative_to(_RUNTIME_PACKAGE.parent).as_posix()
-        for path in _RUNTIME_PACKAGE.rglob("*.py")
-        if excluded_parts.isdisjoint(path.relative_to(_RUNTIME_PACKAGE).parts)
-    }
-    shipped_assets = {
-        path.relative_to(_RUNTIME_PACKAGE.parent).as_posix()
-        for suffix in ("*.min.css", "*.min.js")
-        for path in _RUNTIME_PACKAGE.rglob(suffix)
-    }
+def _touch(root, *names):
+    for name in names:
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"")
 
-    shipped = shipped_python | shipped_assets | {"citry_ui/py.typed"}
-    # Name each file and where to fix it, because a new module is the usual
-    # cause and its author needs only to add one line.
-    missing = sorted(shipped - EXPECTED_RUNTIME_FILES)
-    stale = sorted(EXPECTED_RUNTIME_FILES - shipped)
-    assert not missing, (
-        f"Add these shipped files to EXPECTED_RUNTIME_FILES in citry_ui/quality/qualify_wheel.py: {missing}"
+
+def test_source_runtime_files_follow_the_packaging_rules(tmp_path):
+    # A synthetic package tree with one file of each kind the rules decide on.
+    _touch(
+        tmp_path,
+        "citry_ui/__init__.py",
+        "citry_ui/py.typed",
+        "citry_ui/components/cnew/__init__.py",
+        "citry_ui/components/cnew/cnew.py",
+        "citry_ui/components/cnew/runtime.min.js",
+        "citry_ui/components/cnew/runtime.min.css",
+        "citry_ui/components/cnew/runtime.js",
+        "citry_ui/components/cnew/api.md",
+        "citry_ui/components/cnew/tests/test_cnew.py",
+        "citry_ui/components/cnew/snippets/basic.py",
+        "citry_ui/components/cnew/quality/scenario.py",
+        "citry_ui/components/cnew/tools/build.py",
+        "citry_ui/components/cnew/__pycache__/cnew.cpython-314.pyc",
+        "citry_ui/quality/report.py",
     )
-    assert not stale, f"Remove these files from EXPECTED_RUNTIME_FILES in citry_ui/quality/qualify_wheel.py: {stale}"
+
+    # A new component's module and minified assets are expected without any
+    # edit to the qualifier; unminified JS, docs, tests, snippets, quality code
+    # and bytecode are not.
+    assert source_runtime_files(tmp_path) == {
+        "citry_ui/__init__.py",
+        "citry_ui/py.typed",
+        "citry_ui/components/cnew/__init__.py",
+        "citry_ui/components/cnew/cnew.py",
+        "citry_ui/components/cnew/runtime.min.css",
+        "citry_ui/components/cnew/runtime.min.js",
+    }
 
 
-def test_runtime_boundary_includes_split_button_private_dependencies():
-    assert {
-        "citry_ui/components/_shared_component_assets.py",
-        "citry_ui/components/csplitbutton/_submit_registry.py",
-        "citry_ui/components/csplitbutton/csplitbutton.py",
-    } <= EXPECTED_RUNTIME_FILES
-
-
-def test_runtime_boundary_includes_tags_input_public_runtime():
-    assert {
-        "citry_ui/components/_form_control_runtime.py",
-        "citry_ui/components/ctags_input/__init__.py",
-        "citry_ui/components/ctags_input/ctags_input.py",
-    } <= EXPECTED_RUNTIME_FILES
-
-
-def test_runtime_boundary_includes_scroll_area_and_shared_geometry():
-    assert {
-        "citry_ui/components/_scroll_geometry.py",
-        "citry_ui/components/cscroll_area/__init__.py",
-        "citry_ui/components/cscroll_area/cscroll_area.py",
-    } <= EXPECTED_RUNTIME_FILES
-
-
-def test_runtime_boundary_includes_context_menu_public_runtime():
-    assert {
-        "citry_ui/components/ccontext_menu/__init__.py",
-        "citry_ui/components/ccontext_menu/ccontext_menu.py",
-    } <= EXPECTED_RUNTIME_FILES
-
-
-def test_runtime_boundary_includes_image_public_runtime():
-    assert {
-        "citry_ui/components/cimage/__init__.py",
-        "citry_ui/components/cimage/cimage.py",
-    } <= EXPECTED_RUNTIME_FILES
-
-
-def test_runtime_boundary_includes_command_palette_and_private_controllers():
-    assert {
-        "citry_ui/components/_active_descendant.py",
-        "citry_ui/components/_dialog_controller.py",
-        "citry_ui/components/ccommand_palette/__init__.py",
-        "citry_ui/components/ccommand_palette/ccommand_palette.py",
-    } <= EXPECTED_RUNTIME_FILES
-
-
-def test_runtime_boundary_includes_the_side_effect_free_i18n_catalog_package():
-    assert {
+def test_source_i18n_files_follow_the_package_data_rules(tmp_path):
+    _touch(
+        tmp_path,
+        "citry_ui_i18n/__init__.py",
         "citry_ui_i18n/citry-i18n.toml",
         "citry_ui_i18n/formats.json",
-        "citry_ui_i18n/locales/en-US/citry-ui.ftl",
-        "citry_ui_i18n/_compiled/manifest.json",
+        "citry_ui_i18n/_compiled/__init__.py",
         "citry_ui_i18n/_compiled/server.json",
-        "citry_ui_i18n/_compiled/link.json",
-        "citry_ui_i18n/_generate_catalog.py",
-    } <= EXPECTED_I18N_FILES
+        "citry_ui_i18n/locales/en-US/citry-ui.ftl",
+        "citry_ui_i18n/locales/sk/citry-ui.ftl",
+        "citry_ui_i18n/notes.md",
+        "citry_ui_i18n/__pycache__/x.pyc",
+    )
+
+    # A new locale's catalog ships without an edit here.
+    assert source_i18n_files(tmp_path) == {
+        "citry_ui_i18n/__init__.py",
+        "citry_ui_i18n/citry-i18n.toml",
+        "citry_ui_i18n/formats.json",
+        "citry_ui_i18n/_compiled/__init__.py",
+        "citry_ui_i18n/_compiled/server.json",
+        "citry_ui_i18n/locales/en-US/citry-ui.ftl",
+        "citry_ui_i18n/locales/sk/citry-ui.ftl",
+    }
+
+
+def test_source_files_need_the_checkout(tmp_path):
+    # Without the source tree there is nothing to compare a wheel with, so the
+    # check says where it looked instead of passing on an empty list.
+    with pytest.raises(FileNotFoundError, match="run it from a Citry checkout"):
+        source_runtime_files(tmp_path)
+    with pytest.raises(FileNotFoundError, match="citry_ui_i18n"):
+        source_i18n_files(tmp_path)
 
 
 def test_qualify_wheel_rejects_an_incomplete_third_party_notice(tmp_path):

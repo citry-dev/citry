@@ -1355,11 +1355,12 @@ Engine-wide configuration splits along one line, because Events is a
 built-in extension the user never instantiates. Config that a component
 can override rides `extensions_defaults["events"]` (default `_guard`,
 default `_context`), the mechanism that exists precisely
-for configuring extensions without touching them. The envelope size cap
-(`_max_envelope_bytes`) also rides `extensions_defaults["events"]` but
-is engine-wide only, with no per-component override: it guards the
+for configuring extensions without touching them. The request body cap
+(`_max_body_bytes`) and the form field cap (`_max_form_fields`) also ride
+`extensions_defaults["events"]` but are engine-wide only, with no
+per-component override: they guard the
 transport before any component resolves, and one batch envelope spans
-components, so declaring it on a component's `Events` class fails at
+components, so declaring either on a component's `Events` class fails at
 class definition. The host's CSRF field names (`_csrf_field_names`,
 default `("csrfmiddlewaretoken",)`) are engine-wide in the same way: the
 dispatcher removes those keys from a call's args before it validates them
@@ -4277,8 +4278,12 @@ Rules, each closing a named prior-art hole:
   the component and the State field. Kwargs are unconstrained; only State
   must serialize. No pickle, no rich-object revival, ever: verified state
   re-enters through `cls.State(**s)`, a plain dataclass constructor that
-  raises on unknown or missing keys. There is no hydration machinery to
-  attack (section 7.6).
+  raises on unknown or missing keys, or, for a Pydantic model State, the
+  model's own validation of the JSON the token holds, which rebuilds only
+  the field types the model declares (dates, nested models); unknown keys
+  follow the model's `extra` setting (ignored by default), and a
+  `ValidationError` answers `stale_state`.
+  There is no hydration machinery to attack (section 7.6).
 - Size-capped (State meta `_max_bytes`, default 8192). The cap is a **design
   smell canary, not a technical limit**: the audit measured real tokens
   at 150 to 300 bytes (section 1.4), so a component approaching the cap
@@ -4530,9 +4535,11 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   method is an open endpoint). Honest limitation, documented: citry cannot
   inherit "the page's auth" framework-neutrally; the guard plus host
   middleware on the real per-event URLs are the tools.
-- Abuse limits: envelope size cap (413), `calls` length cap (16 in the
-  schema), state verified before args are parsed, `on_event` as the
-  rate-limit attachment point.
+- Abuse limits: request body cap (413, and the host adapters stop reading
+  one byte past it, or one message past it under ASGI, so an oversized
+  body is never held whole), form field
+  cap (413), `calls` length cap (16 in the schema), state verified before
+  args are parsed, `on_event` as the rate-limit attachment point.
 
 ### 7.5 Rich components and slots
 

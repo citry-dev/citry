@@ -4,8 +4,7 @@ Choose the kind of class Citry generates from plain schema declarations.
 A component's plain ``class Kwargs:`` (and ``TemplateData``, ``JsData``,
 ``CssData``, ``State``, and Events ``data`` classes) becomes a class Citry
 generates. By default that is a slotted dataclass. ``CitrySettings.model_base``
-names another kind, and a base the generated classes share (``State`` only
-for a dataclass base):
+names another kind, and a base the generated classes share:
 
 - a dataclass, whose options (``frozen``, ``kw_only``, ...) the generated
   dataclasses copy;

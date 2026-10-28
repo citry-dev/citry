@@ -484,8 +484,8 @@ struct Reader {
 /// leaves the rest unread for the browser to build.
 ///
 /// A plain element costs one level and an element with `v-if` or `v-for`
-/// two, so the render code of a template at the nesting limits planned in
-/// #272 (512 nested tags, 256 of them control flow) reads about 770 levels
+/// two, so the render code of a template at the nesting limits from
+/// #272 (512 nested tags, 256 of them Citry logic) reads about 770 levels
 /// deep (measured). Each level runs through `with_enough_stack`, so the cap
 /// does not protect the stack. It stops much deeper render code, such as a
 /// chain of thousands of interpolations, and it bounds the depth of the
@@ -2362,7 +2362,7 @@ fn render_page(request: &RenderRequest<'_>) -> HydrationRender {
 }
 
 /// How deep a page's manifest may nest and still be rendered on the server.
-/// The data of a template at the nesting limits planned in #272 nests about
+/// The data of a template at the nesting limits from #272 nests about
 /// 520 levels (256 nested `<c-for>` tags); deeper data makes the page mount
 /// in the browser. The count includes the manifest's own three outer levels.
 const MAX_MANIFEST_DEPTH: usize = 2048;
@@ -2570,8 +2570,8 @@ struct Cx {
 /// mounts in the browser when there is none).
 ///
 /// An element costs two levels (its node and its children) and `v-if` or
-/// `v-for` on it one more, so a template at the nesting limits planned in
-/// #272 (512 nested tags, 256 of them control flow) writes about 1,300
+/// `v-for` on it one more, so a template at the nesting limits from
+/// #272 (512 nested tags, 256 of them Citry logic) writes about 1,300
 /// levels deep (measured). Each level runs through `with_enough_stack`, so
 /// the cap does not protect the stack; it stops much deeper output.
 /// `MAX_ELEMENT_DEPTH` usually stops nested elements first.
@@ -4519,6 +4519,53 @@ mod tests {
     }
 
     #[test]
+    fn an_open_dialog_and_an_inert_region_keep_their_server_html() {
+        // The server writes these booleans by presence, as Vue's server
+        // renderer does, so their content stays in the HTML a reader without
+        // JavaScript sees. A static attribute is the shape that used to send
+        // the element to the browser; a dynamic one used to be dropped.
+        let page = root(
+            concat!(
+                r#"<main><dialog :open="$citryPrepared.open"><p>menu</p></dialog>"#,
+                r#"<section :inert="$citryPrepared.open"><p>body</p></section>"#,
+                r#"<div :autofocus="$citryPrepared.open">x</div></main>"#,
+            ),
+            json!({"open": true}),
+        );
+        assert_eq!(
+            html(&page),
+            concat!(
+                r#"<main><dialog open=""><p>menu</p></dialog>"#,
+                r#"<section inert=""><p>body</p></section>"#,
+                r#"<div autofocus="">x</div></main>"#,
+            )
+        );
+        assert!(page.declines.is_empty(), "{:?}", page.declines);
+        assert_eq!(page.shell_count, 0);
+        let authored = root(
+            concat!(
+                r#"<main><dialog open><p>menu</p></dialog>"#,
+                r#"<section inert><p>body</p></section><div autofocus>x</div></main>"#,
+            ),
+            json!({}),
+        );
+        assert_eq!(
+            html(&authored),
+            concat!(
+                r#"<main><dialog open=""><p>menu</p></dialog>"#,
+                r#"<section inert=""><p>body</p></section><div autofocus="">x</div></main>"#,
+            )
+        );
+        assert!(authored.declines.is_empty(), "{:?}", authored.declines);
+        assert_eq!(authored.shell_count, 0);
+        let closed = root(
+            r#"<main><dialog :open="$citryPrepared.open"><p>menu</p></dialog></main>"#,
+            json!({"open": false}),
+        );
+        assert_eq!(html(&closed), "<main><dialog><p>menu</p></dialog></main>");
+    }
+
+    #[test]
     fn browser_only_content_turns_the_nearest_element_into_a_shell() {
         let text = root("<main><span>{{ open }}</span><p>kept</p></main>", json!({}));
         assert_eq!(
@@ -5060,7 +5107,8 @@ mod tests {
         );
         // `autofocus` is a boolean on every control since before the floor,
         // which BCD records only as a partial implementation; the reviewed
-        // `SUPPORTED_AT_FLOOR` list makes it count.
+        // `SUPPORTED_AT_FLOOR` list makes it count, and
+        // `PRESENCE_ONLY_BOOLEANS` covers it on every element.
         assert_eq!(
             client_attribute(
                 AttributeContext::plain("button"),
@@ -5077,16 +5125,38 @@ mod tests {
             ),
             Ok(None)
         );
+        // `open` on `<dialog>`, `inert` and `autofocus` are written as
+        // booleans, although some floor browser lacks each one (`<dialog>`
+        // until Firefox 98, `inert` until Safari 15.5 and Firefox 112,
+        // `autofocus` outside form controls until Firefox 110); see
+        // PRESENCE_ONLY_BOOLEANS in tools/dom-members. Otherwise an open
+        // dialog or an inert region would be left for the browser to build,
+        // and a page read without JavaScript would lose it.
+        for (tag, key) in [
+            ("dialog", "open"),
+            ("div", "inert"),
+            ("section", "autofocus"),
+        ] {
+            for (value, expected) in [
+                (Val::Bool(true), Some(String::new())),
+                (Val::Str("".into()), Some(String::new())),
+                (Val::Bool(false), None),
+                (Val::Null, None),
+            ] {
+                assert_eq!(
+                    client_attribute(AttributeContext::plain(tag), key, &value),
+                    Ok(expected),
+                    "{tag} {key} {value:?}"
+                );
+            }
+        }
         // Methods, numbers and members some supported browser lacks at the
         // floor leave a result the server cannot predict.
         for (tag, key) in [
             ("div", "focus"),
             ("input", "size"),
-            ("div", "inert"),
-            ("div", "autofocus"),
             ("object", "data"),
             ("embed", "src"),
-            ("dialog", "open"),
         ] {
             assert_eq!(
                 written(tag, key),

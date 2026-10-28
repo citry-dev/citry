@@ -49,7 +49,14 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
 from citry.reload import watch
-from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, call_maybe_sync, match_route
+from citry.util.routing import (
+    RouteHeaders,
+    RouteRequest,
+    RouteResponse,
+    body_read_limit,
+    call_maybe_sync,
+    match_route,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, MutableMapping
@@ -78,14 +85,28 @@ async def _send_response(send: Send, response: RouteResponse) -> None:
     await send({"type": "http.response.body", "body": response.body})
 
 
-async def _read_body(receive: Receive) -> bytes | None:
-    """Drain the request body from ``receive``; ``None`` when the client disconnected first."""
+async def _read_body(receive: Receive, limit: int | None) -> bytes | None:
+    """
+    Read the request body from ``receive``, at most ``limit`` bytes; ``None`` when the client disconnected first.
+
+    The body arrives in messages, with or without a ``Content-Length``, so
+    the count is kept as messages arrive and reading stops once it reaches
+    ``limit``. At most one message past the route's limit is ever held, and
+    the route's handler then sees a body longer than it accepts.
+    """
     chunks: list[bytes] = []
+    received = 0
     while True:
         message = await receive()
         if message["type"] == "http.disconnect":
             return None
-        chunks.append(message.get("body", b""))
+        chunk = message.get("body", b"")
+        chunks.append(chunk)
+        received += len(chunk)
+        if limit is not None and received >= limit:
+            # Cut the last message so the handler gets exactly `limit` bytes.
+            chunks[-1] = chunk[: len(chunk) - (received - limit)]
+            return b"".join(chunks)
         if not message.get("more_body"):
             return b"".join(chunks)
 
@@ -161,7 +182,7 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
         if method in _BODYLESS_METHODS:
             body = b""
         else:
-            drained = await _read_body(receive)
+            drained = await _read_body(receive, body_read_limit(matched.route))
             if drained is None:
                 return  # the client disconnected mid-request; there is nobody to answer
             body = drained

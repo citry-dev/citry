@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from citry import Citry, Component
+from citry_core import _rust
 from citry_lsp.catalog import CatalogIndex
 from citry_lsp.engine import DocumentState
 from citry_lsp.project import ProjectState
@@ -37,9 +38,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from types import FrameType
 
-# The logic nesting limit. The parser's private `_MAX_LOGIC_NESTING`
-# replaces this literal once the limit ships.
-LOGIC_LIMIT = 256
+# The logic nesting limit, read from the parser so the two cannot disagree.
+LOGIC_LIMIT = _rust.template_parser._MAX_LOGIC_NESTING
 # Frames the host holds below the language server.
 HOST_FRAMES = 200
 # Frames the analysis may use above the host.

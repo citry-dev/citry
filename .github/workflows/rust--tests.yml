@@ -13,15 +13,21 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/install-rust/**"
       - ".github/workflows/rust--tests.yml"
       - ".gitmodules"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "crates/**"
       - "third_party/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/install-rust/**"
       - ".github/workflows/rust--tests.yml"
       - ".gitmodules"
   workflow_dispatch:
@@ -31,6 +37,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 jobs:
   test:
+    if: github.event.action != 'closed'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -44,11 +51,7 @@ jobs:
 
       # Install Rust deps
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: This should match the value in `rust-toolchain.toml`
-          toolchain: nightly
-          components: rustfmt, clippy
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

@@ -183,6 +183,36 @@ def test_open_server_fallback_is_visible_but_not_claimed_modal() -> None:
     assert 'aria-expanded="true"' in html
 
 
+def test_an_open_palette_stays_in_the_html_a_reader_without_javascript_sees() -> None:
+    # The page's default delivery writes the open native dialog, with its
+    # content, into the served HTML, rather than leaving it for the browser.
+    app = _app()
+
+    class Page(Component):
+        citry = app
+
+        def template_data(self, kwargs, slots):
+            return {"entries": (CCommandPaletteCommand(value="inspect", label="Inspect readable fallback"),)}
+
+        template = """
+          <main>
+            <c-CCommandPalette
+              id="palette-open"
+              label="Open readable fallback"
+              c-entries="entries"
+              c-open="True"
+            />
+          </main>
+        """
+
+    html = str(Page())
+    dialog = re.search(r'<dialog[^>]*id="palette-open"[^>]*>', html)
+    assert dialog is not None, "the open dialog is missing from the served HTML"
+    assert ' open=""' in dialog.group(0)
+    assert "Open readable fallback" in html[dialog.start() :]
+    assert "Inspect readable fallback" in html[dialog.start() :]
+
+
 def test_supplied_id_is_the_exact_native_dialog_identity() -> None:
     html = _render(_basic(id="owned-palette"))
 

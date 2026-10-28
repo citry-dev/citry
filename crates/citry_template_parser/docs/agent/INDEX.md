@@ -127,8 +127,11 @@ Python wrapper together (CLAUDE.md Mechanism 4).
 Some parse costs still grow faster than the template, because the AST
 contract requires them: every node holds its subtree's comments and used
 variables, and every body holds its subtree's comments and slots, so these
-lists cost depth times count. A nesting limit is planned to bound them
-(#272).
+lists cost depth times count. The nesting limits bound them: a template nests
+at most 512 tags and 256 logic levels (`nesting.rs`; see "13. Nesting limits"
+in `docs/design/template_grammar.md`). The parse loop checks each tag's depth
+as it builds the tag stack, and a template in an attribute continues from the
+depth of the tag that holds it (`ParserContext::depth_base`).
 
 Validation runs through `validate_node` (fill placement, attributes present,
 attribute conflicts, `c-bind`, fill names, variable shadowing). **`<c-raw>` is
@@ -144,6 +147,10 @@ with ASCII folding (`ID`/`id` duplicate, `ID`/`c-id` logical conflict,
 `CLASS`/`c-class` accumulation). Component kwargs remain exact-case.
 
 ## Compiler (`compiler.rs`) and the output-format contract
+
+The compiler checks a tree's depth with `check_template_depth` before it walks
+it, using the parser's `nesting::tag_levels`, so a tree built by hand cannot
+go past the limits either.
 
 The **module-level docstring** at the top of `compiler.rs` is the definitive
 reference for the node types emitted, their signatures, and the formatting

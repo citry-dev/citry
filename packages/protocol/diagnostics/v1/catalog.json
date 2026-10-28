@@ -66,6 +66,40 @@
       "documentationPath": "/ide/diagnostics/#citry.parse.value"
     },
     {
+      "code": "citry.parse.too-deep",
+      "constant": "PARSE_TOO_DEEP",
+      "title": "Template nested too deeply",
+      "summary": "The template nests tags deeper than Citry allows, so it does not render.",
+      "when": "A tag would sit more than 512 levels deep, or more than 256 Citry logic levels deep: every c- tag except <c-raw>, and each c-if=, c-elif=, c-else, c-for= or c-empty attribute. A template inside an attribute counts from the depth of the tag that holds it.",
+      "fix": "Move the inner part into its own component's template, which starts counting from zero. Markup passed to a component between its tags still counts toward the template that writes it.",
+      "defaultSeverity": "error",
+      "surfaces": [
+        "parser",
+        "formatter",
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Parser-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
+      "examples": [
+        {
+          "title": "Tags of any kind past the total limit",
+          "language": "citry-html",
+          "source": "<div>\n  <div>\n    <!-- ... 510 more nested <div> tags ... -->\n    <p>Too deep</p>\n  </div>\n</div>"
+        },
+        {
+          "title": "Logic tags past the logic limit",
+          "language": "citry-html",
+          "source": "<c-if cond=\"a\">\n  <c-for each=\"item in items\">\n    <!-- ... 254 more nested logic tags ... -->\n    <c-if cond=\"b\">Too deep</c-if>\n  </c-for>\n</c-if>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.parse.too-deep"
+    },
+    {
       "code": "citry.parse.configuration",
       "constant": "PARSE_CONFIGURATION",
       "title": "Template parser setup failed",
@@ -516,6 +550,42 @@
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.template.missing-image-alt"
+    },
+    {
+      "code": "citry.template.csp-incompatible",
+      "constant": "TEMPLATE_CSP_INCOMPATIBLE",
+      "title": "Breaks a strict Content Security Policy",
+      "summary": "The template writes something that a strict Content Security Policy blocks in the browser: an inline <script> or <style> element, an inline event attribute such as onclick, or a javascript: URL. Citry reports it only when security_csp is \"warn\" or \"strict\".",
+      "when": "Off by default. When the application sets security_csp to \"warn\", it is a warning; with \"strict\", an error. The template writes one of these directly: a <script> or <style> element; an attribute with a fixed value (not a binding such as :onclick) whose name is longer than two characters and starts with on, such as onclick or online; or an action, formaction, href, src, or xlink:href attribute, or data on <object>, whose value starts with javascript: once character references such as &#115; are decoded. Letter case does not matter. The content of <c-raw> and of v-pre regions is checked the same way, and <c-element is=\"...\"> is checked as the element it names. Citry bindings such as c-href and c-bind, and HTML passed to a component in an attribute, are checked when the page renders instead. Vue bindings such as :href and v-bind get their values in the browser, so neither check sees them. Attributes on component tags (including a capitalized tag such as <Card> that may be a Vue component) are not checked, and neither is the content of <noscript>, <xmp>, <iframe>, <noembed>, <noframes>, or <plaintext>, which the browser reads as text, or markup inside an SVG <title> or <style>. citry check --static and an editor that has not loaded your application do not report it, because they do not know security_csp.",
+      "fix": "Move a script or style into the component's js or css, or into a Script or Style dependency. Replace an inline handler such as onclick with a Vue listener such as @click. Use a real URL, and a Vue listener for the action, instead of a javascript: URL. A custom attribute that starts with on, such as online, needs another name, for example data-online, because browsers and the policy treat every on* attribute as a possible event handler.",
+      "defaultSeverity": "ignore",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "tag": "The element name as written in the template, for the raw-tag message.",
+        "name": "The attribute name as written in the template."
+      },
+      "messages": {
+        "raw-tag": "A strict Content Security Policy blocks this inline <{tag}>. Move it into the component's js or css, or into a Script or Style dependency.",
+        "native-event": "A strict Content Security Policy blocks the inline event attribute '{name}'. Use a Vue listener such as @click instead, or rename a custom attribute, for example to data-{name}.",
+        "javascript-url": "A strict Content Security Policy blocks the javascript: URL in '{name}'. Use a real URL, and a Vue listener for the action."
+      },
+      "examples": [
+        {
+          "title": "An inline click handler",
+          "language": "citry-html",
+          "source": "<button onclick=\"save()\">Save</button>"
+        },
+        {
+          "title": "A javascript: URL",
+          "language": "citry-html",
+          "source": "<a href=\"javascript:void(0)\">Open</a>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.csp-incompatible"
     },
     {
       "code": "citry.template.unknown-url",

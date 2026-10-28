@@ -10,6 +10,7 @@ sandbox rejects succeeds when the sandbox is off.
 
 import re
 import sys
+from types import MappingProxyType
 
 import pytest
 
@@ -73,6 +74,49 @@ def test_sandbox_off_is_byte_identical_to_sandbox_on():
     assert ">p-b<" not in on
 
 
+@pytest.mark.parametrize("source", ["a) or (b", "lambda x: x + 2)(5", "", "# note"])
+def test_both_modes_reject_text_only_the_hidden_parentheses_make_valid(source):
+    # Both modes read the expression inside an extra pair of parentheses, so
+    # text that closes them early, or holds no expression, would otherwise run.
+    for sandboxed in (True, False):
+        with pytest.raises(SyntaxError):
+            compile_expr(source, sandboxed=sandboxed)
+
+
+@pytest.mark.parametrize("sandbox", [True, False])
+def test_a_loop_clause_may_end_with_a_comment(sandbox):
+    c = Citry(sandbox_expressions=sandbox)
+
+    class Loop(Component):
+        citry = c
+        template = """
+          <c-for each="item in items  # every item">{{ item }}</c-for>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"items": ["a", "b"]}
+
+    assert "ab" in Loop().render().serialize()
+
+
+@pytest.mark.parametrize("sandbox", [True, False])
+def test_a_shorthand_loop_may_filter_its_items(sandbox):
+    # `x in items if x` is a loop clause, not an expression of its own.
+    c = Citry(sandbox_expressions=sandbox)
+
+    class Loop(Component):
+        citry = c
+        template = """
+          <ul><li c-for="x in items if x">{{ x }}</li></ul>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"items": ["a", "", "b"]}
+
+    html = Loop().render().serialize()
+    assert html.count("<li") == 2
+
+
 def test_default_is_sandboxed_and_blocks_unsafe_access():
     c = Citry()
 
@@ -102,16 +146,32 @@ def test_sandbox_off_allows_what_the_sandbox_blocks():
     assert Open(obj=holder).render().serialize() == "hidden"
 
 
-def test_unsandboxed_evaluation_exposes_no_builtins_and_cannot_plant_them():
-    # Unsandboxed evaluation exposes no builtins (matching the sandbox), and the
-    # builtins mapping is read-only and shared, so one expression cannot mutate
-    # __builtins__ to leak a fake builtin into another expression's evaluation.
+def _eval_hides_builtins() -> bool:
+    """Whether this interpreter's ``eval`` finds no builtins behind an empty ``__builtins__`` mapping."""
+    try:
+        eval("len", {"__builtins__": MappingProxyType({})})  # noqa: S307
+    except NameError:
+        return True
+    return False
+
+
+def test_unsandboxed_evaluation_cannot_change_the_shared_builtins_mapping():
+    # Every unsandboxed evaluation gets the same __builtins__ mapping, and it
+    # is read-only, so an expression cannot change it for the next one.
     plant = compile_expr("__builtins__.update({'len': lambda x: 999})", sandboxed=False)
     with pytest.raises(AttributeError):
         plant({})  # the read-only mapping refuses mutation
+
+
+@pytest.mark.skipif(
+    not _eval_hides_builtins(),
+    reason="this interpreter's eval still finds builtins when __builtins__ is an empty mapping",
+)
+def test_unsandboxed_evaluation_exposes_no_builtins():
+    # On CPython an empty __builtins__ hides every builtin, matching the sandbox.
     use = compile_expr("len([1, 2, 3])", sandboxed=False)
     with pytest.raises(NameError):
-        use({})  # len is still not a builtin here
+        use({})
 
 
 # The template text holds the six characters `\ud800`, an escape for a lone

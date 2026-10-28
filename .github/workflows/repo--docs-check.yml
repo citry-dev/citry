@@ -40,6 +40,10 @@ on:
       - ".github/workflows/repo--docs-check.yml"
       - ".gitmodules"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "docs_site/**"
       - "CHANGELOG.md"
@@ -75,8 +79,9 @@ permissions:
   contents: read
 
 env:
-  # Docs only need the workspace MSRV. Override the repository's moving nightly
-  # so all Ubuntu docs jobs can reuse one stable citry-core build cache.
+  # Docs only need the workspace MSRV. They build with it, not the
+  # repository's nightly, so all Ubuntu docs jobs can reuse one citry-core
+  # build cache that stays valid when the nightly date moves.
   RUSTUP_TOOLCHAIN: "1.96.0"
   # Share compiler objects across simultaneous cold jobs; rust-cache below also
   # preserves the assembled Cargo target directory between workflow runs.
@@ -85,6 +90,7 @@ env:
 
 jobs:
   docs-check:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:
@@ -164,6 +170,7 @@ jobs:
   # Needs the root-owned `docs` extra (to build the site), the `citry`
   # package's `e2e` group (for Playwright), and the browser binary.
   docs-e2e:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:

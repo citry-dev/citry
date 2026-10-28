@@ -132,7 +132,7 @@ scroll handler that runs at most once every 250 ms:
 <div @scroll.throttle="track">...</div>
 ```
 
-To wait another time, write it after the modifier, as in
+To change the 250 ms, write a duration after the modifier, as in
 `.debounce.300ms` or `.throttle.2s`.
 
 ### When `.outside` runs

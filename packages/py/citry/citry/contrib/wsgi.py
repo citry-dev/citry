@@ -28,7 +28,7 @@ import inspect
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs
 
-from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
+from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, body_read_limit, match_route
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -43,7 +43,46 @@ __all__ = ["wsgi_app"]
 _STATUS_LINES = {200: "200 OK", 404: "404 Not Found", 405: "405 Method Not Allowed"}
 
 
-def _build_request(environ: dict[str, Any], method: str) -> RouteRequest:
+def _read_body(environ: dict[str, Any], limit: int | None) -> bytes:
+    """
+    Read the request body from ``wsgi.input``, at most ``limit`` bytes when a limit is set.
+
+    ``Content-Length`` is the client's own claim, so with a limit it only
+    caps how much is asked for: a larger claim still reads at most
+    ``limit`` bytes. A body without a ``Content-Length`` (a chunked upload)
+    is read only when the server says the stream ends with the body
+    (``wsgi.input_terminated``); otherwise reading could wait forever.
+    """
+    # A request without a body may come without a stream at all.
+    stream = environ.get("wsgi.input")
+    if stream is None:
+        return b""
+    try:
+        content_length = int(environ.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        content_length = 0
+    if limit is None:
+        return stream.read(content_length) if content_length > 0 else b""
+    if content_length > 0:
+        wanted = min(content_length, limit)
+    elif environ.get("wsgi.input_terminated"):
+        wanted = limit
+    else:
+        return b""
+    # read(n) may return fewer bytes than asked for, so keep reading until
+    # the stream ends or the limit is reached.
+    chunks: list[bytes] = []
+    received = 0
+    while received < wanted:
+        chunk = stream.read(wanted - received)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        received += len(chunk)
+    return b"".join(chunks)
+
+
+def _build_request(environ: dict[str, Any], method: str, body_limit: int | None) -> RouteRequest:
     """Read the WSGI environ into a framework-neutral request."""
     header_items: list[tuple[str, str]] = [
         (key[len("HTTP_") :].replace("_", "-"), value) for key, value in environ.items() if key.startswith("HTTP_")
@@ -55,11 +94,7 @@ def _build_request(environ: dict[str, Any], method: str) -> RouteRequest:
         header_items.append(("Content-Length", environ["CONTENT_LENGTH"]))
     headers = RouteHeaders(header_items)
 
-    try:
-        content_length = int(environ.get("CONTENT_LENGTH") or 0)
-    except ValueError:
-        content_length = 0
-    body = environ["wsgi.input"].read(content_length) if content_length > 0 else b""
+    body = _read_body(environ, body_limit)
 
     query = {
         key: tuple(values) for key, values in parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True).items()
@@ -117,7 +152,9 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
             raise TypeError(msg)
         # The guard above rejected async handlers, so the call returns a
         # concrete RouteResponse.
-        response = cast("RouteResponse", handler(_build_request(environ, method), **matched.params))
+        response = cast(
+            "RouteResponse", handler(_build_request(environ, method, body_read_limit(matched.route)), **matched.params)
+        )
         return respond(response)
 
     return app

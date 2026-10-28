@@ -416,14 +416,28 @@ Rust-to-editor path before the more involved body printer lands. It:
 - preserves `/>` versus `>`;
 - reparses and verifies the result.
 
-The one-line fit calculation covers the resulting physical line through an
-immediately adjacent empty-element end tag: the unchanged prefix before the
-opening `<`, the canonical opening tag, and an adjacent `</name>` when present.
-This means `<div ...></div>` wraps when its complete empty-element spelling
-takes the line over the preferred width. Unrelated later source is not counted
-because wrapping the current opening tag cannot shorten that source; general
-sibling layout belongs to M1. Width is counted in Unicode scalar values, like
-the document-wide constant above.
+The one-line fit calculation covers the physical line the tag ends on: the
+unchanged prefix before the opening `<`, the canonical opening tag, and the
+text after its `>` or `/>` that stays on that line whether or not the tag
+wraps. That text runs to the end of the source line, or to the next start tag,
+which is measured on its own. So `<div ...></div>` wraps when its complete
+empty-element spelling takes the line over the preferred width, and
+`<span ...>{{ label }}</span>` wraps when the label takes it over. Width is
+counted in Unicode scalar values, like the document-wide constant above.
+
+Wrapping moves that text onto a line of its own, which starts with the `>` at
+the tag's column. When even that line would be over the width, wrapping cannot
+make it fit, so a tag that fits by itself stays on one line. This check looks
+at the `>` line only: a later line indented from a column on it, such as the
+rest of a multi-line `{{ ... }}`, moves right with it when the tag stays on one
+line.
+
+When a tag that fits stays on one line and a later start tag on the same line
+does not fit, the later tag is the one that wraps, so its attributes can end up
+indented far to the right. Measuring through later tags would wrap the outer
+tag first, but it also wraps tags on lines that the formatter cannot otherwise
+shorten, such as a line of inline control tags, so the later tag is measured on
+its own.
 
 A canonical opening tag stays on one line when it fits, none of its items is
 itself multiline, and a tag with multiple items has no individual item longer

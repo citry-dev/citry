@@ -281,10 +281,9 @@ The same happens for:
   vendor-prefixed name such as `WebkitTransition`, or a list of fallback
   values;
 - an attribute the server cannot be sure how the browser stores, such as
-  `inert`, `autofocus` outside a form control, `<dialog open>`, or a
-  `<form>` attribute that may match the `name` or `id` of a control
-  inside it (such a form leaves its parent, or the whole page when the
-  form is at the page root, to the browser);
+  `size` on an `<input>`, or a `<form>` attribute that may match the
+  `name` or `id` of a control inside it (such a form leaves its parent, or
+  the whole page when the form is at the page root, to the browser);
 - custom directives on elements.
 
 Such an element is sent empty when its contents would hold something the
