@@ -2713,25 +2713,47 @@
     // A mounted document links its initial stylesheets in <head>, so the served HTML paints with
     // them. The browser runs no inline script before those links finish, so a served link is done
     // here. It is adopted unless it failed: an integrity failure leaves no sheet, and an error
-    // status shows in its resource timing entry where the browser reports one (Safari does not).
+    // status shows in its resource timing entry where the browser reports one.
     // A failed link is replaced by a new request below, which reports the failure.
     const served = knownInitial ? [...document.querySelectorAll('link[rel="stylesheet"][data-citry-vue-style-app]')]
       .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
         element.getAttribute("href") === asset.source.url) || null : null;
-    const servedFailed = served !== null && (!served.sheet ||
-      performance.getEntriesByName(served.href).some(entry => entry.responseStatus >= 400));
-    if (served && !servedFailed) {
-      const adopted = {element: served, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
-        identity: assetIdentity(asset), promise: Promise.resolve()};
-      loadedStyleUrls.set(key, adopted);
-      admittedStyles.set(key, {appId, identity: adopted.identity});
-      return adopted.promise;
-    }
-    served?.remove();
-    const link = document.createElement("link");
-    const record = {element: link, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
+    const timings = served ? performance.getEntriesByName(served.href) : [];
+    const servedFailed = served !== null && (!served.sheet || timings.some(entry => entry.responseStatus >= 400));
+    const record = {element: served, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
       identity: assetIdentity(asset)};
-    record.promise = new Promise((resolve, reject) => {
+    if (served && !servedFailed) {
+      // Safari's resource timing has no status, and it gives a link whose response failed an
+      // empty sheet, so there a failed link looks loaded. Other browsers also leave the status
+      // out when the timing entry is missing or the response was cross-origin without CORS.
+      // Without a status, a link whose sheet has rules loaded, and one whose rules are hidden
+      // from this page cannot be checked. A link with an empty sheet is checked: load the same
+      // URL again in a probe link, and request the stylesheet again if the probe fails. Its sheet
+      // is empty, so removing it first takes no styles off the page.
+      const statusKnown = timings.some(entry => entry.responseStatus > 0);
+      record.promise = statusKnown || !styleSheetIsEmpty(served.sheet) ? Promise.resolve() :
+        confirmServedStyle(served, asset, nonce).then(loaded => {
+          // If a stage retired this record while the probe ran, it already removed the link, and
+          // a new request here would add a link that nothing owns.
+          if (loaded || loadedStyleUrls.get(key) !== record) return;
+          served.remove();
+          return linkStyle(appId, asset, nonce, key, record);
+        });
+    } else {
+      served?.remove();
+      record.promise = linkStyle(appId, asset, nonce, key, record);
+    }
+    loadedStyleUrls.set(key, record);
+    admittedStyles.set(key, {appId, identity: record.identity});
+    return record.promise;
+  }
+  // Request the stylesheet in a new link and make it the record's element. The promise rejects
+  // when the load fails and, if the record is still current, drops it so a later render requests
+  // the stylesheet again.
+  function linkStyle(appId, asset, nonce, key, record) {
+    const link = document.createElement("link");
+    record.element = link;
+    return new Promise((resolve, reject) => {
       link.rel = "stylesheet";
       link.href = asset.source.url;
       link.setAttribute("data-citry-vue-style-app", appId);
@@ -2747,9 +2769,42 @@
       };
       document.head.append(link);
     });
-    loadedStyleUrls.set(key, record);
-    admittedStyles.set(key, {appId, identity: record.identity});
-    return record.promise;
+  }
+  // A sheet whose rules this page cannot read came from another origin without CORS. Nothing here
+  // can tell whether it loaded, so it counts as loaded, as a served link with a status does.
+  function styleSheetIsEmpty(sheet) {
+    try {
+      return sheet.cssRules.length === 0;
+    } catch {
+      return false;
+    }
+  }
+  // The probe waits this long for an answer before it counts the served link as loaded, which is
+  // how the runtime treats a served link everywhere else, so a stalled request cannot hold the
+  // mount forever.
+  const STYLE_PROBE_TIMEOUT_MS = 3000;
+  // Load the served link's URL again in a link whose media matches nothing (`not all`), so its
+  // load or error event says whether the response succeeded without changing the page's styles.
+  // The browser usually answers it from memory; otherwise the mount waits for that request, up to
+  // the timeout above.
+  function confirmServedStyle(served, asset, nonce) {
+    return new Promise(resolve => {
+      const probe = document.createElement("link");
+      applyAssetSource(probe, asset.source, nonce);
+      // Set after the source attributes, which may carry their own rel or media.
+      probe.rel = "stylesheet";
+      probe.media = "not all";
+      probe.href = served.href;
+      const finish = loaded => {
+        clearTimeout(timer);
+        probe.remove();
+        resolve(loaded);
+      };
+      const timer = setTimeout(() => finish(true), STYLE_PROBE_TIMEOUT_MS);
+      probe.onload = () => finish(true);
+      probe.onerror = () => finish(false);
+      document.head.append(probe);
+    });
   }
   function loadTypeScript(appId, asset, nonce, knownInitial = false) {
     normalizeScriptAsset(asset);
