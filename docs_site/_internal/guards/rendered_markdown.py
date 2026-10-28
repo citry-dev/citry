@@ -46,11 +46,13 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         # Point at the Markdown the author edits; the leaked text is copied
         # verbatim from it, so its first line locates the unrendered block.
         source = source_markdown(page, ctx.content_dir, ctx.repo_root)
+        excluded = ctx.project.settings.excluded_releases if ctx.project is not None else ()
         # The changelog has no wrapper elements of its own; there the usual
         # cause is an HTML tag written outside backticks.
         cause = (
-            "An HTML tag outside backticks in CHANGELOG.md starts a raw HTML block, "
-            "so the markdown pass skipped the text after it."
+            "In CHANGELOG.md this usually means a block tag such as <div> at the start "
+            "of a line, outside backticks, which starts a raw HTML block, so the "
+            "markdown pass skipped the text after it."
             if source is not None and source.name == "CHANGELOG.md"
             else 'A wrapper element around this content is missing markdown="1", '
             "so the markdown pass skipped everything inside it."
@@ -59,5 +61,5 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
             guard="rendered_markdown",
             message=f"Page shows Markdown source instead of rendered HTML: {detail}. {cause}",
             source=str(source) if source is not None else page.label,
-            line=source_line(source, shown[0], page) if source is not None else None,
+            line=source_line(source, shown[0], page, excluded) if source is not None else None,
         )

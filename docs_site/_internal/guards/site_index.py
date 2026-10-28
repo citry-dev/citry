@@ -24,6 +24,7 @@ from lxml.etree import LxmlError  # type: ignore[import-untyped]
 from docs_site._internal.release_notes import release_line_ranges
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from pathlib import Path
 
 # URL schemes / prefixes that mark a link or asset as external (not a local path
@@ -63,6 +64,12 @@ _STRAY_MARKUP_PATTERNS = (
 )
 _SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.DOTALL | re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]*>")
+# Tags that end a line of visible text. Inline tags, such as the spans inside
+# highlighted code, are dropped so the text they split stays on one line.
+_BLOCK_TAG_RE = re.compile(
+    r"</?(?:p|div|section|template|li|ul|ol|pre|table|tr|td|th|h[1-6]|br|hr|blockquote)\b[^>]*>",
+    re.IGNORECASE,
+)
 # How much of the page after a stray tag to read for the text that follows it.
 _STRAY_CONTEXT_CHARS = 2000
 # Built pages generated from the changelog rather than from a content page.
@@ -499,7 +506,7 @@ def _text_after(html: str, start: int, *, inside_tag: bool) -> str:
     # Skip the rest of a tag the match stopped inside before reading text.
     if inside_tag:
         rest = rest.partition(">")[2]
-    text = html_lib.unescape(_TAG_RE.sub("", rest))
+    text = html_lib.unescape(_TAG_RE.sub("", _BLOCK_TAG_RE.sub("\n", rest)))
     return next((line.strip() for line in text.splitlines() if line.strip()), "")
 
 
@@ -529,29 +536,36 @@ def source_markdown(page: PageRecord, content_dir: Path, repo_root: Path | None 
     return found
 
 
-def source_line(path: Path, text: str, page: PageRecord | None = None) -> int | None:
+def source_line(
+    path: Path, text: str, page: PageRecord | None = None, excluded_releases: Collection[str] = ()
+) -> int | None:
     """
-    Return the 1-based line in ``path`` that holds ``text``.
+    Return the 1-based line in ``path`` that holds ``text``, or None when no searched line holds it.
 
     A line equal to ``text`` wins over one that only contains it. For a release
     page, pass ``page`` so only that release's section of CHANGELOG.md is
-    searched; the same phrase often appears under several versions.
+    searched; the same phrase often appears under several versions. Pass the
+    project's ``excluded_releases`` too, so the sections are numbered the way
+    the build numbers them.
     """
     needle = text.strip()
     if not needle:
         return None
     source = path.read_text(encoding="utf-8")
-    first, last = _release_section(page, path, source) or (1, None)
-    numbered = list(enumerate(source.splitlines(), start=1))[first - 1 : last]
+    first, last = _release_section(page, path, source, excluded_releases) or (1, None)
+    # The ranges count lines the way the release-notes parser splits them.
+    numbered = list(enumerate(source.split("\n"), start=1))[first - 1 : last]
     exact = next((number for number, line in numbered if line.strip() == needle), None)
     return exact or next((number for number, line in numbered if needle in line), None)
 
 
-def _release_section(page: PageRecord | None, path: Path, source: str) -> tuple[int, int] | None:
+def _release_section(
+    page: PageRecord | None, path: Path, source: str, excluded_releases: Collection[str]
+) -> tuple[int, int] | None:
     """Return the line range of the release a ``releases/<slug>/`` page shows."""
     parts = page.rel_path.parts if page is not None else ()
     # A release page is built as `releases/<slug>/index.html`, three parts.
     if path.name != _CHANGELOG or len(parts) != 3 or parts[0] != _RELEASES_DIR:
         return None
     # The page's folder is the release slug, as the release-notes builder writes it.
-    return release_line_ranges(source, exclude=()).get(parts[1])
+    return release_line_ranges(source, exclude=excluded_releases).get(parts[1])

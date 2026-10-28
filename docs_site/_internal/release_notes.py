@@ -221,7 +221,9 @@ def _parse_changelog_with_lines(
         if seen_slugs[slug] > 1:
             slug = f"{slug}-{seen_slugs[slug]}"
 
-        end = start + chunk.count("\n")
+        # The chunk keeps the blank lines before the next heading; dropping
+        # them keeps `end` on a real line, including for the last section.
+        end = start + chunk.rstrip("\n").count("\n")
         releases.append((Release(slug=slug, title=title, body=body), (start, end)))
 
     return releases

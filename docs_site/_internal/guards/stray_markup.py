@@ -13,11 +13,12 @@ inject markup avoid this with ``flatten_for_markdown``; authored HTML avoids it
 by keeping the whole block flush left with no blank lines inside it. A fenced
 code block followed on the very next line by text, such as the next list
 item, gets wrapped in a paragraph the same way; a blank line after the
-closing fence avoids it.
+closing fence avoids it. Inside a list item, the block also needs a 4-space
+indent, or it drops out of the list.
 
-The report names the Markdown file, or CHANGELOG.md for a release-notes page,
-and, when that text appears in the file, the line holding the text after the
-first stray tag on the page.
+The report names the Markdown file, or CHANGELOG.md for a release-notes page.
+When the text right after the first stray tag appears in that file (for a
+release page, in that release's section), it also names that line.
 
 The check covers the page body and the HTML a page ships for Vue to build in
 the browser, which is where the landing page keeps its content.
@@ -57,12 +58,13 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         # after the first one usually comes straight from the Markdown file.
         source = source_markdown(page, ctx.content_dir, ctx.repo_root)
         following = shown[0].following_text
-        line = source_line(source, following, page) if source is not None and following else None
+        excluded = ctx.project.settings.excluded_releases if ctx.project is not None else ()
+        line = source_line(source, following, page, excluded) if source is not None and following else None
         where = f" The first one comes just before {following[:80]!r}." if following else ""
         yield GuardResult.error(
             guard="stray_markup",
             message=(
-                f"The Markdown pass wrapped HTML in stray paragraph tags: {detail}.{where} Keep raw "
+                f"The markdown pass wrapped HTML in stray paragraph tags: {detail}.{where} Keep raw "
                 "HTML blocks flush left with no blank lines, leave a blank line after a "
                 "code block's closing fence, indent a code block inside a list item by 4 "
                 "spaces, and pass generated component markup through flatten_for_markdown."

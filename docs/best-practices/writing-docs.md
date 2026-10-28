@@ -131,14 +131,14 @@ generated scaffolds follow
   by the rules in [`CLAUDE.md`](../../CLAUDE.md#house-style).
 - Show the smallest fragment that makes the point. A template fragment
   often says more than a full component class.
-- Inside a list item, indent a code block's fences and code by 4 spaces,
-  along with any paragraph that follows it in the same item, and leave a
-  blank line before and after the block. The docs site's Markdown pass
-  needs the 4 spaces to keep the block in the item, and this applies to
-  changelog entries too. Without them, the block and the text after it
-  drop out of the list, and a numbered list starts again at 1. A closing
-  fence followed directly by the next item makes the docs build fail
-  `stray_markup`.
+- Inside a list item, indent everything that follows a blank line by 4
+  spaces per list level: a paragraph, a nested list, and a code block's
+  fences and code. Leave a blank line before and after a code block. The
+  docs site renders Markdown with python-markdown, which keeps text in a
+  list item only at that indent, and the release-notes pages are built
+  from CHANGELOG.md the same way. Without it, the text drops out of the
+  list, and a numbered list starts again at 1. A closing fence followed
+  directly by the next item makes the docs build fail `stray_markup`.
 
 ### One call per line
 

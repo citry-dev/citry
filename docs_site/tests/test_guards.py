@@ -966,7 +966,7 @@ def test_rendered_markdown_guard_points_a_release_page_at_its_changelog_section(
         "<html><body><article><div>### Fix</div></article></body></html>", encoding="utf-8"
     )
     (tmp_path / "CHANGELOG.md").write_text(
-        "# Changelog\n\n## Unreleased\n\n### Fixes\n\n## v0.5.0\n\n### Fix\n\n- An entry.\n",
+        "# Changelog\n\n## Unreleased\n\n### Fix\n\n## v0.5.0\n\n### Fix\n\n- An entry.\n",
         encoding="utf-8",
     )
 
@@ -1108,15 +1108,31 @@ def test_stray_markup_guard_searches_only_the_release_section_of_the_changelog(t
         encoding="utf-8",
     )
     (tmp_path / "CHANGELOG.md").write_text(
-        "# Changelog\n\n## Unreleased\n\n- Use `class Kwargs:` here.\n\n"
-        "## v0.2.0\n\n- An entry.\n\n  ```python\n  class Kwargs:\n  ```\n",
+        "# Changelog\n\n## Unreleased\n\n- A newer entry.\n\n    ```python\n    class Kwargs:\n    ```\n\n"
+        "## v0.2.0\n\n- An entry.\n\n    ```python\n    class Kwargs:\n    ```\n",
         encoding="utf-8",
     )
 
     [result] = stray_markup.check(_index_ctx(tmp_path, build))
 
     assert result.source == str(tmp_path / "CHANGELOG.md")
-    assert result.line == 12
+    # Line 8 holds the same text, under Unreleased.
+    assert result.line == 16
+
+
+def test_stray_markup_guard_reports_the_first_stray_tag_on_the_page(tmp_path: Path) -> None:
+    """The report starts from the first stray tag in page order, whatever kind it is."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><p></p>First text<p><div>Later text</div></body></html>", encoding="utf-8"
+    )
+    (tmp_path / "index.md").write_text("# Home\n\nFirst text\n\nLater text\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.message.index("'<p></p>'") < result.message.index("'<p><div'")
+    assert result.line == 3
 
 
 def test_stray_markup_guard_prefers_a_content_page_under_releases(tmp_path: Path) -> None:
