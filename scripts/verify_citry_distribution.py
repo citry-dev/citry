@@ -54,15 +54,18 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # (`_walk.py`), and the helper that copies deeply nested js_data() without a
 # Python call per level (`util/deep_json.py`). Between #439 (2026-10-27) and
 # 2026-10-28 the merged fixes and features added about 63 KB of compressed
-# Python source and no data files: the schema base classes for `model_base`
-# and Pydantic `State` (`_model_base.py`, #455, #461), scoped slot props for
-# `citry check` (`_slot_props.py`, #521), sub-path URLs (`_sub_path.py`,
-# #479), multi-line expressions (`_authored_expression.py`, #459), and the
-# v-pre fixes in `_vue/direct_capture.py` (#514, #525, #526). The CI wheel
-# measured 1,526,915 bytes on main at f67bb05a5. This cap leaves about 45 KB
-# above that, since the last 19 KB of headroom lasted a day.
-# A sizeable addition should raise the cap on purpose rather than use up the
-# headroom unnoticed.
+# source and no data files, almost all Python plus 2.2 KB in the bundled
+# `_vue/runtime.js`. The largest additions are the base classes that
+# `CitrySettings.model_base` picks for plain schemas, with Pydantic `State`
+# support (`_model_base.py`, #455, #461), Vue data passed to fills (#445,
+# across `nodes/__init__.py`, `_vue/static_template.py` and
+# `_vue/direct_capture.py`), scoped slot props for `citry check`
+# (`_slot_props.py`, #521), sub-path URLs (`_sub_path.py`, #479), and the
+# v-pre fixes (#514, #525, #526). The CI wheel measured 1,526,915 bytes on
+# main at f67bb05a5. #455 alone used up the previous 19 KB of headroom, so
+# this cap leaves about 45 KB above that, as a backstop rather than a tight
+# budget. A sizeable addition should still raise the cap on purpose rather
+# than use up the headroom unnoticed.
 MAX_WHEEL_BYTES: Final = 1_536 * 1024
 
 
