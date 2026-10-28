@@ -26,10 +26,11 @@ from __future__ import annotations
 
 import posixpath
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import unquote, urlsplit
 
 from citry._path_checks import PathLookup, register_path_checker
+from citry._sub_path import normalize_sub_path, recording_sub_path, request_sub_path
 from citry.contrib._path_lookup import files_beside
 from citry.contrib.wsgi import wsgi_app
 from citry.util.routing import normalize_mount_prefix
@@ -77,22 +78,62 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
 
     def dispatch(environ: dict[str, Any], start_response: StartResponse) -> Iterable[bytes]:
         path = environ.get("PATH_INFO", "")
-        if path == mount_path or path.startswith(mount_path + "/"):
-            # The WSGI convention for sub-mounting: the prefix moves into
-            # SCRIPT_NAME, PATH_INFO keeps the remainder.
-            forwarded = dict(environ)
-            forwarded["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + mount_path
-            forwarded["PATH_INFO"] = path[len(mount_path) :]
-            return citry_wsgi(forwarded, start_response)
-        return host_wsgi(environ, start_response)
+        # SCRIPT_NAME is the sub-path the server mounted the app at. Record
+        # it while the request is handled, so URLs built in Citry's own
+        # routes, which run outside Flask, start with it.
+        with recording_sub_path(environ.get("SCRIPT_NAME", "")):
+            if path == mount_path or path.startswith(mount_path + "/"):
+                # The WSGI convention for sub-mounting: the prefix moves into
+                # SCRIPT_NAME, PATH_INFO keeps the remainder.
+                forwarded = dict(environ)
+                forwarded["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + mount_path
+                forwarded["PATH_INFO"] = path[len(mount_path) :]
+                return citry_wsgi(forwarded, start_response)
+            return host_wsgi(environ, start_response)
 
     app.wsgi_app = dispatch
     citry_instance.set_mounted_prefix(prefix)
+
+    def sub_path() -> str:
+        script_root = _flask_script_root(app)
+        if script_root is not None:
+            return normalize_sub_path(script_root)
+        # A request to Citry's own routes runs outside Flask, so dispatch
+        # recorded its SCRIPT_NAME.
+        recorded = request_sub_path()
+        if recorded is not None:
+            return recorded
+        # Outside a request, Flask builds URLs below APPLICATION_ROOT, so
+        # Citry's URLs follow it too.
+        return normalize_sub_path(app.config.get("APPLICATION_ROOT"))
+
+    citry_instance._set_sub_path_reader(sub_path)
     # Only a Flask app has a route table to ask. Any other WSGI host gets the
     # mount without a checker, so `citry check` skips its links rather than
     # failing on every one.
     if hasattr(app, "url_map"):
         register_path_checker(citry_instance, _flask_path_checker(app), host=app)
+
+
+def _flask_script_root(app: Any) -> str | None:
+    """
+    Return the current request's ``script_root`` when ``app`` is handling it, or ``None``.
+
+    Inside one of the app's requests, Flask's ``script_root`` is the
+    sub-path, after any WSGI middleware such as ``ProxyFix`` set it, and a
+    streamed response that keeps the request context still sees it.
+    """
+    try:
+        # Imported here, not at module load: mount() also accepts a WSGI
+        # app that is not Flask, in an environment without Flask.
+        from flask import current_app, has_request_context, request  # noqa: PLC0415
+    except ImportError:
+        return None
+    # Another Flask app's request says nothing about this app's sub-path.
+    # current_app is a proxy, so compare the app object it stands for.
+    if not has_request_context() or cast("Any", current_app)._get_current_object() is not app:
+        return None
+    return request.script_root
 
 
 def _flask_path_checker(app: Any) -> PathChecker:

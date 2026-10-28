@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._nested_declarations import _compose_nested_declaration_class
+from citry._sub_path import normalize_sub_path
 from citry.cache import _normalize_ttl
 from citry.constness import Const, _mapping_value_is_const, const_value
 from citry.extension import Extension
@@ -53,6 +54,16 @@ logger = logging.getLogger("citry")
 
 _CacheLookupOutcome = Literal["miss", "corrupt-entry", "incompatible-entry", "oversized-entry"]
 _CacheKind = Literal["component", "fragment"]
+
+
+def _explicit_sub_path(sub_path: str) -> str:
+    """Return a ``sub_path`` a caller passed to a cache key function, raising when it is not a URL path."""
+    # A value read from a request falls back to the site root, but one the
+    # caller wrote on purpose would then name the wrong entry without a word.
+    if sub_path not in ("", "/") and not normalize_sub_path(sub_path):
+        msg = f"sub_path must be '' or start with a single '/', such as '/shop'; got {sub_path!r}."
+        raise ValueError(msg)
+    return normalize_sub_path(sub_path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,8 +217,8 @@ class CacheExtension(Extension):
         if expected is not None and self._revision_snapshot() != expected:
             raise _CacheRevisionChanged
 
-    def _key_context(self) -> _CacheKeyContext:
-        """Snapshot all engine-owned inputs to physical key construction."""
+    def _key_context(self, *, sub_path: str | None = None) -> _CacheKeyContext:
+        """Snapshot all engine-owned inputs to physical key construction, with ``sub_path`` or the current one."""
         scope = _effective_scope(self.citry, self._defaults)
         compatibility = tuple(
             _ExtensionCacheCompatibility(
@@ -224,6 +235,7 @@ class CacheExtension(Extension):
             engine_id=scope.engine_id,
             revision=self._revision_snapshot(),
             extensions=compatibility,
+            sub_path=self.citry._current_sub_path() if sub_path is None else _explicit_sub_path(sub_path),
         )
 
     def _lookup_component(

@@ -29,6 +29,7 @@ from pathlib import PurePath
 from typing import TYPE_CHECKING, Any
 
 from citry._path_checks import PathLookup, register_path_checker
+from citry._sub_path import normalize_sub_path, recording_sub_path, request_sub_path
 from citry.contrib._path_lookup import files_beside
 from citry.contrib.asgi import asgi_app
 from citry.util.routing import normalize_mount_prefix
@@ -52,6 +53,20 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     as FastAPI and Starlette apps do, ``citry check`` and the editor can also
     ask it whether it serves each link path written in your templates.
 
+    For an app served below a sub-path, Citry's URLs (its scripts, styles,
+    and Events endpoints) start with that sub-path. ``mount()`` adds a
+    middleware to ``app`` that reads each request's ASGI ``root_path``,
+    which ``uvicorn --root-path`` or ``FastAPI(root_path=...)`` sets. It
+    runs inside your own middleware, so one that sets ``root_path`` from a
+    proxy header is seen. Outside a request, such as in a script or a test,
+    the URLs use ``app.root_path``, or the site root for a plain Starlette
+    app. Call ``mount()`` before the server starts the app, for example at
+    module level, not inside ``lifespan``: Starlette accepts middleware
+    only until then, so a later ``mount()`` skips it, and the URLs use
+    ``app.root_path`` only. A page that one of your own middlewares
+    renders runs outside Citry's middleware, so its URLs use
+    ``app.root_path`` too.
+
     Raises:
         ValueError: If ``prefix`` does not start with ``/``.
 
@@ -63,11 +78,56 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     mount_path = normalize_mount_prefix(prefix)
     app.mount(mount_path, asgi_app(citry_instance))
     citry_instance.set_mounted_prefix(prefix)
+    _add_root_path_recorder(app)
+
+    def sub_path() -> str:
+        recorded = request_sub_path()
+        # Outside a request, the app's own root_path is the best answer.
+        return recorded if recorded is not None else normalize_sub_path(getattr(app, "root_path", ""))
+
+    citry_instance._set_sub_path_reader(sub_path)
     # Only an app that lists its routes can be asked about a path. Any other
     # host gets the mount without a checker, so `citry check` skips its
     # links rather than failing on every one.
     if hasattr(app, "routes"):
         register_path_checker(citry_instance, _starlette_path_checker(app), host=app)
+
+
+def _add_root_path_recorder(app: Any) -> None:
+    """Add the middleware that records each request's ``root_path``, when ``app`` can still take one."""
+    # One middleware per app is enough for every Citry instance mounted
+    # into it. A host that is not a Starlette app, or one that has already
+    # started and built its middleware, gets the app's setting only, so
+    # mount() still works on such a host.
+    user_middleware = getattr(app, "user_middleware", None)
+    if (
+        not isinstance(user_middleware, list)
+        or getattr(app, "middleware_stack", None) is not None
+        or any(getattr(entry, "cls", None) is _RecordRootPath for entry in user_middleware)
+    ):
+        return
+    # Imported here, not at module load, and only for a Starlette host:
+    # this module must import without Starlette installed.
+    from starlette.middleware import Middleware  # noqa: PLC0415
+
+    # Last in the list runs innermost, after any middleware of the app that
+    # sets root_path from a proxy header, whatever order they were added in.
+    user_middleware.append(Middleware(_RecordRootPath))
+
+
+class _RecordRootPath:
+    """ASGI middleware that records each request's ``root_path`` as the sub-path Citry's URLs start with."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        # Lifespan messages have no root_path and build no URLs.
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        with recording_sub_path(scope.get("root_path", "")):
+            await self.app(scope, receive, send)
 
 
 def _starlette_path_checker(app: Any) -> PathChecker:
