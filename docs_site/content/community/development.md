@@ -282,14 +282,14 @@ contributor reading the source:
 - **Link other symbols with brackets.** Write a link to another entry like
   this:
 
-  ```text
-  [`CitryElement`][citry.CitryElement]
-  ```
+    ```text
+    [`CitryElement`][citry.CitryElement]
+    ```
 
-  The first brackets hold the text the reader sees. The second hold the
-  full dotted path of a real `citry` symbol; a member such as
-  `citry.Component.template_data` works too. An unknown path shows as plain
-  text with no link.
+    The first brackets hold the text the reader sees. The second hold the
+    full dotted path of a real `citry` symbol; a member such as
+    `citry.Component.template_data` works too. An unknown path shows as plain
+    text with no link.
 
 A documented method looks like this:
 

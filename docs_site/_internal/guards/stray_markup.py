@@ -16,7 +16,8 @@ item, gets wrapped in a paragraph the same way; a blank line after the
 closing fence avoids it.
 
 The report names the Markdown file, or CHANGELOG.md for a release-notes page,
-and the line holding the text that follows the first stray tag.
+and, when that text appears in the file, the line holding the text after the
+first stray tag on the page.
 
 The check covers the page body and the HTML a page ships for Vue to build in
 the browser, which is where the landing page keeps its content.
@@ -49,22 +50,22 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
 
         shown = page.stray_markup[:_MAX_REPORTED]
         extra = len(page.stray_markup) - len(shown)
-        detail = "; ".join(repr(markup) for markup in shown)
+        detail = "; ".join(repr(stray.markup) for stray in shown)
         if extra > 0:
             detail += f"; and {extra} more"
         # The stray tags have no source line of their own, but the text right
         # after the first one usually comes straight from the Markdown file.
         source = source_markdown(page, ctx.content_dir, ctx.repo_root)
-        following = page.stray_markup_text[0] if page.stray_markup_text else ""
-        line = source_line(source, following) if source is not None and following else None
+        following = shown[0].following_text
+        line = source_line(source, following, page) if source is not None and following else None
         where = f" The first one comes just before {following[:80]!r}." if following else ""
         yield GuardResult.error(
             guard="stray_markup",
             message=(
-                f"Page wraps raw HTML in stray paragraph tags: {detail}.{where} Keep raw "
+                f"The Markdown pass wrapped HTML in stray paragraph tags: {detail}.{where} Keep raw "
                 "HTML blocks flush left with no blank lines, leave a blank line after a "
-                "code block's closing fence, and pass generated component markup "
-                "through flatten_for_markdown."
+                "code block's closing fence, indent a code block inside a list item by 4 "
+                "spaces, and pass generated component markup through flatten_for_markdown."
             ),
             source=str(source) if source is not None else page.label,
             line=line,

@@ -958,6 +958,25 @@ def test_rendered_markdown_guard_catches_a_wrapper_missing_markdown_attribute(tm
     assert "[Compatibility](/about/compatibility/)" in results[0].message
 
 
+def test_rendered_markdown_guard_points_a_release_page_at_its_changelog_section(tmp_path: Path) -> None:
+    """A leak on an older release's page takes its line from that release, not a newer one."""
+    build = tmp_path / "site"
+    (build / "releases" / "v0.5.0").mkdir(parents=True)
+    (build / "releases" / "v0.5.0" / "index.html").write_text(
+        "<html><body><article><div>### Fix</div></article></body></html>", encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## Unreleased\n\n### Fixes\n\n## v0.5.0\n\n### Fix\n\n- An entry.\n",
+        encoding="utf-8",
+    )
+
+    [result] = rendered_markdown.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(tmp_path / "CHANGELOG.md")
+    assert result.line == 9
+    assert "outside backticks" in result.message
+
+
 def test_rendered_markdown_guard_ignores_markdown_shown_on_purpose(tmp_path: Path) -> None:
     """Documenting Markdown inside code or a heading element is not a leak."""
     build = tmp_path / "site"
@@ -1078,6 +1097,43 @@ def test_stray_markup_guard_points_a_release_notes_page_at_the_changelog(tmp_pat
 
     assert result.source == str(tmp_path / "CHANGELOG.md")
     assert result.line == 5
+
+
+def test_stray_markup_guard_searches_only_the_release_section_of_the_changelog(tmp_path: Path) -> None:
+    """The same text under a newer version must not take the line of an older release's entry."""
+    build = tmp_path / "site"
+    (build / "releases" / "v0.2.0").mkdir(parents=True)
+    (build / "releases" / "v0.2.0" / "index.html").write_text(
+        "<html><body><p><div><code>class Kwargs:</code></div></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## Unreleased\n\n- Use `class Kwargs:` here.\n\n"
+        "## v0.2.0\n\n- An entry.\n\n  ```python\n  class Kwargs:\n  ```\n",
+        encoding="utf-8",
+    )
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(tmp_path / "CHANGELOG.md")
+    assert result.line == 12
+
+
+def test_stray_markup_guard_prefers_a_content_page_under_releases(tmp_path: Path) -> None:
+    """Only a release page with no Markdown of its own maps to the changelog."""
+    build = tmp_path / "site"
+    (build / "releases" / "policy").mkdir(parents=True)
+    (build / "releases" / "policy" / "index.html").write_text(
+        "<html><body><p><div>Policy text</div></body></html>", encoding="utf-8"
+    )
+    (tmp_path / "releases").mkdir()
+    (tmp_path / "releases" / "policy.md").write_text("# Policy\n\nPolicy text\n", encoding="utf-8")
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\nPolicy text\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(tmp_path / "releases" / "policy.md")
+    assert result.line == 3
 
 
 def test_stray_markup_guard_ignores_paragraphs_inside_scripts_and_ordinary_html(tmp_path: Path) -> None:

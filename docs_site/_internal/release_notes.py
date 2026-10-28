@@ -60,20 +60,22 @@ class Release:
     body: str  # markdown body, without the "## version" heading line
 
 
-def _split_sections(text: str) -> list[str]:
+def _split_sections_with_lines(text: str) -> list[tuple[int, str]]:
     """
     Split changelog text into one chunk per ``## version`` section.
 
-    A ``## `` line only starts a new section when it is not inside a fenced code
-    block, so a release body that shows markdown with its own ``## `` headings is
-    not torn apart. The text before the first version heading (the title and any
+    Each chunk comes with the 1-based line its heading is on. A ``## `` line
+    only starts a new section when it is not inside a fenced code block, so a
+    release body that shows markdown with its own ``## `` headings is not torn
+    apart. The text before the first version heading (the title and any
     preamble) is dropped.
     """
-    sections: list[str] = []
+    sections: list[tuple[int, str]] = []
     current: list[str] | None = None
+    current_start = 0
     in_fence = False
     fence_char = ""
-    for line in text.split("\n"):
+    for number, line in enumerate(text.split("\n"), start=1):
         fence = _FENCE.match(line)
         if fence:
             char = fence.group(1)[0]
@@ -83,13 +85,13 @@ def _split_sections(text: str) -> list[str]:
                 in_fence = False
         elif not in_fence and _SECTION_HEAD.match(line):
             if current is not None:
-                sections.append("\n".join(current))
-            current = [line]
+                sections.append((current_start, "\n".join(current)))
+            current, current_start = [line], number
             continue
         if current is not None:
             current.append(line)
     if current is not None:
-        sections.append("\n".join(current))
+        sections.append((current_start, "\n".join(current)))
     return sections
 
 
@@ -167,13 +169,31 @@ def parse_changelog(text: str, *, exclude: Collection[str] | None = None) -> lis
     sidebar item - so a version can be hidden from the docs without touching the
     changelog.
     """
+    return [release for release, _ in _parse_changelog_with_lines(text, exclude=exclude)]
+
+
+def release_line_ranges(text: str, *, exclude: Collection[str] | None = None) -> dict[str, tuple[int, int]]:
+    """
+    Map each release page's slug to the lines its section covers in CHANGELOG.md.
+
+    A guard that reports a problem on ``/releases/<slug>/`` searches only that
+    range for the source line, since the same phrase often appears in several
+    versions. Both ends are 1-based and inclusive.
+    """
+    return {release.slug: lines for release, lines in _parse_changelog_with_lines(text, exclude=exclude)}
+
+
+def _parse_changelog_with_lines(
+    text: str, *, exclude: Collection[str] | None
+) -> list[tuple[Release, tuple[int, int]]]:
+    """Parse the changelog like :func:`parse_changelog`, keeping each section's line range."""
     if exclude is None:
         from docs_site._internal.project import current_docs_project  # noqa: PLC0415
 
         exclude = current_docs_project().settings.excluded_releases
-    releases: list[Release] = []
+    releases: list[tuple[Release, tuple[int, int]]] = []
     seen_slugs: dict[str, int] = {}
-    for chunk in _split_sections(text):
+    for start, chunk in _split_sections_with_lines(text):
         stripped = chunk.strip()
         if not stripped:
             continue
@@ -201,7 +221,8 @@ def parse_changelog(text: str, *, exclude: Collection[str] | None = None) -> lis
         if seen_slugs[slug] > 1:
             slug = f"{slug}-{seen_slugs[slug]}"
 
-        releases.append(Release(slug=slug, title=title, body=body))
+        end = start + chunk.count("\n")
+        releases.append((Release(slug=slug, title=title, body=body), (start, end)))
 
     return releases
 
