@@ -95,6 +95,12 @@
 - `parse_template()` now accepts an `if` filter in a shorthand loop, such as
   `<li c-for="x in items if x">`, as it does on `<c-for each>`.
 
+### Performance
+
+- Reading a field of a parsed template, such as `Template.elements` or a
+  node's `body`, now copies only that node instead of everything below it,
+  so walking a deeply nested template from Python is much faster.
+
 ## v1.9.0
 
 ### Changed

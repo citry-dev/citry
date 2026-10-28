@@ -256,7 +256,7 @@ fn hand_built_tree(depth: usize) -> Template {
             unreachable!()
         };
         body.elements = std::mem::take(&mut template.elements);
-        template.elements = vec![TemplateElement::Node(outer)];
+        template.elements = vec![TemplateElement::Node(outer)].into();
     }
     template
 }

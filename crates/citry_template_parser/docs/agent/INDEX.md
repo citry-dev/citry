@@ -79,6 +79,14 @@ Types annotated `#[pyclass]` are the Python contract. Changing their shape is a
 high-risk change: update the PyO3 registration, the `_rust.pyi` stub, and the
 Python wrapper together (CLAUDE.md Mechanism 4).
 
+The child lists and the per-node lists of variables and comments are
+`Shared<Vec<...>>` (`ast.rs`), an `Arc` that copies of the tree share. PyO3
+copies a field when Python reads it, so this keeps a read to one node instead
+of the whole subtree below it (#384). Python sees plain lists. `Shared` has no
+`DerefMut`, so every possible copy is visible in the code: change a list with
+`Shared::make_mut`, which copies only when the list is shared, and move one
+out with `Shared::into_inner`.
+
 ## Parser (`parser.rs`)
 
 `parse_template(input, lang, user_rules)` builds the tree:

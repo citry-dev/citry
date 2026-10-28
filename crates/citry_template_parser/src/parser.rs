@@ -6,7 +6,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::ast::{
     remove_introduced_variables, Comment, Expr, FillDataField, FillDataPattern, ForeignSourcePart,
-    HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot, Template,
+    HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Shared, StaticNamedSlot, Template,
     TemplateElement, Text, Token,
 };
 use crate::constants::{
@@ -261,10 +261,10 @@ fn parse_template_inner(input: &str, context: &ParserContext) -> Result<Template
     // Handle empty input early
     if input.is_empty() {
         return Ok(Template {
-            elements: vec![],
-            comments: vec![],
-            used_variables: vec![],
-            slots: vec![],
+            elements: Shared::new(vec![]),
+            comments: Shared::new(vec![]),
+            used_variables: Shared::new(vec![]),
+            slots: Shared::new(vec![]),
         });
     }
 
@@ -301,10 +301,10 @@ fn parse_template_inner(input: &str, context: &ParserContext) -> Result<Template
 
     // Root template being built
     let mut root_template = Template {
-        elements: vec![],
-        comments: template_comments,
-        used_variables: vec![],
-        slots: vec![],
+        elements: Shared::new(vec![]),
+        comments: template_comments.into(),
+        used_variables: Shared::new(vec![]),
+        slots: Shared::new(vec![]),
     };
 
     // The root template has no stack entry, so its own flag lives here (see
@@ -373,13 +373,13 @@ fn process_template_element(
             let template = get_current_template(tag_stack, root_template);
             let (text, comment) = process_html_comment(inner, context)?;
             push_text_with_foreign(template, text, context)?;
-            template.comments.push(comment);
+            Shared::make_mut(&mut template.comments).push(comment);
         }
         // Template comments: NOT added as Text, only captured as comments
         Rule::template_comment => {
             let template = get_current_template(tag_stack, root_template);
             let comment = process_template_comment(inner, context)?;
-            template.comments.push(comment);
+            Shared::make_mut(&mut template.comments).push(comment);
         }
         // All of these are treated as plain text
         Rule::html_directive | Rule::html_processing_instruction | Rule::text => {
@@ -395,7 +395,7 @@ fn process_template_element(
             let node = process_html_raw(inner, context)?;
             check_nesting_depth(node.start_tag(), open_depth, context)?;
             let template = get_current_template(tag_stack, root_template);
-            template.elements.push(TemplateElement::Node(node));
+            Shared::make_mut(&mut template.elements).push(TemplateElement::Node(node));
         }
         Rule::html_text_container => {
             // `<script>`, `<style>`, `<textarea>` and `<title>` count like
@@ -427,9 +427,9 @@ fn process_template_element(
             let template = get_current_template(tag_stack, root_template);
             let expr = process_template_expression(inner, context)?;
             // Propagate upwards
-            template.used_variables.extend(expr.used_variables.clone());
-            template.comments.extend(expr.comments.clone());
-            template.elements.push(TemplateElement::Expr(expr));
+            Shared::make_mut(&mut template.used_variables).extend(expr.used_variables.clone());
+            Shared::make_mut(&mut template.comments).extend(expr.comments.clone());
+            Shared::make_mut(&mut template.elements).push(TemplateElement::Expr(expr));
         }
         Rule::html_tag => {
             // Handle HTML tags (start/end/self-closing)
@@ -481,10 +481,10 @@ fn process_template_element(
                         );
                         // Treat void element as self-closing
                         let node = Node::SelfClosing {
-                            used_variables,
-                            comments: start_tag.comments.clone(),
+                            used_variables: used_variables.into(),
+                            comments: start_tag.comments.clone().into(),
                             start_tag,
-                            introduced_variables,
+                            introduced_variables: introduced_variables.into(),
                             contains_fills: false,
                         };
                         finalize_node(
@@ -497,10 +497,10 @@ fn process_template_element(
                         )?;
                     } else {
                         let body = Template {
-                            elements: vec![],
-                            comments: vec![],
-                            used_variables: vec![],
-                            slots: vec![],
+                            elements: Shared::new(vec![]),
+                            comments: Shared::new(vec![]),
+                            used_variables: Shared::new(vec![]),
+                            slots: Shared::new(vec![]),
                         };
                         let in_v_pre = has_v_pre(&start_tag)
                             || tag_stack.last().is_some_and(|parent| parent.in_v_pre);
@@ -660,24 +660,24 @@ fn finalize_node(
 
     // Extract slot if this is a <c-slot> tag
     if let Some(slot) = extract_slot_from_node(&node) {
-        parent_template.slots.push(slot);
+        Shared::make_mut(&mut parent_template.slots).push(slot);
     }
 
     // Attribute values are authored before the body, so preserve that order
     // when carrying their statically named slots into the containing template.
-    parent_template.slots.extend(attribute_slots);
+    Shared::make_mut(&mut parent_template.slots).extend(attribute_slots);
 
     // Propagate slots from body upwards (if node has body)
     if let Node::WithBody { body, .. } = &node {
-        parent_template.slots.extend(body.slots.clone());
+        Shared::make_mut(&mut parent_template.slots).extend(body.slots.iter().cloned());
     }
 
     // Propagate comments upwards. Each node's used-variable list is built
     // later by `recompute_template_used_variables`, once the whole tree
     // exists, because copying every subtree's list into its parent at each
     // close would grow with depth times variables.
-    parent_template.comments.extend(node.comments().clone());
-    parent_template.elements.push(TemplateElement::Node(node));
+    Shared::make_mut(&mut parent_template.comments).extend(node.comments().clone());
+    Shared::make_mut(&mut parent_template.elements).push(TemplateElement::Node(node));
 
     Ok(())
 }
@@ -910,7 +910,7 @@ fn push_text_with_foreign(
 ) -> Result<(), ParseError> {
     let parts = context.claim_foreign_parts(text.token.start_index, text.token.end_index)?;
     if parts.is_empty() {
-        template.elements.push(TemplateElement::Text(text));
+        Shared::make_mut(&mut template.elements).push(TemplateElement::Text(text));
         return Ok(());
     }
 
@@ -918,15 +918,15 @@ fn push_text_with_foreign(
     for part in parts {
         context.validate_foreign_body_locus(&part)?;
         if cursor < part.token.start_index {
-            template.elements.push(TemplateElement::Text(Text {
+            Shared::make_mut(&mut template.elements).push(TemplateElement::Text(Text {
                 token: context.token_from_absolute_range(cursor, part.token.start_index)?,
             }));
         }
         cursor = part.token.end_index;
-        template.elements.push(TemplateElement::Foreign(part));
+        Shared::make_mut(&mut template.elements).push(TemplateElement::Foreign(part));
     }
     if cursor < text.token.end_index {
-        template.elements.push(TemplateElement::Text(Text {
+        Shared::make_mut(&mut template.elements).push(TemplateElement::Text(Text {
             token: context.token_from_absolute_range(cursor, text.token.end_index)?,
         }));
     }
@@ -1160,9 +1160,9 @@ fn process_html_self_closing_tag(
     Ok((
         Node::SelfClosing {
             start_tag,
-            used_variables,
-            introduced_variables,
-            comments,
+            used_variables: used_variables.into(),
+            introduced_variables: introduced_variables.into(),
+            comments: comments.into(),
             contains_fills: false, // Self-closing nodes never have fills
         },
         attribute_slots,
@@ -1504,10 +1504,10 @@ fn parse_html_attribute(
             };
             let nested_bindings = collect_template_binding_tokens(&template, context);
             context.record_nested_template_bindings(&attr_token, nested_bindings);
-            let comments = template.comments.clone();
-            let used_variables = template.used_variables.clone();
+            let comments = template.comments.to_vec();
+            let used_variables = template.used_variables.to_vec();
             let mut template = template;
-            let slots = std::mem::take(&mut template.slots);
+            let slots = Shared::into_inner(std::mem::take(&mut template.slots));
             (HtmlAttrKind::Template, used_variables, comments, slots)
         } else {
             // c-... attribute WITH expression value
@@ -1681,10 +1681,10 @@ fn process_html_raw(
         token: context.create_token(&content_pair),
     };
     let mut body = Template {
-        elements: vec![],
-        comments: vec![],
-        used_variables: vec![],
-        slots: vec![],
+        elements: Shared::new(vec![]),
+        comments: Shared::new(vec![]),
+        used_variables: Shared::new(vec![]),
+        slots: Shared::new(vec![]),
     };
     // Installed providers retain ownership even inside `<c-raw>`. This keeps
     // claims fail-closed and, importantly, never drops claimed authored bytes.
@@ -1790,10 +1790,10 @@ fn process_html_text_container(
     })?;
     assert_rule(&content_pair, content_rule)?;
     let mut body = Template {
-        elements: vec![],
-        comments: vec![],
-        used_variables: vec![],
-        slots: vec![],
+        elements: Shared::new(vec![]),
+        comments: Shared::new(vec![]),
+        used_variables: Shared::new(vec![]),
+        slots: Shared::new(vec![]),
     };
     for body_pair in content_pair.into_inner() {
         match body_pair.as_rule() {
@@ -1813,12 +1813,12 @@ fn process_html_text_container(
                     ));
                 }
                 let expr = process_template_expression(body_pair, context)?;
-                body.used_variables.extend(expr.used_variables.clone());
-                body.comments.extend(expr.comments.clone());
-                body.elements.push(TemplateElement::Expr(expr));
+                Shared::make_mut(&mut body.used_variables).extend(expr.used_variables.clone());
+                Shared::make_mut(&mut body.comments).extend(expr.comments.clone());
+                Shared::make_mut(&mut body.elements).push(TemplateElement::Expr(expr));
             }
             Rule::template_comment => {
-                body.comments
+                Shared::make_mut(&mut body.comments)
                     .push(process_template_comment(body_pair, context)?);
             }
             rule => {
@@ -4290,8 +4290,9 @@ fn recompute_template_used_variables(template: &mut Template) -> Vec<Token> {
     // calling itself per level, so its stack use does not grow with the
     // template's depth. Each body's elements are moved out while it is
     // visited and moved back when it is done, so no two frames hold the same
-    // part of the tree.
-    let elements = std::mem::take(&mut template.elements);
+    // part of the tree. The parser holds the only reference to each list, so
+    // taking one out of its `Shared` copies nothing.
+    let elements = Shared::into_inner(std::mem::take(&mut template.elements));
     let mut stack = vec![Frame {
         owner: None,
         done: Vec::with_capacity(elements.len()),
@@ -4310,7 +4311,7 @@ fn recompute_template_used_variables(template: &mut Template) -> Vec<Token> {
             Some(TemplateElement::Node(mut node)) => {
                 if let Node::WithBody { body, .. } = &mut node {
                     // Visit the body first; the node waits in the new frame.
-                    let elements = std::mem::take(&mut body.elements);
+                    let elements = Shared::into_inner(std::mem::take(&mut body.elements));
                     stack.push(Frame {
                         owner: Some(node),
                         done: Vec::with_capacity(elements.len()),
@@ -4329,13 +4330,13 @@ fn recompute_template_used_variables(template: &mut Template) -> Vec<Token> {
             None => {
                 let finished = stack.pop().expect("checked above");
                 let Some(mut node) = finished.owner else {
-                    template.elements = finished.done;
-                    template.used_variables = finished.used_variables.clone();
+                    template.elements = finished.done.into();
+                    template.used_variables = finished.used_variables.clone().into();
                     return finished.used_variables;
                 };
                 if let Node::WithBody { body, .. } = &mut node {
-                    body.elements = finished.done;
-                    body.used_variables = finished.used_variables.clone();
+                    body.elements = finished.done.into();
+                    body.used_variables = finished.used_variables.clone().into();
                 }
                 let variables = recompute_node_used_variables(&mut node, finished.used_variables);
                 let parent = stack.last_mut().expect("a body's frame has a parent");
@@ -4383,7 +4384,7 @@ fn recompute_node_used_variables(node: &mut Node, body_variables: Vec<Token>) ->
             recomputed.extend(attr.used_variables.clone());
         }
     }
-    *used_variables = recomputed.clone();
+    *used_variables = recomputed.clone().into();
     recomputed
 }
 
@@ -6156,13 +6157,13 @@ fn validate_tag_grouping(
 
 #[cfg(test)]
 mod walks_without_recursion {
-    //! The passes below, and `Template`'s clone, comparison and drop, keep
-    //! their own stack of what is left to visit, so they run on a small
-    //! thread whatever the template's depth. The tree is built by hand, far
-    //! deeper than the parser accepts (3,000 `<c-if>` levels, where the
-    //! parser stops control flow at 256), and none of them has a stack
-    //! guard, so one that called itself once per level would overflow the
-    //! 64 KiB thread.
+    //! The passes below, and `Template`'s comparison and drop, keep their own
+    //! stack of what is left to visit, and its clone shares the lists below it
+    //! without walking, so they run on a small thread whatever the template's
+    //! depth. The tree is built by hand, far deeper than the parser accepts
+    //! (3,000 `<c-if>` levels, where the parser stops control flow at 256), and
+    //! none of them has a stack guard, so one that called itself once per level
+    //! would overflow the 64 KiB thread.
     use super::*;
 
     const DEPTH: usize = 3_000;
@@ -6182,10 +6183,10 @@ mod walks_without_recursion {
     /// moving each level into the next.
     fn deep_control_flow(node: &Node) -> Template {
         let mut template = Template {
-            elements: vec![TemplateElement::Node(node.clone())],
-            comments: Vec::new(),
-            used_variables: Vec::new(),
-            slots: Vec::new(),
+            elements: vec![TemplateElement::Node(node.clone())].into(),
+            comments: Vec::new().into(),
+            used_variables: Vec::new().into(),
+            slots: Vec::new().into(),
         };
         for _ in 1..DEPTH {
             let mut outer = node.clone();
@@ -6193,7 +6194,7 @@ mod walks_without_recursion {
                 unreachable!()
             };
             body.elements = std::mem::take(&mut template.elements);
-            template.elements = vec![TemplateElement::Node(outer)];
+            template.elements = vec![TemplateElement::Node(outer)].into();
         }
         template
     }
@@ -6243,20 +6244,49 @@ mod walks_without_recursion {
             let mut changed = copy.clone();
             let mut level = &mut changed;
             for _ in 1..DEPTH {
-                let TemplateElement::Node(Node::WithBody { body, .. }) = &mut level.elements[0]
+                // The copy shares its lists with `template`, so changing one
+                // copies that level first and leaves `template` as it was.
+                let TemplateElement::Node(Node::WithBody { body, .. }) =
+                    &mut Shared::make_mut(&mut level.elements)[0]
                 else {
                     unreachable!()
                 };
                 level = body;
             }
             let TemplateElement::Node(Node::WithBody { contains_fills, .. }) =
-                &mut level.elements[0]
+                &mut Shared::make_mut(&mut level.elements)[0]
             else {
                 unreachable!()
             };
             *contains_fills = !*contains_fills;
             assert!(changed != template);
+            // The change copied the lists it touched, so the trees `changed`
+            // was copied from still match each other.
+            assert!(copy == template);
             // All three trees are dropped here, still on the small stack.
+        });
+    }
+
+    #[test]
+    fn a_deep_body_held_after_its_root_is_dropped_on_a_small_stack() {
+        // Python can keep a node's `body` from deep in a tree and drop the
+        // root first. The root's drop must then skip the shared list, and the
+        // body, now the last copy of everything below it, must still free it
+        // without calling itself per level.
+        let node = control_flow_node();
+        on_small_stack(move || {
+            let template = deep_control_flow(&node);
+            let mut level = &template;
+            for _ in 0..DEPTH / 2 {
+                let TemplateElement::Node(Node::WithBody { body, .. }) = &level.elements[0] else {
+                    unreachable!()
+                };
+                level = body;
+            }
+            let held = level.clone();
+            drop(template);
+            assert!(Shared::is_unique(&held.elements));
+            drop(held);
         });
     }
 }

@@ -721,6 +721,9 @@
 
 ### Performance
 
+- `citry check` is much faster on deeply nested templates: checking one
+  component nested to the limits took up to about a minute, and now takes
+  less than a second.
 - With a shared cache such as Redis, a render no longer asks the cache
   about every component's JS and CSS and every served `Dependencies`
   file. Each process asks about each one at most once a minute, so if the

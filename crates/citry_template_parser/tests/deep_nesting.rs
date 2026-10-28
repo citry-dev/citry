@@ -36,8 +36,8 @@ fn handles_on_small_stacks(source: String) {
                 let template =
                     parse_template(&source, None, None).unwrap_or_else(|error| panic!("{error}"));
                 let copy = template.clone();
-                // Comparing and printing walk the whole tree too; Python
-                // reaches them through `==` and `repr()`.
+                // Comparing and printing walk the whole tree; Python reaches
+                // them through `==` and `repr()`.
                 assert!(copy == template);
                 assert!(!format!("{template:?}").is_empty());
                 compile_template(template.clone(), None).unwrap();
