@@ -58,25 +58,24 @@ def test_pull_request_workflows_cancel_only_stale_pull_request_runs() -> None:
     }
 
 
-# The workflows whose PR runs take runners. Each one cancels a PR's runs when
-# the PR merges or closes; the notification and relock workflows do not run
-# checks, so they are left out.
-_CHECK_WORKFLOWS_CANCELLED_ON_CLOSE = {
-    "py--examples--tests.yml",
-    "py--tests.yml",
-    "repo--check.yml",
-    "repo--codeql.yml",
-    "repo--docs-check.yml",
-    "repo--docs-lighthouse.yml",
-    "repo--generated.yml",
-    "repo--security.yml",
-    "rust--tests.yml",
-}
+# Workflows that run on pull requests but run no checks, so a closed PR has
+# nothing of theirs worth cancelling: a notification and a lockfile refresh.
+_PR_WORKFLOWS_WITHOUT_CHECKS = {"repo--discord-pr.yml", "repo--dependabot-relock.yml"}
 
 
 def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
-    for name in sorted(_CHECK_WORKFLOWS_CANCELLED_ON_CLOSE):
-        workflow = _load_workflow(name)
+    checked: set[str] = set()
+    for path in sorted([*_WORKFLOWS.glob("*.yml"), *_WORKFLOWS.glob("*.yaml")]):
+        workflow = _load_workflow(path.name)
+        events = workflow.get("on", {})
+        # Every check workflow that runs on pull requests is covered, so a new
+        # one cannot leave its runs going after the PR merges.
+        if not isinstance(events, dict) or "pull_request" not in events:
+            continue
+        if path.name in _PR_WORKFLOWS_WITHOUT_CHECKS:
+            continue
+        name = path.name
+        checked.add(name)
         # A `closed` run joins the PR's concurrency group, and the group's
         # cancel-in-progress (checked above) cancels the PR's earlier runs.
         assert workflow["on"]["pull_request"]["types"] == ["opened", "synchronize", "reopened", "closed"], name
@@ -86,6 +85,8 @@ def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
             # cancelling run would itself queue for runners.
             if "needs" not in job:
                 assert job.get("if") == "github.event.action != 'closed'", f"{name}: {job_name}"
+    # Guards against the loop finding nothing because the trigger shape changed.
+    assert {"repo--check.yml", "py--tests.yml"} <= checked
 
 
 def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> None:
