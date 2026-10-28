@@ -32,8 +32,9 @@ autoreloader::
         def ready(self):
             enable_hot_reload(citry_instance)  # mode="hot" by default
 
-Reusing Django's ``SECRET_KEY`` as citry's signing secret (so values citry
-signs are covered by the key the project already manages)::
+Reusing Django's ``SECRET_KEY`` and ``SECRET_KEY_FALLBACKS`` as citry's
+signing secret (so values citry signs are covered by the keys the project
+already manages)::
 
     from citry.contrib.django import secret
 
@@ -564,13 +565,13 @@ def _hot_reload_dispatch_uid(citry_instance: Citry) -> str:
     return f"citry.contrib.django.enable_hot_reload:{id(citry_instance)}"
 
 
-def secret() -> str:
+def secret() -> str | list[str]:
     """
-    Django's ``SECRET_KEY``, for passing as ``Citry(secret=...)``.
+    Django's ``SECRET_KEY`` and ``SECRET_KEY_FALLBACKS``, for passing as ``Citry(secret=...)``.
 
     Citry signs values with the engine-level
     [`secret`][citry.CitrySettings.secret] setting. In a Django project the
-    natural signing key is the one the project already manages, so pass it
+    natural signing keys are the ones the project already manages, so pass them
     through::
 
         from citry import Citry
@@ -578,11 +579,20 @@ def secret() -> str:
 
         app = Citry(secret=secret())
 
-    The key is read when this is called, so Django settings must be configured
-    by then (in a normal Django startup they already are).
+    When the project sets ``SECRET_KEY_FALLBACKS`` to rotate its key, Citry
+    follows the rotation: ``SECRET_KEY`` signs new values, and a value signed
+    with any of the fallback keys still verifies, so values Citry already put
+    in visitors' pages keep verifying until you remove the old key. Empty
+    fallback entries are skipped.
+
+    The keys are read when this is called, so Django settings must be
+    configured by then (in a normal Django startup they already are).
 
     Returns:
-        The ``SECRET_KEY`` of the active Django settings.
+        ``SECRET_KEY`` as a plain string when ``SECRET_KEY_FALLBACKS`` is
+        empty or unset. Otherwise a list that starts with ``SECRET_KEY`` and
+        then holds each fallback key, in Django's order; ``Citry(secret=...)``
+        accepts both forms.
 
     Raises:
         RuntimeError: When Django settings are not configured; the message
@@ -590,6 +600,8 @@ def secret() -> str:
         django.core.exceptions.ImproperlyConfigured: When settings are
             configured but the ``SECRET_KEY`` itself is unusable (for example
             empty); Django's own message explains the problem.
+        TypeError: When ``SECRET_KEY_FALLBACKS`` is a single string instead of
+            a list, or holds an entry that is not a string.
 
     """
     # Imported here, not at module load: this module must be importable
@@ -598,7 +610,7 @@ def secret() -> str:
     from django.core.exceptions import ImproperlyConfigured  # noqa: PLC0415
 
     try:
-        return cast("str", django_settings.SECRET_KEY)
+        current = cast("str", django_settings.SECRET_KEY)
     except ImproperlyConfigured as err:
         if django_settings.configured:
             # Settings are configured but unusable in some other way (for
@@ -612,6 +624,30 @@ def secret() -> str:
             'secret directly: Citry(secret="...").'
         )
         raise RuntimeError(msg) from err
+    # Django added SECRET_KEY_FALLBACKS in 4.1, so an older Django has no such
+    # setting, and None means the same as an empty list.
+    raw_fallbacks = getattr(django_settings, "SECRET_KEY_FALLBACKS", None) or ()
+    # A string here would split into one-character keys, which anyone could
+    # guess to forge a value, so refuse it rather than read it as a list.
+    if isinstance(raw_fallbacks, str):
+        msg = "Django's SECRET_KEY_FALLBACKS must be a list of keys, not a single string."
+        raise TypeError(msg)
+    fallbacks: list[str] = []
+    for index, key in enumerate(raw_fallbacks):
+        if not isinstance(key, str):
+            msg = f"Django's SECRET_KEY_FALLBACKS[{index}] must be a string, got {type(key).__name__}."
+            raise TypeError(msg)
+        # An empty entry, such as an unset environment variable, is no key at
+        # all; Citry refuses empty keys, so skip it rather than fail every render.
+        if key:
+            fallbacks.append(key)
+    # A project without fallbacks gets the same plain string as before, so
+    # code that treats the result as one key keeps working.
+    if not fallbacks:
+        return current
+    # Citry's rotation list signs with its first entry and verifies with every
+    # entry, which is how Django uses SECRET_KEY and its fallbacks.
+    return [current, *fallbacks]
 
 
 class DjangoCache:
