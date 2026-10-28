@@ -246,6 +246,22 @@ def test_multiline_triple_double_literal_does_not_escape_ordinary_html_quotes() 
     assert '\\"Name\\"' not in result.source
 
 
+def test_blank_lines_in_a_multiline_template_stay_empty() -> None:
+    # A blank line that the formatter keeps, here next to a component tag,
+    # must not gain the template's indentation, which would leave trailing
+    # spaces in the Python file.
+    source = _component_source(
+        '"""\n      <div>\n        <c-B>x</c-B>\n\n        <p>y</p>\n      </div><div  ></div>\n    """',
+    )
+
+    result = format_python_templates(source)
+
+    lines = result.source.split("\n")
+    assert "        <c-B>x</c-B>" in lines
+    assert "" in lines[lines.index("        <c-B>x</c-B>") + 1 : lines.index("        <p>y</p>")]
+    assert not [line for line in lines if line and not line.strip()]
+
+
 def test_unchanged_escape_outside_rewrite_hunks_is_preserved() -> None:
     source = _component_source('"""line\\n<div  class = "row" ></div>"""')
 

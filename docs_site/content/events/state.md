@@ -31,8 +31,10 @@ A handler receives them through its `state` parameter, and any change it makes
 is kept for the next call.
 
 Keep State small: ids, filters, page numbers, flags such as "editing". The
-values must be JSON-serializable. When the inputs hold larger objects, declare
-a smaller State and fill it from the inputs with `state_data()`:
+values must be JSON-serializable, or, for a
+[Pydantic State](#pydantic-state), values Pydantic writes as JSON and
+reads back unchanged. When the inputs hold larger objects, declare a
+smaller State and fill it from the inputs with `state_data()`:
 
 ```citry
 class ProjectPanel(Component):
@@ -186,6 +188,74 @@ browser code share a component.
     of the fields the browser can read (see
     [`$state`](/reference/browser-apis/#state)). This holds when the handler
     returns `None`, returns data, or re-renders only part of the component.
+
+## Pydantic State { #pydantic-state }
+
+To have Pydantic check State, so a handler that sets a field to the wrong
+type fails at once, write `State` as a Pydantic v2 or v1 model:
+
+```citry
+from pydantic import BaseModel
+
+
+class Filters(Component):
+    citry = citry_app
+
+    class State(BaseModel):
+        query: str = ""
+        page: int = 1
+        _public = ("query",)
+```
+
+A plain `class State:` becomes a model too when you pass a Pydantic model
+as [`Citry(model_base=...)`](/concepts/inputs-and-validation/#model-base).
+A component from a library you install keeps the State its author wrote.
+Settings such as `_public` and `_storage` work as on any State; other
+underscore names are reserved for them.
+
+A model State can also hold nested models, dates, and other values
+Pydantic writes as JSON and reads back unchanged. Browser code reads them
+as JSON, so a date is a string such as `"2026-01-02"`, and the next call
+turns them back into dates and models.
+
+Pydantic checks the values at three points, so your validators run at
+each one:
+
+- **When a call restores State.** If the values in the page no longer fit
+  the model, for example because you changed a field's type and deployed,
+  the call fails with `stale_state` (409) and Citry asks the user to reload
+  the page ([details](/reference/browser-apis/#events-fired-around-each-call)).
+- **When the browser writes a field.** The call fails with `invalid_args`
+  (422) before the handler runs, with Pydantic's message for each field.
+- **After a handler changes State.** If a new value does not fit, such as
+  `state.page = "two"` or a wrong-typed item appended to a list, the call
+  fails with `handler_error` (500), the page keeps its old State, and the
+  server log names the component and the handler. Anything else the
+  handler did, such as a database write, stays done.
+
+With `validate_assignment=True`, a wrong assignment raises at that line in
+the handler, and the call fails with `handler_error`.
+
+Citry raises `ValueError` when the component class is defined if State,
+or a model nested in it, uses one of these, because it could not store and
+restore State with them:
+
+- a frozen model (`frozen=True`, or `allow_mutation = False` in v1), or a
+  frozen field;
+- a field left out of the dump (`exclude=True` or `exclude_if`), or a
+  serializer (`model_serializer`, `field_serializer`, `PlainSerializer`,
+  `WrapSerializer`);
+- a secret type such as `SecretStr`, which Pydantic writes masked;
+- a field alias in v1 or in Pydantic older than 2.11, unless the model
+  sets `allow_population_by_field_name = True` (v1) or
+  `populate_by_name=True`.
+
+Citry stores and restores State by field name, so a field alias only
+affects input you pass the model yourself.
+
+Pydantic decides what a browser write may hold. A field the browser may
+write (`_model`) with a type such as `ImportString` would import whatever
+module the browser names, so keep such types out of writable fields.
 
 ## Subclass State
 

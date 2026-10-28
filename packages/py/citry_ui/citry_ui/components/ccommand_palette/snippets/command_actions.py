@@ -33,7 +33,7 @@ class CommandActions(Component):
       <section
         class="command-palette-actions"
       >
-        <h2>Action transaction</h2>
+        <h2>Run a command</h2>
         <div role="group" aria-label="Action behavior">
           <label><input type="checkbox" v-model="throwNext" /> Throw in next action</label>
           <label><input type="checkbox" v-model="moveFocus" /> Move owner focus</label>
@@ -71,7 +71,7 @@ class CommandActions(Component):
           runAction(value, detail) {
             this.events.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
             if (this.moveFocus) this.$refs.focusTarget.focus();
-            // Throw once, so the next action shows the palette recovering.
+            // Throw once, so the console shows the reported error.
             if (this.throwNext) {
               this.throwNext = false;
               throw new Error('Application action failed');

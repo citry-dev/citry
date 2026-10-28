@@ -97,6 +97,11 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Fixed
 
+- A template expression that spans several lines without parentheses, such
+  as a conditional with its `else` on its own line, no longer turns off
+  type information for itself and every later expression in the template.
+  Translation checks and completion now work inside it, and the editor
+  reads the keys of a `c-values` that starts on an indented line.
 - The editor now analyzes the whole of a deeply nested template, such as
   one with 256 nested `<c-if>` tags, even when the program that runs it
   already uses part of Python's stack.

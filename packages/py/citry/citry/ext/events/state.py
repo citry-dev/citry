@@ -16,23 +16,46 @@ import inspect
 import json
 from dataclasses import MISSING, dataclass, fields
 from datetime import timedelta
-from typing import Any, cast
+from typing import Any, cast, get_args
+from weakref import WeakKeyDictionary
 
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _safe_class_text, _static_class_namespace_copy
 from citry._input_types import _CHECKS_ATTR
+from citry._model_base import ModelBase, dataclass_options
 from citry._nested_declarations import (
     _CONST_SCHEMA_DEFAULTS_ATTR,
     _SYNTHESIZED_DECLARATION_ATTR,
     _SYNTHESIZED_FIELD_OWNERS_ATTR,
     NestedClassDeclaration,
-    _convert_to_slotted_dataclass,
     _dropped_field_names,
     _dropped_fields_sentence,
     _replaced_parent_schema,
     _warn_nested_schema_replaced,
+    convert_plain_declaration,
 )
 
+# A setting read with this default was not set.
+_UNSET = object()
+
+
+def _pydantic_supports(method: str, parameter: str) -> bool:
+    """Whether the installed Pydantic v2 ``BaseModel.<method>`` takes ``parameter``."""
+    try:
+        from pydantic import BaseModel  # noqa: PLC0415 - Pydantic is optional
+    except ImportError:
+        return False
+    return parameter in inspect.signature(getattr(BaseModel, method)).parameters
+
+
+# Pydantic 2.11 reads keys by field name only, and 2.12 leaves computed
+# fields out of a dump; older releases get the closest equivalent.
+_VALIDATES_BY_NAME = _pydantic_supports("model_validate_json", "by_name")
+_DUMP_EXCLUDES_COMPUTED = _pydantic_supports("model_dump", "exclude_computed_fields")
+
+
+# Names Python's ABC machinery writes on a model class itself.
+_MODEL_CLASS_NAMES = frozenset({"_abc_impl"})
 # The full State meta surface. Every other underscore attribute on a State
 # class is a class-definition error, which is what makes typos loud
 # (``_pubic = (...)`` fails instead of silently doing nothing).
@@ -79,6 +102,333 @@ class StateMeta:
     max_age: timedelta | None
 
 
+# The field names of each State class, read once: a dataclass's fields, or a
+# Pydantic model's. Every function that reads State fields calls these, so
+# dataclass and model State share one code path.
+_FIELD_NAMES: WeakKeyDictionary[type, tuple[str, ...]] = WeakKeyDictionary()
+_REQUIRED_NAMES: WeakKeyDictionary[type, frozenset[str]] = WeakKeyDictionary()
+
+
+def state_model_kind(state_cls: type) -> str | None:
+    """Return ``"v2"`` or ``"v1"`` for a Pydantic model State, or ``None`` for a dataclass."""
+    if isinstance(getattr(state_cls, "model_fields", None), dict) and hasattr(state_cls, "__pydantic_validator__"):
+        return "v2"
+    if isinstance(getattr(state_cls, "__fields__", None), dict) and hasattr(state_cls, "__config__"):
+        return "v1"
+    return None
+
+
+def _model_fields(state_cls: type) -> dict[str, Any]:
+    kind = state_model_kind(state_cls)
+    if kind == "v2":
+        return cast("dict[str, Any]", state_cls.model_fields)  # type: ignore[attr-defined]
+    return cast("dict[str, Any]", state_cls.__fields__)  # type: ignore[attr-defined]
+
+
+def state_field_names(state_cls: type) -> tuple[str, ...]:
+    """Return a State class's field names, in declaration order."""
+    names = _FIELD_NAMES.get(state_cls)
+    if names is None:
+        names = (
+            tuple(_model_fields(state_cls))
+            if state_model_kind(state_cls)
+            else tuple(f.name for f in fields(state_cls))
+        )
+        _FIELD_NAMES[state_cls] = names
+    return names
+
+
+def _required_field_names(state_cls: type) -> frozenset[str]:
+    """Return the State fields that have no default, which a build must pass."""
+    required = _REQUIRED_NAMES.get(state_cls)
+    if required is None:
+        kind = state_model_kind(state_cls)
+        if kind == "v2":
+            required = frozenset(name for name, info in _model_fields(state_cls).items() if info.is_required())
+        elif kind == "v1":
+            required = frozenset(name for name, info in _model_fields(state_cls).items() if info.required)
+        else:
+            required = frozenset(
+                f.name for f in fields(state_cls) if f.default is MISSING and f.default_factory is MISSING
+            )
+        _REQUIRED_NAMES[state_cls] = required
+    return required
+
+
+def state_values(state: Any) -> dict[str, Any]:
+    """Return a State instance's field values by name, for any State kind."""
+    return {name: getattr(state, name) for name in state_field_names(type(state))}
+
+
+def state_wire_values(state: Any) -> dict[str, Any]:
+    """
+    Return the State field values as the token stores them.
+
+    A model State can hold nested models, dates and other values Pydantic
+    writes as JSON, so Pydantic writes them as JSON here, by field name and
+    in the form it reads back (``round_trip``), and `restore_state` reads
+    that JSON back into their types. Computed fields are left out. A
+    dataclass State's values are used as they are, and the token checks they
+    are plain JSON.
+    """
+    kind = state_model_kind(type(state))
+    if kind == "v2":
+        options: dict[str, Any] = {"mode": "json", "by_alias": False, "round_trip": True, "warnings": False}
+        if _DUMP_EXCLUDES_COMPUTED:
+            options["exclude_computed_fields"] = True
+        else:
+            options["include"] = set(state_field_names(type(state)))
+        return cast("dict[str, Any]", state.model_dump(**options))
+    if kind == "v1":
+        # Pydantic v1 writes a nested model with the fields of its runtime
+        # class, which may be a subclass State does not declare. Reading the
+        # JSON back through the State class keeps only declared fields.
+        declared = type(state).parse_raw(state.json())
+        return cast("dict[str, Any]", json.loads(declared.json()))
+    return state_values(state)
+
+
+def state_setting(state_cls: type, name: str, default: Any = None) -> Any:
+    """
+    Read a State setting such as ``_storage``, also from a Pydantic model.
+
+    Pydantic v2 (and v1 with ``underscore_attrs_are_private``) keeps an
+    underscore name in a model's body as a private attribute, so reading it
+    as a class attribute returns Pydantic's wrapper, not the value.
+    """
+    private = getattr(state_cls, "__private_attributes__", None)
+    if isinstance(private, dict) and name in private:
+        value = getattr(private[name], "default", default)
+        # Pydantic marks a private attribute without a default with its own
+        # undefined object, which is not a setting value.
+        return default if type(value).__name__ in {"PydanticUndefinedType", "UndefinedType"} else value
+    return getattr(state_cls, name, default)
+
+
+def has_state_setting(state_cls: type, name: str) -> bool:
+    """Whether a State class sets a State setting, also as a Pydantic private attribute."""
+    private = getattr(state_cls, "__private_attributes__", None)
+    return (isinstance(private, dict) and name in private) or hasattr(state_cls, name)
+
+
+def _model_frozen(state_cls: type) -> str | None:
+    """Return the setting that freezes a Pydantic model State, or ``None``."""
+    kind = state_model_kind(state_cls)
+    if kind == "v2":
+        config = getattr(state_cls, "model_config", {})
+        return "model_config['frozen']" if config.get("frozen") else None
+    if kind == "v1":
+        config = state_cls.__config__  # type: ignore[attr-defined]
+        if getattr(config, "frozen", False):
+            return "Config.frozen"
+        if getattr(config, "allow_mutation", True) is False:
+            return "Config.allow_mutation = False"
+    return None
+
+
+def restore_state(state_cls: type, values: dict[str, Any]) -> Any:
+    """
+    Build State from the values a verified token carried.
+
+    A model State reads them as JSON, the form the token stores, so a date,
+    an enum, or a tuple that JSON wrote as a list is checked back into its
+    type even under ``strict=True``. Keys are read as field names only, so
+    an alias, which another field could share, never fills a field.
+
+    Raises:
+        TypeError: The values no longer fit a dataclass State.
+        ValueError: The values no longer validate for a model State
+            (Pydantic's ``ValidationError`` is a ``ValueError``).
+
+    """
+    kind = state_model_kind(state_cls)
+    if kind is None:
+        return state_cls(**values)
+    text = json.dumps(values, allow_nan=False)
+    if kind == "v2":
+        if _VALIDATES_BY_NAME:
+            return state_cls.model_validate_json(text, by_alias=False, by_name=True)  # type: ignore[attr-defined]
+        return state_cls.model_validate_json(text)  # type: ignore[attr-defined]
+    return state_cls.parse_raw(text)  # type: ignore[attr-defined]
+
+
+def check_changed_state(state: Any) -> tuple[str | None, str] | None:
+    """
+    Check that a changed model State can be signed and restored again, and adopt Pydantic's values.
+
+    A handler's ``state.count = ...`` or ``state.items.append(...)`` is not
+    validated by Pydantic unless the model sets ``validate_assignment=True``,
+    and an in-place change never is. So the values the token will carry are
+    restored here, and the State takes the restored values, so a value
+    Pydantic converts (``"2"`` for an ``int``) is signed converted. The
+    restored values must then survive a second round trip unchanged.
+    Returns ``(field, message)`` for the first problem, or ``None`` when the
+    State can be signed or is a dataclass.
+    """
+    state_cls = type(state)
+    if state_model_kind(state_cls) is None:
+        return None
+    try:
+        restored = restore_state(state_cls, state_wire_values(state))
+        again = restore_state(state_cls, state_wire_values(restored))
+    except ValueError as error:
+        return _first_error(error)
+    except (TypeError, UnicodeDecodeError) as error:
+        return None, f"a value could not be written as JSON ({type(error).__name__})"
+    # Models compare their field values, so a set in another order is the
+    # same value; a value Pydantic writes as JSON that reads back as another
+    # value is not.
+    changed = next(
+        (name for name in state_field_names(state_cls) if getattr(restored, name) != getattr(again, name)), None
+    )
+    if changed is not None:
+        return changed, "the value Pydantic writes as JSON does not read back as the same value"
+    _adopt(state, restored)
+    return None
+
+
+def _adopt(state: Any, source: Any) -> None:
+    """Give a model State another instance's field values, without assignment validation, which already ran."""
+    state.__dict__.update({name: source.__dict__[name] for name in state_field_names(type(state))})
+
+
+def _first_error(error: ValueError) -> tuple[str | None, str]:
+    """Return the field and message of a Pydantic error, without the input value, which may be private."""
+    errors = getattr(error, "errors", None)
+    found: list[Any] = []
+    if callable(errors):
+        try:
+            found = list(errors(include_input=False))
+        except TypeError:
+            found = list(errors())
+    if not found:
+        return None, type(error).__name__
+    first = found[0]
+    location = tuple(first.get("loc", ()))
+    path = ".".join(str(part) for part in location)
+    return (str(location[0]) if location else None), f"{path}: {first.get('msg', 'invalid value')}"
+
+
+def _check_model_state(comp_name: str, state_cls: type) -> None:
+    """
+    Reject a Pydantic model State that Citry could not store and restore.
+
+    Citry assigns to State, writes its declared fields as JSON into the
+    token by field name, and reads them back the same way. A frozen model or
+    field, a field the dump leaves out or reshapes (``exclude``,
+    ``exclude_if``, a serializer), or a secret type (which Pydantic writes
+    masked) would lose or break State, at any depth of nested models.
+
+    Raises:
+        ValueError: The model has one of these, naming the field or setting.
+
+    """
+    prefix = f"Component {comp_name}: State"
+    frozen = _model_frozen(state_cls)
+    if frozen is not None:
+        msg = (
+            f"{prefix} is a frozen Pydantic model ({frozen}). State must stay mutable (handlers change it and"
+            " the changes travel back to the browser); remove that setting."
+        )
+        raise ValueError(msg)
+    for model, path in _models_in(state_cls, "State"):
+        problem = _model_problem(model, top=model is state_cls)
+        if problem is not None:
+            msg = f"Component {comp_name}: {path}{problem}"
+            raise ValueError(msg)
+
+
+def _models_in(model: type, path: str, seen: set[type] | None = None) -> list[tuple[type, str]]:
+    """Return a model and every model its fields hold, at any depth, with the path to each."""
+    seen = set() if seen is None else seen
+    if model in seen:
+        return []
+    seen.add(model)
+    found: list[tuple[type, str]] = [(model, path)]
+    for name, info in _model_fields(model).items():
+        annotation = getattr(info, "annotation", None) or getattr(info, "outer_type_", None)
+        for nested in _annotation_types(annotation):
+            if state_model_kind(nested) is not None:
+                found.extend(_models_in(nested, f"{path}.{name}", seen))
+    return found
+
+
+def _annotation_types(annotation: Any) -> list[Any]:
+    """Return every type an annotation names, through unions, containers and ``Annotated``."""
+    found = [annotation]
+    for argument in get_args(annotation):
+        found.extend(_annotation_types(argument))
+    return found
+
+
+def _model_problem(model: type, *, top: bool) -> str | None:
+    """Return what makes one model unusable in State, or ``None``; the message starts after its path."""
+    kind = state_model_kind(model)
+    decorators = getattr(model, "__pydantic_decorators__", None)
+    if kind == "v2" and (
+        getattr(decorators, "model_serializers", None) or getattr(decorators, "field_serializers", None)
+    ):
+        return (
+            " defines a serializer, which changes the JSON Citry stores in the page so it may not read back."
+            " Remove it, or keep State to plain fields."
+        )
+    # Restoring by field name ignores aliases on recent Pydantic; older v2
+    # releases and v1 need the model to accept field names.
+    by_name = kind == "v2" and _VALIDATES_BY_NAME
+    by_name = by_name or _populates_by_name(model)
+    for name, info in _model_fields(model).items():
+        problem = _field_problem(kind, name, info, by_name=by_name)
+        if problem is not None:
+            return f".{name} {problem}"
+    del top
+    return None
+
+
+def _populates_by_name(model: type) -> bool:
+    """Whether a model accepts an aliased field by its own name."""
+    if state_model_kind(model) == "v2":
+        config = getattr(model, "model_config", {})
+        return bool(config.get("populate_by_name") or config.get("validate_by_name"))
+    return bool(getattr(model.__config__, "allow_population_by_field_name", False))  # type: ignore[attr-defined]
+
+
+def _field_problem(kind: str | None, name: str, info: Any, *, by_name: bool) -> str | None:
+    """Return what makes one model field unusable in State, or ``None``."""
+    field_info = info if kind == "v2" else getattr(info, "field_info", info)
+    aliases = {getattr(info, "alias", None), getattr(field_info, "validation_alias", None)}
+    if any(alias not in (None, name) for alias in aliases) and not by_name:
+        return (
+            "has an alias, but Citry stores State by field name. Set populate_by_name=True"
+            " (allow_population_by_field_name in Pydantic v1), or remove the alias."
+        )
+    if getattr(field_info, "frozen", None) or getattr(field_info, "allow_mutation", True) is False:
+        return "is frozen, but handlers change State. Remove frozen=True from the field."
+    if getattr(field_info, "exclude", None) or getattr(field_info, "exclude_if", None):
+        return "is left out of the model's dump (exclude), so it would be lost between calls. Remove it."
+    annotation = getattr(info, "annotation", None) or getattr(info, "outer_type_", None)
+    metadata = list(getattr(field_info, "metadata", None) or ())
+    for argument in _annotation_types(annotation):
+        metadata.extend(getattr(argument, "__metadata__", ()))
+    if any(type(item).__name__ in {"PlainSerializer", "WrapSerializer"} for item in metadata):
+        return "has a serializer, so its JSON may not read back as the same value. Remove the serializer."
+    if any(_is_secret_type(argument) for argument in _annotation_types(annotation)):
+        return (
+            "holds a secret type, which Pydantic writes masked, so its value would be lost between calls. Keep"
+            " secrets out of State; store an id and load the secret in the handler."
+        )
+    return None
+
+
+def _is_secret_type(value: Any) -> bool:
+    """Whether a type is one of Pydantic's secret types (v2 or v1), which dump masked."""
+    if not isinstance(value, type):
+        return False
+    return any(
+        klass.__name__ in {"SecretStr", "SecretBytes", "Secret"} and (klass.__module__ or "").startswith("pydantic")
+        for klass in value.__mro__
+    )
+
+
 def _is_dunder(name: str) -> bool:
     return name.startswith("__") and name.endswith("__")
 
@@ -112,7 +462,14 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
     obeys the same wire contract as a plain declaration.
     """
     dataclass_fields: dict[str, Any] = getattr(user_cls, "__dataclass_fields__", {})
-    for field_name in (*dataclass_fields, *_merged_annotations(user_cls)):
+    # `BaseModel` annotates Pydantic's internal names, so a model State's
+    # fields are read from Pydantic, not from the class annotations.
+    declared = (
+        state_field_names(user_cls)
+        if state_model_kind(user_cls) is not None
+        else (*dataclass_fields, *_merged_annotations(user_cls))
+    )
+    for field_name in declared:
         if field_name.startswith("_"):
             msg = (
                 f"Component {comp_name}: State declares field {field_name!r}. State fields cannot"
@@ -120,8 +477,37 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
                 f" reserved for the State meta: {', '.join(STATE_META_NAMES)}."
             )
             raise ValueError(msg)
+    # Pydantic removes a private attribute from the class body, so a typo
+    # such as `_strorage` is found only in its private attributes.
+    private = getattr(user_cls, "__private_attributes__", None)
+    for name in private if isinstance(private, dict) else ():
+        if name in STATE_META_NAMES and state_setting(user_cls, name, _UNSET) is _UNSET:
+            msg = (
+                f"Component {comp_name}: State declares the setting {name!r} without a value. Give it one,"
+                f" such as {name} = ..., or remove it."
+            )
+            raise ValueError(msg)
+        if name not in STATE_META_NAMES:
+            msg = (
+                f"Component {comp_name}: {name!r} is not a recognized State meta attribute."
+                f" Underscore names on State are reserved for the meta:"
+                f" {', '.join(STATE_META_NAMES)}."
+            )
+            raise ValueError(msg)
+    # Pydantic v1 keeps a setting that is only annotated, such as
+    # `_storage: str`, out of the class, so it would silently be unset.
+    if state_model_kind(user_cls) is not None:
+        for name in _merged_annotations(user_cls):
+            if name in STATE_META_NAMES and not has_state_setting(user_cls, name):
+                msg = (
+                    f"Component {comp_name}: State declares the setting {name!r} without a value. Give it one,"
+                    f" such as {name} = ..., or remove it."
+                )
+                raise ValueError(msg)
     for klass in user_cls.__mro__:
-        if klass is object:
+        # Pydantic's own base classes carry its private helpers.
+        module = getattr(klass, "__module__", "") or ""
+        if klass is object or module == "pydantic" or module.startswith("pydantic."):
             continue
         # A render on another thread can be checking a value of a parent's
         # State and store its input checks on that class while this loop
@@ -133,7 +519,7 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
             # Citry's generated schema carries private construction metadata,
             # and a render stores its input checks on the class; only
             # author-written underscore values belong to the State meta.
-            if name in _SYNTHESIZED_STATE_NAMES:
+            if name in _SYNTHESIZED_STATE_NAMES or name in _MODEL_CLASS_NAMES:
                 continue
             if inspect.isfunction(value) or isinstance(value, _DEF_LIKE):
                 continue  # a private helper method; State may carry methods
@@ -146,9 +532,9 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
                 raise ValueError(msg)
 
 
-def convert_state_class(comp_name: str, user_cls: type) -> type:
+def convert_state_class(comp_name: str, user_cls: type, model_base: ModelBase | None = None) -> type:
     """
-    Rebuild a State declaration as a mutable ``dataclass(slots=True)``.
+    Return the mutable State class Citry uses: a dataclass, or a Pydantic model.
 
     Mirrors the treatment the core gives ``Kwargs``: a plain class converts
     to a slotted dataclass, a class the user already decorated with
@@ -160,6 +546,17 @@ def convert_state_class(comp_name: str, user_cls: type) -> type:
     The class the user wrote is never modified. The generated dataclass
     inherits the authored declaration, preserving methods, descriptors,
     zero-argument ``super()``, and source identity in its MRO.
+
+    A Pydantic v2 or v1 model State written by hand is kept too. With
+    ``model_base`` (the setting), a plain State becomes a dataclass with a
+    dataclass base's options, or a model that subclasses a Pydantic base. A
+    NamedTuple base, a frozen dataclass base, and a frozen model are errors,
+    because Citry assigns to State.
+
+    Raises:
+        ValueError: State is frozen, or ``model_base`` names a kind Citry
+            cannot assign to.
+
     """
     frozen_msg = (
         f"Component {comp_name}: State is a frozen dataclass. State must stay mutable"
@@ -172,7 +569,36 @@ def convert_state_class(comp_name: str, user_cls: type) -> type:
         if user_cls.__dataclass_params__.frozen:  # type: ignore[attr-defined]
             raise ValueError(frozen_msg)
         return user_cls
-    converted = _convert_to_slotted_dataclass(user_cls)
+    # A Pydantic model State written by hand is kept, as long as Citry can
+    # assign to it.
+    if state_model_kind(user_cls) is not None:
+        _check_model_state(comp_name, user_cls)
+        return user_cls
+    # `class State(Parent.State):` keeps its parent's dataclass, as any child
+    # schema keeps its parent's kind, so the setting's kind does not apply.
+    if any("__dataclass_fields__" in klass.__dict__ for klass in user_cls.__mro__):
+        model_base = model_base if model_base is not None and model_base.kind == "dataclass" else None
+        if model_base is not None and dataclass_options(model_base).get("frozen"):
+            model_base = None
+    if model_base is not None and model_base.kind == "namedtuple":
+        msg = (
+            f"Component {comp_name}: State cannot be generated as a NamedTuple, because Citry assigns to State."
+            " Decorate State with @dataclass to keep it a dataclass, or set model_base to a Pydantic model or a"
+            " dataclass that is not frozen."
+        )
+        raise ValueError(msg)
+    if model_base is not None and model_base.kind == "dataclass" and dataclass_options(model_base).get("frozen"):
+        msg = (
+            f"Component {comp_name}: State cannot be generated from the frozen dataclass model_base"
+            f" {model_base.base.__qualname__}, because Citry assigns to State. Decorate State with @dataclass to"
+            " keep it a mutable dataclass, or set model_base to a Pydantic model or a dataclass that is not frozen."
+        )
+        raise ValueError(msg)
+    converted = convert_plain_declaration(user_cls, model_base=model_base, component_name=comp_name, name="State")
+    if state_model_kind(converted) is not None:
+        # The setting's model may itself be frozen.
+        _check_model_state(comp_name, converted)
+        return converted
     # A plain State based on a frozen dataclass inherits the frozen flag.
     if converted.__dataclass_params__.frozen:  # type: ignore[attr-defined]
         raise ValueError(frozen_msg)
@@ -202,7 +628,7 @@ def check_replaced_state(component_class: type, nearest: NestedClassDeclaration,
     owner = _safe_class_text(nearest.declaring_class, "__name__") or "Component"
     parent_name = f"{_safe_class_text(parent.declaring_class, '__name__') or '<class>'}.State"
 
-    if getattr(parent_schema, "_storage", "signed") == "server" and not hasattr(declared, "_storage"):
+    if state_setting(parent_schema, "_storage", "signed") == "server" and not has_state_setting(declared, "_storage"):
         msg = (
             f"Component {owner}: State replaces {parent_name}, which keeps its values on the server"
             f' (_storage = "server"). The new State does not set _storage, so its values would be'
@@ -225,7 +651,7 @@ def check_replaced_state(component_class: type, nearest: NestedClassDeclaration,
         "_max_age": "its values never expire",
     }
     for setting, consequence in consequences.items():
-        if getattr(parent_schema, setting, None) is not None and not hasattr(declared, setting):
+        if state_setting(parent_schema, setting) is not None and not has_state_setting(declared, setting):
             sentences.append(f"It does not set {setting}, which {parent_name} sets, so {consequence}.")
     if len(sentences) == 1 and not dropped:
         return
@@ -260,15 +686,15 @@ def resolve_state_meta(comp_name: str, user_cls: type, state_cls: type) -> State
     and ``_max_age`` are stored with their defaults
     (``"signed"``, ``8192``, ``None``).
     """
-    field_names = tuple(f.name for f in fields(state_cls))
+    field_names = state_field_names(state_cls)
 
-    raw_public = getattr(user_cls, "_public", None)
+    raw_public = state_setting(user_cls, "_public")
     if raw_public is None:
         public = field_names
     else:
         public = _validate_field_tuple(comp_name, "_public", raw_public, field_names)
 
-    raw_model = getattr(user_cls, "_model", None)
+    raw_model = state_setting(user_cls, "_model")
     if raw_model is None:
         model = public
     else:
@@ -282,7 +708,7 @@ def resolve_state_meta(comp_name: str, user_cls: type, state_cls: type) -> State
                 )
                 raise ValueError(msg)
 
-    storage = getattr(user_cls, "_storage", "signed")
+    storage = state_setting(user_cls, "_storage", "signed")
     if storage not in _STORAGE_VALUES:
         msg = (
             f"Component {comp_name}: State._storage must be one of"
@@ -290,12 +716,12 @@ def resolve_state_meta(comp_name: str, user_cls: type, state_cls: type) -> State
         )
         raise ValueError(msg)
 
-    max_bytes = getattr(user_cls, "_max_bytes", _DEFAULT_MAX_BYTES)
+    max_bytes = state_setting(user_cls, "_max_bytes", _DEFAULT_MAX_BYTES)
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
         msg = f"Component {comp_name}: State._max_bytes must be a positive int (bytes); got {max_bytes!r}."
         raise ValueError(msg)
 
-    max_age = getattr(user_cls, "_max_age", None)
+    max_age = state_setting(user_cls, "_max_age")
     if max_age is not None and not isinstance(max_age, timedelta):
         msg = f"Component {comp_name}: State._max_age must be a datetime.timedelta or None; got {max_age!r}."
         raise ValueError(msg)
@@ -316,11 +742,12 @@ def build_state_instance(comp_name: str, state_cls: type, raw_kwargs: dict[str, 
     """
     values: dict[str, Any] = {}
     missing: list[str] = []
-    for state_field in fields(state_cls):
-        if state_field.name in raw_kwargs:
-            values[state_field.name] = raw_kwargs[state_field.name]
-        elif state_field.default is MISSING and state_field.default_factory is MISSING:
-            missing.append(state_field.name)
+    required = _required_field_names(state_cls)
+    for name in state_field_names(state_cls):
+        if name in raw_kwargs:
+            values[name] = raw_kwargs[name]
+        elif name in required:
+            missing.append(name)
     if missing:
         noun = "field" if len(missing) == 1 else "fields"
         verb = "has" if len(missing) == 1 else "have"
@@ -345,5 +772,6 @@ def public_state_values(state: Any, meta: StateMeta) -> dict[str, Any]:
     The JSON round trip turns a tuple into a list, the same as the token
     stores it, and sorting gives both places the same key order.
     """
-    values = {name: getattr(state, name) for name in sorted(meta.public)}
+    wire = state_wire_values(state)
+    values = {name: wire[name] for name in sorted(meta.public)}
     return json.loads(json.dumps(values, allow_nan=False))

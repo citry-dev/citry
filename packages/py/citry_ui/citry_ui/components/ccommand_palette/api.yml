@@ -41,7 +41,7 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CCommandPaletteSize]}, omitted: Uses the immutable server input., effect: Controls coordinated surface width and density.}
       - {id: on-open-change, name: onOpenChange, type: function, omitted: Omission selects no visibility callback; null clears the last valid callback., effect: Receives user-authored and forced visibility requests.}
       - {id: on-query-change, name: onQueryChange, type: function, omitted: Omission selects no query callback; null clears the last valid callback., effect: Receives committed user input and accepted-close reset requests.}
-      - {id: on-action, name: onAction, type: function, omitted: Omission selects no command callback; null clears the last valid callback., effect: Receives one eligible command activation before optional close.}
+      - {id: on-action, name: onAction, type: function, omitted: Omission selects no command callback; null clears the last valid callback., effect: Called with the chosen command's value. For a command that closes the palette, the palette calls it after the palette closes, when the owner accepts the close in onOpenChange.}
 
 slots:
   - id: ccommand-palette-slots
@@ -73,7 +73,7 @@ events:
         signature: {display: '(value: string, detail: CCommandPaletteActionDetail) => void', interfaces: [CCommandPaletteActionDetail]}
         trigger: An enabled visible active command receives unmodified Enter or an eligible option receives a plain click.
         detail: {display: '{query, source, item, event, closeOnAction}', interfaces: [CCommandPaletteActionDetail]}
-        behavior: Runs synchronously before optional close; return values are ignored and an exception stops the close transaction.
+        behavior: 'For a command that keeps the palette open, the palette calls it right away. For a command that closes the palette, the palette calls it after the close, after onOpenChange and onQueryChange. If you pass open and keep it true, or set it to false only later, it is called with the palette open. Return values are ignored. A thrown error is reported like an uncaught error.'
 
 methods: []
 

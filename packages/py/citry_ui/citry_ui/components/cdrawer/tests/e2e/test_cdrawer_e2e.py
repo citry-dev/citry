@@ -300,3 +300,120 @@ def test_drawer_geometry_rtl_theme_and_accessibility(page: Any) -> None:
     assert violations == []
     assert console_errors == []
     assert page_errors == []
+
+
+# Owner focus probe: the owner's `onOpenChange(false, ...)` moves focus to a
+# button outside the drawer. Focus has to stay there once the drawer has
+# closed. The orders cover an uncontrolled owner (just focus), a controlled
+# owner that focuses before it accepts the close, and one that accepts the
+# close first and focuses in the same callback.
+_OWNER_STEPS = {
+    "uncontrolled": "window.__ownerFocus();",
+    "focus-first": "window.__ownerFocus(); open = false;",
+    "close-first": "open = false; window.__ownerFocus();",
+}
+
+_CONTROLLED_LOST = pytest.mark.xfail(
+    raises=AssertionError,
+    strict=True,
+    reason=(
+        "#442: focus() in a controlled owner's onOpenChange does nothing because "
+        "the modal drawer still makes the page inert; the close then returns focus "
+        "to the trigger (the 'Open probe' button)"
+    ),
+)
+
+_OWNER_FOCUS_CASES = [
+    pytest.param(False, "uncontrolled", id="uncontrolled"),
+    pytest.param(True, "focus-first", id="controlled-focus-first", marks=_CONTROLLED_LOST),
+    pytest.param(True, "close-first", id="controlled-close-first", marks=_CONTROLLED_LOST),
+]
+
+_TWO_FRAMES_ACTIVE_ID = """() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(
+  () => {
+    // An element without an id is named by its tag and text, so a failure says where focus went.
+    const element = document.activeElement;
+    resolve(element.id || `${element.tagName.toLowerCase()}:${(element.textContent || "").trim().slice(0, 24)}`);
+  }
+)))"""
+
+
+def _owner_focus_page(*, controlled: bool, order: str) -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+    open_binding = ':open="open"' if controlled else ""
+
+    class OwnerFocusPage(Component):
+        citry = app
+        js = """
+          $component({
+            data() {
+              return { open: false };
+            },
+          });
+        """
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body>
+              <c-CDrawer
+                id="probe"
+                OPEN_BINDING
+                :onOpenChange="(next, detail) => {
+                    if (next) {
+                      open = true;
+                      return;
+                    }
+                    OWNER_STEPS
+                  }"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <c-CButton c-attrs="activator_attrs">Open probe</c-CButton>
+                </c-fill>
+                <c-fill name="title">Probe</c-fill>
+                <c-fill name="default">
+                  <p>Probe content.</p>
+                </c-fill>
+                <c-fill name="actions" data="{ close_attrs }">
+                  <c-CButton c-attrs="close_attrs">Close probe</c-CButton>
+                </c-fill>
+              </c-CDrawer>
+              <button id="target" type="button">Owner target</button>
+              <div id="empty-area" style="min-block-size: 3rem">Empty area</div>
+              <c-js />
+            </body>
+          </html>
+        """.replace("OPEN_BINDING", open_binding).replace("OWNER_STEPS", _OWNER_STEPS[order])
+
+    return str(OwnerFocusPage())
+
+
+def _load_owner_focus(page: Any, *, controlled: bool, order: str) -> list[str]:
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_owner_focus_page(controlled=controlled, order=order), wait_until="load")
+    page.wait_for_selector("[data-citry-drawer-initialized]")
+    # The hook runs inside the owner's callback, so the test controls what it does.
+    page.evaluate("window.__ownerFocus = () => document.getElementById('target').focus()")
+    return errors
+
+
+@pytest.mark.parametrize("close", ["escape", "button"])
+@pytest.mark.parametrize(("controlled", "order"), _OWNER_FOCUS_CASES)
+def test_owner_focus_move_in_on_open_change_survives_the_dialog_closing(
+    page: Any, controlled: bool, order: str, close: str
+) -> None:
+    errors = _load_owner_focus(page, controlled=controlled, order=order)
+    page.get_by_role("button", name="Open probe").click()
+    page.wait_for_function("document.querySelector('#probe').open")
+    if close == "escape":
+        page.keyboard.press("Escape")
+    else:
+        page.get_by_role("button", name="Close probe").click()
+    page.wait_for_function("!document.querySelector('#probe').open")
+    # Two frames let any deferred focus-return step run before we look.
+    final = page.evaluate(_TWO_FRAMES_ACTIVE_ID)
+    assert final == "target"
+    assert errors == []

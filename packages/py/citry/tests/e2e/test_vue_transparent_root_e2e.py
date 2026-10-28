@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 pytest.importorskip("pytest_playwright")
@@ -10,6 +12,17 @@ from citry import Citry, Component
 from citry.slots import Slot
 
 pytestmark = pytest.mark.e2e
+
+
+def _logged_error_text(message: Any) -> str:
+    """Return the text of the error a page logged with `console.error`."""
+    # Chromium's `message.text` includes a logged Error's message, but Firefox
+    # prints `JSHandle@object`. The last argument is the Error itself, so ask
+    # the browser for its message. This must run outside the console event
+    # handler, where Playwright cannot wait for a browser round trip.
+    if not message.args:
+        return message.text
+    return message.args[-1].evaluate("error => String(error?.message ?? error)")
 
 
 def test_python_slot_keeps_nested_authored_fill_in_its_lexical_vue_scope(
@@ -133,7 +146,16 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
     page, serve_live, wait_for_citry_ready, wait_for_count
 ) -> None:
     errors: list[str] = []
-    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    # Keep the message objects too: when the product logs an Error object,
+    # only the message's arguments give the same error text in every browser.
+    console_messages: list[Any] = []
+
+    def collect_console_error(message: Any) -> None:
+        if message.type == "error":
+            errors.append(message.text)
+            console_messages.append(message)
+
+    page.on("console", collect_console_error)
     page.on("pageerror", lambda error: errors.append(str(error)))
     app = Citry(autodiscover=False)
     app.set_mounted_prefix("/citry")
@@ -449,9 +471,12 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
         "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
     )
     wait_for_count(late_script_routes, 2)
+    # Chromium reports the aborted request in the console, Firefox does not,
+    # so the browser message is allowed to be absent.
     expected_abort_errors = [error for error in errors if "net::ERR_FAILED" in error]
-    assert len(expected_abort_errors) == 1
-    errors.remove(expected_abort_errors[0])
+    assert len(expected_abort_errors) <= 1
+    for error in expected_abort_errors:
+        errors.remove(error)
     page.evaluate("() => __lateScriptOnerror(new Event('error'))")
     late_script_routes[1].fulfill(body="", content_type="application/javascript")
     page.evaluate("() => __lateScriptSecond")
@@ -488,9 +513,13 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
     }""")
     page.wait_for_function("() => !__citryRuntime._apps.has(__followingId)")
     assert page.evaluate("() => __citryRuntime._apps.has(__throwingId)") is True
-    expected_dispose_errors = [error for error in errors if "expected fragment dispose failure" in error]
+    # Read the logged error's message outside the console handler. Chromium's
+    # `message.text` includes it, but Firefox prints `JSHandle@object`.
+    expected_dispose_errors = [
+        message for message in console_messages if "expected fragment dispose failure" in _logged_error_text(message)
+    ]
     assert len(expected_dispose_errors) == 1
-    errors.remove(expected_dispose_errors[0])
+    errors.remove(expected_dispose_errors[0].text)
     page.evaluate("""() => {
       __restoreThrowingUnmount();
       __citryRuntime._apps.delete(__throwingId);
@@ -576,9 +605,12 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     import json
     import time
 
-    console_errors: list[str] = []
+    # Keep the message objects: the product logs an Error object, and only
+    # its arguments give the same error text in every browser (see
+    # `_logged_error_text`).
+    console_errors: list[Any] = []
     page_errors: list[str] = []
-    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.on("console", lambda message: console_errors.append(message) if message.type == "error" else None)
     page.on("pageerror", lambda error: page_errors.append(str(error)))
     app = Citry(autodiscover=False)
     app.set_mounted_prefix("/citry")
@@ -671,4 +703,4 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     assert page.locator(".slow-replacement").evaluate("node => getComputedStyle(node).color") == "rgb(4, 5, 6)"
     assert page_errors == []
     assert len(console_errors) == 1
-    assert "Vue fragment host changed while mounting" in console_errors[0]
+    assert "Vue fragment host changed while mounting" in _logged_error_text(console_errors[0])

@@ -32,7 +32,7 @@ way (it only stores and echoes the string):
   time-to-live, set from ``_max_age`` at mint.
 
 The per-call order the dispatcher (a later work package) drives is: verify the
-token, rebuild ``cls.State(**verified.state_kwargs)``, apply ``stateUpdates`` to
+token, rebuild the State from ``verified.state_kwargs`` (``restore_state``), apply ``stateUpdates`` to
 the writable (``_model``) fields, run the handler, then mint a fresh token from
 the possibly-mutated State for the response. This module provides the first,
 third, and last of those steps. Design: ``docs/design/events.md`` sections 7.1
@@ -50,7 +50,7 @@ import math
 import secrets as secrets_module
 import sys
 import time
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from types import UnionType
 from typing import TYPE_CHECKING, Any, ForwardRef, Union, cast, get_args, get_origin, get_type_hints
 from weakref import WeakKeyDictionary
@@ -58,6 +58,8 @@ from weakref import WeakKeyDictionary
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _static_class_namespace_copy
 from citry._vue.json_data import _secret_key_path
+from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
+from citry.util.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -119,7 +121,7 @@ class VerifiedState:
 
     Attributes:
         state_kwargs: The State fields as a plain dict, ready to rebuild the
-            typed State with ``cls.State(**state_kwargs)``.
+            typed State with ``restore_state(cls.State, state_kwargs)``.
         class_id: The class id the token was minted for; already checked to
             match the component the call is dispatching to.
 
@@ -241,9 +243,9 @@ def mint_state_token(
     latest server state.
 
     Args:
-        state: The State instance to serialize. Must be a dataclass instance
-            (the extension converts every ``State`` class to one); a stateless
-            component carries no token and must not reach here.
+        state: The State instance to serialize: a dataclass instance, or a
+            Pydantic model, whose JSON form is stored. A stateless component
+            carries no token and must not reach here.
         class_id: The component's stable class id, bound into the token so it
             can only be replayed against the same component.
         secret: The signing secret, a single string or a rotation list whose
@@ -364,14 +366,15 @@ def _state_dict(state: Any, class_id: str, *, component_name: str | None = None)
     see ``mint_state_token``.
     """
     result: dict[str, Any] = {}
-    for state_field in fields(state):
-        value = getattr(state, state_field.name)
+    wire = state_wire_values(state)
+    for name in state_field_names(type(state)):
+        value = wire[name]
         # JSON object keys are always strings, so a non-string dict key (at any
         # depth) is silently rewritten to a string on the round-trip (1 comes back
         # as "1") instead of round-tripping. json.dumps does that coercion without
         # complaint, so catch it here, named to the field, before it corrupts the
         # state or the mixed-key case fails unattributed while the payload is signed.
-        _reject_non_string_dict_keys(value, class_id, state_field.name)
+        _reject_non_string_dict_keys(value, class_id, name)
         try:
             # Probe with the same serializer the payload uses, so a value that
             # cannot be serialized to JSON at all (for example a custom object) is
@@ -380,18 +383,18 @@ def _state_dict(state: Any, class_id: str, *, component_name: str | None = None)
         except (TypeError, ValueError) as err:
             if isinstance(err, ValueError) and "Circular reference" in str(err):
                 raise
-            secret_message = _secret_in_state_message(component_name or class_id, state_field.name, value)
+            secret_message = _secret_in_state_message(component_name or class_id, name, value)
             if secret_message is not None:
                 raise ValueError(secret_message) from err
             msg = (
-                f"Component {class_id}: State field {state_field.name!r} holds a value"
+                f"Component {class_id}: State field {name!r} holds a value"
                 f" ({_state_value_description(value)}) which is not JSON-serializable under strict rules."
                 f" State round-trips as JSON"
                 f" on every event call: store ids and plain values (str, int, float, bool, None,"
                 f" lists, and dicts with string keys) and rebuild richer objects in the handler."
             )
             raise ValueError(msg) from err
-        result[state_field.name] = value
+        result[name] = value
     return result
 
 
@@ -722,6 +725,8 @@ def apply_state_updates(
     if not updates:
         return ()
     writable = frozenset(model_fields)
+    if state_model_kind(type(state)) is not None:
+        return _apply_model_state_updates(state, updates, writable)
     hints = _resolve_hints(type(state))
     errors: dict[str, str] = {}
     to_apply: list[tuple[str, Any]] = []
@@ -742,6 +747,56 @@ def apply_state_updates(
     for name, value in to_apply:
         setattr(state, name, value)
     return tuple(name for name, _ in to_apply)
+
+
+def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable: frozenset[str]) -> tuple[str, ...]:
+    """
+    Apply browser writes to a Pydantic model State, which validates them itself.
+
+    The writes are merged into the current values and checked by building a
+    new model, so the batch is accepted or rejected as a whole, as for a
+    dataclass State.
+
+    Raises:
+        StateUpdateError: A write names a field outside ``_model``, or the
+            merged values do not validate; ``fields`` holds Pydantic's
+            message for each field it names.
+
+    """
+    errors = {
+        name: "This field cannot be written from the client (it is not in the State _model set)."
+        for name in sorted(updates)
+        if name not in writable
+    }
+    if errors:
+        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors)
+    # The writes are JSON, as the token is, so they are merged into the
+    # token's form and read back the same way a restore reads them.
+    merged = {**state_wire_values(state), **updates}
+    try:
+        checked = restore_state(type(state), merged)
+    except ValueError as error:
+        found = getattr(error, "errors", None)
+        for item in found() if callable(found) else ():
+            location = item.get("loc", ()) if isinstance(item, dict) else ()
+            # A field name never starts with an underscore, so a model-level
+            # error cannot share its key with a field.
+            name = ".".join(str(part) for part in location) or "_state"
+            errors.setdefault(name, str(item.get("msg", "Invalid value.")))
+        if not errors:
+            errors["_state"] = str(error)
+        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors) from error
+    except Exception as error:
+        # A validator that fails with another exception is the author's bug,
+        # but it must not take down the whole envelope.
+        logger.exception(f"A State validator raised while checking browser writes to {type(state).__qualname__}.")
+        errors["_state"] = "The State could not be checked."
+        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors) from error
+    # Every field takes the checked model's value, so a value a validator
+    # derives from a written field is current too. The values are copied
+    # without assignment validation, which already ran.
+    state.__dict__.update({name: checked.__dict__[name] for name in state_field_names(type(state))})
+    return tuple(sorted(updates))
 
 
 def _resolve_hints(state_cls: type) -> dict[str, Any]:

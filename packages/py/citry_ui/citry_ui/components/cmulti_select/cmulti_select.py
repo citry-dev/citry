@@ -12,7 +12,6 @@ from typing import Any, Literal, TypedDict, cast
 from citry import LibraryComponent, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
-    ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
@@ -764,9 +763,14 @@ class CMultiSelect(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       const multiSelectHandoffKey = Symbol.for('citry-ui:multi-select-handoff');
       $component({
         props: {
@@ -913,7 +917,6 @@ class CMultiSelect(LibraryComponent):
         },
       })
     """
-    )
 
     css_file = "runtime.min.css"
 

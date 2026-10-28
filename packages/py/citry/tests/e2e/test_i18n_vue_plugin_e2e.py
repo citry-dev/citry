@@ -179,7 +179,15 @@ def test_browser_isolates_fallback_text_exactly_as_the_server_does(
         "console",
         lambda message: faults.append(message.text) if message.type in {"error", "warning"} else None,
     )
-    page.route("http://citry.test/", lambda route: route.fulfill(body=body, content_type="text/html"))
+    # The rendered component is a fragment. Served as-is, Firefox adds its own
+    # "Quirks Mode" and "character encoding not declared" warnings about the
+    # test page, which the console check above would count as hydration
+    # faults. A doctype and a charset make it a normal document.
+    document = f'<!doctype html><meta charset="utf-8">{body}'
+    page.route(
+        "http://citry.test/",
+        lambda route: route.fulfill(body=document, content_type="text/html; charset=utf-8"),
+    )
     page.goto("http://citry.test/", wait_until="commit")
     page.wait_for_function("document.querySelector('.browser')?.textContent.length > 0")
     assert page.locator(".server").text_content() == isolated

@@ -14,7 +14,7 @@ Design: ``docs/design/events.md`` section 5.1.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, NoReturn, cast
 
@@ -30,6 +30,7 @@ from citry._state_binding_targets import (
     _validate_binding_target as _classify_state_binding_target,
 )
 from citry._walk import Call, run
+from citry.ext.events.state import state_field_names
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
@@ -662,7 +663,7 @@ def _resolve_state_field(info: EventsInfo, field: str, attr_name: str, location:
             f" Declare a State class with that field",
         )
         return
-    state_fields = {member.name for member in fields(info.state_cls)}
+    state_fields = set(state_field_names(info.state_cls))
     if field not in state_fields:
         declared = ", ".join(sorted(state_fields)) or "(none)"
         _fail(
