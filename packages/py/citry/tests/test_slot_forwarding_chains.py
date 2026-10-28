@@ -193,15 +193,29 @@ def _structure(part: Any) -> Any:
 
 # Render ids are counted per process, and each Vue app's element id is
 # random, so each distinct id becomes a numbered placeholder in the order it
-# first appears; which id is which stays visible. A counted id is "c" and
-# eight letters or digits, at least one a digit, so a word such as
-# "component" stays as it is.
+# first appears; which id is which stays visible. `_number_ids` numbers
+# each distinct 64-digit hash the same way, as explained there. A counted id
+# is "c" and eight letters or digits, at least one a digit, so a word such
+# as "component" stays as it is.
 _IDS = re.compile(r"\b(?:citryOccurrence[0-9a-f]+|[0-9a-f]{32}|c(?=[0-9a-z]{0,7}[0-9])[0-9a-z]{8})\b")
+_HASHES = re.compile(r"\b[0-9a-f]{64}\b")
 
 
 def _number_ids(text: str) -> str:
     numbered: dict[str, str] = {}
-    return _IDS.sub(lambda match: numbered.setdefault(match.group(0), f"ID{len(numbered)}"), text)
+    text = _IDS.sub(lambda match: numbered.setdefault(match.group(0), f"ID{len(numbered)}"), text)
+    # The Vue manifest names each compiled definition by a SHA-256 of the
+    # browser code the compiler writes. Any change to the compiler's output
+    # changes the hash, while the slot behavior these snapshots guard stays
+    # the same. So each distinct hash gets its own numbered placeholder, and
+    # which hash is which stays visible.
+    hashes: dict[str, str] = {}
+    return _HASHES.sub(lambda match: hashes.setdefault(match.group(0), f"HASH{len(hashes)}"), text)
+
+
+def _without_test_path(text: str) -> str:
+    """Replace this file's path in `text` with a placeholder."""
+    return text.replace(str(Path(__file__)), "<this test file>")
 
 
 def _observe(page: type[Component], *, uses_vue: bool) -> dict[str, Any]:
@@ -372,8 +386,11 @@ def _assert_nothing_is_left_open() -> None:
 def _recorded_error(err: BaseException) -> dict[str, Any]:
     return {
         "type": type(err).__name__,
-        "text": _number_ids(str(err).replace(str(Path(__file__)), "<this test file>")),
-        "args": _number_ids(repr(err.args).replace(str(Path(__file__)), "<this test file>")),
+        "text": _number_ids(_without_test_path(str(err))),
+        # The path is replaced in each argument before the repr is taken: a repr
+        # doubles each Windows backslash and escapes quotes, so the path would
+        # no longer match afterwards.
+        "args": _number_ids(repr(tuple(_without_test_path(arg) if isinstance(arg, str) else arg for arg in err.args))),
         "components": getattr(err, "_components", None),
         "cause": repr(err.__cause__),
         "context": type(err.__context__).__name__,
