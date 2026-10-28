@@ -97,6 +97,10 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         &html_transform_mod
     )?)?;
     html_transform_mod.add_function(wrap_pyfunction!(
+        html_transform::csp_attribute_problem,
+        &html_transform_mod
+    )?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(
         html_transform::is_javascript_url_py,
         &html_transform_mod
     )?)?;
