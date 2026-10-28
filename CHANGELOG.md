@@ -288,6 +288,9 @@
 
 ### Fixes
 
+- `citry format` and the editor's format command no longer add trailing
+  spaces to blank lines in a component's `template`, `js`, or `css` string
+  in a Python file, which Ruff flags as `W293`.
 - A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
   modifier now fails when the template loads and says what to write
   instead. Vue matches none of these names, so the listener never ran.
