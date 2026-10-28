@@ -511,6 +511,14 @@
       "features": ["python-expression-formatting", "multiline-interpolation"]
     },
     {
+      "id": "python-expressions.expressions.kept-or-moved-comments",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/kept-or-moved-comments.input.citry-html",
+      "expected": "expressions/kept-or-moved-comments.expected.citry-html",
+      "features": ["python-expression-formatting", "python-comment", "c-for-clause", "strings"]
+    },
+    {
       "id": "python-expressions.control.for-forms",
       "capability": "python-expressions",
       "category": "control",
