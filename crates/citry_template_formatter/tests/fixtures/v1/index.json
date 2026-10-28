@@ -27,6 +27,14 @@
       "features": ["preferred-width", "expression-attribute"]
     },
     {
+      "id": "opening-tags.tags.wrap-with-same-line-text",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "tags/wrap-with-same-line-text.input.citry-html",
+      "expected": "tags/wrap-with-same-line-text.expected.citry-html",
+      "features": ["preferred-width"]
+    },
+    {
       "id": "opening-tags.comments.tag-internal",
       "capability": "opening-tags",
       "category": "comments",
@@ -485,6 +493,14 @@
       "input": "expressions/long-interpolation.input.citry-html",
       "expected": "expressions/long-interpolation.expected.citry-html",
       "features": ["python-expression-formatting", "line-width", "multiline-interpolation"]
+    },
+    {
+      "id": "python-expressions.expressions.multiline-without-parentheses",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/multiline-without-parentheses.input.citry-html",
+      "expected": "expressions/multiline-without-parentheses.expected.citry-html",
+      "features": ["python-expression-formatting", "multiline-interpolation"]
     },
     {
       "id": "python-expressions.control.for-forms",

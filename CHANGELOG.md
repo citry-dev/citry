@@ -2,28 +2,28 @@
 
 ## Unreleased
 
-### Fixed
-
-- Apps served below a sub-path, such as `/shop`, now load Citry's
-  scripts and styles and reach its Events endpoints. Citry's URLs start
-  with the sub-path each request was served under, whether a proxy,
-  `uvicorn --root-path`, a WSGI mount, or Django's `FORCE_SCRIPT_NAME`
-  sets it. With FastAPI and Starlette, `mount()` adds a middleware that
-  reads each request's `root_path`
-  ([details](https://citry.dev/advanced/web-frameworks/#serve-below-a-sub-path)).
-  The render cache keeps separate entries per sub-path. To delete an entry
-  from a background job when only your server sets the sub-path, pass it
-  to `component_cache_key()` or `fragment_cache_key()` as `sub_path=`.
-  If you worked around this by passing the sub-path to
-  `set_mounted_prefix()` in a process that also calls `mount()` or
-  `urlpatterns()`, remove the sub-path there, or the URLs start with it
-  twice.
-- On PyPy, `import citry` no longer fails with `No module named
-  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
-  values and template types less fully, and both print a note saying so.
-
 ### Added
 
+- You can write an Events `State` as a Pydantic v2 or v1 model, by hand or
+  through `model_base`. A handler that sets a field to a value the model
+  rejects fails that call, before Citry stores it
+  ([details](https://citry.dev/events/state/#pydantic-state)).
+- You can make every plain `class Kwargs:`, `TemplateData`, `JsData`,
+  `CssData`, `State`, and Events `data` class a Pydantic model that subclasses your
+  own `BaseModel` subclass, so its `model_config` applies to all of them:
+  pass it as `Citry(model_base=MyModel)`. A dataclass base or
+  `typing.NamedTuple` works too
+  ([details](https://citry.dev/concepts/inputs-and-validation/#model-base)).
+- `citry check` and the editor now report a `<script>` or `<style>`
+  element, an `on*` attribute such as `onclick`, or a `javascript:` URL
+  written directly in a template, when `security_csp` is `"warn"` or
+  `"strict"`. They are warnings with `"warn"` and errors with `"strict"`,
+  so a project that uses `"strict"` can see `citry check` fail after the
+  upgrade
+  ([details](https://citry.dev/ide/template-linting/#find-csp-problems)).
+  If your editor's language server runs an older citry-lsp, update it
+  too: once `security_csp` is set, it reports "App worker protocol
+  mismatch" and stops reading your app.
 - A component can pass Vue data to a fill, as a Vue scoped slot: write
   `<c-slot name="item" :row="row" />`, and read it in the fill with
   `<c-fill name="item" v-slot="{ row }">`. Python slot data (`c-item`,
@@ -190,6 +190,13 @@
   `--include-libraries`, or set `LintSettings(include_libraries=True)`, to
   report them
   ([details](https://citry.dev/advanced/cli/#check-library-components)).
+- **Breaking:** a template can now nest tags at most 512 levels deep, and
+  at most 256 of those levels can be Citry logic: every `c-` tag except
+  `<c-raw>`, and each `c-if=`, `c-elif=`, `c-else`, `c-for=` or `c-empty`
+  attribute. A deeper template raises `SyntaxError` at the tag that goes
+  too deep, and `citry check` reports it as `citry.parse.too-deep`; move
+  the inner part into its own component. Plain elements nested more than
+  512 deep used to render.
 - Output that an `on_render` hook passes to another component, as in
   `return Frame(body=result)`, or that an `on_component_rendered` hook
   passes on as `ctx.render`, no longer carries the component's own
@@ -296,6 +303,45 @@
 
 ### Fixes
 
+- Apps served below a sub-path, such as `/shop`, now load Citry's
+  scripts and styles and reach its Events endpoints. Citry's URLs start
+  with the sub-path each request was served under, whether a proxy,
+  `uvicorn --root-path`, a WSGI mount, or Django's `FORCE_SCRIPT_NAME`
+  sets it. With FastAPI and Starlette, `mount()` adds a middleware that
+  reads each request's `root_path`
+  ([details](https://citry.dev/advanced/web-frameworks/#serve-below-a-sub-path)).
+  The render cache keeps separate entries per sub-path. To delete an entry
+  from a background job when only your server sets the sub-path, pass it
+  to `component_cache_key()` or `fragment_cache_key()` as `sub_path=`.
+  If you worked around this by passing the sub-path to
+  `set_mounted_prefix()` in a process that also calls `mount()` or
+  `urlpatterns()`, remove the sub-path there, or the URLs start with it
+  twice.
+- On PyPy, `import citry` no longer fails with `No module named
+  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
+  values and template types less fully, and both print a note saying so.
+- A `<c-for>` whose clause ends with a comment, such as
+  `each="item in items  # every item"`, now renders. It used to fail with
+  "unexpected EOF while parsing".
+- In a component that uses Vue, when `<c-fill fallback=...>` shows a
+  fallback whose `<c-slot>` the receiving component placed inside content
+  it passes to another component, the error now says what to change
+  instead of reporting an internal error. When a fallback shown this way
+  prints a `Slot`, such as `{{ icon }}`, the error now names it as slot
+  content instead of calling it a `<c-slot>` outlet.
+- In a component that uses Vue, when your fill puts `{{ fallback }}` inside
+  a component that is not transparent, such as
+  `<c-Box>{{ fallback }}</c-Box>`, the error now says what to change
+  instead of reporting an internal error. When the receiving component is
+  transparent, this used to render without the fallback and now fails with
+  the same error.
+- `citry check` now reports a `Secret` that a `js_data()` value sends when
+  the value spans several lines without parentheses, such as a conditional
+  with its `else` on its own line, and it checks a `c-values` that starts
+  on an indented line. It used to skip both.
+- `citry format` and the editor's format command no longer add trailing
+  spaces to blank lines in a component's `template`, `js`, or `css` string
+  in a Python file, which Ruff flags as `W293`.
 - A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
   modifier now fails when the template loads and says what to write
   instead. Vue matches none of these names, so the listener never ran.
@@ -594,6 +640,10 @@
   `id` of a control inside it now leave that part to the browser. Such a
   form now leaves its parent, or the whole page when the form is at the
   page root, to the browser.
+
+- On PyPy, `import citry` no longer fails with `No module named
+  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
+  values and template types less fully, and both print a note saying so.
 
 ### Performance
 

@@ -12,11 +12,53 @@
   Vue slot props, such as `v-slot="{ row }"`, with the values its
   `<c-slot>` passes when the server knows them. Such a fill used to be left
   for the browser to build.
+- `parse_template()` and the Vue compiler accept `.outside`, `.window`,
+  `.document`, `.debounce`, and `.throttle` on Vue listeners such as
+  `@click` on HTML elements. The compiled template uses a `citry-on`
+  directive that the `citry` package's browser runtime provides.
+
+### Fixed
+
+- `parse_template()` now rejects Alpine's `.minus`, `.underscore`, and
+  `.spacebar` key modifiers on a Vue listener, with a hint, because Vue
+  matches none of these names and the listener would never run.
+
+### Fixed
+
+- `format_template()` now wraps a start tag's attributes when the text after
+  the tag on the same line, such as `{{ label }}</span>`, would make that
+  line longer than 100 columns. It used to measure only the tag.
+- `format_template()` now formats a Python expression that is valid only
+  inside parentheses, such as a `{{ ... }}` split across lines with its
+  `else` parts on their own lines, or `{{ x for x in items }}`. It used to
+  fail with "Citry accepted a Python expression that the formatter provider
+  rejected".
+
+### Fixed
+
+- `parse_template()`, `safe_eval()` and `compile_expr()` now reject an
+  expression with an unmatched `)`, such as `{{ a) or (b }}` or
+  `lambda x: x + 2)(5`, with Python's message, "unmatched ')'". Citry parses
+  each expression inside an extra pair of parentheses, so such text used to
+  run as `(a) or (b)` or `(lambda x: x + 2)(5)`. An expression with nothing
+  in it but spaces or a comment, such as `{{ }}`, is now an error too; it
+  used to render as `()`. `compile_expr(sandboxed=False)` now accepts
+  exactly the text the sandbox accepts, including its nesting limit.
+- `parse_template()` now accepts an `if` filter in a shorthand loop, such as
+  `<li c-for="x in items if x">`, as it does on `<c-for each>`.
 
 ## v1.9.0
 
 ### Changed
 
+- **Breaking:** `template_parser.parse_template()` raises `SyntaxError`
+  for a template that nests tags more than 512 levels deep, or more than
+  256 Citry logic levels deep (`c-` tags other than `<c-raw>`, and the
+  `c-if=`, `c-elif=`, `c-else`, `c-for=` and `c-empty` attributes). The
+  error carries the diagnostic code `citry.parse.too-deep` and the
+  position of the tag that goes too deep. `compile_template()` raises
+  `SyntaxError` for a `Template` you build yourself that nests past the
+  same limits.
 - **Breaking:** citry-core now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing citry-core 1.8.0.
 - `safe_eval()`, `parse_template()` and `format_template()` now reject an
@@ -55,10 +97,6 @@
 
 ### Added
 
-- `parse_template()` and the Vue compiler accept `.outside`, `.window`,
-  `.document`, `.debounce`, and `.throttle` on Vue listeners such as
-  `@click` on HTML elements. The compiled template uses a `citry-on`
-  directive that the `citry` package's browser runtime provides.
 - citry-core now supports Python 3.15. The prebuilt wheels install on it,
   and Linux also gets a free-threaded CPython 3.15 wheel.
 - For text that does not parse, `analyze_browser_source()` returns the
@@ -72,9 +110,6 @@
 
 ### Fixed
 
-- `parse_template()` now rejects Alpine's `.minus`, `.underscore`, and
-  `.spacebar` key modifiers on a Vue listener, with a hint, because Vue
-  matches none of these names and the listener would never run.
 - Parsing, compiling and formatting a template, and the `html_transform`
   functions, no longer crash the process when called with little stack
   left, for example from deep recursion on a thread with a small stack.

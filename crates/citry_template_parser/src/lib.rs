@@ -29,6 +29,7 @@ pub mod lang {
     mod python_printer_tests;
     pub mod rust;
 }
+pub mod nesting;
 pub mod parser;
 pub mod parser_context;
 pub mod stack;

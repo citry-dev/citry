@@ -24,8 +24,9 @@ use citry_html_transform::{
 };
 use citry_html_transform::{
     JAVASCRIPT_MIME_TYPES, JavascriptMode, OutputPolicyOptions, PolicyEvent, PolicyPass,
-    check_output_html as check_output_html_rust, is_activation_attribute, is_javascript_url,
-    is_native_event_attribute, is_url_attribute,
+    check_output_html as check_output_html_rust,
+    csp_attribute_problem as csp_attribute_problem_rust, is_activation_attribute,
+    is_javascript_url, is_native_event_attribute, is_url_attribute,
     script_type_is_executable as script_type_is_executable_rust,
 };
 
@@ -461,6 +462,32 @@ pub fn classify_dependency_attribute(
         flags |= JAVASCRIPT_URL;
     }
     flags
+}
+
+/// What a strict Content Security Policy would block in one attribute
+/// written literally in a template, by the rules `_check_output_html` uses.
+///
+/// `raw_value` is the value as written, with its character references still
+/// in it, or `None` for an attribute written without a value. Returns
+/// `"native-event"` for an inline event handler such as `onclick`,
+/// `"javascript-url"` for a `javascript:` URL in a URL attribute, or `None`.
+/// A lone surrogate in any argument reads as U+FFFD. It never makes a match
+/// on its own, but the rest of the text is still checked, so `on\ud800` is
+/// an event handler. Unlike `_check_output_html`, this never raises for one.
+#[pyfunction(name = "_csp_attribute_problem")]
+#[pyo3(signature = (tag, name, raw_value))]
+pub fn csp_attribute_problem(
+    tag: &Bound<'_, PyString>,
+    name: &Bound<'_, PyString>,
+    raw_value: Option<&Bound<'_, PyString>>,
+) -> Option<&'static str> {
+    let raw_value = raw_value.map(|value| value.to_string_lossy());
+    csp_attribute_problem_rust(
+        &tag.to_string_lossy(),
+        &name.to_string_lossy(),
+        raw_value.as_deref(),
+    )
+    .map(|problem| problem.code())
 }
 
 /// Whether a URL starts with `javascript:`, read without entity decoding.

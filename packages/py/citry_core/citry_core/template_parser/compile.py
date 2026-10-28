@@ -22,6 +22,9 @@ def compile_template(
         The generated source code as a string.
 
     Raises:
+        SyntaxError: If a template built by hand nests more than 512 tags of
+            any kind or more than 256 Citry logic levels. A parsed template
+            never does: the parser rejects it first.
         ValueError: If compilation fails or an unknown language is specified.
 
     Examples:

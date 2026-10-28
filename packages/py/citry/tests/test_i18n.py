@@ -793,6 +793,10 @@ class TestSourceModeAndRemainingComponentSurface:
         gc.collect()
 
         assert class_reference() is None
+        # The collected class drops its entry from the weak-keyed catalog
+        # table, which leaves the catalog unreachable. Without reference
+        # counting (PyPy) the catalog itself is freed only by the next pass.
+        gc.collect()
         assert catalog_reference() is None
         assert not i18n._catalogs
 

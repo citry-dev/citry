@@ -51,12 +51,17 @@ from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import UnionType
-from typing import Any, Literal, NamedTuple, Union, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
+from citry._nested_declarations import _is_plain_field_family, convert_plain_declaration
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.state import convert_state_class
+from citry.util.logger import logger
+
+if TYPE_CHECKING:
+    from citry._model_base import ModelBase
 
 # Pydantic is optional: when installed, Pydantic-model schemas are delegated
 # to it wholesale; without it, schemas are plain annotated classes or
@@ -169,6 +174,56 @@ def convert_schema_class(schema_cls: type) -> type:
         converted = convert_state_class(schema_cls.__name__, schema_cls)
     with _SCHEMA_CACHE_LOCK:
         return _CONVERTED_SCHEMAS.setdefault(schema_cls, converted)
+
+
+# Events `data` classes generated under `model_base`, by authored class and
+# setting. One authored class may serve components of several Citry
+# instances with different settings, so the setting is part of the key.
+_GENERATED_DATA_SCHEMAS: dict[tuple[type, ModelBase], type] = {}
+
+
+def generated_data_schema(comp_name: str, schema_cls: type, model_base: ModelBase) -> type:
+    """
+    Return the class a handler's plain ``data`` declaration becomes under ``model_base``.
+
+    A Pydantic model, a class decorated with ``@dataclass``, or another class
+    that brings its own construction is kept as written, as without the
+    setting.
+
+    Raises:
+        ValueError: ``model_base`` is ``typing.NamedTuple`` or a Pydantic v1
+            model, which Events validation cannot build.
+
+    """
+    # A class that is, or inherits, a dataclass is kept as written, as
+    # without the setting: a child keeps its parent's kind.
+    if (
+        _is_pydantic_model(schema_cls)
+        or any("__dataclass_fields__" in klass.__dict__ for klass in schema_cls.__mro__)
+        or not _is_plain_field_family(schema_cls)
+    ):
+        return schema_cls
+    key = (schema_cls, model_base)
+    cached = _GENERATED_DATA_SCHEMAS.get(key)
+    if cached is not None:
+        return cached
+    if model_base.kind == "namedtuple":
+        msg = (
+            f"Component {comp_name}: the event data class {schema_cls.__qualname__} cannot be generated as a"
+            " NamedTuple, because Events validation builds dataclass or Pydantic instances only. Decorate it with"
+            " @dataclass to keep it a dataclass, or set model_base to another kind."
+        )
+        raise ValueError(msg)
+    if model_base.kind == "pydantic-v1":
+        msg = (
+            f"Component {comp_name}: the event data class {schema_cls.__qualname__} cannot be generated as a"
+            " Pydantic v1 model, because Events validation reads Pydantic v2 models only. Decorate it with"
+            " @dataclass to keep it a dataclass, or set model_base to a Pydantic v2 model."
+        )
+        raise ValueError(msg)
+    generated = convert_plain_declaration(schema_cls, model_base=model_base, component_name=comp_name)
+    with _SCHEMA_CACHE_LOCK:
+        return _GENERATED_DATA_SCHEMAS.setdefault(key, generated)
 
 
 def validate_args(
@@ -409,6 +464,13 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], prefix: str
             location = ".".join(str(part) for part in entry["loc"])
             key = prefix + location if location else prefix.rstrip(".")
             errors.setdefault(key, str(entry["msg"]))
+        return _INVALID
+    except Exception:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
+        # Pydantic turns only ValueError and AssertionError in a validator
+        # into a ValidationError; another exception is the author's bug, and
+        # answers this one call 422 rather than failing the whole envelope.
+        logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
+        errors.setdefault(prefix.rstrip(".") or "_args", "The value could not be checked.")
         return _INVALID
 
 

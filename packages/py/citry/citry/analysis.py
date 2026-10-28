@@ -3220,7 +3220,12 @@ class PythonTemplateSourceMap:
         relative_lines = [line.removeprefix(content_indent) for line in lines]
         assignment_indent = _line_indent_at(self._host_source, part.literal_start)
         template_indent = f"{assignment_indent}  "
-        body = "\n".join(f"{template_indent}{line}" for line in relative_lines)
+        # Leave a line of only spaces and tabs empty. Indenting it would leave
+        # trailing whitespace that Ruff reports as W293, and
+        # `normalize_inline_asset` empties such a line anyway, so the loaded
+        # asset does not change. A form feed is kept, because `textwrap.dedent`
+        # keeps it on Python 3.11 to 3.13.
+        body = "\n".join(f"{template_indent}{line}" if line.strip(" \t") else "" for line in relative_lines)
         return f"\n{body}\n{assignment_indent}"
 
     def _require_rewrite_literal(self) -> _LiteralPart:

@@ -13,6 +13,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, final, overload
 
 import citry.citry_render as render_module
+from citry._authored_expression import parse_authored_expression
 from citry._walk import Call, run, walk
 from citry.attrs import (
     _format_resolved_attrs_to_str,
@@ -414,8 +415,11 @@ def _compile_simple_json_expr(source: object, used_vars: object) -> _SimpleJsonE
     if type(source) is not str or type(used_vars) is not tuple:
         return None
     try:
-        parsed = ast.parse(source, mode="eval")
-    except SyntaxError:
+        # Parse the text the way Citry runs it, so an expression split across
+        # lines without parentheses compiles like the same expression on one
+        # line.
+        parsed = parse_authored_expression(source)
+    except (SyntaxError, ValueError):
         return None
     expression = _simple_json_expr_from_ast(parsed.body)
     if expression is None:
@@ -435,8 +439,8 @@ def _compile_call_input(source: str, used_vars: tuple[str, ...]) -> _SimpleJsonE
     attribute expressions keep numbers out of the shared subset.
     """
     try:
-        parsed = ast.parse(source, mode="eval").body
-    except SyntaxError:
+        parsed = parse_authored_expression(source).body
+    except (SyntaxError, ValueError):
         return None
     if type(parsed) is ast.Constant and type(parsed.value) in {int, float}:
         return _SimpleJsonExpr("constant", value=parsed.value)
@@ -451,7 +455,8 @@ def _compile_simple_json_loop(node: ForNode) -> tuple[str, _SimpleJsonExpr] | No
     if type(each) is not ExprHtmlAttr or type(each.expr) is not str:
         return None
     try:
-        expression = ast.parse(f"[None for {each.expr}]", mode="eval").body
+        # The newline keeps a clause's trailing `# comment` from hiding the `]`.
+        expression = ast.parse(f"[None for {each.expr}\n]", mode="eval").body
     except SyntaxError:
         return None
     if type(expression) is not ast.ListComp or len(expression.generators) != 1:

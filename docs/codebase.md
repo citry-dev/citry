@@ -505,6 +505,43 @@ This ownership rule avoids concurrent full gates by practice rather than by a
 workspace lock. A full result belongs to the source generation it checked; it
 is not evidence for edits made while or after it ran.
 
+#### Saving disk space
+
+A Rust build folder (`target/`) for this workspace takes 4 to 10 GB, and
+several worktrees building in parallel can fill a laptop disk. When the disk
+is full, no shell command can run, not even the one that would free space, so
+every agent on the machine stops until someone deletes files by hand. Agents
+working in a worktree follow these rules to keep that from happening:
+
+- Run `df -h /` before starting a Rust build, and do not start one with less
+  than 6 GB free.
+- Give each worktree its own `target/`, and do not point several worktrees
+  at one shared folder through `CARGO_TARGET_DIR`. Cargo identifies the
+  workspace's own crates by their path inside the workspace, which is the
+  same in every worktree, so a build in one worktree can reuse crates that
+  were compiled from another worktree's source and test the wrong code.
+- Build with `CARGO_INCREMENTAL=0` and
+  `CARGO_PROFILE_DEV_DEBUG=line-tables-only`, and export both in every shell
+  that builds, including `uv sync`. Cargo's incremental cache (saved state for
+  faster rebuilds) and full debug information roughly double the folder's
+  size, and neither pays off in a short-lived worktree that rebuilds only a
+  few times. A build without the two variables recompiles everything and
+  stores a second copy in the same `target/`.
+- Build a release profile only when a measurement needs it. Release builds
+  keep full debug information here (`[profile.release]` in `Cargo.toml`), so
+  delete `target/release` right after.
+- Delete a worktree's `target/` once its pull request is open. After
+  `maturin develop`, the built extension sits in
+  `packages/py/citry_core/citry_core/`, so tests still run once `target/` is
+  gone. Check that a `_rust.*.so` file is there before you delete it.
+- Give each pytest run its own temporary folder. Set
+  `PYTEST_ADDOPTS=--basetemp=/tmp/<your-folder>/pytest` so `scripts/check.py`
+  picks it up too. Use a folder no other run uses, because pytest empties it
+  at the start of each run, and delete it when the run ends. Without this,
+  every run on the machine shares the default `pytest-of-<user>` folder (under
+  `$TMPDIR` on macOS), and cleaning that folder by age can delete files a
+  parallel run still uses.
+
 #### Writing tests that stay fast
 
 Test fidelity comes first, but setup cost should match the boundary under test:
@@ -1552,7 +1589,8 @@ uv's release notes when raising the pin.
 The pins cover the build backends of this repository's own packages, plus
 the ones in `THIRD_PARTY_BUILD_REQUIREMENTS` in `scripts/build_constraints.py`:
 backends that a locked third-party package needs on a supported interpreter it
-ships no wheel for, such as Cython for PyYAML on CPython 3.15 and PyPy 3.11.
+ships no wheel for, such as Cython for PyYAML on CPython 3.15 and PyPy 3.11,
+and pkgconfig for Brotli on free-threaded CPython 3.14.
 When uv has to build some other third-party package from its sdist, that
 backend has no pin and the build stops with `Hash-checking is required, but no
 trusted hash was provided`. Add the backend to that list, then run

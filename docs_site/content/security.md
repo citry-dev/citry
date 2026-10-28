@@ -356,9 +356,14 @@ from citry import Citry
 app = Citry(sandbox_expressions=False)
 ```
 
-A successful render gives the same output either way. Builtins are still
-missing, and a walrus assignment (`:=`) still writes into the template's
-variables. Only the blocked accesses behave differently.
+A successful render gives the same output either way, and a walrus
+assignment (`:=`) still writes into the template's variables. On CPython,
+builtins are still missing, so only the blocked accesses behave
+differently. On PyPy, every builtin is available with the sandbox off,
+including `open` and `__import__`, so `{{ len(items) }}` renders there
+while CPython and the sandbox reject it. This does not change who you can
+trust: with the sandbox off, a template can already reach any Python
+object.
 
 ## Keep secrets server-side { #keep-secrets-on-the-server }
 
@@ -507,8 +512,15 @@ You can pass `security_csp` to `serialize()` to override the mode for one
 render. Any other value raises `ValueError`, both in `Citry(...)` and in
 `serialize()`.
 
-Citry finds these problems only when it serializes a page, so render the
-pages you serve with `"warn"` before you switch to `"strict"`.
+With `"warn"` or `"strict"`, the editor and `citry check` report these
+problems where a template writes them directly, such as
+`onclick="..."`; see
+[Strict CSP problems](/ide/template-linting/#find-csp-problems). Both
+need your app loaded, so `citry check --static` reports none of them.
+Values from Citry bindings and the nonce checks above appear only when
+Citry serializes a page, so render the pages you serve with `"warn"`
+before you switch to `"strict"`. Neither check sees what Vue builds in
+the browser from a binding such as `:href`.
 
 Citry checks only what it renders. Your app owns the response header, the
 nonce, layouts, third-party resources, and every other CSP directive.

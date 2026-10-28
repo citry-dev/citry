@@ -53,6 +53,7 @@ from citry._class_introspection import _static_class_dict
 from citry._component_graph import _build_component_graph
 from citry._component_introspection import _build_component_catalog, _build_component_info
 from citry._linting import _application_lint_info, _component_lint_info
+from citry._model_base import ModelBase, resolve_model_base
 from citry.analysis import TemplateAnalysis
 from citry.autodiscovery import import_component_modules
 from citry.cache import CitryCache, InMemoryCache, _forget_stored_keys
@@ -184,6 +185,7 @@ class Citry:
         ssr_element_threshold: int = 0,
         vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES,
         max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH,
+        model_base: object = None,
     ) -> None:
         self._engine_id = _new_engine_id()
         # CitrySettings.__post_init__ copies every field into its immutable
@@ -212,6 +214,7 @@ class Citry:
             ssr_element_threshold=ssr_element_threshold,
             vue_asset_max_bytes=vue_asset_max_bytes,
             max_component_depth=max_component_depth,
+            model_base=model_base,
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,
@@ -241,6 +244,11 @@ class Citry:
         # settings spec to a live callable. None means "use the built-in
         # generator" (the fallback lives at the mint site in component.py).
         self.id_generator: Callable[[], str] | None = self._resolve_id_generator(id_generator)
+
+        # The kind of class plain schema declarations become (see
+        # CitrySettings.model_base), resolved once: an import string is
+        # imported here, so a missing package fails now, not at render.
+        self._model_base: ModelBase | None = resolve_model_base(self.settings.model_base)
         # Private component-name storage also coordinates lifecycle state and
         # creates the built-ins (<c-provide>, ...) on first use.
         self._registry = _ComponentRegistry(self)

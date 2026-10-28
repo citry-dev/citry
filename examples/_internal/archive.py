@@ -42,7 +42,9 @@ def build_archive(project: ExampleProject, destination: Path) -> tuple[Path, Pat
             archive.addfile(info, io.BytesIO(contents))
 
     with archive_path.open("wb") as output:
-        with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=0) as compressed:
+        # Python 3.15 lowered gzip's default level from 9 to 6; naming it keeps
+        # the archive and its checksum the same on every Python.
+        with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=0, compresslevel=9) as compressed:
             compressed.write(raw_tar.getvalue())
 
     checksum_path = archive_path.with_suffix(archive_path.suffix + ".sha256")

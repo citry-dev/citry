@@ -10,12 +10,13 @@ everything else reads. Design: ``docs/design/events.md`` section 3.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from difflib import get_close_matches
 from types import FunctionType
 from typing import TYPE_CHECKING, Any, Literal, cast
 from weakref import WeakKeyDictionary
 
+from citry._class_introspection import _static_class_dict
 from citry._input_types import _check_input_types
 from citry._nested_declarations import (
     _active_nested_class_declarations,
@@ -46,20 +47,25 @@ from citry.ext.events.handlers import (
 )
 from citry.ext.events.openapi import OpenApiCommand
 from citry.ext.events.routes import events_routes
+from citry.ext.events.schemas import generated_data_schema
 from citry.ext.events.state import (
     StateMeta,
     build_state_instance,
     check_replaced_state,
     convert_state_class,
     resolve_state_meta,
+    state_field_names,
     validate_state_class,
 )
 from citry.ext.events.view_events import view_events_routes
 from citry.extension import Extension
+from citry.library_component import LibraryComponent
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from citry._model_base import ModelBase
+    from citry.citry import Citry
     from citry.component import Component
     from citry.extension import (
         ComponentIntrospectionContext,
@@ -203,6 +209,25 @@ class EventsInfo:
 
 
 _EVENTS_INFO_ATTR = "_citry_events_info"
+
+
+def _schema_model_base(component_class: type, declaring_class: type) -> ModelBase | None:
+    """
+    Return the `model_base` a component's State or Events data follows, or ``None``.
+
+    Citry's own components, and a library's (by the class that declares the
+    schema), keep the kind their authors wrote, as their ``Kwargs`` do.
+    """
+    if component_class.__dict__.get("_citry_framework_component", False) is True:
+        return None
+    # A library definition is not itself a Component, and the component
+    # materialized from it names the definition as its direct base.
+    from citry.component import Component  # noqa: PLC0415 - component imports this module
+
+    library_classes = (declaring_class, *component_class.__bases__)
+    if any(issubclass(klass, LibraryComponent) and not issubclass(klass, Component) for klass in library_classes):
+        return None
+    return cast("Citry", _static_class_dict(component_class)["citry"])._model_base
 
 
 def _component_events_info(component_class: type) -> EventsInfo | None:
@@ -615,7 +640,7 @@ class EventsExtension(Extension):
         declaration = cast("type", nearest.value)
         comp_name = cls.__name__
         validate_state_class(comp_name, declaration)
-        converted = convert_state_class(comp_name, declaration)
+        converted = convert_state_class(comp_name, declaration, _schema_model_base(cls, nearest.declaring_class))
         meta = resolve_state_meta(comp_name, declaration, converted)
         check_replaced_state(cls, nearest, converted)
         type.__setattr__(cls, "State", converted)
@@ -667,7 +692,7 @@ class EventsExtension(Extension):
             f"Component {comp_name}: Events._throttle",
             self._resolve_config_value(raw_events, "_throttle", defaults),
         )
-        state_fields = tuple(f.name for f in fields(state_cls)) if state_cls is not None else None
+        state_fields = state_field_names(state_cls) if state_cls is not None else None
         topics = validate_topics_value(
             f"Component {comp_name}: Events._topics",
             self._resolve_config_value(raw_events, "_topics", defaults),
@@ -679,6 +704,9 @@ class EventsExtension(Extension):
             for method_name, func in collect_event_handlers(comp_name, raw_events).items():
                 params = validate_handler_signature(comp_name, method_name, func, has_state=state_cls is not None)
                 data_schema = resolve_data_schema(cls, method_name, func) if "data" in params else None
+                model_base = _schema_model_base(cls, cls)
+                if data_schema is not None and model_base is not None:
+                    data_schema = generated_data_schema(comp_name, data_schema, model_base)
                 options = event_options(func)
                 wire_name = options.name if options is not None and options.name is not None else method_name
                 if wire_name in handlers:

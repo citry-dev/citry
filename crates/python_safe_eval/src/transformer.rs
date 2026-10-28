@@ -251,6 +251,7 @@
 // - ❌                - ExprIpyEscapeCommand
 
 use crate::comments::extract_comments;
+use crate::nesting::check_nesting;
 use crate::parse::parse_expression;
 use crate::stack::with_enough_stack;
 use crate::utils::literal_source::{
@@ -262,9 +263,10 @@ use crate::utils::python_ast::{
 };
 use regex::Regex;
 use ruff_python_ast::token::TokenKind;
+use ruff_python_ast::token::Tokens;
 use ruff_python_ast::visitor::transformer::Transformer;
 use ruff_python_ast::{self as ast, Expr, Stmt};
-use ruff_python_parser::Parsed;
+use ruff_python_parser::{Mode, ParseOptions, Parsed, parse_unchecked};
 use ruff_source_file::LineIndex;
 use ruff_text_size::Ranged;
 use std::cell::RefCell;
@@ -346,6 +348,109 @@ fn adjust_error_ranges(error_msg: &str, wrap_prefix_len: usize, source: &str) ->
     .to_string()
 }
 
+/// Parse authored text inside its wrapper, refusing text that only the
+/// wrapper makes valid.
+///
+/// Citry wraps each expression in an extra pair of parentheses so it can span
+/// lines, and wraps a `c-for` clause as a generator. Two kinds of text are
+/// valid only because of such a wrapper:
+///
+/// - text whose own `)` closes the wrapper's `(`, such as `a) or (b`, which
+///   would parse as `(a) or (b)`;
+/// - text with no expression in it, only spaces or a comment, which would
+///   parse as the empty tuple `()`.
+///
+/// An unmatched `)` gets Python's message, "unmatched ')'"; text with no
+/// expression gets "expected an expression, found none". When the text has
+/// another mistake as well, the tokens of a parse that keeps going past errors
+/// still show the early `)`, so it is reported first, as Python usually
+/// reports it.
+/// `prefix_len` is the length of the wrapper's opening part (`(\n`, or
+/// `(None for ` for a `c-for` clause).
+pub fn parse_wrapped_expression(
+    wrapped: &str,
+    source: &str,
+    prefix_len: usize,
+) -> Result<Parsed<ast::ModExpression>, String> {
+    match parse_expression_with_adjusted_error_ranges(wrapped, source, prefix_len) {
+        Ok(parsed) => match wrapper_problem(parsed.tokens(), wrapped, source, prefix_len) {
+            Some(error) => Err(error),
+            None => Ok(parsed),
+        },
+        Err(error) => {
+            // Python's tokenizer reports an unmatched `)` before any later
+            // parse error, so that message wins here too. The second parse
+            // builds a tree that it and its drop walk once per level, so it
+            // runs only within the depth limit and on enough stack.
+            let unmatched = if check_nesting(wrapped).is_ok() {
+                with_enough_stack(|| {
+                    let unchecked = parse_unchecked(wrapped, ParseOptions::from(Mode::Expression));
+                    wrapper_problem(unchecked.tokens(), wrapped, source, prefix_len)
+                })
+            } else {
+                None
+            };
+            Err(unmatched
+                .filter(|problem| problem.contains("unmatched"))
+                .unwrap_or(error))
+        }
+    }
+}
+
+/// The error for text that only its wrapper makes valid (see
+/// `parse_wrapped_expression`), or `None`.
+fn wrapper_problem(
+    tokens: &Tokens,
+    wrapped: &str,
+    source: &str,
+    prefix_len: usize,
+) -> Option<String> {
+    // The kinds of the brackets still open, outermost first.
+    let mut open: Vec<TokenKind> = Vec::new();
+    let mut has_content = false;
+    for token in tokens.iter() {
+        let (kind, range) = token.as_tuple();
+        let (start, end) = (range.start().to_usize(), range.end().to_usize());
+        match kind {
+            TokenKind::Lpar | TokenKind::Lsqb | TokenKind::Lbrace => {
+                // Anything inside the wrapper's own `(` is content.
+                has_content |= !open.is_empty();
+                open.push(kind);
+            }
+            TokenKind::Rpar | TokenKind::Rsqb | TokenKind::Rbrace => {
+                let opener = match kind {
+                    TokenKind::Rpar => TokenKind::Lpar,
+                    TokenKind::Rsqb => TokenKind::Lsqb,
+                    _ => TokenKind::Lbrace,
+                };
+                // Only the wrapper's own `)`, the last byte, may close the
+                // outermost group; any other closer there is unmatched, as
+                // in `a) or (b` or `a] or [b`.
+                if open.len() == 1 && end != wrapped.len() {
+                    let closer = wrapped.get(start..end).unwrap_or(")");
+                    return Some(adjust_error_ranges(
+                        &format!("Parse error: unmatched '{closer}' at byte range {start}..{end}"),
+                        prefix_len,
+                        source,
+                    ));
+                }
+                // A closer of the wrong kind, as in `[a)]`, is a mistake of
+                // its own, which the parser reports in its own words.
+                if open.pop() != Some(opener) {
+                    return None;
+                }
+                has_content |= !open.is_empty();
+            }
+            TokenKind::Comment
+            | TokenKind::NonLogicalNewline
+            | TokenKind::Newline
+            | TokenKind::EndOfFile => {}
+            _ => has_content = true,
+        }
+    }
+    (!has_content).then(|| "Parse error: expected an expression, found none".to_string())
+}
+
 /// Adjust token positions from wrapped source coordinates to original source coordinates
 fn adjust_token_position(
     start: usize,
@@ -404,8 +509,7 @@ fn transform_expression_source(source: &str) -> Result<TransformResult, String> 
     let wrapped_source = format!("(\n{}\n)", source);
     let wrap_prefix_len = 2; // "(\n" = 2 characters
 
-    let ast =
-        parse_expression_with_adjusted_error_ranges(&wrapped_source, source, wrap_prefix_len)?;
+    let ast = parse_wrapped_expression(&wrapped_source, source, wrap_prefix_len)?;
     // The text Python keeps for an interpolation (a t-string's `expression`,
     // the `x=` of a self-documenting one) is found from the parser's tokens:
     // they mark where an expression ends and which comments belong to it.
@@ -421,7 +525,7 @@ fn transform_expression_source(source: &str) -> Result<TransformResult, String> 
                 token.end().to_usize(),
             )
         })
-        .collect();
+        .collect::<Vec<_>>();
     let transformer = SandboxTransformer::new(wrap_prefix_len, &wrapped_source, tokens);
 
     // Create a LineIndex to convert byte offsets to line/column positions

@@ -270,7 +270,9 @@ def test_a_secret_jsdata_field_fails_the_render():
     class Page(Component):
         citry = engine
         template = "<p></p>"
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class JsData:
             token: Secret[str]
@@ -462,7 +464,9 @@ def test_a_vue_component_may_use_a_secret_in_template_data():
         template = """
             <p>{{ token }} {{ count }}</p>
         """
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         def template_data(self, kwargs, slots):
             return {"token": SECRET_TOKEN, "count": len(SECRET_TOKEN.get_secret_value())}
@@ -497,7 +501,9 @@ def test_a_secret_passed_to_a_child_component_stays_on_the_server():
         template = """
             <span>{{ token }}</span>
         """
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class Kwargs:
             token: Secret[str]
@@ -566,7 +572,9 @@ def test_a_plain_value_in_a_secret_jsdata_field_says_to_remove_the_field():
     class Page(Component):
         citry = engine
         template = "<p></p>"
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class JsData:
             token: Secret[str]
@@ -805,6 +813,11 @@ class SecretSentFormsPage(Component):
             "starred": ["public", *TOKENS],
             "branch": None if kwargs.get("anonymous") else SECRET_TOKEN,
             "marked": Const(SECRET_TOKEN),
+            # Inside the dict the value may span lines with no parentheses
+            # of its own, and the check must still read it.
+            "splitBranch": None
+            if kwargs.get("anonymous")  # an anonymous page sends nothing
+            else SECRET_TOKEN,
         }
 
 
@@ -833,6 +846,7 @@ def test_check_reads_a_secret_through_attributes_unpacking_branches_and_const(tm
         _secret_finding("fromModule", "secret_settings.API_TOKEN"),
         _secret_finding("fromObject", "SETTINGS.auth.token"),
         _secret_finding("marked", "SECRET_TOKEN"),
+        _secret_finding("splitBranch", "SECRET_TOKEN"),
         _secret_finding("starred", "TOKENS[0]"),
     ]
 
@@ -1022,7 +1036,9 @@ class ServerOnlyBoard(Component):
     template = """
         <c-SecretBadge c-token="token" />
     """
-    js = _COMPONENT_JS
+    js = """
+      $component({});
+    """
 
     class JsData:
         title: str

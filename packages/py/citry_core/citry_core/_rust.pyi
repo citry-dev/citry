@@ -25,7 +25,7 @@
 #   This matches how typeshed defines modules.
 
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 # Whether this extension was compiled without optimizations ("debug", the
 # plain `maturin develop` build) or with them ("release", `--release` and
@@ -280,6 +280,17 @@ class html_transform:
 
         Returns bit flags: 1 for a Vue activation attribute, 2 for a native
         inline event attribute, 4 for a `javascript:` URL in a URL attribute.
+        """
+    @staticmethod
+    def _csp_attribute_problem(
+        tag: str, name: str, raw_value: str | None
+    ) -> Literal["native-event", "javascript-url"] | None:
+        """
+        What a strict CSP would block in one literal template attribute. Private to `citry`.
+
+        `raw_value` is the value as written, before character references are
+        decoded, or `None` for an attribute without a value. Uses the same
+        rules as `_check_output_html`.
         """
     @staticmethod
     def _is_javascript_url(value: str) -> bool:
@@ -894,6 +905,10 @@ class template_parser:
     def analyze_component_source(
         input: str,
     ) -> template_parser.BrowserComponentAnalysis: ...
+    # The nesting limits, private and read by tests: the most tags of any
+    # kind, and the most Citry logic levels, a template may nest.
+    _MAX_TAG_NESTING: Final[int]
+    _MAX_LOGIC_NESTING: Final[int]
     # Functions
     @staticmethod
     def parse_template(

@@ -57,6 +57,10 @@ class DirectExecutionFrame:
     # The receiving `<c-slot>`'s Vue slot props, as `(attribute, expression)`
     # pairs written in its template, such as `(":row", "row")`.
     vue_props: tuple[tuple[str, str], ...] = ()
+    # Whether a `<c-slot>` outlet opened this frame, rather than a Slot printed
+    # as a value, such as `{{ icon }}`, which Python passed to the template;
+    # an error names which it was.
+    from_outlet: bool = False
 
 
 class DirectProjectionRender(CitryRender):
@@ -65,6 +69,7 @@ class DirectProjectionRender(CitryRender):
     __slots__ = (
         "execution_index",
         "fill_source",
+        "from_outlet",
         "parent_execution",
         "public_name",
         "receiver_render_id",
@@ -88,6 +93,7 @@ class DirectProjectionRender(CitryRender):
         span: tuple[int, int],
         preserve_selected: bool = False,
         vue_props: tuple[tuple[str, str], ...] = (),
+        from_outlet: bool = False,
     ) -> None:
         if not isinstance(selected, CitryRender):
             raise TypeError("a direct projection must wrap structured template output")
@@ -127,6 +133,7 @@ class DirectProjectionRender(CitryRender):
         self.source = source
         self.span = span
         self.vue_props = vue_props
+        self.from_outlet = from_outlet
 
 
 class DirectSlotRender(DirectProjectionRender):
@@ -413,6 +420,7 @@ def wrap_slot_result(
         source=source,
         span=span,
         vue_props=execution.vue_props,
+        from_outlet=execution.from_outlet,
     )
 
 
@@ -639,6 +647,7 @@ def begin_slot_execution(
     source: object,
     span: tuple[int, int],
     vue_props: tuple[tuple[str, str], ...] = (),
+    from_outlet: bool = False,
 ) -> DirectExecutionFrame:
     session = direct_session()
     if session is None or session is not fill_source.session or not session.active:
@@ -652,6 +661,7 @@ def begin_slot_execution(
         source,
         span,
         vue_props=vue_props,
+        from_outlet=from_outlet,
     )
 
 

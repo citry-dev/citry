@@ -521,12 +521,9 @@ class CInternalFormCollection(LibraryComponent):
             "catalog_add": kwargs.catalog["add"],
         }
 
-    template = (
-        """
-"""
-        '      <fieldset ref="root" class="cui-form-collection" c-bind="attrs" c-id="root_id" d'
-        'ata-citry-ui-part="form-collection">\n'
-        """        <legend c-id="legend_id" data-citry-ui-part="legend">{{ label }}</legend>
+    template = """
+      <fieldset ref="root" class="cui-form-collection" c-bind="attrs" c-id="root_id" data-citry-ui-part="form-collection">
+        <legend c-id="legend_id" data-citry-ui-part="legend">{{ label }}</legend>
         <p c-if="description is not None" c-id="description_id" data-citry-ui-part="description">{{ description }}</p>
         <ol data-citry-ui-part="items">
           <c-for each="item in items">
@@ -545,8 +542,7 @@ class CInternalFormCollection(LibraryComponent):
           c-$c-tr:citry-ui-form-collection-add="True if catalog_add else None"
         >{{ tr('citry-ui-form-collection-add') if catalog_add else labels['add'] }}</button>
       </fieldset>
-    """
-    )
+    """  # noqa: E501
 
 
 class CInternalFormCollectionItem(LibraryComponent):

@@ -6,6 +6,12 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Added
 
+- With your application's `security_csp` set to `"warn"` or `"strict"`,
+  the editor marks an inline `<script>` or `<style>`, an `on*` attribute
+  such as `onclick`, or a `javascript:` URL in a template: a warning with
+  `"warn"`, an error with `"strict"`. Use it with a `citry` of the same
+  release; an older citry-lsp rejects the project's lint data once
+  `security_csp` is set.
 - The editor suggests `:row="..."` on `<c-slot>` and `v-slot="{ row }"` on
   `<c-fill>`, for passing Vue data from a slot to its fill.
 - citry-lsp now supports Python 3.15.
@@ -81,13 +87,18 @@ All notable changes to `citry-lsp` are documented here.
 - The editor and `citry check --types` warn when a `js_data()` value is a
   `citry.Secret`, alone or inside a list or dict
   (`citry.js-data.unsupported-type`).
+- After the dot in a Vue listener such as `@click.`, the editor suggests
+  the modifiers that fit there, including Citry's `.outside`, `.window`,
+  `.document`, `.debounce`, and `.throttle`, and a duration such as
+  `.300ms` after the last two. Hovering a modifier explains it.
 
 ### Changed
 
 - **Breaking:** citry-lsp now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing citry-lsp 0.2.0.
 - citry-lsp now requires Citry 0.7.0 or later, which provides the
-  custom-directive, `inheritAttrs`, and parser-error checks listed above.
+  custom-directive, `inheritAttrs`, and parser-error checks listed above,
+  and the Vue listener modifiers.
   Installing this citry-lsp upgrades Citry when needed. An earlier
   citry-lsp with Citry 0.7.0 can show a TypeScript error next to Citry's
   message on some broken Vue expressions, such as a listener that declares
@@ -97,6 +108,11 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Fixed
 
+- A template expression that spans several lines without parentheses, such
+  as a conditional with its `else` on its own line, no longer turns off
+  type information for itself and every later expression in the template.
+  Translation checks and completion now work inside it, and the editor
+  reads the keys of a `c-values` that starts on an indented line.
 - The editor now analyzes the whole of a deeply nested template, such as
   one with 256 nested `<c-if>` tags, even when the program that runs it
   already uses part of Python's stack.

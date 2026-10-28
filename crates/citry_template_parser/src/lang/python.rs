@@ -2,8 +2,8 @@ use std::collections::HashSet;
 use std::ops::Range;
 
 use python_safe_eval::transformer::{
-    parse_expression_with_adjusted_error_ranges, transform_expression_string,
-    Comment as SafeEvalComment, Token as SafeEvalToken,
+    parse_wrapped_expression, transform_expression_string, Comment as SafeEvalComment,
+    Token as SafeEvalToken,
 };
 use ruff_python_ast::Expr as PythonAstExpr;
 use ruff_text_size::Ranged;
@@ -75,7 +75,9 @@ impl LangImpl for PythonLang {
         // Parse the comprehension and walk each generator's target. (Parsing
         // errors are reported against the ORIGINAL source, hence the prefix-aware
         // helper.)
-        let ast = parse_expression_with_adjusted_error_ranges(&wrapped_expr, source, prefix_len)?;
+        // Text whose own `)` closes the generator's `(` is rejected with
+        // Python's message, as for any other expression.
+        let ast = parse_wrapped_expression(&wrapped_expr, source, prefix_len)?;
 
         // Extract the expression from the module
         let module = ast.syntax();
@@ -242,8 +244,8 @@ fn _extract_free_variables_from_comp_expr(
 //
 // The passes below walk the tree with loops over a flat node list and
 // explicit work lists, not recursion, so walking a deeper template needs no
-// more Rust stack. (Dropping the tree afterwards still recurses, as the
-// derived `Drop` of `LangSpecArgument` does everywhere.)
+// more Rust stack. Dropping the tree afterwards frees it from a list too
+// (the `Drop` of `LangSpecArgument` in `lang.rs`).
 
 /// The most open brackets one generated statement may hold.
 ///

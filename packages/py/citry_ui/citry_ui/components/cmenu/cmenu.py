@@ -5206,9 +5206,14 @@ class CMenuSubmenu(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       $component({
         props: {
           disabled: {},
@@ -5616,7 +5621,6 @@ class CMenuSubmenu(LibraryComponent):
         },
       });
     """
-    )
 
 
 class CInternalMenuSurface(LibraryComponent):

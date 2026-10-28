@@ -45,6 +45,7 @@ them. There is no separate editor setting.
 | [`citry.template.invalid-nesting`](/ide/diagnostics/#citry.template.invalid-nesting) | A block such as `<div>` inside a `<p>` | error |
 | [`citry.template.duplicate-id`](/ide/diagnostics/#citry.template.duplicate-id) | Two elements with the same `id` | error |
 | [`citry.template.missing-image-alt`](/ide/diagnostics/#citry.template.missing-image-alt) | An `<img>` without alt text | warning |
+| [`citry.template.csp-incompatible`](/ide/diagnostics/#citry.template.csp-incompatible) | A `<script>`, `<style>`, `on*` attribute, or `javascript:` URL that a strict Content Security Policy blocks | off; follows `security_csp` |
 | [`citry.browser.missing-component-key`](/ide/diagnostics/#citry.browser.missing-component-key) | A component that `<c-for>` repeats without `#c-key`, on a page that uses Vue | error |
 | [`citry.browser.prop-assignment`](/ide/diagnostics/#citry.browser.prop-assignment) | A component that assigns to one of its own props | error |
 | [`citry.browser.unknown-server-event-field`](/ide/diagnostics/#citry.browser.unknown-server-event-field) | A key in `@c-*` arguments that the handler does not accept | error |
@@ -270,8 +271,9 @@ Citry checks the list when the class is defined:
 ## Change rule severity { #change-how-strict-a-rule-is }
 
 Each rule has a `rule_*` setting on `LintSettings` that accepts `"ignore"`,
-`"warning"`, or `"error"`. Warnings are shown but do not fail `citry check`;
-errors do, and `"ignore"` turns the rule off. These are the defaults:
+`"warning"`, or `"error"`. The [strict CSP rule](#find-csp-problems) is
+the exception: it follows `security_csp`. Warnings are shown but do not
+fail `citry check`; errors do, and `"ignore"` turns the rule off. These are the defaults:
 
 ```python
 from citry import Citry, LintSettings
@@ -993,6 +995,75 @@ An `inheritAttrs` value that Citry cannot read, such as
 `inheritAttrs: settings.inherit`, counts as passing `alt` on, so the
 image is not reported.
 
+## Strict CSP problems { #find-csp-problems }
+
+A strict Content Security Policy blocks inline scripts and styles, inline
+event handlers, and `javascript:` URLs. The browser skips them, and the
+page shows no error, only a message in the browser console. When your app
+sets [`security_csp`](/security/#choose-a-csp-compatibility-mode) to
+`"warn"`, the editor and `citry check` report these as warnings. With
+`"strict"` they are errors, so `citry check` fails:
+
+```citry-html
+{# Error: A strict Content Security Policy blocks the
+   inline event attribute 'onclick'. #}
+<button onclick="save()">Save</button>
+
+{# Error: ... blocks the javascript: URL in 'href'. #}
+<a href="javascript:void(0)">Open</a>
+
+{# Error: ... blocks this inline <script>. #}
+<script>startTour()</script>
+
+{# Right #}
+<button @click="save">Save</button>
+<a href="/tour">Open</a>
+```
+
+Citry reports:
+
+- a `<script>` or `<style>` element;
+- an attribute with a fixed value (not a binding such as `:onclick`)
+  whose name is longer than two characters and starts with `on`, in any
+  letter case;
+- a `javascript:` URL in `action`, `formaction`, `href`, `src`,
+  `xlink:href`, or `data` on `<object>`, also when it is written with
+  character references such as `java&#115;cript:`.
+
+Move a script or style into the component's `js` or `css`, or into a
+`Script` or `Style` dependency. Citry also checks the content of
+`<c-raw>`, which it writes to the page unchanged, and the element that
+`<c-element is="...">` names.
+
+Citry uses the same rules when it checks a page as it renders it (see
+[Check output for CSP](/security/#choose-a-csp-compatibility-mode)). A
+page that Vue builds in the browser is the exception: the render-time
+check never sees what Vue writes, so for such a page this check is the
+only one.
+
+A custom attribute such as `online` or `onboarding-step` is reported too,
+because browsers and the policy treat every `on*` attribute as a possible
+event handler. Rename it, for example to `data-online`.
+
+The check reads only fixed text in the template. Citry checks Citry
+bindings such as `c-href` and `c-bind`, and HTML passed to a component in
+an attribute, when it renders the page. Vue bindings such as `:href` and
+`v-bind` get their values in the browser, so neither check sees them.
+
+It skips attributes on component tags, including a capitalized tag such
+as `<Card>` that may be a Vue component. It also skips the content of
+`<noscript>`, `<iframe>`, `<xmp>`, `<noembed>`, `<noframes>`, and
+`<plaintext>`, which the browser reads as text, and markup inside an SVG
+`<title>` or `<style>`, which Citry's template parser reads as text.
+
+The rule follows your app's `security_csp` setting, so it has no `rule_*`
+setting, and a component's `Lint` class cannot change it. It reports
+nothing while `security_csp` is `"off"`, the default, and nothing in
+`citry check --static` or in an editor that has not loaded your app,
+because those do not know the setting. Passing `security_csp` to one
+`serialize()` call does not change what the editor and `citry check`
+report.
+
 ## Loops without `#c-key` { #find-repeated-components-without-keys }
 
 On a page that uses Vue, each component that `<c-for>` repeats needs a
@@ -1398,7 +1469,8 @@ properties, or turn it on only in the components you want checked.
 ## Links to missing pages { #find-links-to-missing-pages }
 
 A misspelled link, a wrong route parameter, or a misspelled file name
-shows up only as a 404 page when someone opens it:
+shows up only as a 404 page when someone opens it. Citry reports these
+links as `citry.template.unknown-url`:
 
 ```citry-html
 {# Warning: Your app has no route or static file
@@ -1406,15 +1478,17 @@ shows up only as a 404 page when someone opens it:
    Found. Did you mean '/about'? #}
 <a href="/abuot">About</a>
 
-{# Warning when the route is /projects/<int:id> #}
+{# Warning with Flask's /projects/<int:id> route #}
 <a href="/projects/alpha">Project</a>
 
 {# Warning: Did you mean '/static/avatar.svg'? #}
 <img src="/static/avtar.svg" alt="" />
 ```
 
-Citry does not know your app's routes, so it asks your web framework
-whether it serves each path. The function you mount Citry with answers:
+### Load your routes
+
+Citry does not know your app's routes. The function you mount Citry
+with lets it ask your web framework whether it serves each path:
 
 | Function | What it checks |
 | --- | --- |
@@ -1422,9 +1496,9 @@ whether it serves each path. The function you mount Citry with answers:
 | `citry.contrib.fastapi.mount()` | The routes of a FastAPI or Starlette app, and the files in its `StaticFiles` mounts |
 | `citry.contrib.django.urlpatterns()` | Django's URL patterns, and the files Django's static file finders find under `STATIC_URL` |
 
-That function must run while the check loads your app. Point `--app` at
-the module that mounts Citry, not only at the module that creates the
-`Citry` instance:
+`citry check` and the editor learn your routes only when that function
+runs while they import your app. Point `--app` at the module that mounts
+Citry, not only at the module that creates the `Citry` instance:
 
 ```console
 # app/main.py calls mount(app, citry_app)
@@ -1433,15 +1507,23 @@ citry --app app.main:citry_app check
 
 For Django, point `--app` at the URL configuration that calls
 `urlpatterns()`, such as `config.urls:citry_app`. That module must import
-your Citry instance under the name you give. Set `DJANGO_SETTINGS_MODULE`
-when you run the check, and in the editor's env file (`citry.envFile` in
-VS Code, `envFile` in PyCharm), so Citry starts Django before it imports
-the URL configuration, and your views can import models.
+your Citry instance under the name after the colon. Set
+`DJANGO_SETTINGS_MODULE` when you run the check, and in the editor's env
+file (`citry.envFile` in VS Code, `envFile` in PyCharm). Citry then starts
+Django before it imports the URL configuration, so your views can import
+models.
 
 A Flask app built by a factory function mounts Citry only when the
-factory runs, so add a small module that calls it, such as `app/wsgi.py`
-holding `web_app = create_app()` and `from app.citry_app import citry_app`,
-and point `--app` at `app.wsgi:citry_app`.
+factory runs. Add a module that calls the factory, and point `--app` at
+it (`app.wsgi:citry_app`):
+
+```python
+# app/wsgi.py
+from app import create_app
+from app.citry_app import citry_app
+
+web_app = create_app()
+```
 
 For every framework, give the editor the same `--app` path in its
 settings: `citry.app` in VS Code, `app` in PyCharm. The FastAPI, Django,
@@ -1454,6 +1536,8 @@ no links, and the editor checks no links either. Serving Citry with the
 plain ASGI or WSGI app from `citry.contrib.asgi` or `citry.contrib.wsgi`
 leaves links unchecked, because those apps do not know your routes.
 
+### Which links are checked
+
 The rule checks a literal `href`, `src`, or `action` on an HTML element
 when the value starts with a single `/`. The query string and fragment
 are ignored, so `/about?tab=team#people` is checked as `/about`. These
@@ -1463,26 +1547,47 @@ are not checked:
   `//cdn.example.com/...` URL;
 - a relative path, such as `page.html`;
 - a value written as an expression, such as `:href` or `c-href`;
-- an attribute on a component tag, which is a component input;
+- an attribute on a component tag, which is a component input, or on a
+  custom element such as `<my-widget>`;
+- `srcset`, which can hold several URLs, `<base href>`, and a `<link>` with `rel="preconnect"` or
+  `rel="dns-prefetch"`;
 - a path under the prefix Citry's own routes are mounted at, such as
   `/citry/citry.js`;
-- a parameter type that only the view checks, such as a FastAPI
-  `project_id: int` argument on `/projects/{project_id}`;
+- a route parameter whose type only your view function checks, such as
+  `project_id: int` on FastAPI's `/projects/{project_id}`. The route
+  matches any text, so `/projects/alpha` counts as served;
 - with Django, a path under `MEDIA_URL`, because uploaded files are not
   listed anywhere Citry can read.
 
-An app served below a sub-path, such as FastAPI's `root_path="/api"` or
-Flask's `APPLICATION_ROOT`, has its links compared with its routes as if
-it were served at the site root, so turn the rule off for such an app.
+### Unexpected link results
 
-The editor asks your framework when it loads your application, so a link
-you add later is checked after the next load, which VS Code starts when
-you save a Python file. If your framework raises an error while it
-answers, `citry check` skips that link and prints one note with the error.
+If your app is served below a sub-path, such as FastAPI's
+`root_path="/api"` or Flask's `APPLICATION_ROOT`, Citry compares each
+link with your routes as if the app were at the site root, so a correct
+`/api/about` link is reported. Turn the rule off for such an app. A
+Django app that sets its sub-path with `FORCE_SCRIPT_NAME` needs no
+change, because Citry removes the sub-path before it asks Django.
+If only the server running Django sets the sub-path, through
+`SCRIPT_NAME`, Citry cannot see it, so correct links that start with
+the sub-path are reported. Set `FORCE_SCRIPT_NAME` to the same
+sub-path, or turn the rule off for that app.
 
 Citry also reports a path that another server answers, such as a
-reverse proxy in front of your app. That is why the rule is only a
-warning. To turn it off, set `rule_unknown_url` to `"ignore"` in the
+reverse proxy in front of your app. That is why the rule is a warning
+by default.
+
+The editor checks links when it loads your app, so a link you add later
+is checked after the next load. VS Code reloads the app when a Python
+file or the env file changes; saving a template file does not reload
+it. To recheck sooner, run **Citry: Restart Language Server**.
+
+If your framework raises an error while Citry asks about a link,
+`citry check` skips that link and prints one note with the error. The
+editor does not report such a link and shows no message. It also stops
+asking after 3 seconds in total and leaves the remaining links
+unchecked, so a slow app does not hold up the editor.
+
+To turn the rule off, set `rule_unknown_url` to `"ignore"` in the
 `Lint` class of the component that holds the link
 ([Override one component](#override-one-component)), or in
 `LintSettings` for the whole app.
@@ -1613,8 +1718,10 @@ which reads each child's `emits`, and the rules for
 [misspelled CSS classes](#find-misspelled-css-classes),
 [classes without CSS](#find-classes-without-css),
 [unset CSS variables](#find-unset-css-variables),
-[links](#find-links-to-missing-pages), and
-[keys nothing provides](#find-unknown-inject-keys).
+[links](#find-links-to-missing-pages),
+[keys nothing provides](#find-unknown-inject-keys), and
+[strict CSP problems](#find-csp-problems), which needs your app's
+`security_csp`.
 
 They still run every rule that reads only the template: the Alpine,
 attribute-value, and misspelled-directive rules, and the rules for
