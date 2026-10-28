@@ -567,9 +567,9 @@ work:
   the runtime with an ordinary script and starts its apps from a module
   script, so a deferred script runs between the two:
 
-  ```html
-  <script defer src="/static/vue-plugins.js"></script>
-  ```
+    ```html
+    <script defer src="/static/vue-plugins.js"></script>
+    ```
 
 - **A script an extension adds to `ctx.early_scripts`** in
   `on_dependencies()`. These run after the Vue runtime loads and before

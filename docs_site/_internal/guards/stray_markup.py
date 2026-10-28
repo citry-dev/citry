@@ -10,7 +10,15 @@ The usual cause is generated component markup that the pass tries to read as
 Markdown. It gives up around preformatted code and around a ``<button>`` that
 wraps block content, then wraps what follows in paragraphs. Components that
 inject markup avoid this with ``flatten_for_markdown``; authored HTML avoids it
-by keeping the whole block flush left with no blank lines inside it.
+by keeping the whole block flush left with no blank lines inside it. A fenced
+code block followed on the very next line by text, such as the next list
+item, gets wrapped in a paragraph the same way; a blank line after the
+closing fence avoids it. Inside a list item, the block also needs a 4-space
+indent, or it drops out of the list.
+
+The report names the Markdown file, or CHANGELOG.md for a release-notes page.
+When the text right after the first stray tag appears in that file (for a
+release page, in that release's section), it also names that line.
 
 The check covers the page body and the HTML a page ships for Vue to build in
 the browser, which is where the landing page keeps its content.
@@ -21,7 +29,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
-from docs_site._internal.guards.site_index import source_markdown
+from docs_site._internal.guards.site_index import source_line, source_markdown
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -43,18 +51,24 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
 
         shown = page.stray_markup[:_MAX_REPORTED]
         extra = len(page.stray_markup) - len(shown)
-        detail = "; ".join(repr(markup) for markup in shown)
+        detail = "; ".join(repr(stray.markup) for stray in shown)
         if extra > 0:
             detail += f"; and {extra} more"
-        # The generated markup has no source line of its own, so name the
-        # Markdown file whose raw HTML or component tag produced it.
-        source = source_markdown(page, ctx.content_dir)
+        # The stray tags have no source line of their own, but the text right
+        # after the first one usually comes straight from the Markdown file.
+        source = source_markdown(page, ctx.content_dir, ctx.repo_root)
+        following = shown[0].following_text
+        excluded = ctx.project.settings.excluded_releases if ctx.project is not None else ()
+        line = source_line(source, following, page, excluded) if source is not None and following else None
+        where = f" The first one comes just before {following[:80]!r}." if following else ""
         yield GuardResult.error(
             guard="stray_markup",
             message=(
-                f"Page wraps raw HTML in stray paragraph tags: {detail}. Keep raw HTML "
-                "blocks flush left with no blank lines, and pass generated component "
-                "markup through flatten_for_markdown."
+                f"The markdown pass wrapped HTML in stray paragraph tags: {detail}.{where} Keep raw "
+                "HTML blocks flush left with no blank lines, leave a blank line after a "
+                "code block's closing fence, indent a code block inside a list item by 4 "
+                "spaces, and pass generated component markup through flatten_for_markdown."
             ),
             source=str(source) if source is not None else page.label,
+            line=line,
         )

@@ -199,9 +199,9 @@ with a check mark. To fix it:
 
 1. Install `citry-lsp` in the Python environment the workspace uses:
 
-   ```console
-   python -m pip install citry-lsp
-   ```
+    ```console
+    python -m pip install citry-lsp
+    ```
 
 2. Set `citry.app` to the Citry instance your app starts, written as
    `module:attribute`, for example `myproject.app:engine`. A component

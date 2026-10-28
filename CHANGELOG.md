@@ -94,25 +94,26 @@
 - With your application loaded, `citry check` now reports more mistakes
   that fail only when the page runs
   ([details](https://citry.dev/ide/template-linting/)):
-  - a component that `<c-for>` repeats without `#c-key` on a page that uses
-    Vue (`rule_missing_component_key`);
-  - a component that assigns to its own prop, such as
-    `@click="open = false"` in its template or `this.open = false` in its
-    JavaScript (`rule_prop_assignment`), which the editor reports too;
-  - `@c-*` arguments the server would reject: an unknown key, a missing
-    required field, or a literal of the wrong type, such as
-    `save({amount: '1'})` for an `int` field
-    (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
-    `rule_incompatible_server_event_field`);
-  - a control in a form whose `@c-submit` sends the form's fields, when
-    the handler's data class does not declare its `name`, such as
-    `<input name="qeury">`, or no control is named after a required field
-    (`rule_unknown_form_field`, `rule_missing_form_field`);
-  - a `var(--name)` that misspells a `css_data()` key, such as
-    `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
+    - a component that `<c-for>` repeats without `#c-key` on a page that uses
+      Vue (`rule_missing_component_key`);
+    - a component that assigns to its own prop, such as
+      `@click="open = false"` in its template or `this.open = false` in its
+      JavaScript (`rule_prop_assignment`), which the editor reports too;
+    - `@c-*` arguments the server would reject: an unknown key, a missing
+      required field, or a literal of the wrong type, such as
+      `save({amount: '1'})` for an `int` field
+      (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
+      `rule_incompatible_server_event_field`);
+    - a control in a form whose `@c-submit` sends the form's fields, when
+      the handler's data class does not declare its `name`, such as
+      `<input name="qeury">`, or no control is named after a required field
+      (`rule_unknown_form_field`, `rule_missing_form_field`);
+    - a `var(--name)` that misspells a `css_data()` key, such as
+      `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
 
-  These are errors by default except the CSS check, so `citry check` may
-  now fail on an existing project.
+    These are errors by default except the CSS check, so `citry check` may
+    now fail on an existing project.
+
 - With your application loaded, `citry check` now warns about a link to a
   page or file your app does not serve, such as `<a href="/abuot">` or
   `<img src="/static/avtar.svg">`, and suggests the path you likely meant
@@ -225,11 +226,12 @@
   inputs to an element with `c-bind` now writes `alt=""` there instead
   of a bare `alt`, which HTML reads the same way.
 
-  ```citry-html
-  <c-Avatar alt="" />      <!-- before: True; now "" -->
-  <c-Grid compact="" />    <!-- now "": a bool input rejects it -->
-  <c-Grid compact />       <!-- True, as before -->
-  ```
+    ```citry-html
+    <c-Avatar alt="" />      <!-- before: True; now "" -->
+    <c-Grid compact="" />    <!-- now "": a bool input rejects it -->
+    <c-Grid compact />       <!-- True, as before -->
+    ```
+
 - Output that an `on_render` hook passes to another component, as in
   `return Frame(body=result)`, or that an `on_component_rendered` hook
   passes on as `ctx.render`, no longer carries the component's own
@@ -255,21 +257,22 @@
   valid inputs under this check. A value that equals a `Literal` member,
   such as a `StrEnum` member or `Markup("sm")`, passes the check.
 
-  ```python
-  class Card(Component):
-      class Kwargs:
-          title: str
+    ```python
+    class Card(Component):
+        class Kwargs:
+            title: str
 
-  card = Card(title=123)
-  str(card)
-  # TypeError: Card.Kwargs.title expects str, got int (123). ...
-  ```
+    card = Card(title=123)
+    str(card)
+    # TypeError: Card.Kwargs.title expects str, got int (123). ...
+    ```
 
-  Citry checks only the outer type of each `Kwargs`, `TemplateData`,
-  `JsData`, `CssData`, and Events `State` field, so `list[str]` accepts
-  any list. A field's own default always passes, so `title: str = None`
-  keeps working, and Pydantic models keep their own rules
-  ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
+    Citry checks only the outer type of each `Kwargs`, `TemplateData`,
+    `JsData`, `CssData`, and Events `State` field, so `list[str]` accepts
+    any list. A field's own default always passes, so `title: str = None`
+    keeps working, and Pydantic models keep their own rules
+    ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
+
 - `citry check` now fails, and the editor shows an error, on an HTML
   attribute value the browser does not accept, such as
   `<button type="sumbit">`. Set `rule_invalid_attribute_value="warning"` in

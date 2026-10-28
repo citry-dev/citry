@@ -1751,7 +1751,9 @@ guards, and the `stray_markup` guard cover the landing content once.
 whose markdown pass wrapped raw HTML in stray paragraphs: an empty `<p></p>`, or
 a `<p>` opened right before a `<div>`, `<section>` or `<template>` tag or its
 closing tag. `rendered_markdown` names the Markdown file and the line of the
-first leaked text; `stray_markup` names the file. `stray_markup` skips the
+first leaked text; `stray_markup` names the file and the line of the text
+right after the first stray tag. For a release-notes page, both name
+CHANGELOG.md and look for the line only in that release's section. `stray_markup` skips the
 HTML inside a Vue shell, which the server writes from component templates
 rather than Markdown.
 
