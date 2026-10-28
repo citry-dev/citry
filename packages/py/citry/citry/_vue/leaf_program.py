@@ -2522,6 +2522,9 @@ class LeafProgramNode(Node):
         # depends on changes, so the plan cannot go stale.
         self._native_row_plan: Any = None
         self._native_row_plan_attempted = False
+        # Why Rust refused the plan for nesting too deeply, until the render
+        # that first meets it logs the reason and clears it.
+        self.native_depth_refusal: str | None = None
 
     @property
     def native_row_plan(self) -> Any:
@@ -2544,13 +2547,18 @@ class LeafProgramNode(Node):
                     # fails loudly instead of quietly taking the slower path.
                     try:
                         plan = native._RowPlan(*tuples)
-                    except ValueError:
+                    except ValueError as error:
                         # Rust refuses a shape it cannot evaluate exactly;
                         # those rows keep the Python evaluator. A key with
                         # no UTF-8 form (a lone surrogate, which no Rust
                         # string can hold) raises UnicodeEncodeError, a
                         # ValueError, here.
                         plan = None
+                        # A template nested past Rust's depth limits renders
+                        # correctly, only more slowly. The caller, which knows
+                        # the component's name, reports it once at debug level.
+                        if str(error).startswith("too_deep"):
+                            self.native_depth_refusal = str(error).removeprefix("too_deep: ")
             # Publish the plan before the flag, so a concurrent render sees
             # either nothing yet (and builds it too) or the final value.
             self._native_row_plan = plan

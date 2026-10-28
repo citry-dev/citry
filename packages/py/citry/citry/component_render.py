@@ -131,7 +131,7 @@ from citry.util.exception import (
 )
 from citry.util.html import Markup, escape
 from citry.util.id import gen_render_id, validate_render_id
-from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
+from citry.util.logger import is_tracing, logger, trace_component_msg, trace_node_msg
 from citry.util.misc import get_fields, is_generator, to_dict
 from citry_core.template_parser import ForeignSpan, ParseOptions, compile_template, parse_template
 
@@ -723,6 +723,18 @@ def _simple_vue_record(
         and component_class.citry.mode != "development"
         else None
     )
+    # A template nested past the native path's depth limits renders the same,
+    # only more slowly, so a debug message is enough. It is cleared once
+    # logged, so it appears about once per template (twice if two threads
+    # build the plan at the same moment).
+    if native is None and leaf_node.native_depth_refusal is not None:
+        reason = leaf_node.native_depth_refusal
+        leaf_node.native_depth_refusal = None
+        logger.debug(
+            "Citry renders the simple='vue' component %s with its Python path, because %s.",
+            component_class.__name__,
+            reason,
+        )
     leaf = (
         leaf_node.render_static_instance_free(
             variables,

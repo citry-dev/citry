@@ -206,7 +206,13 @@ jobs:
       # suite on those interpreters. Every other cell keeps the native path.
       # The option is added here rather than as a matrix key, so the cell's
       # check name stays the same.
+      #
+      # The tests that render deep templates on a 128 KiB thread start an
+      # interpreter each, so one Linux cell runs them on CI; a local run
+      # always does (packages/py/citry/tests/test_native_render_depth.py).
       - name: Run Python tests
+        env:
+          CITRY_NATIVE_DEPTH_PROBES: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14') && '1' || '' }}
         run: >-
           uv run --no-sync pytest
           -m "not e2e"

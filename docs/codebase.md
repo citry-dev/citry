@@ -223,7 +223,7 @@ pip install uv
    the editable package into another checkout's environment. Check the selected
    interpreter and imported `citry_core._rust` path after rebuilding.
 
-   Note: both `maturin develop` and the `uv sync` build produce a **debug** (unoptimized) extension. That is fine for tests, but it makes the Rust-backed paths ~10x or more slower, so pass `--release` (for example `uv run maturin develop --release`) before running any benchmark.
+   Note: `uv sync` builds the extension through maturin's PEP 517 backend, which compiles Cargo's `release` profile, so CI's test jobs run an optimized build. `maturin develop` without `--release` produces a **debug** (unoptimized) extension. That is fine for tests, but it makes the Rust-backed paths ~10x or more slower, so pass `--release` (for example `uv run maturin develop --release`) before running any benchmark. A few limits differ between the two builds, such as the native render path's depth limits, so a test that depends on one reads it from `citry_core._rust` rather than copying it.
    The extension reports how it was compiled in `citry_core._rust.BUILD_PROFILE` (`"release"` or `"debug"`), and the benchmark runners exit on a debug build with the rebuild command. To measure a debug build on purpose, set `CITRY_BENCH_ALLOW_DEBUG_NATIVE=1`. Check which build is installed:
 
    ```bash

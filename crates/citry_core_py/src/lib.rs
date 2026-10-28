@@ -68,6 +68,17 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
             "release"
         },
     )?;
+    // The native render path's depth limits, which differ by build profile
+    // (see `MAX_BODY_DEPTH` in `citry_native_render`). Tests read them here
+    // rather than copying a number that depends on the build.
+    m.add(
+        "NATIVE_RENDER_MAX_BODY_DEPTH",
+        citry_native_render::MAX_BODY_DEPTH,
+    )?;
+    m.add(
+        "NATIVE_RENDER_MAX_READ_DEPTH",
+        citry_native_render::MAX_READ_DEPTH,
+    )?;
     let vue_mod = PyModule::new(m.py(), "vue")?;
     vue::register(&vue_mod)?;
     m.add_submodule(&vue_mod)?;

@@ -26,6 +26,12 @@
 
 ### Fixed
 
+- Rendering a `simple='vue'` component whose template nests many `c-for`
+  or `c-if` blocks no longer crashes the process on a thread with a small
+  stack, such as the 128 KiB stack a thread gets by default on Alpine Linux. A template
+  nested more than 62 `c-for` or `c-if` blocks deep, or one that reads a
+  path more than 63 subscripts deep, now renders through Citry's Python
+  path instead, with the same output, only more slowly.
 - `parse_template()` now rejects Alpine's `.minus`, `.underscore`, and
   `.spacebar` key modifiers on a Vue listener, with a hint, because Vue
   matches none of these names and the listener would never run.

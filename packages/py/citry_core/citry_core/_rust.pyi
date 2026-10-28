@@ -32,6 +32,17 @@ from typing import Any, Final, Literal
 # published wheels). Benchmarks refuse to measure a "debug" build.
 BUILD_PROFILE: Literal["release", "debug"]
 
+# How deep a `simple='vue'` template may nest before the native render path
+# leaves it to the Python evaluator. NATIVE_RENDER_MAX_BODY_DEPTH counts the
+# template's top level as 1, then one for each `c-if` branch or `c-for` body
+# around an operation, one for the operation's expression, and one for each
+# conditional expression inside it. NATIVE_RENDER_MAX_READ_DEPTH counts a
+# path's variable as 1, then one for each subscript of it or loop over it. A
+# "debug" build's limits are lower than a "release" build's, because its
+# stack frames are larger.
+NATIVE_RENDER_MAX_BODY_DEPTH: int
+NATIVE_RENDER_MAX_READ_DEPTH: int
+
 ########################################################
 # Internationalization
 ########################################################
