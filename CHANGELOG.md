@@ -187,6 +187,11 @@
 
 ### Changed
 
+- `citry.contrib.django.secret()` now includes Django's
+  `SECRET_KEY_FALLBACKS`, so `Citry(secret=secret())` keeps accepting
+  values signed with an old key while you rotate `SECRET_KEY`. With
+  fallbacks set it returns a list of keys, so its return type is now
+  `str | list[str]`; without fallbacks it still returns the plain string.
 - When a component from a registered component library, such as Citry UI,
   gets an input of the wrong type, the `TypeError` now names the library
   and asks you to change the value you pass, instead of suggesting you
