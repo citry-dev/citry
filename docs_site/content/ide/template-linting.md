@@ -1559,18 +1559,40 @@ are not checked:
 - with Django, a path under `MEDIA_URL`, because uploaded files are not
   listed anywhere Citry can read.
 
+When your app is served below a sub-path, such as `/shop`, its links
+start with `/shop`, as in `/shop/cart`, but its routes leave it out, as
+in `/cart`. Citry removes `/shop` from each link before it asks your
+framework. It reads the sub-path from your framework's own setting:
+
+| Framework | Where you set it |
+| --- | --- |
+| FastAPI | `FastAPI(root_path="/shop")` |
+| Flask | `app.config["APPLICATION_ROOT"] = "/shop"` |
+| Django | `FORCE_SCRIPT_NAME = "/shop"` in `settings.py` |
+
+A link that does not start with the sub-path, such as `/blog`, is
+reported, because the browser sends it outside your app. A path under
+Citry's own prefix, listed above, is not checked.
+
+Write the value with a leading `/`, such as `/shop`; a trailing `/` is
+ignored, and an empty value or `/` means the site root. Citry reads the
+value the same way when it builds its own URLs, so a value that does not
+start with a single `/`, such as `shop`, also counts as the site root
+(see [Serve below a sub-path](/advanced/web-frameworks/#serve-below-a-sub-path)).
+
+If only your server sets the sub-path, such as gunicorn's `SCRIPT_NAME`
+or uvicorn's `--root-path`, the check cannot see it and reports every
+link that includes it. Set the same value in the framework setting
+above, or turn the rule off for that app. A plain Starlette app has no
+such setting, so turn the rule off there. In Flask, `APPLICATION_ROOT`
+also sets the path of the session cookie, which then matches the
+sub-path, unless you set `SESSION_COOKIE_PATH`.
+
 ### Unexpected link results
 
-If your app is served below a sub-path, such as FastAPI's
-`root_path="/api"` or Flask's `APPLICATION_ROOT`, Citry compares each
-link with your routes as if the app were at the site root, so a correct
-`/api/about` link is reported. Turn the rule off for such an app. A
-Django app that sets its sub-path with `FORCE_SCRIPT_NAME` needs no
-change, because Citry removes the sub-path before it asks Django.
-If only the server running Django sets the sub-path, through
-`SCRIPT_NAME`, Citry cannot see it, so correct links that start with
-the sub-path are reported. Set `FORCE_SCRIPT_NAME` to the same
-sub-path, or turn the rule off for that app.
+If only your server sets the sub-path, Citry reports correct links that
+start with it; see [the sub-path rules above](#find-links-to-missing-pages)
+for the fix.
 
 Citry also reports a path that another server answers, such as a
 reverse proxy in front of your app. That is why the rule is a warning
