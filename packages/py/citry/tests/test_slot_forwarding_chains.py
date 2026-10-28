@@ -197,11 +197,28 @@ def _structure(part: Any) -> Any:
 # eight letters or digits, at least one a digit, so a word such as
 # "component" stays as it is.
 _IDS = re.compile(r"\b(?:citryOccurrence[0-9a-f]+|[0-9a-f]{32}|c(?=[0-9a-z]{0,7}[0-9])[0-9a-z]{8})\b")
+_HASHES = re.compile(r"\b[0-9a-f]{64}\b")
 
 
 def _number_ids(text: str) -> str:
     numbered: dict[str, str] = {}
-    return _IDS.sub(lambda match: numbered.setdefault(match.group(0), f"ID{len(numbered)}"), text)
+    text = _IDS.sub(lambda match: numbered.setdefault(match.group(0), f"ID{len(numbered)}"), text)
+    # The Vue manifest names each compiled definition by a SHA-256 of the
+    # browser code the compiler writes, so any compiler change moves it while
+    # the slot behavior these snapshots guard stays the same. Each distinct
+    # hash gets its own numbered placeholder, so which hash is which stays
+    # visible without locking the compiler's bytes.
+    hashes: dict[str, str] = {}
+    return _HASHES.sub(lambda match: hashes.setdefault(match.group(0), f"HASH{len(hashes)}"), text)
+
+
+def _without_test_path(text: str) -> str:
+    """Replace this file's path with a placeholder, in plain or repr form."""
+    path = str(Path(__file__))
+    # A repr doubles each backslash, so on Windows the path in `repr(err.args)`
+    # reads differently from the path in `str(err)`.
+    escaped = repr(path)[1:-1]
+    return text.replace(escaped, "<this test file>").replace(path, "<this test file>")
 
 
 def _observe(page: type[Component], *, uses_vue: bool) -> dict[str, Any]:
@@ -372,8 +389,8 @@ def _assert_nothing_is_left_open() -> None:
 def _recorded_error(err: BaseException) -> dict[str, Any]:
     return {
         "type": type(err).__name__,
-        "text": _number_ids(str(err).replace(str(Path(__file__)), "<this test file>")),
-        "args": _number_ids(repr(err.args).replace(str(Path(__file__)), "<this test file>")),
+        "text": _number_ids(_without_test_path(str(err))),
+        "args": _number_ids(_without_test_path(repr(err.args))),
         "components": getattr(err, "_components", None),
         "cause": repr(err.__cause__),
         "context": type(err.__context__).__name__,

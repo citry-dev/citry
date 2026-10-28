@@ -314,11 +314,19 @@ _VUE_DATA_BLOCK = re.compile(
 # A counted id is "c" and eight letters or digits, at least one a digit,
 # so a word such as "component" stays as it is.
 _IDS = re.compile(r"\b(?:citryOccurrence[0-9a-f]+|[0-9a-f]{32}|c(?=[0-9a-z]{0,7}[0-9])[0-9a-z]{8})\b")
+_HASHES = re.compile(r"\b[0-9a-f]{64}\b")
 
 
 def _number_ids(text: str) -> str:
     numbered: dict[str, str] = {}
-    return _IDS.sub(lambda match: numbered.setdefault(match.group(0), f"ID{len(numbered)}"), text)
+    text = _IDS.sub(lambda match: numbered.setdefault(match.group(0), f"ID{len(numbered)}"), text)
+    # The Vue manifest names each compiled definition by a SHA-256 of the
+    # browser code the compiler writes, so any compiler change moves it while
+    # the render behavior these snapshots guard stays the same. Each distinct
+    # hash gets its own numbered placeholder, so which hash is which stays
+    # visible without locking the compiler's bytes.
+    hashes: dict[str, str] = {}
+    return _HASHES.sub(lambda match: hashes.setdefault(match.group(0), f"HASH{len(hashes)}"), text)
 
 
 def _vue_parts(page: str) -> dict[str, str]:
