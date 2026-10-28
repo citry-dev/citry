@@ -637,8 +637,7 @@ class CInternalTransferList(LibraryComponent):
             "move_bottom_label": kwargs.labels["move_bottom"],
         }
 
-    template = (
-        """
+    template = """
       <div
         class="cui-transfer-list"
         c-bind="attrs"
@@ -702,10 +701,8 @@ class CInternalTransferList(LibraryComponent):
               data-citry-transfer-listbox="available"
               data-citry-ui-part="listbox"
             >
-"""
-        '              <c-for each="item in available_items"><c-CInternalTransferListItem #c-ke'
-        'y="item[\'declaration\'].value" c-item="item" /></c-for>\n'
-        """            </div>
+              <c-for each="item in available_items"><c-CInternalTransferListItem #c-key="item['declaration'].value" c-item="item" /></c-for>
+            </div>
             <p
               c-hidden="available_total != 0"
               c-$c-tr:citry-ui-transfer-list-available-empty="True if catalog['available_empty'] else None"
@@ -755,10 +752,8 @@ class CInternalTransferList(LibraryComponent):
               data-citry-transfer-listbox="chosen"
               data-citry-ui-part="listbox"
             >
-"""
-        '              <c-for each="item in chosen_items"><c-CInternalTransferListItem #c-key="'
-        'item[\'declaration\'].value" c-item="item" /></c-for>\n'
-        """            </div>
+              <c-for each="item in chosen_items"><c-CInternalTransferListItem #c-key="item['declaration'].value" c-item="item" /></c-for>
+            </div>
             <p c-hidden="chosen_total != 0"
               c-$c-tr:citry-ui-transfer-list-chosen-empty="True if catalog['chosen_empty'] else None"
               data-citry-ui-part="empty"
@@ -792,8 +787,7 @@ class CInternalTransferList(LibraryComponent):
         </div>
         <div aria-live="polite" aria-atomic="true" data-citry-ui-part="status"></div>
       </div>
-    """
-    )
+    """  # noqa: E501
 
 
 class CInternalTransferListItem(LibraryComponent):

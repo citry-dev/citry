@@ -10,7 +10,6 @@ from citry import CitryRender, LibraryComponent, SlotInput, const_value
 from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
-    ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._attrs import (
     CClassValue,
@@ -742,9 +741,14 @@ class CDisclosure(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       $component({
         props: {
           open: {},
@@ -1522,7 +1526,6 @@ class CDisclosure(LibraryComponent):
         },
       });
     """
-    )
 
     css_file = "runtime.min.css"
 
