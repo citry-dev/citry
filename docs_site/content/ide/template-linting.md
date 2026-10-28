@@ -1785,10 +1785,10 @@ that start with an underscore. The valid ones are `_blank`, `_self`,
 
 ### Alpine load errors
 
-An Alpine-only event modifier such as `@click.outside`, and `v-once` or
+An Alpine-only event modifier such as `@click.away`, and `v-once` or
 `v-memo`, are not lint rules, so no setting turns them off. The template
 fails to load, with a message that shows what to write instead. See
-[Vue in templates](/syntax/vue/).
+[What is not supported](/vue/limits/#what-is-not-supported).
 
 ### Navigate declared names
 

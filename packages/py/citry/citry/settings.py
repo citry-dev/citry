@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast, get_args
 
+from citry._model_base import check_model_base
 from citry_core.template_parser import analyze_browser_source
 
 if TYPE_CHECKING:
@@ -718,6 +719,30 @@ class CitrySettings:
             recursion limit stops that kind of recursion much earlier, with
             an ordinary ``RecursionError`` that ``<c-error-fallback>`` can
             catch, so avoid wrapping such a recursion in one.
+        model_base: The kind of class Citry generates from every plain
+            schema declaration (``class Kwargs:`` with annotated fields, and
+            likewise ``TemplateData``, ``JsData``, ``CssData``, and Events
+            ``data`` classes), and a base those classes share. ``None`` (the default) generates dataclasses. A
+            Pydantic v2 or v1 model class generates models that subclass it,
+            so its ``model_config`` and validators apply, and Pydantic, not
+            Citry, checks the values. A dataclass generates dataclasses that
+            subclass it and copy its options. ``typing.NamedTuple``
+            generates named tuples. ``State`` follows a dataclass base and
+            stays a dataclass under a Pydantic base. Classes decorated with
+            ``@dataclass``, hand-written models, ``Slots``, Citry's own
+            components, and components from an installed library are kept
+            as written. An import string such as ``"pydantic.BaseModel"`` is
+            imported when the ``Citry`` instance is built.
+
+            Building the settings raises ``TypeError`` for a value of another
+            kind, a named tuple class with fields, a dataclass with its own
+            ``__init__``, a Pydantic dataclass, or a root model. An import
+            string is checked only when ``Citry`` is built: ``ImportError``
+            if it cannot be imported, ``TypeError`` if it names a class of
+            another kind. A
+            component class fails when it is defined if a schema cannot take
+            the kind; see "Share one schema base" in the inputs and
+            validation guide.
         id_generator: A function returning the per-render id stamped on each
             component instance (``component.id``; static output also writes it
             into each component root's ``data-cid-<id>`` attribute). Given as
@@ -779,6 +804,7 @@ class CitrySettings:
     ssr_element_threshold: int = 0
     vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES
     max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH
+    model_base: object = None
 
     def __post_init__(self) -> None:
         # Copy every input into its immutable stored shape, so a direct
@@ -826,6 +852,10 @@ class CitrySettings:
             )
         if self.max_component_depth < 1:
             raise ValueError(f"Citry max_component_depth must be 1 or greater, got {self.max_component_depth}.")
+        # A class is checked now; an import string is checked when the Citry
+        # instance imports it, so a settings module need not import the base.
+        if not isinstance(self.model_base, str):
+            check_model_base(self.model_base)
 
         # Extensions are copied into a tuple of their own.
         object.__setattr__(self, "extensions", tuple(self.extensions))

@@ -61,6 +61,7 @@ Example:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from difflib import get_close_matches
@@ -131,6 +132,7 @@ from citry.util.exception import add_slot_to_error_message
 from citry.util.html import escape
 from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
 from citry_core.safe_eval import compile_expr
+from citry_core.template_parser import analyze_browser_binding_pattern
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -534,6 +536,82 @@ class _TemplateSlotContent:
         return CitryRender(parts=_render_body(self._body, render_context), context=render_context)
 
 
+def _slot_prop_key(key: str) -> str | None:
+    """
+    The prop name of a Vue slot prop key on `<c-slot>`: `row` for `:row` or `v-bind:row`.
+
+    Mirrors the parser's `slot_prop_name`, which has already rejected every
+    other `:` spelling written in a template, so only these two forms reach
+    the runtime as authored attributes.
+    """
+    rest = key.removeprefix("v-bind:") if key.startswith("v-bind:") else key.removeprefix(":")
+    if rest == key or not rest or rest.startswith("[") or "." in rest:
+        return None
+    return rest
+
+
+def _slot_vue_props(attrs: tuple[HtmlAttr, ...]) -> tuple[tuple[str, str], ...]:
+    """
+    Return a `<c-slot>`'s Vue slot props as `(attribute, expression)` pairs, in template order.
+
+    The parser checks each prop's form, but not `{{ ... }}` in its value, so
+    this check refuses interpolation: Python data must never choose the Vue
+    code the browser runs.
+    """
+    props: list[tuple[str, str]] = []
+    for attr in attrs:
+        if _slot_prop_key(attr.key) is None:
+            continue
+        if type(attr) is not StaticHtmlAttr or not isinstance(attr.value, str):
+            msg = f"Vue slot prop {attr.key!r} on <c-slot> must be written in the template with a plain text value."
+            raise RuntimeError(msg)
+        if "{{" in attr.value:
+            msg = (
+                f"Vue slot prop {attr.key!r} on <c-slot> cannot use '{{{{ ... }}}}'; write the Vue expression "
+                f'directly, such as {attr.key}="row".'
+            )
+            raise RuntimeError(msg)
+        props.append((attr.key, attr.value))
+    return tuple(props)
+
+
+def _camelize(name: str) -> str:
+    """Vue's `camelize`: `row-data` becomes `rowData`, as Vue names the props it passes to a fill."""
+    # Vue's `\w` is the JavaScript one, which matches ASCII only.
+    return re.sub(r"-(\w)", lambda match: match.group(1).upper(), name, flags=re.ASCII)
+
+
+def _pattern_names(pattern: str | None) -> frozenset[str]:
+    """The names a `v-slot` pattern binds; empty when there is no pattern."""
+    if pattern is None:
+        return frozenset()
+    _valid, bindings, _references = analyze_browser_binding_pattern(pattern)
+    return frozenset(name for name, _start, _end in bindings)
+
+
+def _fill_vue_pattern(attrs: tuple[HtmlAttr, ...]) -> str | None:
+    """
+    Return a `<c-fill>`'s `v-slot` pattern, or `None` when it has none.
+
+    The parser checks the pattern's shape, but not `{{ ... }}` in it, so this
+    check refuses interpolation, as `_slot_vue_props` does.
+    """
+    pattern: str | None = None
+    for attr in attrs:
+        if attr.key != "v-slot":
+            continue
+        if type(attr) is not StaticHtmlAttr or not isinstance(attr.value, str) or not attr.value.strip():
+            msg = "'v-slot' on <c-fill> must be written in the template with a plain text value."
+            raise RuntimeError(msg)
+        if "{{" in attr.value:
+            msg = (
+                "'v-slot' on <c-fill> cannot use '{{ ... }}'; write the pattern directly, such as v-slot=\"{ row }\"."
+            )
+            raise RuntimeError(msg)
+        pattern = attr.value.strip()
+    return pattern
+
+
 def _make_body_slot(
     body: list[BodyItem],
     context: CitryContext,
@@ -546,6 +624,7 @@ def _make_body_slot(
     source: object,
     kind: LogicalFillKind,
     fallback_slot_site_location_id: Any = None,  # noqa: ARG001
+    vue_pattern: str | None = None,
 ) -> Slot:
     """
     Wrap a fill body (or a component's implicit default body) as a ``Slot``.
@@ -589,6 +668,7 @@ def _make_body_slot(
             source=source,
             span=position,
             origin=context.template_record.origin if context.template_record is not None else None,
+            vue_pattern=vue_pattern,
         )
     return slot
 
@@ -2842,6 +2922,12 @@ class SlotNode(Node):
         self.body = body
         self.used_vars = used_vars
         self.introduced_vars = introduced_vars
+        # The parser accepts only static `:row`-style slot props written in the
+        # template, so they are fixed per node and read once here.
+        self.vue_props = _slot_vue_props(attrs)
+        # The names the fill receives, as Vue writes them, for the clash
+        # check against Python data that `c-bind` adds at render.
+        self._vue_prop_names = frozenset(_camelize(key.split(":", 1)[1]) for key, _ in self.vue_props)
 
     @override
     def render(self, context: CitryContext) -> RenderPart:
@@ -2973,6 +3059,7 @@ class SlotNode(Node):
             begin_slot_execution,
             direct_execution_scope,
             direct_fill_source,
+            python_slot_at_props_outlet,
         )
 
         body_slot = _make_body_slot(
@@ -2995,13 +3082,19 @@ class SlotNode(Node):
             # but components rendered by that Slot can contain authenticated
             # template fills. Keep direct capture active for those descendants;
             # _render_plain does not manufacture a relation for this outlet.
-            return self._render_plain(context, component, name, required, data, fill)
+            # This outlet's props cannot travel through the Python Slot, so a
+            # scoped fill it calls directly must fail instead of reading
+            # nothing. An outlet without props clears an outer outlet's mark,
+            # because a fill called here has nothing to lose.
+            with python_slot_at_props_outlet(type(component).__name__, name, has_props=bool(self.vue_props)):
+                return self._render_plain(context, component, name, required, data, fill)
         execution = begin_slot_execution(
             source,
             public_name=name,
             receiver_render_id=component.id,
             source=self.source,
             span=self.position,
+            vue_props=self.vue_props,
         )
         with direct_execution_scope(execution), add_slot_to_error_message(type(component).__name__, name):
             part = _render_slot_value(slot_used, data, body_slot if fill is not None else None, context)
@@ -3115,6 +3208,7 @@ class SlotNode(Node):
             receiver_render_id=component.id,
             source=self.source,
             span=self.position,
+            vue_props=self.vue_props,
         )
 
         parts: list[RenderPart] = []
@@ -3201,11 +3295,22 @@ class SlotNode(Node):
                     elif spread_key == "required":
                         required = spread_value
                     else:
+                        if _camelize(spread_key) in self._vue_prop_names:
+                            # The parser refuses the same clash between written attributes.
+                            msg = (
+                                f"'c-bind' on <c-slot> passes {spread_key!r} as Python slot data, but the slot also "
+                                f"passes {_camelize(spread_key)!r} as a Vue slot prop. Give the two values different "
+                                "names."
+                            )
+                            raise RuntimeError(msg)
                         data[spread_key] = spread_value
             elif key in ("name", "c-name"):
                 name = attr.resolve(context)
             elif key in ("required", "c-required"):
                 required = attr.resolve(context)
+            elif _slot_prop_key(key) is not None:
+                # A Vue slot prop goes to the browser, not into the Python data.
+                continue
             else:
                 data[key.removeprefix("c-")] = attr.resolve(context)
 
@@ -3262,6 +3367,10 @@ class FillNode(Node):
         self.body = body
         self.used_vars = used_vars
         self.introduced_vars = introduced_vars
+        # The fill's `v-slot` pattern, checked by the parser, for the Vue slot
+        # function Citry writes; `None` when the fill reads no Vue slot props.
+        self.vue_pattern = _fill_vue_pattern(attrs)
+        self._vue_pattern_names = _pattern_names(self.vue_pattern)
 
     @override
     def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
@@ -3286,6 +3395,7 @@ class FillNode(Node):
             self.position,
             source=self.source,
             kind=LogicalFillKind.NAMED,
+            vue_pattern=self.vue_pattern,
         )
         sink.add(name, slot)
 
@@ -3335,8 +3445,11 @@ class FillNode(Node):
                     props[spread_key] = spread_value
             elif key == "c-name":
                 props["name"] = attr.resolve(context)
+            elif key == "v-slot":
+                # Read once in `__init__`; it shapes the browser slot function only.
+                continue
             else:
-                # The parser only lets "name", "data", and "fallback" through.
+                # The parser only lets "name", "data", "fallback", and "v-slot" through.
                 props[key] = attr.resolve(context)
 
         name = props.get("name")
@@ -3366,6 +3479,17 @@ class FillNode(Node):
             else:
                 fallback_var = canonical_var
         data_targets = data_var.targets if isinstance(data_var, FillDataBinding) else (data_var,)
+        clash = next(
+            (var for var in (*data_targets, fallback_var) if var is not None and var in self._vue_pattern_names), None
+        )
+        if clash is not None:
+            # The parser refuses the same clash between written attributes;
+            # `c-bind` can add a Python name only at render.
+            msg = (
+                f"<c-fill name=\"{name}\"> names {clash!r} both in its Vue 'v-slot' and in its Python "
+                "'data' or 'fallback'. Rename one of them."
+            )
+            raise RuntimeError(msg)
         if fallback_var is not None and fallback_var in data_targets:
             msg = f"<c-fill name=\"{name}\"> binds 'data' and 'fallback' to the same variable {fallback_var!r}."
             raise RuntimeError(msg)

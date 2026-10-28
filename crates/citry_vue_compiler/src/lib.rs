@@ -21,6 +21,7 @@ use vize_atelier_dom::{
 };
 use vize_s1::{SurfaceChild, SurfaceTree};
 
+mod dom_members;
 mod hydration;
 pub mod server_render;
 mod stack;
@@ -440,6 +441,7 @@ fn compile_on_stack(request: CompileRequest) -> CompileArtifact {
         output: &mut elements,
         edits: &mut edits,
         diagnostics: &mut diagnostics,
+        citry_listeners: 0,
     };
     walk(&root.children, &[], false, &mut walk_state);
     for item in &request.dynamic_elements {
@@ -1074,6 +1076,9 @@ struct WalkState<'a> {
     output: &'a mut Vec<ElementMetadata>,
     edits: &'a mut Vec<Edit>,
     diagnostics: &'a mut Vec<Diagnostic>,
+    /// How many listeners with a Citry modifier the walk has rewritten, which
+    /// numbers the next one (see [`plan_citry_listener`]).
+    citry_listeners: usize,
 }
 
 /// The runtime directive object a parsed directive compiles to, and the
@@ -1261,6 +1266,30 @@ fn walk(
             .calls_by_span
             .get(&(element.loc.span.start, element.loc.span.end))
             .is_some_and(|calls| !calls.is_empty());
+        // A listener with one of Citry's modifiers is rewritten into a plain
+        // listener and a `v-citry-on` directive. The metadata comes from this
+        // parse of the source before the edit, so it records the directive
+        // the edit adds, at the listener's own ordinal.
+        let mut citry_listeners: HashMap<usize, (Option<String>, Vec<String>)> = HashMap::new();
+        for (ordinal, directive) in element
+            .props
+            .iter()
+            .filter_map(|prop| match prop {
+                PropNode::Directive(d) => Some(d),
+                _ => None,
+            })
+            .enumerate()
+        {
+            if directive.name == "on"
+                && directive
+                    .modifiers
+                    .iter()
+                    .any(|modifier| CITRY_LISTENER_MODIFIERS.contains(&modifier.content))
+                && let Some(rewritten) = plan_citry_listener(directive, state)
+            {
+                citry_listeners.insert(ordinal, rewritten);
+            }
+        }
         let directives = element
             .props
             .iter()
@@ -1273,6 +1302,19 @@ fn walk(
             })
             .enumerate()
             .map(|(ordinal, d)| {
+                if let Some((argument, modifiers)) = citry_listeners.remove(&ordinal) {
+                    return DirectiveMetadata {
+                        ordinal,
+                        name: "citry-on".to_owned(),
+                        argument,
+                        modifiers,
+                        source_start: d.loc.span.start,
+                        source_end: d.loc.span.end,
+                        runtime_lifecycle: !local_call_site,
+                        runtime_implementation: Some("resolveDirective:citry-on".to_owned()),
+                        static_input_type: None,
+                    };
+                }
                 let (runtime_implementation, static_input_type) =
                     directive_runtime_identity(element, d.name, local_call_site);
                 DirectiveMetadata {
@@ -1562,6 +1604,166 @@ fn string_literal(content: &str) -> Option<String> {
     }
     let inner = &content[1..content.len() - 1];
     (!inner.contains(['\'', '"', '\\'])).then(|| inner.to_owned())
+}
+
+/// The modifiers Citry adds to Vue listeners (the parser checks where they
+/// may appear and how they combine).
+const CITRY_LISTENER_MODIFIERS: [&str; 5] =
+    ["outside", "window", "document", "debounce", "throttle"];
+
+/// What a bare `.debounce` or `.throttle` waits, as for `@c-*` bindings.
+const DEFAULT_LISTENER_TIME_MS: u128 = 250;
+
+/// The longest time a listener may wait: the largest whole number a
+/// JavaScript number holds exactly.
+const MAX_LISTENER_TIME_MS: u128 = (1 << 53) - 1;
+
+/// Rewrite one listener that uses a Citry modifier, and return the
+/// `v-citry-on` directive's argument and modifiers for the metadata.
+///
+/// Vue's modifiers are a fixed set inside its template compiler, so
+/// `@keydown.escape.window.debounce.300ms="close"` becomes
+/// `@citry-on-0="close"` plus
+/// `v-citry-on:keydown.debounce-300ms.escape.window="'0'"`. Vue compiles the
+/// first as any listener, so a method name, an inline statement and `$event`
+/// all mean what they mean in Vue, and stores it in the vnode's props as
+/// `onCitryOn0`; the directive in `client.js` finds it there and attaches the
+/// real listener where and when the modifiers say.
+fn plan_citry_listener(
+    directive: &vize_atelier_core::DirectiveNode<'_>,
+    state: &mut WalkState<'_>,
+) -> Option<(Option<String>, Vec<String>)> {
+    let start = directive.loc.span.start as usize;
+    let end = directive.loc.span.end as usize;
+    let fail = |state: &mut WalkState<'_>, message: &str| {
+        state.diagnostics.push(diag(
+            "metadata",
+            "CITRY_LISTENER_SHAPE",
+            message,
+            directive.loc.span.start,
+            directive.loc.span.end,
+        ));
+        None
+    };
+    // The attribute name runs to `=` or the end of the attribute, past any
+    // `[...]` dynamic event name, which may itself hold `=` or spaces.
+    let Some(attribute) = state.source.get(start..end) else {
+        return fail(state, "a listener with a Citry modifier has no source span");
+    };
+    let mut depth = 0usize;
+    let name_len = attribute
+        .char_indices()
+        .find(|&(_, character)| match character {
+            '[' => {
+                depth += 1;
+                false
+            }
+            ']' => {
+                depth = depth.saturating_sub(1);
+                false
+            }
+            '=' => depth == 0,
+            character => depth == 0 && character.is_whitespace(),
+        })
+        .map_or(attribute.len(), |(index, _)| index);
+    let (event, dynamic) = match directive.arg.as_ref() {
+        Some(ExpressionNode::Simple(arg)) => (arg.content.to_owned(), !arg.is_static),
+        _ => {
+            return fail(
+                state,
+                "a listener with a Citry modifier needs an event name",
+            );
+        }
+    };
+    let authored = directive
+        .modifiers
+        .iter()
+        .map(|modifier| modifier.content)
+        .collect::<Vec<_>>();
+    // Vue's `transformOn` renames these two for a static name; the directive
+    // applies the same renaming in the browser for a dynamic one.
+    let event = match event.as_str() {
+        "click" if !dynamic && authored.contains(&"right") => "contextmenu".to_owned(),
+        "click" if !dynamic && authored.contains(&"middle") => "mouseup".to_owned(),
+        _ => event,
+    };
+    // Each timing modifier and its time become one token, because Vue writes
+    // a directive's modifiers as an object and the directive signature keeps
+    // them sorted and unique: `.debounce.100ms.throttle.100ms` would lose a
+    // time otherwise, and swapped times would sign the same.
+    let mut modifiers = Vec::new();
+    let mut index = 0;
+    while index < authored.len() {
+        let modifier = authored[index];
+        if matches!(modifier, "debounce" | "throttle") {
+            let next = authored.get(index + 1).copied();
+            let time = next.and_then(listener_time_ms);
+            // The parser refuses a mistyped or too long time; without that
+            // check in front, a silent 250 ms and a stray key would be wrong.
+            if time.is_none()
+                && next.is_some_and(|next| next.starts_with(|c: char| c.is_ascii_digit()))
+            {
+                return fail(
+                    state,
+                    "a listener's time is not whole milliseconds or seconds",
+                );
+            }
+            if time.is_some_and(|time| time > MAX_LISTENER_TIME_MS) {
+                return fail(
+                    state,
+                    "a listener's time is longer than JavaScript can hold exactly",
+                );
+            }
+            let milliseconds = time.unwrap_or(DEFAULT_LISTENER_TIME_MS);
+            modifiers.push(format!("{modifier}-{milliseconds}ms"));
+            index += if time.is_some() { 2 } else { 1 };
+            continue;
+        }
+        // The parser refuses a time that no timing modifier comes right
+        // before; without that check, Vue would wait for a key named `300ms`.
+        // The parser is also the only place that checks how the modifiers
+        // combine.
+        if listener_time_ms(modifier).is_some() {
+            return fail(
+                state,
+                "a listener's time must come right after .debounce or .throttle",
+            );
+        }
+        modifiers.push(modifier.to_owned());
+        index += 1;
+    }
+    modifiers.sort();
+    let number = state.citry_listeners;
+    state.citry_listeners += 1;
+    let argument = if dynamic { format!("[{event}]") } else { event };
+    let suffix = modifiers
+        .iter()
+        .map(|modifier| format!(".{modifier}"))
+        .collect::<String>();
+    state.edits.push(Edit {
+        start,
+        end: start + name_len,
+        replacement: format!("@citry-on-{number}"),
+    });
+    state.edits.push(Edit {
+        start: end,
+        end,
+        replacement: format!(r#" v-citry-on:{argument}{suffix}="'{number}'""#),
+    });
+    Some((Some(argument), modifiers))
+}
+
+/// The milliseconds a time segment such as `300ms` or `2s` names.
+fn listener_time_ms(segment: &str) -> Option<u128> {
+    let (digits, factor) = if let Some(digits) = segment.strip_suffix("ms") {
+        (digits, 1)
+    } else {
+        (segment.strip_suffix('s')?, 1000)
+    };
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse::<u128>().ok()?.checked_mul(factor)
 }
 
 fn plan_dynamic_model_marker(
@@ -3746,6 +3948,670 @@ mod tests {
             element_bindings: vec![],
             dynamic_elements: vec![],
         })
+    }
+
+    /// The `citry-on` directives of an artifact's elements, as
+    /// (ordinal, argument, modifiers), in source order.
+    fn citry_on_directives(
+        artifact: &CompileArtifact,
+    ) -> Vec<(usize, Option<String>, Vec<String>)> {
+        artifact
+            .elements
+            .iter()
+            .flat_map(|element| &element.directives)
+            .filter(|directive| directive.name == "citry-on")
+            .map(|directive| {
+                (
+                    directive.ordinal,
+                    directive.argument.clone(),
+                    directive.modifiers.clone(),
+                )
+            })
+            .collect()
+    }
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn rewrites_a_static_listener_with_citry_modifiers_into_a_plain_listener_and_a_directive() {
+        let artifact =
+            compile_template(r#"<p @keydown.escape.window.debounce.300ms="close">x</p>"#);
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        // The listener keeps its value and loses every modifier; the
+        // directive carries the event, the timing as one token, and the
+        // other modifiers sorted.
+        assert!(
+            artifact.transformed_template.contains(
+                r#" @citry-on-0="close" v-citry-on:keydown.debounce-300ms.escape.window="'0'">x</p>"#
+            ),
+            "{}",
+            artifact.transformed_template
+        );
+        // Vue compiles the plain listener as any other, under the props key
+        // the browser directive reads it from.
+        assert!(
+            artifact.code.contains("onCitryOn0: _ctx.close"),
+            "{}",
+            artifact.code
+        );
+        assert!(
+            artifact
+                .code
+                .contains(r#"const _directive_citry_on = _resolveDirective("citry-on")"#),
+            "{}",
+            artifact.code
+        );
+        assert!(
+            artifact.code.contains(
+                r#"[_directive_citry_on, '0', "keydown", { "debounce-300ms": true, "escape": true, "window": true }]"#
+            ),
+            "{}",
+            artifact.code
+        );
+        assert!(
+            artifact
+                .helpers
+                .iter()
+                .any(|helper| helper == "resolveDirective")
+                && artifact
+                    .helpers
+                    .iter()
+                    .any(|helper| helper == "withDirectives")
+        );
+        let element = &artifact.elements[0];
+        assert_eq!(
+            element.lifecycle_signature,
+            r#"[["citry-on","keydown",["debounce-300ms","escape","window"],"resolveDirective:citry-on",null]]"#
+        );
+        assert!(element.replacement_key.is_some());
+        let [directive] = element.directives.as_slice() else {
+            panic!("{:?}", element.directives);
+        };
+        assert_eq!(directive.ordinal, 0);
+        assert_eq!(directive.name, "citry-on");
+        assert_eq!(directive.argument.as_deref(), Some("keydown"));
+        assert_eq!(
+            directive.modifiers,
+            strings(&["debounce-300ms", "escape", "window"])
+        );
+        assert!(directive.runtime_lifecycle);
+        assert_eq!(
+            directive.runtime_implementation.as_deref(),
+            Some("resolveDirective:citry-on")
+        );
+        // The directive's span is the authored attribute's.
+        let template = r#"<p @keydown.escape.window.debounce.300ms="close">x</p>"#;
+        assert_eq!(
+            &template[directive.source_start as usize..directive.source_end as usize],
+            r#"@keydown.escape.window.debounce.300ms="close""#
+        );
+    }
+
+    #[test]
+    fn rewrites_a_dynamic_event_name_and_an_inline_statement() {
+        let artifact = compile_template(r#"<div @[name].outside="open = false; count++">x</div>"#);
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        assert!(
+            artifact
+                .transformed_template
+                .contains(r#"@citry-on-0="open = false; count++" v-citry-on:[name].outside="'0'""#),
+            "{}",
+            artifact.transformed_template
+        );
+        // Vue compiles the inline statement as it does for any listener,
+        // and the dynamic argument gets the `_ctx.` prefix.
+        assert!(
+            artifact
+                .code
+                .contains("onCitryOn0: $event => {_ctx.open = false; _ctx.count++}"),
+            "{}",
+            artifact.code
+        );
+        assert!(
+            artifact
+                .code
+                .contains(r#"[_directive_citry_on, '0', _ctx.name, { "outside": true }]"#),
+            "{}",
+            artifact.code
+        );
+        // The metadata writes a dynamic name as `[name]`, so a static and a
+        // dynamic event never share a signature.
+        assert_eq!(
+            citry_on_directives(&artifact),
+            [(0, Some("[name]".to_owned()), strings(&["outside"]))]
+        );
+        assert_eq!(
+            artifact.elements[0].lifecycle_signature,
+            r#"[["citry-on","[name]",["outside"],"resolveDirective:citry-on",null]]"#
+        );
+        let static_name = compile_template(r#"<div @name.outside="go">x</div>"#);
+        assert_ne!(
+            static_name.elements[0].lifecycle_signature,
+            artifact.elements[0].lifecycle_signature
+        );
+    }
+
+    #[test]
+    fn renames_click_right_and_click_middle_for_a_static_event_only() {
+        let right =
+            compile_template(r#"<div v-on:click.right.document.throttle="h($event)">x</div>"#);
+        assert!(right.diagnostics.is_empty(), "{:?}", right.diagnostics);
+        assert!(
+            right.transformed_template.contains(
+                r#"@citry-on-0="h($event)" v-citry-on:contextmenu.document.right.throttle-250ms="'0'""#
+            ),
+            "{}",
+            right.transformed_template
+        );
+        assert!(
+            right
+                .code
+                .contains("onCitryOn0: $event => (_ctx.h($event))"),
+            "{}",
+            right.code
+        );
+        assert!(
+            right.code.contains(
+                r#"[_directive_citry_on, '0', "contextmenu", { "document": true, "right": true, "throttle-250ms": true }]"#
+            ),
+            "{}",
+            right.code
+        );
+        assert_eq!(
+            citry_on_directives(&right),
+            [(
+                0,
+                Some("contextmenu".to_owned()),
+                strings(&["document", "right", "throttle-250ms"])
+            )]
+        );
+        let middle = compile_template(r#"<div @click.middle.outside="h">x</div>"#);
+        assert_eq!(
+            citry_on_directives(&middle),
+            [(
+                0,
+                Some("mouseup".to_owned()),
+                strings(&["middle", "outside"])
+            )]
+        );
+        // A dynamic name is renamed in the browser, so the compiler keeps
+        // the modifiers and writes the name as authored.
+        let dynamic = compile_template(r#"<div @[name].right.window="h">x</div>"#);
+        assert_eq!(
+            citry_on_directives(&dynamic),
+            [(0, Some("[name]".to_owned()), strings(&["right", "window"]))]
+        );
+        // Another event keeps its name.
+        let other = compile_template(r#"<div @keydown.right.window="h">x</div>"#);
+        assert_eq!(
+            citry_on_directives(&other),
+            [(0, Some("keydown".to_owned()), strings(&["right", "window"]))]
+        );
+    }
+
+    #[test]
+    fn writes_a_bare_timing_modifier_and_a_listener_without_a_value() {
+        let artifact = compile_template("<input @input.debounce.1s>");
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        assert!(
+            artifact
+                .transformed_template
+                .contains(r#"@citry-on-0 v-citry-on:input.debounce-1000ms="'0'">"#),
+            "{}",
+            artifact.transformed_template
+        );
+        // With no value, Vue compiles an empty function, so the directive
+        // still finds a function under the props key.
+        assert!(
+            artifact.code.contains("onCitryOn0: () => {}"),
+            "{}",
+            artifact.code
+        );
+        assert_eq!(
+            citry_on_directives(&artifact),
+            [(0, Some("input".to_owned()), strings(&["debounce-1000ms"]))]
+        );
+        // A bare timing modifier waits 250 ms, as for `@c-*` bindings.
+        let bare = compile_template(r#"<div @scroll.throttle.debounce="h">x</div>"#);
+        assert_eq!(
+            citry_on_directives(&bare),
+            [(
+                0,
+                Some("scroll".to_owned()),
+                strings(&["debounce-250ms", "throttle-250ms"])
+            )]
+        );
+        // Each timing modifier keeps its own time, in the order the
+        // directive signature sorts them.
+        let both = compile_template(r#"<input @input.debounce.1s.throttle.2s="h">"#);
+        assert_eq!(
+            citry_on_directives(&both),
+            [(
+                0,
+                Some("input".to_owned()),
+                strings(&["debounce-1000ms", "throttle-2000ms"])
+            )]
+        );
+        let swapped = compile_template(r#"<input @input.debounce.2s.throttle.1s="h">"#);
+        assert_ne!(
+            both.elements[0].lifecycle_signature,
+            swapped.elements[0].lifecycle_signature
+        );
+        let milliseconds = compile_template(r#"<input @input.debounce.300ms="h">"#);
+        assert_eq!(
+            citry_on_directives(&milliseconds),
+            [(0, Some("input".to_owned()), strings(&["debounce-300ms"]))]
+        );
+    }
+
+    #[test]
+    fn numbers_rewritten_listeners_in_source_order() {
+        // Two on one element, then one in a nested element.
+        let artifact = compile_template(
+            r#"<div><p @click.outside="a" @keydown.window="b">x</p><span><i @scroll.throttle.2s="c">y</i></span></div>"#,
+        );
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        for fragment in [
+            r#"@citry-on-0="a" v-citry-on:click.outside="'0'""#,
+            r#"@citry-on-1="b" v-citry-on:keydown.window="'1'""#,
+            r#"@citry-on-2="c" v-citry-on:scroll.throttle-2000ms="'2'""#,
+        ] {
+            assert!(
+                artifact.transformed_template.contains(fragment),
+                "{fragment}: {}",
+                artifact.transformed_template
+            );
+        }
+        assert!(
+            artifact.code.contains(r#"onCitryOn0: _ctx.a,"#)
+                && artifact.code.contains("onCitryOn1: _ctx.b")
+                && artifact.code.contains("onCitryOn2: _ctx.c"),
+            "{}",
+            artifact.code
+        );
+        // The element's `_withDirectives` list has one entry per listener,
+        // each holding its own number.
+        for entry in [
+            r#"[_directive_citry_on, '0', "click", { "outside": true }],"#,
+            r#"[_directive_citry_on, '1', "keydown", { "window": true }]"#,
+            r#"[_directive_citry_on, '2', "scroll", { "throttle-2000ms": true }]"#,
+        ] {
+            assert!(artifact.code.contains(entry), "{entry}: {}", artifact.code);
+        }
+        // The ordinal in the metadata counts the element's directives, so
+        // it restarts for the nested element.
+        assert_eq!(
+            citry_on_directives(&artifact),
+            [
+                (0, Some("click".to_owned()), strings(&["outside"])),
+                (1, Some("keydown".to_owned()), strings(&["window"])),
+                (0, Some("scroll".to_owned()), strings(&["throttle-2000ms"])),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_rewritten_listener_keeps_its_place_among_other_directives_and_listeners() {
+        let artifact =
+            compile_template(r#"<div @click.stop.outside="a" v-show="open" @click="g">x</div>"#);
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        let directives = artifact.elements[0]
+            .directives
+            .iter()
+            .map(|directive| (directive.ordinal, directive.name.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(directives, [(0, "citry-on"), (1, "show"), (2, "on")]);
+        // The plain `@click` is untouched and stays a Vue listener.
+        assert!(
+            artifact.code.contains("onClick: _ctx.g"),
+            "{}",
+            artifact.code
+        );
+        // Runtime directives keep source order, so the signature has the
+        // new directive first, then `v-show`.
+        assert_eq!(
+            artifact.elements[0].lifecycle_signature,
+            r#"[["citry-on","click",["outside","stop"],"resolveDirective:citry-on",null],["show",null,[],"vShow",null]]"#
+        );
+    }
+
+    #[test]
+    fn a_rewritten_listener_meets_the_dynamic_model_marker_edit() {
+        // The listener is the last authored attribute, and the marker is
+        // appended after it, so both edits meet at the end of the tag. Each
+        // order and the self-closing form give the same directive list.
+        for template in [
+            r#"<input :type="kind" v-model="x" @input.debounce="h">"#,
+            r#"<input :type="kind" v-model="x" @input.debounce="h" />"#,
+            r#"<input :type="kind" @input.debounce="h" v-model="x">"#,
+        ] {
+            let artifact = compile_template(template);
+            assert!(
+                artifact.diagnostics.is_empty(),
+                "{template}: {:?}",
+                artifact.diagnostics
+            );
+            let rewritten = &artifact.transformed_template;
+            let listener = rewritten
+                .find(r#"@citry-on-0="h" v-citry-on:input.debounce-250ms="'0'""#)
+                .unwrap_or_else(|| panic!("{template}: {rewritten}"));
+            let marker = rewritten
+                .find(":__citryInputModelSite=")
+                .unwrap_or_else(|| panic!("{template}: {rewritten}"));
+            assert!(listener < marker, "{rewritten}");
+            assert_eq!(rewritten.matches(":__citryInputModelSite=").count(), 1);
+            // `_withDirectives` holds the model helper and the new
+            // directive, which is the list the metadata describes.
+            assert_eq!(
+                artifact.code.matches("_directive_citry_on, '0'").count(),
+                1,
+                "{}",
+                artifact.code
+            );
+            assert!(
+                artifact.code.contains("[_vModelDynamic, _ctx.x]"),
+                "{}",
+                artifact.code
+            );
+            let names = artifact.elements[0]
+                .directives
+                .iter()
+                .map(|directive| directive.name.as_str())
+                .collect::<Vec<_>>();
+            assert!(
+                names == ["bind", "model", "citry-on"] || names == ["bind", "citry-on", "model"],
+                "{names:?}"
+            );
+            assert_eq!(
+                citry_on_directives(&artifact)
+                    .into_iter()
+                    .map(|(_, argument, modifiers)| (argument, modifiers))
+                    .collect::<Vec<_>>(),
+                [(Some("input".to_owned()), strings(&["debounce-250ms"]))]
+            );
+        }
+        // With the model first, the listener's ordinal follows the model's.
+        let artifact = compile_template(r#"<input :type="kind" v-model="x" @input.debounce="h">"#);
+        assert_eq!(
+            artifact.elements[0].lifecycle_signature,
+            r#"[["model",null,[],"vModelDynamic",null],["citry-on","input",["debounce-250ms"],"resolveDirective:citry-on",null]]"#
+        );
+        assert_eq!(citry_on_directives(&artifact)[0].0, 2);
+    }
+
+    #[test]
+    fn a_listener_without_citry_modifiers_is_not_rewritten() {
+        let artifact = compile_template(
+            r#"<div @click.stop.prevent="a" @keydown.enter.exact="b" @click.self.once="c">x</div>"#,
+        );
+        assert!(!artifact.transformed_template.contains("citry-on"));
+        assert!(!artifact.code.contains("_directive_citry_on"));
+        assert!(citry_on_directives(&artifact).is_empty());
+    }
+
+    /// Compile a template that must give no diagnostics, and return the
+    /// artifact.
+    fn compile_without_diagnostics(template: &str) -> CompileArtifact {
+        let artifact = compile_template(template);
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{template:?}: {:?}",
+            artifact.diagnostics
+        );
+        artifact
+    }
+
+    #[test]
+    fn rewrites_a_listener_with_spaces_around_the_equals_sign() {
+        // The name edit must stop at the space before `=`, or the `=` and
+        // the authored spacing would be replaced with the new name.
+        let template = r#"<div @click.outside = "close"></div>"#;
+        let artifact = compile_without_diagnostics(template);
+        assert_eq!(
+            artifact.transformed_template,
+            r#"<div key="citryReplacement5148a043b69f1497b3e8f226649a2e5b7f5691665e5b11ebf24efd52fc5a010b" @citry-on-0 = "close" v-citry-on:click.outside="'0'"></div>"#
+        );
+        assert_eq!(
+            citry_on_directives(&artifact),
+            [(0, Some("click".to_owned()), strings(&["outside"]))]
+        );
+        // The directive's span covers the whole authored attribute,
+        // spaces included.
+        let directive = &artifact.elements[0].directives[0];
+        assert_eq!(
+            &template[directive.source_start as usize..directive.source_end as usize],
+            r#"@click.outside = "close""#
+        );
+    }
+
+    #[test]
+    fn rewrites_a_listener_on_its_own_line_in_a_crlf_tag() {
+        // CRLF line endings stay as authored, and the directive goes at the
+        // end of the listener's own line, not after the next attribute.
+        let template =
+            "<div\r\n  id=\"a\"\r\n  @click.outside=\"close\"\r\n  class=\"x\"\r\n></div>";
+        let artifact = compile_without_diagnostics(template);
+        assert_eq!(
+            artifact.transformed_template,
+            "<div key=\"citryReplacement5148a043b69f1497b3e8f226649a2e5b7f5691665e5b11ebf24efd52fc5a010b\"\r\n  id=\"a\"\r\n  @citry-on-0=\"close\" v-citry-on:click.outside=\"'0'\"\r\n  class=\"x\"\r\n></div>"
+        );
+        let directive = &artifact.elements[0].directives[0];
+        assert_eq!(
+            &template[directive.source_start as usize..directive.source_end as usize],
+            "@click.outside=\"close\""
+        );
+        assert_eq!(
+            citry_on_directives(&artifact),
+            [(0, Some("click".to_owned()), strings(&["outside"]))]
+        );
+    }
+
+    #[test]
+    fn a_listener_with_no_space_before_the_next_attribute_is_left_alone() {
+        // The parser accepts this form but reports it, and a template with
+        // any diagnostic gets no edits, so the listener is not half
+        // rewritten.
+        let template = r#"<div @click.window="a"class="x"></div>"#;
+        let artifact = compile_template(template);
+        assert_eq!(artifact.transformed_template, template);
+        assert_eq!(
+            artifact
+                .diagnostics
+                .iter()
+                .map(|item| item.code.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "MissingWhitespaceBetweenAttributes",
+                "MissingWhitespaceBetweenAttributes"
+            ]
+        );
+        // The tightest form that compiles cleanly has one space; the added
+        // directive then sits before the next attribute and leaves it
+        // untouched.
+        let spaced = compile_without_diagnostics(r#"<div @click.window="a" class="x"></div>"#);
+        assert_eq!(
+            spaced.transformed_template,
+            r#"<div key="citryReplacementdd79f895e065a48b05e76840e65ff317316ffdfefd6f7879ec12fedaf949def2" @citry-on-0="a" v-citry-on:click.window="'0'" class="x"></div>"#
+        );
+    }
+
+    #[test]
+    fn a_rewritten_listener_and_a_static_key_do_not_overlap() {
+        // The compiler replaces the authored `key` and appends the
+        // directive at the listener's end; an overlap would add an
+        // `OVERLAPPING_SOURCE_EDITS` diagnostic and leave the template as
+        // authored. Both orders are checked.
+        let before = compile_without_diagnostics(r#"<div key="k" @click.outside="a"></div>"#);
+        assert_eq!(
+            before.transformed_template,
+            r#"<div key="citryReplacement2d41fc0edb70b799a98d25601b7226dc21cccb3f191c26779e9b60a6b52c026c" @citry-on-0="a" v-citry-on:click.outside="'0'"></div>"#
+        );
+        let after = compile_without_diagnostics(r#"<div @click.outside="a" key="k"></div>"#);
+        assert_eq!(
+            after.transformed_template,
+            r#"<div @citry-on-0="a" v-citry-on:click.outside="'0'" key="citryReplacement2d41fc0edb70b799a98d25601b7226dc21cccb3f191c26779e9b60a6b52c026c"></div>"#
+        );
+        for artifact in [&before, &after] {
+            assert_eq!(
+                citry_on_directives(artifact),
+                [(0, Some("click".to_owned()), strings(&["outside"]))]
+            );
+        }
+    }
+
+    #[test]
+    fn rewrites_a_listener_on_a_v_for_item_once_for_every_item() {
+        // The rewrite happens on the source, so one `@citry-on-0` serves
+        // every item; the item's own key must stay in the generated code.
+        let artifact = compile_without_diagnostics(
+            r#"<ul><li v-for="item in items" :key="item.id" @click.outside="close(item)">x</li></ul>"#,
+        );
+        assert_eq!(
+            artifact.transformed_template,
+            r#"<ul><li v-for="item in items" :key="JSON.stringify(['citryReplacement29baf2a2cdd77d8374203c6c36c049dc85b0302c9b206a4f735dd83b7fb4a9ef', (item.id)])" @citry-on-0="close(item)" v-citry-on:click.outside="'0'">x</li></ul>"#
+        );
+        // The handler sees the loop variable, and the directive entry is
+        // inside the loop body, so every item gets its own.
+        for fragment in [
+            "_renderList(_ctx.items, (item) => {",
+            "onCitryOn0: $event => (_ctx.close(item))",
+            r#"[_directive_citry_on, '0', "click", { "outside": true }]"#,
+        ] {
+            assert!(
+                artifact.code.contains(fragment),
+                "{fragment}: {}",
+                artifact.code
+            );
+        }
+        assert_eq!(artifact.code.matches("onCitryOn0:").count(), 1);
+        // The metadata is for the `li`; its ordinal counts the `v-for` and
+        // the key binding before the listener.
+        assert_eq!(
+            citry_on_directives(&artifact),
+            [(2, Some("click".to_owned()), strings(&["outside"]))]
+        );
+        let item = artifact
+            .elements
+            .iter()
+            .find(|element| !element.directives.is_empty())
+            .expect("the item element");
+        assert_eq!(
+            item.directives
+                .iter()
+                .map(|directive| directive.name.as_str())
+                .collect::<Vec<_>>(),
+            ["for", "bind", "citry-on"]
+        );
+        assert_eq!(
+            item.lifecycle_signature,
+            r#"[["citry-on","click",["outside"],"resolveDirective:citry-on",null]]"#
+        );
+    }
+
+    #[test]
+    fn a_malformed_listener_time_gives_a_diagnostic_and_no_rewrite() {
+        // Without the parser in front, a time such as `.300MS` would be
+        // read as a key name and silently run at 250 ms.
+        for time in ["300MS", "1m", "5", "1.5s", "300 ms"] {
+            for modifier in ["debounce", "throttle"] {
+                let template = format!(r#"<div @input.{modifier}.{time}="h">x</div>"#);
+                let artifact = compile_template(&template);
+                assert_eq!(artifact.transformed_template, template, "{template}");
+                assert!(!artifact.code.contains("citry_on"), "{template}");
+                assert!(citry_on_directives(&artifact).is_empty(), "{template}");
+                let codes = artifact
+                    .diagnostics
+                    .iter()
+                    .map(|item| item.code.as_str())
+                    .collect::<Vec<_>>();
+                assert!(
+                    codes.contains(&"CITRY_LISTENER_SHAPE"),
+                    "{template}: {codes:?}"
+                );
+            }
+        }
+        // A time with no timing modifier right before it.
+        for template in [
+            r#"<div @keydown.window.300ms="h">x</div>"#,
+            r#"<div @input.debounce.1s.1s="h">x</div>"#,
+        ] {
+            let artifact = compile_template(template);
+            assert_eq!(artifact.transformed_template, template, "{template}");
+            assert!(
+                artifact
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code == "CITRY_LISTENER_SHAPE"),
+                "{template}"
+            );
+        }
+        // A key name after the modifier is not a time and still works.
+        let key = compile_without_diagnostics(r#"<div @keydown.debounce.enter="h">x</div>"#);
+        assert_eq!(
+            citry_on_directives(&key),
+            [(
+                0,
+                Some("keydown".to_owned()),
+                strings(&["debounce-250ms", "enter"])
+            )]
+        );
+    }
+
+    #[test]
+    fn a_listener_time_past_the_largest_exact_number_gives_a_diagnostic() {
+        // JavaScript holds whole numbers exactly only up to 2^53 - 1, so a
+        // longer wait would be a different number in the browser.
+        let largest =
+            compile_without_diagnostics(r#"<div @input.debounce.9007199254740991ms="h">x</div>"#);
+        assert_eq!(
+            citry_on_directives(&largest),
+            [(
+                0,
+                Some("input".to_owned()),
+                strings(&["debounce-9007199254740991ms"])
+            )]
+        );
+        for time in [
+            "9007199254740992ms",
+            // 9007199254741 seconds is 9007199254741000 ms.
+            "9007199254741s",
+            "99999999999999999999999999999999999999999999ms",
+        ] {
+            let template = format!(r#"<div @input.throttle.{time}="h">x</div>"#);
+            let artifact = compile_template(&template);
+            assert_eq!(artifact.transformed_template, template, "{time}");
+            assert!(citry_on_directives(&artifact).is_empty(), "{time}");
+            assert!(
+                artifact
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code == "CITRY_LISTENER_SHAPE"),
+                "{time}: {:?}",
+                artifact.diagnostics
+            );
+        }
     }
 
     fn rejects_key(template: &str) -> bool {

@@ -2395,7 +2395,8 @@ def component_listener_event(expression: BrowserExpression) -> str | None:
 
 def _vue_camelize(name: str) -> str:
     """Camelize the way Vue does: `drop-task` becomes `dropTask`."""
-    return re.sub(r"-(\w)", lambda match: match.group(1).upper(), name)
+    # Vue's `\w` is the JavaScript one, which matches ASCII only.
+    return re.sub(r"-(\w)", lambda match: match.group(1).upper(), name, flags=re.ASCII)
 
 
 def _vue_hyphenate(name: str) -> str:

@@ -1787,10 +1787,12 @@ fn validate_node(
     validate_component_tag_vue_directives(node, context)?;
     validate_vue_slot_syntax_in_component(node, tag_stack, context)?;
     validate_slot_tag_vue_directives(node, context)?;
+    validate_fill_tag_vue_directives(node, context)?;
     validate_attributes_present(node, context)?;
     validate_meta_attr_placement(node, context)?;
     validate_ignored_element_contents(node, tag_stack, context)?;
     validate_vue_listener_modifiers(node, context)?;
+    validate_reserved_citry_names(node, context)?;
     validate_element_once_memo(node, context)?;
     validate_element_vue_directives(node, context)?;
     validate_vue_builtin_component_tag(node, context)?;
@@ -1992,7 +1994,9 @@ fn component_tag_directive_hint(directive: &str) -> &'static str {
         "if" | "else-if" | "else" => {
             "Write 'v-if', 'v-else-if', and 'v-else' without an argument or modifiers."
         }
-        "for" => "A browser 'v-for' cannot create Citry components. Repeat the component with '<c-for>'.",
+        "for" => {
+            "A browser 'v-for' cannot create Citry components. Repeat the component with '<c-for>'."
+        }
         "slot" => "Pass slot content with '<c-fill name=\"...\">' inside the component tag.",
         "html" | "text" => {
             "This directive would replace the child's own content. Pass the value as a prop or through '<c-fill>' and render it inside the child."
@@ -2125,10 +2129,12 @@ fn slot_tag_directive_hint(directive: &str) -> &'static str {
         }
         "for" => "Repeat the slot with '<c-for>'.",
         "show" => "Wrap the slot in an element that carries 'v-show'.",
-        "slot" => "Name the slot with 'name=\"...\"'; the caller fills it with '<c-fill name=\"...\">'.",
+        "slot" => {
+            "Name the slot with 'name=\"...\"'; the caller fills it with '<c-fill name=\"...\">'."
+        }
         "on" => "Put the listener on an element around the slot or inside the fill.",
         "bind" | "prop" | "attr" => {
-            "Vue slot props are not supported. Pass Python slot data as a plain attribute ('item=\"text\"') or a 'c-' attribute ('c-item=\"expr\"')."
+            "To pass Vue data, write ':row=\"row\"' or 'v-bind:row=\"row\"' (lowercase 'v-bind'), with a fixed name and no modifiers. To pass Python slot data, write a plain attribute ('item=\"text\"') or a 'c-' attribute ('c-item=\"expr\"')."
         }
         _ => "Put the directive on an element around the slot or inside its fallback content.",
     }
@@ -2213,15 +2219,16 @@ fn validate_vue_slot_syntax_in_component(
         }
         _ => "'<c-fill name=\"default\">'".to_string(),
     };
-    // Vue slot props (`#item="{ row }"`) map to the fill's `data` variable.
-    // A `c-` form's value is a Python expression, not slot props.
+    // Vue slot props (`#item="{ row }"`) map to the fill's `v-slot`, and
+    // Python slot data to its `data`. A `c-` form's value is a Python
+    // expression, not slot props.
     let has_slot_props = !name.starts_with("c-")
         && attr
             .inner_value
             .as_ref()
             .is_some_and(|value| !value.content.trim().is_empty());
     let data_hint = if has_slot_props {
-        " Read the slot's data with the fill's 'data=\"...\"' attribute."
+        " Read Vue slot props with the fill's 'v-slot=\"{ ... }\"', or Python slot data with its 'data=\"...\"'."
     } else {
         ""
     };
@@ -2261,13 +2268,15 @@ fn vue_slot_argument(name: &str) -> Option<Option<&str>> {
     }
 }
 
-/// Reject Vue directives on `<c-slot>`.
+/// Check Vue syntax on `<c-slot>`.
 ///
-/// Every `<c-slot>` attribute other than its name and `required` becomes
-/// Python slot data, so a `v-if`, `:prop`, or `@event` there would reach the
-/// fill as a data key and the browser would never see it. The template fails
-/// to compile instead. The `c-` form (`c-v-if`) is rejected the same way,
-/// because it names the same directive with a Python-computed value.
+/// A static `:name` (or `v-bind:name`) passes Vue data to the fill, as a Vue
+/// slot prop. Every other `<c-slot>` attribute except its name and
+/// `required` becomes Python slot data, so a `v-if`, `@event`, or any other
+/// Vue directive there would reach the fill as a data key that the browser
+/// never sees. The template fails to compile instead. The `c-` form
+/// (`c-v-if`, `c-:row`) is rejected the same way, because it names the
+/// directive with a Python-computed value.
 fn validate_slot_tag_vue_directives(
     node: &Node,
     context: &ParserContext,
@@ -2276,12 +2285,19 @@ fn validate_slot_tag_vue_directives(
     if tag_name != C_SLOT_TAG {
         return Ok(());
     }
+    let mut props: Vec<(String, &HtmlAttr)> = Vec::new();
     for attr in node.attrs() {
         // `#c-*` metadata has its own placement rules.
         if attr.kind == HtmlAttrKind::Meta {
             continue;
         }
         let name = attr.key.content.as_str();
+        // Checked before the directive forms below, so a slot prop takes the
+        // supported path and every other `:` spelling still gets its hint.
+        if let Some(prop) = slot_prop_name(name) {
+            props.push((validate_slot_prop(attr, prop, &props, context)?, attr));
+            continue;
+        }
         let logical_name = name.strip_prefix("c-").unwrap_or(name);
         // The `:` and `@` shorthands spell `v-bind` and `v-on`; every other
         // directive form (`v-*` or `V-*`, `#name`, `.name`, `^name`) is
@@ -2299,12 +2315,275 @@ fn validate_slot_tag_vue_directives(
         return Err(context.error_from_token(
             &attr.token,
             format!(
-                "Vue directive '{name}' is not supported on '<{tag_name}>'. Its attributes other than 'name' and 'required' become Python slot data, which the browser never sees. {}",
+                "Vue directive '{name}' is not supported on '<{tag_name}>'. Its attributes other than 'name', 'required', and ':' slot props become Python slot data, which the browser never sees. {}{}",
+                // A `c-` prefix makes the value Python, which is the first
+                // thing to fix in `c-:row`.
+                if name.starts_with("c-") {
+                    "A 'c-' attribute takes a Python value, which must not choose the browser's code. "
+                } else {
+                    ""
+                },
                 // Every directive is rejected here, so `V-IF` gets the same
                 // advice as `v-if`.
                 slot_tag_directive_hint(&directive.to_ascii_lowercase())
             ),
         ));
+    }
+    // A Vue prop and Python slot data under one name would leave the fill
+    // reading two different values through two attributes.
+    for (camel, prop_attr) in &props {
+        let clash = node.attrs().iter().find(|attr| {
+            slot_python_data_name(attr)
+                .is_some_and(|data| crate::browser::camelize_prop(data) == *camel)
+        });
+        if let Some(data_attr) = clash {
+            return Err(context.error_from_token(
+                &prop_attr.token,
+                format!(
+                    "'{}' and '{}' on '<{tag_name}>' both pass '{camel}' to the fill, once as Vue data and once as Python slot data. Use one: keep ':' when the browser computes the value, or the Python attribute when Python does, and read it in the fill with 'v-slot' or 'data' to match.",
+                    prop_attr.key.content, data_attr.key.content
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The prop name of a static Vue slot prop on `<c-slot>`: `row` for `:row`
+/// or `v-bind:row`. `None` for every other spelling, including dynamic names
+/// (`:[name]`), modifiers (`:row.prop`), the object form (`v-bind="..."`),
+/// and the Python-valued `c-:row`.
+fn slot_prop_name(name: &str) -> Option<&str> {
+    let rest = name
+        .strip_prefix("v-bind:")
+        .or_else(|| name.strip_prefix(':'))?;
+    (!rest.is_empty() && !rest.starts_with('[') && !rest.contains('.')).then_some(rest)
+}
+
+/// The Python slot data key an attribute on `<c-slot>` passes, if any:
+/// `row` for `row="..."` or `c-row="..."`.
+fn slot_python_data_name(attr: &HtmlAttr) -> Option<&str> {
+    if attr.kind == HtmlAttrKind::Meta {
+        return None;
+    }
+    let name = attr.key.content.as_str();
+    let logical = name.strip_prefix("c-").unwrap_or(name);
+    // `bind="x"` without the prefix is ordinary slot data, so only the exact
+    // `c-bind` spread is a fixed attribute.
+    let fixed = matches!(
+        name,
+        "name" | "c-name" | "required" | "c-required" | C_BIND_ATTR
+    ) || CONTROL_FLOW_GROUPS
+        .iter()
+        .flat_map(|group| group.iter())
+        .any(|control| *control == name);
+    let vue = logical.starts_with([':', '@', '#', '.', '^'])
+        || logical.starts_with("v-")
+        || logical.starts_with("V-");
+    (!fixed && !vue && !logical.is_empty()).then_some(logical)
+}
+
+/// Check one Vue slot prop on `<c-slot>` and return its name as the fill
+/// receives it (Vue camelizes it: `:row-data` arrives as `rowData`).
+fn validate_slot_prop(
+    attr: &HtmlAttr,
+    prop: &str,
+    earlier: &[(String, &HtmlAttr)],
+    context: &ParserContext,
+) -> Result<String, ParseError> {
+    let name = attr.key.content.as_str();
+    let fail = |message: String| Err(context.error_from_token(&attr.token, message));
+    // A value another template language fills in would let data choose the
+    // Vue code that runs in the browser. (`{{ ... }}` is refused when the
+    // runtime node is built.)
+    if !attr.foreign_parts.is_empty() {
+        return fail(format!(
+            "'{name}' on '<c-slot>' must be a Vue expression written in the template; another template language must not fill in any part of it."
+        ));
+    }
+    if attr
+        .inner_value
+        .as_ref()
+        .is_none_or(|value| value.content.trim().is_empty())
+    {
+        return fail(format!(
+            "'{name}' on '<c-slot>' needs a Vue expression, such as ':{prop}=\"{prop}\"'."
+        ));
+    }
+    // Citry reads `{{ ... }}` in an attribute as its own interpolation, which
+    // would let Python text choose the Vue code, so it is refused here, where
+    // `citry check` also sees it.
+    if attr
+        .inner_value
+        .as_ref()
+        .is_some_and(|value| value.content.contains("{{"))
+    {
+        return fail(format!(
+            "'{name}' on '<c-slot>' holds '{{{{'; write the Vue expression directly, such as ':{prop}=\"{prop}\"'."
+        ));
+    }
+    let camel = crate::browser::camelize_prop(prop);
+    // Vue would pass `:c-value` on, but Citry reads `c-` names on an
+    // element as Python attributes, so the slot's own outlet would reject it.
+    if prop.starts_with("c-") {
+        return fail(format!(
+            "'{name}' cannot be a slot prop: names that start with 'c-' are Citry attributes. Give the prop another name, such as ':value'."
+        ));
+    }
+    if camel == "name" {
+        return fail(format!(
+            "'{name}' cannot be a slot prop: Vue reads ':name' on a slot as the slot's own name. Give the prop another name; the slot's name is 'name=\"...\"'."
+        ));
+    }
+    if camel == "key" {
+        return fail(format!(
+            "'{name}' cannot be a slot prop: Citry sets the slot's own 'key'. Give the prop another name."
+        ));
+    }
+    if camel.starts_with(['$', '_']) || camel.starts_with("citry") {
+        return fail(format!(
+            "'{name}' cannot be a slot prop: names that start with '$', '_', or 'citry' are reserved for the props Citry passes to every fill. Use a name without that prefix."
+        ));
+    }
+    if let Some((_, other)) = earlier.iter().find(|(seen, _)| *seen == camel) {
+        return fail(format!(
+            "'{name}' and '{}' on '<c-slot>' pass the same slot prop '{camel}'. Vue writes prop names in camelCase, so keep one of them.",
+            other.key.content
+        ));
+    }
+    Ok(camel)
+}
+
+/// Check Vue syntax on `<c-fill>`.
+///
+/// `v-slot="..."` reads the Vue slot props the component's `<c-slot>`
+/// passes. The fill's slot is chosen by `name`, so `v-slot:name`, `#name`,
+/// and every other Vue directive are rejected with a hint. The pattern must
+/// be one object pattern or one identifier, because Citry adds its own slot
+/// props in front of it, and its names must not reuse the fill's Python
+/// `data` and `fallback` names or Citry's reserved prefixes.
+fn validate_fill_tag_vue_directives(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    if node.tag_name() != C_FILL_TAG {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        if attr.kind == HtmlAttrKind::Meta {
+            continue;
+        }
+        let name = attr.key.content.as_str();
+        if name == "v-slot" {
+            validate_fill_slot_pattern(node, attr, context)?;
+            continue;
+        }
+        let logical_name = name.strip_prefix("c-").unwrap_or(name);
+        let directive = if logical_name.starts_with(':') {
+            Some("bind")
+        } else if logical_name.starts_with('@') {
+            Some("on")
+        } else {
+            citry_tag_vue_directive_name(logical_name)
+        };
+        let Some(directive) = directive else {
+            continue;
+        };
+        let hint = if name.starts_with("c-") && directive.eq_ignore_ascii_case("slot") {
+            "A 'c-' attribute takes a Python value, which must not choose the browser's code. Choose the slot with 'name=\"...\"', and read Vue slot props with 'v-slot=\"{ ... }\"' written in the template."
+        } else if name.starts_with("c-") {
+            "A 'c-' attribute takes a Python value, which must not choose the browser's code. Put the directive on an element inside the fill."
+        } else if directive.eq_ignore_ascii_case("slot") {
+            "Choose the slot with 'name=\"...\"' and read its Vue slot props with 'v-slot=\"{ ... }\"', written in lowercase and without an argument or modifier."
+        } else {
+            "Put the directive on an element inside the fill."
+        };
+        return Err(context.error_from_token(
+            &attr.token,
+            format!("Vue directive '{name}' is not supported on '<c-fill>'. {hint}"),
+        ));
+    }
+    Ok(())
+}
+
+/// Check the value of `<c-fill v-slot="...">`.
+fn validate_fill_slot_pattern(
+    node: &Node,
+    attr: &HtmlAttr,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let fail = |message: String| Err(context.error_from_token(&attr.token, message));
+    if !attr.foreign_parts.is_empty() {
+        return fail(
+            "'v-slot' on '<c-fill>' must be a pattern written in the template; another template language must not fill in any part of it.".to_string(),
+        );
+    }
+    let Some(value) = attr
+        .inner_value
+        .as_ref()
+        .map(|value| value.content.as_str())
+    else {
+        return fail(
+            "'v-slot' on '<c-fill>' needs a pattern, such as 'v-slot=\"{ row }\"'.".to_string(),
+        );
+    };
+    if value.trim().is_empty() {
+        return fail(
+            "'v-slot' on '<c-fill>' needs a pattern, such as 'v-slot=\"{ row }\"'.".to_string(),
+        );
+    }
+    // Citry reads `{{ ... }}` in an attribute as its own interpolation, as
+    // on `<c-slot>` props.
+    if value.contains("{{") {
+        return fail(
+            "'v-slot' on '<c-fill>' holds '{{'; write the pattern directly, such as 'v-slot=\"{ row }\"'."
+                .to_string(),
+        );
+    }
+    if let Some(problem) = crate::browser::browser_slot_pattern_problem(value) {
+        return fail(format!("'v-slot=\"{value}\"' on '<c-fill>' {problem}."));
+    }
+    let analysis = crate::browser::analyze_browser_binding_pattern(value);
+    if !analysis.valid {
+        return fail(format!(
+            "'v-slot=\"{value}\"' on '<c-fill>' is not a valid JavaScript parameter; write one object pattern, such as 'v-slot=\"{{ row }}\"', or one name, such as 'v-slot=\"props\"'."
+        ));
+    }
+    // The fill's Python names are in scope beside its Vue names, so one name
+    // in both would leave a reader unable to tell which value it holds.
+    let python_names: Vec<&str> = node
+        .attrs()
+        .iter()
+        .filter_map(|other| match other.key.content.as_str() {
+            "data" => other.fill_data_pattern.as_ref().map(|pattern| {
+                pattern
+                    .whole
+                    .iter()
+                    .chain(pattern.fields.iter().map(|field| &field.target))
+                    .chain(pattern.rest.iter())
+                    .map(|token| token.content.as_str())
+                    .collect::<Vec<_>>()
+            }),
+            "fallback" => other
+                .inner_value
+                .as_ref()
+                .map(|value| vec![value.content.as_str()]),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    for binding in &analysis.bindings {
+        let local = binding.name.as_str();
+        if local.starts_with(['$', '_']) || local.starts_with("citry") {
+            return fail(format!(
+                "'{local}' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill. Use a name without that prefix."
+            ));
+        }
+        if python_names.contains(&local) {
+            return fail(format!(
+                "'{local}' is named by both 'v-slot' and the Python 'data' or 'fallback' of this '<c-fill>'. Rename the Vue name or the Python name."
+            ));
+        }
     }
     Ok(())
 }
@@ -2439,23 +2718,13 @@ fn non_key_modifier_hint(modifier: &str) -> String {
 /// one of these silently ignores it or never runs, depending on the event.
 fn alpine_only_modifier_hint(modifier: &str) -> Option<&'static str> {
     Some(match modifier {
-        "outside" | "away" => {
-            "Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted()."
-        }
-        "window" => {
-            "Add the listener with window.addEventListener(...) in mounted() and remove it in unmounted()."
-        }
-        "document" => {
-            "Add the listener with document.addEventListener(...) in mounted() and remove it in unmounted()."
-        }
-        "debounce" | "throttle" => {
-            "Delay the work inside the method instead, for example with setTimeout. To call a server event handler, a '@c-*' binding such as '@c-input.debounce' accepts this modifier."
-        }
+        "away" => "Use Citry's '.outside' modifier instead.",
         "camel" | "dot" => {
             "Add the listener for the exact event name with addEventListener(...) in mounted(), on an element you reach through a 'ref', and remove it in unmounted()."
         }
         "cmd" | "super" => "Use Vue's '.meta' modifier instead.",
-        "period" | "comma" | "slash" | "equal" => {
+        "spacebar" => "Use Vue's '.space' modifier instead.",
+        "period" | "comma" | "slash" | "equal" | "minus" | "underscore" => {
             "Vue matches key modifiers against the key's name, so check the key in the listener instead, for example @keydown=\"if ($event.key === '.') go();\"."
         }
         _ => return None,
@@ -2768,6 +3037,222 @@ fn validate_vue_binding_python_conflicts(
     Ok(())
 }
 
+/// The props key Vue stores a listener under (`toHandlerKey(camelize(event))`
+/// in Vue's shared helpers): `citry-on-0` and `citryOn0` both give
+/// `onCitryOn0`.
+fn vue_handler_key(event: &str) -> String {
+    let mut camel = String::with_capacity(event.len());
+    let mut upper_next = false;
+    for character in event.chars() {
+        if character == '-' {
+            upper_next = true;
+            continue;
+        }
+        if upper_next {
+            camel.extend(character.to_uppercase());
+            upper_next = false;
+        } else {
+            camel.push(character);
+        }
+    }
+    if upper_next {
+        // Vue's `camelize` keeps a trailing hyphen.
+        camel.push('-');
+    }
+    let mut characters = camel.chars();
+    match characters.next() {
+        Some(first) => format!("on{}{}", first.to_uppercase(), characters.as_str()),
+        None => "on".to_owned(),
+    }
+}
+
+/// Whether a props key is one Citry's Vue compiler writes for a listener
+/// that uses a Citry modifier (`onCitryOn` followed by digits).
+fn is_citry_listener_key(key: &str) -> bool {
+    key.strip_prefix("onCitryOn").is_some_and(|digits| {
+        !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+    })
+}
+
+/// Reject an attribute that would write the props key Citry's compiler
+/// gives a listener.
+///
+/// The Vue compiler rewrites a listener with a Citry modifier into a plain
+/// listener stored under `onCitryOn<n>` and a `v-citry-on` directive that
+/// finds it there. An authored attribute with the same props key would be
+/// merged into that listener. Authored `v-citry-*` directives are refused
+/// with the other reserved directive names (`validate_element_vue_directives`).
+fn validate_reserved_citry_names(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    for attr in node.attrs() {
+        let name = attr.key.content.as_str();
+        let props_key = if let Some(event) = name
+            .strip_prefix("v-on:")
+            .or_else(|| name.strip_prefix('@'))
+        {
+            // A dynamic event name is known only in the browser, where the
+            // directive checks that it finds a function.
+            if event.starts_with('[') {
+                continue;
+            }
+            vue_handler_key(event.split('.').next().unwrap_or(""))
+        } else {
+            let bound = name
+                .strip_prefix("v-bind:")
+                .or_else(|| name.strip_prefix(':'))
+                .unwrap_or(name);
+            bound.split('.').next().unwrap_or("").to_owned()
+        };
+        if !is_citry_listener_key(&props_key) {
+            continue;
+        }
+        let (line, col) = attr.token.line_col;
+        return Err(context.error_from_token(
+            &attr.token,
+            format!(
+                "'{name}' on <{}> (line {line}, column {col}) uses a name Citry's compiler writes for itself. Rename the attribute or event.",
+                node.tag_name()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The modifiers Citry adds to Vue listeners on HTML elements. The Vue
+/// compiler turns a listener that uses one into Citry's `v-citry-on` runtime
+/// directive (see `citry_vue_compiler`), because Vue's own modifiers are a
+/// fixed set inside its template compiler.
+const CITRY_LISTENER_MODIFIERS: [&str; 5] =
+    ["outside", "window", "document", "debounce", "throttle"];
+
+/// The largest time a `.debounce` or `.throttle` segment may give: the
+/// largest integer a JavaScript number holds exactly, as for `@c-*` bindings.
+const MAX_LISTENER_TIME_MS: u128 = (1 << 53) - 1;
+
+/// The milliseconds a time segment such as `300ms` or `2s` names, or `None`
+/// when the segment is not a time.
+fn listener_time_ms(segment: &str) -> Option<u128> {
+    let (digits, factor) = if let Some(digits) = segment.strip_suffix("ms") {
+        (digits, 1)
+    } else {
+        (segment.strip_suffix('s')?, 1000)
+    };
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    // A long run of digits saturates instead of overflowing, so the limit
+    // check reports it.
+    Some(
+        digits
+            .parse::<u128>()
+            .unwrap_or(u128::MAX)
+            .saturating_mul(factor),
+    )
+}
+
+/// Check a listener that uses one of Citry's own modifiers (`.outside`,
+/// `.window`, `.document`, `.debounce`, `.throttle`).
+///
+/// They work only on HTML elements, and some combinations would either do
+/// nothing or stop every click on the page, so those are load errors.
+fn validate_citry_listener_modifiers(
+    node: &Node,
+    name: &str,
+    modifiers: &[&str],
+    location: (usize, usize),
+    attr: &HtmlAttr,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let (line, col) = location;
+    let tag_name = node.tag_name();
+    let fail = |problem: String| {
+        Err(context.error_from_token(
+            &attr.token,
+            format!("'{name}' on <{tag_name}> (line {line}, column {col}) {problem}"),
+        ))
+    };
+    let component =
+        has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG);
+    if component
+        || ["template", "slot", "component"].contains(&tag_name.to_ascii_lowercase().as_str())
+    {
+        // A listener on a component tag receives the component's emitted
+        // events, which do not come from the DOM, so a window, document,
+        // outside or timed listener has no meaning there.
+        return fail(
+            "uses a Citry listener modifier, which works only on HTML elements. Put the listener on an element inside the component, or handle the timing in the method.".to_owned(),
+        );
+    }
+    let has = |modifier: &str| modifiers.contains(&modifier);
+    let places = ["outside", "window", "document"]
+        .into_iter()
+        .filter(|place| has(place))
+        .collect::<Vec<_>>();
+    if places.len() > 1 {
+        return fail(format!(
+            "combines '.{}' and '.{}'. A listener listens in one place: the element, the window or the document.",
+            places[0], places[1]
+        ));
+    }
+    for (other, why) in [
+        (
+            "self",
+            "the element can never be the target of an event that starts outside it",
+        ),
+        (
+            "capture",
+            "'.outside' listens on the document after the event's own handlers have run, and the capture phase would run it first",
+        ),
+        (
+            "once",
+            "'.once' removes the listener after its first event, and a document listener sees every click, so a click inside the element would use it up",
+        ),
+    ] {
+        if has("outside") && has(other) {
+            return fail(format!("combines '.outside' with '.{other}': {why}."));
+        }
+    }
+    if has("passive") && has("prevent") {
+        return fail(
+            "combines '.passive' with '.prevent'. A passive listener cannot cancel the event."
+                .to_owned(),
+        );
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    for (index, modifier) in modifiers.iter().enumerate() {
+        let after_timing = index > 0 && matches!(modifiers[index - 1], "debounce" | "throttle");
+        if after_timing
+            && modifier.starts_with(|character: char| character.is_ascii_digit())
+            && listener_time_ms(modifier).is_none()
+        {
+            // A mistyped unit such as `.1m` or `.300MS` would otherwise be
+            // read as a key name and do nothing. A bare number is refused
+            // too, because Vue reads `.5` as the key `5`.
+            let timing = modifiers[index - 1];
+            return fail(format!(
+                "gives '.{modifier}' as a time. Write the time in milliseconds or seconds, such as '.300ms' or '.2s'. To name a key, put it before '.{timing}'."
+            ));
+        }
+        if let Some(milliseconds) = listener_time_ms(modifier) {
+            if !after_timing {
+                return fail(format!(
+                    "has the time '.{modifier}' without '.debounce' or '.throttle' right before it."
+                ));
+            }
+            if milliseconds > MAX_LISTENER_TIME_MS {
+                return fail(format!(
+                    "gives '.{modifier}', which is longer than JavaScript can hold exactly."
+                ));
+            }
+            continue;
+        }
+        if seen.contains(modifier) {
+            return fail(format!("repeats '.{modifier}'. Give each modifier once."));
+        }
+        seen.push(modifier);
+    }
+    Ok(())
+}
+
 /// Reject event modifiers on a Vue listener (`@event` or `v-on:event`) that
 /// Vue would silently drop, or that would stop the listener from running.
 ///
@@ -2810,10 +3295,36 @@ fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Resu
             }
         };
         let (line, col) = attr.token.line_col;
-        for modifier in modifiers.split('.').skip(1) {
-            // Vue compares modifiers case-sensitively, so `.OUTSIDE` is an
+        let parts = modifiers.split('.').skip(1).collect::<Vec<_>>();
+        if parts
+            .iter()
+            .any(|part| CITRY_LISTENER_MODIFIERS.contains(part))
+        {
+            validate_citry_listener_modifiers(node, name, &parts, (line, col), attr, context)?;
+        }
+        for (index, &modifier) in parts.iter().enumerate() {
+            // Citry's own modifiers and the time after `.debounce` or
+            // `.throttle` are not key names; the compiler handles them.
+            if CITRY_LISTENER_MODIFIERS.contains(&modifier)
+                || (listener_time_ms(modifier).is_some()
+                    && index > 0
+                    && matches!(parts[index - 1], "debounce" | "throttle"))
+            {
+                continue;
+            }
+            let lowercase = modifier.to_ascii_lowercase();
+            if CITRY_LISTENER_MODIFIERS.contains(&lowercase.as_str()) {
+                // Vue compares modifiers case-sensitively, and so does Citry.
+                return Err(context.error_from_token(
+                    &attr.token,
+                    format!(
+                        "'{name}' (line {line}, column {col}) uses '.{modifier}'. Write it in lowercase, '.{lowercase}'."
+                    ),
+                ));
+            }
+            // Vue compares modifiers case-sensitively, so `.AWAY` is an
             // unknown modifier too and Vue would read it as a key name.
-            if let Some(hint) = alpine_only_modifier_hint(&modifier.to_ascii_lowercase()) {
+            if let Some(hint) = alpine_only_modifier_hint(&lowercase) {
                 return Err(context.error_from_token(
                     &attr.token,
                     format!(

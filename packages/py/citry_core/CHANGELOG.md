@@ -1,5 +1,18 @@
 # Release notes
 
+## Unreleased
+
+### Added
+
+- `parse_template()` accepts a Vue slot prop such as `:row="row"` on
+  `<c-slot>`, and a `v-slot="{ row }"` pattern on `<c-fill>`. Other forms,
+  such as `:[key]` or `v-slot="a, b"`, still fail, with a message that
+  names the form to write.
+- In a component that uses Vue, the server now writes a fill that reads
+  Vue slot props, such as `v-slot="{ row }"`, with the values its
+  `<c-slot>` passes when the server knows them. Such a fill used to be left
+  for the browser to build.
+
 ## v1.9.0
 
 ### Changed
@@ -42,6 +55,10 @@
 
 ### Added
 
+- `parse_template()` and the Vue compiler accept `.outside`, `.window`,
+  `.document`, `.debounce`, and `.throttle` on Vue listeners such as
+  `@click` on HTML elements. The compiled template uses a `citry-on`
+  directive that the `citry` package's browser runtime provides.
 - citry-core now supports Python 3.15. The prebuilt wheels install on it,
   and Linux also gets a free-threaded CPython 3.15 wheel.
 - For text that does not parse, `analyze_browser_source()` returns the
@@ -55,6 +72,9 @@
 
 ### Fixed
 
+- `parse_template()` now rejects Alpine's `.minus`, `.underscore`, and
+  `.spacebar` key modifiers on a Vue listener, with a hint, because Vue
+  matches none of these names and the listener would never run.
 - Parsing, compiling and formatting a template, and the `html_transform`
   functions, no longer crash the process when called with little stack
   left, for example from deep recursion on a thread with a small stack.
