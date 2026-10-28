@@ -12,7 +12,6 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -33,7 +32,6 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -50,6 +48,14 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+
+env:
+  # Test the examples with the compiler the citry-core release wheels are
+  # built with: the minimum Rust version that Cargo.toml declares. It is set
+  # here as well as in the setup step because these jobs build inside the
+  # checkout, where rust-toolchain.toml would otherwise select the
+  # development nightly.
+  RUSTUP_TOOLCHAIN: "1.96.0"
 
 jobs:
   clean-copy:
@@ -75,7 +81,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
-          toolchain: "1.96.0"
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
@@ -138,7 +144,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
-          toolchain: "1.96.0"
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 

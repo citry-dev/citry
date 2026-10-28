@@ -1,4 +1,4 @@
-"""The toolchain validator catches a workflow that leaves the reviewed uv or PyPI upload setup."""
+"""The toolchain validator catches a workflow that leaves the reviewed Rust, uv or PyPI upload setup."""
 
 import json
 import shutil
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 from scripts.validators import toolchain
-from scripts.validators.toolchain import pinned_action_errors
+from scripts.validators.toolchain import nightly_pin_errors, pinned_action_errors, selected_toolchain_errors
 
 _REPO = Path(__file__).resolve().parents[4]
 _UV_PIN = json.loads((_REPO / "packages/py/citry_core/pyodide-build.json").read_text())["uv"]
@@ -16,6 +16,8 @@ _UV_PIN = json.loads((_REPO / "packages/py/citry_core/pyodide-build.json").read_
 @pytest.fixture
 def root(tmp_path):
     shutil.copytree(_REPO / ".github/workflows", tmp_path / ".github/workflows")
+    shutil.copytree(_REPO / ".github/actions", tmp_path / ".github/actions")
+    shutil.copy(_REPO / "rust-toolchain.toml", tmp_path / "rust-toolchain.toml")
     # Only the example CI workflows matter to the check, so copy just those.
     for workflow in _REPO.glob("examples/*/*/.github/workflows/check.yml"):
         target = tmp_path / workflow.relative_to(_REPO)
@@ -114,3 +116,121 @@ def test_a_composite_action_with_the_reviewed_pins_passes(root):
     step = {"uses": toolchain._UV_ACTION, "with": {"version": _UV_PIN, "prune-cache": True}}
     action.write_text(yaml.safe_dump({"name": "Setup", "runs": {"using": "composite", "steps": [step]}}))
     assert pinned_action_errors(root, _UV_PIN) == []
+
+
+def test_the_dated_nightly_and_current_workflows_pass(root):
+    assert nightly_pin_errors(root) == []
+
+
+@pytest.mark.parametrize("channel", ["nightly", "stable", "nightly-2026-10"])
+def test_a_channel_that_is_not_a_dated_nightly_fails(root, channel):
+    toolchain_file = root / "rust-toolchain.toml"
+    text = toolchain_file.read_text()
+    current = next(line for line in text.splitlines() if line.startswith("channel = "))
+    toolchain_file.write_text(text.replace(current, f'channel = "{channel}"'))
+    assert [error for error in nightly_pin_errors(root) if "rust-toolchain.toml channel" in error]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        # A setup action given the undated channel, in any quoting.
+        "          toolchain: nightly",
+        "          toolchain: 'nightly'",
+        # A dated nightly in a workflow would still drift from the file.
+        "          toolchain: nightly-2026-01-01",
+        # The action ref its README suggests.
+        "      - uses: dtolnay/rust-toolchain@nightly",
+        "          rust-toolchain: nightly",
+        "      - run: cargo +nightly clippy",
+        "      - run: rustup toolchain install --profile minimal nightly",
+        "      - run: rustup update nightly",
+        '      - run: echo RUSTUP_TOOLCHAIN=nightly >> "$GITHUB_ENV"',
+        "      RUSTUP_TOOLCHAIN: nightly  # for the audit",
+    ],
+)
+def test_a_workflow_that_names_its_own_nightly_fails(root, line):
+    workflow = root / ".github/workflows/rust--tests.yml"
+    workflow.write_text(workflow.read_text() + line + "\n")
+    errors = nightly_pin_errors(root)
+    assert errors
+    assert all("rust--tests.yml" in error for error in errors)
+
+
+def test_a_composite_action_that_names_its_own_nightly_fails(root):
+    action = root / ".github/actions/install-rust/action.yml"
+    action.parent.mkdir(parents=True, exist_ok=True)
+    action.write_text("runs:\n  using: composite\n  steps:\n    - run: rustup default nightly\n")
+    assert [error for error in nightly_pin_errors(root) if "install-rust/action.yml" in error]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "      # Do not run rustup update nightly here.",
+        "      - run: cargo test  # works on the pinned nightly",
+    ],
+)
+def test_a_comment_that_mentions_nightly_passes(root, line):
+    workflow = root / ".github/workflows/rust--tests.yml"
+    workflow.write_text(workflow.read_text() + line + "\n")
+    assert nightly_pin_errors(root) == []
+
+
+_SETUP_JOB = """
+  pinned:
+    runs-on: ubuntu-latest{env}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: "1.96.0"
+      - run: cargo build
+"""
+
+
+def test_current_workflows_select_the_toolchain_they_install(root):
+    assert selected_toolchain_errors(root) == []
+
+
+def test_a_setup_input_that_names_an_unset_variable_fails(root):
+    # The examples setup reads `${{ env.RUSTUP_TOOLCHAIN }}`, which is now unset.
+    _replace_once(root / ".github/workflows/py--examples--tests.yml", '  RUSTUP_TOOLCHAIN: "1.96.0"\n', "")
+    errors = selected_toolchain_errors(root)
+    assert errors
+    assert all("py--examples--tests.yml" in error and "not set" in error for error in errors)
+
+
+def test_a_publish_job_without_rustup_toolchain_fails(root):
+    # The sdist job installs 1.96.0, but cargo in the checkout would then
+    # follow rust-toolchain.toml to the development nightly.
+    workflow = root / ".github/workflows/py--citry-core--publish.yml"
+    text = workflow.read_text()
+    workflow.write_text(text.replace('      RUSTUP_TOOLCHAIN: "1.96.0"\n', "", 1))
+    errors = selected_toolchain_errors(root)
+    assert any("job sdist" in error and "does not set RUSTUP_TOOLCHAIN" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("env", "passes"),
+    [
+        ("", False),
+        ('\n    env:\n      RUSTUP_TOOLCHAIN: "1.97.0"', False),
+        ('\n    env:\n      RUSTUP_TOOLCHAIN: "1.96.0"', True),
+        # An env written as an expression is read as empty, not as a crash.
+        ("\n    env: ${{ fromJSON(vars.RUST_ENV) }}", False),
+    ],
+)
+def test_a_job_must_select_the_toolchain_it_installs(root, env, passes):
+    workflow = root / ".github/workflows/rust--tests.yml"
+    workflow.write_text(workflow.read_text() + _SETUP_JOB.format(env=env))
+    errors = selected_toolchain_errors(root)
+    assert (errors == []) is passes
+    assert all("job pinned" in error for error in errors)
+
+
+def test_a_setup_that_names_its_toolchain_in_the_ref_must_select_it(root):
+    workflow = root / ".github/workflows/rust--tests.yml"
+    job = "\n  pinned:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: dtolnay/rust-toolchain@1.96.0\n"
+    workflow.write_text(workflow.read_text() + job)
+    assert any("job pinned" in error and "'1.96.0'" in error for error in selected_toolchain_errors(root))

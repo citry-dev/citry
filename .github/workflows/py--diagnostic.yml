@@ -81,14 +81,12 @@ jobs:
           prune-cache: true
           version: "0.13.5"
 
-      # The moving nightly is part of the wheel identity. Resolve the actual
-      # compiler before cache lookup so a newly published nightly cannot reuse
-      # artifacts produced by an older compiler under the same channel name.
+      # The compiler is part of the wheel identity. Resolve the actual
+      # compiler before cache lookup, so a wheel built with an earlier nightly
+      # date is never reused once the date moves.
       - name: Install Rust toolchain
         if: ${{ inputs.install_profile != 'pygments-citry' }}
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Resolve Citry Core wheel identity
         if: ${{ inputs.install_profile != 'pygments-citry' }}

@@ -13,6 +13,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/install-rust/**"
       - ".github/workflows/rust--tests.yml"
       - ".gitmodules"
   pull_request:
@@ -26,6 +27,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/install-rust/**"
       - ".github/workflows/rust--tests.yml"
       - ".gitmodules"
   workflow_dispatch:
@@ -49,11 +51,7 @@ jobs:
 
       # Install Rust deps
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: This should match the value in `rust-toolchain.toml`
-          toolchain: nightly
-          components: rustfmt, clippy
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

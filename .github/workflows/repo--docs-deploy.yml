@@ -55,8 +55,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Docs only need the workspace MSRV. Pin it so Pages and docs checks share a
-  # stable citry-core build cache instead of invalidating it with each nightly.
+  # Docs only need the workspace MSRV. Pin it so Pages and docs checks share
+  # one citry-core build cache that stays valid when the nightly date moves.
   RUSTUP_TOOLCHAIN: "1.96.0"
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"

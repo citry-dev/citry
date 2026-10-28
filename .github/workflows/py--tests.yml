@@ -29,6 +29,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/install-rust/**"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -66,6 +67,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/install-rust/**"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -114,9 +116,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -181,10 +181,7 @@ jobs:
       # Rust is needed because `uv sync` builds the citry_core extension through
       # the maturin backend, so the toolchain must be in place before the sync.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -229,9 +226,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -265,9 +260,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -313,10 +306,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -429,9 +419,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Build the Citry UI wheel and source distribution
         run: uv build --package citry-ui --out-dir dist
@@ -758,10 +746,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

@@ -9,7 +9,6 @@ import yaml  # type: ignore[import-untyped]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOLCHAIN_FILE = REPO_ROOT / "rust-toolchain.toml"
-_WORKFLOW_FILE = REPO_ROOT / ".github" / "workflows" / "rust--tests.yml"
 _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-core--publish.yml"
 _CITRY_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry--publish.yml"
 _CITRY_LSP_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-lsp--publish.yml"
@@ -59,7 +58,6 @@ _PNPM_ACTION = "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86"
 def check() -> list[str]:
     required = (
         _TOOLCHAIN_FILE,
-        _WORKFLOW_FILE,
         _PUBLISH_WORKFLOW,
         _CITRY_PUBLISH_WORKFLOW,
         _CITRY_LSP_PUBLISH_WORKFLOW,
@@ -111,22 +109,8 @@ def check() -> list[str]:
             if marker not in path_list:
                 errors.append(f"py--tests.yml {event} path filters must include {path!r}")
 
-    channel = tomllib.loads(_TOOLCHAIN_FILE.read_text(encoding="utf-8")).get("toolchain", {}).get("channel", "")
-
-    content = _WORKFLOW_FILE.read_text(encoding="utf-8")
-    action = re.search(r"dtolnay/rust-toolchain", content)
-    if action is None:
-        errors.append("could not find 'dtolnay/rust-toolchain' in rust--tests.yml")
-    else:
-        pinned = re.search(r"toolchain:\s*(\S+)", content[action.end() :])
-        if pinned is None:
-            errors.append("could not find a 'toolchain:' value after 'dtolnay/rust-toolchain' in rust--tests.yml")
-        else:
-            workflow_toolchain = pinned.group(1).strip("\"'")
-            if channel != workflow_toolchain:
-                errors.append(
-                    f"toolchain mismatch: rust-toolchain.toml='{channel}', rust--tests.yml='{workflow_toolchain}'"
-                )
+    errors.extend(nightly_pin_errors(REPO_ROOT))
+    errors.extend(selected_toolchain_errors(REPO_ROOT))
 
     root_manifest = tomllib.loads(_ROOT_CARGO.read_text(encoding="utf-8"))
     minimum = root_manifest.get("workspace", {}).get("package", {}).get("rust-version")
@@ -210,8 +194,10 @@ def check() -> list[str]:
     examples_rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", examples_workflow))
     if examples_workflow.count(f"uses: {_RUST_ACTION}") != examples_rust_actions:
         errors.append("every examples evidence Rust setup must use the reviewed immutable action commit")
-    if examples_workflow.count('toolchain: "1.96.0"') != examples_rust_actions:
-        errors.append("every examples evidence Rust setup must pin the workspace MSRV")
+    if not re.search(rf'^  RUSTUP_TOOLCHAIN: ["\']{re.escape(docs_toolchain)}["\']$', examples_workflow, re.MULTILINE):
+        errors.append(f"{_EXAMPLES_TEST_WORKFLOW.name} must pin examples Rust to the workspace MSRV {docs_toolchain}")
+    if examples_workflow.count("toolchain: ${{ env.RUSTUP_TOOLCHAIN }}") != examples_rust_actions:
+        errors.append("every examples evidence Rust setup must select the pinned RUSTUP_TOOLCHAIN")
     examples_rust_caches = len(re.findall(r"uses:\s+Swatinem/rust-cache@", examples_workflow))
     if examples_workflow.count(f"uses: {_RUST_CACHE_ACTION}") != examples_rust_caches:
         errors.append("every examples evidence Rust cache must use the reviewed immutable action commit")
@@ -412,6 +398,122 @@ def check() -> list[str]:
         if marker not in release_workflow:
             errors.append(f"mandatory release workflow is missing {marker!r}")
     return errors
+
+
+# A dated nightly such as `nightly-2026-10-27`. An undated `nightly` would
+# give every build a new compiler each time a nightly is published.
+_DATED_NIGHTLY = re.compile(r"nightly-\d{4}-\d{2}-\d{2}")
+# Any mention of a nightly in CI configuration: an action input
+# (`toolchain: nightly`), an action ref (`dtolnay/rust-toolchain@nightly`),
+# `RUSTUP_TOOLCHAIN`, `cargo +nightly`, or a rustup command. Each one would
+# pick a compiler other than the one rust-toolchain.toml names.
+_NIGHTLY_WORD = re.compile(r"(?<![\w-])nightly(?![\w])")
+
+
+def nightly_pin_errors(root: Path) -> list[str]:
+    """
+    Report an undated development nightly, or CI configuration that picks its own nightly.
+
+    `rust-toolchain.toml` must name a dated nightly, so every machine and CI
+    job builds with the same compiler until the date is moved on purpose. CI
+    installs that toolchain through the `install-rust` composite action,
+    which reads the file, so no workflow, composite action or example
+    workflow may name a nightly itself. YAML comments are skipped, and jobs
+    that pin a stable release on purpose, such as the docs and release
+    builds, pass.
+    """
+    errors: list[str] = []
+    toolchain_file = root / "rust-toolchain.toml"
+    channel = tomllib.loads(toolchain_file.read_text(encoding="utf-8")).get("toolchain", {}).get("channel", "")
+    if not _DATED_NIGHTLY.fullmatch(str(channel)):
+        errors.append(
+            f"rust-toolchain.toml channel must be a dated nightly such as 'nightly-YYYY-MM-DD', found {channel!r}"
+        )
+    paths = sorted((root / ".github" / "workflows").glob("*.y*ml"))
+    paths += sorted((root / ".github" / "actions").glob("*/action.y*ml"))
+    # Users copy the example workflows, so they follow the same rule.
+    paths += sorted(root.glob("examples/*/*/.github/workflows/*.y*ml"))
+    for path in paths:
+        label = path.relative_to(root).as_posix()
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            # A comment may mention nightly freely; only the YAML before it counts.
+            code = line.split(" #", 1)[0] if not line.lstrip().startswith("#") else ""
+            if _NIGHTLY_WORD.search(code):
+                errors.append(
+                    f"{label}:{number} names its own nightly ({code.strip()!r}); install Rust with "
+                    "the ./.github/actions/install-rust action, which reads rust-toolchain.toml"
+                )
+    return errors
+
+
+def selected_toolchain_errors(root: Path) -> list[str]:
+    """
+    Report a job that installs a specific Rust toolchain but would build with another.
+
+    Installing a toolchain with `dtolnay/rust-toolchain` does not select it
+    inside the checkout: there, `rust-toolchain.toml` wins and every cargo
+    run uses the development nightly. So a job that installs a toolchain,
+    such as the workspace minimum, must also set `RUSTUP_TOOLCHAIN` to the
+    same value in its workflow or job env. Only those two count: a step's
+    env reaches that step alone, not the cargo steps after it. A
+    `${{ env.NAME }}` setup input is resolved against the workflow and job
+    env, with the job env winning, as GitHub does. A setup with no
+    `toolchain` input takes the toolchain from its ref (`@1.96.0`), unless
+    the ref is a commit SHA, which then installs nothing specific.
+    """
+    errors: list[str] = []
+    paths = sorted((root / ".github" / "workflows").glob("*.y*ml"))
+    paths += sorted(root.glob("examples/*/*/.github/workflows/*.y*ml"))
+    for path in paths:
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        label = path.relative_to(root).as_posix()
+        workflow_env = _env_mapping(workflow.get("env"))
+        for job_name, job in (workflow.get("jobs") or {}).items():
+            job_env = _env_mapping(job.get("env"))
+            env = {**workflow_env, **job_env}
+            for step in job.get("steps") or []:
+                uses = str(step.get("uses", ""))
+                if not uses.lower().startswith("dtolnay/rust-toolchain@"):
+                    continue
+                settings = step.get("with")
+                requested = str((settings if isinstance(settings, dict) else {}).get("toolchain", "")).strip()
+                ref = uses.partition("@")[2]
+                # Without an input, the action installs the toolchain its ref names.
+                if not requested and not re.fullmatch(r"[0-9a-f]{40}", ref):
+                    requested = ref
+                installed = _resolve_env(requested, env)
+                selected = _resolve_env(env.get("RUSTUP_TOOLCHAIN", ""), workflow_env)
+                # An input that names an unset variable installs nothing the job can rely on.
+                if requested and not installed:
+                    errors.append(f"{label} job {job_name} installs Rust {requested!r}, which is not set")
+                    continue
+                # nightly_pin_errors already reports a setup that names a nightly, so skip it here.
+                if not installed or _NIGHTLY_WORD.search(installed):
+                    continue
+                if not selected:
+                    errors.append(
+                        f"{label} job {job_name} installs Rust {installed!r} but does not set "
+                        "RUSTUP_TOOLCHAIN, so cargo in the checkout would use rust-toolchain.toml; "
+                        "set it in the workflow or job env"
+                    )
+                elif selected != installed:
+                    errors.append(
+                        f"{label} job {job_name} installs Rust {installed!r} but sets "
+                        f"RUSTUP_TOOLCHAIN={selected!r}, so cargo in the checkout would build with "
+                        f"{selected!r} instead"
+                    )
+    return errors
+
+
+def _env_mapping(value: object) -> dict[str, str]:
+    """Read an `env:` block as strings; an expression such as `${{ fromJSON(...) }}` reads as empty."""
+    return {str(key): str(item) for key, item in value.items()} if isinstance(value, dict) else {}
+
+
+def _resolve_env(value: str, env: dict[str, str]) -> str:
+    """Resolve a whole-value `${{ env.NAME }}` reference, as GitHub does for workflow env."""
+    reference = re.fullmatch(r"\$\{\{\s*env\.(\w+)\s*\}\}", value.strip())
+    return env.get(reference.group(1), "") if reference else value.strip().strip("\"'")
 
 
 def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
