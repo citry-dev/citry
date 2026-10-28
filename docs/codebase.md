@@ -2239,9 +2239,17 @@ pytest phase.
 
 **Configuration**:
 
-- Python versions: 3.11, 3.12, 3.13, 3.14, 3.15
-- OS: ubuntu-latest and windows-latest, plus a macOS smoke pair (oldest and newest Python)
-- Leaves out the Linux cell for the Python that `repo--check.yml` uses (3.14), because that workflow runs the same tests there on every pull request
+- Pushes to `main` and `dev`, and manual runs, test the full set: Linux and
+  Windows on Python 3.11 to 3.15, plus macOS on the oldest and newest Python
+- Pull requests test a trimmed set to save runner slots: Linux on every Python,
+  Windows on 3.11 and 3.15, and macOS on 3.15. A failure that shows only on
+  Windows 3.12 to 3.14 or on macOS 3.11 appears in the push run right after
+  the merge
+- Both sets leave out the Linux cell for the Python that `repo--check.yml`
+  uses (3.14), because that workflow runs the same tests there on every pull
+  request
+- The `include:` expression in the `test` job's matrix is the one place that
+  picks the set; `test_ci_workflows.py` pins both sets
 - Requires Rust toolchain (`uv sync` builds the citry_core extension via maturin)
 - Uses Rust dependency caching
 
@@ -2306,9 +2314,11 @@ the Rust build entirely.
   `python scripts/check.py --profile full` (lint, types, coverage, validators,
   and single-environment portable tests)
 - **Dependencies**: Installed from the uv workspace lockfile; `--locked` keeps CI reproducible
-- **Matrix testing**: Python tests run across Python versions (3.11-3.15) and OSes,
-  except Linux with Python 3.14, which the full gate in `repo--check.yml` already
-  covers on every pull request. The real-server reload tests run only there, in
+- **Matrix testing**: on pushes to `main`, Python tests run across Python
+  versions (3.11-3.15) and OSes, except Linux with Python 3.14, which the full
+  gate in `repo--check.yml` already covers on every pull request. Pull requests
+  run Windows and macOS only on the oldest and newest Python (see the
+  `py--tests.yml` configuration above). The real-server reload tests run only there, in
   check.py's serial "pytest reload servers" phase.
 
 ### Publishing

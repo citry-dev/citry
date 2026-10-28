@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import shutil
@@ -89,8 +90,27 @@ def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
     assert {"repo--check.yml", "py--tests.yml"} <= checked
 
 
-def test_the_python_matrix_leaves_out_only_the_cell_the_check_workflow_runs() -> None:
-    matrix = _load_workflow("py--tests.yml")["jobs"]["test"]["strategy"]["matrix"]
+_SUPPORTED_PYTHONS = ["3.11", "3.12", "3.13", "3.14", "3.15"]
+
+
+def _python_test_cells() -> dict[str, set[tuple[str, str]]]:
+    """Return the (OS, Python) cells py--tests.yml runs on a pull request and on every other event."""
+    expression = _load_workflow("py--tests.yml")["jobs"]["test"]["strategy"]["matrix"]["include"]
+    # The matrix is one expression that picks a JSON list by event, so the
+    # two lists are read out of its two quoted strings.
+    match = re.fullmatch(
+        r"\$\{\{ fromJSON\(github\.event_name == 'pull_request' && '(?P<pr>\[.*?\])' \|\| '(?P<full>\[.*?\])'\) \}\}",
+        expression.strip(),
+    )
+    assert match is not None, expression
+    return {
+        name: {(cell["os"], cell["python-version"]) for cell in json.loads(match.group(name))}
+        for name in ("pr", "full")
+    }
+
+
+def test_the_full_python_matrix_runs_every_supported_python_on_every_os() -> None:
+    cells = _python_test_cells()
     check_job = _load_workflow("repo--check.yml")["jobs"]["check"]
     check_python = next(
         step["with"]["python-version"]
@@ -98,12 +118,20 @@ def test_the_python_matrix_leaves_out_only_the_cell_the_check_workflow_runs() ->
         if step.get("uses", "").startswith("actions/setup-python")
     )
 
-    # The Check workflow runs the same non-browser suite on every pull request,
-    # so the matrix drops exactly that one OS and Python pair. If Check moves to
-    # another Python, this fails until the dropped cell moves with it.
+    # Pushes to main run the full set, so a failure that a pull request's
+    # trimmed set skips still shows up right after the merge. Linux leaves out
+    # only the Python that the Check workflow already runs on every pull
+    # request; Windows runs every supported Python; macOS keeps the oldest and
+    # newest. If Check moves to another Python, this fails until the matrix
+    # moves with it.
     assert check_job["runs-on"] == "ubuntu-latest"
-    assert matrix["exclude"] == [{"os": "ubuntu-latest", "python-version": check_python}]
-    assert check_python in matrix["python-version"]
+    assert check_python in _SUPPORTED_PYTHONS
+    assert cells["full"] == {
+        *(("ubuntu-latest", version) for version in _SUPPORTED_PYTHONS if version != check_python),
+        *(("windows-latest", version) for version in _SUPPORTED_PYTHONS),
+        ("macos-latest", _SUPPORTED_PYTHONS[0]),
+        ("macos-latest", _SUPPORTED_PYTHONS[-1]),
+    }
     # That only holds while Check runs on every pull request: no path filter on
     # its trigger and no condition on the step that runs check.py.
     check_events = _load_workflow("repo--check.yml")["on"]
@@ -116,6 +144,22 @@ def test_the_python_matrix_leaves_out_only_the_cell_the_check_workflow_runs() ->
     matrix_run = tests_steps["Run Python tests"]["run"]
     assert '-m "not e2e"' in matrix_run
     assert matrix_run.count("--ignore") == 1
+
+
+def test_a_pull_request_runs_a_trimmed_python_matrix() -> None:
+    cells = _python_test_cells()
+
+    # A pull request keeps every Linux cell, and Windows and macOS only at the
+    # edges, to save runner slots. Every cell it runs is in the full set, so
+    # the trimmed set can never test something main does not.
+    linux = {cell for cell in cells["full"] if cell[0] == "ubuntu-latest"}
+    assert cells["pr"] == {
+        *linux,
+        ("windows-latest", _SUPPORTED_PYTHONS[0]),
+        ("windows-latest", _SUPPORTED_PYTHONS[-1]),
+        ("macos-latest", _SUPPORTED_PYTHONS[-1]),
+    }
+    assert cells["pr"] < cells["full"]
 
 
 def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> None:
