@@ -273,14 +273,24 @@ render, or an Events action), check its security before delivery, as follows:
    defeat each check in a real browser, with a harmless test value whose effect
    is easy to see. Its report names each route as safe, author-only by design,
    or a hole.
-5. **Keep a hole private until its fix ships.** When you find one, stop, tell
-   the maintainer in your report, and do not commit, push, or open anything
-   public that describes it. The maintainer opens a private advisory as
-   [`SECURITY.md`](SECURITY.md) describes, and the fix is built in that
-   advisory's private fork. Sweep for siblings there (Mechanism 3). The fix's
-   regression tests, docs note, and changelog entry stay in the private fix
-   and become public only when the advisory is published, which overrides the
-   usual rule to publish those with the change.
+5. **Handle a hole by where it lives.** What you do depends on whether any
+   released version has it:
+   - **Only in the change you are writing:** fix it in the same pull request
+     and list it in the review record under "Fixed during the review"
+     (step 7).
+   - **On `main` but in no release yet:** fix it publicly in a small pull
+     request. Describe it neutrally, as tightening the code, without a
+     walkthrough of how to exploit it.
+   - **In a released version:** stop, tell the maintainer in your report, and
+     do not commit, push, or open anything public that describes it. The
+     maintainer opens a private advisory as [`SECURITY.md`](SECURITY.md)
+     describes, and the fix is built in that advisory's private fork. Sweep
+     for siblings there (Mechanism 3). The fix's regression tests, docs note,
+     and changelog entry stay in the private fix and become public only when
+     the advisory is published, which overrides the usual rule to publish
+     those with the change.
+
+   When you can't tell whether a release has it, treat it as released.
 6. **Say in the docs when an input is author-only.** When a value is trusted
    because only the template author writes it, the page that documents the
    API must say so, so app authors know not to pass request data into it.
