@@ -33,7 +33,7 @@ from citry.ext.events.handlers import EVENT_OPTIONS_ATTR, EventOptions, event_op
 # event name comes from the HTTP method instead of the URL, so the verb
 # route reuses the routes module's package-private request pipeline rather
 # than duplicating it.
-from citry.ext.events.routes import _serve_call, _serve_call_async
+from citry.ext.events.routes import _body_cap, _serve_call, _serve_call_async
 from citry.util.routing import RouteRequest, RouteResponse, URLRoute
 
 if TYPE_CHECKING:
@@ -196,5 +196,8 @@ def view_events_routes(citry: Citry) -> list[URLRoute]:
             handler_async=serve_view_event_async,
             name="citry_events_view_dispatch",
             methods=_VERB_METHODS,
+            # The same cap as the other dispatch routes, so the adapters stop
+            # reading an oversized body here too.
+            max_body_bytes=lambda: _body_cap(citry),
         ),
     ]
