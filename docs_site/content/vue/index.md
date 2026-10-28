@@ -87,8 +87,19 @@ sit in one template:
 ```
 
 Python sets the class and inserts `details` once. After the page loads, Vue
-changes `open`. Define `open` in `data()`, `setup()`, or
-[`js_data()`](/vue/component-options/#seed-browser-data-from-python).
+changes `open`. Define `open` in `data()` or `setup()`, or in
+[`js_data()`](/vue/component-options/#seed-browser-data-from-python) when
+the HTML the page loads with should already hide the paragraph.
+
+The server can read `js_data()` values but not `data()`, `setup()` or
+`computed`, even a `computed` that reads `js_data()`. So with `open` in
+`data()`, the page loads with the paragraph visible, and Vue hides it when it
+starts. [Before Vue starts](/vue/server-rendering/#what-a-hydrated-page-shows-before-vue-starts)
+shows what each binding does until then. If you move `open` to `js_data()`,
+remove it from `data()`: one name cannot come from both. Each server render
+then resets it to the value Python returns, so a paragraph the user opened
+closes when an event handler renders the component again. Keep `open` in
+`data()` when that matters more than the first paint.
 
 A Vue expression cannot see Python names. A common first attempt inside a
 `c-for` loop reads the loop name from Vue, and no item gets a title:

@@ -15,8 +15,8 @@ backend. They differ in how an author names and varies an entry, but they share
 one Cache extension, one key builder, and one replayable cache-entry format.
 
 This is output caching. It does not replace Citry's compiled-template cache,
-const-body cache, dependency-script cache, application data cache, response
-cache, or the proposed expression cache.
+const-body cache, dependency-script cache, application data cache, or
+response cache.
 
 The migration inventory is
 [`migration_djc_tests.md`](migration_djc_tests.md). The applicable

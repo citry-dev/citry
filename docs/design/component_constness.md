@@ -63,9 +63,8 @@ Upstream references: django-components
 [#1650](https://github.com/django-components/django-components/issues/1650)
 (preserve structured render data for safe cache replay),
 [#1326](https://github.com/django-components/django-components/issues/1326)
-(avoid double-parsing). The variable-provenance notes in
-[`TODO/v2_TODO.md`](../../TODO/v2_TODO.md) (the "Expression caching" section)
-are closely related.
+(avoid double-parsing). Citry [#20](https://github.com/citry-dev/citry/issues/20)
+tracks values derived from `Const` inputs.
 
 ---
 
@@ -417,13 +416,17 @@ already tracked in the AST.
 
 ## 10. Interactions and non-goals
 
-- **Expression caching (#1473) is a separate concern.** That is a per-value
-  memo of expression results while inputs are unchanged. It is unrelated to
-  const precomputing and must not be entangled with it. In particular, because
-  precomputed bodies are shared across elements with the same const signature but
-  different dynamic inputs, the non-const nodes in a shared body must be
-  stateless re-evaluators; any expression cache is a separate, value-keyed
-  layer that only applies to truly-unshared nodes.
+- **Non-const nodes in a precomputed body evaluate on every render**, unless
+  the component sets `pure = True`, which reuses the body within one page. A
+  precomputed body is shared across elements with the same const signature but
+  different dynamic inputs, so each non-const node in it reads its inputs and
+  evaluates its expression again each time; any future value-keyed cache must
+  not attach to these shared nodes. Reuse across renders comes from const
+  precomputing and output caching (`Component.Cache`, `<c-cache>`), and citry
+  [#20](https://github.com/citry-dev/citry/issues/20) tracks values derived
+  from `Const` inputs. The upstream django-components
+  [#1473](https://github.com/django-components/django-components/issues/1473)
+  proposed a value-keyed expression cache (closed).
 - **Slot content precomputes inside; the slot boundary stays dynamic.** Precomputing
   descends into fill bodies, the implicit default-slot body, and slot
   fallback bodies: they render against the variables of the component whose
