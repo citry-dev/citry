@@ -509,7 +509,11 @@ def test_context_menu_assets_stay_within_the_family_budgets():
     assert incremental["javascript"]["raw"] < 32 * 1024
     assert incremental["javascript"]["gzip"] < 10 * 1024
     assert incremental["javascript"]["brotli"] < 9 * 1024
-    assert family["javascript"]["raw"] < 160 * 1024
+    # 161 KiB from 160 KiB: CMenu's shared menu runtime skips writes whose
+    # value is already in place, so an idle open menu stops refocusing its
+    # item in a loop. That adds about 1 KiB raw after shorter comments. Gzip
+    # still fits its budget below, with under 100 bytes to spare.
+    assert family["javascript"]["raw"] < 161 * 1024
     # 35 KiB from 34 KiB: CMenu now scrolls only its own list to show the
     # focused item, and scrolls the page only after a key press (#383),
     # which added about 880 gzip bytes that shorter comments could not

@@ -309,7 +309,7 @@ jobs:
           packages/py/citry_ui/citry_ui/components
           packages/py/citry_ui/citry_ui/quality/tests/e2e
           packages/py/citry_ui/tests/e2e
-          -m e2e
+          -m "e2e and not weekly"
           --browser chromium
           -n 4
           --dist loadfile

@@ -430,10 +430,13 @@ uv run --no-sync pytest \
 ```
 
 The pull-request Chromium job and the scheduled Chromium, Firefox, and WebKit
-jobs use this same distribution. The browser matrix still assigns each browser
-to a separate GitHub job; the four workers run inside that browser's one job
-and do not request four GitHub runners. `--durations 30` reports the slowest
-tests so an oversized file that limits parallelism remains visible.
+jobs use this same distribution. The pull-request job selects
+`-m "e2e and not weekly"` so it skips the tests marked `weekly`; the
+scheduled cross-browser job selects `-m e2e` and runs them. The browser
+matrix still assigns each browser to a separate GitHub job; the four workers
+run inside that browser's one job and do not request four GitHub runners.
+`--durations 30` reports the slowest tests so an oversized file that limits
+parallelism remains visible.
 
 Do not put the worker flags in pytest's global `addopts`. Small focused runs,
 the ordinary Python matrix, and the docs-site E2E suite stay serial. In
@@ -601,6 +604,12 @@ Test fidelity comes first, but setup cost should match the boundary under test:
   when a cheaper test already covers the ordinary behavior. The fast profile
   omits that marker. The full profile runs it in a separate two-worker phase
   without coverage instrumentation, and the Python version matrix retains it.
+- Mark a browser test `weekly` when it is too slow to run on every pull
+  request, such as a guard that walks every browser scenario. The
+  pull-request e2e job runs `-m "e2e and not weekly"`, and the weekly
+  cross-browser job (`py--tests-cross-browser.yml`) runs `-m e2e`, so it
+  includes these tests. Give a `weekly` test the `e2e` marker too. Without
+  it, the ordinary `not e2e` jobs run the test on every pull request.
 - Citry renders on two paths: the native (Rust) render path on standard
   CPython and the Python path everywhere else
   ([`native_render.md`](design/native_render.md)). Tests run on the native

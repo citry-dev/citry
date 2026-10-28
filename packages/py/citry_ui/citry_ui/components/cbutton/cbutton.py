@@ -308,13 +308,18 @@ class CButton(LibraryComponent):
         event.stopImmediatePropagation();
         return false;
       };
-      const applyButtonConfiguration = (root, indicator, data, next) => {
+      // Skip unchanged writes: they still report a change, and a component
+      // that repairs its markup from an observer would never go idle.
+      const setAttribute = (element, name, value) => {
+        if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+      };
+      const applyButtonConfiguration = (root, indicator, data, next, { writesLoadingState = true } = {}) => {
         const isLink = root.localName === "a";
         if (isLink) {
           if (next.disabled || next.loading) {
             root.removeAttribute("href");
           } else {
-            root.setAttribute("href", data.href);
+            setAttribute(root, "href", data.href);
           }
           const tabIndex = next.disabled
             ? -1
@@ -324,7 +329,7 @@ class CButton(LibraryComponent):
           if (tabIndex === null || tabIndex === undefined) {
             root.removeAttribute("tabindex");
           } else {
-            root.setAttribute("tabindex", String(tabIndex));
+            setAttribute(root, "tabindex", String(tabIndex));
           }
         } else {
           if (root.disabled !== next.disabled) {
@@ -332,25 +337,29 @@ class CButton(LibraryComponent):
           }
         }
         root.toggleAttribute("data-disabled", next.disabled);
-        root.toggleAttribute("data-loading", next.loading);
-        root.toggleAttribute("data-block", next.block);
         if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
         if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
         if (root.dataset.size !== next.size) root.dataset.size = next.size;
-        if (root.dataset.loadingPosition !== next.loadingPosition) {
-          root.dataset.loadingPosition = next.loadingPosition;
+        // A split button's menu trigger never shows loading and uses native
+        // `disabled`, so its caller skips these.
+        if (writesLoadingState) {
+          root.toggleAttribute("data-loading", next.loading);
+          root.toggleAttribute("data-block", next.block);
+          if (root.dataset.loadingPosition !== next.loadingPosition) {
+            root.dataset.loadingPosition = next.loadingPosition;
+          }
+          if (next.loading) {
+            setAttribute(root, "aria-busy", "true");
+          } else {
+            root.removeAttribute("aria-busy");
+          }
+          if (next.disabled || next.loading) {
+            setAttribute(root, "aria-disabled", "true");
+          } else {
+            root.removeAttribute("aria-disabled");
+          }
         }
-        if (next.loading) {
-          root.setAttribute("aria-busy", "true");
-        } else {
-          root.removeAttribute("aria-busy");
-        }
-        if (next.disabled || next.loading) {
-          root.setAttribute("aria-disabled", "true");
-        } else {
-          root.removeAttribute("aria-disabled");
-        }
-        if (indicator) {
+        if (indicator && indicator.hidden !== !next.loading) {
           indicator.hidden = !next.loading;
         }
       };
@@ -415,8 +424,7 @@ class CButton(LibraryComponent):
           disabled: commonDisabled || next.menuDisabled,
           loading: false,
           block: false,
-          loadingPosition: "center",
-        });
+        }, { writesLoadingState: false });
         for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
           trigger.removeAttribute(name);
         }

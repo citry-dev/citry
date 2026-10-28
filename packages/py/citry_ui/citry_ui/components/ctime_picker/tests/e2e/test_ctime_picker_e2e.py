@@ -268,3 +268,33 @@ def test_client_locale_switch_updates_display_trigger_title_clear_and_options(
     )
     assert page.locator("#arrival-native").input_value() == "09:30"
     assert errors == []
+
+
+@pytest.mark.parametrize("list_open", [False, True], ids=["closed", "open"])
+def test_idle_time_picker_makes_no_dom_changes(page: Any, serve_citry_ui_live: Any, list_open: bool) -> None:
+    errors = _open(page, _app(), serve_citry_ui_live)
+    if list_open:
+        page.locator("#arrival").click()
+        page.wait_for_function("document.querySelector('#arrival').getAttribute('aria-expanded') === 'true'")
+    # Let the open animation and the first positioning frames finish.
+    page.wait_for_timeout(700)
+    # The picker and its listbox each watch the other's markup, so a write
+    # with an unchanged value would make their observers trigger each other
+    # forever. The page looks the same either way, so only the records of a
+    # mutation observer show it.
+    page.evaluate(
+        """() => {
+          const seen = window.__idleMutations = {};
+          new MutationObserver((records) => {
+            for (const record of records) {
+              const part = record.target.getAttribute?.('data-citry-ui-part') ?? record.target.nodeName;
+              const key = `${record.type} ${record.attributeName ?? ''} ${part}`;
+              seen[key] = (seen[key] || 0) + 1;
+            }
+          }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+        }"""
+    )
+    page.wait_for_timeout(1000)
+
+    assert page.evaluate("window.__idleMutations") == {}
+    assert errors == []
