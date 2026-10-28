@@ -306,7 +306,8 @@ def test_an_error_three_levels_deep_matches_the_snapshot(render_path: str, monke
 # fallback records which template wrote it in the browser data. The data
 # block's ids are random or counted per process, so each distinct id becomes
 # a numbered placeholder in the order it first appears; which id is which
-# stays visible.
+# stays visible. `_number_ids` numbers each distinct 64-digit hash the same
+# way, as explained there.
 SLOT_FIXTURES = tuple(name for name in FIXTURES if "fallback" in name)
 _VUE_DATA_BLOCK = re.compile(
     r'<script type="application/json" data-citry-vue-document="[^"]*">(.*?)</script>', re.DOTALL
@@ -321,10 +322,10 @@ def _number_ids(text: str) -> str:
     numbered: dict[str, str] = {}
     text = _IDS.sub(lambda match: numbered.setdefault(match.group(0), f"ID{len(numbered)}"), text)
     # The Vue manifest names each compiled definition by a SHA-256 of the
-    # browser code the compiler writes, so any compiler change moves it while
-    # the render behavior these snapshots guard stays the same. Each distinct
-    # hash gets its own numbered placeholder, so which hash is which stays
-    # visible without locking the compiler's bytes.
+    # browser code the compiler writes. Any change to the compiler's output
+    # changes the hash, while the render behavior these snapshots guard stays
+    # the same. So each distinct hash gets its own numbered placeholder, and
+    # which hash is which stays visible.
     hashes: dict[str, str] = {}
     return _HASHES.sub(lambda match: hashes.setdefault(match.group(0), f"HASH{len(hashes)}"), text)
 
