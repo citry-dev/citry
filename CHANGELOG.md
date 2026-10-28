@@ -664,9 +664,6 @@
   used to be rendered in the browser. A `<form>` attribute that may match
   the `name` or `id` of a control inside it now leaves the form's parent to
   the browser, or the whole page when the form is at the page root.
-- On PyPy, `import citry` no longer fails with `No module named
-  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
-  values and template types less fully, and both print a note saying so.
 - In Safari, when a stylesheet linked in the served page fails to load,
   Citry now requests it again and reports an error if it still fails, as it
   does in other browsers. Before, the page mounted without its styles and no
