@@ -1863,6 +1863,7 @@ fn validate_node(
     validate_ignored_element_contents(node, tag_stack, context)?;
     validate_vue_listener_modifiers(node, context)?;
     validate_reserved_citry_names(node, context)?;
+    validate_events_binding_hooks(node, context)?;
     validate_element_once_memo(node, context)?;
     validate_element_vue_directives(node, context)?;
     validate_vue_builtin_component_tag(node, context)?;
@@ -3180,6 +3181,52 @@ fn validate_reserved_citry_names(node: &Node, context: &ParserContext) -> Result
             &attr.token,
             format!(
                 "'{name}' on <{}> (line {line}, column {col}) uses a name Citry's compiler writes for itself. Rename the attribute or event.",
+                node.tag_name()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The props keys Vue reads as hooks of an element's own lifecycle
+/// (`@vnode-mounted`, `@vue:mounted` and the like) rather than as event
+/// listeners.
+const VUE_VNODE_HOOK_KEYS: [&str; 6] = [
+    "onVnodeBeforeMount",
+    "onVnodeMounted",
+    "onVnodeBeforeUpdate",
+    "onVnodeUpdated",
+    "onVnodeBeforeUnmount",
+    "onVnodeUnmounted",
+];
+
+/// Reject an Events binding (`@c-<event>`) whose event is one of Vue's
+/// element lifecycle hooks.
+///
+/// An Events binding becomes a Vue listener for `<event>`. Vue runs the
+/// lifecycle keys when the element mounts, updates or unmounts, not on a
+/// browser event, so the binding would call Citry's event dispatch with
+/// Vue's record of the element (a vnode) in place of an event. The Events
+/// extension refuses the same names when a `c-bind` mapping supplies them.
+fn validate_events_binding_hooks(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    for attr in node.attrs() {
+        let name = attr.key.content.as_str();
+        let Some(event) = name.strip_prefix("@c-") else {
+            continue;
+        };
+        let event = event.split('.').next().unwrap_or("");
+        // Vue writes `vue:mounted` as `vnode-mounted`, its older spelling.
+        let event = event
+            .strip_prefix("vue:")
+            .map_or_else(|| event.to_owned(), |hook| format!("vnode-{hook}"));
+        if !VUE_VNODE_HOOK_KEYS.contains(&vue_handler_key(&event).as_str()) {
+            continue;
+        }
+        let (line, col) = attr.token.line_col;
+        return Err(context.error_from_token(
+            &attr.token,
+            format!(
+                "'{name}' on <{}> (line {line}, column {col}) names one of Vue's element lifecycle hooks, which is not a browser event. Bind the handler to a browser event, such as '@c-click'.",
                 node.tag_name()
             ),
         ));

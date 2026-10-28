@@ -12,6 +12,7 @@ import pytest
 
 from citry import Citry, Component, InMemoryCache
 from citry._vue.capture import render_prepared
+from citry._vue.compiler import _generated_event_listener_name
 from citry._vue.direct_capture import assemble_typed_render
 from citry.client_directives import (
     RuntimeComponentEventBinding,
@@ -1583,6 +1584,143 @@ class TestComponentTagSpreadBoundary:
         assert binding["kind"] == "event"
         assert binding["name"] == "v-on:click"
         assert f"dispatchComponent('{event['id']}', $event)" in binding["value"]
+
+    @pytest.mark.parametrize(
+        ("key", "message"),
+        [
+            ("@c-citry-on-0", "uses a name Citry's compiler writes for itself"),
+            ("@c-citryOn0", "uses a name Citry's compiler writes for itself"),
+            ("@c-vnode-mounted", "names one of Vue's element lifecycle hooks"),
+            ("@c-vue:mounted", "names one of Vue's element lifecycle hooks"),
+            ("@c-vue:before-unmount", "names one of Vue's element lifecycle hooks"),
+        ],
+    )
+    def test_a_spread_key_that_is_not_a_browser_event_is_rejected(self, key, message):
+        # The template parser refuses these names when the template writes
+        # them; a `c-bind` mapping reaches the same Events check at render.
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = app
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"a": {key: "go"}}
+
+            template = '<c-Child c-bind="a"></c-Child>'
+
+        with pytest.raises(ValueError, match=re.escape(message)):
+            _typed_binding_tables(Parent)
+
+    @pytest.mark.parametrize("key", ["@c-VnodeMounted", "@c-vnodeMounted", "@c-vue:updated"])
+    def test_a_lifecycle_hook_spelled_another_way_is_rejected(self, key):
+        # Vue camelizes an event name on a component tag, so these spellings
+        # reach the same hook keys.
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = app
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"a": {key: "go"}}
+
+            template = '<c-Child c-bind="a"></c-Child>'
+
+        with pytest.raises(ValueError, match="names one of Vue's element lifecycle hooks"):
+            _typed_binding_tables(Parent)
+
+    @pytest.mark.parametrize("key", ["@c-x\\", '@c-a"b', "@c-[globalThis]", "@c-a`b", "@c-1x", "@c-a;b"])
+    def test_a_spread_event_name_outside_the_allowed_characters_is_rejected(self, key):
+        # A component tag's event name is written into the compiled render
+        # code as a props key, so only letters, digits, '-', '_' and ':' may reach it.
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = app
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"a": {key: "go"}}
+
+            template = '<c-Child c-bind="a"></c-Child>'
+
+        with pytest.raises(ValueError, match="needs an event name of letters, digits"):
+            _typed_binding_tables(Parent)
+
+    def test_a_dynamic_component_spread_key_that_is_not_a_browser_event_is_rejected(self):
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = app
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"a": {"@c-vnode-mounted": "go"}, "name": "Child"}
+
+            template = '<c-component c-is="name" c-bind="a"></c-component>'
+
+        with pytest.raises(ValueError, match="names one of Vue's element lifecycle hooks"):
+            _typed_binding_tables(Parent)
+
+    @pytest.mark.parametrize("event", ["x\\", 'a"b', "[globalThis]", "", "1x"])
+    def test_the_vue_listener_name_is_checked_where_it_is_written(self, event):
+        # A second check where Citry writes `v-on:<event>`, so a later route to
+        # that point cannot bring an unchecked name into the compiled code.
+        binding = {"event": event, "prevent": False, "stop": False, "self": False, "once": False, "key": None}
+        with pytest.raises(ValueError, match="must start with a letter and use only letters"):
+            _generated_event_listener_name(binding)
+        assert (
+            _generated_event_listener_name({**binding, "event": "update:model-value", "prevent": True})
+            == "v-on:update:model-value.prevent"
+        )
+
+    @pytest.mark.parametrize("key", ["@c-citry-on-0", "@c-vnode-mounted", "@c-vue:mounted"])
+    def test_an_element_spread_key_that_is_not_a_browser_event_is_rejected(self, key):
+        app = Citry(secret=SIGNING_KEY)
+
+        class Comp(Component):
+            citry = app
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": {key: "go"}}
+
+            template = '<div c-bind="attrs"></div>'
+
+        with pytest.raises(ValueError, match=r"not a browser event|writes for itself"):
+            _rendered(Comp())
 
     def test_runtime_component_event_carrier_cannot_be_forged(self):
         forged = RuntimeComponentEventBinding("@c-click", "go", "<c-Child c-bind='a'>", (9, 19))

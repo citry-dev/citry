@@ -248,6 +248,14 @@
     or a malformed string or `url()`, and any value containing `</style`
     or `<!--`. `rgb()`, `calc()`, and `url()` values, SVG data URLs
     included, still work.
+  - An Events binding on one of Vue's lifecycle hooks, such as
+    `@c-vnode-mounted` or `@c-vue:mounted`, whether the template writes it
+    or a `c-bind` mapping key supplies it. Vue ran such a binding when the
+    element or component mounted or updated, not on a browser event. Bind
+    the handler to a browser event, such as `@c-click`.
+  - An Events binding whose event name starts with something other than a
+    letter, or contains a character other than a letter, digit, `-`, `_`
+    or `:`, such as `@c-1x` or `@c-a;b`. Rename the event.
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old

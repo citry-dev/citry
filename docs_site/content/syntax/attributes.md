@@ -391,6 +391,8 @@ accepts.
 
     Citry's own `@c-` and `:c-` Events bindings are the exception: a
     `c-bind` key may set them. See [Bind events in templates](/events/bindings/).
+    Such a key chooses which handler runs and on which event, so build the
+    mapping in your own code; do not take its keys or values from a request.
     A `v-on` value containing `{{ ... }}` fails too.
 
 To give Vue a value from Python, return it from `js_data()` and read it in

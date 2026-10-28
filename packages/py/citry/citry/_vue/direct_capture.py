@@ -82,7 +82,7 @@ from .compiler import (
     _DynamicElementDeclaration,
     _ElementBindingDeclaration,
     _generated_event_args,
-    _generated_event_modifiers,
+    _generated_event_listener_name,
     _generated_vue_attr,
     _guard_template_braces,
     _LocalCallBindingDeclaration,
@@ -2779,8 +2779,10 @@ def assemble_typed_render(
                                     "runtime component-boundary Events bindings accept a handler name "
                                     "without arguments"
                                 )
-                            suffix = _generated_event_modifiers(spec)
-                            generated_name = f"v-on:{spec['event']}{suffix}"
+                            try:
+                                generated_name = _generated_event_listener_name(spec)
+                            except ValueError as error:
+                                raise UnsupportedPreparedView(str(error)) from error
                             if generated_name in emitted_listener_names:
                                 raise UnsupportedPreparedView(
                                     f"component call resolves more than one listener named {generated_name!r}"
@@ -4897,11 +4899,14 @@ def _event_directive_attrs(part: PreparedElementOpen | PreparedDynamicElementOpe
         if event in seen_events:
             raise UnsupportedPreparedView("prepared Vue target supports one Events binding per DOM event")
         seen_events.add(event)
-        suffix = _generated_event_modifiers(binding)
         authored_args = _generated_event_args(binding["args"])
+        try:
+            listener_name = _generated_event_listener_name(binding)
+        except ValueError as error:
+            raise UnsupportedPreparedView(str(error)) from error
         attrs.append(
             _generated_vue_attr(
-                f"v-on:{event}{suffix}",
+                listener_name,
                 f"$citryEvents.dispatch('{binding['id']}', $event{authored_args})",
             )
         )

@@ -70,6 +70,27 @@ def _generated_event_args(args: object, *, el_expression: str = "$event.currentT
     return f", (($el) => ({args}))({el_expression})"
 
 
+# The event names an Events binding may use, the same rule
+# `ext/events/bindings.py` applies when it builds the binding. The name is
+# written into the generated Vue template as `v-on:<event>`, and the Vue
+# compiler copies it into the render function's code as a quoted props key
+# without escaping it. Checking again where the name is written means a route
+# added later cannot bring a quote, backslash or bracket into that code.
+_VUE_EVENT_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_:-]*")
+
+
+def _generated_event_listener_name(binding: Mapping[str, object]) -> str:
+    """Return the ``v-on:<event><modifiers>`` name Citry writes for one ``@c-*`` event binding."""
+    event = binding["event"]
+    if type(event) is not str or _VUE_EVENT_NAME_RE.fullmatch(event) is None:
+        msg = (
+            f"an Events binding's event name {event!r} must start with a letter and use only letters, digits, "
+            "'-', '_' and ':'"
+        )
+        raise ValueError(msg)
+    return f"v-on:{event}{_generated_event_modifiers(binding)}"
+
+
 def _generated_event_modifiers(binding: Mapping[str, object]) -> str:
     """
     Return the Vue modifier suffix for one ``@c-*`` event binding, such as ``.prevent.enter``.
@@ -1432,13 +1453,12 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                     if event in seen_events:
                         raise ValueError("prepared Vue target supports one Events binding per DOM event")
                     seen_events.add(event)
-                    suffix = _generated_event_modifiers(binding)
                     binding_id = str(binding["id"])
                     args = binding["args"]
                     authored_args = _generated_event_args(args)
                     attrs.append(
                         _generated_vue_attr(
-                            f"v-on:{event}{suffix}",
+                            _generated_event_listener_name(binding),
                             f"$citryEvents.dispatch('{binding_id}', $event{authored_args})",
                         )
                     )

@@ -75,7 +75,7 @@ from .capture import (
 from .compiler import (
     _ElementBindingDeclaration,
     _generated_event_args,
-    _generated_event_modifiers,
+    _generated_event_listener_name,
     _generated_vue_attr,
     _guard_template_braces,
     _RuntimeEventDeclaration,
@@ -3128,12 +3128,11 @@ class _Compiler:
         if len(event_names) != len(set(event_names)):
             self.safe_body = False
         for binding in node._event_bindings:
-            suffix = _generated_event_modifiers(binding)
             args = binding["args"]
             authored_args = _generated_event_args(args)
             attrs.append(
                 _generated_vue_attr(
-                    f"v-on:{binding['event']}{suffix}",
+                    _generated_event_listener_name(binding),
                     f"$citryEvents.dispatch('{binding['id']}', $event{authored_args})",
                 )
             )

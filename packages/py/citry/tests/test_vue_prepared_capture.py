@@ -2321,7 +2321,7 @@ def test_repeated_receiver_fills_allocate_distinct_caller_bindings() -> None:
     assert [root.prepared_data[key] for key in sorted(root.prepared_data) if key.startswith("citryText")] == ["A", "B"]
 
 
-@pytest.mark.parametrize("name", ["innerHTML", "outerHTML", "textContent", "innerText"])
+@pytest.mark.parametrize("name", ["textContent", "innerText"])
 def test_dynamic_dom_properties_and_listeners_are_rejected_before_compilation(name: str) -> None:
     registry = Citry(autodiscover=False, extensions=[])
 
@@ -2341,7 +2341,8 @@ def test_dynamic_dom_properties_and_listeners_are_rejected_before_compilation(na
         )
 
 
-def test_inline_event_handler_from_a_mapping_is_rejected_while_rendering() -> None:
+@pytest.mark.parametrize("name", ["onClick", "innerHTML", "outerHTML"])
+def test_inline_event_handler_from_a_mapping_is_rejected_while_rendering(name: str) -> None:
     registry = Citry(autodiscover=False, extensions=[])
 
     class Page(Component):
@@ -2349,11 +2350,11 @@ def test_inline_event_handler_from_a_mapping_is_rejected_while_rendering() -> No
         template = '<div c-bind="attrs">safe fallback</div>'
 
         def template_data(self, kwargs, slots):
-            return {"attrs": {"onClick": "globalThis.marker = 1"}}
+            return {"attrs": {name: '<img src="x" onerror="globalThis.pwned=true">'}}
 
     # The shared mapping rule refuses the name while the template renders,
     # before the prepared Vue checks see it.
-    with pytest.raises(ValueError, match=r"may not set an attribute name\s+that starts with 'on'"):
+    with pytest.raises(ValueError, match=r"An attribute name from data may not start with 'on' or be innerHTML"):
         render_prepared(Page())
 
 

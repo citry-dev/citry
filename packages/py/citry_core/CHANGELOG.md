@@ -19,6 +19,10 @@
 
 ### Fixed
 
+- `parse_template()` now rejects an Events binding on one of Vue's element
+  lifecycle hooks, such as `@c-vnode-mounted` or `@c-vue:mounted`. Vue ran
+  such a binding when the element mounted or updated, not on a browser
+  event.
 - `parse_template()` now rejects Alpine's `.minus`, `.underscore`, and
   `.spacebar` key modifiers on a Vue listener, with a hint, because Vue
   matches none of these names and the listener would never run.

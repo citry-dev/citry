@@ -25,6 +25,10 @@ event:
 | `@c-click="rate({stars: 5})"` | Pass arguments as one object. The handler receives it as `data`. |
 | `@c-submit.prevent="submit"` | Collect the form's named controls and call `submit` instead of submitting the page. |
 
+An event name must start with a letter and use only letters, digits, `-`,
+`_` and `:`. Vue's lifecycle hooks, such as `vnode-mounted`, are not events,
+so Citry refuses them.
+
 Modifiers after the event name control which events send a call, and when:
 
 | Modifier | Use |
