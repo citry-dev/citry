@@ -9,7 +9,7 @@
 // - Unknown: anything else, or any doubt. The server declines such a name.
 
 import { INTERFACES_WITHOUT_TAG } from "./data.mjs";
-import { NOT_MIRRORING, PROSE_MIRRORING, SUPPORTED_AT_FLOOR } from "./reviewed.mjs";
+import { PRESENCE_ONLY_BOOLEANS, NOT_MIRRORING, PROSE_MIRRORING, SUPPORTED_AT_FLOOR } from "./reviewed.mjs";
 
 /**
  * The oldest browser versions Citry supports. The client already needs them,
@@ -44,9 +44,10 @@ export function classify(data) {
     }
     let answers = answersFor(data, name);
     // A browser at the floor that lacks this element's interface gives the
-    // tag the unknown-element chain, so a name has to agree under both.
+    // tag the unknown-element chain, so a name has to agree under both,
+    // unless the attribute is listed in PRESENCE_ONLY_BOOLEANS.
     if (!supportedAtFloor(lookupCompat(data.bcd, name, null))) {
-      answers = combineAnswers(answers, base);
+      answers = combineAnswers(answers, base, (key) => PRESENCE_ONLY_BOOLEANS.has(`${name}.${key}`));
     }
     const differences = {};
     for (const key of new Set([...Object.keys(answers), ...Object.keys(base)])) {
@@ -155,7 +156,10 @@ function decide(data, name, occurrences, interfaces) {
     if (!presentAfterFloor(compat)) {
       continue;
     }
-    const reviewedSupport = interfaces.some((owner) => SUPPORTED_AT_FLOOR.has(`${owner}.${name}`));
+    const reviewedSupport = interfaces.some(
+      (owner) =>
+        SUPPORTED_AT_FLOOR.has(`${owner}.${name}`) || PRESENCE_ONLY_BOOLEANS.has(`${owner}.${name}`),
+    );
     if (kind === "boolean-mirror" && (reviewedSupport || supportedAtFloor(compat))) {
       booleanMirror = true;
       continue;
@@ -416,12 +420,15 @@ export function compareVersions(left, right) {
   return 0;
 }
 
-function combineAnswers(own, base) {
+function combineAnswers(own, base, keepBoolean = () => false) {
   const combined = {};
   for (const key of new Set([...Object.keys(own), ...Object.keys(base)])) {
     const left = own[key] ?? "WritesText";
     const right = base[key] ?? "WritesText";
-    const answer = left === right ? left : "Unknown";
+    // A listed boolean keeps the element's answer (see
+    // PRESENCE_ONLY_BOOLEANS).
+    const keep = left === "ReflectBoolean" && right === "WritesText" && keepBoolean(key);
+    const answer = left === right || keep ? left : "Unknown";
     if (answer !== "WritesText") {
       combined[key] = answer;
     }

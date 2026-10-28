@@ -359,6 +359,29 @@ describe("classify", () => {
     assert.equal(base.zznodata, "Unknown");
   });
 
+  it("writes a listed boolean by presence even where the floor lacks its member", () => {
+    // `inert` arrived after the floor, and `<dialog>` is missing at the floor
+    // in one browser. Both are in PRESENCE_ONLY_BOOLEANS, so they stay
+    // booleans, while an unlisted late boolean (`zzlate`) stays Unknown.
+    const data = makeData();
+    data.idl.interfaces.get("HTMLElement").members.push(booleanReflect("inert"));
+    data.idl.interfaces.set("HTMLDialogElement", {
+      inherits: "HTMLElement",
+      extAttrs: [],
+      members: [booleanReflect("open")],
+    });
+    data.elements.set("dialog", "HTMLDialogElement");
+    data.bcd[0].api.HTMLElement.inert = feature({ ...atFloor(), safari: { version_added: "15.5" } });
+    data.bcd[0].api.HTMLDialogElement = {
+      __compat: { support: { ...atFloor(), firefox: { version_added: "98" } } },
+      open: feature({ ...atFloor(), firefox: { version_added: "98" } }),
+    };
+    const table = classify(data);
+    assert.equal(table.base.inert, "ReflectBoolean");
+    assert.equal(table.elements.dialog.open, "ReflectBoolean");
+    assert.equal(table.base.zzlate, "Unknown");
+  });
+
   it("calls a member only BCD knows Unknown", () => {
     assert.equal(classify(makeData()).base.zzbcdonly, "Unknown");
   });
