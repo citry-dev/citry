@@ -1589,7 +1589,8 @@ uv's release notes when raising the pin.
 The pins cover the build backends of this repository's own packages, plus
 the ones in `THIRD_PARTY_BUILD_REQUIREMENTS` in `scripts/build_constraints.py`:
 backends that a locked third-party package needs on a supported interpreter it
-ships no wheel for, such as Cython for PyYAML on CPython 3.15 and PyPy 3.11.
+ships no wheel for, such as Cython for PyYAML on CPython 3.15 and PyPy 3.11,
+and pkgconfig for Brotli on free-threaded CPython 3.14.
 When uv has to build some other third-party package from its sdist, that
 backend has no pin and the build stops with `Hash-checking is required, but no
 trusted hash was provided`. Add the backend to that list, then run
