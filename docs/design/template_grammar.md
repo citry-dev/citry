@@ -427,10 +427,17 @@ derived from their declared inputs. The built-in rules are:
 | `c-for` | `each` | `each` |
 | `c-empty` | (none) | (none) |
 | `c-raw` | (none) | (none) |
-| `c-fill` | `name`; `c-name`; `data`; `fallback`; `c-bind` | one of `name` / `c-name` / `c-bind` |
-| `c-slot` | any (no name means the `default` slot) | (none) |
+| `c-fill` | `name`; `c-name`; `data`; `fallback`; `v-slot`; `c-bind` | one of `name` / `c-name` / `c-bind` |
+| `c-slot` | any (no name means the `default` slot); Vue syntax only as static slot props such as `:row` / `v-bind:row` | (none) |
 | `c-component` | any | one of `is` / `c-is` / `c-bind` |
 | `c-element` | any (only the `default` slot) | one of `is` / `c-is` / `c-bind` |
+
+The parser also checks the Vue slot props on `<c-slot>` and the `v-slot`
+pattern on `<c-fill>` when the template loads. A slot prop needs a fixed
+name without modifiers. The names `name` and `key` are rejected, as are
+names that start with `c-`, `$`, `_`, or `citry`. A `v-slot` value must be
+one object pattern or one name. The rejected forms are listed in
+`docs_site/content/vue/slots.md` ("Slot syntax errors").
 
 For a user component, its `Component.Kwargs` become the allowed and required
 attributes, so `<c-Table bogus="1">` (unknown input) or `<c-Table>` (missing a

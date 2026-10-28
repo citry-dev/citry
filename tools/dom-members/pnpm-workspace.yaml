@@ -1,0 +1,4 @@
+# This directory is its own pnpm root, outside the repository's workspace, so
+# the browser data it reads stays out of every workspace install. Without
+# this file, pnpm would treat it as part of the workspace above it.
+packages: []

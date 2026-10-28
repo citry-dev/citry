@@ -6725,6 +6725,27 @@ _STRUCTURAL_ATTRIBUTES: dict[str, tuple[_SyntaxSpec, ...]] = {
 # tags, so add the parser's five control-flow forms after slot-owned fields.
 _STRUCTURAL_ATTRIBUTES["c-slot"] = (*_STRUCTURAL_ATTRIBUTES["c-slot"], *_GENERAL_DIRECTIVES[:5])
 _DYNAMIC_TARGET_ATTRIBUTES = _syntax_specs(kind="attribute", context="dynamic-target")
+# The Vue forms that carry Vue slot props. They are kept apart from the
+# structural lists above, which mirror the parser list that citry-core exports.
+_SLOT_PROP_SPEC = _SyntaxSpec(
+    ":",
+    "attribute",
+    "Pass Vue data to the fill",
+    "Pass the value of a Vue expression to the fill as a Vue slot prop, which the fill reads with "
+    "`v-slot`. Give it a fixed name, without modifiers.",
+    "https://citry.dev/vue/slots/#scoped-slots",
+    insert_text=':${1:row}="${2:expression}"',
+    repeatable=True,
+)
+_FILL_SLOT_PROPS_SPEC = _SyntaxSpec(
+    "v-slot",
+    "attribute",
+    "Read the slot's Vue props",
+    "Read the Vue slot props that the matching `<c-slot>` passes, as one object pattern such as `{ row }` or "
+    "one name. Choose the slot with `name`.",
+    "https://citry.dev/vue/slots/#scoped-slots",
+    insert_text='v-slot="{ ${1:row} }"',
+)
 
 
 def _is_semantic_component_tag(tag_name: str, registered_component: bool = False) -> bool:
@@ -6735,7 +6756,12 @@ def _is_semantic_component_tag(tag_name: str, registered_component: bool = False
 
 def _vue_completion_specs(tag_name: str, *, semantic_component: bool) -> tuple[_SyntaxSpec, ...]:
     """Select Vue spellings that are valid on this authored element."""
-    if tag_name.lower() in RESERVED_TAG_NAMES:
+    normalized = tag_name.lower()
+    if normalized == "c-slot":
+        return (_SLOT_PROP_SPEC,)
+    if normalized == "c-fill":
+        return (_FILL_SLOT_PROPS_SPEC,)
+    if normalized in RESERVED_TAG_NAMES:
         return ()
     event_specs = (_VUE_SYNTAX_BY_LABEL["v-on"], *_VUE_EVENT_COMPLETIONS)
     binding_specs = (_VUE_SYNTAX_BY_LABEL["v-bind"], *_VUE_BINDING_COMPLETIONS)

@@ -349,6 +349,8 @@ class _FillFragment:
     public_name: str
     lexical_owner: str
     body: _DefinitionFragment
+    # The fill's `v-slot` pattern (`None` when it reads no Vue slot props).
+    vue_pattern: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -596,6 +598,34 @@ def assemble_typed_render(
     context_binding_attrs = "".join(f' :{name}="{name}"' for name in template_context_names)
     context_binding_pattern = "" if not template_context_names else '="{ ' + ", ".join(template_context_names) + ' }"'
 
+    def fill_binding_pattern(vue_pattern: str | None) -> str:
+        """
+        Return the parameter text of one fill's Vue slot function, starting at its `=`.
+
+        Citry's context names come first, then the author's `v-slot` names:
+        `{ row }` becomes `{ $i18n, row }`, and an identifier `p` becomes
+        `{ $i18n, key: citrySlotKey, ...p }`. A fill without a pattern keeps
+        the slot function with the context names only.
+        """
+        if vue_pattern is None:
+            return context_binding_pattern
+        names = [*template_context_names]
+        # Vue adds the key of Citry's `v-if` around each outlet to the props
+        # it passes. Binding it to a reserved name keeps it out of a props
+        # object or `...rest` the author reads. A `...` inside a literal
+        # default only adds an unused name.
+        if not vue_pattern.startswith("{") or "..." in vue_pattern:
+            names.append("key: citrySlotKey")
+        if not names:
+            return _authored_vue_attr("", vue_pattern)
+        joined = ", ".join(names)
+        if vue_pattern.startswith("{"):
+            authored = vue_pattern[1:-1].strip()
+            merged = f"{{ {joined}, {authored} }}" if authored else f"{{ {joined} }}"
+        else:
+            merged = f"{{ {joined}, ...{vue_pattern} }}"
+        return _authored_vue_attr("", merged)
+
     def owner_values(owner_id: str) -> dict[str, object]:
         """Return ``prepared_by_occurrence[owner_id]`` for an owner whose values assembly reads or merges."""
         values = prepared_by_occurrence[owner_id]
@@ -669,6 +699,21 @@ def assemble_typed_render(
         for author_owner, receiving_owner, reads in browser_read_trackers:
             if owner_id in {author_owner, receiving_owner}:
                 reads.append(description)
+
+    def receiver_label(render_id: str | None, occurrence: str) -> str:
+        """Name a receiver for an error: a built-in by the tag the author wrote, any other by its class."""
+        class_id = transparent_class_ids.get(render_id) if render_id is not None else None
+        try:
+            component = citry.get_component_by_class_id(class_id or occurrence_types[occurrence])
+        except KeyError:
+            component = None
+        # Only Citry's own classes carry the token, so an author's class
+        # named `Provide` keeps its name.
+        if component is not None and getattr(component, "_citry_builtin_token", None) is not None:
+            tag = _BUILTIN_RECEIVER_TAGS.get(component.__name__)
+            if tag is not None:
+                return tag
+        return class_name_of(render_id, occurrence)
 
     def class_name_of(render_id: str | None, occurrence: str) -> str:
         """Name the component that owns a render, preferring the transparent component itself."""
@@ -1562,8 +1607,8 @@ def assemble_typed_render(
             if len({fill.site_id for fill in fills}) != len(fills):
                 raise UnsupportedPreparedView("prepared component call has duplicate supplied fill sites")
             for fill in fills:
-                output.append(_fill_opening(fill.site_id, context_binding_pattern))
                 if fill.lexical_owner == definition_owner_id:
+                    output.append(_fill_opening(fill.site_id, fill_binding_pattern(fill.vue_pattern)))
                     output.extend(fill.body)
                 else:
                     ancestor = occurrence_id
@@ -1592,9 +1637,19 @@ def assemble_typed_render(
                     # placement key is the same for every instance.
                     forwarded_site_id = f"citrySlot{_digest('forwarded', fill.site_id, child_placement_key)[:16]}"
                     supplied_fills[definition_owner_id].append(
-                        _FillFragment(forwarded_site_id, fill.public_name, fill.lexical_owner, fill.body)
+                        _FillFragment(
+                            forwarded_site_id, fill.public_name, fill.lexical_owner, fill.body, fill.vue_pattern
+                        )
                     )
-                    output.append(f'<slot name="{forwarded_site_id}"{context_binding_attrs}></slot>')
+                    if fill.vue_pattern is None:
+                        output.append(_fill_opening(fill.site_id, context_binding_pattern))
+                        output.append(f'<slot name="{forwarded_site_id}"{context_binding_attrs}></slot>')
+                    else:
+                        # A pattern names only the props its author reads, so
+                        # pass on the whole props object the receiver's outlet
+                        # gave, for the author's slot function to destructure.
+                        output.append(_fill_opening(fill.site_id, '="citrySlotProps"'))
+                        output.append(f'<slot name="{forwarded_site_id}" v-bind="citrySlotProps"></slot>')
                 output.append("</template>")
 
         def transform_parts(
@@ -2031,6 +2086,16 @@ def assemble_typed_render(
                         selected = yield from by_driver(walker)
                     if watches_reads:
                         browser_read_trackers.pop()
+                    if (flattened_transparent_receiver or copied_outside_author) and (
+                        part.vue_props or part.fill_source.vue_pattern is not None
+                    ):
+                        # The fill is copied into another template, so there is
+                        # no Vue slot function to receive the props. Checked
+                        # before the reads below, which would call a `v-slot`
+                        # name the author's Vue data.
+                        raise UnsupportedPreparedView(
+                            describe_inline_scoped_fill(part, receiver_label(part.receiver_render_id, receiver_owner))
+                        )
                     if fill_reads and copied_outside_author:
                         raise UnsupportedPreparedView(
                             describe_fill_outside_author(part, lexical_owner, receiver_owner, fill_reads[0])
@@ -2044,7 +2109,18 @@ def assemble_typed_render(
                     if flattened_transparent_receiver:
                         output.extend(selected)
                         continue
-                    fill = _FillFragment(site_id, part.public_name, lexical_owner, selected)
+                    fill = _FillFragment(
+                        site_id, part.public_name, lexical_owner, selected, part.fill_source.vue_pattern
+                    )
+                    # The receiving `<c-slot>`'s Vue slot props, written on
+                    # every outlet below. Only the fill that `<c-slot>` called
+                    # carries them (`capture_slot_call` gives any other Slot,
+                    # a fallback handle included, none), and its outlet lands
+                    # in the receiver's own definition, so the expressions
+                    # read the receiver's data.
+                    outlet_attrs = context_binding_attrs + "".join(
+                        " " + _authored_vue_attr(key, value) for key, value in part.vue_props
+                    )
                     if receiver_owner != output_owner:
                         if containing_slot is None:
                             raise UnsupportedPreparedView("direct slot result moved outside its receiver")
@@ -2058,21 +2134,19 @@ def assemble_typed_render(
                                 f"container_lexical={containing_lexical!r}"
                             )
                         supplied_fills[receiver_owner].append(fill)
-                        output.append(f'<slot name="{site_id}"{context_binding_attrs}></slot>')
+                        output.append(f'<slot name="{site_id}"{outlet_attrs}></slot>')
                     elif nested_template:
                         supplied_fills[output_owner].append(fill)
-                        output.append(f'<slot name="{site_id}"{context_binding_attrs}></slot>')
+                        output.append(f'<slot name="{site_id}"{outlet_attrs}></slot>')
                     elif lexical_owner == output_owner:
-                        _append_slot_outlet(
-                            output, site_id, selected, context_binding_attrs, keyed=slot_key is not None
-                        )
+                        _append_slot_outlet(output, site_id, selected, outlet_attrs, keyed=slot_key is not None)
                     else:
                         supplied_fills[output_owner].append(fill)
                         _append_slot_outlet(
                             output,
                             site_id,
                             _DefinitionFragment.empty(),
-                            context_binding_attrs,
+                            outlet_attrs,
                             keyed=slot_key is not None,
                         )
                     continue
@@ -4067,6 +4141,42 @@ def _component_call_binding_attr(key: str, value: str) -> str:
 
     """
     return key if value == "" else _authored_vue_attr(key, value)
+
+
+# The built-ins that copy a slot's content in place, by the tag an author writes.
+_BUILTIN_RECEIVER_TAGS = {"Provide": "<c-provide>", "Cache": "<c-cache>", "DynamicElement": "<c-element>"}
+
+
+def describe_inline_scoped_fill(part: DirectProjectionRender, receiver: str) -> str:
+    """Explain why Vue slot props cannot pass through a slot whose content Citry copies in place."""
+    copies = f"{receiver} copies the content of slot '{part.public_name}' into the template around it"
+    if part.fill_source.vue_pattern is None:
+        # The receiver's own `<c-slot>` passes the props, so the fix is in it.
+        names = ", ".join(repr(key) for key, _ in part.vue_props)
+        verb = "has" if len(part.vue_props) == 1 else "have"
+        return (
+            f"{copies}, as components with transparent = True do, so its slot "
+            f"{'prop' if len(part.vue_props) == 1 else 'props'} {names} {verb} no Vue slot to travel through. "
+            f"Remove transparent = True from {receiver}, or pass the value as Python slot data ('c-' attributes "
+            "on '<c-slot>', 'data=\"...\"' on the fill)."
+        )
+    pattern = f"'v-slot=\"{part.fill_source.vue_pattern}\"'"
+    if receiver.startswith("<c-"):
+        # A built-in passes no Vue slot props at all, so the pattern can only go.
+        hint = (
+            " To fill a slot of a Vue component, write '<template #name>' inside '<c-element>'."
+            if receiver == "<c-element>"
+            else ""
+        )
+        return (
+            f"{copies}, so the fill's {pattern} has no Vue slot to read from. {receiver} passes no Vue slot "
+            f"props; remove 'v-slot' from the fill.{hint}"
+        )
+    return (
+        f"{copies}, as components with transparent = True do, so the fill's {pattern} has no Vue slot to "
+        f"read from. Remove 'v-slot' from the fill and read Python slot data with 'data=\"...\"', or remove "
+        f"transparent = True from {receiver}."
+    )
 
 
 def _fill_opening(site_id: str, context_binding_pattern: str = "") -> str:

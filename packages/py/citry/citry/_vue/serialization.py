@@ -294,18 +294,23 @@ class HydrationDecline:
     ``browser-text``, ``browser-condition`` (a ``v-if`` test) and
     ``browser-list`` (a ``v-for`` source). Codes for what the server does not
     write the way Vue does: ``unsupported-attribute``, ``unsupported-tag``,
-    ``unsupported-directive``, ``unsupported-comment``, ``text-value`` (a NUL,
-    a carriage return or an unpaired surrogate in text or an attribute value,
-    or a leading newline the parser would drop), ``parser-repair`` (an element
-    the browser's HTML parser would move), ``opaque-html`` (HTML Python hands
-    over as a finished string, such as ``<c-raw>`` contents, that the page's
-    parser would change, that holds a ``<script>``, or that starts with a
-    comment),
+    ``unsupported-directive``, ``unsupported-comment``,
+    ``form-named-property`` (a ``<form>`` key that the ``name`` or ``id`` of
+    one of its controls turns into a form property, or might, when the server
+    cannot see every control's name; the browser then sets a property where
+    the server would write an attribute),
+    ``text-value`` (a NUL, a carriage return or an unpaired surrogate in text
+    or an attribute value, or a leading newline the parser would drop),
+    ``parser-repair`` (an element the browser's HTML parser would move),
+    ``opaque-html`` (HTML Python hands over as a finished string, such as
+    ``<c-raw>`` contents, that the page's parser would change, that holds a
+    ``<script>``, or that starts with a comment),
     ``component-text-root`` (a component whose render is one text node),
     ``component-attrs``
     (attributes passed to a component), ``component-lookup`` (a component
     whose occurrence or render program is missing, including one whose render
-    function could not be read), ``slot-props`` (a scoped slot),
+    function could not be read), ``slot-props`` (a ``v-slot`` pattern that nests a pattern or gives a
+    default),
     ``dynamic-slots``, ``dynamic-component``, ``dynamic-attribute-name``,
     ``render-shape``, ``render-helper``, ``nesting-depth`` and ``host-root``
     (text directly inside the Vue host element).

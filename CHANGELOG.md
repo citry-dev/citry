@@ -16,7 +16,17 @@
   pass it as `Citry(model_base=MyModel)`. A dataclass base or
   `typing.NamedTuple` works too
   ([details](https://citry.dev/concepts/inputs-and-validation/#model-base)).
+- A component can pass Vue data to a fill, as a Vue scoped slot: write
+  `<c-slot name="item" :row="row" />`, and read it in the fill with
+  `<c-fill name="item" v-slot="{ row }">`. Python slot data (`c-item`,
+  `data="..."`) works beside it
+  ([details](https://citry.dev/vue/slots/#scoped-slots)). When the server
+  knows the slot's values, it writes the fill's HTML with them.
 - Citry now supports Python 3.15.
+- You can now use `.outside`, `.window`, `.document`, `.debounce`, and
+  `.throttle` on Vue listeners such as `@click` on HTML elements, as in
+  `@click.outside="open = false"` or `@input.debounce.300ms="search()"`
+  ([details](https://citry.dev/syntax/vue/#listener-modifiers)).
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
   spell check no longer waits behind the app's slower calls. A detached
@@ -278,6 +288,15 @@
 
 ### Fixes
 
+- A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
+  modifier now fails when the template loads and says what to write
+  instead. Vue matches none of these names, so the listener never ran.
+- In a component that uses Vue, a fill that holds a Citry component now
+  fails at render, with an error that names both components, when the
+  receiving component's `<c-slot>` sits inside a Vue `v-for`. The page used
+  to fail in the browser once the list held more than one item. Loop with
+  `c-for` around the `<c-slot>` instead
+  ([details](https://citry.dev/vue/slots/#scoped-slot-limits)).
 - Without a configured cache, the stylesheets that `css_data()` produces
   no longer pile up in memory, one per distinct set of values, for the
   life of the process. They now count toward `vue_asset_max_bytes`, and
@@ -559,6 +578,14 @@
   The same rendered component id was encountered more than once`, and on
   a Vue page it failed even for a component used on its own, as did a
   hook that returns `result` unchanged.
+- In a component that uses Vue, a static attribute that the element has
+  no property for, or whose property mirrors the attribute as text, such as
+  `foo="1"`, is now written by the server, where the element around it
+  used to be rendered in the browser. `inert`, `autofocus` outside form
+  controls, `<dialog open>`, and a `<form>` attribute that may match the `name` or
+  `id` of a control inside it now leave that part to the browser. Such a
+  form now leaves its parent, or the whole page when the form is at the
+  page root, to the browser.
 
 ### Performance
 
