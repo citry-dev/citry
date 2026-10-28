@@ -286,6 +286,18 @@
 
 ### Fixes
 
+- In a component that uses Vue, when `<c-fill fallback=...>` shows a
+  fallback whose `<c-slot>` the receiving component placed inside content
+  it passes to another component, the error now says what to change
+  instead of reporting an internal error. When a fallback shown this way
+  prints a `Slot`, such as `{{ icon }}`, the error now names it as slot
+  content instead of calling it a `<c-slot>` outlet.
+- In a component that uses Vue, when your fill puts `{{ fallback }}` inside
+  a component that is not transparent, such as
+  `<c-Box>{{ fallback }}</c-Box>`, the error now says what to change
+  instead of reporting an internal error. When the receiving component is
+  transparent, this used to render without the fallback and now fails with
+  the same error.
 - `citry check` now reports a `Secret` that a `js_data()` value sends when
   the value spans several lines without parentheses, such as a conditional
   with its `else` on its own line, and it checks a `c-values` that starts

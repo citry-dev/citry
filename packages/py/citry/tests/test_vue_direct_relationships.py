@@ -1827,6 +1827,489 @@ $component({});
         Caller().render().serialize()
 
 
+def test_a_fallback_shown_by_a_fill_names_a_captured_slot_as_one() -> None:
+    # The fallback prints a Slot it received from Python; the author wrote
+    # no `<c-slot>` there, so the error must not say it did.
+    registry = Citry(autodiscover=False)
+
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-slot name="body">{{ icon }}</c-slot></article>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"icon": slots["icon"]}
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver>
+  <c-fill name="icon"><b>i</b></c-fill>
+  <c-fill name="body" fallback="fallback">{{ fallback }}</c-fill>
+</c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+    message = (
+        "Caller shows the fallback of Receiver's 'body' slot through '<c-fill fallback=...>', so that fallback"
+        " cannot hold a Slot value that it prints, such as one taken from slots."
+    )
+    with pytest.raises(TypeError, match=re.escape(message)):
+        Caller().render().serialize()
+
+
+def test_a_cached_render_names_a_captured_slot_the_same_way() -> None:
+    # The cache stores which slot results an outlet rendered, so a replay
+    # gives the same error as the first render.
+    registry = Citry(autodiscover=False)
+
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-slot name="body">{{ icon }}</c-slot></article>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"icon": slots["icon"]}
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver>
+  <c-fill name="icon"><b>i</b></c-fill>
+  <c-fill name="body" fallback="fallback">{{ fallback }}</c-fill>
+</c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+        class Cache:
+            enabled = True
+
+    for _attempt in range(2):
+        with pytest.raises(
+            TypeError, match=re.escape("cannot hold a Slot value that it prints, such as one taken from slots")
+        ):
+            Caller().render().serialize()
+
+
+def _forwarded_fallback_through_a_receiver_fill(registry: Citry) -> type[Component]:
+    class Mid(Component):
+        citry = registry
+        template = """
+<section><c-slot /></section>
+"""
+        js = """
+$component({});
+"""
+
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-Mid><c-slot name="body"><i>x</i></c-slot></c-Mid></article>
+"""
+        js = """
+$component({});
+"""
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver><c-fill name="body" fallback="fallback">{{ fallback }}</c-fill></c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+    return Caller
+
+
+def _forwarded_fallback_through_a_middle_slot(registry: Citry) -> type[Component]:
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-slot name="body"><i>x</i></c-slot></article>
+"""
+        js = """
+$component({});
+"""
+
+    class Middle(Component):
+        citry = registry
+        template = """
+<div><c-Receiver><c-fill name="body"><c-slot name="mid" /></c-fill></c-Receiver></div>
+"""
+        js = """
+$component({});
+"""
+
+    class Page(Component):
+        citry = registry
+        template = """
+<main><c-Middle><c-fill name="mid" fallback="fallback">{{ fallback }}</c-fill></c-Middle></main>
+"""
+        js = """
+$component({});
+"""
+
+    return Page
+
+
+@pytest.mark.parametrize(
+    ("build", "message"),
+    [
+        (
+            _forwarded_fallback_through_a_receiver_fill,
+            "Caller shows the fallback of Receiver's 'body' slot through '<c-fill fallback=...>', but Receiver"
+            " puts that '<c-slot>' inside the content it passes to Mid",
+        ),
+        (
+            _forwarded_fallback_through_a_middle_slot,
+            "Page shows the fallback of Middle's 'mid' slot through '<c-fill fallback=...>', but Middle puts that"
+            " '<c-slot>' inside the content it passes to Receiver",
+        ),
+    ],
+    ids=["receiver-outlet-in-a-fill", "middle-outlet-in-a-fill"],
+)
+def test_a_fallback_whose_outlet_sits_in_another_components_fill_names_what_to_change(build, message) -> None:
+    # The fallback holds only plain HTML, but its `<c-slot>` lives in a fill
+    # for another component, so the caller's template cannot place it.
+    page = build(Citry(autodiscover=False))
+
+    with pytest.raises(TypeError, match=re.escape(message)):
+        page().render().serialize()
+
+
+def test_a_deeper_chain_names_the_component_the_receiver_passes_content_to() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Inner(Component):
+        citry = registry
+        template = """
+<section><c-slot /></section>
+"""
+        js = """
+$component({});
+"""
+
+    class Outer(Component):
+        citry = registry
+        template = """
+<div><c-Inner><c-slot /></c-Inner></div>
+"""
+        js = """
+$component({});
+"""
+
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-Outer><c-slot name="body"><i>x</i></c-slot></c-Outer></article>
+"""
+        js = """
+$component({});
+"""
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver><c-fill name="body" fallback="fallback">{{ fallback }}</c-fill></c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+    # Receiver passes its content to Outer, not to Inner, whose template
+    # the fallback ends up in.
+    with pytest.raises(
+        TypeError, match=re.escape("but Receiver puts that '<c-slot>' inside the content it passes to Outer")
+    ):
+        Caller().render().serialize()
+
+
+def _fallback_inside_a_wrapper(
+    fill: str,
+    *,
+    wrap_is_transparent: bool = False,
+    forward_is_transparent: bool = False,
+    receiver_is_transparent: bool = False,
+    cache_caller: bool = False,
+) -> type[Component]:
+    registry = Citry(autodiscover=False)
+
+    class Wrap(Component):
+        citry = registry
+        transparent = wrap_is_transparent
+        template = """
+<span class="w"><c-slot /></span>
+"""
+
+    class Inner(Component):
+        citry = registry
+        template = """
+<b><c-slot /></b>
+"""
+        js = """
+$component({});
+"""
+
+    class Forward(Component):
+        citry = registry
+        transparent = forward_is_transparent
+        template = """
+<p><c-Inner><c-slot /></c-Inner></p>
+"""
+
+    class Receiver(Component):
+        citry = registry
+        transparent = receiver_is_transparent
+        template = """
+<article><c-slot name="body"><i>x</i></c-slot></article>
+"""
+
+    class Caller(Component):
+        citry = registry
+        template = f"""
+<main><c-Receiver><c-fill name="body" fallback="fallback">{fill}</c-fill></c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+        class Cache:
+            enabled = cache_caller
+
+        def template_data(self, kwargs, slots):
+            # Counts the renders that did not come from the cache.
+            data_calls.append(1)
+            return {}
+
+    data_calls: list[int] = []
+    Caller.data_calls = data_calls
+    return Caller
+
+
+def _fallback_inside_message(wrapper: str) -> str:
+    return (
+        "Caller shows the fallback of Receiver's 'body' slot through '<c-fill fallback=...>', but it puts"
+        f" that fallback inside {wrapper}'s slot."
+    )
+
+
+@pytest.mark.parametrize(
+    ("fill", "wrapper"),
+    [
+        ("<c-Wrap>{{ fallback }}</c-Wrap>", "Wrap"),
+        ("<c-Wrap><em>{{ fallback }}</em></c-Wrap>", "Wrap"),
+        # The message names the innermost component. The fallback must move
+        # out of it first, and each outer component gets its own error after
+        # that.
+        ("<c-Wrap><c-Inner>{{ fallback }}</c-Inner></c-Wrap>", "Inner"),
+        # Forward passes its slot on to Inner, so the fallback lands in
+        # Inner's template, but Forward is the component the caller wrote.
+        ("<c-Forward>{{ fallback }}</c-Forward>", "Forward"),
+    ],
+    ids=["direct", "inside-html", "nested-components", "forwarded-slot"],
+)
+def test_a_fallback_inside_a_component_that_is_not_transparent_names_what_to_change(fill: str, wrapper: str) -> None:
+    # The fallback is plain HTML, but the caller shows it inside another
+    # component's slot, which has no place for Receiver's fallback content.
+    page = _fallback_inside_a_wrapper(fill)
+
+    with pytest.raises(TypeError, match=re.escape(_fallback_inside_message(wrapper))):
+        page().render().serialize()
+
+
+def test_a_fallback_inside_a_component_names_a_transparent_receiver() -> None:
+    page = _fallback_inside_a_wrapper("<c-Wrap>{{ fallback }}</c-Wrap>", receiver_is_transparent=True)
+
+    with pytest.raises(TypeError, match=re.escape(_fallback_inside_message("Wrap"))):
+        page().render().serialize()
+
+
+def test_a_fallback_inside_a_component_names_the_slot_after_a_cache_replay() -> None:
+    page = _fallback_inside_a_wrapper("<c-Wrap>{{ fallback }}</c-Wrap>", cache_caller=True)
+
+    # The second render replays Caller from the cache, which must keep the
+    # fallback's own slot name rather than Wrap's.
+    for _attempt in range(2):
+        with pytest.raises(TypeError, match=re.escape(_fallback_inside_message("Wrap"))):
+            page().render().serialize()
+    assert page.data_calls == [1]
+
+
+@pytest.mark.parametrize(
+    ("fill", "wrap_is_transparent"),
+    [
+        ("<c-Wrap>{{ fallback }}</c-Wrap>", True),
+        ('<span class="w">{{ fallback }}</span>', False),
+    ],
+    ids=["transparent-component", "html-element"],
+)
+def test_the_fixes_the_fallback_message_suggests_render(fill: str, wrap_is_transparent: bool) -> None:
+    page = _fallback_inside_a_wrapper(fill, wrap_is_transparent=wrap_is_transparent)
+
+    assert '<article><!--[--><span class="w"><i>x</i></span><!--]--></article>' in page().render().serialize()
+
+
+def test_a_transparent_wrapper_that_passes_its_slot_on_is_named_with_the_receivers_slot() -> None:
+    # A transparent Forward is copied into place, so the fallback's
+    # `<c-slot>` ends up in content Forward passes to Inner.
+    page = _fallback_inside_a_wrapper("<c-Forward>{{ fallback }}</c-Forward>", forward_is_transparent=True)
+
+    with pytest.raises(
+        TypeError,
+        match=re.escape(
+            "Caller shows the fallback of Receiver's 'body' slot through '<c-fill fallback=...>', but Forward"
+            " puts that '<c-slot>' inside the content it passes to Inner"
+        ),
+    ):
+        page().render().serialize()
+
+
+def test_a_fallback_shown_by_a_fill_names_a_printed_template_value() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-slot name="body">{{ tpl }}</c-slot></article>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"tpl": kwargs["tpl"]}
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver c-tpl="<b>t</b>"><c-fill name="body" fallback="fallback">{{ fallback }}</c-fill></c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+    with pytest.raises(
+        TypeError, match=re.escape("so that fallback cannot hold a template value that it prints (a c- attribute")
+    ):
+        Caller().render().serialize()
+
+
+def test_a_transparent_caller_is_named_in_the_fallback_message() -> None:
+    # The fill is written in the transparent Caller, which the author knows,
+    # though its content lands in Page's template.
+    registry = Citry(autodiscover=False)
+
+    class Mid(Component):
+        citry = registry
+        template = """
+<section><c-slot /></section>
+"""
+        js = """
+$component({});
+"""
+
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-Mid><c-slot name="body"><i>x</i></c-slot></c-Mid></article>
+"""
+        js = """
+$component({});
+"""
+
+    class Caller(Component):
+        citry = registry
+        transparent = True
+        template = """
+<main><c-Receiver><c-fill name="body" fallback="fallback">{{ fallback }}</c-fill></c-Receiver></main>
+"""
+
+    class Page(Component):
+        citry = registry
+        template = """
+<div><c-Caller /></div>
+"""
+        js = """
+$component({});
+"""
+
+    with pytest.raises(
+        TypeError, match=re.escape("In a component that uses Vue, Caller shows the fallback of Receiver's")
+    ):
+        Page().render().serialize()
+
+
+def test_a_hook_that_moves_a_fallback_keeps_the_internal_message() -> None:
+    # No `<c-fill fallback=...>` is involved, so the message for that case
+    # must not claim one.
+    saved: list[CitryRender] = []
+
+    class Relocate(Extension):
+        name = "relocate"
+
+        def on_slot_rendered(self, ctx):
+            if ctx.slot_name != "s":
+                return ctx.result
+            if not saved:
+                saved.append(ctx.slot())
+                return ctx.result
+            return CitryRender(parts=[saved[0]], context=saved[0].context)
+
+    registry = Citry(autodiscover=False, extensions=[Relocate])
+
+    class Mid(Component):
+        citry = registry
+        template = """
+<section><c-slot /></section>
+"""
+        js = """
+$component({});
+"""
+
+    class B(Component):
+        citry = registry
+        template = """
+<p><c-Mid><c-slot name="s"><i>fb</i></c-slot></c-Mid></p>
+"""
+        js = """
+$component({});
+"""
+
+    class A(Component):
+        citry = registry
+        template = """
+<p><c-slot name="s"><i>fa</i></c-slot><c-B /></p>
+"""
+        js = """
+$component({});
+"""
+
+    class Root(Component):
+        citry = registry
+        template = """
+<main><c-A /></main>
+"""
+        js = """
+$component({});
+"""
+
+    with pytest.raises(TypeError, match="moved across unrelated receivers"):
+        Root().render().serialize()
+
+
 def test_a_fill_that_shows_the_fallback_keeps_its_own_vue_bindings() -> None:
     # Only the fallback is checked for Vue data reads. The caller wrote the
     # rest of its fill, so its bindings around `{{ fallback }}` read its own
