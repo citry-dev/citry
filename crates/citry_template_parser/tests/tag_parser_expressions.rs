@@ -91,6 +91,23 @@ mod tests {
     }
 
     #[test]
+    fn test_an_expression_that_closes_its_hidden_parentheses_is_an_error() {
+        // The parser wraps each expression in an extra pair of parentheses, so
+        // `a) or (b` would otherwise parse as `(a) or (b)`. Python rejects the
+        // text as written, and so does the parser, in text and in an
+        // attribute alike. The same holds for a `c-for` clause.
+        assert_parse_error("{{ a) or (b }}", "unmatched ')'");
+        assert_parse_error(r#"<div c-title="a) or (b"></div>"#, "unmatched ')'");
+        assert_parse_error(
+            r#"<c-for each="x in a) or (b">{{ x }}</c-for>"#,
+            "unmatched ')'",
+        );
+        // An expression with no content would be the empty tuple `()`.
+        assert_parse_error("{{ }}", "expected an expression, found none");
+        assert_parse_error("{{ # note }}", "expected an expression, found none");
+    }
+
+    #[test]
     fn test_django_block_delimiter_is_literal_text() {
         // V3 has no `{% ... %}` block-tag language. Even an unterminated DTL
         // opener is ordinary text rather than a half-recognized directive.

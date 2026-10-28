@@ -2504,7 +2504,9 @@ class ForNode(Node):
             # the targets in a 1-tuple keeps single- and multi-target binding
             # uniform: `(x,)` for one target, `(k, v,)` for several.
             clause = each_attr.expr
-            gen_src = f"(({', '.join(targets)},) for {clause})"
+            # The newline keeps a trailing `# comment` in the clause from
+            # hiding the closing parenthesis.
+            gen_src = f"(({', '.join(targets)},) for {clause}\n)"
             self._iter_eval = compile_expr(gen_src, sandboxed=context.sandboxed)
 
         count = 0

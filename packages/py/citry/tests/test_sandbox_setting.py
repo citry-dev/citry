@@ -73,6 +73,49 @@ def test_sandbox_off_is_byte_identical_to_sandbox_on():
     assert ">p-b<" not in on
 
 
+@pytest.mark.parametrize("source", ["a) or (b", "lambda x: x + 2)(5", "", "# note"])
+def test_both_modes_reject_text_only_the_hidden_parentheses_make_valid(source):
+    # Both modes read the expression inside an extra pair of parentheses, so
+    # text that closes them early, or holds no expression, would otherwise run.
+    for sandboxed in (True, False):
+        with pytest.raises(SyntaxError):
+            compile_expr(source, sandboxed=sandboxed)
+
+
+@pytest.mark.parametrize("sandbox", [True, False])
+def test_a_loop_clause_may_end_with_a_comment(sandbox):
+    c = Citry(sandbox_expressions=sandbox)
+
+    class Loop(Component):
+        citry = c
+        template = """
+          <c-for each="item in items  # every item">{{ item }}</c-for>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"items": ["a", "b"]}
+
+    assert "ab" in Loop().render().serialize()
+
+
+@pytest.mark.parametrize("sandbox", [True, False])
+def test_a_shorthand_loop_may_filter_its_items(sandbox):
+    # `x in items if x` is a loop clause, not an expression of its own.
+    c = Citry(sandbox_expressions=sandbox)
+
+    class Loop(Component):
+        citry = c
+        template = """
+          <ul><li c-for="x in items if x">{{ x }}</li></ul>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"items": ["a", "", "b"]}
+
+    html = Loop().render().serialize()
+    assert html.count("<li") == 2
+
+
 def test_default_is_sandboxed_and_blocks_unsafe_access():
     c = Citry()
 

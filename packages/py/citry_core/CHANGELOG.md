@@ -34,6 +34,19 @@
   fail with "Citry accepted a Python expression that the formatter provider
   rejected".
 
+### Fixed
+
+- `parse_template()`, `safe_eval()` and `compile_expr()` now reject an
+  expression with an unmatched `)`, such as `{{ a) or (b }}` or
+  `lambda x: x + 2)(5`, with Python's message, "unmatched ')'". Citry parses
+  each expression inside an extra pair of parentheses, so such text used to
+  run as `(a) or (b)` or `(lambda x: x + 2)(5)`. An expression with nothing
+  in it but spaces or a comment, such as `{{ }}`, is now an error too; it
+  used to render as `()`. `compile_expr(sandboxed=False)` now accepts
+  exactly the text the sandbox accepts, including its nesting limit.
+- `parse_template()` now accepts an `if` filter in a shorthand loop, such as
+  `<li c-for="x in items if x">`, as it does on `<c-for each>`.
+
 ## v1.9.0
 
 ### Changed

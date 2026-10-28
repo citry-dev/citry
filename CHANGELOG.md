@@ -286,6 +286,9 @@
 
 ### Fixes
 
+- A `<c-for>` whose clause ends with a comment, such as
+  `each="item in items  # every item"`, now renders. It used to fail with
+  "unexpected EOF while parsing".
 - In a component that uses Vue, when `<c-fill fallback=...>` shows a
   fallback whose `<c-slot>` the receiving component placed inside content
   it passes to another component, the error now says what to change

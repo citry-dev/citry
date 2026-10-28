@@ -256,6 +256,10 @@ def compile_expr(source: str, *, sandboxed: bool = True) -> Callable[[Mapping[st
     if sandboxed:
         return safe_eval(source)
 
+    # The Rust check rejects what only the `(\n...\n)` wrapper makes valid,
+    # such as `a) or (b` or an empty expression, so this path accepts exactly
+    # the text the sandbox accepts.
+    _rust.safe_eval.safe_eval(source)
     # Plain Python, no interceptors. Compiled once and reused across renders.
     code = compile(f"(\n{source}\n)", "<expr>", "eval")
 
