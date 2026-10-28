@@ -44,10 +44,6 @@ four kinds of State:
   and restore gives the same values.
 - **A browser write skipping validation:** writes are merged into the
   model's JSON form and validated, and the whole validated model is kept.
-- **Pydantic v1 nested subclasses:** a v1 nested model is dumped through
-  its declared class, so a subclass instance cannot add fields the State
-  class does not declare to the page.
-  `test_a_v1_nested_subclass_does_not_leak_its_extra_fields` covers this.
 - **Options that change what is stored or shown** are refused when the
   component class is defined, at any depth of nested models:
   - a frozen model or field;
@@ -70,6 +66,10 @@ four kinds of State:
   it restores the token and when it checks a browser write, so an alias
   never fills another field. `test_an_alias_never_fills_another_field`
   covers this.
+- **Pydantic v1 nested subclass:** a subclass instance in a v1 nested field
+  could put fields the State class does not declare into the page. Citry
+  now dumps v1 values through the declared class.
+  `test_a_v1_nested_subclass_does_not_leak_its_extra_fields` covers this.
 
 ## Not tested
 
