@@ -215,8 +215,11 @@ changed text:
 5. Every `Text` token containing non-whitespace content is byte-identical and
    remains in the same structural position.
 6. Every whitespace boundary classified as sensitive or verbatim by section 6
-   is byte-identical. Only structural whitespace may be inserted, removed, or
-   normalized.
+   is byte-identical. Only structural whitespace may be removed or
+   normalized. The formatter never puts whitespace into a gap between items
+   where the source had none, because two items written with nothing between
+   them render with nothing between them. Section 6.7 describes the one
+   exception, inside a reformatted `script` or `style` body.
 7. In M0 every expression is exact. M1 changes only parser-accepted outer
    trivia of a short, comment-free `{{ ... }}` expression; its semantic content
    and every expression-valued attribute stay exact. M2/M3 may change a region
@@ -437,9 +440,13 @@ When a start tag becomes multiline inside a structural parent, M0 also
 normalizes the immediate structural gaps needed to put the tag's opening `<`
 on its own line and keep a following parent end tag from sharing the child's
 line. It never does this at a sensitive, component, root-margin, verbatim, or
-suppressed boundary. An empty element's end tag may still follow the start-tag
-delimiter directly, as in `></div>`. This narrow surrounding-line rule is part
-of opening-tag layout; general body and end-tag layout remains M1 work.
+suppressed boundary, or where the author wrote no whitespace. There the
+wrapped tag keeps its place on the line, and its attributes indent from the
+column where the tag starts, so a tag that follows a sibling on the same line
+indents its attributes far to the right. An empty element's end tag may still
+follow the start-tag delimiter directly, as in `></div>`. This narrow
+surrounding-line rule is part of opening-tag layout; general body and end-tag
+layout remains M1 work.
 
 Each block child owns only its leading structural gap. A child owns its trailing
 gap only when it is the last significant child and that gap leads directly to
@@ -490,7 +497,7 @@ whitespace, before choosing line breaks. There are three classes:
 |---|---|---|
 | Verbatim | Whitespace belongs to raw or whitespace-preserving content, or to a suppressed range. | Preserve exact bytes. |
 | Sensitive | Whitespace presence or spelling may affect inline, mixed, expression-adjacent, or unknown component output. | Preserve exact bytes and never introduce a new text boundary. |
-| Structural | The gap is between known block-like structures under the fixed default-CSS model. | Normalize to the required newline and indentation, including inserting a gap that was absent. |
+| Structural | The gap holds authored whitespace and lies between known block-like structures under the fixed default-CSS model. | Normalize to the required newline and indentation. |
 
 The classifier is deliberately local and conservative:
 
@@ -507,14 +514,17 @@ The classifier is deliberately local and conservative:
    is treated as one mixed-content group: all of that body's gaps stay exact.
    This avoids partially reindenting a body whose local whitespace decisions
    are coupled by inline or uncertain content.
-3. A gap is structural only when its parent is a known structural container
-   and both rendered neighbors are known block-like HTML structures. Known
+3. A gap is structural only when the author wrote whitespace in it, its
+   parent is a known structural container, and both rendered neighbors are
+   known block-like HTML structures. A gap with no whitespace is sensitive
+   everywhere: filling it would add a text node to the rendered output, even
+   between `<td>` cells, `<option>`s or at the start of a `c-fill` body. Known
    block containers are structural containers; `select` and `optgroup` are the
    contextual exceptions that are structural for their `option`/`optgroup`
    children without becoming block-like at their own outer boundary. A missing
    neighbor at the start or end of a structural container counts as block-like.
-   A document-root leading or trailing margin is structural only when authored
-   whitespace already exists; the printer never creates a new root margin.
+   The same rule covers a document-root leading or trailing margin, so the
+   printer never creates a new root margin.
 4. `c-if`, `c-elif`, `c-else`, `c-for`, and `c-empty` are transparent for
    classification. Their rendered edge kind is derived from the first or last
    possible descendant of every branch. If branches disagree or an edge can be
@@ -565,7 +575,9 @@ remain sensitive instead of guessing.
 M1 applies M0 opening-tag rules and additionally formats complete structure:
 
 - a block container with structural child gaps prints its opening tag,
-  indented children, and closing tag on separate lines;
+  indented children, and closing tag on separate lines; a child that touches
+  its neighbour stays on that neighbour's line, and its own children indent
+  from the column where it starts;
 - nested block structure gains one indentation level at a time;
 - an empty element stays on one line when its complete tag fits;
 - end-tag spelling and case are preserved, while surrounding structural
@@ -577,7 +589,9 @@ M1 applies M0 opening-tag rules and additionally formats complete structure:
   the gaps immediately after the component start tag and before its end tag
   remain exact, except for the structural body of exact lowercase `c-fill`;
 
-Thus ordinary block markup becomes conventional:
+Thus ordinary block markup with whitespace between its tags becomes
+conventional, while the same markup written with its tags touching stays as
+written:
 
 ```citry-html
 <main>
@@ -598,20 +612,32 @@ But inline and mixed content keeps its meaningful spelling:
 The last two lines remain observably different. M1 never turns the first into
 the second or vice versa.
 
-Python triple-quoted host literals use canonical host framing whenever the
-formatted template or direct JavaScript/CSS asset is multiline. The opening
-delimiter remains on the assignment line, asset content starts on the next
-line at two spaces beyond the assignment indentation, and the closing
-delimiter occupies its own line at the assignment indentation. Citry,
-JavaScript, and CSS nesting adds two spaces relative to that asset base. A
-formatted asset that remains single-line retains inline delimiter framing.
+Python triple-quoted host literals use canonical host framing when the
+formatted template or direct JavaScript/CSS asset is multiline, subject to the
+template rule in the next paragraph. The opening delimiter remains on the
+assignment line, asset content starts on the next line at two spaces beyond
+the assignment indentation, and the closing delimiter occupies its own line at
+the assignment indentation. Citry, JavaScript, and CSS nesting adds two spaces
+relative to that asset base. A formatted asset that remains single-line
+retains inline delimiter framing.
 
-This host rule deliberately may introduce or normalize root whitespace in the
-decoded template value. It is the Python-source counterpart of M1 structural
-whitespace normalization. Authors whose runtime or authored-CSS contract makes
-that whitespace significant can protect the template with `fmt: off`. A
-literal containing an escaped whitespace character that prevents a physical
-line-for-line rewrite retains its existing host framing.
+A template takes that framing at each edge separately. An edge where the
+formatted template begins or ends with an HTML whitespace character (space,
+tab, newline, carriage return or form feed) gets the newline and indentation
+above. An edge where the template touches its quote keeps touching it, because
+a component renders the text at its template's edges and a new newline there
+would change the HTML. When the start touches the opening quote, the later
+lines keep the columns the formatter gave them, counted from the left edge of
+the file, because Citry removes only indentation that every line shares and
+the first line has none; a closing quote on a line of its own still moves to
+the assignment indentation, because loading empties a line of only spaces.
+JavaScript and CSS assets take the framing at both edges. The rule normalizes
+existing root whitespace in the decoded template value. It is the
+Python-source counterpart of M1 structural whitespace normalization. Authors
+whose runtime or authored-CSS contract makes that whitespace significant can
+protect the template with `fmt: off`. A literal containing an escaped
+whitespace character that prevents a physical line-for-line rewrite retains
+its existing host framing.
 
 ### 6.4 Comments under the whitespace model
 
@@ -696,12 +722,13 @@ quote choices remain unchanged.
 If recursive formatting makes a template value multiline, the containing
 opening tag becomes multiline under section 6.1. The attribute begins on its
 own continuation line, its nested structural content is indented one level
-beyond the attribute, the closing fragment or nested end tag aligns with the
-value's opening delimiter, and the outer quote remains attached to that close.
-The outer tag delimiter then occupies its own line. A fragment is formatted as
-a structural container for known block-like children only between margins that
-were already authored inside its `<>` and `</>` delimiters. A compact fragment
-does not gain new fragment-root margins.
+beyond the attribute where the author wrote whitespace between its tags, the
+closing fragment or nested end tag aligns with the value's opening delimiter,
+and the outer quote remains attached to that close. The outer tag delimiter
+then occupies its own line. A fragment is formatted as a structural container
+for known block-like children only between margins that were already authored
+inside its `<>` and `</>` delimiters. A compact fragment does not gain new
+fragment-root margins.
 
 The recursive formatter applies only when edits can be represented without
 changing the outer literal's meaning. If inserted whitespace would require
@@ -774,7 +801,11 @@ protected-range, and host-literal checks pass.
 The Citry/HTML printer always owns the outer `script` or `style` tag and its
 indentation. Eligible embedded output is reindented as one block; the lexical
 guards above exclude tokens for which that transform could alter meaningful
-raw whitespace or start position.
+raw whitespace or start position. The block goes on lines of its own between
+the start and end tags, even when the body touched them. That newline is
+inside JavaScript or CSS text, so the page behaves the same, but the
+element's `textContent` changes; this is the one place the formatter adds
+whitespace to text in the page where the author wrote none.
 
 ### 6.8 Protected content
 
@@ -1482,7 +1513,8 @@ M0/M1 cases include:
 - bare, static, expression, template, event, binding, and metadata attributes;
 - normal, self-closing, void, fragment, and structural Citry tags;
 - lowercase and class-name component spellings;
-- nested known block elements with absent, one-line, and multiline gaps;
+- nested known block elements with absent, one-line, and multiline gaps,
+  where an absent gap stays absent;
 - inline siblings with no gap, one space, and a newline gap, all kept distinct;
 - mixed text, expression, inline element, and block element bodies;
 - custom elements and Citry components treated as sensitive at their

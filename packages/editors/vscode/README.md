@@ -191,7 +191,7 @@ The command palette provides:
 - **Citry: Format at Cursor** - format only the direct component region under
   the cursor.
 
-Formatting expands Citry/HTML structure and formats embedded JavaScript and
+Formatting lays out Citry/HTML structure and formats embedded JavaScript and
 CSS while preserving readable Python triple-quoted strings:
 
 ![Citry formatting an inline template, JavaScript, and CSS inside a Python component](https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/formatting.gif)

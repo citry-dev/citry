@@ -288,6 +288,12 @@
 
 ### Fixes
 
+- `citry format` and the editor's format command no longer add a line break
+  where two tags touch, such as between `<td>` cells or `<option>`s or just
+  inside a `<c-fill>`, or at the start or end of a template string written
+  right against its quotes. That line break was new text in the rendered
+  HTML. Whitespace you wrote is still re-indented; to spread compact markup
+  over lines, add a line break between the tags once.
 - `citry format` and the editor's format command no longer add trailing
   spaces to blank lines in a component's `template`, `js`, or `css` string
   in a Python file, which Ruff flags as `W293`.

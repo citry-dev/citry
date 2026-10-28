@@ -386,6 +386,9 @@ class AlpineAttributeFinding:
 # set the rule. The application's LintSettings cannot be read there, so a
 # warning keeps a value that a page script reads from failing the check.
 _NO_SETTINGS_ATTRIBUTE_VALUE_SEVERITY: Literal["warning"] = "warning"
+# The characters HTML treats as whitespace between tags. Python's
+# `str.isspace()` also accepts a non-breaking space, which a page shows.
+_HTML_WHITESPACE = frozenset(" \t\n\r\f")
 
 
 @dataclass(frozen=True, slots=True)
@@ -3193,10 +3196,26 @@ class PythonTemplateSourceMap:
         newline = _detected_newline(self._host_source)
         return text if newline == "\n" else text.replace("\n", newline)
 
-    def _canonicalize_multiline_framing(self, formatted: str) -> str:
-        """Indent multiline triple-string asset content relative to its assignment."""
+    def _canonicalize_multiline_framing(self, formatted: str, *, frame_flush_edges: bool) -> str:
+        """
+        Indent multiline triple-string asset content relative to its assignment.
+
+        The content moves onto lines of its own between the quotes.
+        ``frame_flush_edges`` says whether that may add a newline at an edge
+        where the asset touches its quote. Pass ``False`` for a template: a
+        component renders the text at its template's edges, so a new newline
+        there would be new text in the HTML.
+        """
         part = self._require_rewrite_literal()
         if len(part.delimiter) != 3 or "\n" not in formatted:
+            return formatted
+        # A template edge may take the new newline only where the loaded
+        # template already has whitespace there. The test uses HTML's own
+        # whitespace, because a non-breaking space is text in HTML, so a
+        # newline added next to it would be new text.
+        frame_start = frame_flush_edges or formatted[:1] in _HTML_WHITESPACE
+        frame_end = frame_flush_edges or formatted[-1:] in _HTML_WHITESPACE
+        if not frame_start and not frame_end:
             return formatted
         if any(
             unit.value.isspace()
@@ -3207,6 +3226,17 @@ class PythonTemplateSourceMap:
             return formatted
         if re.search(r"\{#\s*fmt:\s+off\s*#\}", self.template_source):
             return formatted
+        assignment_indent = _line_indent_at(self._host_source, part.literal_start)
+        if not frame_start:
+            # The first line stays against the opening quote, so the lines
+            # share no indentation that loading could remove, and they keep
+            # the columns the formatter gave them. A closing quote on a line
+            # of its own is still safe, because loading empties a line of
+            # only spaces.
+            through_last_newline = formatted.rstrip(" \t")
+            if not through_last_newline.endswith("\n"):
+                return formatted
+            return f"{through_last_newline}{assignment_indent}"
 
         lines = formatted.split("\n")
         while lines and not lines[0].strip(" \t\f"):
@@ -3218,7 +3248,6 @@ class PythonTemplateSourceMap:
 
         content_indent = _common_line_indent(lines)
         relative_lines = [line.removeprefix(content_indent) for line in lines]
-        assignment_indent = _line_indent_at(self._host_source, part.literal_start)
         template_indent = f"{assignment_indent}  "
         # Leave a line of only spaces and tabs empty. Indenting it would leave
         # trailing whitespace that Ruff reports as W293, and
@@ -3226,6 +3255,9 @@ class PythonTemplateSourceMap:
         # asset does not change. A form feed is kept, because `textwrap.dedent`
         # keeps it on Python 3.11 to 3.13.
         body = "\n".join(f"{template_indent}{line}" if line.strip(" \t") else "" for line in relative_lines)
+        # A template whose end touches the closing quote keeps it there.
+        if not frame_end:
+            return f"\n{body}"
         return f"\n{body}\n{assignment_indent}"
 
     def _require_rewrite_literal(self) -> _LiteralPart:
@@ -4493,7 +4525,10 @@ def finish_python_component_assets(
                 )
                 if translated_notice not in notices:
                     notices.append(translated_notice)
-            formatted = prepared.region.source_map._canonicalize_multiline_framing(outcome.source)
+            formatted = prepared.region.source_map._canonicalize_multiline_framing(
+                outcome.source,
+                frame_flush_edges=prepared.region.kind is not PythonComponentAssetKind.TEMPLATE,
+            )
             providers.update(outcome.providers)
         else:
             public_id, _direct_id = prepared.request_ids[0]
@@ -4507,7 +4542,10 @@ def finish_python_component_assets(
                     )
                 notices.append(direct_notice)
             else:
-                formatted = prepared.region.source_map._canonicalize_multiline_framing(formatted)
+                formatted = prepared.region.source_map._canonicalize_multiline_framing(
+                    formatted,
+                    frame_flush_edges=prepared.region.kind is not PythonComponentAssetKind.TEMPLATE,
+                )
             if result.status is EmbeddedResultStatus.FORMATTED and result.provider is not None:
                 providers.add(result.provider)
 
@@ -4712,7 +4750,7 @@ def format_python_templates(
         try:
             region.source_map._require_rewrite_literal()
             formatted = _format_template(region.source_map.template_source)
-            formatted = region.source_map._canonicalize_multiline_framing(formatted)
+            formatted = region.source_map._canonicalize_multiline_framing(formatted, frame_flush_edges=False)
             region_replacements = region.source_map._rewrite_replacements(formatted)
         except _CoreTemplateFormatError as error:
             failure_notices.append(PythonTemplateNotice(region.component_name, str(error)))

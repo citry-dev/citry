@@ -1004,12 +1004,22 @@ mod tests {
         );
         assert!(
             verify_contract_projection(
-                "<div><section></section></div>",
+                "<div> <section></section> </div>",
                 "<div>\n<section></section>\n</div>",
                 ProjectionCapability::OpeningTags,
             )
             .is_ok()
         );
+        // A gap the author left empty renders as nothing, so filling it is a
+        // change to the output, not to the layout.
+        assert!(matches!(
+            verify_contract_projection(
+                "<div><section></section></div>",
+                "<div>\n<section></section>\n</div>",
+                ProjectionCapability::OpeningTags,
+            ),
+            Err(ContractError::Mismatch { .. })
+        ));
         assert!(matches!(
             verify_contract_projection(
                 "{{ name }}",
@@ -1032,12 +1042,20 @@ mod tests {
     fn structural_layout_allows_structural_but_not_sensitive_whitespace_changes() {
         assert!(
             verify_contract_projection(
-                "<main><section></section><footer></footer></main>",
+                "<main> <section></section>\n\n<footer></footer> </main>",
                 "<main>\n  <section></section>\n  <footer></footer>\n</main>",
                 ProjectionCapability::StructuralLayout,
             )
             .is_ok()
         );
+        assert!(matches!(
+            verify_contract_projection(
+                "<main><section></section><footer></footer></main>",
+                "<main>\n  <section></section>\n  <footer></footer>\n</main>",
+                ProjectionCapability::StructuralLayout,
+            ),
+            Err(ContractError::Mismatch { .. })
+        ));
         assert!(matches!(
             verify_contract_projection(
                 "<span>A</span><span>B</span>",
@@ -1109,7 +1127,7 @@ mod tests {
     fn nested_template_values_use_the_same_projection_contract() {
         assert!(matches!(
             verify_contract_projection(
-                r#"<c-Card c-body="<main><section></section></main>" />"#,
+                r#"<c-Card c-body="<main> <section></section> </main>" />"#,
                 "<c-Card c-body=\"<main>\n  <section></section>\n</main>\" />",
                 ProjectionCapability::OpeningTags,
             ),
@@ -1117,7 +1135,7 @@ mod tests {
         ));
         assert!(
             verify_contract_projection(
-                r#"<c-Card c-body="<main><section></section></main>" />"#,
+                r#"<c-Card c-body="<main> <section></section> </main>" />"#,
                 "<c-Card c-body=\"<main>\n  <section></section>\n</main>\" />",
                 ProjectionCapability::StructuralLayout,
             )
@@ -1125,19 +1143,28 @@ mod tests {
         );
         assert!(
             verify_contract_projection(
-                r#"<c-Card c-body="  <><main><section></section></main></>  " />"#,
+                r#"<c-Card c-body="  <><main> <section></section> </main></>  " />"#,
                 "<c-Card c-body=\"  <><main>\n  <section></section>\n</main></>  \" />",
                 ProjectionCapability::StructuralLayout,
             )
             .is_ok()
         );
+        // The nested template follows the same rule as the outer one.
+        assert!(matches!(
+            verify_contract_projection(
+                r#"<c-Card c-body="<main><section></section></main>" />"#,
+                "<c-Card c-body=\"<main>\n  <section></section>\n</main>\" />",
+                ProjectionCapability::StructuralLayout,
+            ),
+            Err(ContractError::Mismatch { .. })
+        ));
     }
 
     #[test]
     fn exhaustive_block_control_branches_are_structural() {
         assert!(
             verify_contract_projection(
-                r#"<main><c-if cond="ok"><section></section></c-if><c-else><footer></footer></c-else></main>"#,
+                r#"<main> <c-if cond="ok"> <section></section> </c-if> <c-else> <footer></footer> </c-else> </main>"#,
                 "<main>\n  <c-if cond=\"ok\">\n    <section></section>\n  </c-if>\n  <c-else>\n    <footer></footer>\n  </c-else>\n</main>",
                 ProjectionCapability::StructuralLayout,
             )
@@ -1177,7 +1204,7 @@ mod tests {
         ));
         assert!(
             verify_contract_projection(
-                r#"<main><section c-if="ok"></section><footer c-else></footer></main>"#,
+                r#"<main> <section c-if="ok"></section> <footer c-else></footer> </main>"#,
                 "<main>\n  <section c-if=\"ok\"></section>\n  <footer c-else></footer>\n</main>",
                 ProjectionCapability::StructuralLayout,
             )

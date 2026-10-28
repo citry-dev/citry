@@ -2,7 +2,7 @@ use citry_template_formatter::format_template;
 
 #[test]
 fn structural_layout_formats_complete_block_trees() {
-    let source = "<main><section><h2>{{title}}</h2></section><footer></footer></main>";
+    let source = "<main> <section> <h2>{{title}}</h2> </section> <footer></footer> </main>";
     let expected = concat!(
         "<main>\n",
         "  <section>\n",
@@ -18,7 +18,7 @@ fn structural_layout_formats_complete_block_trees() {
 
 #[test]
 fn root_processing_instructions_and_comment_stacks_follow_structure() {
-    let directive = "<?xml version=\"1.0\"?><html><body></body></html>";
+    let directive = "<?xml version=\"1.0\"?> <html> <body></body> </html>";
     let directive_expected = concat!(
         "<?xml version=\"1.0\"?>\n",
         "<html>\n",
@@ -27,7 +27,7 @@ fn root_processing_instructions_and_comment_stacks_follow_structure() {
     );
     assert_eq!(format_template(directive).unwrap(), directive_expected);
 
-    let comments = "<main><section></section>{# one #}{# two #}<footer></footer></main>";
+    let comments = "<main> <section></section> {# one #} {# two #} <footer></footer> </main>";
     let comments_expected = concat!(
         "<main>\n",
         "  <section></section>\n",
@@ -40,8 +40,15 @@ fn root_processing_instructions_and_comment_stacks_follow_structure() {
 }
 
 #[test]
+fn a_compact_document_keeps_its_tags_touching() {
+    let source =
+        "<!doctype html><html><head><title>x</title></head><body><main></main></body></html>";
+    assert_eq!(format_template(source).unwrap(), source);
+}
+
+#[test]
 fn nested_template_comments_are_formatted_once() {
-    let source = "<c-card c-body=\"<main>{# note #}<section></section></main>\" />";
+    let source = "<c-card c-body=\"<main> {# note #} <section></section> </main>\" />";
     let expected = concat!(
         "<c-card\n",
         "  c-body=\"<main>\n",
@@ -74,7 +81,7 @@ fn mixed_inline_unknown_and_component_boundaries_remain_exact() {
 
 #[test]
 fn root_margins_newlines_and_missing_final_newlines_are_preserved() {
-    let source = "\r\n<main><section></section></main>\r\n";
+    let source = "\r\n<main> <section></section> </main>\r\n";
     let expected = "\r\n<main>\r\n  <section></section>\r\n</main>\r\n";
     assert_eq!(format_template(source).unwrap(), expected);
 
@@ -102,8 +109,8 @@ fn verbatim_bodies_disable_all_descendant_formatting() {
 #[test]
 fn structural_layout_resumes_around_protected_nodes() {
     let source = concat!(
-        "<main>{# fmt: off #}<section  class = \"x\" ></section>",
-        "{# fmt: on #}<footer  id = \"y\" ></footer></main>",
+        "<main> {# fmt: off #}<section  class = \"x\" ></section>",
+        "{# fmt: on #} <footer  id = \"y\" ></footer> </main>",
     );
     let expected = concat!(
         "<main>\n",
@@ -118,8 +125,8 @@ fn structural_layout_resumes_around_protected_nodes() {
 #[test]
 fn fully_protected_children_still_layout_their_outer_container() {
     let source = concat!(
-        "<main>{# fmt: off #}<section> <div></div> </section>{# fmt: on #}",
-        "{# fmt: skip #}<footer> <div></div> </footer></main>",
+        "<main> {# fmt: off #}<section> <div></div> </section>{# fmt: on #}",
+        " {# fmt: skip #}<footer> <div></div> </footer> </main>",
     );
     let expected = concat!(
         "<main>\n",
@@ -162,14 +169,33 @@ fn generated_boundary_combinations_converge() {
     for parent in parents {
         for left in children {
             for right in children {
-                let source = format!("<{parent}>{left}{right}</{parent}>");
-                let formatted = format_template(&source)
-                    .unwrap_or_else(|error| panic!("failed for {source:?}: {error}"));
+                let compact = format!("<{parent}>{left}{right}</{parent}>");
+                // Tags written with nothing between them render with nothing
+                // between them, so the formatter must leave them touching.
                 assert_eq!(
-                    format_template(&formatted).unwrap(),
-                    formatted,
-                    "input: {source:?}",
+                    format_template(&compact).unwrap(),
+                    compact,
+                    "input: {compact:?}",
                 );
+
+                // Every mix of empty and spaced gaps must settle, including
+                // a body where only some gaps can be re-indented.
+                for gaps in 0..8 {
+                    let gap = |bit: i32| if gaps & bit == 0 { "" } else { " " };
+                    let source = format!(
+                        "<{parent}>{}{left}{}{right}{}</{parent}>",
+                        gap(1),
+                        gap(2),
+                        gap(4),
+                    );
+                    let formatted = format_template(&source)
+                        .unwrap_or_else(|error| panic!("failed for {source:?}: {error}"));
+                    assert_eq!(
+                        format_template(&formatted).unwrap(),
+                        formatted,
+                        "input: {source:?}",
+                    );
+                }
             }
         }
     }
@@ -178,10 +204,13 @@ fn generated_boundary_combinations_converge() {
 #[test]
 fn generated_boundaries_lock_structural_and_sensitive_classification() {
     for parent in ["main", "div"] {
-        let blocks = format!("<{parent}><section></section><footer></footer></{parent}>");
+        let blocks = format!("<{parent}> <section></section> <footer></footer> </{parent}>");
         let blocks_expected =
             format!("<{parent}>\n  <section></section>\n  <footer></footer>\n</{parent}>",);
         assert_eq!(format_template(&blocks).unwrap(), blocks_expected);
+
+        let compact_blocks = format!("<{parent}><section></section><footer></footer></{parent}>");
+        assert_eq!(format_template(&compact_blocks).unwrap(), compact_blocks);
 
         for sensitive in ["<span>A</span>", "<x-panel>A</x-panel>", "text"] {
             let mixed = format!("<{parent}>{sensitive}<section></section></{parent}>");

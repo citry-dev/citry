@@ -182,7 +182,9 @@ def test_non_string_input_remains_a_type_error() -> None:
 
 
 def test_embedded_plan_and_outcome_are_typed_and_immutable() -> None:
-    plan = prepare_embedded_format("<main><script>const  answer=41+1;</script><style>.card{color:red}</style></main>")
+    plan = prepare_embedded_format(
+        "<main> <script>const  answer=41+1;</script> <style>.card{color:red}</style> </main>",
+    )
 
     assert plan.formatted_source.startswith("<main>\n")
     assert [request.language for request in plan.requests] == [
