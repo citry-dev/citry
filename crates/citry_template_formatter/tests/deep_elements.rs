@@ -6,7 +6,7 @@
 //! this test binary.
 
 use citry_template_formatter::format_template;
-use citry_template_parser::nesting::MAX_TAG_NESTING;
+use citry_template_parser::nesting::{MAX_LOGIC_NESTING, MAX_TAG_NESTING};
 
 #[test]
 fn deeply_nested_elements_format_on_a_small_stack() {
@@ -22,7 +22,9 @@ fn deeply_nested_elements_format_on_a_small_stack() {
         "<c-if cond=\"x\">".repeat(control_depth) + "<p></p>" + &"</c-if>".repeat(control_depth);
     // A chain of `c-for` tags written on one line covers tags that break
     // across lines at every level, where each break moves the tag inside it.
-    let for_depth = 400;
+    // Each `<div c-for>` is one logic level and two levels in all, so this
+    // chain reaches both nesting limits at once.
+    let for_depth = MAX_LOGIC_NESTING;
     let for_chain = (0..for_depth)
         .map(|level| format!("<div c-for=\"row{level} in rows\">"))
         .collect::<String>()
