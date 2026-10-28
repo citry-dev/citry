@@ -1,6 +1,8 @@
-// Reviewed decisions for settable lowercase string attributes whose IDL
+// Reviewed decisions the generator cannot make from the IDL and browser data.
+// The first two lists cover settable lowercase string attributes whose IDL
 // carries no reflection marker. Each entry is `Interface.member`, and the
-// generator refuses to run while an element's member is on neither list.
+// generator refuses to run while such a member is on neither list. The later
+// lists each explain their own case.
 //
 // A member mirrors when setting it to a string leaves that same string in the
 // content attribute of the same name. The browser test checks each lowercase
@@ -93,3 +95,43 @@ export const SUPPORTED_AT_FLOOR = new Set([
   "HTMLSelectElement.autofocus",
   "HTMLTextAreaElement.autofocus",
 ]);
+
+/**
+ * Boolean attributes whose meaning depends only on being present, written by
+ * the server as present or absent, as Vue's own server renderer does, even
+ * though some browser at the floor lacks the member.
+ *
+ * Where a browser lacks the member, Vue writes the attribute with
+ * `setAttribute`, so `true` leaves `open="true"` and `false` leaves
+ * `open="false"`. For `true` and `""`, every browser ends with the attribute
+ * present. For `false` in such a browser, Vue's browser path leaves the
+ * attribute present while the server leaves it out. Hydration re-applies a
+ * dynamic binding, so the page then ends as Vue builds it; a static or
+ * constant value keeps the server's version, which is what the author asked
+ * for. The hand list before #444 wrote these the same way.
+ *
+ * - `open` on `<dialog>`: `<dialog>` arrived in Firefox 98. Before it,
+ *   `<dialog>` is an unknown element, but the built-in stylesheet still hides
+ *   `dialog:not([open])`.
+ * - `inert` arrived in Safari 15.5 and Firefox 112.
+ * - `autofocus` on any element arrived in Firefox 110; before it the
+ *   attribute is ignored outside the form controls.
+ */
+export const PRESENCE_ONLY_BOOLEANS = new Set([
+  "HTMLDialogElement.open",
+  "HTMLElement.inert",
+  "HTMLElement.autofocus",
+]);
+
+/**
+ * Names a browser build exposes on every HTML element although no IDL or
+ * browser data records them, so the generator cannot know them. Each is
+ * Unknown everywhere, so the server leaves an element that uses one to the
+ * browser, and the browser test does not check them.
+ *
+ * - `cue` and `cuebackground`: the WebKit build Playwright 1.64.1 installs
+ *   (WebKit 27.2) has them as boolean properties on every element. Their
+ *   names suggest WebKit's work on WebVTT cues; whether a shipping Safari
+ *   has them is not recorded anywhere the generator reads.
+ */
+export const UNRECORDED_MEMBERS = new Set(["cue", "cuebackground"]);
