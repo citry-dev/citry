@@ -1913,7 +1913,7 @@ def test_terminal_app_releases_only_its_shared_stylesheet_reference(page: Any) -
     }
 
 
-def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any) -> None:
+def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any, browser_name: str) -> None:
     vue_root = Path(__file__).parents[2] / "citry" / "_vue"
     requests = {"healthy": 0, "failed": 0}
     request_order: list[str] = []
@@ -2016,7 +2016,12 @@ def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any) -> 
         "stylePreloadsAfterFailures": 0,
         "displayAfterSuccess": "none",
     }
-    assert requests == {"healthy": 2, "failed": 2}
+    # In WebKit, Playwright answers a repeated request for a routed URL from
+    # the first response without calling the route again, even when that
+    # response says `no-store`. A real server does get each retry in WebKit,
+    # so the count is checked only where the route sees every request.
+    if browser_name != "webkit":
+        assert requests == {"healthy": 2, "failed": 2}
     assert request_order.index("style") < request_order.index("failed-end")
 
 
