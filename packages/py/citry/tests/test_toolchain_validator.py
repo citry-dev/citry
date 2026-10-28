@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 from scripts.validators import toolchain
-from scripts.validators.toolchain import nightly_pin_errors, pinned_action_errors
+from scripts.validators.toolchain import nightly_pin_errors, pinned_action_errors, selected_toolchain_errors
 
 _REPO = Path(__file__).resolve().parents[4]
 _UV_PIN = json.loads((_REPO / "packages/py/citry_core/pyodide-build.json").read_text())["uv"]
@@ -175,3 +175,62 @@ def test_a_comment_that_mentions_nightly_passes(root, line):
     workflow = root / ".github/workflows/rust--tests.yml"
     workflow.write_text(workflow.read_text() + line + "\n")
     assert nightly_pin_errors(root) == []
+
+
+_SETUP_JOB = """
+  pinned:
+    runs-on: ubuntu-latest{env}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: "1.96.0"
+      - run: cargo build
+"""
+
+
+def test_current_workflows_select_the_toolchain_they_install(root):
+    assert selected_toolchain_errors(root) == []
+
+
+def test_a_setup_input_that_names_an_unset_variable_fails(root):
+    # The examples setup reads `${{ env.RUSTUP_TOOLCHAIN }}`, which is now unset.
+    _replace_once(root / ".github/workflows/py--examples--tests.yml", '  RUSTUP_TOOLCHAIN: "1.96.0"\n', "")
+    errors = selected_toolchain_errors(root)
+    assert errors
+    assert all("py--examples--tests.yml" in error and "not set" in error for error in errors)
+
+
+def test_a_publish_job_without_rustup_toolchain_fails(root):
+    # The sdist job installs 1.96.0, but cargo in the checkout would then
+    # follow rust-toolchain.toml to the development nightly.
+    workflow = root / ".github/workflows/py--citry-core--publish.yml"
+    text = workflow.read_text()
+    workflow.write_text(text.replace('      RUSTUP_TOOLCHAIN: "1.96.0"\n', "", 1))
+    errors = selected_toolchain_errors(root)
+    assert any("job sdist" in error and "does not set RUSTUP_TOOLCHAIN" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("env", "passes"),
+    [
+        ("", False),
+        ('\n    env:\n      RUSTUP_TOOLCHAIN: "1.97.0"', False),
+        ('\n    env:\n      RUSTUP_TOOLCHAIN: "1.96.0"', True),
+        # An env written as an expression is read as empty, not as a crash.
+        ("\n    env: ${{ fromJSON(vars.RUST_ENV) }}", False),
+    ],
+)
+def test_a_job_must_select_the_toolchain_it_installs(root, env, passes):
+    workflow = root / ".github/workflows/rust--tests.yml"
+    workflow.write_text(workflow.read_text() + _SETUP_JOB.format(env=env))
+    errors = selected_toolchain_errors(root)
+    assert (errors == []) is passes
+    assert all("job pinned" in error for error in errors)
+
+
+def test_a_setup_that_names_its_toolchain_in_the_ref_must_select_it(root):
+    workflow = root / ".github/workflows/rust--tests.yml"
+    job = "\n  pinned:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: dtolnay/rust-toolchain@1.96.0\n"
+    workflow.write_text(workflow.read_text() + job)
+    assert any("job pinned" in error and "'1.96.0'" in error for error in selected_toolchain_errors(root))

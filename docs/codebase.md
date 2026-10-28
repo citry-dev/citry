@@ -87,9 +87,15 @@ Every machine and CI job then builds with the same compiler, and a new nightly
 reaches the project only when someone moves that date on purpose (see
 [Moving the Rust nightly date](#moving-the-rust-nightly-date)).
 
-The published `citry-core` wheels and the docs builds use the minimum
-version, Rust 1.96.0, instead. Their workflows set it themselves, so moving
-the nightly date does not change a released wheel.
+The published `citry-core` wheels, the docs builds and the example-project
+tests use the minimum version, Rust 1.96.0, so moving the nightly date does
+not change what users install. Inside the checkout, `rust-toolchain.toml`
+takes priority over a toolchain that `dtolnay/rust-toolchain` installs, so
+every job that installs Rust that way also sets `RUSTUP_TOOLCHAIN` to the
+same version. The wheel jobs get the same result from maturin-action, which
+runs `rustup override set`. The `toolchain` validator
+(`scripts/validators/toolchain.py`) fails on a `dtolnay/rust-toolchain` job
+without a matching `RUSTUP_TOOLCHAIN`.
 
 **Check your Rust version:**
 
