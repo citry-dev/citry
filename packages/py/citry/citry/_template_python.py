@@ -256,14 +256,21 @@ def template_python_queries(
     *,
     parse_nested: Callable[[str], Any] = parse_template,
 ) -> tuple[TemplatePythonQuery, ...]:
-    """Return every Python-valued host with its exact lexical context."""
-    indexes = run(_query_start_indexes(template, base_index=0, parse_nested=parse_nested))
+    """
+    Return every Python-valued host with its exact lexical context, in source order.
+
+    One walk visits each node once and carries the `c-if`, `c-for` and fill
+    controls that enclose each node down to the hosts inside it, so the cost
+    grows with the size of the template. Each query is
+    the one `template_python_query_at` returns at the host's start.
+    """
+    found: list[TemplatePythonQuery] = []
+    run(_collect_template_queries(template, (), found, base_index=0, parse_nested=parse_nested))
     queries: list[TemplatePythonQuery] = []
     seen: set[tuple[int, int, str]] = set()
-    for index in sorted(indexes):
-        query = run(_query_in_template(template, index, (), base_index=0, parse_nested=parse_nested))
-        if query is None:
-            continue
+    # The walk already reaches hosts in source order; the sort only
+    # guarantees that order, and costs little on a sorted list.
+    for query in sorted(found, key=lambda item: item.start_index):
         key = query.start_index, query.end_index, query.host_kind
         if key not in seen:
             seen.add(key)
@@ -1994,45 +2001,166 @@ def _query_in_template(
     return None
 
 
-def _query_start_indexes(
+def _collect_template_queries(
     template: Any,
+    controls: tuple[TemplatePythonControl, ...],
+    found: list[TemplatePythonQuery],
     *,
     base_index: int,
     parse_nested: Callable[[str], Any],
-) -> Generator[Call, Any, set[int]]:
-    indexes: set[int] = set()
+    fill_owner: str | None = None,
+) -> Generator[Call, Any, None]:
+    """
+    Append the query of every host in one template, with the controls around it.
+
+    This is the walk `_query_in_template` makes for one position, made once
+    for all of them: the same sibling conditions, controls and fill owner
+    reach each host, so each query matches the one found at its start.
+    """
+    branch_conditions: list[tuple[str, tuple[str, ...]]] = []
     for element in template.elements:
         value: Any = element._0
         if isinstance(element, TemplateElement.Expr):
-            indexes.add(base_index + value.value.start_index)
+            found.append(
+                TemplatePythonQuery(
+                    value.value.content,
+                    base_index + value.value.start_index,
+                    base_index + value.value.end_index,
+                    "interpolation",
+                    controls,
+                    _used_names(value),
+                )
+            )
+            branch_conditions.clear()
+            continue
+        if isinstance(element, TemplateElement.Text):
+            if value.token.content.strip():
+                branch_conditions.clear()
             continue
         if not isinstance(element, TemplateElement.Node):
             continue
-        for attr in value.start_tag.attrs:
-            inner = attr.inner_value
-            if inner is None:
+        branch_kind = _condition_branch_kind(value)
+        if branch_kind not in {"elif", "else"}:
+            branch_conditions.clear()
+        prior_branch_controls = tuple(
+            TemplatePythonControl("if", f"not (\n{source}\n)", free_names=free_names)
+            for source, free_names in branch_conditions
+        )
+        yield Call(
+            _collect_node_queries,
+            value,
+            (*controls, *prior_branch_controls),
+            found,
+            base_index=base_index,
+            parse_nested=parse_nested,
+            fill_owner=fill_owner,
+        )
+        condition = _condition_control(value)
+        if branch_kind in {"if", "elif"}:
+            branch_conditions.append(
+                (condition.source, condition.free_names) if condition is not None else ("True", ())
+            )
+        elif branch_kind == "else":
+            branch_conditions.clear()
+
+
+def _collect_node_queries(
+    node: Any,
+    controls: tuple[TemplatePythonControl, ...],
+    found: list[TemplatePythonQuery],
+    *,
+    base_index: int,
+    parse_nested: Callable[[str], Any],
+    fill_owner: str | None = None,
+) -> Generator[Call, Any, None]:
+    """Append the queries of one node's attributes and body, as `_query_in_node` finds each one."""
+    condition = _condition_control(node)
+    loop = _loop_control(node)
+    body_controls = (
+        *controls,
+        *((condition,) if condition is not None else ()),
+        *((loop,) if loop is not None else ()),
+        *_unknown_binding_controls(node, loop, fill_owner),
+    )
+    for attr in node.start_tag.attrs:
+        inner = attr.inner_value
+        if inner is None:
+            continue
+        start = base_index + inner.start_index
+        name = attr.key.content
+        if attr.kind == HtmlAttrKind.Template:
+            nested = _nested_template(inner.content, parse_nested)
+            if nested is None:
                 continue
-            start = base_index + inner.start_index
-            if attr.kind == HtmlAttrKind.Template:
-                nested = _nested_template(inner.content, parse_nested)
-                if nested is not None:
-                    nested_template, nested_start = nested
-                    indexes.update(
-                        (
-                            yield Call(
-                                _query_start_indexes,
-                                nested_template,
-                                base_index=start + nested_start,
-                                parse_nested=parse_nested,
-                            )
-                        )
-                    )
-            elif attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta:  # noqa: PLR1714
-                indexes.add(start)
-        body = getattr(value, "body", None)
-        if body is not None:
-            indexes.update((yield Call(_query_start_indexes, body, base_index=base_index, parse_nested=parse_nested)))
-    return indexes
+            nested_template, nested_start = nested
+            # The content of a template-valued attribute starts with no fill
+            # owner, as `_query_in_node` starts it.
+            yield Call(
+                _collect_template_queries,
+                nested_template,
+                body_controls if _attribute_sees_loop(name) else controls,
+                found,
+                base_index=start + nested_start,
+                parse_nested=parse_nested,
+            )
+            continue
+        if attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta:  # noqa: PLR1714
+            found.append(_attribute_query(node, attr, controls, body_controls, condition, base_index))
+    # Like `_node_body_contains`, read a body only when the node has an end
+    # tag; every parsed body has one.
+    body = getattr(node, "body", None)
+    if body is not None and getattr(node, "end_tag", None) is not None:
+        yield Call(
+            _collect_template_queries,
+            body,
+            body_controls,
+            found,
+            base_index=base_index,
+            parse_nested=parse_nested,
+            fill_owner=_body_fill_owner(node, fill_owner),
+        )
+
+
+def _attribute_query(
+    node: Any,
+    attr: Any,
+    controls: tuple[TemplatePythonControl, ...],
+    body_controls: tuple[TemplatePythonControl, ...],
+    condition: TemplatePythonControl | None,
+    base_index: int,
+) -> TemplatePythonQuery:
+    """Return the query of one Python-valued attribute, with the controls that apply to it."""
+    inner = attr.inner_value
+    name = attr.key.content
+    attr_controls = controls
+    host_kind: Literal["attribute", "loop"] = "attribute"
+    if _is_loop_attribute(node, name):
+        # A combined condition runs before its loop, so it can narrow the
+        # iterable while the loop target itself is still unavailable.
+        if condition is not None:
+            attr_controls = (*attr_controls, condition)
+        host_kind = "loop"
+    elif not _is_condition_attribute(node, name):
+        attr_controls = body_controls
+    # A `c-*` value that sets an attribute or a component input can be
+    # checked against that target's type; control attributes cannot.
+    target = (
+        (node.start_tag.name.content, name.removeprefix("c-"))
+        if attr.kind == HtmlAttrKind.Expression
+        and host_kind == "attribute"
+        and name.startswith("c-")
+        and _attribute_sees_loop(name)
+        else None
+    )
+    return TemplatePythonQuery(
+        inner.content,
+        base_index + inner.start_index,
+        base_index + inner.end_index,
+        host_kind,
+        attr_controls,
+        _used_names(attr),
+        target,
+    )
 
 
 def _query_in_node(
@@ -2081,35 +2209,7 @@ def _query_in_node(
             )
         if not (attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta):  # noqa: PLR1714
             return None
-        attr_controls = controls
-        host_kind: Literal["attribute", "loop"] = "attribute"
-        if _is_loop_attribute(node, name):
-            # A combined condition runs before its loop, so it can narrow the
-            # iterable while the loop target itself is still unavailable.
-            if condition is not None:
-                attr_controls = (*attr_controls, condition)
-            host_kind = "loop"
-        elif not _is_condition_attribute(node, name):
-            attr_controls = body_controls
-        # A `c-*` value that sets an attribute or a component input can be
-        # checked against that target's type; control attributes cannot.
-        target = (
-            (node.start_tag.name.content, name.removeprefix("c-"))
-            if attr.kind == HtmlAttrKind.Expression
-            and host_kind == "attribute"
-            and name.startswith("c-")
-            and _attribute_sees_loop(name)
-            else None
-        )
-        return TemplatePythonQuery(
-            inner.content,
-            start,
-            end,
-            host_kind,
-            attr_controls,
-            _used_names(attr),
-            target,
-        )
+        return _attribute_query(node, attr, controls, body_controls, condition, base_index)
 
     body = getattr(node, "body", None)
     if body is not None and _node_body_contains(node, index, base_index=base_index):

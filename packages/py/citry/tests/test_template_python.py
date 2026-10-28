@@ -6,6 +6,7 @@ import textwrap
 
 import pytest
 
+from citry import _template_python as template_python_module
 from citry._symbol_table import symtable
 from citry._template_python import _method_bound_names, _renamable_method_locals
 from citry.analysis import (
@@ -290,6 +291,58 @@ def test_query_enumeration_covers_nested_and_structural_hosts_once() -> None:
         ("user.name", "attribute"),
         ("user.label", "interpolation"),
     ]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        """<c-card c-if="visible" c-body='<><span c-title="user.name">{{ user.label }}</span></>' />""",
+        '<c-if cond="a">{{ x }}</c-if><c-elif cond="b">{{ y }}</c-elif><c-else>{{ z }}</c-else>',
+        '<li c-for="item in items" c-title="item.name">{{ item.label }}</li>',
+        '<li c-if="ready" c-for="row in rows">{{ row }}</li>',
+        '<c-card><c-fill name="body" data="row">{{ row.title }}</c-fill></c-card>',
+        '<c-for each="(key, value) in pairs.items()"><p c-title="key">{{ value }}</p></c-for>',
+    ],
+)
+def test_each_enumerated_query_is_the_query_at_its_start(source: str) -> None:
+    # `template_python_queries` walks the template once for every host,
+    # while `template_python_query_at` searches from the root for one
+    # position, so the two must agree on every host's lexical context.
+    template = parse_template(source)
+
+    queries = template_python_queries(template)
+
+    assert queries
+    for query in queries:
+        assert template_python_query_at(template, query.start_index) == query
+
+
+def _condition_reads(monkeypatch: pytest.MonkeyPatch, depth: int) -> int:
+    """Count the nodes whose controls one enumeration reads, on a template nested ``depth`` levels deep."""
+    source = '<div c-title="t">' * depth + "{{ x }}" + "</div>" * depth
+    template = parse_template(source)
+    reads: list[object] = []
+    read_condition = template_python_module._condition_control
+
+    def counting(node: object) -> object:
+        reads.append(node)
+        return read_condition(node)
+
+    monkeypatch.setattr(template_python_module, "_condition_control", counting)
+    queries = template_python_queries(template)
+    monkeypatch.setattr(template_python_module, "_condition_control", read_condition)
+    assert len(queries) == depth + 1
+    return len(reads)
+
+
+def test_query_enumeration_reads_grow_linearly_with_depth(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The walk reads each node's controls a fixed number of times, so the
+    # reads grow with the depth of the template, not with its square.
+    shallow = _condition_reads(monkeypatch, 64)
+    deep = _condition_reads(monkeypatch, 128)
+
+    assert shallow <= 2 * 64
+    assert deep <= 2 * shallow + 2
 
 
 def test_schema_shadow_keeps_an_exact_query_copy() -> None:
