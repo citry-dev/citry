@@ -645,10 +645,6 @@
   form now leaves its parent, or the whole page when the form is at the
   page root, to the browser.
 
-- On PyPy, `import citry` no longer fails with `No module named
-  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
-  values and template types less fully, and both print a note saying so.
-
 ### Performance
 
 - With a shared cache such as Redis, a render no longer asks the cache
