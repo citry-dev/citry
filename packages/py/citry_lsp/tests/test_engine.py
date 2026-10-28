@@ -4019,6 +4019,15 @@ def test_literal_marker_diagnostics_ignore_dynamic_and_nonmark_selectors(source:
     assert not [item for item in document.diagnostics if item.code == TEMPLATE_MARKER_NAME_INVALID]
 
 
+def test_a_template_nested_too_deeply_reports_the_too_deep_code():
+    # 257 nested <c-if> tags: one past the logic levels a template may nest.
+    source = '<c-if cond="x">' * 257 + "x" + "</c-if>" * 257
+    document = _document(source, _syntax_state())
+
+    assert [item.code for item in document.diagnostics] == ["citry.parse.too-deep"]
+    assert "is 257 Citry logic levels deep" in document.diagnostics[0].message
+
+
 def test_duplicate_mark_name_uses_the_parser_syntax_diagnostic():
     source = '<c-component is="mark" name="one" name="two" />'
     document = _document(source, _syntax_state())

@@ -540,7 +540,7 @@ is written as a shell. With no such element, the page mounts in the browser
 (`host-root`). Render code nested deeper than 2,048 vnode or expression
 levels is not read, and output nested deeper than 2,048 levels is not
 written; both are declined like any other part. A template at the nesting
-limits planned in #272 (512 nested tags, 256 of them control flow) reads
+limits from #272 (512 nested tags, 256 of them Citry logic) reads
 about 770 levels and writes about 1,300. Each level of reading and writing
 runs through a stack guard (`citry_vue_compiler/src/stack.rs`), so these
 caps stop much deeper input rather than protecting the stack. A page whose

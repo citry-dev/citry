@@ -34,6 +34,10 @@ validation, the exact compiler output format), see
 
 ## Gotchas
 
+- **Nesting is counted in one place.** `nesting::tag_levels` says how many
+  total and logic levels a tag adds, and the parser, the compiler and the
+  Python binding all use it. Count any new wrapping construct there, or the
+  three disagree at the limit.
 - **Build span errors with `ParseError::from_span`.** Pest's own
   `Error::new_from_span` takes time that grows with the span's line count
   times the input length; `from_span` builds the same error in time

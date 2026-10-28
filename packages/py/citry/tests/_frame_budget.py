@@ -1,7 +1,7 @@
 """
 Check that templates at the logic nesting limit render within a fixed Python frame budget.
 
-The planned nesting limit (#272) lets a template nest 256 of Citry's logic
+The nesting limit lets a template nest 256 of Citry's logic
 levels: control-flow tags and attributes, slots, fills and component tags.
 This test confirms that this leaves room for the application around Citry.
 A web framework, middleware, a view and a test runner already sit on the
@@ -58,14 +58,14 @@ from citry import Citry, Component
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
 from citry._vue.json_data import _DIRECT_JSON_DEPTH
+from citry_core import _rust
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import FrameType
 
-# The logic nesting limit. The parser's private `_MAX_LOGIC_NESTING`
-# replaces this literal once the limit ships.
-LOGIC_LIMIT = 256
+# The logic nesting limit, read from the parser so the two cannot disagree.
+LOGIC_LIMIT = _rust.template_parser._MAX_LOGIC_NESTING
 # Frames the application holds below Citry when it renders.
 HOST_FRAMES = 200
 # Frames Citry's own work may use above the host.

@@ -51,6 +51,14 @@
 
 ### Changed
 
+- **Breaking:** `template_parser.parse_template()` raises `SyntaxError`
+  for a template that nests tags more than 512 levels deep, or more than
+  256 Citry logic levels deep (`c-` tags other than `<c-raw>`, and the
+  `c-if=`, `c-elif=`, `c-else`, `c-for=` and `c-empty` attributes). The
+  error carries the diagnostic code `citry.parse.too-deep` and the
+  position of the tag that goes too deep. `compile_template()` raises
+  `SyntaxError` for a `Template` you build yourself that nests past the
+  same limits.
 - **Breaking:** citry-core now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing citry-core 1.8.0.
 - `safe_eval()`, `parse_template()` and `format_template()` now reject an

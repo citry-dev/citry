@@ -17,7 +17,7 @@ use citry_template_parser::browser::{
     analyze_component_source as analyze_component_source_rust,
 };
 use citry_template_parser::compiler::{
-    compile_prepared_template as compile_prepared_template_rust,
+    check_template_depth, compile_prepared_template as compile_prepared_template_rust,
     compile_template as compile_template_rust,
 };
 use citry_template_parser::error::CompileError;
@@ -47,7 +47,9 @@ fn lang_from_str(s: Option<&str>) -> PyResult<Option<Lang>> {
 fn parse_error_to_py(py: Python<'_>, error: ParseError) -> PyErr {
     let diagnostic = error.diagnostic();
     let py_error = match error {
-        ParseError::Syntax(_) => PySyntaxError::new_err(diagnostic.message.clone()),
+        ParseError::Syntax(_) | ParseError::TooDeep(..) => {
+            PySyntaxError::new_err(diagnostic.message.clone())
+        }
         ParseError::Value(_) => PyValueError::new_err(diagnostic.message.clone()),
     };
     let result = Py::new(py, diagnostic)
@@ -81,7 +83,8 @@ fn compile_error_to_py(e: CompileError) -> PyErr {
 ///
 /// **Raises:**
 ///
-/// - SyntaxError: If the template has invalid syntax.
+/// - SyntaxError: If the template has invalid syntax, or nests more than 512
+///   tags of any kind or more than 256 Citry logic levels.
 /// - ValueError: If an unknown language is specified or a semantic error occurs.
 #[pyfunction]
 #[pyo3(signature = (input, lang=None, user_rules=None, *, options=None))]
@@ -123,14 +126,19 @@ pub fn parse_template(
 ///
 /// **Raises:**
 ///
+/// - SyntaxError: If a template built by hand nests more than 512 tags of any
+///   kind or more than 256 Citry logic levels.
 /// - ValueError: If compilation fails or an unknown language is specified.
 #[pyfunction]
 #[pyo3(signature = (template, lang=None))]
 pub fn compile_template(template: PyRef<'_, Template>, lang: Option<&str>) -> PyResult<String> {
     let lang_enum = lang_from_str(lang)?;
     // The template is borrowed rather than taken by value, so PyO3 does not
-    // clone the whole tree while it converts the argument. The clone here
-    // runs through the parser's stack guard.
+    // clone the whole tree while it converts the argument. A tree built by
+    // hand can nest past the parser's limits, so its depth is checked first,
+    // with a loop instead of recursion. The clone then runs through the
+    // parser's stack guard.
+    check_template_depth(&template).map_err(compile_error_to_py)?;
     with_enough_stack(|| compile_template_rust((*template).clone(), lang_enum))
         .map_err(compile_error_to_py)
 }
@@ -143,7 +151,8 @@ pub fn compile_prepared_template(
     lang: Option<&str>,
 ) -> PyResult<String> {
     let lang_enum = lang_from_str(lang)?;
-    // Borrowed for the same reason as in `compile_template`.
+    // Borrowed and checked for the same reasons as in `compile_template`.
+    check_template_depth(&template).map_err(compile_error_to_py)?;
     with_enough_stack(|| compile_prepared_template_rust((*template).clone(), lang_enum))
         .map_err(compile_error_to_py)
 }

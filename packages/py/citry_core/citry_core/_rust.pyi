@@ -25,7 +25,7 @@
 #   This matches how typeshed defines modules.
 
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 # Whether this extension was compiled without optimizations ("debug", the
 # plain `maturin develop` build) or with them ("release", `--release` and
@@ -894,6 +894,10 @@ class template_parser:
     def analyze_component_source(
         input: str,
     ) -> template_parser.BrowserComponentAnalysis: ...
+    # The nesting limits, private and read by tests: the most tags of any
+    # kind, and the most Citry logic levels, a template may nest.
+    _MAX_TAG_NESTING: Final[int]
+    _MAX_LOGIC_NESTING: Final[int]
     # Functions
     @staticmethod
     def parse_template(

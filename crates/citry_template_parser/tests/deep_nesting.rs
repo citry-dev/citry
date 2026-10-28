@@ -17,13 +17,16 @@
 
 use citry_template_parser::ast::{Comment, StaticNamedSlot, TemplateElement, Token};
 use citry_template_parser::compiler::{compile_prepared_template, compile_template};
+use citry_template_parser::nesting::{MAX_LOGIC_NESTING, MAX_TAG_NESTING};
 use citry_template_parser::parser::parse_template;
 
-/// Tags nested in the deepest templates these tests build.
-const TOTAL_DEPTH: usize = 512;
+/// Tags nested in the deepest templates these tests build: the most a
+/// template may nest.
+const TOTAL_DEPTH: usize = MAX_TAG_NESTING;
 
-/// Control-flow and component tags nested in the deepest templates.
-const LOGIC_DEPTH: usize = 256;
+/// Citry logic levels nested in the deepest templates: the most a template
+/// may nest.
+const LOGIC_DEPTH: usize = MAX_LOGIC_NESTING;
 
 /// Parse, clone, compile and drop `source` on threads with small stacks.
 fn handles_on_small_stacks(source: String) {
@@ -102,12 +105,13 @@ fn nested_components() {
 #[test]
 fn a_fill_under_deep_control_flow_in_a_component() {
     // The parser collects a component's fills through the control flow
-    // around them.
+    // around them. The component and the fill are logic levels too, so this
+    // nests exactly LOGIC_DEPTH of them.
     let deep_fill = nest(
         "<c-if cond=\"x\">",
         "<c-fill name=\"a\">{{ x }}</c-fill>",
         "</c-if>",
-        LOGIC_DEPTH - 1,
+        LOGIC_DEPTH - 2,
     );
     handles_on_small_stacks(format!("<c-my-comp>{deep_fill}</c-my-comp>"));
 }
