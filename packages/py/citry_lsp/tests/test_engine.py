@@ -2228,6 +2228,137 @@ def test_vue_listener_modifier_error_on_a_non_element_marks_the_attribute(source
     )
 
 
+@pytest.mark.parametrize(
+    ("source", "marker", "heading", "fragment", "shown"),
+    [
+        (
+            '<c-slot name="item" :row="row" />',
+            ":row",
+            "### `:row`",
+            "Pass the value of a Vue expression to the fill as a Vue slot prop, which the fill reads with `v-slot`.",
+            ":row",
+        ),
+        (
+            '<c-slot name="item" v-bind:row-data="row" />',
+            "v-bind:row-data",
+            "### `v-bind:row-data`",
+            "Pass the value of a Vue expression to the fill as a Vue slot prop, which the fill reads with `v-slot`.",
+            "v-bind:row-data",
+        ),
+        (
+            '<c-card><c-fill name="item" v-slot="{ row }">x</c-fill></c-card>',
+            "v-slot",
+            "### `v-slot`",
+            "Read the Vue slot props that the matching `<c-slot>` passes, as one object pattern such as `{ row }`",
+            "v-slot",
+        ),
+        # A `<c-slot>` nested in a fill is still a `<c-slot>`.
+        (
+            '<c-card><c-fill name="a"><c-slot name="item" :row="row" /></c-fill></c-card>',
+            ":row",
+            "### `:row`",
+            "Pass the value of a Vue expression to the fill as a Vue slot prop",
+            ":row",
+        ),
+    ],
+)
+def test_scoped_slot_attribute_hover_explains_the_attribute(source, marker, heading, fragment, shown):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 2), project)
+
+    assert result is not None
+    assert result.contents.value.startswith(heading)
+    assert fragment in result.contents.value
+    assert "https://citry.dev/vue/slots/#scoped-slots" in result.contents.value
+    # The hover covers the attribute name only, not its value.
+    assert result.range == types.Range(_position(source, marker), _position(source, marker, len(shown)))
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "heading"),
+    [
+        ('<div :row="row"></div>', ":row", "### `:row`"),
+        ('<div v-bind:row="row"></div>', "v-bind:row", "### `v-bind:row`"),
+        ('<c-card :row="row" />', ":row", "### `:row`"),
+    ],
+)
+def test_vue_bind_hover_off_c_slot_keeps_the_general_vue_text(source, marker, heading):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 2), project)
+
+    assert result is not None
+    assert result.contents.value.startswith(heading)
+    assert "Keep an HTML attribute or component prop synchronized with a Vue expression." in result.contents.value
+    assert "https://vuejs.org/api/built-in-directives.html#v-bind" in result.contents.value
+    assert "slot prop" not in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        ('<c-slot name="item" :name="slot_name" :row="row" />', ":name"),
+        ('<c-slot name="item" v-bind:name="slot_name" :row="row" />', "v-bind:name"),
+        ('<c-slot name="item" :key="row" :row="row" />', ":key"),
+        ('<c-slot name="item" v-bind:key="row" :row="row" />', "v-bind:key"),
+    ],
+)
+def test_name_and_key_on_c_slot_get_no_slot_prop_hover(source, marker):
+    project = _syntax_state()
+
+    # The parser rejects `:name` and `:key` on `<c-slot>`, so they pass no
+    # slot prop and the hover must not describe them as one.
+    assert hover(_document(source, project), _position(source, marker, 2), project) is None
+
+    # The `:row` beside them is still a slot prop.
+    result = hover(_document(source, project), _position(source, ":row", 2), project)
+    assert result is not None
+    assert result.contents.value.startswith("### `:row`")
+    assert "Pass the value of a Vue expression to the fill as a Vue slot prop" in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "attribute", "message"),
+    [
+        (
+            '<c-card><c-fill name="item" #item>x</c-fill></c-card>',
+            "#item",
+            "Vue directive '#item' is not supported on '<c-fill>'.",
+        ),
+        (
+            '<c-card><c-fill v-slot:item="{ row }">x</c-fill></c-card>',
+            'v-slot:item="{ row }"',
+            "Vue directive 'v-slot:item' is not supported on '<c-fill>'.",
+        ),
+        (
+            '<c-slot name="item" :row.prop="row" />',
+            ':row.prop="row"',
+            "Vue directive ':row.prop' is not supported on '<c-slot>'.",
+        ),
+        (
+            '<c-card><c-fill name="item" v-slot="a, b">x</c-fill></c-card>',
+            'v-slot="a, b"',
+            "lists several parameters; a slot passes one props object.",
+        ),
+    ],
+)
+def test_rejected_scoped_slot_forms_mark_the_attribute(source, attribute, message):
+    # Each form is refused by the parser, so the editor reports it as a
+    # syntax error that covers the attribute, as the listener modifiers do.
+    document = _document(f"<div>\n  {source}\n</div>", _syntax_state())
+
+    (diagnostic,) = document.diagnostics
+    assert diagnostic.code == "citry.parse.syntax"
+    assert diagnostic.severity == types.DiagnosticSeverity.Error
+    assert message in diagnostic.message
+    text = f"<div>\n  {source}\n</div>"
+    assert diagnostic.range == types.Range(
+        _position(text, attribute),
+        _position(text, attribute, len(attribute)),
+    )
+
+
 def test_vue_listener_modifier_error_maps_into_an_inline_python_template():
     source = (
         "from citry import Component\nclass Card(Component):\n"
