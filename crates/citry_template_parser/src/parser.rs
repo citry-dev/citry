@@ -3632,47 +3632,53 @@ fn validate_ignored_element_contents(
 /// Find the first child tag or attribute, in source order, that a `#c-ignore`
 /// element cannot keep as server-written HTML.
 fn find_ignored_content_problem(body: &Template) -> Option<IgnoredContentProblem<'_>> {
-    // This check walks the whole subtree under `#c-ignore`, one call per level.
-    crate::stack::with_enough_stack(|| {
-        for element in &body.elements {
-            let TemplateElement::Node(child) = element else {
+    // The walk covers the whole subtree under `#c-ignore`. It keeps its own
+    // list of the element lists still being read, innermost last, rather
+    // than calling itself per level, so its stack use does not grow with
+    // the template's depth.
+    let mut pending: Vec<std::slice::Iter<'_, TemplateElement>> = vec![body.elements.iter()];
+    while let Some(elements) = pending.last_mut() {
+        let Some(element) = elements.next() else {
+            pending.pop();
+            continue;
+        };
+        let TemplateElement::Node(child) = element else {
+            continue;
+        };
+        let child_tag = child.tag_name();
+        if has_citry_component_prefix(child_tag)
+            && !IGNORED_CONTENT_CITRY_TAGS
+                .iter()
+                .any(|allowed| citry_component_tag_eq(child_tag, allowed))
+        {
+            return Some(IgnoredContentProblem::Tag(&child.start_tag().name));
+        }
+        for attr in child.attrs() {
+            if attr.kind == HtmlAttrKind::Meta {
                 continue;
-            };
-            let child_tag = child.tag_name();
-            if has_citry_component_prefix(child_tag)
-                && !IGNORED_CONTENT_CITRY_TAGS
-                    .iter()
-                    .any(|allowed| citry_component_tag_eq(child_tag, allowed))
-            {
-                return Some(IgnoredContentProblem::Tag(&child.start_tag().name));
             }
-            for attr in child.attrs() {
-                if attr.kind == HtmlAttrKind::Meta {
-                    continue;
-                }
-                let name = attr.key.content.as_str();
-                // `@event`, `:attr`, `v-*`, `#slot`, `.prop`, the `$c-*` browser
-                // bindings, and `ref` all need Vue to read the element.
-                let needs_vue = name.starts_with('@')
-                    || name.starts_with(':')
-                    || name.starts_with("$c-")
-                    || name == "ref"
-                    || vue_directive_name(name).is_some();
-                if needs_vue {
-                    return Some(IgnoredContentProblem::Binding {
-                        attr,
-                        owner: &child.start_tag().name,
-                    });
-                }
-            }
-            if let Node::WithBody { body, .. } = child {
-                if let Some(problem) = find_ignored_content_problem(body) {
-                    return Some(problem);
-                }
+            let name = attr.key.content.as_str();
+            // `@event`, `:attr`, `v-*`, `#slot`, `.prop`, the `$c-*` browser
+            // bindings, and `ref` all need Vue to read the element.
+            let needs_vue = name.starts_with('@')
+                || name.starts_with(':')
+                || name.starts_with("$c-")
+                || name == "ref"
+                || vue_directive_name(name).is_some();
+            if needs_vue {
+                return Some(IgnoredContentProblem::Binding {
+                    attr,
+                    owner: &child.start_tag().name,
+                });
             }
         }
-        None
-    })
+        // The child's own body comes before its next sibling, as in source
+        // order.
+        if let Node::WithBody { body, .. } = child {
+            pending.push(body.elements.iter());
+        }
+    }
+    None
 }
 
 /// Validate semantic attribute values whose contracts are narrower than the
@@ -4080,43 +4086,45 @@ fn validate_fill_exclusivity(
 /// This is used to validate that control flow siblings of `<c-fill>` don't smuggle in
 /// non-fill content like `<div>` or components.
 fn _contains_only_fills_and_control_flow(template: &Template) -> bool {
-    // This check calls itself once per level of control flow.
-    crate::stack::with_enough_stack(|| {
-        for element in &template.elements {
-            match element {
-                TemplateElement::Text(text) => {
-                    // Whitespace-only text is allowed (formatting/indentation)
-                    if !text.token.content.trim().is_empty() {
-                        return false;
-                    }
-                }
-                TemplateElement::Expr(_) => {
-                    // Expressions are not allowed in fill-only context
+    // The element lists still being read, innermost last; the walk keeps its
+    // own list so its stack use does not grow with the depth of control flow.
+    let mut pending: Vec<std::slice::Iter<'_, TemplateElement>> = vec![template.elements.iter()];
+    while let Some(elements) = pending.last_mut() {
+        let Some(element) = elements.next() else {
+            pending.pop();
+            continue;
+        };
+        match element {
+            TemplateElement::Text(text) => {
+                // Whitespace-only text is allowed (formatting/indentation)
+                if !text.token.content.trim().is_empty() {
                     return false;
                 }
-                TemplateElement::Foreign(_) => return false,
-                TemplateElement::Node(node) => {
-                    let tag_name = node.tag_name();
-                    if tag_name == C_FILL_TAG {
-                        // <c-fill> is always OK
-                        continue;
-                    } else if CONTROL_FLOW_TAGS.contains(tag_name) {
-                        // Control flow tag: recursively check its body
-                        if let Node::WithBody { body, .. } = node {
-                            if !_contains_only_fills_and_control_flow(body) {
-                                return false;
-                            }
-                        }
-                        // Self-closing control flow is fine (empty body)
-                    } else {
-                        // Any other tag (HTML, component, etc.) is not allowed
-                        return false;
+            }
+            TemplateElement::Expr(_) => {
+                // Expressions are not allowed in fill-only context
+                return false;
+            }
+            TemplateElement::Foreign(_) => return false,
+            TemplateElement::Node(node) => {
+                let tag_name = node.tag_name();
+                if tag_name == C_FILL_TAG {
+                    // <c-fill> is always OK
+                    continue;
+                } else if CONTROL_FLOW_TAGS.contains(tag_name) {
+                    // Control flow tag: its body must satisfy the same rule.
+                    // Self-closing control flow is fine (empty body).
+                    if let Node::WithBody { body, .. } = node {
+                        pending.push(body.elements.iter());
                     }
+                } else {
+                    // Any other tag (HTML, component, etc.) is not allowed
+                    return false;
                 }
             }
         }
-        true
-    })
+    }
+    true
 }
 
 /// Validate that a component body holding `<c-fill>` tags contains nothing else.
@@ -4138,64 +4146,70 @@ fn validate_fill_group_content(
     template: &Template,
     context: &ParserContext,
 ) -> Result<(), ParseError> {
-    // This check calls itself once per level of control flow.
-    crate::stack::with_enough_stack(|| {
-        for element in &template.elements {
-            match element {
-                TemplateElement::Text(text) => {
-                    if !text.token.content.trim().is_empty() {
-                        return Err(context.error_from_token(
-                            &text.token,
-                            "Text cannot appear next to '<c-fill>' tags. When a component body \
-                            contains '<c-fill>' tags, all other content must be inside the fills \
-                            (whitespace-only text is allowed for formatting)."
-                                .to_string(),
-                        ));
-                    }
-                }
-                TemplateElement::Expr(expr) => {
+    // The element lists still being read, innermost last. A control-flow
+    // body is checked before the next sibling, so the first error is the
+    // first one in source order, and the walk's stack use does not grow
+    // with the depth of control flow.
+    let mut pending: Vec<std::slice::Iter<'_, TemplateElement>> = vec![template.elements.iter()];
+    while let Some(elements) = pending.last_mut() {
+        let Some(element) = elements.next() else {
+            pending.pop();
+            continue;
+        };
+        match element {
+            TemplateElement::Text(text) => {
+                if !text.token.content.trim().is_empty() {
                     return Err(context.error_from_token(
-                        &expr.token,
-                        "Expression cannot appear next to '<c-fill>' tags. When a component body \
-                        contains '<c-fill>' tags, all other content must be inside the fills."
+                        &text.token,
+                        "Text cannot appear next to '<c-fill>' tags. When a component body \
+                        contains '<c-fill>' tags, all other content must be inside the fills \
+                        (whitespace-only text is allowed for formatting)."
                             .to_string(),
                     ));
                 }
-                TemplateElement::Foreign(part) => {
-                    if !part.may_control_body {
-                        return Err(context.error_from_token(
-                            &part.token,
-                            "Non-controlling foreign content cannot appear next to '<c-fill>' tags. The provider must mark host control-flow claims and implement fill collection."
-                                .to_string(),
-                        ));
-                    }
+            }
+            TemplateElement::Expr(expr) => {
+                return Err(context.error_from_token(
+                    &expr.token,
+                    "Expression cannot appear next to '<c-fill>' tags. When a component body \
+                    contains '<c-fill>' tags, all other content must be inside the fills."
+                        .to_string(),
+                ));
+            }
+            TemplateElement::Foreign(part) => {
+                if !part.may_control_body {
+                    return Err(context.error_from_token(
+                        &part.token,
+                        "Non-controlling foreign content cannot appear next to '<c-fill>' tags. The provider must mark host control-flow claims and implement fill collection."
+                            .to_string(),
+                    ));
                 }
-                TemplateElement::Node(node) => {
-                    let tag_name = node.tag_name();
-                    if tag_name == C_FILL_TAG {
-                        // A fill's body IS the slot content - don't descend.
-                        continue;
-                    } else if CONTROL_FLOW_TAGS.contains(tag_name) {
-                        // Control flow may hold nested fills; its body must satisfy
-                        // the same rule.
-                        if let Node::WithBody { body, .. } = node {
-                            validate_fill_group_content(body, context)?;
-                        }
-                    } else {
-                        return Err(context.error_from_token(
-                            &node.start_tag().token,
-                            format!(
-                                "Tag '<{}>' cannot appear next to '<c-fill>' tags. When a component \
-                                body contains '<c-fill>' tags, all other content must be inside the fills.",
-                                tag_name
-                            ),
-                        ));
+            }
+            TemplateElement::Node(node) => {
+                let tag_name = node.tag_name();
+                if tag_name == C_FILL_TAG {
+                    // A fill's body IS the slot content - don't descend.
+                    continue;
+                } else if CONTROL_FLOW_TAGS.contains(tag_name) {
+                    // Control flow may hold nested fills; its body must satisfy
+                    // the same rule.
+                    if let Node::WithBody { body, .. } = node {
+                        pending.push(body.elements.iter());
                     }
+                } else {
+                    return Err(context.error_from_token(
+                        &node.start_tag().token,
+                        format!(
+                            "Tag '<{}>' cannot appear next to '<c-fill>' tags. When a component \
+                            body contains '<c-fill>' tags, all other content must be inside the fills.",
+                            tag_name
+                        ),
+                    ));
                 }
             }
         }
-        Ok(())
-    })
+    }
+    Ok(())
 }
 
 /// Recompute a template's free-variable metadata from the completed tree.
@@ -4208,87 +4222,118 @@ fn validate_fill_group_content(
 /// - on a shorthand `c-for` host, control-flow attributes are outside the loop
 ///   while ordinary/meta/template attributes and the body are inside it.
 fn recompute_template_used_variables(template: &mut Template) -> Vec<Token> {
-    // This pass calls itself once per nesting level of the tree.
-    crate::stack::with_enough_stack(|| {
-        let mut used_variables = Vec::new();
-        for element in &mut template.elements {
-            match element {
-                TemplateElement::Expr(expr) => used_variables.extend(expr.used_variables.clone()),
-                TemplateElement::Node(node) => {
-                    used_variables.extend(recompute_node_used_variables(node));
-                }
-                TemplateElement::Text(_) => {}
-                TemplateElement::Foreign(_) => {}
+    /// One template whose elements are being visited: the elements already
+    /// done, the ones still to visit, and the variables they use so far.
+    /// `owner` is the node whose body this is (None for the root), held here
+    /// while its body's elements are taken out.
+    struct Frame {
+        owner: Option<Node>,
+        done: Vec<TemplateElement>,
+        rest: std::vec::IntoIter<TemplateElement>,
+        used_variables: Vec<Token>,
+    }
+
+    // The pass needs each body's variables before its node's, so it visits
+    // the tree in post-order. It keeps its own stack of frames, rather than
+    // calling itself per level, so its stack use does not grow with the
+    // template's depth. Each body's elements are moved out while it is
+    // visited and moved back when it is done, so no two frames hold the same
+    // part of the tree.
+    let elements = std::mem::take(&mut template.elements);
+    let mut stack = vec![Frame {
+        owner: None,
+        done: Vec::with_capacity(elements.len()),
+        rest: elements.into_iter(),
+        used_variables: Vec::new(),
+    }];
+    loop {
+        let frame = stack
+            .last_mut()
+            .expect("the root frame stays until the end");
+        match frame.rest.next() {
+            Some(TemplateElement::Expr(expr)) => {
+                frame.used_variables.extend(expr.used_variables.clone());
+                frame.done.push(TemplateElement::Expr(expr));
             }
-        }
-        template.used_variables = used_variables.clone();
-        used_variables
-    })
-}
-
-fn recompute_node_used_variables(node: &mut Node) -> Vec<Token> {
-    match node {
-        Node::WithBody {
-            start_tag,
-            body,
-            used_variables,
-            introduced_variables,
-            ..
-        } => {
-            let body_variables = recompute_template_used_variables(body);
-            let tag_name = start_tag.name.content.as_str();
-            let is_shorthand_for = tag_name != C_FOR_TAG
-                && tag_name != C_FILL_TAG
-                && !introduced_variables.is_empty()
-                && start_tag
-                    .attrs
-                    .iter()
-                    .any(|attr| attr.key.content == C_FOR_TAG);
-
-            let mut recomputed = filter_bound_variables(body_variables, introduced_variables);
-            for attr in &start_tag.attrs {
-                if is_shorthand_for && !is_control_flow_attribute(&attr.key.content) {
-                    recomputed.extend(filter_bound_variables(
-                        attr.used_variables.clone(),
-                        introduced_variables,
-                    ));
+            Some(TemplateElement::Node(mut node)) => {
+                if let Node::WithBody { body, .. } = &mut node {
+                    // Visit the body first; the node waits in the new frame.
+                    let elements = std::mem::take(&mut body.elements);
+                    stack.push(Frame {
+                        owner: None,
+                        done: Vec::with_capacity(elements.len()),
+                        rest: elements.into_iter(),
+                        used_variables: Vec::new(),
+                    });
+                    stack.last_mut().expect("just pushed").owner = Some(node);
                 } else {
-                    recomputed.extend(attr.used_variables.clone());
+                    let variables = recompute_node_used_variables(&mut node, Vec::new());
+                    frame.used_variables.extend(variables);
+                    frame.done.push(TemplateElement::Node(node));
                 }
             }
-            *used_variables = recomputed.clone();
-            recomputed
-        }
-        Node::SelfClosing {
-            start_tag,
-            used_variables,
-            introduced_variables,
-            ..
-        } => {
-            let tag_name = start_tag.name.content.as_str();
-            let is_shorthand_for = tag_name != C_FOR_TAG
-                && tag_name != C_FILL_TAG
-                && !introduced_variables.is_empty()
-                && start_tag
-                    .attrs
-                    .iter()
-                    .any(|attr| attr.key.content == C_FOR_TAG);
-
-            let mut recomputed = Vec::new();
-            for attr in &start_tag.attrs {
-                if is_shorthand_for && !is_control_flow_attribute(&attr.key.content) {
-                    recomputed.extend(filter_bound_variables(
-                        attr.used_variables.clone(),
-                        introduced_variables,
-                    ));
-                } else {
-                    recomputed.extend(attr.used_variables.clone());
-                }
+            Some(other @ (TemplateElement::Text(_) | TemplateElement::Foreign(_))) => {
+                frame.done.push(other);
             }
-            *used_variables = recomputed.clone();
-            recomputed
+            None => {
+                let finished = stack.pop().expect("checked above");
+                let Some(mut node) = finished.owner else {
+                    template.elements = finished.done;
+                    template.used_variables = finished.used_variables.clone();
+                    return finished.used_variables;
+                };
+                if let Node::WithBody { body, .. } = &mut node {
+                    body.elements = finished.done;
+                    body.used_variables = finished.used_variables.clone();
+                }
+                let variables = recompute_node_used_variables(&mut node, finished.used_variables);
+                let parent = stack.last_mut().expect("a body's frame has a parent");
+                parent.used_variables.extend(variables);
+                parent.done.push(TemplateElement::Node(node));
+            }
         }
     }
+}
+
+/// Recompute one node's free variables, given its body's (empty for a
+/// self-closing node), and store them on the node.
+fn recompute_node_used_variables(node: &mut Node, body_variables: Vec<Token>) -> Vec<Token> {
+    let (start_tag, used_variables, introduced_variables) = match node {
+        Node::WithBody {
+            start_tag,
+            used_variables,
+            introduced_variables,
+            ..
+        }
+        | Node::SelfClosing {
+            start_tag,
+            used_variables,
+            introduced_variables,
+            ..
+        } => (start_tag, used_variables, introduced_variables),
+    };
+    let tag_name = start_tag.name.content.as_str();
+    let is_shorthand_for = tag_name != C_FOR_TAG
+        && tag_name != C_FILL_TAG
+        && !introduced_variables.is_empty()
+        && start_tag
+            .attrs
+            .iter()
+            .any(|attr| attr.key.content == C_FOR_TAG);
+
+    let mut recomputed = filter_bound_variables(body_variables, introduced_variables);
+    for attr in &start_tag.attrs {
+        if is_shorthand_for && !is_control_flow_attribute(&attr.key.content) {
+            recomputed.extend(filter_bound_variables(
+                attr.used_variables.clone(),
+                introduced_variables,
+            ));
+        } else {
+            recomputed.extend(attr.used_variables.clone());
+        }
+    }
+    *used_variables = recomputed.clone();
+    recomputed
 }
 
 fn filter_bound_variables(used_variables: Vec<Token>, bindings: &[Token]) -> Vec<Token> {
@@ -4318,23 +4363,29 @@ fn is_control_flow_attribute(attr_name: &str) -> bool {
 /// Collect all statically known loop/fill declarations in a template,
 /// including declarations nested inside template-valued attributes.
 fn collect_template_binding_tokens(template: &Template, context: &ParserContext) -> Vec<Token> {
-    // This pass calls itself once per nesting level of the tree.
-    crate::stack::with_enough_stack(|| {
-        let mut bindings = Vec::new();
-        for element in &template.elements {
-            let TemplateElement::Node(node) = element else {
-                continue;
-            };
-            bindings.extend(node.introduced_variables().clone());
-            for attr in node.attrs() {
-                bindings.extend(context.nested_template_bindings(&attr.token));
-            }
-            if let Node::WithBody { body, .. } = node {
-                bindings.extend(collect_template_binding_tokens(body, context));
-            }
+    // The element lists still being read, innermost last. A node's body is
+    // read before its next sibling, so the tokens come out in the same
+    // order as a walk that calls itself per level, without the stack use
+    // growing with the template's depth.
+    let mut bindings = Vec::new();
+    let mut pending: Vec<std::slice::Iter<'_, TemplateElement>> = vec![template.elements.iter()];
+    while let Some(elements) = pending.last_mut() {
+        let Some(element) = elements.next() else {
+            pending.pop();
+            continue;
+        };
+        let TemplateElement::Node(node) = element else {
+            continue;
+        };
+        bindings.extend(node.introduced_variables().clone());
+        for attr in node.attrs() {
+            bindings.extend(context.nested_template_bindings(&attr.token));
         }
-        bindings
-    })
+        if let Node::WithBody { body, .. } = node {
+            pending.push(body.elements.iter());
+        }
+    }
+    bindings
 }
 
 /// Validate loop/fill declarations against the complete lexical context.
@@ -4356,60 +4407,67 @@ fn validate_template_bindings(
     active_bindings: &[String],
     context: &ParserContext,
 ) -> Result<(), ParseError> {
-    // This pass calls itself once per nesting level of the tree.
-    crate::stack::with_enough_stack(|| {
-        for element in &template.elements {
-            let TemplateElement::Node(node) = element else {
-                continue;
-            };
+    // The element lists still being read, innermost last, each with the
+    // names bound around it. A node's body is checked before its next
+    // sibling, so the first error is the same as for a walk that calls
+    // itself per level, and the stack use does not grow with the depth.
+    let mut pending: Vec<(std::slice::Iter<'_, TemplateElement>, Vec<String>)> =
+        vec![(template.elements.iter(), active_bindings.to_vec())];
+    while let Some((elements, active_bindings)) = pending.last_mut() {
+        let Some(element) = elements.next() else {
+            pending.pop();
+            continue;
+        };
+        let TemplateElement::Node(node) = element else {
+            continue;
+        };
 
-            let tag_name = node.tag_name();
-            let bindings = node.introduced_variables();
-            validate_binding_site(
-                bindings,
+        let tag_name = node.tag_name();
+        let bindings = node.introduced_variables();
+        validate_binding_site(
+            bindings,
+            root_free_names,
+            active_bindings,
+            &format!("tag '<{}>'", tag_name),
+            context,
+        )?;
+
+        let is_shorthand_for = tag_name != C_FOR_TAG
+            && tag_name != C_FILL_TAG
+            && !bindings.is_empty()
+            && node
+                .attrs()
+                .iter()
+                .any(|attr| attr.key.content == C_FOR_TAG);
+        let mut body_bindings = active_bindings.clone();
+        body_bindings.extend(
+            bindings
+                .iter()
+                .map(|token| canonical_identifier(&token.content)),
+        );
+
+        for attr in node.attrs() {
+            let nested_bindings = context.nested_template_bindings(&attr.token);
+            let nested_active = if is_shorthand_for && !is_control_flow_attribute(&attr.key.content)
+            {
+                body_bindings.as_slice()
+            } else {
+                active_bindings.as_slice()
+            };
+            validate_bindings_against_outer_scope(
+                &nested_bindings,
                 root_free_names,
-                active_bindings,
-                &format!("tag '<{}>'", tag_name),
+                nested_active,
+                "nested template attribute",
                 context,
             )?;
-
-            let is_shorthand_for = tag_name != C_FOR_TAG
-                && tag_name != C_FILL_TAG
-                && !bindings.is_empty()
-                && node
-                    .attrs()
-                    .iter()
-                    .any(|attr| attr.key.content == C_FOR_TAG);
-            let mut body_bindings = active_bindings.to_vec();
-            body_bindings.extend(
-                bindings
-                    .iter()
-                    .map(|token| canonical_identifier(&token.content)),
-            );
-
-            for attr in node.attrs() {
-                let nested_bindings = context.nested_template_bindings(&attr.token);
-                let nested_active =
-                    if is_shorthand_for && !is_control_flow_attribute(&attr.key.content) {
-                        body_bindings.as_slice()
-                    } else {
-                        active_bindings
-                    };
-                validate_bindings_against_outer_scope(
-                    &nested_bindings,
-                    root_free_names,
-                    nested_active,
-                    "nested template attribute",
-                    context,
-                )?;
-            }
-
-            if let Node::WithBody { body, .. } = node {
-                validate_template_bindings(body, root_free_names, &body_bindings, context)?;
-            }
         }
-        Ok(())
-    })
+
+        if let Node::WithBody { body, .. } = node {
+            pending.push((body.elements.iter(), body_bindings));
+        }
+    }
+    Ok(())
 }
 
 /// Nested templates validate their own lexical structure while they are parsed.
@@ -5640,63 +5698,85 @@ fn extract_fill_nodes(
     inside_control_flow: bool,
     inside_foreign_control: bool,
 ) -> Vec<FillNodeInfo<'_>> {
-    // This pass calls itself once per level of control flow around a fill.
-    crate::stack::with_enough_stack(|| {
-        let mut fill_nodes = Vec::new();
+    /// One body being searched, with what surrounds it.
+    struct Frame<'a> {
+        elements: std::slice::Iter<'a, TemplateElement>,
+        inside_for_loop: bool,
+        inside_control_flow: bool,
+        body_has_foreign_control: bool,
+    }
+
+    fn frame(
+        template: &Template,
+        inside_for_loop: bool,
+        inside_control_flow: bool,
+        inside_foreign_control: bool,
+    ) -> Frame<'_> {
         let body_has_foreign_control = inside_foreign_control
             || template.elements.iter().any(
                 |element| matches!(element, TemplateElement::Foreign(part) if part.may_control_body),
             );
+        Frame {
+            elements: template.elements.iter(),
+            inside_for_loop,
+            inside_control_flow,
+            body_has_foreign_control,
+        }
+    }
 
-        for element in &template.elements {
-            match element {
-                TemplateElement::Node(node) => {
-                    let tag_name = node.tag_name();
-                    if tag_name == C_FILL_TAG {
-                        fill_nodes.push(FillNodeInfo {
-                            node,
-                            inside_for_loop,
-                            inside_control_flow: inside_control_flow || body_has_foreign_control,
-                            inside_foreign_control: body_has_foreign_control,
-                        });
-                    } else if CONTROL_FLOW_TAGS.contains(&tag_name) {
-                        // Recursively search inside control flow nodes.
-                        // Only `<c-for>` sets inside_for_loop to true.
-                        // `<c-empty>` does NOT - it renders at most once.
-                        // ALL control flow tags set inside_control_flow to true.
-                        if let Node::WithBody { body, .. } = node {
-                            let nested_inside_for = inside_for_loop || tag_name == C_FOR_TAG;
-                            fill_nodes.extend(extract_fill_nodes(
-                                body,
-                                nested_inside_for,
-                                true,
-                                body_has_foreign_control,
-                            ));
-                        }
-                    } else {
-                        // NOTE: When we come across nested components or regular HTML tags,
-                        // we stop the search and don't go deeper, as these are already part of the content itself,
-                        // not content delimiters. So when we see a nested component or regular HTML tag,
-                        // we can assume that what's inside the component is an implicit "default" slot.
-                        //
-                        // Of course, it could happen that there'd be both content-like tags and <c-fill> tags, e.g.
-                        // ```html
-                        // <c-my-comp>
-                        //   <div>Hello</div>
-                        //   <c-fill name="footer"> </c-fill>
-                        // </c-my-comp>
-                        // ```
-                        // This would be invalid, and we check for it in `validate_fill_exclusivity()`.
-                    }
-                }
-                _ => {
-                    // Text and Expr don't contain nodes
-                }
+    // The bodies still being searched, innermost last. A control-flow body
+    // is searched before the next sibling, so the fills come out in source
+    // order, and the stack use does not grow with the depth of control flow.
+    let mut fill_nodes = Vec::new();
+    let mut pending = vec![frame(
+        template,
+        inside_for_loop,
+        inside_control_flow,
+        inside_foreign_control,
+    )];
+    while let Some(current) = pending.last_mut() {
+        let Some(element) = current.elements.next() else {
+            pending.pop();
+            continue;
+        };
+        let TemplateElement::Node(node) = element else {
+            // Text and Expr don't contain nodes
+            continue;
+        };
+        let tag_name = node.tag_name();
+        if tag_name == C_FILL_TAG {
+            fill_nodes.push(FillNodeInfo {
+                node,
+                inside_for_loop: current.inside_for_loop,
+                inside_control_flow: current.inside_control_flow
+                    || current.body_has_foreign_control,
+                inside_foreign_control: current.body_has_foreign_control,
+            });
+        } else if CONTROL_FLOW_TAGS.contains(&tag_name) {
+            // Search inside control flow nodes too. Only `<c-for>` sets
+            // inside_for_loop: `<c-empty>` renders at most once. Every
+            // control flow tag sets inside_control_flow.
+            if let Node::WithBody { body, .. } = node {
+                let nested_inside_for = current.inside_for_loop || tag_name == C_FOR_TAG;
+                let foreign = current.body_has_foreign_control;
+                pending.push(frame(body, nested_inside_for, true, foreign));
             }
         }
-
-        fill_nodes
-    })
+        // NOTE: When we come across nested components or regular HTML tags,
+        // we stop the search and don't go deeper, as these are already part of the content itself,
+        // not content delimiters. So when we see a nested component or regular HTML tag,
+        // we can assume that what's inside the component is an implicit "default" slot.
+        //
+        // Of course, it could happen that there'd be both content-like tags and <c-fill> tags, e.g.
+        // ```html
+        // <c-my-comp>
+        //   <div>Hello</div>
+        //   <c-fill name="footer"> </c-fill>
+        // </c-my-comp>
+        // ```
+        // This would be invalid, and we check for it in `validate_fill_exclusivity()`.
+    }
+    fill_nodes
 }
 
 /// Whether a tag is a component whose `<c-fill>` children fill its slots.
@@ -6022,4 +6102,110 @@ fn validate_tag_grouping(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod walks_without_recursion {
+    //! The passes below, and `Template`'s clone, comparison and drop, keep
+    //! their own stack of what is left to visit, so they run on a small
+    //! thread whatever the template's depth. The tree is built by hand, six
+    //! times deeper than the parser accepts, and none of them has a stack
+    //! guard, so one that called itself once per level would overflow the
+    //! 64 KiB thread.
+    use super::*;
+
+    const DEPTH: usize = 3_000;
+
+    /// One `<c-if cond="x">` node with an empty body. The parser itself
+    /// needs more than the small thread has, so the tests parse this on the
+    /// test thread and build the deep tree from it on the small one.
+    fn control_flow_node() -> Node {
+        let template = parse_template(r#"<c-if cond="x"></c-if>"#, None, None).unwrap();
+        let TemplateElement::Node(node) = template.elements[0].clone() else {
+            unreachable!()
+        };
+        node
+    }
+
+    /// `node` nested `DEPTH` levels deep around its empty body, built by
+    /// moving each level into the next.
+    fn deep_control_flow(node: &Node) -> Template {
+        let mut template = Template {
+            elements: vec![TemplateElement::Node(node.clone())],
+            comments: Vec::new(),
+            used_variables: Vec::new(),
+            slots: Vec::new(),
+        };
+        for _ in 1..DEPTH {
+            let mut outer = node.clone();
+            let Node::WithBody { body, .. } = &mut outer else {
+                unreachable!()
+            };
+            body.elements = std::mem::take(&mut template.elements);
+            template.elements = vec![TemplateElement::Node(outer)];
+        }
+        template
+    }
+
+    /// Run `work` on a thread with a 64 KiB stack.
+    fn on_small_stack(work: impl FnOnce() + Send + 'static) {
+        std::thread::Builder::new()
+            .stack_size(64 * 1024)
+            .spawn(work)
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    fn context() -> ParserContext {
+        ParserContext::new(&Lang::Python.to_lang_impl(), &Rc::new(HashMap::new()))
+    }
+
+    #[test]
+    fn the_tree_passes_visit_a_deep_tree_on_a_small_stack() {
+        let node = control_flow_node();
+        on_small_stack(move || {
+            let mut template = deep_control_flow(&node);
+            let context = context();
+            assert!(find_ignored_content_problem(&template).is_none());
+            assert!(_contains_only_fills_and_control_flow(&template));
+            validate_fill_group_content(&template, &context).unwrap();
+            assert!(extract_fill_nodes(&template, false, false, false).is_empty());
+            assert!(collect_template_binding_tokens(&template, &context).is_empty());
+            validate_template_bindings(&template, &HashSet::new(), &[], &context).unwrap();
+            let used = recompute_template_used_variables(&mut template);
+            // Every level's `cond="x"` reads `x`.
+            assert_eq!(used.len(), DEPTH);
+        });
+    }
+
+    #[test]
+    fn a_deep_tree_is_cloned_compared_and_dropped_on_a_small_stack() {
+        let node = control_flow_node();
+        on_small_stack(move || {
+            let template = deep_control_flow(&node);
+            let copy = template.clone();
+            assert!(copy == template);
+
+            // A change at the innermost level must still be seen, so the
+            // comparison really walks the whole tree.
+            let mut changed = copy.clone();
+            let mut level = &mut changed;
+            for _ in 1..DEPTH {
+                let TemplateElement::Node(Node::WithBody { body, .. }) = &mut level.elements[0]
+                else {
+                    unreachable!()
+                };
+                level = body;
+            }
+            let TemplateElement::Node(Node::WithBody { contains_fills, .. }) =
+                &mut level.elements[0]
+            else {
+                unreachable!()
+            };
+            *contains_fills = !*contains_fills;
+            assert!(changed != template);
+            // All three trees are dropped here, still on the small stack.
+        });
+    }
 }
