@@ -204,14 +204,20 @@ pub(crate) fn element_core<'a>(
 ) -> Op<'a> {
     cx.report_missing_close(element);
     let tag = element.tag();
-    if tag == "slot" {
+    // Citry: Vue's parser types an element only outside `v-pre`, so inside
+    // a `v-pre` subtree, and on the element that opens one, `<slot>`, a
+    // component, and the built-ins (`<component>`, `<teleport>`,
+    // `<keep-alive>`, `<transition>`) stay plain elements
+    // (compiler-core's `onCloseTag`).
+    let in_v_pre = cx.v_pre_suppressed() || analyzed.opens_v_pre;
+    if tag == "slot" && !in_v_pre {
         return lower_slot(cx, element, analyzed, ns);
     }
     let own_ns = enter_ns(ns, tag);
     let child_ns = children_ns(own_ns, tag);
     let span = element_span(cx, element);
     let node = cx.mint_op();
-    let component = !is_native_tag(tag) && !cx.is_custom_element(tag);
+    let component = !in_v_pre && !is_native_tag(tag) && !cx.is_custom_element(tag);
 
     let open_end = cx.token_span(&element.open.gt).end;
     let open_slice = cx
@@ -259,6 +265,18 @@ pub(crate) fn element_core<'a>(
             // accounted for, like any other dropped node.
             cx.record(
                 "drop.v-pre",
+                None,
+                attr_slice(cx, attr),
+                String::default(),
+                attr_span(cx, attr),
+            );
+            continue;
+        }
+        if in_v_pre && attr.name.text == "is" && matches!(tag, "component" | "Component") {
+            // Citry: Vue drops `is` from a `<component>` that stays a plain
+            // element (compiler-core's `buildProps`), so it is not written.
+            cx.record(
+                "drop.v-pre-is",
                 None,
                 attr_slice(cx, attr),
                 String::default(),

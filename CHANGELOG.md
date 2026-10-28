@@ -334,6 +334,14 @@
 
 ### Fixes
 
+- Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
+  modifier (`@click.bogus`), or a built-in such as `<transition>` no
+  longer stops the template from loading. A `<slot>`, `<component>`,
+  `<teleport>`, or `<keep-alive>` there is written as a plain element, as
+  Vue writes it, instead of running as a slot, a dynamic component, or a
+  built-in. When `v-pre` sits on one of those tags and its contents hold
+  Citry values, rendering now fails with advice to put `v-pre` on an
+  element around it.
 - `citry format` and the editor's format command no longer add a line break
   where two tags touch, such as between `<td>` cells or `<option>`s or just
   inside a `<c-fill>`, or at the start or end of a template string written
