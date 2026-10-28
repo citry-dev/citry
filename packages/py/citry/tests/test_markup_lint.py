@@ -86,6 +86,41 @@ def test_misspelled_attribute_stays_silent(source):
     assert "misspelled-attribute" not in _codes(source)
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves `:titl` under `v-pre` as an attribute literally named
+        # `:titl`, not a binding of `titl`, so it is not a misspelling.
+        '<p v-pre :titl="x"></p>',
+        '<p v-pre v-bind:titl="x"></p>',
+        '<div v-pre><p :titl="x"></p></div>',
+        "<c-card c-header=\"<><p v-pre :titl='x'></p></>\" />",
+        "<div v-pre><c-card c-header=\"<><p :titl='x'></p></>\" /></div>",
+    ],
+)
+def test_misspelled_attribute_ignores_vue_bindings_at_and_inside_v_pre(source):
+    assert "misspelled-attribute" not in _codes(source)
+
+
+@pytest.mark.parametrize(
+    ("source", "span"),
+    [
+        # A plain name is the attribute the browser reads, so it is still checked.
+        ('<p v-pre titl="x"></p>', "titl"),
+        ('<div v-pre><p titl="x"></p></div>', "titl"),
+        # Citry renders `c-titl` on the server, before Vue sees the page.
+        ('<p v-pre c-titl="x"></p>', "c-titl"),
+        # The bindings outside `v-pre` are checked as usual, also after a `v-pre` sibling.
+        ('<p :titl="x"></p>', ":titl"),
+        ('<p v-bind:titl="x"></p>', "v-bind:titl"),
+        ('<div v-pre></div><p :titl="x"></p>', ":titl"),
+        ("<c-card c-header=\"<><p :titl='x'></p></>\" />", ":titl"),
+    ],
+)
+def test_misspelled_attribute_still_checks_plain_names_in_v_pre_and_bindings_outside_it(source, span):
+    assert _markup(source) == [("misspelled-attribute", span, "error")]
+
+
 # --- citry.template.misspelled-element ----------------------------------------
 
 
@@ -146,6 +181,36 @@ def test_unknown_aria_attribute_accepts_aria_1_2_and_1_3_names_and_component_inp
     assert _markup(source) == []
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves `:aria-lable` under `v-pre` as an attribute literally
+        # named `:aria-lable`, so it is not an ARIA attribute to check.
+        '<p v-pre :aria-lable="x"></p>',
+        '<div v-pre><p :aria-lable="x"></p></div>',
+    ],
+)
+def test_unknown_aria_attribute_ignores_vue_bindings_at_and_inside_v_pre(source):
+    assert _markup(source) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "span"),
+    [
+        # A plain name is the attribute the browser reads, so it is still checked.
+        ('<p v-pre aria-lable="x"></p>', "aria-lable"),
+        ('<div v-pre><p aria-lable="x"></p></div>', "aria-lable"),
+        # Only the plain name is checked when both are written.
+        ('<p v-pre :aria-lable="x" aria-lable="y"></p>', "aria-lable"),
+        # The binding outside `v-pre` is checked as usual, also after a `v-pre` sibling.
+        ('<p :aria-lable="x"></p>', ":aria-lable"),
+        ('<div v-pre></div><p :aria-lable="x"></p>', ":aria-lable"),
+    ],
+)
+def test_unknown_aria_attribute_still_checks_plain_names_in_v_pre_and_bindings_outside_it(source, span):
+    assert _markup(source) == [("unknown-aria-attribute", span, "error")]
+
+
 # --- citry.template.invalid-nesting -------------------------------------------
 
 
@@ -197,6 +262,38 @@ def test_invalid_nesting_stays_silent(source):
     assert "invalid-nesting" not in _codes(source)
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue resolves no component under `v-pre`, so `<Card>` is a plain
+        # element, as `<card>` is, and the browser still closes the paragraph.
+        "<p v-pre><Card><div></div></Card></p>",
+        "<p><Card v-pre><div></div></Card></p>",
+        "<div v-pre><p><Card><div></div></Card></p></div>",
+        "<p><card><div></div></card></p>",
+    ],
+)
+def test_invalid_nesting_treats_a_pascal_case_tag_under_v_pre_as_plain_markup(source):
+    assert _markup(source) == [("invalid-nesting", "div", "error")]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Outside `v-pre` the same tag may be a component, whose output is not visible here.
+        "<p><Card><div></div></Card></p>",
+        # A `v-pre` element elsewhere does not turn the tag into plain markup.
+        "<p><Card><div></div></Card></p><div v-pre><b></b></div>",
+        # A Citry component tag is rendered on the server, even under `v-pre`.
+        "<p v-pre><c-Card><div></div></c-Card></p>",
+        # Nothing here sits inside a paragraph.
+        "<Card v-pre><div></div></Card>",
+    ],
+)
+def test_invalid_nesting_keeps_a_component_tag_silent_outside_v_pre_and_a_citry_tag_inside_it(source):
+    assert "invalid-nesting" not in _codes(source)
+
+
 # --- citry.template.duplicate-id ----------------------------------------------
 
 
@@ -229,6 +326,67 @@ def test_duplicate_id_reports_the_benchmark_template():
     ],
 )
 def test_duplicate_id_stays_silent_when_either_element_may_not_render(source):
+    assert "duplicate-id" not in _codes(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves `v-if` and `v-else` as written, so both elements are on the page.
+        '<div v-pre><p v-if="a" id="same"></p><p v-else id="same"></p></div>',
+        '<div v-pre><p v-if="a" id="same"></p><p v-else-if="b" id="same"></p></div>',
+        '<p v-pre v-if="a" id="same"></p><p v-pre v-else id="same"></p>',
+        # A `v-for` is not a loop there, so its element appears once.
+        '<div v-pre><li v-for="x in xs" id="same"></li><li id="same"></li></div>',
+        '<li v-pre v-for="x in xs" id="same"></li><li id="same"></li>',
+    ],
+)
+def test_duplicate_id_counts_vue_conditions_and_loops_under_v_pre_as_plain_attributes(source):
+    assert _codes(source) == ["duplicate-id"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # A PascalCase tag is plain markup there, not a component rendered elsewhere.
+        '<div v-pre><Card id="same"></Card><i id="same"></i></div>',
+        '<Card v-pre id="same"></Card><i id="same"></i>',
+    ],
+)
+def test_duplicate_id_counts_a_pascal_case_tag_under_v_pre_as_plain_markup(source):
+    assert _codes(source) == ["duplicate-id"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Citry renders these before Vue sees the page, so they still choose or repeat.
+        '<div v-pre><p c-if="a" id="same"></p><p c-else id="same"></p></div>',
+        '<p v-pre c-if="a" id="same"></p><p v-pre c-else id="same"></p>',
+        '<div v-pre><li c-for="x in xs" id="same"></li><li id="same"></li></div>',
+        '<div v-pre><c-if cond="x"><i id="same"></i></c-if><c-else><i id="same"></i></c-else></div>',
+    ],
+)
+def test_duplicate_id_stays_silent_for_citry_conditions_and_loops_under_v_pre(source):
+    assert "duplicate-id" not in _codes(source)
+
+
+def test_duplicate_id_stays_silent_for_a_vue_loop_under_v_pre_with_one_id():
+    # A `v-for` under `v-pre` is not a loop, so one id is not repeated.
+    assert "duplicate-id" not in _codes('<div v-pre><li v-for="x in xs" id="one"></li></div>')
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # A component, or a `v-if`/`v-else` pair, outside `v-pre` may not render both.
+        '<Card id="same"></Card><i id="same"></i>',
+        '<p v-if="a" id="same"></p><p v-else id="same"></p><div v-pre><i id="other"></i></div>',
+        # A `v-pre` sibling earlier in the template does not reach the pair after it.
+        '<div v-pre></div><p v-if="a" id="same"></p><p v-else id="same"></p>',
+    ],
+)
+def test_duplicate_id_keeps_its_result_outside_v_pre(source):
     assert "duplicate-id" not in _codes(source)
 
 
@@ -990,6 +1148,47 @@ def test_invalid_vue_expression_follows_the_consumers_severity():
     source = '<p v-if="open &&"></p>'
     assert _invalid(source, (MarkupLintConsumer(rule_invalid_vue_expression="ignore"),)) == []
     assert _invalid(source, (MarkupLintConsumer(rule_invalid_vue_expression="warning"),)) == [("&", "warning")]
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # Citry renders the `@c-*` and `$c-tr` bindings of the `v-pre`
+        # element itself, so a mistake in them is still a mistake.
+        ('<p v-pre @c-click="save({)"></p>', [("{", "error")]),
+        ('<p v-pre $c-tr="{a:"></p>', [(":", "error")]),
+        # The Vue syntax beside them is left as written and stays unchecked.
+        ('<p v-pre $c-tr="{a:" :title="a &&" @click="go("></p>', [(":", "error")]),
+        # A later element outside `v-pre` is checked as usual.
+        ('<p v-pre @c-click="save({)"></p><b @c-click="save({)"></b>', [("{", "error"), ("{", "error")]),
+        # In a template-valued attribute.
+        ("<c-card c-header=\"<><i v-pre @c-click='save({)'></i></>\" />", [("{", "error")]),
+    ],
+)
+def test_invalid_vue_expression_checks_the_citry_bindings_of_the_v_pre_element_itself(source, expected):
+    assert _invalid(source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Inside the contents of a `v-pre` element, nothing is compiled.
+        '<p v-pre><b @c-click="save({)"></b></p>',
+        '<p v-pre><b $c-tr="{a:"></b></p>',
+        '<div v-pre><p @c-click="save({)"></p></div>',
+        '<div v-pre><p v-pre @c-click="save({)"></p></div>',
+        "<c-card c-header=\"<><i v-pre><b @c-click='save({)'></b></i></>\" />",
+    ],
+)
+def test_invalid_vue_expression_skips_the_contents_of_a_v_pre_element(source):
+    assert _invalid(source) == []
+
+
+def test_invalid_vue_expression_counts_each_citry_binding_on_the_v_pre_element_once():
+    # The element's own bindings are checked, and its contents are not
+    # checked a second time as a separate range.
+    source = '<p v-pre @c-click="save({)" $c-tr="{a:"><b @c-click="save({)"></b></p>'
+    assert _invalid(source) == [("{", "error"), (":", "error")]
 
 
 def test_invalid_vue_expression_skips_v_pre_inside_a_nested_template():

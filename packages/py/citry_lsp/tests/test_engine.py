@@ -2034,6 +2034,67 @@ def test_vue_listener_modifier_completion_is_empty_where_no_listener_fits(source
     assert completion_items(_document(source, project), cursor, project) == []
 
 
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        # Vue reads no listener at or inside `v-pre`, so it has no modifiers to offer.
+        ("<div v-pre @click.", "@click."),
+        ("<div v-pre @click.></div>", "@click."),
+        ("<div v-pre><b @click.", "@click."),
+        ("<div v-pre><b @click.></b></div>", "@click."),
+        ("<div v-pre><b @keydown.", "@keydown."),
+        ('<div v-pre @click.prevent="x" @keydown.', "@keydown."),
+        ("<div v-pre v-on:click.", "v-on:click."),
+        # `v-pre` written after the cursor, in the same tag, still applies.
+        ("<div @click. v-pre></div>", "@click."),
+        ('<div @click. :title="a > b" v-pre></div>', "@click."),
+        # `v-pre` on an ancestor, found from the parsed elements around the tag.
+        ('<ul><li v-pre><b @click.="x">b</b></li></ul>', "@click."),
+    ],
+)
+def test_vue_listener_modifier_completion_is_empty_at_and_inside_v_pre(source, marker):
+    project = _syntax_state()
+    cursor = _position(source, marker, len(marker))
+
+    assert completion_items(_document(source, project), cursor, project) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "<div v-pre></div><b @click.",
+        "<div v-pre><p></p></div><b @click.",
+        "<br v-pre><b @click.",
+        # A `v-pre` only in a value, or in a later tag, does not apply.
+        '<div @click. title="v-pre"></div>',
+        "<div @click.></div><i v-pre></i>",
+        # The words `v-pre` inside an attribute value are not an attribute.
+        '<p title="see v-pre docs"><b @click.>',
+        '<p title="see v-pre docs" @click.',
+        # A closed `v-pre` sibling, also inside a template-valued attribute.
+        "<ul><li v-pre>a</li><li @click.>b</li></ul>",
+        '<c-card c-header="<><b v-pre>x</b></>"><p @click.></p></c-card>',
+    ],
+)
+def test_vue_listener_modifier_completion_stays_on_after_a_closed_v_pre_element(source):
+    project = _syntax_state()
+    cursor = _position(source, "@click.", len("@click."))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert labels == _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS
+
+
+@pytest.mark.parametrize("source", ["<div v-pre @c-click.", "<div v-pre><b @c-click."])
+def test_citry_listener_modifier_completion_stays_on_at_and_inside_v_pre(source):
+    project = _syntax_state()
+    cursor = _position(source, "@c-click.", len("@c-click."))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert {".debounce", ".once"} <= labels
+
+
 def test_vue_listener_modifier_completion_replaces_only_the_current_segment():
     project = _syntax_state()
     source = '<div @input.debounce.30.prevent="search"></div>'
@@ -4633,6 +4694,144 @@ def test_vue_structural_directives_are_available_on_html_elements_without_vue_na
 
 
 @pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves its own attributes at or inside `v-pre` as written, so
+        # none of them is offered.
+        "<div v-pre ",
+        "<div v-pre><p ",
+        "<div v-pre><span>x</span><p ",
+        "<div v-pre v-",
+        "<div v-pre @",
+        "<div v-pre :",
+        '<div v-pre="" ',
+        "<div V-PRE ",
+        "<c-card v-pre ",
+    ],
+)
+def test_attribute_completion_offers_no_vue_syntax_at_or_inside_v_pre(source):
+    project = _syntax_state()
+
+    labels = {
+        item.label
+        for item in completion_items(_document(source, project), _position(source, source, len(source)), project)
+    }
+
+    assert not [label for label in labels if label.startswith(("v-", ":", "@")) and not label.startswith("@c-")]
+    # Citry renders its own attributes before Vue sees the page.
+    assert {"c-if", "c-for"} <= labels
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "vue_syntax"),
+    [
+        # The template parses, so the parsed elements decide, including
+        # those inside a template-valued attribute.
+        ("<ul><li v-pre><b ></b></li></ul>", "<b ", False),
+        ('<c-card c-header="<><div v-pre><p ></p></div></>" />', "<p ", False),
+        ("<ul><li v-pre>a</li><li ></li></ul>", "</li><li ", True),
+        ('<c-card c-header="<><div><p ></p></div></>" />', "<p ", True),
+        ('<c-card c-header="<><b v-pre>x</b></>"><p ></p></c-card>', "<p ", True),
+        # The words `v-pre` inside an attribute value are not an attribute.
+        ('<p title="see v-pre docs"><b ></b></p>', "<b ", True),
+        ('<p title="see v-pre docs" ></p>', 'docs" ', True),
+    ],
+)
+def test_attribute_completion_reads_v_pre_from_the_parsed_template(source, marker, vue_syntax):
+    project = _syntax_state()
+    document = _document(source, project)
+    assert document.diagnostics == ()
+    cursor = _position(source, marker, len(marker))
+
+    labels = {item.label for item in completion_items(document, cursor, project)}
+
+    assert ({"v-if", "v-for", ":class", "@click"} <= labels) is vue_syntax
+    assert {"c-if", "c-for"} <= labels
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "vue_syntax"),
+    [
+        # While the template does not parse, the text around the cursor decides.
+        ('<div v-pre><p v-if="a"></p><b ', "<b ", False),
+        ("<div v-pre><p ", "<p ", False),
+        ('<p title="see v-pre docs" ', 'docs" ', True),
+        ('<p title="see v-pre docs"><b ', "<b ", True),
+        ("<ul><li v-pre>a</li><li ", "</li><li ", True),
+    ],
+)
+def test_attribute_completion_reads_v_pre_from_the_text_when_the_template_does_not_parse(source, marker, vue_syntax):
+    project = _syntax_state()
+    document = _document(source, project)
+    assert document.diagnostics
+    cursor = _position(source, marker, len(marker))
+
+    labels = {item.label for item in completion_items(document, cursor, project)}
+
+    assert ({"v-if", "v-for", ":class", "@click"} <= labels) is vue_syntax
+    assert {"c-if", "c-for"} <= labels
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # `v-pre` written after the cursor, in the same tag, still applies,
+        # even when a quoted `>` sits between them.
+        "<div  v-pre></div>",
+        '<div  :title="a > b" v-pre></div>',
+    ],
+)
+def test_attribute_completion_offers_no_vue_syntax_before_a_v_pre_in_the_same_tag(source):
+    project = _syntax_state()
+    cursor = _position(source, "<div ", len("<div "))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert not [label for label in labels if label.startswith(("v-", ":", "@")) and not label.startswith("@c-")]
+    assert {"c-if", "c-for"} <= labels
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # A `v-pre` only in a value, a name part, or a later tag does not apply.
+        '<div  title="v-pre"></div>',
+        "<div  data-v-pre></div>",
+        "<div  ></div><i v-pre></i>",
+    ],
+)
+def test_attribute_completion_keeps_vue_syntax_when_v_pre_is_not_an_attribute_of_the_tag(source):
+    project = _syntax_state()
+    cursor = _position(source, "<div ", len("<div "))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert {"v-if", "v-for", ":class", "@click"} <= labels
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "<div ",
+        # A closed `v-pre` element earlier does not reach the tag after it.
+        "<div v-pre></div><p ",
+        "<div v-pre><p></p></div><p ",
+        "<br v-pre><p ",
+        "<div v-pre /><p ",
+    ],
+)
+def test_attribute_completion_offers_vue_syntax_outside_v_pre(source):
+    project = _syntax_state()
+
+    labels = {
+        item.label
+        for item in completion_items(_document(source, project), _position(source, source, len(source)), project)
+    }
+
+    assert {"v-if", "v-for", "v-show", ":class", "@click", "c-if"} <= labels
+
+
+@pytest.mark.parametrize(
     ("source", "label", "expected_new_text"),
     [
         ("<div c-ioops>", "c-if", 'c-if="${1:condition}"'),
@@ -5078,6 +5277,127 @@ def test_vue_condition_and_model_hover_on_component_tags(source, marker, anchor)
 
     assert result is not None
     assert f"https://vuejs.org/api/built-in-directives.html{anchor}" in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        # Vue leaves its own attributes at or inside `v-pre` as written, so
+        # there is no Vue syntax to explain.
+        ('<div v-pre v-if="a"></div>', "v-if"),
+        ('<div v-pre @click="go"></div>', "@click"),
+        ('<div v-pre :title="t"></div>', ":title"),
+        ('<div v-pre v-model.trim="text"></div>', "v-model"),
+        ('<div v-pre @click.prevent="go"></div>', ".prevent"),
+        ('<c-card v-pre v-show="open"></c-card>', "v-show"),
+        ('<div V-PRE v-if="a"></div>', "v-if"),
+        ('<div v-pre><p v-if="a"></p></div>', "v-if"),
+        ('<div v-pre><section><p @click="go"></p></section></div>', "@click"),
+        # A void element before the hovered tag leaves `v-pre` open.
+        ('<div v-pre><br><p v-if="a"></p></div>', "v-if"),
+        # The inner `v-pre` sits in a tag that is still open.
+        ('<div v-pre><p v-pre v-if="a"></p></div>', "v-if"),
+        # `v-pre` written after the hovered attribute still applies to it.
+        ('<div v-if="a" v-pre></div>', "v-if"),
+        ('<div @click="go" v-pre></div>', "@click"),
+        ('<div v-if="a" v-pre><p></p></div>', "v-if"),
+        ('<div v-if="a" v-pre="x"></div>', "v-if"),
+        ('<div v-if="a" v-pre/>', "v-if"),
+        # A `>` inside a quoted value before `v-pre` does not end the tag.
+        ('<div :title="a > b" v-if="x" v-pre></div>', "v-if"),
+        ("<div :title='a > b' v-if=\"x\" v-pre></div>", "v-if"),
+        # An element with `v-pre` inside a template-valued attribute.
+        ("<c-card c-header=\"<><div v-pre><p v-if='a'></p></div></>\" />", "v-if"),
+        ('<ul><li v-pre><b v-if="a">b</b></li></ul>', "v-if"),
+    ],
+)
+def test_vue_syntax_hover_is_off_at_and_inside_v_pre(source, marker):
+    project = _syntax_state()
+
+    assert hover(_document(source, project), _position(source, marker, 1), project) is None
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "anchor"),
+    [
+        ('<div v-if="a"></div>', "v-if", "#v-if"),
+        ('<div @click="go"></div>', "@click", "#v-on"),
+        ('<div @click.prevent="go"></div>', ".prevent", None),
+        # A closed `v-pre` element earlier does not reach the tags after it.
+        ('<div v-pre></div><p v-if="a"></p>', "v-if", "#v-if"),
+        ('<div v-pre><p></p></div><p @click="go"></p>', "@click", "#v-on"),
+        # Void and self-closing `v-pre` elements have no contents.
+        ('<br v-pre><p v-if="a"></p>', "v-if", "#v-if"),
+        ('<div v-pre /><p v-if="a"></p>', "v-if", "#v-if"),
+        # A `v-pre` on a later element, or only in text, does not apply.
+        ('<div v-if="a"></div><p v-pre></p>', "v-if", "#v-if"),
+        ('<div v-if="a" title="v-pre"></div>', "v-if", "#v-if"),
+        ('<div v-if="a" data-v-pre></div>', "v-if", "#v-if"),
+        ('<div :title="a > b" v-if="x"></div>', "v-if", "#v-if"),
+        # The words `v-pre` inside an attribute value are not an attribute.
+        ('<p title="see v-pre docs"><b v-if="a"></b></p>', "v-if", "#v-if"),
+        # A closed `v-pre` sibling, also inside a template-valued attribute.
+        ('<ul><li v-pre>a</li><li v-if="a">b</li></ul>', "v-if", "#v-if"),
+        ('<c-card c-header="<><b v-pre>x</b></>"><p v-if="a"></p></c-card>', "v-if", "#v-if"),
+        ("<c-card c-header=\"<><div v-pre></div><p v-if='a'></p></>\" />", "v-if", "#v-if"),
+        ("<c-card c-header=\"<><div><p v-if='a'></p></div></>\" />", "v-if", "#v-if"),
+    ],
+)
+def test_vue_syntax_hover_stays_on_outside_v_pre(source, marker, anchor):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 1), project)
+
+    assert result is not None
+    if anchor is not None:
+        assert f"https://vuejs.org/api/built-in-directives.html{anchor}" in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "vue_help"),
+    [
+        # While the template does not parse, the text around the cursor decides.
+        ('<div v-pre><p v-if="a">', "v-if", False),
+        ('<div v-pre><p v-if="a">x', "v-if", False),
+        ('<div v-pre title="a"><p v-if="a"><b>', "v-if", False),
+        ('<div><p v-if="a" v-pre><b>', "v-if", False),
+        ('<div><p v-if="a">', "v-if", True),
+        ('<div v-pre></div><p v-if="a">', "v-if", True),
+        ('<ul><li v-pre>a</li><li v-if="a">b', "v-if", True),
+        # The words `v-pre` inside an attribute value are not an attribute.
+        ('<p title="see v-pre docs" v-if="a">', "v-if", True),
+        ('<div title="see v-pre docs"><p v-if="a"><b>', "v-if", True),
+    ],
+)
+def test_vue_syntax_hover_reads_v_pre_from_the_text_when_the_template_does_not_parse(source, marker, vue_help):
+    project = _syntax_state()
+    document = _document(source, project)
+    # The sources are unfinished on purpose, so the parsed template is not available.
+    assert document.diagnostics
+
+    result = hover(document, _position(source, marker, 1), project)
+
+    assert (result is not None) is vue_help
+    if vue_help:
+        assert result.contents.value.startswith("### `v-if`")
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "heading"),
+    [
+        # Citry renders its own syntax before Vue sees the page, so it keeps its help.
+        ('<div v-pre c-if="a"></div>', "c-if", "### `c-if`"),
+        ('<div v-pre><p c-if="a"></p></div>', "c-if", "### `c-if`"),
+        ('<div v-pre><c-if cond="a"></c-if></div>', "c-if", "### `<c-if>`"),
+    ],
+)
+def test_citry_syntax_hover_stays_on_at_and_inside_v_pre(source, marker, heading):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 1), project)
+
+    assert result is not None
+    assert result.contents.value.startswith(heading)
 
 
 def test_vue_show_hover_is_available_on_component_tags():
@@ -7763,6 +8083,64 @@ class Card(Component):
     ]
     assert 'c-title="item"' in findings[0].message
     assert "component's browser value 'label'" in findings[1].message
+
+
+def test_editor_reads_no_vue_syntax_at_or_inside_v_pre(tmp_path):
+    template_source = (
+        '<p :title="title" id="out" v-if="missing"></p>\n'
+        '<div v-pre><p :title="title" id="nested" v-if="gone"></p></div>\n'
+        '<section v-pre :title="title" id="self" v-if="away"></section>\n'
+        '<div v-pre><p id="same" v-if="a"></p><p id="same" v-else></p></div>\n'
+    )
+    app_source = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Card(Component):
+    citry = engine
+    template_file = 'card.html'
+    class JsData:
+        title: str
+"""
+    template_file = tmp_path / "card.html"
+    app_file = tmp_path / "app.py"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    template = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    python = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    for document in (template, python):
+        document.update(document.source, document.version, project)
+    documents = {template.uri: template, python.uri: python}
+
+    # Vue leaves `v-if` under `v-pre` as written, so only `missing` is unknown.
+    unknown = [
+        finding.message
+        for finding in browser_diagnostics(template, project, documents)
+        if finding.code == "citry.vue.unknown-variable"
+    ]
+    assert unknown == ["Vue variable 'missing' is not available in this component."]
+
+    # Both elements of the `v-if`/`v-else` pair are on the page, so the id repeats.
+    duplicates = [
+        finding
+        for finding in template_lint_diagnostics(template, project, documents)
+        if finding.code == "citry.template.duplicate-id"
+    ]
+    assert [finding.range.start for finding in duplicates] == [
+        _position(template_source, 'same" v-else', 0),
+    ]
+
+    # The `js_data()` name `title` is offered and explained outside `v-pre`
+    # only, because Vue reads no value inside it.
+    outside = _position(template_source, 'title" id="out"', 2)
+    assert [item.label for item in completion_items(template, outside, project, documents)] == ["title"]
+    outside_hover = hover(template, outside, project, documents)
+    assert outside_hover is not None
+    assert "(variable) title: string" in outside_hover.contents.value
+    for marker in ('title" id="nested"', 'title" id="self"'):
+        position = _position(template_source, marker, 2)
+        assert completion_items(template, position, project, documents) == []
+        assert hover(template, position, project, documents) is None
 
 
 def test_component_js_types_accept_page_plugins_async_initializers_and_send_options(tmp_path):

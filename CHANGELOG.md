@@ -336,6 +336,12 @@
 
 ### Fixes
 
+- `citry check` and the editor now leave Vue syntax on or inside an
+  element with `v-pre` as written, as Vue does. A `v-if="a"` there no
+  longer reports that `a` is not available, and a `:dir="'rlt'"` there is
+  no longer reported as a wrong `dir` value. The editor no longer offers
+  Vue completion or hover help there. Both elements of a `v-if`/`v-else`
+  pair there are in the page, so a repeated `id` on them is now reported.
 - `citry format` and the editor's format command no longer add a line break
   where two tags touch, such as between `<td>` cells or `<option>`s or just
   inside a `<c-fill>`, or at the start or end of a template string written
