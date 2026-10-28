@@ -15,13 +15,14 @@ browser, start with [Diagnose failures](#diagnose-failures).
 
 The Vue features in this section fail when the template loads, and the
 error says what to write instead. `citry check` and the editor report them
-too.
+too. Inside an element with `v-pre`, Vue reads them as plain HTML, so
+they are written as plain elements and attributes there.
 
 ### Vue built-in components { #vue-built-in-components }
 
 `<Transition>`, `<TransitionGroup>`, `<KeepAlive>`, `<Teleport>`, and
-`<Suspense>` fail on every page, in any spelling, such as `<KeepAlive>` or
-`<keep-alive>`. Use these instead:
+`<Suspense>` fail on every page outside `v-pre`, in any spelling, such as
+`<KeepAlive>` or `<keep-alive>`. Use these instead:
 
 | Vue component | Use instead |
 | --- | --- |
@@ -32,9 +33,9 @@ too.
 
 ### `v-once` and `v-memo` { #v-once-and-v-memo }
 
-Both fail on elements and component tags alike. To compute a fixed value
-once, do it in `data()`. To keep an element's contents as the server
-first rendered them, use
+Both fail on elements and component tags alike, outside `v-pre`. To
+compute a fixed value once, do it in `data()`. To keep an element's
+contents as the server first rendered them, use
 [`#c-ignore`](/syntax/attributes/#c-ignore-keep-contents-that-a-library-manages).
 
 ### Alpine-only modifiers { #unknown-modifiers }

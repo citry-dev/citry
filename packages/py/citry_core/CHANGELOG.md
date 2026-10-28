@@ -13,6 +13,16 @@
 
 ### Fixed
 
+- `parse_template()` no longer rejects Vue-only syntax inside `v-pre`, such
+  as `v-once`, `<transition>`, or `@click.bogus`, because Vue reads it as
+  plain HTML there. `<c-*>` tags inside `v-pre` keep their checks.
+- `parse_template()` now rejects `v-pre` written with an argument or
+  modifiers, such as `v-pre.x`, which Vue also reads as `v-pre`.
+- The Vue compiler now writes `<slot>`, `<component>`, `<teleport>`,
+  `<keep-alive>`, and `<transition>` inside `v-pre` as plain elements, as
+  Vue does, and reports `V_PRE_NEEDS_S2_LANE` for a `v-pre` template it
+  could compile only on its older code path, which does not follow that
+  rule.
 - A component's later root tags no longer lose the attribute that scopes
   its CSS, and tags nested inside them no longer get it, when `Markup` or
   a `<c-raw>` block holds a self-closed tag such as `<i/>` or `<div/>`,

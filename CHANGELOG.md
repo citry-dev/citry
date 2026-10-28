@@ -336,6 +336,14 @@
 
 ### Fixes
 
+- Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
+  modifier (`@click.bogus`), or a built-in such as `<transition>` no
+  longer stops the template from loading. A `<slot>`, `<component>`,
+  `<teleport>`, or `<keep-alive>` there is written as a plain element, as
+  Vue writes it, instead of running as a slot, a dynamic component, or a
+  built-in. When `v-pre` sits on one of those tags and its contents hold
+  Citry values, rendering now fails with advice to put `v-pre` on an
+  element around it.
 - `citry check` and the editor now leave Vue syntax on or inside an
   element with `v-pre` as written, as Vue does. A `v-if="a"` there no
   longer reports that `a` is not available, and a `:dir="'rlt'"` there is

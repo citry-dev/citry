@@ -110,7 +110,7 @@ write instead:
 - To repeat a component, use `<c-for>`, not `v-for`; see
   [`v-for` on components](#repeat-a-component).
 - For `v-html` or `v-text`, pass a prop or a fill that the child renders.
-- `v-once` and `v-memo` fail everywhere; see
+- `v-once` and `v-memo` fail everywhere outside `v-pre`; see
   [`v-once` and `v-memo`](/vue/limits/#v-once-and-v-memo).
 
 ### `v-model` on a child { #bind-with-v-model }

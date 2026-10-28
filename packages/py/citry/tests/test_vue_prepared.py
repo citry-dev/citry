@@ -345,7 +345,7 @@ def test_authored_text_plan_validator_binds_utf8_spans_and_compiler_source() -> 
         ],
     }
     response = {
-        "compiler": {"name": "vize_atelier_dom", "version": "0.420.0+citry.6"},
+        "compiler": {"name": "vize_atelier_dom", "version": "0.420.0+citry.7"},
         "transformedTemplate": source,
         "transformedSourceSha256": source_hash,
         "authoredTextPlan": plan,

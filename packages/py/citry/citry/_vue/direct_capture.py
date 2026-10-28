@@ -4514,7 +4514,20 @@ def _without_v_pre(part: PreparedElementOpen, *, takes_root_markers: bool = Fals
     ``takes_root_markers`` is True when Citry compiles the element only
     because it is a component's root that Citry adds attributes to. The
     error then names that reason.
+
+    Under `v-pre`, Vue also writes the element itself as a plain element, so
+    a `<slot>`, `<component>`, a Vue built-in, or a component name, which
+    Vue writes with capitals (SVG's camelCase elements excepted), stays a
+    plain element. Citry compiles this element as live
+    Vue, where those tags would run as a slot, a component, or a built-in,
+    so they are refused too.
     """
+    if _vue_types_tag(part.tag):
+        raise UnsupportedPreparedView(
+            f"{_directive_element_label(part, 'v-pre')} cannot be kept. Under 'v-pre', Vue writes <{part.tag}>"
+            " as a plain element, but this element holds Citry values, so Citry compiles it as live Vue, where"
+            f" <{part.tag}> would run as a slot, a component, or a built-in. Put 'v-pre' on an element around it."
+        )
     for attr in part.attrs:
         if attr.origin == "source" and is_vue_directive_name(attr.name) and attr.name.casefold() != "v-pre":
             # At a component root, moving the attribute inward would put it on
@@ -4535,6 +4548,78 @@ def _without_v_pre(part: PreparedElementOpen, *, takes_root_markers: bool = Fals
         part,
         attrs=tuple(attr for attr in part.attrs if not (attr.origin == "source" and attr.name.casefold() == "v-pre")),
     )
+
+
+# The tags Vue gives a meaning of its own: a slot outlet, a dynamic component,
+# and the built-in components, in both the spellings a template may use.
+_VUE_TYPED_TAGS = frozenset(
+    {
+        "slot",
+        "component",
+        "teleport",
+        "keep-alive",
+        "keepalive",
+        "transition",
+        "transition-group",
+        "transitiongroup",
+        "suspense",
+    }
+)
+
+
+# SVG's camelCase element names (Vue's `isSVGTag` list). Vue reads these as
+# native elements, so their capital letters do not make them components.
+_SVG_CAMEL_CASE_TAGS = frozenset(
+    {
+        "altGlyph",
+        "altGlyphDef",
+        "altGlyphItem",
+        "animateColor",
+        "animateMotion",
+        "animateTransform",
+        "clipPath",
+        "feBlend",
+        "feColorMatrix",
+        "feComponentTransfer",
+        "feComposite",
+        "feConvolveMatrix",
+        "feDiffuseLighting",
+        "feDisplacementMap",
+        "feDistantLight",
+        "feDropShadow",
+        "feFlood",
+        "feFuncA",
+        "feFuncB",
+        "feFuncG",
+        "feFuncR",
+        "feGaussianBlur",
+        "feImage",
+        "feMerge",
+        "feMergeNode",
+        "feMorphology",
+        "feOffset",
+        "fePointLight",
+        "feSpecularLighting",
+        "feSpotLight",
+        "feTile",
+        "feTurbulence",
+        "foreignObject",
+        "glyphRef",
+        "linearGradient",
+        "radialGradient",
+        "textPath",
+    }
+)
+
+
+def _vue_types_tag(tag: str) -> bool:
+    """Return whether Vue reads ``tag`` as more than a plain element when it compiles it outside `v-pre`."""
+    if tag.casefold() in _VUE_TYPED_TAGS:
+        return True
+    # A capital letter makes Vue resolve the tag as a component, except in
+    # SVG's camelCase element names; HTML tags and custom elements are
+    # lowercase.
+    return tag != tag.lower() and tag not in _SVG_CAMEL_CASE_TAGS
 
 
 def _v_pre_left_to_vue(parts: Sequence[RenderPart], open_index: int) -> bool:

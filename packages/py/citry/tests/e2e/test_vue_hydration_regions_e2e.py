@@ -846,3 +846,48 @@ $component({data(){return {name: 'Ann'};}});
     assert page.evaluate("document.querySelector('main > div > input').getAttribute(':value')") == "y"
     assert page.evaluate("document.querySelector('#bound').value") == "Ann"
     assert "v-citry-vue-owned" not in result["html"].split("<script", 1)[0]
+
+
+def test_v_pre_tags_stay_plain_elements_and_hydrate_like_a_client_mount(
+    page: Any, browser: Any, serve_document: Any, monkeypatch: Any
+) -> None:
+    engine = Citry(autodiscover=False)
+
+    class Board(Component):
+        citry = engine
+        # Vue leaves each of these tags as a plain element under `v-pre`,
+        # so neither side runs a slot, a dynamic component, or a built-in.
+        template = """
+<main>
+  <div v-pre>
+    <slot name="a">FALLBACK</slot>
+    <component is="x">c</component>
+    <teleport to="body">t</teleport>
+    <keep-alive>k</keep-alive>
+    <transition><p>p</p></transition>
+  </div>
+  <p id="bound" v-text="name"></p>
+</main>
+"""
+        js = """
+$component({data(){return {name: 'Ann'};}});
+"""
+
+    result = _compare_with_client_mount(
+        Board(),
+        page=page,
+        browser=browser,
+        serve_document=serve_document,
+        monkeypatch=monkeypatch,
+    )
+
+    # The tags are in the DOM as written, and nothing moved to the body.
+    for tag in ("slot", "component", "teleport", "keep-alive", "transition"):
+        assert page.evaluate(f"document.querySelectorAll('main > div > {tag}').length") == 1, tag
+    assert page.evaluate("document.querySelector('main > div > slot').textContent") == "FALLBACK"
+    assert page.evaluate("document.querySelector('main > div > component').hasAttribute('is')") is False
+    assert page.evaluate("document.querySelector('#bound').textContent") == "Ann"
+    # The server leaves only <keep-alive>, a custom element name, for the
+    # browser to build.
+    shells = re.findall(r'<[a-z-]+ data-allow-mismatch="children">', result["html"].split("<script", 1)[0])
+    assert shells == ['<div data-allow-mismatch="children">']
