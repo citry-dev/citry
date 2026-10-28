@@ -127,7 +127,7 @@ from citry.constness import (
     _overlay_const_mapping,
     const_value,
 )
-from citry.slots import Slot, SlotData, _normalize_slot_data, normalize_slot_fills
+from citry.slots import Slot, SlotContext, SlotData, _normalize_slot_data, normalize_slot_fills
 from citry.util.exception import add_slot_to_error_message
 from citry.util.html import escape
 from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
@@ -458,8 +458,20 @@ def collect_fills_from_body(body: Sequence[BodyItem], context: CitryContext, sin
         raise
 
 
+# What a template fill raises when it runs after the Slot that owns it is gone.
+_LOST_OWNER_MESSAGE = "A template Slot content callable lost its owning Slot."
+
+
 class _TemplateSlotContent:
-    """One template fill callable that does not strongly point back to its Slot."""
+    """
+    One template fill callable that does not strongly point back to its Slot.
+
+    Calling it renders the fill body through a new run of the body
+    renderer. ``SlotNode._render_steps`` instead hands the body and the
+    context ``_render_context`` returns to the body renderer that is already
+    running, so a fill passed on through a chain of components does not add
+    Python frames per link.
+    """
 
     __slots__ = (
         "_body",
@@ -496,18 +508,27 @@ class _TemplateSlotContent:
         slot_ref = self._slot_ref
         slot = slot_ref() if slot_ref is not None else None
         if slot is None:
-            raise RuntimeError("A template Slot content callable lost its owning Slot.")
-
-        def render_content() -> CitryRender:
-            return self._render(ctx)
-
-        return render_content()
+            raise RuntimeError(_LOST_OWNER_MESSAGE)
+        return self._render(ctx)
 
     def _render(self, ctx: Any) -> CitryRender:
         # Imported lazily: component_render imports the node classes, so
         # importing the body walker at module load would be circular.
         from citry.component_render import _render_body  # noqa: PLC0415
 
+        render_context = self._render_context(ctx)
+        return CitryRender(parts=_render_body(self._body, render_context), context=render_context)
+
+    def _render_context(self, ctx: Any) -> CitryContext:
+        """
+        Return the context the fill body renders in, for the slot call described by ``ctx``.
+
+        It is the context where the fill was written, with the slot data and
+        the fallback added under the fill's names, and the slot site's
+        provides over the captured ones. ``_render`` and
+        ``SlotNode._render_steps`` both use it, so a fill sees the same
+        variables whichever of them renders it.
+        """
         context = self._context
         provides = context.provides
         if ctx.provides is not None and ctx.provides is not provides:
@@ -533,7 +554,47 @@ class _TemplateSlotContent:
             )
         else:
             render_context = context
-        return CitryRender(parts=_render_body(self._body, render_context), context=render_context)
+        return render_context
+
+
+# `Slot.__call__` and the template content's `__call__` and `_render`, as
+# Citry defines them. `SlotNode._render_steps` renders a fill itself only
+# while these three are unchanged, so code that replaces one of them still
+# sees every fill go through it.
+_SLOT_CALL = Slot.__call__
+_TEMPLATE_CONTENT_CALL = _TemplateSlotContent.__call__
+_TEMPLATE_CONTENT_RENDER = _TemplateSlotContent._render
+
+
+def _fill_for_body_renderer(fill: Slot) -> _TemplateSlotContent | None:
+    """
+    Return a passed fill's template content when the body renderer can render the fill itself, else ``None``.
+
+    That is a plain ``Slot`` made from a ``<c-fill>`` (or a component's
+    implicit default body) while no code has replaced ``Slot.__call__`` or
+    the template content's ``__call__`` or ``_render``, and while the render
+    session the fill was made in is the one that is open. For anything
+    else, such as a Python function, a ``Slot`` subclass or a fill from
+    another session, the slot calls the ``Slot``, which runs that code or
+    raises its error.
+    """
+    if type(fill) is not Slot or Slot.__call__ is not _SLOT_CALL:
+        return None
+    content = fill.content_func
+    if (
+        type(content) is not _TemplateSlotContent
+        or _TemplateSlotContent.__call__ is not _TEMPLATE_CONTENT_CALL
+        or _TemplateSlotContent._render is not _TEMPLATE_CONTENT_RENDER
+    ):
+        return None
+    # Imported here because the Vue modules import this one.
+    from citry._vue.direct import direct_fill_source, direct_session  # noqa: PLC0415
+
+    source = direct_fill_source(fill)
+    session = direct_session()
+    if source is None or session is None or source.session is not session or not session.active:
+        return None
+    return content
 
 
 def _slot_prop_key(key: str) -> str | None:
@@ -2291,7 +2352,9 @@ class BodySteps(NamedTuple):
     ``_render_steps``, so the body renderer can render each body on its own
     stack instead of calling the node's ``render``, which would call the
     body renderer again for every level of nesting. ``SlotNode`` returns it
-    only for its own fallback. ``bodies`` yields each ``(body, context)`` pair in render
+    for its own fallback and for a template fill passed to the component,
+    so a fill passed on through a chain of components adds no Python frames
+    per link. ``bodies`` yields each ``(body, context)`` pair in render
     order, and is read one pair at a time, so loop side effects and errors
     happen in the same order as in ``render``. ``finish`` takes the parts of
     every body, in order, and returns the node's part.
@@ -2311,12 +2374,12 @@ class BodySteps(NamedTuple):
 
 class _CarriedStopIteration(Exception):
     """
-    Carry a ``StopIteration`` out of a slot fallback's ``bodies`` generator.
+    Carry a ``StopIteration`` out of a slot's ``bodies`` generator.
 
     Python turns a ``StopIteration`` that leaves a generator into a
     ``RuntimeError``. One raised by template code (a ``next()`` on an empty
     iterator in a template function) or by an ``on_slot_rendered`` hook comes
-    out unchanged when a fallback renders through a ``Slot`` call, as
+    out unchanged when a slot renders through a ``Slot`` call, as
     ``render`` still does, so the generator raises this instead, and the
     body renderer raises the original from ``stop``.
     """
@@ -2948,9 +3011,11 @@ class SlotNode(Node):
         A required slot with no fill raises, with a "did you mean" hint over
         the fills the component received.
 
-        Inside a template body the body renderer usually renders the fallback
-        itself, through ``_render_steps``, so nested fallbacks do not add a
-        Python call per level; this method gives the same result.
+        Inside a template body the body renderer usually calls
+        ``_render_steps`` instead, and renders the fallback or a passed
+        template fill on its own stack, so nested fallbacks and long chains
+        of passed-on fills do not add Python calls per level; this method
+        gives the same result.
         """
         selected = self._select(context)
         # A render part, for a simple component's outlet, is never a tuple.
@@ -3148,22 +3213,25 @@ class SlotNode(Node):
 
     def _render_steps(self, context: CitryContext) -> BodySteps | RenderPart:
         """
-        Return the fallback for the body renderer to render, or the part ``render`` returns.
+        Return the body for the body renderer to render, or the part ``render`` returns.
 
-        A slot that gets no fill renders its own body. Rendering that body
-        through a ``Slot`` call, as ``render`` does, would start the body
-        renderer again for every nested fallback, so here the fallback body
-        is handed to the running body renderer instead. Everything else
-        happens as in ``_render_direct``, in the same order: the same Slot
-        is made, the same execution is started, the same scopes are held
+        A slot renders either its own body, as the fallback, or a template
+        fill that another component passed. Rendering either through a
+        ``Slot`` call, as ``render`` does, would start the body renderer
+        again for every nested fallback and for every component a fill is
+        passed on through, so here the body is handed to the running body
+        renderer instead. Everything else happens as in ``_render_direct``
+        and the ``Slot`` call it makes, in the same order: the same Slots
+        are made, the same execution is started, the same scopes are held
         while the body renders, and the result is wrapped the same way.
 
-        A passed fill renders a body that another component wrote, through
-        that component, so walking it here would not save a frame per level;
-        it renders through ``_render_direct``. So does a fallback while code
-        has patched the ``CitryRender`` class, which ``_render_value`` would
-        treat differently. Without a Vue capture session, which every
-        ordinary render has, the slot renders through ``_render_plain``.
+        Any other fill (a Python function, a string, a ``Slot`` subclass, a
+        fill made in another render session, or any fill while code has
+        replaced ``Slot.__call__`` or the template content's ``__call__`` or
+        ``_render``) renders through ``_render_direct``. So does every slot while code has patched the
+        ``CitryRender`` class, which ``_render_value`` would treat
+        differently. Without a Vue capture session, which every ordinary
+        render has, the slot renders through ``_render_plain``.
         """
         from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
 
@@ -3174,19 +3242,20 @@ class SlotNode(Node):
         if not direct_prepared_render_active():
             return self._render_plain(context, *selected)
         component, name, required, data, fill = selected
-        if fill is not None or not _render_passes_through(CitryRender):
+        if not _render_passes_through(CitryRender):
             return self._render_direct(context, component, name, required, data, fill)
+        # Decided before any Slot is made, so a fill sent to `_render_direct`
+        # makes its fallback Slot once, there.
+        content = None
+        if fill is not None:
+            content = _fill_for_body_renderer(fill)
+            if content is None:
+                return self._render_direct(context, component, name, required, data, fill)
 
-        # Imported only here, so a filled slot does not pay for them.
-        from citry._vue.direct import (  # noqa: PLC0415
-            active_execution,
-            begin_slot_execution,
-            direct_execution_scope,
-            direct_fill_source,
-            wrap_slot_result,
-        )
+        # Imported only here, so a slot rendered another way does not pay for them.
+        from citry._vue.direct import begin_slot_execution, direct_fill_source  # noqa: PLC0415
 
-        # The same steps as `_render_direct` with no fill, up to the Slot call.
+        # The same steps as `_render_direct`, up to the Slot call.
         body_slot = _make_body_slot(
             self.body,
             context,
@@ -3198,14 +3267,21 @@ class SlotNode(Node):
             source=self.source,
             kind=LogicalFillKind.FALLBACK,
         )
-        if required:
-            raise RuntimeError(_missing_required_slot_message(component, name))
-        source = direct_fill_source(body_slot)
-        if source is None:
-            return self._render_plain(context, component, name, required, data, None)
-        # `begin_slot_execution` checks that the fallback's source belongs to
-        # the open session, which is the check `Slot.__call__` makes. The
-        # branch there for a Slot with no source cannot apply: it has one.
+        if fill is None:
+            if required:
+                raise RuntimeError(_missing_required_slot_message(component, name))
+            slot_used = body_slot
+            source = direct_fill_source(body_slot)
+            if source is None:
+                return self._render_plain(context, component, name, required, data, None)
+        else:
+            slot_used = fill
+            # `_fill_for_body_renderer` already checked that this fill has a
+            # source in the open session.
+            source = cast("DirectFillSource", direct_fill_source(fill))
+        # `begin_slot_execution` checks that the source belongs to the open
+        # session, which is the check `Slot.__call__` makes. The branch there
+        # for a Slot with no source cannot apply: this one has one.
         execution = begin_slot_execution(
             source,
             public_name=name,
@@ -3218,46 +3294,94 @@ class SlotNode(Node):
 
         parts: list[RenderPart] = []
         finished: list[RenderPart] = []
+        bodies = self._slot_steps(
+            context, component, name, required, data, slot_used, body_slot, content, source, execution, parts, finished
+        )
+        return BodySteps(bodies, lambda _parts: finished[0], parts, wraps_errors=True)
 
-        def fallback() -> Iterator[tuple[Sequence[BodyItem], CitryContext]]:
-            try:
-                # The scopes `_render_direct` holds around the Slot call, then
-                # the one `capture_slot_call` holds around the body, in that order.
-                with direct_execution_scope(execution), add_slot_to_error_message(type(component).__name__, name):
-                    # A fallback reads none of the slot data, but invalid data
-                    # must still fail here, as it does in a Slot call.
-                    _normalize_slot_data(data)
-                    # `capture_slot_call` would find this execution active and
-                    # not yet used, and mark it used; do the same. The check
-                    # only guards against a later change breaking that.
-                    if active_execution() is not execution or execution.consumed:
-                        raise RuntimeError("a slot fallback's execution is not the active one")
-                    execution.consumed = True
-                    with direct_execution_scope(execution):
+    def _slot_steps(
+        self,
+        context: CitryContext,
+        component: Any,
+        name: str,
+        required: bool,
+        data: dict[str, Any],
+        slot_used: Slot,
+        body_slot: Slot,
+        content: _TemplateSlotContent | None,
+        source: DirectFillSource,
+        execution: DirectExecutionFrame,
+        parts: list[RenderPart],
+        finished: list[RenderPart],
+    ) -> Iterator[tuple[Sequence[BodyItem], CitryContext]]:
+        """
+        Yield the one body a slot renders, inside the scopes a ``Slot`` call would hold around it.
+
+        ``content`` is the passed fill's template content, or ``None`` when
+        the slot renders its own body as the fallback. The body renderer
+        puts the body's parts in ``parts``; this then wraps them, runs the
+        slot hook, and leaves the slot's part in ``finished``. An error
+        raised inside the body is thrown in at the ``yield``, so the scopes
+        below see it as they would around a ``Slot`` call.
+        """
+        # Imported here because the Vue modules import this one.
+        from citry._vue.direct import active_execution, direct_execution_scope, wrap_slot_result  # noqa: PLC0415
+
+        try:
+            # The scopes `_render_direct` holds around the Slot call, then
+            # the one `capture_slot_call` holds around the body, in that order.
+            with direct_execution_scope(execution), add_slot_to_error_message(type(component).__name__, name):
+                # Invalid slot data fails here, as it does in a Slot call,
+                # even for a fallback, which reads none of it.
+                slot_data = _normalize_slot_data(data)
+                if content is not None:
+                    # What `Slot.__call__` passes the fill: the slot data,
+                    # the fallback handle and the slot site's provides.
+                    ctx = SlotContext(data=slot_data, fallback=body_slot, provides=context.provides)
+                # `capture_slot_call` would find this execution active and
+                # not yet used, and mark it used; do the same. The check
+                # only guards against a later change breaking that.
+                if active_execution() is not execution or execution.consumed:
+                    raise RuntimeError("a slot's execution is not the active one")
+                execution.consumed = True
+                with direct_execution_scope(execution):
+                    if content is None:
                         # The fallback renders in the slot's own context: it
-                        # has no slot data or fallback variable to add, and the
-                        # slot site's provides are that context's own.
-                        yield (self.body, context)
-                        rendered = CitryRender(parts=parts, context=context)
-                    part: RenderPart = wrap_slot_result(
-                        rendered,
-                        fill_source=source,
-                        public_name=execution.public_name,
-                        receiver_render_id=execution.receiver_render_id,
-                        source=execution.source,
-                        span=execution.span,
-                        execution=execution,
+                        # has no slot data or fallback variable to add, and
+                        # the slot site's provides are that context's own.
+                        body: Sequence[BodyItem] = self.body
+                        body_context = context
+                    else:
+                        # The check `_TemplateSlotContent.__call__` makes
+                        # before it renders: a fill copied into another Slot
+                        # still needs the Slot it was made for.
+                        slot_ref = content._slot_ref
+                        if slot_ref is None or slot_ref() is None:
+                            raise RuntimeError(_LOST_OWNER_MESSAGE)
+                        body = content._body
+                        body_context = content._render_context(ctx)
+                    yield (body, body_context)
+                    # `Slot.__call__` hands this on unchanged: `_render_value`
+                    # passes an unpatched `CitryRender` through (checked in
+                    # `_render_steps`), and a fill is never plain text.
+                    rendered = CitryRender(parts=parts, context=body_context)
+                part: RenderPart = wrap_slot_result(
+                    rendered,
+                    fill_source=source,
+                    public_name=execution.public_name,
+                    receiver_render_id=execution.receiver_render_id,
+                    source=execution.source,
+                    span=execution.span,
+                    execution=execution,
+                )
+                if component.citry.extensions.has_hook("on_slot_rendered"):
+                    part = self._direct_slot_hook(
+                        context, component, name, required, slot_used, source, execution, part
                     )
-                    if component.citry.extensions.has_hook("on_slot_rendered"):
-                        part = self._direct_slot_hook(
-                            context, component, name, required, body_slot, source, execution, part
-                        )
-                    finished.append(part)
-            except StopIteration as stop:
-                # Leaving the generator would turn it into a RuntimeError.
-                raise _CarriedStopIteration(stop) from None
-
-        return BodySteps(fallback(), lambda _parts: finished[0], parts, wraps_errors=True)
+                finished.append(part)
+        except StopIteration as stop:
+            # Leaving the generator would turn it into a RuntimeError.
+            raise _CarriedStopIteration(stop) from None
 
     def _resolve_props(self, context: CitryContext) -> tuple[str, bool, dict[str, Any]]:
         """

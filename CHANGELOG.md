@@ -502,9 +502,12 @@
 - Rendering, serializing, or running `citry check` on a template nested
   up to 256 levels deep no longer raises `RecursionError`, even when your
   web framework already uses part of Python's stack. This includes
-  `<c-slot>` tags nested inside each other's fallback content. A slot
-  passed on through a long chain of components can still raise it,
-  because each component in the chain adds to the stack.
+  `<c-slot>` tags nested inside each other's fallback content.
+- Slot content that a long chain of components passes on with
+  `<c-fill><c-slot /></c-fill>` no longer raises `RecursionError`.
+  Content passed on through an expression, such as `{{ content }}` where
+  `template_data()` returns `slots["default"]`, can still raise it after
+  about 80 components.
 - In a component that uses Vue, a `Markup` value without tags, such as
   `Markup("a&#127;b")`, now keeps a character such as U+007F, or the
   Unicode noncharacter U+FDD0, that a numeric reference names, as the
