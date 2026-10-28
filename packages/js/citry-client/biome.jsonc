@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
   // Formatter settings mirror how this package was already written (2-space
   // indent, double quotes, semicolons, trailing commas); lineWidth 120 tracks
   // the repo-wide taste (ruff runs Python at 119).
@@ -15,6 +15,13 @@
         // have evaluation-order requirements.
         "organizeImports": "off"
       }
+    }
+  },
+  // Biome formats Markdown by default. Keep the README's line wrapping and lists
+  // as written; Biome still lints it.
+  "markdown": {
+    "formatter": {
+      "enabled": false
     }
   },
   "linter": {
