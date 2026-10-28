@@ -62,7 +62,7 @@ from typing import TYPE_CHECKING, Any, cast
 from citry._django_startup import start_django
 from citry._path_checks import PathLookup, register_path_checker
 from citry._sub_path import normalize_sub_path
-from citry.contrib._path_lookup import files_beside
+from citry.contrib._path_lookup import files_beside, path_below
 from citry.util.routing import RouteHeaders, RouteRequest, body_read_limit, flatten_routes, normalize_mount_prefix
 
 if TYPE_CHECKING:
@@ -305,12 +305,18 @@ def _django_path_checker() -> PathChecker:
         static_url = _site_prefix(django_settings.STATIC_URL, script_prefix)
         if static_url is not None and path.startswith(static_url) and apps.is_installed("django.contrib.staticfiles"):
             return _static_file_lookup(path, path[len(static_url) :])
+        # The links start with the sub-path Citry starts its own URLs with,
+        # read the same way; a link to the sub-path alone, such as "/shop",
+        # reaches the project's root too.
+        sub_path = _django_sub_path()
         # Suggestions are written the way a link writes them, with the sub-path.
-        nearby = tuple(sorted({script_prefix.rstrip("/") + route for route in _literal_routes()}))
-        if not path.startswith(script_prefix):
+        nearby = tuple(sorted({sub_path + route for route in _literal_routes()}))
+        below = path_below(path, sub_path)
+        if below is None:
             # A path outside the sub-path never reaches this project.
             return PathLookup(found=False, nearby=nearby)
-        path_info = "/" + path[len(script_prefix) :]
+        # Django serves an empty path as its root.
+        path_info = below or "/"
         if _resolve_match(path_info) is not None or _redirects_to_slash(path_info):
             return PathLookup(found=True)
         return PathLookup(found=False, nearby=nearby)
