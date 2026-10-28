@@ -35,6 +35,8 @@
   `data="..."`) works beside it
   ([details](https://citry.dev/vue/slots/#scoped-slots)). When the server
   knows the slot's values, it writes the fill's HTML with them.
+  `citry check` warns when `v-slot="{ ... }"` reads a name the slot does
+  not pass, which Vue would leave `undefined`.
 - Citry now supports Python 3.15.
 - You can now use `.outside`, `.window`, `.document`, `.debounce`, and
   `.throttle` on Vue listeners such as `@click` on HTML elements, as in
@@ -334,6 +336,20 @@
 
 ### Fixes
 
+- Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
+  modifier (`@click.bogus`), or a built-in such as `<transition>` no
+  longer stops the template from loading. A `<slot>`, `<component>`,
+  `<teleport>`, or `<keep-alive>` there is written as a plain element, as
+  Vue writes it, instead of running as a slot, a dynamic component, or a
+  built-in. When `v-pre` sits on one of those tags and its contents hold
+  Citry values, rendering now fails with advice to put `v-pre` on an
+  element around it.
+- `citry check` and the editor now leave Vue syntax on or inside an
+  element with `v-pre` as written, as Vue does. A `v-if="a"` there no
+  longer reports that `a` is not available, and a `:dir="'rlt'"` there is
+  no longer reported as a wrong `dir` value. The editor no longer offers
+  Vue completion or hover help there. Both elements of a `v-if`/`v-else`
+  pair there are in the page, so a repeated `id` on them is now reported.
 - `citry format` and the editor's format command no longer add a line break
   where two tags touch, such as between `<td>` cells or `<option>`s or just
   inside a `<c-fill>`, or at the start or end of a template string written
@@ -502,9 +518,12 @@
 - Rendering, serializing, or running `citry check` on a template nested
   up to 256 levels deep no longer raises `RecursionError`, even when your
   web framework already uses part of Python's stack. This includes
-  `<c-slot>` tags nested inside each other's fallback content. A slot
-  passed on through a long chain of components can still raise it,
-  because each component in the chain adds to the stack.
+  `<c-slot>` tags nested inside each other's fallback content.
+- Slot content that a long chain of components passes on with
+  `<c-fill><c-slot /></c-fill>` no longer raises `RecursionError`.
+  Content passed on through an expression, such as `{{ content }}` where
+  `template_data()` returns `slots["default"]`, can still raise it after
+  about 80 components.
 - In a component that uses Vue, a `Markup` value without tags, such as
   `Markup("a&#127;b")`, now keeps a character such as U+007F, or the
   Unicode noncharacter U+FDD0, that a numeric reference names, as the

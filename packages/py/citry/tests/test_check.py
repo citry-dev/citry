@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import textwrap
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
@@ -1916,6 +1917,50 @@ def test_registry_check_accepts_known_send_event_and_keeps_dynamic_and_on_event_
     assert not [finding for finding in report.findings if finding.code == "citry.browser.unknown-server-event"]
 
 
+def test_registry_check_reads_no_vue_variables_under_v_pre_but_reports_its_duplicate_id(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = """
+        <div v-pre>
+          <p v-if="a" id="same"></p>
+          <p v-else id="same"></p>
+        </div>
+        """
+        js = """
+        $component({});
+        """
+
+    class Plain(Component):
+        citry = engine
+        template = """
+        <div>
+          <p v-if="a"></p>
+        </div>
+        """
+        js = """
+        $component({});
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # Vue leaves `v-if` under `v-pre` as written, so only the component
+    # without `v-pre` reads `a`. Both `<p>` elements are on the page, so the
+    # repeated id is real.
+    assert sorted((item.origin.rsplit(".", 2)[-2], item.code) for item in report.findings) == [
+        ("Card", "citry.template.duplicate-id"),
+        ("Plain", "citry.vue.unknown-variable"),
+    ]
+    messages = {item.code: item.message for item in report.findings}
+    assert messages == {
+        "citry.template.duplicate-id": (
+            "Another element in this template already has id 'same'. An id must be unique in the page."
+        ),
+        "citry.vue.unknown-variable": "Vue variable 'a' is not available in this component.",
+    }
+
+
 def test_registry_check_reports_unknown_alpine_roots_and_respects_component_policy(tmp_path):
     engine = Citry(autodiscover=False)
 
@@ -2002,6 +2047,214 @@ def test_registry_check_reports_a_vue_read_of_a_python_loop_variable_once(tmp_pa
             'Use c-title="entry" to pass the Python value.',
         ),
     ]
+
+
+_TABLE_SLOT_TEMPLATE = """
+  <ul>
+    <li v-for="row in rows"><c-slot name="item" :row="row" /></li>
+  </ul>
+"""
+_PAGE_SCOPED_FILL_TEMPLATE = """
+  <c-Table>
+    <c-fill name="item" v-slot="{ row, missing }"><b>cell</b></c-fill>
+  </c-Table>
+"""
+
+
+def _unknown_slot_prop_findings(tmp_path: Path, engine: Citry) -> list[CheckFinding]:
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    return [item for item in report.findings if item.code == "citry.vue.unknown-slot-prop"]
+
+
+def test_registry_check_reports_a_v_slot_key_the_receiving_slot_does_not_pass(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = _TABLE_SLOT_TEMPLATE
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE
+
+    (finding,) = _unknown_slot_prop_findings(tmp_path, engine)
+
+    assert finding.severity == "warning"
+    assert finding.message == (
+        "Slot 'item' on <c-Table> passes no Vue prop named 'missing', so it is undefined in this fill. "
+        "The slot passes: row."
+    )
+    assert "Page" in finding.origin
+    # The range is the key `missing` itself, in the Page template after its shared indentation is removed.
+    assert (finding.line, finding.column, finding.end_line, finding.end_column) == (2, 37, 2, 44)
+    assert finding.source_kind == "inline"
+    assert finding.start_index is not None
+    assert finding.end_index is not None
+    text = textwrap.dedent(_PAGE_SCOPED_FILL_TEMPLATE).encode()
+    assert text[finding.start_index : finding.end_index] == b"missing"
+
+
+def test_registry_check_reports_a_key_the_slot_cannot_pass_because_it_passes_no_props(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = '<ul><c-slot name="item" /></ul>'
+
+    class Page(Component):
+        citry = engine
+        template = '<c-Table><c-fill name="item" v-slot="{ x }"><b>cell</b></c-fill></c-Table>'
+
+    (finding,) = _unknown_slot_prop_findings(tmp_path, engine)
+
+    assert finding.severity == "warning"
+    assert finding.message == (
+        "Slot 'item' on <c-Table> passes no Vue props, so 'x' is undefined in this fill. "
+        "If the slot passes Python data, read it with data= instead. Otherwise add it to its "
+        '<c-slot> as a Vue prop, such as :row="row".'
+    )
+    assert (finding.line, finding.column, finding.end_line, finding.end_column) == (0, 39, 0, 40)
+
+
+def test_registry_check_skips_the_v_slot_check_when_the_receiving_template_has_a_dynamic_slot_name(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = """
+          <ul>
+            <li v-for="row in rows"><c-slot name="item" :row="row" /></li>
+            <c-slot c-name="other" />
+          </ul>
+        """
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE
+
+    # A slot with a computed name may be the one `item` targets, so nothing
+    # proves which props the fill receives.
+    assert _unknown_slot_prop_findings(tmp_path, engine) == []
+
+
+def test_registry_check_counts_a_slot_prop_passed_from_inside_a_forwarded_fill(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Inner(Component):
+        citry = engine
+        template = '<div><c-slot name="x" /></div>'
+
+    class Table(Component):
+        citry = engine
+        # The `<c-slot name="item">` sits in a fill of `Inner`, so it is nested
+        # in a `<c-fill>` body, and it still decides what `item` passes.
+        template = """
+          <ul>
+            <li v-for="row in rows">
+              <c-Inner><c-fill name="x"><c-slot name="item" :row="row" /></c-fill></c-Inner>
+            </li>
+          </ul>
+        """
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE
+
+    (finding,) = _unknown_slot_prop_findings(tmp_path, engine)
+
+    # `row` is found inside the forwarded fill, so only `missing` is unknown.
+    # Had the walk skipped the fill body, the slot would look absent and
+    # nothing would be reported.
+    assert finding.message == (
+        "Slot 'item' on <c-Table> passes no Vue prop named 'missing', so it is undefined in this fill. "
+        "The slot passes: row."
+    )
+
+
+def test_registry_check_reads_the_template_a_receiving_subclass_inherits(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Base(Component):
+        citry = engine
+        template = _TABLE_SLOT_TEMPLATE
+
+        class JsData:
+            rows: list[str]
+
+    class Child(Base):
+        pass
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE.replace("Table", "Child")
+
+    (finding,) = _unknown_slot_prop_findings(tmp_path, engine)
+
+    # `Child` declares no template of its own, so it is checked against the
+    # `item` slot it inherits from `Base`.
+    assert finding.message == (
+        "Slot 'item' on <c-Child> passes no Vue prop named 'missing', so it is undefined in this fill. "
+        "The slot passes: row."
+    )
+
+
+def test_registry_check_skips_the_v_slot_check_for_an_unregistered_tag(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = _TABLE_SLOT_TEMPLATE
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE.replace("Table", "Missing")
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # The unknown tag is reported by its own rule; the slot check adds nothing on top.
+    assert any(item.code == "citry.template.unknown-component" for item in report.findings)
+    assert not any(item.code == "citry.vue.unknown-slot-prop" for item in report.findings)
+
+
+def test_registry_check_skips_the_v_slot_check_when_every_key_is_passed_or_the_pattern_is_one_name(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = """
+          <ul>
+            <li v-for="row in rows"><c-slot name="item" :row-data="row" /></li>
+          </ul>
+        """
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = """
+          <c-Table>
+            <c-fill name="item" v-slot="{ rowData }"><b>cell</b></c-fill>
+          </c-Table>
+          <c-Table>
+            <c-fill name="item" v-slot="props"><b>cell</b></c-fill>
+          </c-Table>
+        """
+
+    # `:row-data` reaches the fill as `rowData`, and a single name reads no key by name.
+    assert _unknown_slot_prop_findings(tmp_path, engine) == []
 
 
 def test_registry_check_defaults_unknown_alpine_roots_to_error(tmp_path):

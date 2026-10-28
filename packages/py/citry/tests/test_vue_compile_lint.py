@@ -344,6 +344,9 @@ def test_still_reports_another_mistake_inside_the_same_paragraph():
         '<c-if cond="a"><p v-if="b">1</p><p v-else>2</p></c-if><c-elif cond="c">x</c-elif><c-else>y</c-else>',
         '<c-for each="item in items"><li>{{ item }}</li></c-for><c-empty><li>none</li></c-empty>',
         '<div v-pre><p v-else>x</p><b :title="a +">y</b></div>',
+        # A `v-pre` element that holds a Citry value reaches the browser
+        # with its contents as one block of HTML, which Vue does not compile.
+        "<div v-pre>{{ a }}<table><div>x</div></table></div>",
         '<c-card v-if="open" :title="t" @close="open = false" v-model="value">'
         '<c-fill name="body">B</c-fill><c-fill name="footer" data="d">{{ d }}</c-fill></c-card>'
         "<p v-else>closed</p>",

@@ -81,6 +81,10 @@ struct TagStackEntry {
     /// `validate_fill_exclusivity` needs this for every closed child, and
     /// keeping it here saves searching all earlier siblings each time.
     holds_fill: bool,
+    /// Whether this tag carries `v-pre` or sits inside a tag that does. Vue
+    /// reads everything there as written, so the Vue-only checks skip it.
+    /// Kept per entry so a node needs to look only at its parent.
+    in_v_pre: bool,
 }
 
 /// Parse a complete template into a Template AST
@@ -498,12 +502,15 @@ fn process_template_element(
                             used_variables: Shared::new(vec![]),
                             slots: Shared::new(vec![]),
                         };
+                        let in_v_pre = has_v_pre(&start_tag)
+                            || tag_stack.last().is_some_and(|parent| parent.in_v_pre);
                         tag_stack.push(TagStackEntry {
                             start_tag,
                             body,
                             introduced_variables,
                             attribute_slots,
                             holds_fill: false,
+                            in_v_pre,
                             depth,
                         });
                     }
@@ -548,6 +555,7 @@ fn process_template_element(
                         attribute_slots,
                         holds_fill: _,
                         depth: _,
+                        in_v_pre: _,
                     } = tag_stack.pop().unwrap();
 
                     // `introduced_variables` was computed when the start tag was
@@ -1864,22 +1872,51 @@ fn validate_node(
     validate_fill_placement(node, tag_stack, context)?;
     validate_client_props_placement(node, context)?;
     validate_component_tag_vue_directives(node, context)?;
-    validate_vue_slot_syntax_in_component(node, tag_stack, context)?;
+    // Vue reads an element with `v-pre`, and everything inside it, as
+    // written: its directives are plain attributes and its tags plain
+    // elements, so the checks for Vue-only syntax do not apply there.
+    // Citry's own tags still render inside `v-pre`, so they keep theirs.
+    // The checks keep their order, so a template with several problems
+    // reports the same one first.
+    let vue_compiles = has_citry_component_prefix(node.tag_name())
+        || !(has_v_pre(node.start_tag()) || tag_stack.last().is_some_and(|parent| parent.in_v_pre));
+    // A direct child of a Citry component is still that component's content,
+    // which Citry places in a slot, so Vue slot syntax there keeps its check
+    // (pointing at `<c-fill>`) even inside `v-pre`.
+    let parent_is_component = tag_stack
+        .last()
+        .is_some_and(|parent| has_citry_component_prefix(&parent.start_tag.name.content));
+    if vue_compiles || parent_is_component {
+        validate_vue_slot_syntax_in_component(node, tag_stack, context)?;
+    }
     validate_slot_tag_vue_directives(node, context)?;
     validate_fill_tag_vue_directives(node, context)?;
     validate_attributes_present(node, context)?;
     validate_meta_attr_placement(node, context)?;
     validate_ignored_element_contents(node, tag_stack, context)?;
-    validate_vue_listener_modifiers(node, context)?;
-    validate_reserved_citry_names(node, context)?;
-    validate_element_once_memo(node, context)?;
-    validate_element_vue_directives(node, context)?;
-    validate_vue_builtin_component_tag(node, context)?;
-    validate_vue_binding_python_conflicts(node, context)?;
+    if vue_compiles {
+        validate_vue_listener_modifiers(node, context)?;
+        validate_reserved_citry_names(node, context)?;
+        validate_element_once_memo(node, context)?;
+        validate_element_vue_directives(node, context)?;
+        validate_vue_builtin_component_tag(node, context)?;
+        validate_vue_binding_python_conflicts(node, context)?;
+    }
     validate_attribute_conflicts(node, context)?;
     validate_attribute_values(node, context)?;
     validate_fill_names(node, fill_nodes, context)?;
     Ok(())
+}
+
+/// Whether a start tag carries exactly `v-pre`. The directive-shape check
+/// rejects any other spelling (`V-PRE`, `v-pre.x`, `v-pre:x`) outside
+/// `v-pre`, so outside `v-pre` this is the only spelling a loaded template
+/// can carry.
+fn has_v_pre(start_tag: &HtmlStartTag) -> bool {
+    start_tag
+        .attrs
+        .iter()
+        .any(|attr| attr.key.content == "v-pre")
 }
 
 /// Enforce the boundary between Citry syntax and ordinary/custom HTML.
@@ -2904,6 +2941,12 @@ fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Resu
         }
         if directive == "show" && !suffix.is_empty() {
             return fail("takes no argument or modifiers. Write 'v-show=\"...\"'.".to_string());
+        }
+        // Vue reads `v-pre.x` and `v-pre:x` as `v-pre` too, while Citry
+        // recognizes only the plain name, so the two would disagree about
+        // which content Vue reads as written.
+        if directive == "pre" && !suffix.is_empty() {
+            return fail("takes no argument or modifiers. Write 'v-pre'.".to_string());
         }
         if directive == "model" && suffix.starts_with(':') {
             return fail(

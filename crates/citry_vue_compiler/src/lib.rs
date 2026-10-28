@@ -442,6 +442,7 @@ fn compile_on_stack(request: CompileRequest) -> CompileArtifact {
         edits: &mut edits,
         diagnostics: &mut diagnostics,
         citry_listeners: 0,
+        v_pre_depth: 0,
     };
     walk(&root.children, &[], false, &mut walk_state);
     for item in &request.dynamic_elements {
@@ -622,6 +623,14 @@ fn compile_on_stack(request: CompileRequest) -> CompileArtifact {
             .map(|item| item.alias.clone().into())
             .collect(),
     );
+    // The S2 probe below needs the same custom elements as the compile.
+    let probe_matcher = CustomElementMatcher::from_patterns(
+        request
+            .dynamic_elements
+            .iter()
+            .map(|item| item.alias.clone().into())
+            .collect(),
+    );
     let (compiler_root, compile_errors, result) =
         compile_template_with_custom_elements_and_template_syntax_and_codegen_options(
             &compiler_allocator,
@@ -636,6 +645,20 @@ fn compile_on_stack(request: CompileRequest) -> CompileArtifact {
             matcher,
             CodegenOptions::default(),
         );
+    // A template the fallback already reports errors for fails with those;
+    // only a template the fallback compiles without errors is checked here.
+    if compile_errors.is_empty() && !s2_lane_compiles_v_pre(&transformed_template, &probe_matcher) {
+        diagnostics.push(diag(
+            "compile",
+            "V_PRE_NEEDS_S2_LANE",
+            "Citry cannot compile this template's v-pre content the way Vue does, because \
+             another part of the template needs an older code path in Citry's Vue compiler, which reads tags inside \
+             v-pre (such as <slot> or <component>) as live Vue. Simplify the rest of the \
+             template, or move the v-pre content into its own component",
+            0,
+            transformed_template.len() as u32,
+        ));
+    }
     let authored_text_plan = authored_text_plan(
         &transformed_template,
         &compiler_root,
@@ -738,7 +761,7 @@ fn compile_on_stack(request: CompileRequest) -> CompileArtifact {
         schema: SCHEMA,
         compiler: CompilerIdentity {
             name: "vize_atelier_dom",
-            version: "0.420.0+citry.6",
+            version: "0.420.0+citry.7",
         },
         target: TARGET,
         options: CompilerOptions {
@@ -761,6 +784,38 @@ fn compile_on_stack(request: CompileRequest) -> CompileArtifact {
         elements,
         dynamic_elements: request.dynamic_elements,
     }
+}
+
+/// Whether the S2 emitter, the vize lane that follows Vue's `v-pre` rules,
+/// compiles a template that uses `v-pre`.
+///
+/// Vize compiles on the S2 lane when it can and falls back to its older
+/// code generator when S2 declines. That fallback types the tags inside
+/// `v-pre` as live Vue (`<slot>` as an outlet, `<component>` as dynamic),
+/// unlike Vue 3.5, so a `v-pre` template it would compile is refused here
+/// instead. The probe uses the options and custom elements Citry compiles
+/// with; a template whose text does not contain `v-pre` skips the probe,
+/// so the common case costs nothing.
+fn s2_lane_compiles_v_pre(source: &str, custom_elements: &CustomElementMatcher) -> bool {
+    if !source.contains("v-pre") {
+        return true;
+    }
+    let allocator = Allocator::new();
+    let options = vize_s1_to_s2::DomEmitOptions {
+        prefix_identifiers: true,
+        hoist_static: false,
+        cache_handlers: false,
+        custom_element_patterns: custom_elements.patterns(),
+        custom_element_predicate: custom_elements.static_predicate(),
+        ..vize_s1_to_s2::DomEmitOptions::DEFAULT
+    };
+    vize_s1_to_s2::emit_dom_source_with_options(
+        &allocator,
+        source,
+        vize_s1_to_s2::LegacyCaps::VUE3,
+        &options,
+    )
+    .is_ok()
 }
 
 fn authored_text_plan(
@@ -1079,6 +1134,10 @@ struct WalkState<'a> {
     /// How many listeners with a Citry modifier the walk has rewritten, which
     /// numbers the next one (see [`plan_citry_listener`]).
     citry_listeners: usize,
+    /// How many open elements carry `v-pre`. Vue reads their contents as
+    /// written, so a `<slot>` or `<template v-slot>` there is a plain
+    /// element, not an outlet or a fill that Citry could place content in.
+    v_pre_depth: usize,
 }
 
 /// The runtime directive object a parsed directive compiles to, and the
@@ -1223,6 +1282,11 @@ fn walk(
             }
             _ => None,
         });
+        // The vize parser this walk reads removes `v-pre` from the element's
+        // props, so the opening tag's source says whether this element starts
+        // a `v-pre` subtree.
+        let opens_v_pre = opening_tag_has_v_pre(state.source, element);
+        let in_v_pre = opens_v_pre || state.v_pre_depth > 0;
         let mut path = parent.to_vec();
         path.push(match &static_key {
             Some(key) => format!("k:{}:{}", hex(key.as_bytes()), hex(element.tag.as_bytes())),
@@ -1522,16 +1586,93 @@ fn walk(
             local_descendant_runs: Vec::new(),
             slot_outlets: Vec::new(),
             fills: Vec::new(),
-            slot_name: slot_outlet_name(element),
-            fill_name: slot_fill_name(element),
+            slot_name: (!in_v_pre).then(|| slot_outlet_name(element)).flatten(),
+            fill_name: (!in_v_pre).then(|| slot_fill_name(element)).flatten(),
         });
+        if opens_v_pre {
+            state.v_pre_depth += 1;
+        }
         walk(
             &element.children,
             &path,
             inside_v_for || element_v_for,
             state,
         );
+        if opens_v_pre {
+            state.v_pre_depth -= 1;
+        }
     }
+}
+
+/// Whether an element's opening tag, as written, carries the `v-pre`
+/// attribute. It reads the tag the way HTML does: an attribute value after
+/// `=`, quoted or not, is skipped, so `title="v-pre"` and `title= v-pre` do
+/// not count.
+fn opening_tag_has_v_pre(source: &str, element: &ElementNode<'_>) -> bool {
+    let start = element.loc.span.start as usize;
+    let end = (element.loc.span.end as usize).min(source.len());
+    let Some(text) = source.get(start..end) else {
+        return false;
+    };
+    let bytes = text.as_bytes();
+    // Skip `<` and the tag name.
+    let mut index = 1;
+    while index < bytes.len()
+        && !bytes[index].is_ascii_whitespace()
+        && !matches!(bytes[index], b'>' | b'/')
+    {
+        index += 1;
+    }
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte.is_ascii_whitespace() || byte == b'/' {
+            index += 1;
+            continue;
+        }
+        if byte == b'>' {
+            return false;
+        }
+        // An attribute name runs to whitespace, `=`, `/`, or `>`.
+        let name_start = index;
+        while index < bytes.len()
+            && !bytes[index].is_ascii_whitespace()
+            && !matches!(bytes[index], b'=' | b'>' | b'/')
+        {
+            index += 1;
+        }
+        if &text[name_start..index] == "v-pre" {
+            return true;
+        }
+        // Whitespace may sit around `=`.
+        let mut after = index;
+        while after < bytes.len() && bytes[after].is_ascii_whitespace() {
+            after += 1;
+        }
+        if after < bytes.len() && bytes[after] == b'=' {
+            index = after + 1;
+            while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+                index += 1;
+            }
+            match bytes.get(index) {
+                Some(&quote @ (b'"' | b'\'')) => {
+                    index += 1;
+                    while index < bytes.len() && bytes[index] != quote {
+                        index += 1;
+                    }
+                    index += 1;
+                }
+                _ => {
+                    while index < bytes.len()
+                        && !bytes[index].is_ascii_whitespace()
+                        && bytes[index] != b'>'
+                    {
+                        index += 1;
+                    }
+                }
+            }
+        }
+    }
+    false
 }
 
 /// The static `name` of a `<slot>` outlet. The producer always writes one; an
@@ -3298,6 +3439,74 @@ mod tests {
             !serde_json::to_string(&artifact)
                 .unwrap()
                 .contains("occurrence")
+        );
+    }
+
+    #[test]
+    fn a_slot_inside_v_pre_is_not_an_outlet() {
+        // Vue reads `<slot>` inside `v-pre` as a plain element, so no fill
+        // may target it. Outside `v-pre` the same slot is an outlet.
+        for (template, expected) in [
+            (r#"<div v-pre><slot name="a">x</slot></div>"#, vec![]),
+            (r#"<div><slot v-pre name="a">x</slot></div>"#, vec![]),
+            (r#"<div v-pre><p><slot name="a">x</slot></p></div>"#, vec![]),
+            (
+                r#"<div title="v-pre"><slot name="a">x</slot></div>"#,
+                vec!["a"],
+            ),
+            (
+                r#"<div v-pre></div><div><slot name="a">x</slot></div>"#,
+                vec!["a"],
+            ),
+        ] {
+            let artifact = compile_plain(template);
+            let outlets: Vec<&str> = artifact
+                .elements
+                .iter()
+                .flat_map(|element| element.slot_outlets.iter().map(String::as_str))
+                .collect();
+            let expected: Vec<&str> = expected;
+            assert_eq!(outlets.contains(&"a"), !expected.is_empty(), "{template}");
+        }
+    }
+
+    #[test]
+    fn a_v_pre_template_the_s2_lane_declines_is_refused() {
+        // The S2 lane follows Vue's v-pre rules; a v-pre template only the
+        // fallback lane could compile would read <slot> as a live outlet.
+        let none = CustomElementMatcher::from_patterns(vec![]);
+        assert!(s2_lane_compiles_v_pre(
+            r#"<div v-pre><slot name="a">x</slot></div>"#,
+            &none
+        ));
+        // Without the directive no probe runs, whatever the template holds.
+        assert!(s2_lane_compiles_v_pre(r#"<p :x="a +">x</p>"#, &none));
+        assert!(!s2_lane_compiles_v_pre(
+            r#"<div v-pre></div><p :x="a +">x</p>"#,
+            &none
+        ));
+        // The fallback already reports that template's error, so Citry adds
+        // no second one.
+        let artifact = compile_plain(r#"<div v-pre></div><p :x="a +">x</p>"#);
+        assert!(
+            artifact
+                .diagnostics
+                .iter()
+                .all(|item| item.code != "V_PRE_NEEDS_S2_LANE"),
+            "{:?}",
+            artifact.diagnostics
+        );
+        // A duplicate `:class` makes the S2 lane decline while the fallback
+        // compiles it without an error, so the v-pre content is refused.
+        let refused =
+            compile_plain(r#"<div><span v-pre>x</span><p :class="a" :class="b">a</p></div>"#);
+        assert!(
+            refused
+                .diagnostics
+                .iter()
+                .any(|item| item.code == "V_PRE_NEEDS_S2_LANE"),
+            "{:?}",
+            refused.diagnostics
         );
     }
 

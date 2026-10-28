@@ -26,9 +26,12 @@ The test also measures how many frames a render needs: the deepest stack at
 the limit may be at most 20 frames above the deepest stack at depth 8, or,
 with Vue, at depth 128 (see `VUE_COMPARISON_DEPTH`), plus the fixed cost of
 copying the first levels of the data Vue receives (`VUE_DIRECT_JSON_FRAMES`).
-A chain of four components that pass a slot on may cost at most 12 frames
-per extra component. It prints every number, so the measured margin is on
-record in the CI log.
+A chain of components that pass a template fill on with
+``<c-fill><c-slot /></c-fill>`` renders in the body renderer that is
+already running, so a chain of 150 may use at most 20 frames more than a
+chain of one, plus, with Vue, the fixed cost of the nested walks that build
+the browser data (`VUE_WALK_FRAMES`). It prints every number, so the
+measured margin is on record in the CI log.
 
 Each render path runs in its own subprocess, so the lowered recursion limit
 never reaches the pytest process, and in its own test file, so CI runs the
@@ -58,6 +61,7 @@ import pytest
 from citry import Citry, Component
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
+from citry._vue.direct_capture import _INLINE_WALK_FRAMES
 from citry._vue.json_data import _DIRECT_JSON_DEPTH
 from citry_core import _rust
 
@@ -73,8 +77,8 @@ HOST_FRAMES = 200
 BUDGET = 500
 SHALLOW = 8
 ALLOWED_GROWTH = 20
-# Extra frames allowed for each component a passed-on slot goes through.
-FRAMES_PER_HOP = 12
+# The longest chain of components passing a fill on that the test renders.
+LONG_CHAIN = 150
 # In a component that uses Vue, Citry's code that builds the browser data runs
 # up to `_INLINE_WALK_FRAMES` (128) frames of nested walks directly before
 # it hands deeper ones to `citry._walk.run`, which keeps them on a list
@@ -89,6 +93,11 @@ VUE_COMPARISON_DEPTH = 128
 # stack may grow by that many frames more. On 3.11 each of those levels is
 # two frames, because a comprehension runs in a frame of its own there.
 VUE_DIRECT_JSON_FRAMES = _DIRECT_JSON_DEPTH * (2 if sys.version_info < (3, 12) else 1)
+# The nested walks that build a Vue component's browser data run up to this
+# many frames deep before they hand the rest to `citry._walk.run`. A chain of
+# passed-on fills nests one level of that data per link, so a long chain
+# with Vue reaches this fixed cost, and stays there.
+VUE_WALK_FRAMES = _INLINE_WALK_FRAMES
 
 
 # The two test files mark their test with this.
@@ -406,7 +415,12 @@ def _measure(
             "cached_renders": _CACHED_CALLS[0],
         }
 
-    normal = run(LOGIC_LIMIT)
+    try:
+        normal = run(LOGIC_LIMIT)
+    except RecursionError as error:
+        # A fixture that cannot render even under the normal limit is
+        # reported with the others, rather than ending the whole run.
+        return {"error": f"RecursionError under the normal limit: {error}"}
     try:
         low = _with_host_stack(lambda: run(LOGIC_LIMIT))
     except RecursionError as error:
@@ -451,13 +465,23 @@ def _worker(*, run_check: bool) -> None:
                 expects_innermost=variant != "vue",
             )
     for uses_vue in (False, True):
-        for links in (1, 4):
-            results[f"fill_chain[{links}, {'vue' if uses_vue else 'html'}]"] = _measure(
+        variant = "vue" if uses_vue else "html"
+        for links in (1, 4, LONG_CHAIN):
+            results[f"fill_chain[{links}, {variant}]"] = _measure(
                 "fill_chain",
                 lambda depth, links=links, uses_vue=uses_vue: _fill_chain(depth, links, uses_vue=uses_vue),
                 uses_vue=uses_vue,
                 expects_innermost=not uses_vue,
             )
+        # The same long chain with shallow templates. With Vue, this is the
+        # chain whose browser data nests deepest: its walk reaches the
+        # `VUE_WALK_FRAMES` cap, while the chains at the limit stay at the
+        # frames of a chain of one.
+        results[f"shallow_fill_chain[{LONG_CHAIN}, {variant}]"] = _measure(
+            "fill_chain",
+            lambda _depth, uses_vue=uses_vue: _fill_chain(SHALLOW, LONG_CHAIN, uses_vue=uses_vue),
+            uses_vue=uses_vue,
+        )
     if run_check:
         # `citry check` reads the template, not the render path or the
         # app's options, so one run on one path covers each fixture.
@@ -513,8 +537,18 @@ def check_render_path(render_path: str) -> None:
     }
     assert not grew, f"(depth compared, frames there, frames at {LOGIC_LIMIT}): {grew}"
     for variant in ("html", "vue"):
-        hops = results[f"fill_chain[4, {variant}]"]["deep_peak"] - results[f"fill_chain[1, {variant}]"]["deep_peak"]
-        assert hops <= 3 * FRAMES_PER_HOP, f"{variant}: a chain of four costs {hops} frames more than a chain of one"
+        one = results[f"fill_chain[1, {variant}]"]["deep_peak"]
+        allowed = ALLOWED_GROWTH + (VUE_WALK_FRAMES if variant == "vue" else 0)
+        # Spread over the 149 extra links of the longest chain, that
+        # allowance is under one frame per link.
+        longer = (
+            f"fill_chain[4, {variant}]",
+            f"fill_chain[{LONG_CHAIN}, {variant}]",
+            f"shallow_fill_chain[{LONG_CHAIN}, {variant}]",
+        )
+        chains = {name: results[name]["deep_peak"] for name in longer}
+        grew_with_links = {name: peak for name, peak in chains.items() if peak - one > allowed}
+        assert not grew_with_links, f"{variant}: a chain of one takes {one} frames, longer chains: {grew_with_links}"
 
 
 if __name__ == "__main__":

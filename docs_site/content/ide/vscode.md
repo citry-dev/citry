@@ -351,6 +351,48 @@ The editor does not check a fill whose slot name is set with `c-name` or
 `SlotInput[dict[str, Any]]`. `citry check --types` reports the same
 errors.
 
+### Vue slot props in fills { #vue-slot-props-in-fills }
+
+A slot can also pass values that exist only in the browser, with a `:`
+attribute such as `<c-slot :row="row">`. Each one is a Vue slot prop,
+and the fill reads it with `v-slot="{ row }"` in Vue expressions, not
+with `data=` ([Pass Vue data](/vue/slots/#scoped-slots)). Once your app
+is [connected](#connect-your-app), the editor reads the child
+component's template to find the props each slot passes:
+
+- Inside `v-slot="{ }"`, it suggests them.
+- Hovering the fill's `name` lists them with their types. A prop that
+  only some of the slot's `<c-slot>` tags pass is marked optional.
+- In the fill's Vue expressions, `row` has the type of the value the
+  child passes, so hover shows it and a misspelled field such as
+  `row.titel` is an error. The editor knows that type when the child
+  passes a [`js_data()`](#types-of-js_data) value, a `v-for` item over
+  one, a field of either, or a literal. Any other value has no type, so
+  the editor does not check it. A name inside a nested pattern, such as
+  `title` in `{ row: { title } }`, or a `...rest` name has no type either.
+
+A name the slot does not pass is a warning, in the editor and in
+`citry check`. Vue sets that name to `undefined` without a warning of its
+own, so the fill shows nothing, or fails in the browser when it reads a
+field such as `item.title`:
+
+```citry-html
+{# Table's template: <c-slot name="item" :row="row" /> #}
+<c-Table>
+  {# Warning: citry.vue.unknown-slot-prop #}
+  <c-fill name="item" v-slot="{ item }">
+    <span v-text="item.title"></span>
+  </c-fill>
+</c-Table>
+```
+
+A fill that names the whole object, as in `v-slot="props"`, gets no
+warning. The editor does not suggest, type, or check props for a fill
+whose slot name is set with `c-name` or `c-bind`. It does the same for a
+child whose template it cannot read, such as a
+[template set by code](#templates-set-by-code), and for a child with any
+`<c-slot>` named with `c-name` or `c-bind`.
+
 ## Vue and component JS { #complete-vue-expressions-and-component-javascript }
 
 In a component's template, Vue expressions know the data the component sends

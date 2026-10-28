@@ -919,7 +919,14 @@ def lint_unknown_vue_variables(
             )
             # A Python loop or slot variable of the same name is the likely
             # cause, so say so in the one finding this span gets.
-            variant = "python" if _is_python_bound(reference.name, expression) else "default"
+            if not _is_python_bound(reference.name, expression):
+                variant = "default"
+            elif expression.element is not None and _ascii_lower(expression.element) == "c-slot":
+                # On `<c-slot>`, a `c-` attribute is Python slot data that the
+                # fill reads with `data=`, so the hint names both ways.
+                variant = "python-slot-prop"
+            else:
+                variant = "python"
             findings.append(
                 VueLintFinding(
                     name=reference.name,
@@ -999,7 +1006,16 @@ def lint_vue_python_variables(
             # Only a component that reports the read decides which message it gets.
             browser_known = any(reference.name in consumer.known_names for consumer in active)
             attribute = _python_attribute_for(expression, reference.name)
-            if attribute is not None:
+            if expression.element is not None and _ascii_lower(expression.element) == "c-slot":
+                # On `<c-slot>`, `c-row` passes Python slot data, which the
+                # fill reads with `data=`, not with `v-slot`, so the message
+                # explains the two ways instead of offering it as a swap.
+                message = render_diagnostic(
+                    VUE_PYTHON_VARIABLE,
+                    variant="browser-slot-prop" if browser_known else "slot-prop",
+                    name=reference.name,
+                )
+            elif attribute is not None:
                 variant = "browser-attribute" if browser_known else "attribute"
                 message = render_diagnostic(
                     VUE_PYTHON_VARIABLE, variant=variant, name=reference.name, attribute=attribute
@@ -1258,6 +1274,7 @@ def _collect_attribute_values(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
+    vue_skipped: bool = False,
 ) -> Generator[Call, Any, None]:
     """Check each static attribute of each HTML element in one template and its nested templates."""
     for element in template.elements:
@@ -1272,8 +1289,11 @@ def _collect_attribute_values(
         # Vue resolves only lowercase names as native tags; `<Button>` may be
         # a component, and a custom element or `c-*` tag has its own attributes.
         checked = tag in _HTML_ELEMENTS
+        # Under `v-pre`, Vue leaves `:dir="'rlt'"` as an attribute literally
+        # named `:dir`, which sets no `dir`, so only plain attributes count.
+        inside_v_pre = vue_skipped or any(_ascii_lower(attr.key.content) == "v-pre" for attr in node.start_tag.attrs)
         for attr in node.start_tag.attrs:
-            if checked:
+            if checked and not (inside_v_pre and _is_vue_attribute_name(attr.key.content)):
                 finding = _attribute_value_finding(tag, attr, severity, base_index)
                 if finding is not None:
                     found.append(finding)
@@ -1291,12 +1311,29 @@ def _collect_attribute_values(
                         severity,
                         parse_nested=parse_nested,
                         base_index=base_index + inner.start_index + nested_start,
+                        vue_skipped=inside_v_pre,
                     )
         body = getattr(node, "body", None)
         if body is not None:
             yield Call(
-                _collect_attribute_values, body, found, severity, parse_nested=parse_nested, base_index=base_index
+                _collect_attribute_values,
+                body,
+                found,
+                severity,
+                parse_nested=parse_nested,
+                base_index=base_index,
+                vue_skipped=inside_v_pre,
             )
+
+
+def _is_vue_attribute_name(name: str) -> bool:
+    """
+    Return whether an attribute name is in Vue's syntax: a binding, a listener, a directive, or a slot shorthand.
+
+    Citry's `@c-*`, `:c-*` and `#c-*` match too. None of those has an HTML
+    value to check, so treating them alike changes nothing here.
+    """
+    return name.startswith((":", "v-bind:", "@", "v-", "#"))
 
 
 def _attribute_value_finding(

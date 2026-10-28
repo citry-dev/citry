@@ -2,6 +2,13 @@
 
 ## v1 - Unreleased
 
+- Added `citry.vue.unknown-slot-prop`, reported by `citry check` and the
+  language server when a `<c-fill v-slot="{ ... }">` names a Vue slot prop
+  that the component's `<c-slot>` does not pass.
+- Added the message variants `slot-prop` and `browser-slot-prop` to
+  `citry.vue.python-variable`, and `python-slot-prop` to
+  `citry.vue.unknown-variable`. They are used when the value of a `:`
+  attribute on `<c-slot>`, such as `:row`, reads a Python variable.
 - Added `citry.template.csp-incompatible`, reported by `citry check` and the
   language server when the application's `security_csp` is `"warn"` (a
   warning) or `"strict"` (an error). It is off by default, because

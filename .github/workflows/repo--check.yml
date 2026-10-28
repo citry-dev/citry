@@ -18,6 +18,10 @@ on:
     types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
+# A newer run cancels an older one for the same pull request. A push or any
+# other run gets a group named after its own run ID, so no newer run cancels
+# it. Every commit on main then keeps a complete Check result, which release
+# step 5 in docs/codebase.md relies on.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}

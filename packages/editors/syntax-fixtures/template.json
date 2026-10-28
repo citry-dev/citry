@@ -195,6 +195,50 @@
       ]
     },
     {
+      "name": "scoped slot props",
+      "language": "citry-html",
+      "source": "<c-slot name=\"item\" :row=\"row\" />\n<c-Table><c-fill name=\"item\" v-slot=\"{ row }\"><span v-text=\"row.title\"></span></c-fill></c-Table>",
+      "allow_errors": false,
+      "assertions": [
+        {
+          "text": "name",
+          "role": "attribute"
+        },
+        {
+          "text": ":row",
+          "role": "attribute"
+        },
+        {
+          "text": "row",
+          "occurrence": 2,
+          "role": "javascript"
+        },
+        {
+          "text": "name",
+          "occurrence": 2,
+          "role": "attribute"
+        },
+        {
+          "text": "v-slot",
+          "role": "attribute"
+        },
+        {
+          "text": "row",
+          "occurrence": 3,
+          "role": "javascript"
+        },
+        {
+          "text": "v-text",
+          "role": "attribute"
+        },
+        {
+          "text": "row",
+          "occurrence": 4,
+          "role": "javascript"
+        }
+      ]
+    },
+    {
       "name": "nested template attribute",
       "language": "citry-html",
       "source": "<c-Card c-body='<section c-if=\"visible\">{{ title }}</section>' />",

@@ -456,7 +456,7 @@ def _paused_fallbacks() -> int:
         1
         for value in gc.get_objects()
         if type(value) is types.GeneratorType
-        and value.gi_code.co_qualname == "SlotNode._render_steps.<locals>.fallback"
+        and value.gi_code.co_qualname == "SlotNode._slot_steps"
         and value.gi_frame is not None
     )
 

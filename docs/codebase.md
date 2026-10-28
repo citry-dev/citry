@@ -827,12 +827,42 @@ selected in the same plan. This qualifies the unreleased pair concurrently.
 During promotion, the controller still publishes and verifies Core before it
 starts Citry, whose public dependency must then resolve to those exact bytes.
 
-### Pull request cancellation and targeted diagnostics
+### Cancelling stale runs and targeted diagnostics
 
-Each pull-request workflow uses a concurrency group containing the workflow
-name and pull-request number. A newer run cancels an older run for the same
-pull request. Push and manual runs use their unique run IDs, so this policy
-does not interrupt or replace them.
+Each workflow that runs on pull requests or on pushes to `main` and `dev`
+puts a run in a concurrency group (GitHub runs one run of a group at a time)
+named after the workflow and either the pull request or, for a push, the
+branch. Three workflows that run on a push to `main` are exceptions, listed
+below. A newer run then cancels the older one still going in that group:
+
+- A new commit on a pull request cancels the checks for the previous commit.
+- A new push to `main` (or `dev`) cancels the checks still running for the
+  previous push. The older commit then has no complete result from those
+  checks, though the repository Check still finishes.
+  The newer commit's run tests the older commit's changes too, so a failure
+  the older commit introduced shows up on the newer one. Release step 5 below
+  says how to get a result for the release commit itself.
+- A scheduled or manual run gets a group of its own, named after its run ID,
+  so no other run cancels it.
+
+Three workflows that run on a push to `main` never let a newer push cancel a
+push run:
+
+- `repo--check.yml`, because release step 5 requires a complete repository
+  Check result for the release commit itself. It still cancels an older run
+  for the same pull request.
+- `repo--docs-deploy.yml`, because a cancelled deploy publishes nothing, so
+  if the newer run then fails, the site stays on a deploy older than both
+  commits. Its `pages` group still keeps at most one newer run waiting.
+- `repo--release-candidate.yml`, because it starts the publish workflows that
+  qualify a release and waits for them.
+
+The publish workflows start only when the release candidate or
+`repo--release.yml` dispatches them. `repo--release.yml` starts only by hand,
+and it starts `repo--docs-release.yml` once the packages are published. None
+of them cancels a started run, at the workflow or the job level.
+`packages/py/citry/tests/test_ci_workflows.py` checks the concurrency settings
+these rules depend on.
 
 Use [`py--diagnostic.yml`](../.github/workflows/py--diagnostic.yml) to reproduce
 one Python failure on a selected hosted OS and supported Python version. Its
@@ -1801,6 +1831,17 @@ Prepare a release as follows:
    Qualification requires each worker to be dispatched from the planned commit
    on `main`. If `main` advances before dispatch, prepare a new candidate on
    current `main`.
+
+   No newer push cancels the repository Check, so every commit on `main`
+   keeps its own Check result. A newer push to `main` cancels the other
+   checks still running for the older commit (see
+   [Cancelling stale runs and targeted diagnostics](#cancelling-stale-runs-and-targeted-diagnostics)),
+   so hold merges to `main` until the release commit's checks finish. If a
+   newer push already cancelled some of them, push a temporary branch at the
+   release commit and start each cancelled check on that branch with
+   **Run workflow**. A manual
+   run tests the tip of the branch it is started on, gets a group of its own,
+   and is never cancelled. Delete the branch afterwards.
 6. Start the only publication entry point, **Release qualified packages**, and
    supply the successful candidate workflow run ID. From the command line:
 

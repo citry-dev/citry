@@ -723,7 +723,13 @@ The Vue rules (invalid expressions, `v-model` targets, Vue directive
 typos, and DOM event names) skip everything inside an element with
 `v-pre`, because Vue does not compile it. The rule for
 [other compile errors](#templates-vue-cannot-compile) still checks how
-elements nest there.
+elements nest there, unless Citry also fills something in on the element
+or inside it, such as `{{ title }}`, a `c-` attribute, or a `<c-if>`.
+Citry then sends the element's contents to the browser as HTML that Vue
+does not compile, so that rule skips them too. On a `<table>`, its rows
+and sections, or an element inside `<svg>` or `<math>`, Citry compiles
+those contents as usual, so the rule checks them, and they cannot hold
+Vue syntax.
 
 ### Invalid expressions { #invalid-vue-expressions }
 
@@ -828,6 +834,9 @@ one message and one setting.
 It does not check:
 
 - anything inside an element with `#c-ignore`, or inside `<c-raw>`;
+- the contents of a `v-pre` element that Citry also fills something into,
+  such as `{{ title }}`, except on a table, its rows and sections, or
+  inside `<svg>` or `<math>` ([see above](#find-vue-compile-errors));
 - in most templates, how the content of a `<c-if>` branch or `<c-for>`
   body fits the element around it, such as a `<div>` in a `<c-for>`
   directly inside a `<table>`, because Vue compiles that content on its
@@ -933,6 +942,11 @@ sits inside, any of these:
 
 So `c-if` and `c-else` branches may share an id. `v-show` does not count,
 because a hidden element is still in the page.
+
+Inside an element with `v-pre`, Vue leaves `v-if` and `v-for` as written
+and treats a PascalCase tag as a plain element. None of these count
+there, so both elements of a `v-if`/`v-else` pair are in the page and a
+repeated `id` on them is reported.
 
 The same id in two different templates is not reported, even when both
 render on one page. Development mode reports that case when Citry
