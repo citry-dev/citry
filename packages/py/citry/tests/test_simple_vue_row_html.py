@@ -682,6 +682,19 @@ MARKER_SHAPES = {
     "plain-template-tag": """<div c-bind="row_attrs"><template><p>x</p></template></div>""",
     "text-only": """{{ row['title'] }}""",
     "spread-only-root": """<div c-bind="row_attrs"></div>""",
+    # SVG and MathML read `/>` and text elements differently, which the walk
+    # declines, so both paths must still agree.
+    "svg-with-html-void-name": """
+        <svg><img src="/a.png"></svg><article c-bind="row_attrs">{{ row['title'] }}</article>
+    """,
+    "math-root": """<math><mi>x</mi></math><article c-bind="row_attrs">y</article>""",
+    "xmp-text": """<xmp>{{ row['title'] }}</xmp><article c-bind="row_attrs">y</article>""",
+    "plaintext-root": """<article c-bind="row_attrs">y</article><plaintext>{{ row['title'] }}</plaintext>""",
+    "list-items": """<ul c-bind="row_attrs"><li>{{ row['title'] }}</li><li>b</li></ul><p>after</p>""",
+    # Literal placeholder text inside a text element stays in every path.
+    "placeholder-text-in-textarea": """
+        <article c-bind="row_attrs"><textarea><template c-render-id="lit"></template></textarea></article><p>x</p>
+    """,
 }
 
 

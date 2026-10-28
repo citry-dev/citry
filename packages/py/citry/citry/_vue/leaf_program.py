@@ -587,12 +587,101 @@ class _MaterializedRowPlan:
 # The byte-level rules below mirror crates/citry_html_transform/src/marker.rs.
 # The row HTML writer exists only when this Python walk and the native
 # scan provably agree, so every rule that is not copied exactly declines.
+# The walk keeps the names of the open elements, innermost last, so it can
+# check that each end tag closes the element it opened. The native scan
+# follows more of the browser's rules (end tags that close several elements,
+# a new `<li>` or `<p>` ending an open one, SVG and MathML); the walk
+# declines wherever one of those could apply.
 _MARKER_WHITESPACE = " \t\n\r\x0c"
 _MARKER_ASCII_LETTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 _MARKER_VOID_TAGS = frozenset(
-    ("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr")
+    (
+        "area",
+        "base",
+        "basefont",
+        "bgsound",
+        "br",
+        "col",
+        "embed",
+        "frame",
+        "hr",
+        "image",
+        "img",
+        "input",
+        "keygen",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    )
 )
-_MARKER_RAW_TEXT_TAGS = frozenset(("script", "style", "textarea", "title"))
+_MARKER_RAW_TEXT_TAGS = frozenset(("script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"))
+# Tags the walk does not model: SVG and MathML change how the browser reads
+# `/>` and text elements, and `<plaintext>` runs to the end of the input.
+_MARKER_DECLINED_TAGS = frozenset(("svg", "math", "plaintext"))
+# Start tags before which the browser may end an open element (see
+# `close_implied` in marker.rs); the walk declines when one could apply.
+_MARKER_HEADINGS = frozenset(("h1", "h2", "h3", "h4", "h5", "h6"))
+_MARKER_CLOSES_P = frozenset(
+    (
+        "address",
+        "article",
+        "aside",
+        "blockquote",
+        "center",
+        "dd",
+        "details",
+        "dialog",
+        "dir",
+        "div",
+        "dl",
+        "dt",
+        "fieldset",
+        "figcaption",
+        "figure",
+        "footer",
+        "form",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "hgroup",
+        "hr",
+        "li",
+        "listing",
+        "main",
+        "menu",
+        "nav",
+        "ol",
+        "p",
+        "plaintext",
+        "pre",
+        "search",
+        "section",
+        "table",
+        "ul",
+    )
+)
+
+
+def _marker_ends_an_open_element(name: str, stack: tuple[str, ...]) -> bool:
+    """Whether the browser may end an open element before a start tag named ``name``, which the walk declines."""
+    if name in _MARKER_CLOSES_P and "p" in stack:
+        return True
+    if name == "li" and "li" in stack:
+        return True
+    if name in {"dt", "dd"} and ("dt" in stack or "dd" in stack):
+        return True
+    if name in {"option", "button"} and name in stack:
+        return True
+    return name in _MARKER_HEADINGS and bool(stack) and stack[-1] in _MARKER_HEADINGS
+
+
 _MARKER_PLACEHOLDER_ATTR = frozenset(("c-render-id",))
 _MARKER_PLACEHOLDER_TAG = frozenset(("template",))
 
@@ -688,18 +777,20 @@ def _marker_raw_text_end(html: str, start: int, name: str) -> int | None:
 
 def _marker_scan_piece(
     html: str,
-    depth: int,
+    stack: tuple[str, ...],
     raw: str | None,
     *,
     allow_roots: bool,
-) -> tuple[int, str | None, list[int]] | None:
+) -> tuple[tuple[str, ...], str | None, list[int]] | None:
     """
     Advance the native marker scan over one fixed piece of output.
 
-    ``depth`` and ``raw`` (the raw-text element being skipped, if any) carry
-    the scan state between pieces. Returns the new state and the positions
-    of root start tags inside the piece. None declines: the piece ends inside
-    a comment or tag, or holds a root where roots are not allowed.
+    ``stack`` (the open elements' lowercase names, innermost last) and
+    ``raw`` (the raw-text element being skipped, if any) carry the scan
+    state between pieces. Returns the new state and the positions of root
+    start tags inside the piece. None declines: the piece ends inside a
+    comment or tag, holds a root where roots are not allowed, or uses a rule
+    the walk does not mirror.
     """
     position = 0
     length = len(html)
@@ -709,7 +800,7 @@ def _marker_scan_piece(
         if end is None:
             return None
         if end < 0:
-            return depth, raw, root_positions
+            return stack, raw, root_positions
         position = end
         raw = None
     while position < length:
@@ -738,8 +829,12 @@ def _marker_scan_piece(
             end = html.find(">", position)
             if end < 0:
                 return None
-            if not _marker_name_is(html[position + 2 : name_end], _MARKER_VOID_TAGS):
-                depth -= 1
+            # An end tag that does not close the innermost open element can
+            # close several elements, or none, in the native scan.
+            closed = html[position + 2 : name_end]
+            if not stack or not closed.isascii() or closed.lower() != stack[-1]:
+                return None
+            stack = stack[:-1]
             position = end + 1
         elif position + 1 < length and html[position + 1] in _MARKER_ASCII_LETTERS:
             tag = _marker_start_tag(html, position)
@@ -748,26 +843,36 @@ def _marker_scan_piece(
             if tag is None or tag[4]:
                 return None
             name, insert_at, position, self_closing, _render_id = tag
-            if depth == 0:
+            if not name.isascii():
+                return None
+            lowered = name.lower()
+            if lowered in _MARKER_DECLINED_TAGS or _marker_ends_an_open_element(lowered, stack):
+                return None
+            is_void = lowered in _MARKER_VOID_TAGS
+            # The native scan keeps a self-closed element that is not void
+            # open, which compiled output never writes.
+            if self_closing and not is_void:
+                return None
+            if not stack:
                 if not allow_roots:
                     return None
                 root_positions.append(insert_at)
-            if not self_closing and not _marker_name_is(name, _MARKER_VOID_TAGS):
-                if _marker_name_is(name, _MARKER_RAW_TEXT_TAGS):
+            if not is_void:
+                if lowered in _MARKER_RAW_TEXT_TAGS:
                     end = _marker_raw_text_end(html, position, name)
                     if end is None:
                         return None
                     if end < 0:
-                        return depth, name, root_positions
+                        return stack, name, root_positions
                     position = end
                 else:
-                    depth += 1
+                    stack = (*stack, lowered)
         elif position + 1 >= length:
             # A trailing "<" would join the next piece's first character.
             return None
         else:
             position += 1
-    return depth, raw, root_positions
+    return stack, raw, root_positions
 
 
 def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _MaterializedRowPlan | None:
@@ -785,13 +890,16 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
     plain_name_opens: set[int] = set()
 
     def open_tag(
-        simple: _SimpleJsonOperation, depth: int, raw: str | None, *, top: bool
-    ) -> tuple[int, str | None] | None:
+        simple: _SimpleJsonOperation, stack: tuple[str, ...], raw: str | None, *, top: bool
+    ) -> tuple[tuple[str, ...], str | None] | None:
         operation = cast("_Open", simple.operation)
         node = operation.node
         # An opening written per occurrence cannot sit inside skipped raw
         # text, and a template tag could become a serialize placeholder.
-        if raw is not None or _marker_name_is(node.tag, _MARKER_PLACEHOLDER_TAG):
+        if raw is not None or _marker_name_is(node.tag, _MARKER_PLACEHOLDER_TAG) or not node.tag.isascii():
+            return None
+        lowered = node.tag.lower()
+        if lowered in _MARKER_DECLINED_TAGS or _marker_ends_an_open_element(lowered, stack):
             return None
         # The opening ends with "/>" only for self-closing void syntax, and
         # the native scan must read the same tag the same way.
@@ -799,7 +907,7 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
         native_void = _marker_name_is(node.tag, _MARKER_VOID_TAGS)
         if self_closing and not native_void:
             return None
-        is_root = depth == 0
+        is_root = not stack
         if is_root and (not top or self_closing):
             return None
         runtime_opens[id(simple)] = is_root
@@ -809,24 +917,24 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
             if _marker_name_is(node.tag, _MARKER_RAW_TEXT_TAGS):
                 raw = node.tag
             else:
-                depth += 1
+                stack = (*stack, lowered)
         if node.is_self_closing and not node.is_void:
-            scanned = _marker_scan_piece(f"</{node.tag}>", depth, raw, allow_roots=False)
+            scanned = _marker_scan_piece(f"</{node.tag}>", stack, raw, allow_roots=False)
             if scanned is None:
                 return None
-            depth, raw, _positions = scanned
-        return depth, raw
+            stack, raw, _positions = scanned
+        return stack, raw
 
     # `walk_body` yields `Call(...)` where it would call itself, and
     # `citry._walk.run` runs those calls from a list, so checking the plan
     # does not need one Python call per level of control flow.
     def walk_body(
         simple_operations: tuple[_SimpleJsonOperation, ...],
-        depth: int,
+        stack: tuple[str, ...],
         raw: str | None,
         *,
         top: bool,
-    ) -> Generator[Call, Any, tuple[int, str | None] | None]:
+    ) -> Generator[Call, Any, tuple[tuple[str, ...], str | None] | None]:
         for simple in simple_operations:
             if simple.kind == "skip":
                 operation = simple.operation
@@ -835,15 +943,15 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
                 ):
                     # Data attributes are escaped per occurrence, like the
                     # serialize-time path, instead of formatted once here.
-                    state = open_tag(simple, depth, raw, top=top)
+                    state = open_tag(simple, stack, raw, top=top)
                 else:
                     piece = _static_html_piece(operation)
                     if piece is None:
                         return None
-                    scanned = _marker_scan_piece(piece, depth, raw, allow_roots=top)
+                    scanned = _marker_scan_piece(piece, stack, raw, allow_roots=top)
                     if scanned is None:
                         return None
-                    depth, raw, positions = scanned
+                    stack, raw, positions = scanned
                     bounds = [0, *positions, len(piece)]
                     literal_pieces[id(simple)] = tuple(piece[start:end] for start, end in pairwise(bounds))
                     continue
@@ -852,9 +960,9 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
                 # both ordinary text and skipped raw text.
                 continue
             elif simple.kind in {"open", "generic"}:
-                state = open_tag(simple, depth, raw, top=top)
+                state = open_tag(simple, stack, raw, top=top)
             elif simple.kind in {"if", "for"}:
-                if raw is not None or depth <= 0:
+                if raw is not None or not stack:
                     return None
                 bodies = (
                     tuple(body for _condition, body in simple.branches)
@@ -862,17 +970,17 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
                     else (simple.body, simple.empty)
                 )
                 for body in bodies:
-                    if (yield Call(walk_body, body, depth, None, top=False)) != (depth, None):
+                    if (yield Call(walk_body, body, stack, None, top=False)) != (stack, None):
                         return None
                 continue
             else:
                 return None
             if state is None:
                 return None
-            depth, raw = state
-        return depth, raw
+            stack, raw = state
+        return stack, raw
 
-    if run(walk_body(operations, 0, None, top=True)) is None:
+    if run(walk_body(operations, (), None, top=True)) is None:
         return None
     return _MaterializedRowPlan(literal_pieces, runtime_opens, frozenset(plain_name_opens))
 

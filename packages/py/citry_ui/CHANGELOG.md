@@ -55,6 +55,9 @@
 
 ### Fixed
 
+- `CMenu` and `CAccordion` now accept a self-closed element such as
+  `<span/>` in an item's label or title, and write it as `<span></span>`,
+  as Citry does elsewhere. They used to reject it.
 - An open `CMenu`, `CContextMenu`, or `CSplitButton` menu that contains a
   submenu no longer moves focus to its current item again and again, and an
   idle `CSplitButton` or `CTimePicker` no longer rewrites its own markup

@@ -180,6 +180,131 @@ fn script_content_is_raw_text() {
 }
 
 #[test]
+fn every_element_the_browser_reads_as_text_hides_its_content() {
+    // `<xmp>`, `<iframe>`, `<noembed>` and `<noframes>` hold text in the
+    // browser too, so a `</div>` inside them closes nothing and the `<p>`
+    // after them is still a root.
+    for tag in ["xmp", "iframe", "noembed", "noframes"] {
+        let result = mark(&format!("<{tag}></div></{tag}><p>x</p>"), &["data-cid-c1"]);
+        assert_eq!(
+            result.segments,
+            vec![format!(
+                r#"<{tag} data-cid-c1=""></div></{tag}><p data-cid-c1="">x</p>"#
+            )],
+            "{tag}"
+        );
+    }
+    // No end tag closes `<plaintext>`: everything after it is its text.
+    let result = mark("<plaintext></plaintext><p>x</p>", &["data-cid-c1"]);
+    assert_eq!(
+        result.segments,
+        vec![r#"<plaintext data-cid-c1=""></plaintext><p>x</p>"#]
+    );
+}
+
+#[test]
+fn a_self_closed_html_element_that_is_not_void_stays_open() {
+    // The browser ignores the `/` of `<div/>`, so the `<p>` is inside the
+    // div and is not a root.
+    let result = mark("<div/><p>x</p>", &["data-cid-c1"]);
+    assert_eq!(result.segments, vec![r#"<div data-cid-c1=""/><p>x</p>"#]);
+
+    // A self-closed `<textarea/>` starts its text, which the `<p>` is part of.
+    for source in ["<textarea/><p>x</p>", "<TEXTAREA/><p>x</p>"] {
+        let result = mark(source, &["data-cid-c1"]);
+        let tag = &source[1..9];
+        assert_eq!(
+            result.segments,
+            vec![format!(r#"<{tag} data-cid-c1=""/><p>x</p>"#)],
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn svg_and_mathml_elements_close_at_their_slash() {
+    // In SVG and MathML, `/>` closes the element, so a self-closed SVG
+    // `<title/>` holds nothing, and the `<p>` after the `<svg>` is a root.
+    let result = mark("<svg><title/><circle/></svg><p>x</p>", &["data-cid-c1"]);
+    assert_eq!(
+        result.segments,
+        vec![r#"<svg data-cid-c1=""><title/><circle/></svg><p data-cid-c1="">x</p>"#]
+    );
+
+    let result = mark("<svg/><p>x</p>", &["data-cid-c1"]);
+    assert_eq!(
+        result.segments,
+        vec![r#"<svg data-cid-c1=""/><p data-cid-c1="">x</p>"#]
+    );
+
+    let result = mark("<math><mi/></math><p>x</p>", &["data-cid-c1"]);
+    assert_eq!(
+        result.segments,
+        vec![r#"<math data-cid-c1=""><mi/></math><p data-cid-c1="">x</p>"#]
+    );
+}
+
+#[test]
+fn an_html_element_inside_foreign_object_reads_as_html() {
+    // `<foreignObject>` children are HTML, so a `<textarea>` there holds text
+    // up to its end tag.
+    let result = mark(
+        "<svg><foreignObject><textarea></foreignObject></textarea></foreignObject></svg><p>x</p>",
+        &["data-cid-c1"],
+    );
+    assert_eq!(
+        result.segments,
+        vec![
+            r#"<svg data-cid-c1=""><foreignObject><textarea></foreignObject></textarea></foreignObject></svg><p data-cid-c1="">x</p>"#
+        ]
+    );
+}
+
+#[test]
+fn a_placeholder_inside_text_content_is_still_split_out() {
+    // A child component placed inside `<xmp>` or `<noscript>` keeps its HTML:
+    // the placeholder is split out, without the root attributes.
+    for tag in ["xmp", "noscript"] {
+        let result = mark(
+            &format!(r#"<{tag}><template c-render-id="c2"></template></{tag}><p>x</p>"#),
+            &["data-cid-c1"],
+        );
+        assert_eq!(result.placeholders.len(), 1, "{tag}");
+        assert_eq!(result.placeholders[0].id, "c2");
+        assert!(result.placeholders[0].added_attributes.is_empty());
+        assert_eq!(
+            joined(&result),
+            format!(
+                r#"<{tag} data-cid-c1=""><template c-render-id="c2"></template></{tag}><p data-cid-c1="">x</p>"#
+            ),
+            "{tag}"
+        );
+    }
+}
+
+#[test]
+fn an_end_tag_closes_only_what_the_browser_closes() {
+    // `</div>` closes the `<i/>` the browser kept open inside the div, so the
+    // `<p>` after it is a root; a stray `</span>` closes nothing.
+    let result = mark(r#"<div><i class="icon"/></div><p>x</p>"#, &["data-cid-c1"]);
+    assert_eq!(
+        result.segments,
+        vec![r#"<div data-cid-c1=""><i class="icon"/></div><p data-cid-c1="">x</p>"#]
+    );
+    let result = mark("<p>a</span></p><p>b</p>", &["data-cid-c1"]);
+    assert_eq!(
+        result.segments,
+        vec![r#"<p data-cid-c1="">a</span></p><p data-cid-c1="">b</p>"#]
+    );
+    // A new `<li>` ends the open one, so both are roots.
+    let result = mark("<li/><li/>", &["data-cid-c1"]);
+    assert_eq!(
+        result.segments,
+        vec![r#"<li data-cid-c1=""/><li data-cid-c1=""/>"#]
+    );
+}
+
+#[test]
 fn quoted_attribute_values_may_contain_gt() {
     let result = mark(
         r#"<div title="a > b" data-x='1>2'>x</div>"#,

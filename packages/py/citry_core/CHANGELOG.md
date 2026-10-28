@@ -13,6 +13,16 @@
 
 ### Fixed
 
+- A component's later root tags no longer lose the attribute that scopes
+  its CSS, and tags nested inside them no longer get it, when `Markup` or
+  a `<c-raw>` block holds a self-closed tag such as `<i/>` or `<div/>`,
+  the content of `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>` or
+  `<plaintext>`, or tags the browser closes on its own.
+  `html_transform.mark_html()` now follows more of the browser's rules for
+  where elements end.
+- Citry now writes the HTML of a child component placed inside a
+  `<textarea>` or another element whose content is text, where the page
+  used to get Citry's internal `<template c-render-id>` placeholder.
 - `template_formatter.format_template()` no longer adds a line break where
   two tags touch, such as between `<td>` cells or `<option>`s. That line
   break was new text in the rendered HTML. Whitespace in the template is

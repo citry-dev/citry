@@ -42,6 +42,22 @@ def _document(*body: object, head: tuple[object, ...] = ()) -> CitryRender:
     )
 
 
+def test_a_self_closed_head_element_is_written_open_and_a_void_one_keeps_its_slash() -> None:
+    # The browser ignores the `/` of `<title/>` and reads what follows as the
+    # title's text, so the shell writes the element open; the compiler emits
+    # its end tag as a separate part. A void element keeps `/>`.
+    title = PreparedElementOpen(
+        source="", span=(0, 0), tag="title", attrs=(), is_void=False, is_self_closing=True, element_metadata={}
+    )
+    meta = PreparedElementOpen(
+        source="", span=(0, 0), tag="meta", attrs=(), is_void=True, is_self_closing=True, element_metadata={}
+    )
+    shell = typed_document_shell(_document(head=(title, _close("title"), meta)), '<div id="host"></div>')
+
+    assert shell is not None
+    assert shell.html.startswith("<!doctype html><html><head><title></title><meta/></head>")
+
+
 def test_trusted_markup_inside_typed_body_is_replaced_with_host() -> None:
     shell = typed_document_shell(
         _document(Markup('<span onclick="trusted()">body</span>')),
