@@ -45,7 +45,7 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
             detail += f"; and {extra} more line(s)"
         # Point at the Markdown the author edits; the leaked text is copied
         # verbatim from it, so its first line locates the unrendered block.
-        source = source_markdown(page, ctx.content_dir)
+        source = source_markdown(page, ctx.content_dir, ctx.repo_root)
         yield GuardResult.error(
             guard="rendered_markdown",
             message=(

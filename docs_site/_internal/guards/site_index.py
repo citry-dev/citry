@@ -9,6 +9,7 @@ site, so the whole suite pays the parse cost a single time.
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 from dataclasses import dataclass, field
@@ -59,6 +60,11 @@ _STRAY_MARKUP_PATTERNS = (
     re.compile(r"<p>\s*</(?:div|section|template)>"),
 )
 _SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.DOTALL | re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]*>")
+# How much of the page after a stray tag to read for the text that follows it.
+_STRAY_CONTEXT_CHARS = 2000
+# Built pages generated from the changelog rather than from a content page.
+_RELEASES_DIR = "releases"
 
 
 @dataclass(frozen=True)
@@ -136,6 +142,10 @@ class PageRecord:
     glued_css_vars: list[str] = field(default_factory=list)
     # Markup that the markdown pass wrapped in paragraphs or left unconsumed.
     stray_markup: list[str] = field(default_factory=list)
+    # The first line of text after each entry of `stray_markup`, in the same
+    # order. The tags themselves never appear in the source, but this text
+    # usually does, so it locates the source line.
+    stray_markup_text: list[str] = field(default_factory=list)
     # Static HTML fragments shipped inside a prepared Vue app's start script.
     prepared_html: list[str] = field(default_factory=list)
 
@@ -216,7 +226,11 @@ class SiteIndex:
     def _find_stray_markup(html: str, record: PageRecord) -> None:
         """Collect markup that the markdown pass wrapped in stray paragraphs."""
         for pattern in _STRAY_MARKUP_PATTERNS:
-            record.stray_markup.extend(match.group().strip() for match in pattern.finditer(html))
+            for match in pattern.finditer(html):
+                record.stray_markup.append(match.group().strip())
+                record.stray_markup_text.append(
+                    _text_after(html, match.end(), inside_tag=not match.group().endswith(">"))
+                )
 
     @staticmethod
     def _find_glued_css_vars(dom: lxml.html.HtmlElement, record: PageRecord) -> None:
@@ -465,11 +479,30 @@ def _prepared_html(dom: lxml.html.HtmlElement) -> list[str]:
     return fragments
 
 
-def source_markdown(page: PageRecord, content_dir: Path) -> Path | None:
-    """Return the Markdown file a built page came from, when one exists."""
+def _text_after(html: str, start: int, *, inside_tag: bool) -> str:
+    """Return the first non-empty line of visible text in ``html`` after ``start``."""
+    rest = html[start : start + _STRAY_CONTEXT_CHARS]
+    # A match that ends on a tag name stops partway through that tag, so skip
+    # to its end before reading text.
+    if inside_tag:
+        rest = rest.partition(">")[2]
+    text = html_lib.unescape(_TAG_RE.sub("", rest))
+    return next((line.strip() for line in text.splitlines() if line.strip()), "")
+
+
+def source_markdown(page: PageRecord, content_dir: Path, repo_root: Path | None = None) -> Path | None:
+    """
+    Return the Markdown file a built page came from, when one exists.
+
+    The release-notes pages come from the repository's CHANGELOG.md, so with
+    ``repo_root`` given they map to that file.
+    """
     parts = page.rel_path.parts
     if not parts or not parts[-1].endswith(".html"):
         return None
+    if repo_root is not None and parts[0] == _RELEASES_DIR:
+        changelog = repo_root / "CHANGELOG.md"
+        return changelog if changelog.is_file() else None
     if parts[-1] == "index.html":
         stem = parts[:-1]
         candidates = [content_dir.joinpath(*stem, "index.md")]

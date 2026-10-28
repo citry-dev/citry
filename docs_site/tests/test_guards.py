@@ -1044,6 +1044,42 @@ def test_stray_markup_guard_catches_paragraphs_around_generated_markup(tmp_path:
     assert "'<p></p>'" in result.message
 
 
+def test_stray_markup_guard_names_the_line_of_the_text_after_the_stray_tag(tmp_path: Path) -> None:
+    """The stray tags are not in the source, so the text after them locates the line."""
+    build = tmp_path / "site"
+    (build / "guide").mkdir(parents=True)
+    (build / "guide" / "index.html").write_text(
+        '<html><body><ul><li>One</li></ul><p><div class="highlight"><pre><code>'
+        "&lt;c-Card /&gt; x</code></pre></div></body></html>",
+        encoding="utf-8",
+    )
+    content = tmp_path / "guide"
+    content.mkdir()
+    (content / "index.md").write_text("# Guide\n\n- One\n\n  ```\n  <c-Card /> x\n  ```\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(content / "index.md")
+    assert result.line == 6
+    assert "'<c-Card /> x'" in result.message
+
+
+def test_stray_markup_guard_points_a_release_notes_page_at_the_changelog(tmp_path: Path) -> None:
+    """Release-notes pages have no content page; their source is CHANGELOG.md."""
+    build = tmp_path / "site"
+    (build / "releases" / "unreleased").mkdir(parents=True)
+    (build / "releases" / "unreleased" / "index.html").write_text(
+        "<html><body><p><div><code>broken entry</code></div></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## Unreleased\n\n- broken entry\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(tmp_path / "CHANGELOG.md")
+    assert result.line == 5
+
+
 def test_stray_markup_guard_ignores_paragraphs_inside_scripts_and_ordinary_html(tmp_path: Path) -> None:
     """Script text and well-formed paragraphs are not markdown damage."""
     build = tmp_path / "site"

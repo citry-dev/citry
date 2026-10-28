@@ -225,11 +225,12 @@
   inputs to an element with `c-bind` now writes `alt=""` there instead
   of a bare `alt`, which HTML reads the same way.
 
-  ```citry-html
-  <c-Avatar alt="" />      <!-- before: True; now "" -->
-  <c-Grid compact="" />    <!-- now "": a bool input rejects it -->
-  <c-Grid compact />       <!-- True, as before -->
-  ```
+    ```citry-html
+    <c-Avatar alt="" />      <!-- before: True; now "" -->
+    <c-Grid compact="" />    <!-- now "": a bool input rejects it -->
+    <c-Grid compact />       <!-- True, as before -->
+    ```
+
 - Output that an `on_render` hook passes to another component, as in
   `return Frame(body=result)`, or that an `on_component_rendered` hook
   passes on as `ctx.render`, no longer carries the component's own
@@ -255,21 +256,22 @@
   valid inputs under this check. A value that equals a `Literal` member,
   such as a `StrEnum` member or `Markup("sm")`, passes the check.
 
-  ```python
-  class Card(Component):
-      class Kwargs:
-          title: str
+    ```python
+    class Card(Component):
+        class Kwargs:
+            title: str
 
-  card = Card(title=123)
-  str(card)
-  # TypeError: Card.Kwargs.title expects str, got int (123). ...
-  ```
+    card = Card(title=123)
+    str(card)
+    # TypeError: Card.Kwargs.title expects str, got int (123). ...
+    ```
 
-  Citry checks only the outer type of each `Kwargs`, `TemplateData`,
-  `JsData`, `CssData`, and Events `State` field, so `list[str]` accepts
-  any list. A field's own default always passes, so `title: str = None`
-  keeps working, and Pydantic models keep their own rules
-  ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
+    Citry checks only the outer type of each `Kwargs`, `TemplateData`,
+    `JsData`, `CssData`, and Events `State` field, so `list[str]` accepts
+    any list. A field's own default always passes, so `title: str = None`
+    keeps working, and Pydantic models keep their own rules
+    ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
+
 - `citry check` now fails, and the editor shows an error, on an HTML
   attribute value the browser does not accept, such as
   `<button type="sumbit">`. Set `rule_invalid_attribute_value="warning"` in
