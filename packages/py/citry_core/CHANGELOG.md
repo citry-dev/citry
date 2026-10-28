@@ -15,6 +15,9 @@
 
 ### Fixed
 
+- `format_template()` now wraps a start tag's attributes when the text after
+  the tag on the same line, such as `{{ label }}</span>`, would make that
+  line longer than 100 columns. It used to measure only the tag.
 - `format_template()` now formats a Python expression that is valid only
   inside parentheses, such as a `{{ ... }}` split across lines with its
   `else` parts on their own lines, or `{{ x for x in items }}`. It used to
