@@ -163,9 +163,11 @@ jobs:
       # can break an old version that the build above never renders. It needs
       # no build, so it also runs when an earlier check fails, and one CI run
       # reports both kinds of failure. It still needs the installed workspace.
+      # Only the /static/ guard runs here (a few seconds); the slower link
+      # guards run in the docs release workflow with the full versions-check.
       - name: Check the committed version snapshots
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run --no-sync python -m docs_site versions-check --strict
+        run: uv run --no-sync python -m docs_site versions-check --strict --guard snapshot_static_files
 
       # docs_site/examples holds the per-example regression tests
       # (test_example_*.py), which live beside each example's component.py/page.py;

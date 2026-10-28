@@ -628,8 +628,9 @@ that version is committed under `docs_site/versions/`.
 The `snapshot_static_files` guard enforces this rule. `versions-check`
 fails when a `src`, `href`, or `srcset` attribute in a committed snapshot page
 points to a `/static/` file that is missing from `docs_site/static/`. The
-Docs check workflow runs `versions-check --strict` on every pull request that
-touches `docs_site/`. To change an image that old versions show, save the
+Docs check workflow runs this guard alone (`versions-check --strict --guard
+snapshot_static_files`) on every pull request that touches `docs_site/`; the
+docs release workflow runs every version guard. To change an image that old versions show, save the
 new image under a new file name and keep the old file: the guard fails while
 any committed version still loads the old name. The guard checks only that a file
 exists, so it cannot tell when a file was changed in place.

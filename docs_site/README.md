@@ -944,9 +944,10 @@ If a demo points at a missing file on purpose, to show its error state, add
 that path to `_MISSING_ON_PURPOSE` in
 `docs_site/_internal/guards/snapshot_static_files.py`.
 
-The Docs check workflow runs `versions-check --strict` on every pull request
-that touches `docs_site/`, so deleting a file that a snapshot loads fails the
-Docs check on that pull request.
+The Docs check workflow runs this guard alone (`versions-check --strict
+--guard snapshot_static_files`) on every pull request that touches
+`docs_site/`, so deleting a file that a snapshot loads fails the Docs check on
+that pull request. The docs release workflow runs every version guard.
 
 ## Maintenance workflows
 
