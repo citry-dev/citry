@@ -2259,7 +2259,13 @@ pytest phase.
 
 **Purpose**: Tests all Python packages.
 
-**Triggers**: Runs when changes are made to:
+**Triggers**: A push to `main` or `dev` starts the workflow only when it
+changes one of the paths below. Every pull request starts it. Its first job,
+`changes`, lists the pull request's files and compares them with the same
+paths, and every other job skips when none of them match. A skipped job still
+reports a passing check, so a check from this workflow can be required on
+`main` without blocking a docs-only pull request. This costs a docs-only pull
+request one short job (a few seconds on one runner). The paths are:
 
 - `packages/py/**` - Python package code
 - `packages/js/citry-client/**` and `packages/protocol/**` - browser/runtime contracts exercised by Python jobs

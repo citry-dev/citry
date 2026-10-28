@@ -45,39 +45,9 @@ on:
     # PR's queued or running checks once it merges or closes; every job
     # skips on that event, so the cancelling run needs no runner.
     types: [opened, synchronize, reopened, closed]
-    paths:
-      - "packages/py/**"
-      - "packages/js/citry-client/**"
-      - "packages/protocol/**"
-      - "benchmarks/i18n.py"
-      - "benchmarks/native_build.py"
-      - "scripts/build_citry_core_pyodide_wheel.py"
-      - "scripts/build_constraints.py"
-      - "scripts/release_links.py"
-      - "scripts/select_citry_core_qualification.py"
-      - "scripts/sync_protocol_python.py"
-      - "scripts/verify_citry_core_distribution.py"
-      - "scripts/verify_citry_distribution.py"
-      - "scripts/verify_citry_lsp_distribution.py"
-      - "scripts/verify_citry_ui_distribution.py"
-      - "scripts/verify_pygments_citry_distribution.py"
-      - "scripts/verify_wheel_size.py"
-      - "crates/**"
-      - "third_party/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "rust-toolchain.toml"
-      - ".github/actions/install-rust/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "README.md" # the citry wheel's metadata includes the root README
-      - ".github/workflows/py--tests.yml"
-      - ".github/workflows/py--citry-ui--publish.yml"
-      - ".github/workflows/py--pygments-citry--publish.yml"
-      - ".gitmodules"
+    # No path filter here: the `changes` job below decides, so a required
+    # check in this workflow reports on every pull request (a workflow that
+    # never starts leaves a required check waiting forever).
   workflow_dispatch:
 
 # A newer run cancels an older one for the same pull request, or for the same
@@ -99,8 +69,100 @@ env:
   PIP_WHEEL: "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
 
 jobs:
-  i18n-release-qualification:
+  # Decides whether this run touches anything the jobs below test. A push to
+  # main or dev and a manual run always do: the push path filter above already
+  # chose them. A pull request lists its changed files and compares them with
+  # the same paths, kept in step with that filter by test_ci_workflows.py.
+  changes:
     if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    # Listing a pull request's files needs read access to pull requests.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      python: ${{ steps.match.outputs.python }}
+    steps:
+      - name: Match the changed files against the Python inputs
+        id: match
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # The same paths as `on.push.paths`. A path ending in `/**` matches
+          # everything below that folder; any other path matches one file.
+          PYTHON_INPUTS: |
+            packages/py/**
+            packages/js/citry-client/**
+            packages/protocol/**
+            benchmarks/i18n.py
+            benchmarks/native_build.py
+            scripts/build_citry_core_pyodide_wheel.py
+            scripts/build_constraints.py
+            scripts/release_links.py
+            scripts/select_citry_core_qualification.py
+            scripts/sync_protocol_python.py
+            scripts/verify_citry_core_distribution.py
+            scripts/verify_citry_distribution.py
+            scripts/verify_citry_lsp_distribution.py
+            scripts/verify_citry_ui_distribution.py
+            scripts/verify_pygments_citry_distribution.py
+            scripts/verify_wheel_size.py
+            crates/**
+            third_party/**
+            Cargo.toml
+            Cargo.lock
+            rust-toolchain.toml
+            .github/actions/install-rust/**
+            pyproject.toml
+            uv.lock
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            README.md
+            .github/workflows/py--tests.yml
+            .github/workflows/py--citry-ui--publish.yml
+            .github/workflows/py--pygments-citry--publish.yml
+            .gitmodules
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The files endpoint lists at most 3,000 files, so a larger pull
+          # request runs everything rather than risk a missed match.
+          count=$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER" --jq '.changed_files')
+          if [ "$count" -ge 3000 ]; then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A renamed file counts under its old path too, so moving a file
+          # out of a Python folder still runs the Python jobs.
+          files=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)')
+          python=false
+          while IFS= read -r file; do
+            while IFS= read -r pattern; do
+              [ -n "$pattern" ] || continue
+              case "$pattern" in
+                */\*\*) prefix="${pattern%\*\*}"; [[ "$file" == "$prefix"* ]] && python=true ;;
+                *) [[ "$file" == "$pattern" ]] && python=true ;;
+              esac
+            done <<< "$PYTHON_INPUTS"
+            # One match is enough to run every job.
+            if [ "$python" = true ]; then
+              break
+            fi
+          done <<< "$files"
+          echo "Python inputs changed: $python"
+          echo "python=$python" >> "$GITHUB_OUTPUT"
+
+  i18n-release-qualification:
+    # The `closed` event skips `changes`, and with it this job.
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -148,7 +210,9 @@ jobs:
           if-no-files-found: error
 
   test:
-    if: github.event.action != 'closed'
+    # The `closed` event skips `changes`, and with it this job.
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       # A failure on one interpreter must not hide portability results from
@@ -228,7 +292,9 @@ jobs:
   # the same paths on all three engines. The `test` job above excludes `e2e`
   # explicitly and does not sync that dependency group.
   e2e:
-    if: github.event.action != 'closed'
+    # The `closed` event skips `changes`, and with it this job.
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -341,7 +407,9 @@ jobs:
           if-no-files-found: error
 
   citry-ui-wheel-build:
-    if: github.event.action != 'closed'
+    # The `closed` event skips `changes`, and with it this job.
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -664,7 +732,9 @@ jobs:
   # pull requests. The scheduled cross-browser workflow retains the broader
   # all-e2e sweep.
   vue-conformance:
-    if: github.event.action != 'closed'
+    # The `closed` event skips `changes`, and with it this job.
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

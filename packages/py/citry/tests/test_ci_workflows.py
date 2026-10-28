@@ -205,6 +205,35 @@ def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
     assert {"repo--check.yml", "py--tests.yml"} <= checked
 
 
+def test_python_tests_start_on_every_pull_request_and_skip_without_python_changes() -> None:
+    workflow = _load_workflow("py--tests.yml")
+    # A required check in a workflow that never starts waits forever, so the
+    # pull-request trigger has no path filter and the `changes` job decides.
+    assert "paths" not in workflow["on"]["pull_request"]
+    changes = workflow["jobs"]["changes"]
+    inputs = [line.strip() for line in changes["steps"][0]["env"]["PYTHON_INPUTS"].splitlines() if line.strip()]
+    # Both lists must name the same inputs, or a push and a pull request
+    # would disagree about which changes the Python jobs test.
+    assert inputs == workflow["on"]["push"]["paths"]
+    # The job's shell matcher understands only these two forms.
+    for pattern in inputs:
+        body = pattern.removesuffix("/**")
+        assert not any(char in body for char in "*?[]!"), pattern
+
+    jobs = workflow["jobs"]
+    for name, job in jobs.items():
+        if name == "changes":
+            continue
+        needs = job["needs"] if isinstance(job.get("needs"), list) else [job.get("needs")]
+        if "changes" in needs:
+            # A skipped job counts as passing a required check.
+            assert job["if"] == "needs.changes.outputs.python == 'true'", name
+        else:
+            # A job that needs another one skips with it.
+            assert all(jobs[parent].get("needs") == "changes" for parent in needs), name
+    assert "citry-ui-wheel-build" in jobs
+
+
 _SUPPORTED_PYTHONS = ["3.11", "3.12", "3.13", "3.14", "3.15"]
 
 

@@ -84,29 +84,28 @@ def check() -> list[str]:
 
     errors: list[str] = []
 
-    # Each event owns its path list, so a duplicate in one list cannot hide an omission in the other.
-    python_test_workflow = _PYTHON_TEST_WORKFLOW.read_text(encoding="utf-8")
-    _, pull_request_marker, after_push = python_test_workflow.partition("  pull_request:\n")
-    pull_request_section, workflow_dispatch_marker, _ = after_push.partition("  workflow_dispatch:\n")
-    event_sections = {
-        "push": python_test_workflow.partition("  push:\n")[2].partition("  pull_request:\n")[0],
-        "pull_request": pull_request_section if pull_request_marker and workflow_dispatch_marker else "",
-    }
+    # A push filters at the trigger, and a pull request decides in the
+    # `changes` job, so each list is checked on its own: a duplicate in one
+    # cannot hide an omission in the other.
+    python_test_workflow = yaml.safe_load(_PYTHON_TEST_WORKFLOW.read_text(encoding="utf-8"))
+    # PyYAML reads the Actions key `on` as the boolean True.
+    triggers = python_test_workflow.get(True) or python_test_workflow.get("on") or {}
+    changes_steps = python_test_workflow.get("jobs", {}).get("changes", {}).get("steps", [])
     event_path_lists = {
-        event: (
-            match.group(1).splitlines()
-            if (match := re.search(r"(?m)^    paths:\n((?:      - .*\n)+)", section))
-            else []
-        )
-        for event, section in event_sections.items()
+        "push": (triggers.get("push") or {}).get("paths", []),
+        "pull_request": [
+            line.strip()
+            for step in changes_steps
+            for line in step.get("env", {}).get("PYTHON_INPUTS", "").splitlines()
+            if line.strip()
+        ],
     }
     for path in (
         "scripts/verify_citry_ui_distribution.py",
         ".github/workflows/py--citry-ui--publish.yml",
     ):
-        marker = f'      - "{path}"'
         for event, path_list in event_path_lists.items():
-            if marker not in path_list:
+            if path not in path_list:
                 errors.append(f"py--tests.yml {event} path filters must include {path!r}")
 
     errors.extend(nightly_pin_errors(REPO_ROOT))
