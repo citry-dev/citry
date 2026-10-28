@@ -32,6 +32,8 @@ from citry._class_introspection import (
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
+    from citry._model_base import ModelBase
+
 _RAW_NESTED_DECLARATIONS_ATTR = "_citry_raw_nested_declarations"
 _SYNTHESIZED_DECLARATION_ATTR = "_citry_synthesized_declaration"
 _SYNTHESIZED_FIELD_OWNERS_ATTR = "_citry_synthesized_field_owners"
@@ -41,6 +43,10 @@ _HEAP_TYPE_FLAG = 1 << 9
 # A plain class that defines one of these constructs instances its own way,
 # so a generated dataclass ``__init__`` must not replace it.
 _CUSTOM_CONSTRUCTION_NAMES = frozenset({"__init__", "__new__", "__slots__", "model_fields", "__fields__", "_fields"})
+
+# The data shapes `model_base` generates. `Slots` holds render content, not
+# field values, so it always stays a dataclass.
+_MODEL_BASE_SCHEMA_NAMES = frozenset({"Kwargs", "TemplateData", "JsData", "CssData"})
 
 # A library definition is materialized once per Citry instance that installs
 # it, so remember which definitions already warned to warn only once each.
@@ -487,7 +493,7 @@ def _is_plain_field_family(declaration: type) -> bool:
     return True
 
 
-def _effective_data_schema(component_class: type, name: str, declared: type) -> type:
+def _effective_data_schema(component_class: type, name: str, declared: type, *, use_model_base: bool = True) -> type:
     """Return the runtime class for one class-valued data-shape declaration."""
     component_name = _safe_class_text(component_class, "__name__") or "Component"
     namespace = _static_class_dict(declared)
@@ -519,7 +525,116 @@ def _effective_data_schema(component_class: type, name: str, declared: type) -> 
 
     if not _is_plain_field_family(declared):
         return declared
-    return _convert_to_slotted_dataclass(declared, owner=component_class, name=name)
+    model_base = (
+        _component_model_base(component_class) if use_model_base and name in _MODEL_BASE_SCHEMA_NAMES else None
+    )
+    return convert_plain_declaration(declared, owner=component_class, name=name, model_base=model_base)
+
+
+def _component_model_base(component_class: type) -> ModelBase | None:
+    """Return the resolved `model_base` of the Citry instance a component belongs to."""
+    engine = _static_class_dict(component_class).get("citry")
+    model_base = getattr(engine, "_model_base", None)
+    from citry._model_base import ModelBase  # noqa: PLC0415 - avoids importing the settings module early
+
+    return model_base if isinstance(model_base, ModelBase) else None
+
+
+def convert_plain_declaration(
+    user_cls: type,
+    *,
+    owner: type | None = None,
+    name: str | None = None,
+    model_base: ModelBase | None = None,
+    component_name: str | None = None,
+) -> type:
+    """
+    Generate the class for one plain field declaration, of the kind ``model_base`` names.
+
+    A declaration that already inherits a dataclass, such as a parent
+    component's generated class, stays a dataclass: a child follows its
+    parent's kind, and the setting decides only when no parent schema exists.
+
+    ``component_name`` names the component in messages when there is no
+    ``owner`` class, as for an Events ``data`` class.
+
+    Raises:
+        ValueError: The dataclass cannot be generated (see
+            `_convert_to_slotted_dataclass`).
+        TypeError: The model or named tuple cannot be generated.
+
+    """
+    inherits_dataclass = any(
+        "__dataclass_fields__" in _static_class_dict(klass) for klass in _static_class_mro(user_cls)
+    )
+    if (
+        model_base is not None
+        and model_base.kind == "dataclass"
+        and (not inherits_dataclass or issubclass(user_cls, model_base.base))
+    ):
+        # A child of a class generated from the base keeps the base's options;
+        # a class that inherits another dataclass keeps that one's.
+        return _convert_to_slotted_dataclass(user_cls, owner=owner, name=name, model_base=model_base)
+    if model_base is None or inherits_dataclass:
+        return _convert_to_slotted_dataclass(user_cls, owner=owner, name=name)
+
+    from citry._input_types import _UNRESOLVED, _resolve_annotation  # noqa: PLC0415 - imports component modules
+    from citry._model_base import BuildInput, build_named_tuple, build_pydantic_model  # noqa: PLC0415
+    from citry.constness import _plain_schema_default  # noqa: PLC0415 - constness imports component modules
+
+    annotations: dict[str, Any] = {}
+    field_owners: dict[str, type] = {}
+    for klass in reversed(_static_class_mro(user_cls)):
+        own_annotations = _own_annotations(klass)
+        annotations.update(own_annotations)
+        field_owners.update((field_name, klass) for field_name in own_annotations)
+    # The generated class lives in the component's module, so each name is
+    # read now in the module of the class that wrote it. A name that cannot
+    # be read yet stays text, for the model to read when it is first used.
+    hints_by_owner: dict[type, dict[str, object] | None] = {}
+    for field_name, annotation in annotations.items():
+        resolved = _resolve_annotation(field_name, annotation, field_owners[field_name], hints_by_owner)
+        if resolved is not _UNRESOLVED:
+            annotations[field_name] = resolved
+    module, qualname = _generated_names(user_cls, owner, name)
+    owner_name = _safe_class_text(owner, "__name__") if owner is not None else component_name
+    build = BuildInput(
+        user_cls=user_cls,
+        component_name=owner_name,
+        schema_name=name or _safe_class_text(user_cls, "__name__") or "Schema",
+        annotations=annotations,
+        field_owners=field_owners,
+        field_names=tuple(
+            field_name for field_name, annotation in annotations.items() if not _is_classvar_annotation(annotation)
+        ),
+        module=module,
+        qualname=qualname,
+        class_name=_safe_class_text(user_cls, "__name__") or "Schema",
+    )
+    if model_base.kind == "namedtuple":
+        generated, const_defaults = build_named_tuple(build, _plain_schema_default)
+        if const_defaults:
+            type.__setattr__(generated, _CONST_SCHEMA_DEFAULTS_ATTR, const_defaults)
+    else:
+        generated = build_pydantic_model(build, model_base)
+    # Set after creation: Pydantic turns an underscore name in a class body
+    # into a private attribute, which would hide these markers.
+    type.__setattr__(generated, _SYNTHESIZED_DECLARATION_ATTR, True)
+    type.__setattr__(generated, _SYNTHESIZED_FIELD_OWNERS_ATTR, tuple(field_owners.items()))
+    return generated
+
+
+def _generated_names(user_cls: type, owner: type | None, name: str | None) -> tuple[str, str]:
+    """Return the module and qualified name a generated class reports."""
+    provenance_class = user_cls if owner is None else owner
+    module = _static_class_attribute(provenance_class, "__module__")
+    qualname = _static_class_attribute(provenance_class, "__qualname__")
+    if owner is not None and isinstance(qualname, str):
+        qualname = f"{qualname}.{name or _safe_class_text(user_cls, '__name__') or 'Schema'}"
+    return (
+        module if isinstance(module, str) else "citry.component",
+        qualname if isinstance(qualname, str) else _safe_class_text(user_cls, "__name__") or "Schema",
+    )
 
 
 def _inherited_default(user_cls: type, field_name: str) -> object:
@@ -565,6 +680,7 @@ def _convert_to_slotted_dataclass(
     *,
     owner: type | None = None,
     name: str | None = None,
+    model_base: ModelBase | None = None,
 ) -> type:
     """
     Generate one slotted dataclass from an authored plain field class.
@@ -575,12 +691,23 @@ def _convert_to_slotted_dataclass(
     plain bases, become the new fields. The generated class is frozen when
     its dataclass bases are frozen.
 
+    With a dataclass ``model_base``, the generated class also subclasses
+    the base, and takes its dataclass options.
+
     Raises:
         ValueError: The dataclass bases mix frozen and non-frozen, so no
             generated class can inherit from all of them, or the dataclass
             cannot be generated for another reason.
 
     """
+    from citry._model_base import dataclass_options  # noqa: PLC0415 - avoids importing settings early
+
+    # The base sits after the authored class, so the authored class's own
+    # members still win; the base's fields come first in field order.
+    extra_bases: tuple[type, ...] = (
+        (model_base.base,) if model_base is not None and not issubclass(user_cls, model_base.base) else ()
+    )
+    options = dataclass_options(model_base) if model_base is not None else {}
     # Plain classes that a dataclass base already covers reach the new class
     # through dataclass inheritance with their defaults intact. Collecting
     # their annotations again would redeclare those fields without defaults.
@@ -647,6 +774,8 @@ def _convert_to_slotted_dataclass(
         shell_namespace[_CONST_SCHEMA_DEFAULTS_ATTR] = const_defaults
 
     base_flags = _dataclass_base_frozen_flags(user_cls)
+    for extra_base in extra_bases:
+        base_flags.update(_dataclass_base_frozen_flags(extra_base))
     # Python 3.13 and later reject a frozen dataclass over a non-frozen
     # dataclass base, and 3.10 to 3.12 accept one, so check the bases here and
     # fail the same way on every version.
@@ -659,11 +788,12 @@ def _convert_to_slotted_dataclass(
         # Field() markers are consumed by dataclass(), so each attempt starts
         # from fresh copies of them.
         namespace = {key: copy(value) if isinstance(value, Field) else value for key, value in shell_namespace.items()}
-        shell = new_class(class_name, (user_cls,), exec_body=lambda attrs: attrs.update(namespace))
+        shell = new_class(class_name, (user_cls, *extra_bases), exec_body=lambda attrs: attrs.update(namespace))
         # ``types.new_class`` may leave ``__qualname__`` inherited when its value
         # matches a base. Dataclass's slots rebuild copies only own attributes.
         type.__setattr__(shell, "__qualname__", namespace["__qualname__"])
-        return dataclass(slots=True, frozen=frozen, kw_only=kw_only)(shell)
+        chosen = {**options, "frozen": frozen, "kw_only": kw_only or options.get("kw_only", False)}
+        return dataclass(slots=True, **chosen)(shell)
 
     try:
         return generate(kw_only=False)

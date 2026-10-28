@@ -162,7 +162,7 @@ def _enrich_unexpected_schema_key(error: TypeError, schema: type, supplied: dict
         error.args = (f"{message} Did you mean {close[0]!r}?", *error.args[1:])
 
 
-def _build_component_data_schema(component_class: type, name: str) -> object:
+def _build_component_data_schema(component_class: type, name: str, *, framework_owned: bool = False) -> object:
     """
     Return the effective data-shape class for one component class.
 
@@ -181,7 +181,22 @@ def _build_component_data_schema(component_class: type, name: str) -> object:
     if ancestor is not None:
         return _static_class_dict(ancestor)[name]
 
-    schema = _effective_data_schema(component_class, name, cast("type", nearest.value))
+    # A library's schema keeps the kind its author wrote and tested, whatever
+    # `model_base` the installing application sets.
+    from citry.library_component import LibraryComponent  # noqa: PLC0415 - library_component imports this module
+
+    # Citry's own built-in components keep theirs too.
+    declaring_class = nearest.declaring_class
+    # A library definition is not itself a Component; an application's own
+    # subclass of an installed library component is, and follows the setting.
+    from_library = (
+        isinstance(declaring_class, type)
+        and issubclass(declaring_class, LibraryComponent)
+        and not issubclass(declaring_class, Component)
+    )
+    schema = _effective_data_schema(
+        component_class, name, cast("type", nearest.value), use_model_base=not (from_library or framework_owned)
+    )
     _warn_if_fields_dropped(component_class, name, nearest, schema)
     return schema
 
@@ -435,6 +450,9 @@ class ComponentMeta(LibraryComponentMeta):
 
         if _citry_builtin is not None:
             type.__setattr__(cls, "_citry_builtin_token", _citry_builtin)
+        # Citry's own components keep the schemas they declare, whatever
+        # `model_base` the application sets.
+        type.__setattr__(cls, "_citry_framework_component", _citry_builtin is not None or _citry_internal is not None)
 
         # Resolve the Citry instance from the explicit or inherited binding,
         # then stamp it onto this concrete class. The own immutable binding
@@ -486,7 +504,15 @@ class ComponentMeta(LibraryComponentMeta):
         # NamedTuple keep their own construction model.
         for data_class_name in _DATA_SCHEMA_NAMES:
             if _get_nested_class_declarations(cls, data_class_name):
-                type.__setattr__(cls, data_class_name, _build_component_data_schema(cls, data_class_name))
+                type.__setattr__(
+                    cls,
+                    data_class_name,
+                    _build_component_data_schema(
+                        cls,
+                        data_class_name,
+                        framework_owned=cls.__dict__["_citry_framework_component"],
+                    ),
+                )
 
         # Class-created hooks may define more components, so they and the final
         # registration share one lifecycle owner. Another thread can never see

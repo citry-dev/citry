@@ -10,6 +10,12 @@
 
 ### Added
 
+- You can make every plain `class Kwargs:`, `TemplateData`, `JsData`,
+  `CssData`, and Events `data` class a Pydantic model that subclasses your
+  own `BaseModel` subclass, so its `model_config` applies to all of them:
+  pass it as `Citry(model_base=MyModel)`. A dataclass base or
+  `typing.NamedTuple` works too
+  ([details](https://citry.dev/concepts/inputs-and-validation/#model-base)).
 - A component can pass Vue data to a fill, as a Vue scoped slot: write
   `<c-slot name="item" :row="row" />`, and read it in the fill with
   `<c-fill name="item" v-slot="{ row }">`. Python slot data (`c-item`,
