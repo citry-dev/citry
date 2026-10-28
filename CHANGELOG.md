@@ -312,6 +312,12 @@
 
 ### Fixes
 
+- `citry format` and the editor's format command no longer add a line break
+  where two tags touch, such as between `<td>` cells or `<option>`s or just
+  inside a `<c-fill>`, or at the start or end of a template string written
+  right against its quotes. That line break was new text in the rendered
+  HTML. Whitespace you wrote is still re-indented; to spread compact markup
+  over lines, add a line break between the tags once.
 - An oversized request to Citry's event endpoints no longer fills the
   server's memory: by default Citry stops reading a body past 1 MiB and
   rejects a form post with more than 1,000 fields, both with

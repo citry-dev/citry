@@ -440,7 +440,7 @@ def test_template_embedded_body_uses_the_explicit_provider_atomically(
     monkeypatch.chdir(tmp_path)
     biome = _write_fake_biome(tmp_path / "biome")
     target = tmp_path / "card.citry-html"
-    target.write_text("<main><script>const  value = 1;</script></main>", encoding="utf-8")
+    target.write_text("<main> <script>const  value = 1;</script> </main>", encoding="utf-8")
 
     assert (
         _run_main(

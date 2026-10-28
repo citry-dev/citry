@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- `template_formatter.format_template()` no longer adds a line break where
+  two tags touch, such as between `<td>` cells or `<option>`s. That line
+  break was new text in the rendered HTML. Whitespace in the template is
+  still re-indented.
+
 ### Added
 
 - `parse_template()` accepts a Vue slot prop such as `:row="row"` on

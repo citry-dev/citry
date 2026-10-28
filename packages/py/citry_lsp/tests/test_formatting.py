@@ -397,7 +397,7 @@ def test_component_asset_plan_rejects_document_changes_before_composition() -> N
 
 
 def test_unavailable_component_asset_provider_keeps_region_and_reports_notice() -> None:
-    source = "<main><style>.card{color:red}</style></main>"
+    source = "<main> <style>.card{color:red}</style> </main>"
     document = _document(source, language_id="citry-html")
     prepared = prepare_component_assets(document, requested_version=4, scope="document")
     assert isinstance(prepared, PreparedComponentAssets)
