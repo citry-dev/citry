@@ -101,7 +101,7 @@ use std::vec::IntoIter;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::ast::{
-    ForeignSourcePart, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template,
+    ForeignSourcePart, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Shared, Template,
     TemplateElement, Text, Token,
 };
 use crate::constants::{
@@ -247,8 +247,9 @@ pub(crate) fn compile_template_body_with_mode(
         // Rust does not allow moving a field out of a type that has its own
         // `Drop`, as `Template` does, so the elements are taken out instead.
         let mut template = template;
-        let processed_elements =
-            wrap_nodes_with_control_flow_attrs(std::mem::take(&mut template.elements))?;
+        let processed_elements = wrap_nodes_with_control_flow_attrs(Shared::into_inner(
+            std::mem::take(&mut template.elements),
+        ))?;
 
         let mut body_items = Vec::new();
         let mut elements_iter = processed_elements.into_iter().peekable();
@@ -397,7 +398,9 @@ pub(crate) fn compile_template_body_with_mode(
                         C_RAW_TAG => {
                             if mode == CompileMode::Prepared {
                                 if let Node::WithBody { mut body, .. } = node {
-                                    for element in std::mem::take(&mut body.elements) {
+                                    for element in
+                                        Shared::into_inner(std::mem::take(&mut body.elements))
+                                    {
                                         match element {
                                             TemplateElement::Text(text) => {
                                                 body_items
@@ -416,7 +419,9 @@ pub(crate) fn compile_template_body_with_mode(
                                     }
                                 }
                             } else if let Node::WithBody { mut body, .. } = node {
-                                for element in std::mem::take(&mut body.elements) {
+                                for element in
+                                    Shared::into_inner(std::mem::take(&mut body.elements))
+                                {
                                     match element {
                                         TemplateElement::Text(text) => body_items.push(
                                             LangSpecArgument::UnsafeString(text.token.content),
@@ -2334,7 +2339,7 @@ fn _remove_attr_and_wrap_in_control_flow(
     let lifted_used_variables = attr.used_variables.clone();
     match &mut node {
         Node::WithBody { used_variables, .. } | Node::SelfClosing { used_variables, .. } => {
-            used_variables.retain(|token| !lifted_used_variables.contains(token));
+            Shared::make_mut(used_variables).retain(|token| !lifted_used_variables.contains(token));
         }
     }
 
@@ -2430,12 +2435,12 @@ fn _wrap_node_in_control_flow(
             } => std::mem::take(introduced_variables),
         }
     } else {
-        Vec::new()
+        Shared::default()
     };
     // Get slots from the inner node's body if it exists (WithBody), otherwise empty vec
     let inner_slots = match &inner_node {
         Node::WithBody { body, .. } => body.slots.clone(),
-        Node::SelfClosing { .. } => vec![],
+        Node::SelfClosing { .. } => Shared::default(),
     };
 
     // The control flow attribute may contain comments, e.g. `<div c-if="1 # my comment">`.
@@ -2520,9 +2525,9 @@ fn _wrap_node_in_control_flow(
 
     // Create the body containing just the inner node
     let body = Template {
-        elements: vec![TemplateElement::Node(inner_node)],
-        comments: inner_comments.clone(),
-        used_variables: inner_used_vars,
+        elements: vec![TemplateElement::Node(inner_node)].into(),
+        comments: inner_comments.clone().into(),
+        used_variables: inner_used_vars.into(),
         slots: inner_slots,
     };
 
@@ -2541,9 +2546,9 @@ fn _wrap_node_in_control_flow(
         start_tag: cf_start_tag,
         end_tag: cf_end_tag,
         body,
-        used_variables: wrapper_used_vars,
+        used_variables: wrapper_used_vars.into(),
         introduced_variables: wrapper_introduced_vars,
-        comments,
+        comments: comments.into(),
         contains_fills: false,
     })
 }

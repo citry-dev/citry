@@ -11,10 +11,10 @@ that limit Citry renders the fixture twice and serializes it. That leaves
 at least 300 frames below Python's default limit of 1,000.
 
 The fixtures run without Vue, with Vue, and with the i18n extension; the
-events extension is on in all of them, as it is by default. Two fixtures
+events extension is on in all of them, as it is by default. Four fixtures
 also run ``citry check`` on the Python render path, once at the limit
 under the low limit, compared with a check at depth 128 under the normal
-one (see `CHECKED_FIXTURES` for why only two). The language server's half is
+one (see `CHECKED_FIXTURES` for which four). The language server's half is
 ``packages/py/citry_lsp/tests/test_frame_budget.py``.
 
 Several handlers in Citry catch ``RecursionError`` and quietly do less, so a
@@ -326,9 +326,9 @@ def _check_under_the_low_limit(fixture: str) -> dict[str, Any]:
     """
     Check `fixture` at the limit under the low limit, and compare with a normal check at depth 128.
 
-    A check at the limit takes tens of seconds (#384), so it runs once,
-    under the low limit, and is compared with a check at the comparison
-    depth under the normal limit, which takes an eighth of the time.
+    The check at the limit runs once, under the low limit, and its findings
+    are compared with a check at the comparison depth under the normal
+    limit, which must find the same problems.
     """
     expected = _check(fixture, VUE_COMPARISON_DEPTH)
     try:
@@ -428,13 +428,15 @@ def _measure(
 
 
 VARIANTS = ("html", "vue", "i18n")
-# `citry check` reads the parsed tree from the Rust extension, which copies
-# a node's whole subtree each time Python reads its body (#384), so a check
-# at the limit takes tens of seconds even for these two fixtures; each runs
-# once at the limit (see `_check_under_the_low_limit`). The check walkers'
-# frame use at other shapes is covered at depth 128 by
-# test_check_depth_frames.py.
-CHECKED_FIXTURES = ("plain_elements", "fills")
+# The fixtures whose `citry check` findings are the same at depth 128 and at
+# the limit, and include the name at the innermost level. The others were
+# written for rendering: their findings change with depth, or they hold no
+# name at the innermost level (two do not nest at all), so comparing their
+# findings at two depths would not show that the check reached the
+# innermost level. Each check at the limit takes under a
+# second. The check walkers' frame use at the other shapes is covered at
+# depth 128 by test_check_depth_frames.py.
+CHECKED_FIXTURES = ("plain_elements", "fills", "component_tags", "slot_defaults")
 
 
 def _worker(*, run_check: bool) -> None:

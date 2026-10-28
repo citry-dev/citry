@@ -175,11 +175,9 @@ def test_a_component_rendered_in_a_loop_can_nest_to_the_limit(render_path: str) 
     assert html.count(">row</li>") == 3
 
 
-# `citry check` reads the tree through the binding, which copies a node's
-# whole subtree each time Python reads its body, so its cost grows with
-# the cube of the depth. The two shapes that cost the most are left out
-# here to keep the suite fast; the parser counts them the same way.
-CHECKED_SHAPES = ("elements", "fills_inside_components")
+# `citry check` reads one node per step down the tree, so a check at the
+# limits takes less than a second, and every shape is checked.
+CHECKED_SHAPES = tuple(AT_LIMITS)
 
 
 @pytest.mark.parametrize("shape", CHECKED_SHAPES)

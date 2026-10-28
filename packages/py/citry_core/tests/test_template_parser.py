@@ -781,3 +781,27 @@ class TestTagRules:
         rules = {"c-card": TagRules(required_attrs=[["title"]])}
         with pytest.raises(SyntaxError):
             parse_template("<c-card></c-card>", user_rules=rules)
+
+
+def test_compiling_leaves_the_parsed_template_unchanged():
+    # The compiler starts from a copy that shares its lists with the parsed
+    # template, and takes it apart while it works. Every change must copy a
+    # shared list first, so the template Python holds still compiles to the
+    # same code the second time. The source covers the places the compiler
+    # changes a tree: control-flow shorthands it turns into wrapper nodes,
+    # `<c-raw>` bodies it takes out, and a template inside an attribute.
+    source = """
+<div c-if="show" c-for="item in items">{{ item }}</div>
+<c-raw><b>{{ not_parsed }}</b></c-raw>
+<c-Card c-title='<em c-if="flag">{{ title }}</em>'>
+  <c-fill name="default">{{ body }}</c-fill>
+</c-Card>
+"""
+    template = parse_template(source)
+    before = repr(template)
+    first = compile_template(template)
+    first_prepared = _rust.template_parser._compile_prepared_template(template)
+    assert repr(template) == before
+    assert compile_template(template) == first
+    assert _rust.template_parser._compile_prepared_template(template) == first_prepared
+    assert repr(template) == before

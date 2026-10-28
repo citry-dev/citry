@@ -47,8 +47,8 @@ def test_deep_templates_parse_and_compile_on_a_small_thread(shape: str) -> None:
             template = parse_template(source)
             compile_template(template)
             _compile_prepared_template(template)
-            # Reading a field copies the subtree it holds into Python, and
-            # `==` and `repr()` walk the whole tree.
+            # Reading a field converts its list into Python, and `==` and
+            # `repr()` walk the whole tree.
             template.elements
             assert template == template
             repr(template)

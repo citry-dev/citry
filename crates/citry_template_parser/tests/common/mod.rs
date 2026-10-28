@@ -222,9 +222,9 @@ pub fn end_tag_with_comments(token: Token, name: Token, comments: Vec<Comment>) 
 pub fn self_closing_node(start_tag: HtmlStartTag) -> Node {
     Node::SelfClosing {
         start_tag,
-        used_variables: vec![],
-        introduced_variables: vec![],
-        comments: vec![],
+        used_variables: vec![].into(),
+        introduced_variables: vec![].into(),
+        comments: vec![].into(),
         contains_fills: false,
     }
 }
@@ -233,9 +233,9 @@ pub fn self_closing_node(start_tag: HtmlStartTag) -> Node {
 pub fn self_closing_node_vars(start_tag: HtmlStartTag, used_variables: Vec<Token>) -> Node {
     Node::SelfClosing {
         start_tag,
-        used_variables,
-        introduced_variables: vec![],
-        comments: vec![],
+        used_variables: used_variables.into(),
+        introduced_variables: vec![].into(),
+        comments: vec![].into(),
         contains_fills: false,
     }
 }
@@ -246,9 +246,9 @@ pub fn body_node(start_tag: HtmlStartTag, end_tag: HtmlEndTag, body: Template) -
         start_tag,
         end_tag,
         body,
-        used_variables: vec![],
-        introduced_variables: vec![],
-        comments: vec![],
+        used_variables: vec![].into(),
+        introduced_variables: vec![].into(),
+        comments: vec![].into(),
         contains_fills: false,
     }
 }
@@ -264,9 +264,9 @@ pub fn body_node_vars(
         start_tag,
         end_tag,
         body,
-        used_variables,
-        introduced_variables: vec![],
-        comments: vec![],
+        used_variables: used_variables.into(),
+        introduced_variables: vec![].into(),
+        comments: vec![].into(),
         contains_fills: false,
     }
 }
@@ -286,9 +286,9 @@ pub fn body_node_full(
         start_tag,
         end_tag,
         body,
-        used_variables,
-        introduced_variables,
-        comments,
+        used_variables: used_variables.into(),
+        introduced_variables: introduced_variables.into(),
+        comments: comments.into(),
         contains_fills,
     }
 }
@@ -303,9 +303,9 @@ pub fn self_closing_node_full(
 ) -> Node {
     Node::SelfClosing {
         start_tag,
-        used_variables,
-        introduced_variables,
-        comments,
+        used_variables: used_variables.into(),
+        introduced_variables: introduced_variables.into(),
+        comments: comments.into(),
         contains_fills,
     }
 }
@@ -317,30 +317,30 @@ pub fn self_closing_node_full(
 /// Build a Template with default empty fields.
 pub fn template(elements: Vec<TemplateElement>) -> Template {
     Template {
-        elements,
-        comments: vec![],
-        used_variables: vec![],
-        slots: vec![],
+        elements: elements.into(),
+        comments: vec![].into(),
+        used_variables: vec![].into(),
+        slots: vec![].into(),
     }
 }
 
 /// Build a Template with used_variables.
 pub fn template_with_vars(elements: Vec<TemplateElement>, used_variables: Vec<Token>) -> Template {
     Template {
-        elements,
-        comments: vec![],
-        used_variables,
-        slots: vec![],
+        elements: elements.into(),
+        comments: vec![].into(),
+        used_variables: used_variables.into(),
+        slots: vec![].into(),
     }
 }
 
 /// Build a Template with comments.
 pub fn template_with_comments(elements: Vec<TemplateElement>, comments: Vec<Comment>) -> Template {
     Template {
-        elements,
-        comments,
-        used_variables: vec![],
-        slots: vec![],
+        elements: elements.into(),
+        comments: comments.into(),
+        used_variables: vec![].into(),
+        slots: vec![].into(),
     }
 }
 
@@ -351,10 +351,10 @@ pub fn template_with_comments_and_vars(
     used_variables: Vec<Token>,
 ) -> Template {
     Template {
-        elements,
-        comments,
-        used_variables,
-        slots: vec![],
+        elements: elements.into(),
+        comments: comments.into(),
+        used_variables: used_variables.into(),
+        slots: vec![].into(),
     }
 }
 
@@ -366,10 +366,10 @@ pub fn template_full(
     slots: Vec<StaticNamedSlot>,
 ) -> Template {
     Template {
-        elements,
-        comments,
-        used_variables,
-        slots,
+        elements: elements.into(),
+        comments: comments.into(),
+        used_variables: used_variables.into(),
+        slots: slots.into(),
     }
 }
 
@@ -443,7 +443,9 @@ pub fn slot(tok: Token, required: Option<bool>) -> StaticNamedSlot {
 pub fn parse_first_node(input: &str) -> Result<Node, ParseError> {
     let mut template = parse_template(input, None, None)?;
 
-    for element in std::mem::take(&mut template.elements) {
+    for element in
+        citry_template_parser::ast::Shared::into_inner(std::mem::take(&mut template.elements))
+    {
         if let TemplateElement::Node(node) = element {
             return Ok(node);
         }

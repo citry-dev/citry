@@ -34,6 +34,12 @@ validation, the exact compiler output format), see
 
 ## Gotchas
 
+- **Tree lists are shared.** `Template`'s lists and each node's
+  `used_variables`, `introduced_variables` and `comments` are `Shared<Vec<_>>`,
+  so a clone of the tree shares them. Write with `Shared::make_mut(&mut x)`,
+  move a list out with `Shared::into_inner(std::mem::take(&mut x))`, and build
+  one with `.into()`. There is no `DerefMut` on purpose; see
+  "AST (`ast.rs`)" in `docs/agent/INDEX.md`.
 - **Nesting is counted in one place.** `nesting::tag_levels` says how many
   total and logic levels a tag adds, and the parser, the compiler and the
   Python binding all use it. Count any new wrapping construct there, or the
@@ -43,8 +49,9 @@ validation, the exact compiler output format), see
   times the input length; `from_span` builds the same error in time
   proportional to the input.
 - **A walk over the tree keeps its own work list.** The parser's passes
-  over the finished tree, and `Template`'s `Clone`, `PartialEq` and `Drop`,
-  keep a list of what is left to visit, so their stack use stays flat at any
+  over the finished tree, and `Template`'s `PartialEq` and `Drop`, keep a list
+  of what is left to visit (its `Clone` shares the lists below it and does not
+  walk), so their stack use stays flat at any
   depth (the `walks_without_recursion` tests in `src/parser.rs` run them on a
   64 KiB thread). Write a new pass the same way. Three parts of the parser call
   themselves once per level and wrap their body in

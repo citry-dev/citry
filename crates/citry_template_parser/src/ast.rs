@@ -11,6 +11,147 @@ use unicode_normalization::UnicodeNormalization;
 use crate::grammar::Rule;
 
 // #########################################################
+// SHARED VALUES
+// #########################################################
+
+/// A list in the tree that every copy of the tree shares.
+///
+/// Python reads a parsed template through PyO3, which copies the field it
+/// reads. Each node holds the variable uses and comments of its whole
+/// subtree, so copying a list together with everything below it would cost
+/// about depth² values near the root, and a walk over the tree depth³ (#384).
+/// Copying a `Shared` only adds one to a reference count, and the lists below
+/// stay shared, so a read copies one node.
+///
+/// No code changes a list that another copy still holds. `Shared` has no
+/// `DerefMut`, so every write goes through [`Shared::make_mut`], which copies
+/// the value first if anything else still holds it. That keeps a copy from
+/// happening without the code saying so.
+pub struct Shared<T>(std::sync::Arc<T>);
+
+impl<T> Shared<T> {
+    pub fn new(value: T) -> Self {
+        Shared(std::sync::Arc::new(value))
+    }
+
+    /// Give the value to change in place. It is copied first only when another
+    /// reference to it exists. While the parser builds a tree, nothing else
+    /// holds one, except where `Node::from_start_and_end_tags` starts a
+    /// node's lists from a copy of its body's, which copies them as before.
+    pub fn make_mut(this: &mut Self) -> &mut T
+    where
+        T: Clone,
+    {
+        std::sync::Arc::make_mut(&mut this.0)
+    }
+
+    /// Take the value out: without a copy when this is the only reference,
+    /// and as a copy otherwise.
+    pub fn into_inner(this: Self) -> T
+    where
+        T: Clone,
+    {
+        std::sync::Arc::unwrap_or_clone(this.0)
+    }
+
+    /// The value when this is the only reference, without a copy; otherwise
+    /// the shared value back.
+    pub fn try_into_inner(this: Self) -> Result<T, Self> {
+        std::sync::Arc::try_unwrap(this.0).map_err(Shared)
+    }
+
+    /// Whether nothing else holds this value.
+    pub fn is_unique(this: &Self) -> bool {
+        std::sync::Arc::strong_count(&this.0) == 1
+    }
+
+    /// Whether two shared values are the same allocation.
+    pub fn ptr_eq(this: &Self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&this.0, &other.0)
+    }
+}
+
+impl<T> std::ops::Deref for Shared<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> Clone for Shared<T> {
+    fn clone(&self) -> Self {
+        Shared(std::sync::Arc::clone(&self.0))
+    }
+}
+
+impl<T: Default> Default for Shared<T> {
+    fn default() -> Self {
+        Shared::new(T::default())
+    }
+}
+
+// `for item in &node.comments` keeps working on a shared list.
+impl<'a, T> IntoIterator for &'a Shared<Vec<T>> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<T> From<T> for Shared<T> {
+    fn from(value: T) -> Self {
+        Shared::new(value)
+    }
+}
+
+// Equality and printing look through to the value, so `==` and `repr` give
+// the same results as on the value itself. The same-allocation shortcut is
+// sound because no tree value is a float, so every value equals itself.
+impl<T: PartialEq> PartialEq for Shared<T> {
+    fn eq(&self, other: &Self) -> bool {
+        Shared::ptr_eq(self, other) || *self.0 == *other.0
+    }
+}
+
+impl<T: Eq> Eq for Shared<T> {}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Shared<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Passing the same formatter keeps `{:#?}` and every other flag.
+        std::fmt::Debug::fmt(&*self.0, formatter)
+    }
+}
+
+// Python sees the value itself: a getter converts a copy of it, as PyO3
+// does for a plain field, and a constructor accepts what the value accepts.
+impl<'py, T> IntoPyObject<'py> for Shared<T>
+where
+    T: IntoPyObject<'py> + Clone,
+{
+    type Target = T::Target;
+    type Output = T::Output;
+    type Error = T::Error;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Shared::into_inner(self).into_pyobject(py)
+    }
+}
+
+impl<'a, 'py, T> FromPyObject<'a, 'py> for Shared<T>
+where
+    T: FromPyObject<'a, 'py>,
+{
+    type Error = T::Error;
+
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        T::extract(obj).map(Shared::new)
+    }
+}
+
+// #########################################################
 // TOKEN
 // #########################################################
 
@@ -662,11 +803,11 @@ pub enum Node {
         /// The body content (template elements inside the node)
         body: Template,
         /// All variables used both within the start tag and the body content
-        used_variables: Vec<Token>,
+        used_variables: Shared<Vec<Token>>,
         /// Variables introduced by this node (e.g., loop variables from `<c-for>`)
-        introduced_variables: Vec<Token>,
+        introduced_variables: Shared<Vec<Token>>,
         /// All comments found in the node (start/end tags and body content)
-        comments: Vec<Comment>,
+        comments: Shared<Vec<Comment>>,
         /// Whether this node contains any `<c-fill>` tags in its body
         contains_fills: bool,
     },
@@ -675,11 +816,11 @@ pub enum Node {
         /// The start tag with attributes
         start_tag: HtmlStartTag,
         /// All variables used both within the start tag and the body content
-        used_variables: Vec<Token>,
+        used_variables: Shared<Vec<Token>>,
         /// Variables introduced by this node (e.g., loop variables from `<c-for>`)
-        introduced_variables: Vec<Token>,
+        introduced_variables: Shared<Vec<Token>>,
         /// All comments found in the node (start tag)
-        comments: Vec<Comment>,
+        comments: Shared<Vec<Comment>>,
         /// Whether this node contains any `<c-fill>` tags in its body (always false for self-closing nodes)
         contains_fills: bool,
     },
@@ -807,7 +948,7 @@ impl Node {
         // Extract comments from end tag
         // NOTE: End tags don't use variables
         let comments_from_end_tag = end_tag.comments.clone();
-        comments.extend(comments_from_end_tag);
+        Shared::make_mut(&mut comments).extend(comments_from_end_tag);
 
         // Extract comments and used variables from start tag and its attrs
         let used_variables_from_attrs: Vec<Token> = start_tag
@@ -820,18 +961,19 @@ impl Node {
             .iter()
             .flat_map(|attr| attr.comments.clone());
         let comments_from_start_tag = start_tag.comments.clone();
-        comments.extend(comments_from_attrs);
-        comments.extend(comments_from_start_tag);
-        used_variables.extend(used_variables_from_attrs);
+        Shared::make_mut(&mut comments).extend(comments_from_attrs);
+        Shared::make_mut(&mut comments).extend(comments_from_start_tag);
+        Shared::make_mut(&mut used_variables).extend(used_variables_from_attrs);
 
-        let used_variables = remove_introduced_variables(used_variables, &introduced_variables);
+        let used_variables =
+            remove_introduced_variables(Shared::into_inner(used_variables), &introduced_variables);
 
         Self::WithBody {
             start_tag,
             end_tag,
             body,
-            used_variables,
-            introduced_variables,
+            used_variables: used_variables.into(),
+            introduced_variables: introduced_variables.into(),
             comments,
             contains_fills: false, // Will be set in finalize_node
         }
@@ -1005,116 +1147,32 @@ impl StaticNamedSlot {
 pub struct Template {
     /// The elements in the template
     #[pyo3(get)]
-    pub elements: Vec<TemplateElement>,
+    pub elements: Shared<Vec<TemplateElement>>,
 
     /// All comments found in the template at any nesting level.
     #[pyo3(get)]
-    pub comments: Vec<Comment>,
+    pub comments: Shared<Vec<Comment>>,
 
     /// Context variables that this Template needs (used variables from all tags and expressions)
     #[pyo3(get)]
-    pub used_variables: Vec<Token>,
+    pub used_variables: Shared<Vec<Token>>,
 
     /// All slots defined by `<c-slot>` tags (with static names) found in the template (at any nesting level)
     #[pyo3(get)]
-    pub slots: Vec<StaticNamedSlot>,
+    pub slots: Shared<Vec<StaticNamedSlot>>,
 }
 
-/// Cloning a template copies its whole tree. A clone that called itself per
-/// level would grow the native stack with the tree's depth, so this one
-/// keeps its own stack of the bodies still being copied. PyO3 clones a
-/// template when Python reads a field that holds one, such as a node's
-/// `body`. Each body is copied before the node that holds it, from a copy of
-/// the node with an empty body, so the derived `Clone` of `Node` never runs
-/// for a node with a body.
+/// Cloning a template shares its four lists with the copy, so it costs the
+/// same at any depth and never walks the tree. PyO3 clones a template when
+/// Python reads a field that holds one, such as a node's `body`.
 impl Clone for Template {
     fn clone(&self) -> Self {
-        // Most bodies hold only text and expressions, which cannot nest,
-        // and PyO3 clones a body on every read of a node's `body`, so those
-        // skip the work list.
-        if !has_child_nodes(&self.elements) {
-            return Template {
-                elements: self.elements.clone(),
-                comments: self.comments.clone(),
-                used_variables: self.used_variables.clone(),
-                slots: self.slots.clone(),
-            };
+        Template {
+            elements: self.elements.clone(),
+            comments: self.comments.clone(),
+            used_variables: self.used_variables.clone(),
+            slots: self.slots.clone(),
         }
-        /// One body being copied: its source elements still to copy, the
-        /// copies made so far, and the copied node (with an empty body)
-        /// waiting for them. The root has no node.
-        struct Frame<'a> {
-            rest: std::slice::Iter<'a, TemplateElement>,
-            done: Vec<TemplateElement>,
-            node: Option<Node>,
-        }
-
-        let mut stack = vec![Frame {
-            rest: self.elements.iter(),
-            done: Vec::with_capacity(self.elements.len()),
-            node: None,
-        }];
-        loop {
-            let frame = stack
-                .last_mut()
-                .expect("the root frame stays until the end");
-            match frame.rest.next() {
-                Some(TemplateElement::Node(node @ Node::WithBody { body, .. })) => {
-                    let shell = node_with_empty_body(node);
-                    stack.push(Frame {
-                        rest: body.elements.iter(),
-                        done: Vec::with_capacity(body.elements.len()),
-                        node: Some(shell),
-                    });
-                }
-                Some(element) => frame.done.push(element.clone()),
-                None => {
-                    let finished = stack.pop().expect("checked above");
-                    let Some(mut node) = finished.node else {
-                        return Template {
-                            elements: finished.done,
-                            comments: self.comments.clone(),
-                            used_variables: self.used_variables.clone(),
-                            slots: self.slots.clone(),
-                        };
-                    };
-                    if let Node::WithBody { body, .. } = &mut node {
-                        body.elements = finished.done;
-                    }
-                    let parent = stack.last_mut().expect("a body's frame has a parent");
-                    parent.done.push(TemplateElement::Node(node));
-                }
-            }
-        }
-    }
-}
-
-/// A copy of `node` whose body holds everything but its elements.
-fn node_with_empty_body(node: &Node) -> Node {
-    match node {
-        Node::WithBody {
-            start_tag,
-            end_tag,
-            body,
-            used_variables,
-            introduced_variables,
-            comments,
-            contains_fills,
-        } => Node::WithBody {
-            start_tag: start_tag.clone(),
-            end_tag: end_tag.clone(),
-            body: Template {
-                elements: Vec::new(),
-                comments: body.comments.clone(),
-                used_variables: body.used_variables.clone(),
-                slots: body.slots.clone(),
-            },
-            used_variables: used_variables.clone(),
-            introduced_variables: introduced_variables.clone(),
-            comments: comments.clone(),
-            contains_fills: *contains_fills,
-        },
-        Node::SelfClosing { .. } => node.clone(),
     }
 }
 
@@ -1238,23 +1296,44 @@ fn has_child_nodes(elements: &[TemplateElement]) -> bool {
         .any(|element| matches!(element, TemplateElement::Node(_)))
 }
 
-/// Dropping a template frees its whole tree. A drop that called itself per
-/// level would grow the native stack with the depth: a template parsed from
-/// an attribute value is freed while the parser is still reading the tag
-/// that holds it, and there a 128 KiB thread ran out at 192 levels. So the
-/// drop moves every nested body's elements onto one list and frees them
-/// from there; each body is already empty when it is freed.
+/// Dropping the last reference to a template frees its whole tree. A drop
+/// that called itself per level would grow the native stack with the depth:
+/// a template parsed from an attribute value is freed while the parser is
+/// still reading the tag that holds it, and there a 128 KiB thread ran out at
+/// 192 levels. So the drop takes each nested body's elements out and frees
+/// them from one work list; each body is already empty when it is freed. A
+/// list that another copy of the tree still holds is left to that copy.
 impl Drop for Template {
     fn drop(&mut self) {
-        // Only a body with child nodes can nest further; the rest are freed
-        // here as usual.
-        if !has_child_nodes(&self.elements) {
+        // Only a list with child nodes can nest further, and only one nothing
+        // else holds is freed here. A list another copy still holds is left
+        // to that copy, which also avoids allocating an empty list for every
+        // throwaway copy, such as the one behind each Python read of a node's
+        // `body`. If another thread drops that copy meanwhile, the list is
+        // freed by the ordinary drop instead, which goes one level down before
+        // the next body's own `drop` takes over.
+        if !has_child_nodes(&self.elements) || !Shared::is_unique(&self.elements) {
             return;
         }
-        let mut pending = std::mem::take(&mut self.elements);
-        while let Some(element) = pending.pop() {
-            if let TemplateElement::Node(Node::WithBody { mut body, .. }) = element {
-                pending.append(&mut body.elements);
+        let mut pending = vec![std::mem::take(&mut self.elements)];
+        while let Some(list) = pending.pop() {
+            // Every list here was checked to be unique and is owned by this
+            // loop, so this always succeeds; if a later change lets another
+            // copy hold one, leaving it to that copy is still correct.
+            let Ok(elements) = Shared::try_into_inner(list) else {
+                continue;
+            };
+            for mut element in elements {
+                // Only a body with child nodes can nest further, and only one
+                // nothing else holds is freed here; the others drop as usual.
+                match &mut element {
+                    TemplateElement::Node(Node::WithBody { body, .. })
+                        if has_child_nodes(&body.elements) && Shared::is_unique(&body.elements) =>
+                    {
+                        pending.push(std::mem::take(&mut body.elements));
+                    }
+                    _ => {}
+                }
             }
         }
     }
@@ -1270,10 +1349,10 @@ impl Template {
         slots: Option<Vec<StaticNamedSlot>>,
     ) -> Self {
         Self {
-            elements,
-            comments: comments.unwrap_or_default(),
-            used_variables,
-            slots: slots.unwrap_or_default(),
+            elements: elements.into(),
+            comments: comments.unwrap_or_default().into(),
+            used_variables: used_variables.into(),
+            slots: slots.unwrap_or_default().into(),
         }
     }
 
