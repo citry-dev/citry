@@ -75,6 +75,8 @@ if TYPE_CHECKING:
 # The attribute name the placeholders carry, and that mark_html splits the
 # HTML around.
 _RENDER_ID_ATTR = "c-render-id"
+
+
 # A root marker written as a full `name="value"` attribute. The marking scan
 # (mark_html) only splices bare `name=""` attributes, so valued markers are
 # recognized here and spliced by this module instead; see _apply_valued_markers.
@@ -170,6 +172,23 @@ class _PreparedMarkupTracker(LongReferenceSafeParser):
 
     def handle_charref(self, name: str) -> None:  # noqa: ARG002
         self.mark_content("&")
+
+
+def _marked_without_children(html: str, markers: list[str]) -> list[str]:
+    """
+    Mark a leaf's root tags, keeping any `<template c-render-id>` text in place.
+
+    A leaf renders no child components, so a placeholder ``mark_html`` finds
+    in it is text an author wrote, such as one inside a ``<textarea>``. Its
+    text goes back between the segments, as ``join_frames`` does for an id it
+    does not know.
+    """
+    segments, placeholders = mark_html(html, markers, _RENDER_ID_ATTR)
+    parts = [segments[0]]
+    for (_child_id, placeholder_html, _added), segment in zip(placeholders, segments[1:], strict=True):
+        parts.append(placeholder_html)
+        parts.append(segment)
+    return parts
 
 
 def _looks_like_document(html: str) -> bool:
@@ -1264,12 +1283,7 @@ def _append_frame_parts(
 
             rendered_parts = static_leaf_parts(part.leaf)
             markers = [f"data-cid-{part.render_id}", *part.root_markers]
-            marked_parts, _ = mark_html(
-                "".join(rendered_parts),
-                markers,
-                _RENDER_ID_ATTR,
-            )
-            out.extend(marked_parts)
+            out.extend(_marked_without_children("".join(rendered_parts), markers))
         elif isinstance(part, Placeholder):
             # Each occurrence needs its own identity for serialization hooks.
             placeholder_id = f"{part.key}:{len(placeholder_map) + 1}:{placeholder_nonce}"
@@ -1462,11 +1476,7 @@ def _append_frame_parts_with_fallback_tracking(
 
             rendered_parts = static_leaf_parts(part.leaf)
             markers = [f"data-cid-{part.render_id}", *part.root_markers]
-            marked_parts, _ = mark_html(
-                "".join(rendered_parts),
-                markers,
-                _RENDER_ID_ATTR,
-            )
+            marked_parts = _marked_without_children("".join(rendered_parts), markers)
             out.extend(marked_parts)
             for marked in marked_parts:
                 consume_markup(marked)

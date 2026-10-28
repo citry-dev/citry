@@ -193,6 +193,23 @@ def test_accordion_rejects_duplicate_items_and_stray_direct_output():
         )
 
 
+def test_a_self_closed_element_in_an_item_renders_like_its_open_form():
+    # A template `<span/>` is written as `<span></span>`, so the accordion's
+    # check of its direct content reads it the same way.
+    for title in ("Canopy <span/>", "Canopy <span></span>"):
+        html = _render_template(
+            f"""
+              <c-CAccordion>
+                <c-CAccordionItem value="canopy">
+                  <c-fill name="title">{title}</c-fill>
+                  <c-fill name="default">High leaves</c-fill>
+                </c-CAccordionItem>
+              </c-CAccordion>
+            """
+        )
+        assert "Canopy <span></span>" in html, title
+
+
 def test_transparent_component_may_produce_direct_items_without_a_wrapper():
     app = _app()
 

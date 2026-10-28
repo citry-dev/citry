@@ -8,7 +8,7 @@ from typing import Annotated, NamedTuple
 
 import pytest
 
-from citry import Citry, CitryElement, Component, Const, NestedSchemaReplacedWarning, Slot
+from citry import Citry, CitryElement, Component, Const, Markup, NestedSchemaReplacedWarning, Slot
 
 
 class TestComponentFields:
@@ -406,6 +406,88 @@ class TestTemplateData:
             template = "<p>{{ title }}</p>"
 
         assert MyComp(title="Hello").render().serialize() == '<p data-cid-c1="">Hello</p>'
+
+    def test_root_markers_follow_the_browser_after_xmp_text_and_a_self_closed_textarea(self):
+        # The browser reads `<xmp>` content as text, so the `</div>` inside it
+        # closes nothing and the template's own `<p>` is still a root that
+        # carries the component's marker. After a self-closed `<textarea/>`,
+        # the rest is textarea text, so nothing after it is a root.
+        c = Citry()
+
+        class Escaped(Component):
+            citry = c
+            template = """
+              {{ html }}<p>after</p>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"html": kwargs["html"]}
+
+        rendered = Escaped(html=Markup("<xmp></div></xmp>")).render().serialize()
+        assert '<p data-cid-c1="">after</p>' in rendered
+
+        rendered = Escaped(html=Markup("<textarea/>")).render().serialize()
+        assert "<p>after</p>" in rendered
+
+        # An icon written `<i/>` inside a parent closes with the parent, so the
+        # `<p>` after the parent is still a root.
+        class Icon(Component):
+            citry = c
+            template = """
+              <div>{{ html }}</div><p>after</p>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"html": kwargs["html"]}
+
+        rendered = Icon(html=Markup('<i class="icon"/>')).render().serialize()
+        assert '<p data-cid-c3="">after</p>' in rendered
+
+    def test_a_child_component_inside_noscript_keeps_its_html(self):
+        # A reader with JavaScript off sees `<noscript>` content, so the child
+        # rendered there must be written into the page.
+        c = Citry()
+
+        class Child(Component):
+            citry = c
+            template = """
+              <span>child</span>
+            """
+
+        class Parent(Component):
+            citry = c
+            template = """
+              <noscript><c-Child /></noscript><p>after</p>
+            """
+
+        rendered = Parent().render().serialize()
+        assert ">child</span>" in rendered
+        assert "c-render-id" not in rendered
+        assert '<p data-cid-c1="">after</p>' in rendered
+
+    def test_a_child_component_inside_a_textarea_writes_its_html_there(self):
+        # The textarea's content is text, so the child's HTML reads as text
+        # in the page; Citry still writes it rather than its own placeholder.
+        c = Citry()
+
+        class Child(Component):
+            citry = c
+            template = """
+              <b>child</b>
+            """
+
+        class Parent(Component):
+            citry = c
+            template = """
+              <textarea>{{ child }}</textarea><p>after</p>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"child": Child().render()}
+
+        rendered = Parent().render().serialize()
+        assert ">child</b>" in rendered.split("</textarea>")[0]
+        assert "c-render-id" not in rendered
 
     def test_typed_kwargs_resolve_in_template_without_template_data(self):
         # A typed Kwargs instance is normalized to a dict by the default, so its

@@ -215,6 +215,14 @@ def test_command_link_and_item_regions_keep_exact_accessible_relationships():
     assert 'data-citry-ui-part="menu-item-end"' in html
 
 
+def test_a_self_closed_element_in_an_item_label_renders_like_its_open_form():
+    # A template `<span/>` is written as `<span></span>`, so the menu's check
+    # of its direct content reads it the same way.
+    for label in ("Rename <span/>", "Rename <span></span>"):
+        html = _render(_menu(f'<c-CMenuItem value="rename">{label}</c-CMenuItem>'))
+        assert "Rename <span></span>" in html, label
+
+
 @pytest.mark.parametrize(
     ("root_inputs", "message"),
     [
