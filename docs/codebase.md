@@ -63,7 +63,8 @@ As such, the Rust crates are ideal for:
 ### Prerequisites
 
 - **Rust**: Install via [rustup](https://rustup.rs/). Vendored Ruff requires
-  Rust 1.96 or higher, and this repository selects the nightly channel.
+  Rust 1.96 or higher, and this repository builds with one dated nightly that
+  rustup selects for you.
 - **Python**: 3.11 or higher
 - **UV**: Fast Python package installer (recommended)
 - **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based
@@ -79,10 +80,16 @@ As such, the Rust crates are ideal for:
 ### Installing and Managing Rust
 
 This codebase uses **Rust edition 2024**, and vendored Ruff requires Rust 1.96
-or higher. The edition and minimum version are both available on stable Rust;
-the repository separately chooses to track nightly in
-[`rust-toolchain.toml`](../rust-toolchain.toml) so local and CI builds use one
-development channel.
+or higher. The edition and minimum version are both available on stable Rust.
+For development, the repository names one dated nightly, written
+`nightly-YYYY-MM-DD`, in [`rust-toolchain.toml`](../rust-toolchain.toml).
+Every machine and CI job then builds with the same compiler, and a new nightly
+reaches the project only when someone moves that date on purpose (see
+[Moving the Rust nightly date](#moving-the-rust-nightly-date)).
+
+The published `citry-core` wheels and the docs builds use the minimum
+version, Rust 1.96.0, instead. Their workflows set it themselves, so moving
+the nightly date does not change a released wheel.
 
 **Check your Rust version:**
 
@@ -102,14 +109,12 @@ rustup show
 # Install rustup (if not already installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Install the nightly toolchain selected by this repository
-rustup toolchain install nightly
+# From the repository root, install the toolchain and components that
+# rust-toolchain.toml names
+rustup toolchain install
 
-# Update to the latest nightly
-rustup update nightly
-
-# The rust-toolchain.toml file will automatically select the correct toolchain
-# when you run cargo commands in this directory
+# rustup then selects that toolchain whenever cargo or rustc runs in this
+# directory
 ```
 
 **Verify the correct toolchain is active:**
@@ -117,15 +122,38 @@ rustup update nightly
 ```bash
 # From the repository root
 cd citry
-cargo --version  # Should show nightly version
-rustc --version  # Should show nightly version
+rustup show active-toolchain  # Should name the date in rust-toolchain.toml
+rustc --version               # Should show a nightly version
 ```
 
-If you need to manually override the toolchain for this directory:
+Do not run `rustup override set` in this directory: an override wins over
+`rust-toolchain.toml`, so your builds would no longer use the pinned compiler.
 
-```bash
-rustup override set nightly
-```
+### Moving the Rust nightly date
+
+Treat the nightly date like any other dependency pin. Move it on purpose, in
+its own pull request, when the project needs a newer compiler or as routine
+maintenance. Never move it as a side effect of unrelated work.
+
+1. Change `channel` in [`rust-toolchain.toml`](../rust-toolchain.toml) to the
+   new `nightly-YYYY-MM-DD`. A nightly's date is usually the day after the
+   commit date that `rustc --version` prints, so
+   `rustc 1.101.0-nightly (16d1ffac1 2026-10-26)` is `nightly-2026-10-27`.
+2. Run `rustup toolchain install` to fetch it, and check `rustc --version`.
+   If a nightly lacks `clippy` or `rustfmt`, the install fails; pick another
+   date.
+3. Run the fast gate (`python scripts/check.py --profile fast`). New clippy
+   lints and format changes often come with a new nightly. Fix them in the
+   same pull request.
+4. Open the pull request. Every Rust job in CI installs the new date through
+   the [`install-rust`](../.github/actions/install-rust/action.yml) action,
+   which reads the file. The `toolchain` validator
+   (`scripts/validators/toolchain.py`) fails if the channel is not a dated
+   nightly, or if a workflow, composite action or example workflow names a
+   nightly outside a comment.
+
+Only `rust-toolchain.toml` sets the date. Workflows and scripts read that
+file, so moving the date needs no other edit.
 
 ### Installing UV
 
@@ -156,19 +184,14 @@ pip install uv
 2. **Verify Rust toolchain** (required before building):
 
    ```bash
-   # Check that nightly is installed and active
-   rustc --version  # Should show nightly version
-   cargo --version  # Should show nightly version
-
-   # If not using nightly, install it:
-   rustup toolchain install nightly
-   rustup override set nightly
+   # Install the toolchain that rust-toolchain.toml names
+   rustup toolchain install
+   rustc --version  # Should show a nightly version
    ```
 
-   The [`rust-toolchain.toml`](../rust-toolchain.toml) file automatically
-   selects the repository's nightly development channel when you run cargo
-   commands in this directory. Rust edition 2024 itself does not require
-   nightly.
+   The [`rust-toolchain.toml`](../rust-toolchain.toml) file selects the
+   repository's dated nightly whenever you run cargo commands in this
+   directory. Rust edition 2024 itself does not require nightly.
 
 3. **Install the workspace** (from the repository root):
 
@@ -2233,7 +2256,7 @@ table check in `repo--generated.yml` covers the table matching its inputs.
 
 The docs workflows build the local `citry_core` extension because the rendered
 site imports Citry. They use the workspace MSRV (`RUSTUP_TOOLCHAIN=1.96.0`), not
-the repository's moving development nightly, and share the
+the repository's dated development nightly, and share the
 `docs-citry-core-py314` Rust cache across Ubuntu/CPython 3.14 jobs. The cache
 deliberately omits the GitHub job ID and is saved even if a later docs guard,
 browser audit, link check, or deployment step fails. This prevents an unrelated

@@ -41,11 +41,7 @@ jobs:
       # Rust is needed for the cargo fmt/clippy/test phases and to build the
       # citry_core extension during `uv sync`.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
-          components: rustfmt, clippy
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

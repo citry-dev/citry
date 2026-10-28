@@ -1,7 +1,13 @@
 # Rust toolchain configuration
 [toolchain]
-# Vendored Ruff 0.16.6 requires rustc/cargo v1.96 or higher.
-# This repository tracks nightly, which satisfies that minimum automatically.
-# The channel below is selected whenever cargo/rustc runs in this directory.
-channel = "nightly"
+# A dated nightly, so every machine and CI job builds with the same compiler
+# until someone moves the date on purpose ("Moving the Rust nightly date" in
+# docs/codebase.md). The copy of Ruff 0.16.6 in third_party/rust/ruff
+# requires rustc/cargo 1.96 or higher, which this nightly satisfies.
+# rustup selects this channel whenever cargo or rustc runs in this directory,
+# and CI installs it through .github/actions/install-rust, which reads this
+# file.
+channel = "nightly-2026-10-27"
 components = ["rustfmt", "clippy"]
+# Skip the offline docs, which neither developers nor CI read.
+profile = "minimal"

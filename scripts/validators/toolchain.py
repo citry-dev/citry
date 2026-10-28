@@ -9,7 +9,6 @@ import yaml  # type: ignore[import-untyped]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOLCHAIN_FILE = REPO_ROOT / "rust-toolchain.toml"
-_WORKFLOW_FILE = REPO_ROOT / ".github" / "workflows" / "rust--tests.yml"
 _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-core--publish.yml"
 _CITRY_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry--publish.yml"
 _CITRY_LSP_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-lsp--publish.yml"
@@ -59,7 +58,6 @@ _PNPM_ACTION = "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86"
 def check() -> list[str]:
     required = (
         _TOOLCHAIN_FILE,
-        _WORKFLOW_FILE,
         _PUBLISH_WORKFLOW,
         _CITRY_PUBLISH_WORKFLOW,
         _CITRY_LSP_PUBLISH_WORKFLOW,
@@ -111,22 +109,7 @@ def check() -> list[str]:
             if marker not in path_list:
                 errors.append(f"py--tests.yml {event} path filters must include {path!r}")
 
-    channel = tomllib.loads(_TOOLCHAIN_FILE.read_text(encoding="utf-8")).get("toolchain", {}).get("channel", "")
-
-    content = _WORKFLOW_FILE.read_text(encoding="utf-8")
-    action = re.search(r"dtolnay/rust-toolchain", content)
-    if action is None:
-        errors.append("could not find 'dtolnay/rust-toolchain' in rust--tests.yml")
-    else:
-        pinned = re.search(r"toolchain:\s*(\S+)", content[action.end() :])
-        if pinned is None:
-            errors.append("could not find a 'toolchain:' value after 'dtolnay/rust-toolchain' in rust--tests.yml")
-        else:
-            workflow_toolchain = pinned.group(1).strip("\"'")
-            if channel != workflow_toolchain:
-                errors.append(
-                    f"toolchain mismatch: rust-toolchain.toml='{channel}', rust--tests.yml='{workflow_toolchain}'"
-                )
+    errors.extend(nightly_pin_errors(REPO_ROOT))
 
     root_manifest = tomllib.loads(_ROOT_CARGO.read_text(encoding="utf-8"))
     minimum = root_manifest.get("workspace", {}).get("package", {}).get("rust-version")
@@ -411,6 +394,52 @@ def check() -> list[str]:
     ):
         if marker not in release_workflow:
             errors.append(f"mandatory release workflow is missing {marker!r}")
+    return errors
+
+
+# A dated nightly such as `nightly-2026-10-27`. An undated `nightly` would
+# give every build a new compiler each time a nightly is published.
+_DATED_NIGHTLY = re.compile(r"nightly-\d{4}-\d{2}-\d{2}")
+# Any mention of a nightly in CI configuration: an action input
+# (`toolchain: nightly`), an action ref (`dtolnay/rust-toolchain@nightly`),
+# `RUSTUP_TOOLCHAIN`, `cargo +nightly`, or a rustup command. Each one would
+# pick a compiler other than the one rust-toolchain.toml names.
+_NIGHTLY_WORD = re.compile(r"(?<![\w-])nightly(?![\w])")
+
+
+def nightly_pin_errors(root: Path) -> list[str]:
+    """
+    Report an undated development nightly, or CI configuration that picks its own nightly.
+
+    `rust-toolchain.toml` must name a dated nightly, so every machine and CI
+    job builds with the same compiler until the date is moved on purpose. CI
+    installs that toolchain through the `install-rust` composite action,
+    which reads the file, so no workflow, composite action or example
+    workflow may name a nightly itself. YAML comments are skipped, and jobs
+    that pin a stable release on purpose, such as the docs and release
+    builds, pass.
+    """
+    errors: list[str] = []
+    toolchain_file = root / "rust-toolchain.toml"
+    channel = tomllib.loads(toolchain_file.read_text(encoding="utf-8")).get("toolchain", {}).get("channel", "")
+    if not _DATED_NIGHTLY.fullmatch(str(channel)):
+        errors.append(
+            f"rust-toolchain.toml channel must be a dated nightly such as 'nightly-YYYY-MM-DD', found {channel!r}"
+        )
+    paths = sorted((root / ".github" / "workflows").glob("*.y*ml"))
+    paths += sorted((root / ".github" / "actions").glob("*/action.y*ml"))
+    # Users copy the example workflows, so they follow the same rule.
+    paths += sorted(root.glob("examples/*/*/.github/workflows/*.y*ml"))
+    for path in paths:
+        label = path.relative_to(root).as_posix()
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            # A comment may mention nightly freely; only the YAML before it counts.
+            code = line.split(" #", 1)[0] if not line.lstrip().startswith("#") else ""
+            if _NIGHTLY_WORD.search(code):
+                errors.append(
+                    f"{label}:{number} names its own nightly ({code.strip()!r}); install Rust with "
+                    "the ./.github/actions/install-rust action, which reads rust-toolchain.toml"
+                )
     return errors
 
 
