@@ -13,7 +13,10 @@ All notable changes to `citry-lsp` are documented here.
   release; an older citry-lsp rejects the project's lint data once
   `security_csp` is set.
 - The editor suggests `:row="..."` on `<c-slot>` and `v-slot="{ row }"` on
-  `<c-fill>`, for passing Vue data from a slot to its fill.
+  `<c-fill>`, for passing Vue data from a slot to its fill. In the fill,
+  it suggests the props the slot passes, shows their types on hover,
+  checks the fill's Vue expressions against those types, and warns about
+  a name the slot does not pass (`citry.vue.unknown-slot-prop`).
 - citry-lsp now supports Python 3.15.
 - The editor accepts `$sendEvent(name, args, {wait: false})` for a handler
   declared with `@event(detached=True)`, and still marks `wait: false` as
@@ -98,7 +101,7 @@ All notable changes to `citry-lsp` are documented here.
   3.10, pip keeps installing citry-lsp 0.2.0.
 - citry-lsp now requires Citry 0.7.0 or later, which provides the
   custom-directive, `inheritAttrs`, and parser-error checks listed above,
-  and the Vue listener modifiers.
+  the Vue listener modifiers, and the scoped-slot checks.
   Installing this citry-lsp upgrades Citry when needed. An earlier
   citry-lsp with Citry 0.7.0 can show a TypeScript error next to Citry's
   message on some broken Vue expressions, such as a listener that declares

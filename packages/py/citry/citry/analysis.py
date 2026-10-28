@@ -919,7 +919,14 @@ def lint_unknown_vue_variables(
             )
             # A Python loop or slot variable of the same name is the likely
             # cause, so say so in the one finding this span gets.
-            variant = "python" if _is_python_bound(reference.name, expression) else "default"
+            if not _is_python_bound(reference.name, expression):
+                variant = "default"
+            elif expression.element is not None and _ascii_lower(expression.element) == "c-slot":
+                # On `<c-slot>`, a `c-` attribute is Python slot data that the
+                # fill reads with `data=`, so the hint names both ways.
+                variant = "python-slot-prop"
+            else:
+                variant = "python"
             findings.append(
                 VueLintFinding(
                     name=reference.name,
@@ -999,7 +1006,16 @@ def lint_vue_python_variables(
             # Only a component that reports the read decides which message it gets.
             browser_known = any(reference.name in consumer.known_names for consumer in active)
             attribute = _python_attribute_for(expression, reference.name)
-            if attribute is not None:
+            if expression.element is not None and _ascii_lower(expression.element) == "c-slot":
+                # On `<c-slot>`, `c-row` passes Python slot data, which the
+                # fill reads with `data=`, not with `v-slot`, so the message
+                # explains the two ways instead of offering it as a swap.
+                message = render_diagnostic(
+                    VUE_PYTHON_VARIABLE,
+                    variant="browser-slot-prop" if browser_known else "slot-prop",
+                    name=reference.name,
+                )
+            elif attribute is not None:
                 variant = "browser-attribute" if browser_known else "attribute"
                 message = render_diagnostic(
                     VUE_PYTHON_VARIABLE, variant=variant, name=reference.name, attribute=attribute

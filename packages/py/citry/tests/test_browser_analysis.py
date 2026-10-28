@@ -602,6 +602,28 @@ def test_unknown_vue_lint_is_strict_configurable_and_v_for_scope_aware():
     ]
 
 
+def test_unknown_vue_lint_on_c_slot_names_vue_and_python_slot_data_for_a_python_variable():
+    # Inside a Python loop, `:row` on `<c-slot>` reads a name the browser
+    # never sees. On `<c-slot>`, a `c-` attribute is Python slot data that the
+    # fill reads with `data=`, so the hint names both ways instead of the
+    # general `c-` attribute swap.
+    template = parse_template('<c-for each="row in rows"><c-slot name="item" :row="row" /></c-for>')
+
+    findings = lint_unknown_vue_variables(
+        browser_expressions(template),
+        (VueLintConsumer(frozenset(), "error", "closed"),),
+    )
+
+    assert [(item.name, item.message) for item in findings] == [
+        (
+            "row",
+            "Vue variable 'row' is not available in this component. 'row' is a Python variable here, which the "
+            "browser never sees, and a Vue prop on <c-slot>, such as :row, needs a browser value. Loop with "
+            "Vue's v-for, or pass it as Python slot data with a c- attribute and read it with data= in the fill.",
+        )
+    ]
+
+
 def test_unknown_vue_lint_knows_vue_instance_names():
     # A Vue template reads these from the component instance, as `$el` and `$refs`.
     template = parse_template(
@@ -734,6 +756,54 @@ def test_vue_python_variable_lint_names_both_meanings_when_the_browser_also_know
     ] == [
         "Vue reads the component's browser value 'item' here, not the Python loop or slot variable "
         "'item'. Use c-title=\"item\" for the Python value, or rename one of them."
+    ]
+
+
+def test_vue_python_variable_lint_on_c_slot_explains_vue_and_python_slot_data_instead_of_offering_a_c_attribute():
+    slot_message = (
+        "Vue reads 'row' from browser state, but 'row' is a Python variable here, and a Vue prop on <c-slot>, "
+        "such as :row, needs a browser value. Loop with Vue's v-for, or pass it as Python slot data with a c- "
+        "attribute and read it with data= in the fill."
+    )
+
+    for prop in (':row="row"', 'v-bind:row="row"', ':row="row.id"'):
+        findings = _python_variable_findings(f'<c-for each="row in rows"><c-slot name="item" {prop} /></c-for>')
+
+        # `c-row` on `<c-slot>` is Python slot data that the fill reads with
+        # `data=`, so the message never offers it as a drop-in swap.
+        assert findings == [("row", "warning", slot_message)]
+        assert "c-row=" not in findings[0][2]
+
+
+def test_vue_python_variable_lint_on_c_slot_names_both_meanings_when_the_browser_also_knows_the_name():
+    findings = _python_variable_findings(
+        '<c-for each="row in rows"><c-slot name="item" :row="row" /></c-for>',
+        frozenset({"row"}),
+        namespace_policy="closed",
+    )
+
+    assert findings == [
+        (
+            "row",
+            "warning",
+            "Vue reads the component's browser value 'row' here, not the Python loop or slot variable 'row'. "
+            "To pass the Python value, write it as a c- attribute on <c-slot> and read it with data= in the "
+            "fill, or rename one of them.",
+        )
+    ]
+
+
+def test_vue_python_variable_lint_gives_a_plain_element_next_to_a_c_slot_the_attribute_message():
+    findings = _python_variable_findings(
+        '<c-for each="row in rows"><c-slot name="item" :row="row" /><b :title="row"></b></c-for>',
+    )
+
+    # Only the `<c-slot>` read gets the slot message; the element beside it
+    # keeps the `c-title` suggestion.
+    assert [message.split(" here")[1] for _name, _severity, message in findings] == [
+        ", and a Vue prop on <c-slot>, such as :row, needs a browser value. Loop with Vue's v-for, or pass it "
+        "as Python slot data with a c- attribute and read it with data= in the fill.",
+        '. Use c-title="row" to pass the Python value.',
     ]
 
 

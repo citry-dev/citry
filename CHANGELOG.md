@@ -35,6 +35,8 @@
   `data="..."`) works beside it
   ([details](https://citry.dev/vue/slots/#scoped-slots)). When the server
   knows the slot's values, it writes the fill's HTML with them.
+  `citry check` warns when `v-slot="{ ... }"` reads a name the slot does
+  not pass, which Vue would leave `undefined`.
 - Citry now supports Python 3.15.
 - You can now use `.outside`, `.window`, `.document`, `.debounce`, and
   `.throttle` on Vue listeners such as `@click` on HTML elements, as in
