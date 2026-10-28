@@ -646,10 +646,6 @@ mod tests {
             r#"<input @input.debounce.1s.throttle.2s="go();" />"#,
             r#"<input @input.throttle.debounce.1s="go();" />"#,
             r#"<div @keydown.escape.window.debounce.300ms.stop.prevent="go();"></div>"#,
-            // A dynamic event name takes the modifiers after the brackets.
-            r#"<div @[name].window="go();"></div>"#,
-            r#"<div @[name].outside.stop="go();"></div>"#,
-            r#"<div v-on:[name].debounce.1s="go();"></div>"#,
         ] {
             parse_template(input, None, None).unwrap_or_else(|error| {
                 panic!("expected {input} to parse, got: {error}");
@@ -701,6 +697,15 @@ mod tests {
             (
                 r#"<component @click.document="x = 1;"></component>"#,
                 "component",
+            ),
+            // `<c-element>` counts as the tag its static `is` names.
+            (
+                r#"<c-element is="component" @click.outside="x = 1;" />"#,
+                "c-element",
+            ),
+            (
+                r#"<c-element is="MyThing" @click.outside="x = 1;" />"#,
+                "c-element",
             ),
         ] {
             assert_parse_error(input, &format!("on <{tag}> (line 1, column"));
@@ -865,6 +870,34 @@ mod tests {
     }
 
     #[test]
+    fn citry_listener_modifiers_need_the_event_name_written_out() {
+        // A name in brackets comes from a value at run time, which would let
+        // data decide what a window or document listener hears.
+        let message = "gives the event name in brackets. Citry's listener modifiers need the event name written out, as in '@click.outside'.";
+        for input in [
+            r#"<div @[name].window="go();"></div>"#,
+            r#"<div @[name].outside.stop="go();"></div>"#,
+            r#"<div v-on:[name].debounce.1s="go();"></div>"#,
+        ] {
+            assert_parse_error(input, message);
+        }
+    }
+
+    #[test]
+    fn citry_listener_modifiers_are_rejected_on_capitalized_tags() {
+        // Vue reads a tag that starts with a capital letter as a component,
+        // `<Div>` included.
+        let message = "on a tag that starts with a capital letter, which Vue reads as a component";
+        for input in [
+            r#"<MyThing @click.outside="x = 1;"></MyThing>"#,
+            r#"<Card v-on:close.window="x = 1;" />"#,
+            r#"<Div @click.outside="x = 1;"></Div>"#,
+        ] {
+            assert_parse_error(input, message);
+        }
+    }
+
+    #[test]
     fn names_the_compiler_writes_for_a_rewritten_listener_are_reserved() {
         // Vue's `camelize` turns `-0` into `0`, so these all give the props
         // key `onCitryOn0`, which the compiler writes for a listener.
@@ -885,6 +918,12 @@ mod tests {
                 "div",
             ),
             (r#"<div onCitryOn0="go();"></div>"#, "onCitryOn0", "div"),
+            // `.camel` makes Vue camelize the bound name.
+            (
+                r#"<div :on-citry-on-0.camel="go"></div>"#,
+                ":on-citry-on-0.camel",
+                "div",
+            ),
             // More digits, a Vue modifier, and a component tag.
             (r#"<div @citry-on-12="go();"></div>"#, "@citry-on-12", "div"),
             (
@@ -898,6 +937,18 @@ mod tests {
                 "div",
             ),
             (r#"<c-card @citry-on-0="go();" />"#, "@citry-on-0", "c-card"),
+            // An Events binding `@c-<event>` becomes a listener for `<event>`.
+            (
+                r#"<div @c-citry-on-0="save"></div>"#,
+                "@c-citry-on-0",
+                "div",
+            ),
+            (r#"<div @c-citryOn0="save"></div>"#, "@c-citryOn0", "div"),
+            (
+                r#"<div @c-citry-on-0.prevent="save"></div>"#,
+                "@c-citry-on-0.prevent",
+                "div",
+            ),
             (
                 r#"<c-element is="div" @citry-on-0="go();" />"#,
                 "@citry-on-0",

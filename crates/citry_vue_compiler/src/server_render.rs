@@ -4483,12 +4483,6 @@ mod tests {
                 r#"<div><button @click.right.document.throttle="h($event)" class="b">x</button></div>"#,
                 r#"<div><button class="b">x</button></div>"#,
             ),
-            // A dynamic event name is a browser value, but the listener is
-            // applied by Vue while it hydrates.
-            (
-                r#"<div @[name].outside="open = false; count++">x</div>"#,
-                "<div>x</div>",
-            ),
             (
                 r#"<input @input.debounce="h" value="v">"#,
                 r#"<input value="v">"#,
