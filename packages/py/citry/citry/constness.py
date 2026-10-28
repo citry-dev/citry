@@ -36,7 +36,7 @@ Guidance for using ``Const``:
   value. Mutating a value after marking it const produces stale output; that
   is the documented trade.
 - **Values written in the template are const automatically.** A static
-  attribute (``age="30"``, boolean ``compact=""``) or an expression attribute
+  attribute (``age="30"``, bare boolean ``compact``) or an expression attribute
   that uses no variables (``c-age="30"``, ``c-items="[1, 2]"``) on a
   component tag cannot change between renders, so the engine marks it without
   any opt-in.

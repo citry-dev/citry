@@ -91,11 +91,12 @@ gives the same page either way.
 
 ## Values written in tags
 
-A value written directly on a component tag is the same in every render,
-so Citry treats it as constant without `Const`:
+A value written directly on a component tag, including a bare attribute
+such as `compact`, is the same in every render, so Citry treats it as
+constant without `Const`:
 
 ```citry-html
-<c-Grid columns="3" compact="" />
+<c-Grid columns="3" compact />
 <c-Grid c-columns="1 + 2" c-breakpoints="[480, 900]" />
 ```
 

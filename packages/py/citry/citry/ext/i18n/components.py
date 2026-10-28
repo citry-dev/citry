@@ -159,7 +159,12 @@ $component({});
         def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:  # noqa: ARG002
             client = const_value(kwargs.client)
             if type(client) is not bool:
-                raise TypeError("<c-i18n> client must be an exact boolean.")
+                msg = "<c-i18n> client must be an exact boolean."
+                if type(client) is str and not client:
+                    # client="" passes the text "", while a bare attribute
+                    # passes True.
+                    msg += ' Write client without a value, as in <c-i18n tag="div" client>, to pass True.'
+                raise TypeError(msg)
             raw = self.raw_kwargs
             context_value = const_value(kwargs.context)
             if context_value is not None and type(context_value) is not LocaleContext:

@@ -4608,8 +4608,8 @@ fn process_control_flow_metadata(
             continue;
         };
         if inner_value.content.trim().is_empty() {
-            // `cond=""` carries no expression; an empty value is the boolean form
-            // (the compiler normalizes it to `True`), so there is nothing to
+            // `cond=""` carries no expression; on `c-if` an empty value is the
+            // boolean form (the compiler keeps it as `True`), so there is nothing to
             // track. Leave it as-is.
             continue;
         }

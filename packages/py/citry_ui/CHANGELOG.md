@@ -15,6 +15,11 @@
 
 ### Changed
 
+- Writing an empty value in a template for a text input, such as
+  `<c-CButtonGroup label="">` or `<c-CContextMenu aria_label="">`, raises
+  the component's own `ValueError` saying the text is empty, not a
+  `TypeError` about a `bool`, because Citry passes `""` for a written
+  empty value.
 - **Breaking:** in `CCommandPalette`, a command that closes the palette
   now calls `onAction` after the palette closes, and after `onOpenChange`
   and `onQueryChange`, so `onAction` can move focus anywhere on the page

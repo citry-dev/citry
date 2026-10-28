@@ -232,10 +232,10 @@ class _TemplateEmptyValue(str):
     """
     The value of a ``class`` or ``style`` that the template writes empty.
 
-    The template parser turns ``<p class>`` and ``<p class="">`` into the value
-    ``True``, the same value it gives any boolean attribute. The class and
-    style merge rejects ``True``, because from Python data (``c-class="flag"``)
-    it is a mistake worth reporting. The renderer therefore swaps a written
+    The template compiler turns ``<p class>`` and ``<p class="">`` on an HTML
+    element into the value ``True``, the same value it gives any boolean
+    attribute. The class and style merge rejects ``True``, because from
+    Python data (``c-class="flag"``) it is a mistake worth reporting. The renderer therefore swaps a written
     empty ``class`` or ``style`` for this marker before merging (see
     ``template_attr_value``). As an empty string it adds no class names and
     no style properties, and its own type lets the merge tell it apart from an
@@ -252,7 +252,7 @@ TEMPLATE_EMPTY_VALUE = _TemplateEmptyValue()
 
 def hide_template_empty_values(values: dict[str, Any]) -> tuple[str, ...]:
     """
-    Put back the parser's ``True`` for each written empty ``class``/``style`` before an extension hook.
+    Put back the compiler's ``True`` for each written empty ``class``/``style`` before an extension hook.
 
     Extension hooks receive the attribute values the template compiled to, so
     a hook never sees the private marker. Returns the names that held the
@@ -262,7 +262,7 @@ def hide_template_empty_values(values: dict[str, Any]) -> tuple[str, ...]:
     """
     names = tuple(name for name, value in values.items() if isinstance(value, _TemplateEmptyValue))
     for name in names:
-        dict.__setitem__(values, name, True)  # noqa: FBT003 - the value the parser gives it
+        dict.__setitem__(values, name, True)  # noqa: FBT003 - the value the compiler gives it
     return names
 
 

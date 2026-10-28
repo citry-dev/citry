@@ -345,7 +345,9 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   while preserving first-seen (source) order.
 - **HTML rendering rules.** Void elements stay compact (`<br/>`), non-void
   self-closing expand (`<div></div>`), and `key=""` normalizes to a boolean
-  attribute (`True`).
+  attribute (`True`) on an HTML element, a dynamic `<c-element>`, and
+  `<c-if>`; on a component tag and on `<c-slot>` data it compiles to `""`,
+  and only a bare `key` is `True`.
 - **Rust nightly toolchain** (edition 2024), pinned in
   [`rust-toolchain.toml`](rust-toolchain.toml).
 - **maturin module mapping.** The Python extension is built with

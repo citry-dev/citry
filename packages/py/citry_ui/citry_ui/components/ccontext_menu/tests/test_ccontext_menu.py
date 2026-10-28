@@ -233,7 +233,7 @@ def test_target_accepts_safe_native_semantics_but_root_does_not() -> None:
 @pytest.mark.parametrize(
     ("inputs", "error"),
     [
-        ('aria_label=""', r"CContextMenu\.Kwargs\.aria_label expects str, got bool"),
+        ('aria_label=""', "aria_label must contain non-whitespace text"),
         ('aria_label="Actions" id="bad id"', "ASCII whitespace"),
         ('aria_label="Actions" size="xl"', r"CContextMenu\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"),
         ('aria_label="Actions" c-open="1"', r"CContextMenu\.Kwargs\.open expects bool"),
