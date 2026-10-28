@@ -96,6 +96,32 @@ def test_records_template_data_and_composite_template_calls_without_values() -> 
     assert "12.5" not in repr(record)
 
 
+def test_template_calls_at_or_inside_v_pre_are_not_preloaded_for_the_browser() -> None:
+    app = configured_app()
+
+    class Notice(Component):
+        citry = app
+        # Vue leaves `v-text` under `v-pre` as written, so the browser never
+        # calls `$i18n.tr` there and needs no message for it.
+        template = """
+            <span v-pre v-text="$i18n.tr('self-message')"></span>
+            <div v-pre>
+              <span v-text="$i18n.tr('nested-message')"></span>
+            </div>
+            <span v-text="$i18n.tr('shown-message')"></span>
+        """
+        messages = """
+            self-message = Self
+            nested-message = Nested
+            shown-message = Shown
+        """
+
+    rendered = Notice().render()
+    record = next(iter(rendered.context.extra[EXTRA_KEY].values()))
+
+    assert record.client_outputs == (MessageOutputUse("shown-message", None),)
+
+
 def test_component_js_preloads_calls_through_a_variable_holding_the_service() -> None:
     app = configured_app()
 

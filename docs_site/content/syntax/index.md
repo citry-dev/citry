@@ -148,9 +148,16 @@ part into its own component's `template`, which starts counting again
 from zero. Markup you pass to a component between its tags, or in an
 attribute, still counts toward the template that writes it.
 
-When a component passes its slot content on to another component's slot,
-and that one passes it on again, each component in the chain uses some of
-Python's stack, so a long chain can raise `RecursionError`.
+A component can pass its slot content on to another component's slot by
+writing `<c-slot />` inside its `<c-fill>`, and that one can pass it on
+again. Such a chain can be long: Citry renders it in a fixed amount of
+Python's stack, up to
+[`max_component_depth`][citry.CitrySettings.max_component_depth]
+(2000 components by default). Content passed on through an expression
+instead, such as `{{ content }}` where `template_data()` returns
+`slots["default"]`, or through a Python slot function that calls the
+fill, uses about 11 levels of Python's stack for each component, so a
+chain of about 80 of those can raise `RecursionError`.
 
 In a component that uses Vue, the server writes at most 400 levels of
 elements inside the component, which leaves room in Chrome for the page

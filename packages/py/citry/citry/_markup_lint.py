@@ -279,8 +279,9 @@ def lint_invalid_vue_expressions(
     too.
 
     Skipped: a valueless ``:title``, which Vue 3.4 and later read as
-    ``:title="title"``; everything on or inside an element with ``v-pre``,
-    which Vue never compiles; a dynamic slot name; and the value of a custom
+    ``:title="title"``; everything inside an element with ``v-pre``, which
+    Vue never compiles, while Citry's own bindings on that element are still
+    checked; a dynamic slot name; and the value of a custom
     directive, which Citry does not read, although Vue still fails on one
     that is not valid JavaScript.
 
@@ -426,7 +427,13 @@ def _v_pre_ranges(
     parse_nested: Callable[[str], Template],
     base_index: int,
 ) -> Generator[Call, Any, list[tuple[int, int]]]:
-    """Return the source ranges of elements with ``v-pre``, whose content Vue leaves as written."""
+    """
+    Return the source ranges of the contents of elements with ``v-pre``, which Vue leaves as written.
+
+    A range starts after the element's start tag. Citry still renders the
+    ``@c-*`` and ``$c-tr`` bindings on the ``v-pre`` element itself, so those
+    are still checked, while the render refuses them inside the contents.
+    """
     ranges: list[tuple[int, int]] = []
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -435,7 +442,7 @@ def _v_pre_ranges(
         if any(_ascii_lower(attr.key.content) == "v-pre" for attr in node.start_tag.attrs):
             end_tag = getattr(node, "end_tag", None)
             end = end_tag.token.end_index if end_tag is not None else node.start_tag.token.end_index
-            ranges.append((base_index + node.start_tag.token.start_index, base_index + end))
+            ranges.append((base_index + node.start_tag.token.end_index, base_index + end))
             continue
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
@@ -564,6 +571,9 @@ _REPEATING_OR_CONDITIONAL_TAGS = frozenset({"c-if", "c-elif", "c-else", "c-for",
 _REPEATING_OR_CONDITIONAL_ATTRIBUTES = frozenset(
     {"c-if", "c-elif", "c-else", "c-for", "c-empty", "v-if", "v-else-if", "v-else", "v-for"},
 )
+# The Citry ones among them, which still apply under `v-pre`, because Citry
+# renders the element before Vue sees it.
+_CITRY_REPEATING_OR_CONDITIONAL_ATTRIBUTES = frozenset({"c-if", "c-elif", "c-else", "c-for", "c-empty"})
 # Names Vue reads on any element besides the HTML attributes.
 _VUE_SPECIAL_ATTRIBUTES = frozenset({"key", "ref", "ref_for", "ref_key", "is"})
 # The elements `v-model` can read a value from. A component tag and
@@ -636,9 +646,12 @@ class _MarkupWalker:
             vue_skipped = context.vue_skipped or "v-pre" in names
             html = not foreign and tag in HTML_ELEMENTS
             # A lowercase tag with a hyphen is a custom element; `c-*` tags are
-            # Citry tags and PascalCase tags are Vue components.
+            # Citry tags and PascalCase tags are Vue components. Under `v-pre`
+            # Vue resolves no component, so a PascalCase tag is a plain element.
             custom = not foreign and _is_custom_element(tag)
-            component = not foreign and (tag != lower or (lower.startswith("c-") and lower != "c-element"))
+            component = not foreign and (
+                (tag != lower and not vue_skipped) or (lower.startswith("c-") and lower != "c-element")
+            )
             if not foreign:
                 self._check_element_name(node, tag, base_index)
             # `v-pre` does not hide anything here: Vue still sets the
@@ -657,17 +670,26 @@ class _MarkupWalker:
                     node.start_tag.name.end_index,
                     base_index,
                 )
+            # Under `v-pre`, Vue leaves `v-if` and `v-for` as written, so both
+            # branches of a `v-if`/`v-else` are on the page; only Citry's own
+            # `c-if` and `c-for` still choose or repeat an element there.
+            conditional = (
+                _CITRY_REPEATING_OR_CONDITIONAL_ATTRIBUTES if vue_skipped else _REPEATING_OR_CONDITIONAL_ATTRIBUTES
+            )
             may_repeat = (
                 context.may_repeat
                 or lower in _REPEATING_OR_CONDITIONAL_TAGS
                 or lower == "template"
-                or bool(names & _REPEATING_OR_CONDITIONAL_ATTRIBUTES)
+                or bool(names & conditional)
                 or (component and lower not in _IN_PLACE_TAGS)
             )
             for attr in attrs:
-                if not component:
+                # Under `v-pre`, `:titl` is an attribute literally named `:titl`,
+                # not a binding of `titl`, so only plain and `c-` names are checked.
+                plain_name = not (vue_skipped and attr.key.content.startswith((":", "v-bind:")))
+                if not component and plain_name:
                     self._check_aria_attribute(attr, base_index)
-                if html:
+                if html and plain_name:
                     self._check_attribute_name(tag, attr, base_index)
                 if html and not vue_skipped:
                     self._check_event_name(attr, base_index)

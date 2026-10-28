@@ -284,6 +284,10 @@ def _attr(element: Any, name: str) -> Any | None:
 
 def _node_attr(node: Any, name: str) -> Any | None:
     """Return the attribute with this directive name, ignoring an argument or modifiers."""
+    # Vue leaves an element with `v-pre` as written, so its own `v-if`,
+    # `v-for` and `v-slot` are plain attributes that render nothing special.
+    if name.startswith("v-") and any(attr.key.content.lower() == "v-pre" for attr in node.start_tag.attrs):
+        return None
     for attr in node.start_tag.attrs:
         if attr.kind == HtmlAttrKind.Template:
             continue

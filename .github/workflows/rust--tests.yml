@@ -32,9 +32,12 @@ on:
       - ".gitmodules"
   workflow_dispatch:
 
+# A newer run cancels an older one for the same pull request, or for the same
+# branch when both come from a push. Any other run gets a group named after
+# its own run ID, so no newer run cancels it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'push' }}
 jobs:
   test:
     if: github.event.action != 'closed'

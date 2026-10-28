@@ -18,7 +18,13 @@ from lsprotocol import types
 
 from citry import LspPosition, LspRange
 from citry._authored_expression import parse_authored_expression
-from citry._browser_expressions import _normalized_dynamic_slot_source, _vue_hyphenated_prop_name, _vue_prop_name
+from citry._browser_expressions import (
+    _ascii_lower,
+    _normalized_dynamic_slot_source,
+    _tokens,
+    _vue_hyphenated_prop_name,
+    _vue_prop_name,
+)
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
@@ -57,6 +63,16 @@ from citry._registry_lint import (
     unknown_inject_key_findings,
     unknown_url_findings,
 )
+from citry._slot_props import (
+    ScopedFill,
+    SlotOutlet,
+    lint_unknown_slot_props,
+    outlets_for_slot,
+    scoped_fills,
+    slot_outlets,
+    slot_prop_name,
+    unknown_slot_props_for,
+)
 from citry._source_lines import source_lines
 from citry._vue_compile_lint import lint_vue_compile
 from citry._walk import Call, run
@@ -75,6 +91,7 @@ from citry.analysis import (
     BrowserObjectProperty,
     BrowserProp,
     ComponentJsLintConsumer,
+    JsonWireField,
     JsonWireType,
     MarkupLintConsumer,
     MarkupLintFinding,
@@ -1628,6 +1645,21 @@ def browser_diagnostics(
                         source="citry",
                     )
                 )
+        # A `v-slot` key the receiving component's `<c-slot>` never passes is
+        # `undefined` in the fill without any error, so it is reported here at
+        # the key. A receiver the editor cannot read gets no warning.
+        fills = scoped_fills(parsed.template, parse_nested=parser)
+        if fills:
+            # Each receiving component is read once, however many fills target it.
+            receivers: dict[str, tuple[SlotOutlet, ...] | None] = {}
+            for fill in fills:
+                tag = _ascii_lower(fill.tag)
+                if tag not in receivers:
+                    receivers[tag] = _receiver_slot_outlets(fill.tag, project, document, open_documents)
+            diagnostics.extend(
+                _vue_finding_diagnostic(region, finding)
+                for finding in lint_unknown_slot_props(fills, unknown_slot_props_for(receivers))
+            )
         diagnostics.extend(
             _vue_finding_diagnostic(region, finding)
             for finding in (
@@ -1836,6 +1868,183 @@ def _owner_rule_severities(
     if analysis is None:
         return []
     return [getattr(analysis.component_lint.get(owner.definition_id, analysis.lint), rule) for owner in consumers]
+
+
+def _receiver_slot_outlets(
+    tag: str,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[SlotOutlet, ...] | None:
+    """Return the `<c-slot>` tags of the component a `c-*` tag renders, or `None` when its template is unknown."""
+    component = None if project.catalog is None else project.catalog.get_tag(tag)
+    if component is None:
+        return None
+    template = _component_template_ast(component, project, document, open_documents)
+    if template is None:
+        return None
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    return slot_outlets(template, parse_nested=parser)
+
+
+class _SlotBindingTypes:
+    """
+    Type the names a `<c-fill v-slot>` binds, from the props its slot passes, on demand.
+
+    The receiving component's template is read only for a fill whose names an
+    expression actually uses, and once per component and slot, so a page
+    with many scoped fills does not slow down every completion and hover.
+    """
+
+    def __init__(
+        self,
+        template: Any,
+        parser: Callable[[str], Any],
+        project: ProjectState,
+        document: DocumentState,
+        open_documents: Mapping[str, DocumentState] | None,
+    ) -> None:
+        self._template = template
+        self._parser = parser
+        self._project = project
+        self._document = document
+        self._open_documents = open_documents
+        self._fills: dict[int, ScopedFill] | None = None
+        self._props: dict[tuple[str, str], dict[str, JsonWireField] | None] = {}
+        self._types: dict[int, dict[str, JsonWireType]] = {}
+
+    def wire_type(self, binding: BrowserBinding) -> JsonWireType | None:
+        """Return a `v-slot` name's type, or `None` when its slot or prop is not known."""
+        if binding.kind != "v-slot":
+            return None
+        start = binding.source_start_index
+        if start not in self._types:
+            self._types[start] = self._fill_types(start)
+        return self._types[start].get(binding.name)
+
+    def _fill_types(self, pattern_start: int) -> dict[str, JsonWireType]:
+        if self._fills is None:
+            # A `v-slot` binding records where its pattern starts, which is
+            # also where `scoped_fills` says the fill's pattern starts.
+            self._fills = {
+                fill.pattern_start_index: fill for fill in scoped_fills(self._template, parse_nested=self._parser)
+            }
+        fill = self._fills.get(pattern_start)
+        if fill is None:
+            return {}
+        key = (_ascii_lower(fill.tag), fill.slot)
+        if key not in self._props:
+            self._props[key] = _receiver_slot_prop_types(
+                fill.tag, fill.slot, self._project, self._document, self._open_documents
+            )
+        props = self._props[key]
+        if props is None:
+            return {}
+        if fill.keys is None:
+            name = fill.pattern.strip()
+            # `v-slot="props"` binds the whole props object.
+            if re.fullmatch(r"[A-Za-z_$][\w$]*", name):
+                return {name: JsonWireType("object", fields=tuple(props.values()))}
+            return {}
+        return {key.local: props[key.name].value for key in fill.keys if key.local is not None and key.name in props}
+
+
+def _receiver_slot_prop_types(
+    tag: str,
+    slot: str,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> dict[str, JsonWireField] | None:
+    """
+    Return each Vue prop a component's slot passes, with its type, or `None` when the slot is not known.
+
+    A prop whose expression is a `js_data` name, a Vue `v-for` alias over one,
+    or a field of either gets that type, and a literal gets its own type. A
+    prop that only some `<c-slot>` tags pass is optional, and one they
+    disagree on is `unknown`. When several `<c-slot>` tags serve the
+    slot and disagree on a prop's type, the prop is `unknown`.
+    """
+    component = None if project.catalog is None else project.catalog.get_tag(tag)
+    if component is None:
+        return None
+    return _component_slot_prop_types(component, slot, project, document, open_documents)
+
+
+def _component_slot_prop_types(
+    component: ComponentRecord,
+    slot: str,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> dict[str, JsonWireField] | None:
+    """Return each Vue prop one component's slot passes, as `_receiver_slot_prop_types` does."""
+    template = _component_template_ast(component, project, document, open_documents)
+    if template is None:
+        return None
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    serving = outlets_for_slot(slot_outlets(template, parse_nested=parser), slot)
+    if serving is None:
+        return None
+    roots = _component_js_data_roots(component, project, document, open_documents).roots
+    expressions = tuple(
+        expression
+        for expression in browser_expressions(template, parse_nested=parser)
+        if expression.element is not None and expression.element.lower() == "c-slot"
+    )
+    found: dict[str, list[JsonWireType]] = {}
+    for outlet in serving:
+        for prop in outlet.props:
+            expression = next(
+                (
+                    candidate
+                    for candidate in expressions
+                    if prop.start_index <= candidate.start_index <= prop.end_index
+                ),
+                None,
+            )
+            wire = JsonWireType("unknown") if expression is None else _outlet_prop_wire_type(expression, roots)
+            found.setdefault(prop.name, []).append(wire)
+    # A prop that only some of the slot's `<c-slot>` tags pass may be
+    # `undefined` in the fill, so it is optional; tags that disagree on its
+    # type leave it `unknown`.
+    return {
+        name: JsonWireField(
+            name,
+            wires[0] if all(wire == wires[0] for wire in wires) else JsonWireType("unknown"),
+            required=len(wires) == len(serving),
+        )
+        for name, wires in found.items()
+    }
+
+
+def _outlet_prop_wire_type(expression: BrowserExpression, roots: tuple[_JsDataRoot, ...]) -> JsonWireType:
+    """Type one `:row` value on a `<c-slot>` from the receiving component's names."""
+    source = expression.source.strip()
+
+    def name_type(name: str) -> JsonWireType:
+        # A Vue `v-for` alias around the `<c-slot>` hides a root of the same name.
+        binding = next(
+            (candidate for candidate in reversed(expression.binding_details) if candidate.name == name), None
+        )
+        if binding is not None:
+            return _browser_binding_wire_type(binding, roots)
+        root = next((candidate for candidate in roots if candidate.name == name), None)
+        return root.wire_type if root is not None else JsonWireType("unknown")
+
+    if re.fullmatch(r"[A-Za-z_$][\w$]*", source):
+        return name_type(source)
+    member = re.fullmatch(r"([A-Za-z_$][\w$]*)\??\.([A-Za-z_$][\w$]*)", source)
+    if member is not None:
+        owner_type = name_type(member.group(1))
+        if owner_type.kind == "object":
+            field = next((candidate for candidate in owner_type.fields if candidate.name == member.group(2)), None)
+            if field is not None:
+                return field.value
+            if owner_type.additional is not None:
+                return owner_type.additional
+        return JsonWireType("unknown")
+    return browser_literal_wire_type(source)
 
 
 def _tag_js_source(
@@ -2372,6 +2581,9 @@ class _TemplateScope:
     native_names: tuple[str, ...]
     instance: _TemplateComponentInstance | None
     i18n: Any
+    # Types the names `<c-fill v-slot>` binds in this template, reading each
+    # receiving component only when an expression uses one of those names.
+    slot_types: _SlotBindingTypes | None = None
 
 
 def _template_scope(
@@ -2417,7 +2629,12 @@ def _template_scope(
     )
     if instance is not None:
         preamble = f"{preamble}\n{instance.source}"
-    return _TemplateScope(preamble, roots, state_roots, tuple(native_names), instance, project.i18n)
+    parsed = document.parsed.get(region.key)
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    slot_types = (
+        None if parsed is None else _SlotBindingTypes(parsed.template, parser, project, document, open_documents)
+    )
+    return _TemplateScope(preamble, roots, state_roots, tuple(native_names), instance, project.i18n, slot_types)
 
 
 def _template_expression_block(
@@ -2441,7 +2658,9 @@ def _template_expression_block(
     `_component_prop_value_types` returns it.
     """
     binding_types = {
-        binding.name: _browser_binding_wire_type(binding, scope.roots) for binding in expression.binding_details
+        binding.name: (scope.slot_types.wire_type(binding) if scope.slot_types is not None else None)
+        or _browser_binding_wire_type(binding, scope.roots)
+        for binding in expression.binding_details
     }
     name_declarations = _browser_name_declarations(
         scope.roots,
@@ -4208,7 +4427,7 @@ def completion_result(
     modifier_result = _citry_binding_modifier_completion_result(document, position)
     if modifier_result is not None:
         return modifier_result
-    listener_modifier_result = _vue_listener_modifier_completion_result(document, position)
+    listener_modifier_result = _vue_listener_modifier_completion_result(document, position, project)
     if listener_modifier_result is not None:
         return listener_modifier_result
     browser_result = _browser_data_completion_result(document, position, project, open_documents)
@@ -4364,6 +4583,7 @@ def completion_result(
         authored_attrs,
         edit_range=attribute_context.edit_range,
         preserve_value=attribute_context.preserve_value,
+        vue=not _cursor_inside_v_pre(document, region, source, cursor, project),
     )
     if component is None:
         return CompletionResult(tuple(items), is_incomplete=True)
@@ -4608,6 +4828,15 @@ def hover(
     # structural tag makes the otherwise recognizable document invalid.
     if syntax_reference is None:
         syntax_reference = _syntax_reference_from_source(source, cursor)
+    # Vue leaves an element with `v-pre` as written, so its `v-if` or `@click`
+    # there is a plain attribute with nothing to explain. `v-pre` itself has
+    # no entry in `_VUE_SYNTAX`, so no hover is lost here.
+    if (
+        syntax_reference is not None
+        and syntax_reference.spec in _VUE_SYNTAX
+        and _cursor_inside_v_pre(document, region, source, cursor, project)
+    ):
+        syntax_reference = None
     if syntax_reference is not None:
         # A listener's modifier gets its own explanation over its own span.
         modifier_hover = _vue_listener_modifier_hover(source, syntax_reference, parser_index)
@@ -4648,10 +4877,24 @@ def hover(
                 slot_name = token_text
             slot = _find_field(parent.slots, slot_name or "")
             if slot is None:
-                return None
+                # A slot that no `Slots` class declares still shows the Vue
+                # props its `<c-slot>` tags pass.
+                if not slot_name or token_text != slot_name:
+                    return None
+                vue_props = _component_slot_prop_types(parent, slot_name, project, document, open_documents)
+                if not vue_props:
+                    return None
+                content = _vue_slot_markdown(slot_name, vue_props)
+                return types.Hover(
+                    types.MarkupContent(types.MarkupKind.Markdown, content),
+                    range=_range(
+                        region.source_map.map_range(_char_to_byte(source, start), _char_to_byte(source, end))
+                    ),
+                )
             data_fields = project.component_slot_data_fields(parent, slot.name)
             if token_text == slot.name:
-                content = _slot_markdown(slot, data_fields)
+                vue_props = _component_slot_prop_types(parent, slot.name, project, document, open_documents)
+                content = _slot_markdown(slot, data_fields, vue_props)
             elif data_fields is not None and token_text in data_fields:
                 content = _slot_data_field_markdown(token_text, slot.name, parent)
             else:
@@ -7219,6 +7462,14 @@ def _token_contains(token: Any, index: int, *, base_index: int) -> bool:
 def _syntax_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
     """Resolve context-sensitive structural attributes before general directives."""
     normalized_tag = tag_name.lower()
+    # The `:row` attributes on `<c-slot>` and `v-slot` on `<c-fill>` are kept
+    # out of `_STRUCTURAL_ATTRIBUTES`, which must match citry-core's list, so
+    # they are looked up here before it. The parser rejects `:name` and `:key`
+    # on `<c-slot>`, so those get no slot-prop help.
+    if normalized_tag == "c-slot" and slot_prop_name(attr_name) not in {None, "name", "key"}:
+        return _SLOT_PROP_SPEC
+    if normalized_tag == "c-fill" and attr_name == "v-slot":
+        return _FILL_SLOT_PROPS_SPEC
     if normalized_tag in RESERVED_TAG_NAMES:
         # Reserved tags accept only their context-qualified fixed syntax. This
         # keeps recovery hover from documenting parser-forbidden directives.
@@ -7453,6 +7704,7 @@ def _directive_attribute_completions(
     *,
     edit_range: types.Range,
     preserve_value: bool,
+    vue: bool = True,
 ) -> list[types.CompletionItem]:
     normalized_tag = tag_name.lower()
     semantic_component = _is_semantic_component_tag(tag_name, registered_component)
@@ -7465,7 +7717,9 @@ def _directive_attribute_completions(
     else:
         i18n_specs = () if semantic_component or normalized_tag.startswith("c-") else _I18N_BINDING_DIRECTIVES
         specs = (*_GENERAL_DIRECTIVES, *(_CLIENT_PROP_DIRECTIVES if semantic_component else ()), *i18n_specs)
-    specs = (*specs, *_vue_completion_specs(tag_name, semantic_component=semantic_component))
+    # Under `v-pre`, Vue leaves its own attributes as written, so none is offered.
+    if vue:
+        specs = (*specs, *_vue_completion_specs(tag_name, semantic_component=semantic_component))
 
     control_if_present = bool(authored_attrs & {"c-if", "c-elif", "c-else"})
     control_for_present = bool(authored_attrs & {"c-for", "c-empty"})
@@ -8520,6 +8774,130 @@ def _parent_component(source: str, cursor: int, catalog: CatalogIndex) -> Compon
     return None
 
 
+# `v-pre` as an attribute name, matched in a tag's text after `_without_quoted_values`
+# blanks its quoted values.
+_V_PRE_ATTRIBUTE = re.compile(r"\sv-pre(?=[\s=/>]|$)", re.IGNORECASE)
+
+
+def _cursor_inside_v_pre(
+    document: DocumentState,
+    region: TemplateRegion,
+    source: str,
+    cursor: int,
+    project: ProjectState,
+) -> bool:
+    """
+    Return whether the cursor sits on or inside an element with `v-pre`, where Vue leaves its syntax as written.
+
+    The parsed template answers exactly, including an element inside a
+    template-valued attribute. While the template does not parse, as it often
+    does while an attribute is being typed, the text around the cursor is read
+    instead.
+    """
+    parsed = document.parsed.get(region.key)
+    if parsed is None:
+        return _inside_v_pre_text(source, cursor)
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    index = len(source[:cursor].encode("utf-8"))
+    return run(_v_pre_encloses(parsed.template, index, parser, base_index=0))
+
+
+def _v_pre_encloses(template: Any, index: int, parser: Any, *, base_index: int) -> Generator[Call, Any, bool]:
+    """Return whether an element with `v-pre` contains a byte offset of the template, searching nested templates."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node: Any = element._0
+        end_tag = getattr(node, "end_tag", None)
+        start = base_index + node.start_tag.token.start_index
+        end = base_index + (end_tag.token.end_index if end_tag is not None else node.start_tag.token.end_index)
+        if not start <= index <= end:
+            continue
+        if any(attr.key.content.lower() == "v-pre" for attr in node.start_tag.attrs):
+            return True
+        for attr in node.start_tag.attrs:
+            inner = attr.inner_value
+            if attr.kind != HtmlAttrKind.Template or inner is None:
+                continue
+            if not base_index + inner.start_index <= index <= base_index + inner.end_index:
+                continue
+            nested = _parse_nested_template_source(inner.content, parser)
+            if nested is not None:
+                nested_template, nested_start, _nested_source = nested
+                return (
+                    yield Call(
+                        _v_pre_encloses,
+                        nested_template,
+                        index,
+                        parser,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+                )
+        body = getattr(node, "body", None)
+        return False if body is None else (yield Call(_v_pre_encloses, body, index, parser, base_index=base_index))
+    return False
+
+
+def _without_quoted_values(tag_text: str) -> str:
+    """Blank out quoted attribute values, so a name such as `v-pre` is found only where it is an attribute."""
+    kept: list[str] = []
+    quote = None
+    for char in tag_text:
+        if quote is not None:
+            kept.append(" ")
+            if char == quote:
+                quote = None
+        elif char in {'"', "'"}:
+            quote = char
+            kept.append(" ")
+        else:
+            kept.append(char)
+    return "".join(kept)
+
+
+def _inside_v_pre_text(source: str, cursor: int) -> bool:
+    """
+    Return whether the cursor sits on or inside an element with `v-pre`, reading the template text around it.
+
+    Used only while the template does not parse. An element inside a
+    template-valued attribute is not seen here.
+    """
+    current = source[:cursor]
+    open_tag = _open_start_tag(current)
+    # The cursor's own tag counts in full, since `v-pre` may come after the
+    # attribute being hovered or typed, as in `<div v-if="a" v-pre>`.
+    if open_tag is not None and _V_PRE_ATTRIBUTE.search(
+        _without_quoted_values(open_tag[1] + _rest_of_start_tag(source, cursor))
+    ):
+        return True
+    stack: list[tuple[str, str]] = []
+    tags = sorted(_complete_tags(current), key=lambda item: item[0])
+    for _start, tag_text, closing, name, self_closing in tags:
+        if closing:
+            for position in range(len(stack) - 1, -1, -1):
+                if stack[position][0].lower() == name.lower():
+                    del stack[position:]
+                    break
+        elif not self_closing and name.lower() not in HTML_VOID_ELEMENTS:
+            stack.append((name, tag_text))
+    return any(_V_PRE_ATTRIBUTE.search(_without_quoted_values(tag_text)) for _name, tag_text in stack)
+
+
+def _rest_of_start_tag(source: str, cursor: int) -> str:
+    """Return the text from the cursor to the end of the start tag it sits in, skipping `>` inside quotes."""
+    quote = None
+    for index in range(cursor, len(source)):
+        char = source[index]
+        if quote is not None:
+            if char == quote:
+                quote = None
+        elif char in {'"', "'"}:
+            quote = char
+        elif char in {">", "<"}:
+            return source[cursor:index]
+    return source[cursor:]
+
+
 def _token_at(source: str, cursor: int) -> tuple[str, int, int] | None:
     for match in _TOKEN_RE.finditer(source):
         if match.start() <= cursor <= match.end():
@@ -8582,7 +8960,10 @@ def _browser_binding_at(
     if binding is None:
         return None
     roots = _template_js_data_roots(document, region, project, open_documents)
-    return region, binding, _browser_binding_wire_type(binding, roots), use_start, use_end
+    wire_type = None
+    if binding.kind == "v-slot":
+        wire_type = _SlotBindingTypes(parsed.template, parser, project, document, open_documents).wire_type(binding)
+    return region, binding, wire_type or _browser_binding_wire_type(binding, roots), use_start, use_end
 
 
 def _browser_binding_hover(
@@ -8687,8 +9068,17 @@ def _browser_data_completion_result(
     completion = browser_completion_at(expression, parser_index)
     if completion is None:
         return CompletionResult((), is_incomplete=True)
-    roots = _template_js_data_roots(document, region, project, open_documents)
     edit_range = _range(region.source_map.map_range(completion.start_index, completion.end_index))
+    if expression.mode == "binding-pattern":
+        # A key names a slot prop and the name after `:` is a new variable,
+        # so neither reads the caller's `js_data`. The parser accepts only a
+        # literal as a default, so no other position takes a name either.
+        if _pattern_cursor_place(expression, completion.start_index) == "key":
+            return _slot_prop_key_completion(
+                document, region, expression, completion, edit_range, project, open_documents
+            )
+        return CompletionResult((), is_incomplete=True)
+    roots = _template_js_data_roots(document, region, project, open_documents)
     return CompletionResult(
         tuple(
             types.CompletionItem(
@@ -8701,6 +9091,78 @@ def _browser_data_completion_result(
             )
             for root in roots
             if root.name.startswith(completion.prefix) and root.name not in expression.bindings
+        ),
+        is_incomplete=True,
+    )
+
+
+def _pattern_cursor_place(expression: BrowserExpression, start_index: int) -> Literal["key", "name", "value"]:
+    """
+    Say what the identifier starting at `start_index` in a `v-slot` pattern is: a key, a new name, or a default value.
+
+    Only the pattern's top level is read. Inside a nested pattern every
+    position counts as a value, where completion offers nothing.
+    """
+    prefix = expression.source.encode("utf-8")[: max(0, start_index - expression.start_index)].decode(
+        "utf-8", errors="ignore"
+    )
+    depth = 0
+    last = None
+    for token in _tokens(prefix):
+        if token.source in {"(", "[", "{"}:
+            depth += 1
+        elif token.source in {")", "]", "}"}:
+            depth -= 1
+        last = (depth, token.source)
+    if last is None or last[0] != 1:
+        return "value"
+    if last[1] in {"{", ","}:
+        return "key"
+    if last[1] == ":":
+        return "name"
+    return "value"
+
+
+def _slot_prop_key_completion(
+    document: DocumentState,
+    region: TemplateRegion,
+    expression: BrowserExpression,
+    completion: Any,
+    edit_range: types.Range,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> CompletionResult:
+    """Offer the props a `<c-fill v-slot>` pattern's slot passes that the pattern does not name yet."""
+    parsed = document.parsed.get(region.key)
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    fill = (
+        None
+        if parsed is None
+        else next(
+            (
+                candidate
+                for candidate in scoped_fills(parsed.template, parse_nested=parser)
+                if candidate.pattern_start_index == expression.start_index
+            ),
+            None,
+        )
+    )
+    props = None if fill is None else _receiver_slot_prop_types(fill.tag, fill.slot, project, document, open_documents)
+    if fill is None or props is None:
+        return CompletionResult((), is_incomplete=True)
+    named = {key.name for key in fill.keys or ()}
+    return CompletionResult(
+        tuple(
+            types.CompletionItem(
+                label=name,
+                kind=types.CompletionItemKind.Property,
+                detail=prop.value.javascript,
+                documentation=_markdown(f"Vue prop passed by slot `{fill.slot}` on `<{fill.tag}>`."),
+                filter_text=name,
+                text_edit=types.TextEdit(edit_range, name),
+            )
+            for name, prop in props.items()
+            if name.startswith(completion.prefix) and (name not in named or name == completion.prefix)
         ),
         is_incomplete=True,
     )
@@ -11014,6 +11476,7 @@ def _vue_listener_modifier_allowed(name: str, used: set[str]) -> bool:
 def _vue_listener_modifier_completion_result(
     document: DocumentState,
     position: types.Position,
+    project: ProjectState,
 ) -> CompletionResult | None:
     """Complete the modifier segment of a Vue listener such as `@click.`."""
     active = _attribute_name_at_cursor(document, position)
@@ -11036,7 +11499,9 @@ def _vue_listener_modifier_completion_result(
     # fits there; the attribute names the general completion would offer
     # do not belong after a dot either.
     semantic_component = _is_semantic_component_tag(tag_name)
-    if _VUE_SYNTAX_BY_LABEL["v-on"] not in _vue_completion_specs(tag_name, semantic_component=semantic_component):
+    if _VUE_SYNTAX_BY_LABEL["v-on"] not in _vue_completion_specs(
+        tag_name, semantic_component=semantic_component
+    ) or _cursor_inside_v_pre(document, region, source, cursor, project):
         return CompletionResult((), is_incomplete=True)
     segment_start, segment_end, _text = segments[current]
     edit_range = _mapped_template_range(
@@ -14027,14 +14492,34 @@ def _direct_schema_field_names(class_node: ast.ClassDef) -> set[str]:
     return names
 
 
-def _slot_markdown(field: FieldRecord, data_fields: tuple[str, ...] | None) -> str:
+def _slot_markdown(
+    field: FieldRecord,
+    data_fields: tuple[str, ...] | None,
+    vue_props: Mapping[str, JsonWireField] | None = None,
+) -> str:
     lines = [f"### Slot `{field.name}`", "", _field_detail(field)]
     if field.description:
         lines.extend(("", field.description))
     if data_fields is not None:
         shape = ", ".join(f"`{name}`" for name in data_fields) if data_fields else "No fields."
         lines.extend(("", f"**Exposed data:** {shape}"))
+    # The fill reads the Vue props with `v-slot` and the Python data with
+    # `data=`, so the hover lists them apart.
+    if vue_props:
+        lines.extend(("", _vue_props_line(vue_props)))
     return "\n".join(lines)
+
+
+def _vue_slot_markdown(slot_name: str, vue_props: Mapping[str, JsonWireField]) -> str:
+    """Describe a slot that only its `<c-slot>` tags declare, by the Vue props they pass."""
+    return "\n".join((f"### Slot `{slot_name}`", "", _vue_props_line(vue_props)))
+
+
+def _vue_props_line(vue_props: Mapping[str, JsonWireField]) -> str:
+    props = ", ".join(
+        f"`{name}{'' if prop.required else '?'}: {prop.value.javascript}`" for name, prop in vue_props.items()
+    )
+    return f"**Vue props** (read with `v-slot`): {props}"
 
 
 def _slot_data_field_markdown(name: str, slot_name: str, component: ComponentRecord) -> str:

@@ -2,15 +2,17 @@
 Rendering a deeper template does not need more Python frames.
 
 The body renderer, fill collection and the Vue leaf program walk nested
-``<c-if>``, ``<c-for>`` and ``c-if=`` bodies, and the fallback bodies of
-``<c-slot>`` tags nobody fills, on their own stacks, and the generated
+``<c-if>``, ``<c-for>`` and ``c-if=`` bodies, the fallback bodies of
+``<c-slot>`` tags nobody fills, and template fills passed on from one
+component to the next, on their own stacks, and the generated
 leaf code stops at a fixed nesting depth. So the deepest Python call stack
 during a render stays the same however deeply control flow and fallbacks
 nest. Each case renders once to compile, then measures the second render
 with a profile hook that records the deepest stack. The peak at depth 128
 may be at most 20 frames above the peak at depth 32. A first render, which
 also compiles the component and walks its template several times, is
-measured the same way.
+measured the same way. A chain of 64 components that pass a fill on may
+use at most 20 frames more than a chain of 8.
 """
 
 from __future__ import annotations
@@ -257,6 +259,54 @@ def test_first_renders_of_const_and_simple_vue_templates_use_the_same_python_sta
         peaks.append(_peak_frames(root, first_render=True, count_generated=not simple_vue))
     shallow, deep = peaks
     assert deep - shallow <= ALLOWED_GROWTH, f"{shape}: {shallow} frames at depth {SHALLOW}, {deep} at {DEEP}"
+
+
+# Chain lengths for the forwarded-fill test: each link is one more component
+# that passes the fill it received on to the next one's slot.
+SHORT_CHAIN = 8
+LONG_CHAIN = 64
+
+
+def _forwarding_chain(links: int) -> type[Component]:
+    """A root that fills the last of `links` components, each of which passes the fill on to the one before."""
+    app = Citry()
+
+    # As in the shapes above, the root starts with a component tag, so it
+    # renders through the body renderer, not a Vue leaf program.
+    class Row(Component):
+        citry = app
+        template = """
+            <li>r</li>
+        """
+
+    for index in range(links):
+        template = (
+            "<p><c-slot /></p>"
+            if index == 0
+            else f'<c-Link{index - 1}><c-fill name="default"><c-slot /></c-fill></c-Link{index - 1}>'
+        )
+        type(f"Link{index}", (Component,), {"citry": app, "template": template, "__module__": __name__})
+
+    class Root(Component):
+        citry = app
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"n": 1}
+
+    del Row
+    last = links - 1
+    Root.template = f'<c-Row /><c-Link{last}><c-fill name="default">{{{{ n }}}}</c-fill></c-Link{last}>'
+    return Root
+
+
+def test_longer_forwarded_chains_render_in_the_same_python_stack(render_path: str) -> None:
+    # The body renderer renders a passed template fill itself, so every
+    # link's `<c-slot />` adds a body to its stack instead of Python frames.
+    shallow = _peak_frames(_forwarding_chain(SHORT_CHAIN))
+    deep = _peak_frames(_forwarding_chain(LONG_CHAIN))
+    assert deep - shallow <= ALLOWED_GROWTH, (
+        f"{shallow} frames for a chain of {SHORT_CHAIN}, {deep} for a chain of {LONG_CHAIN}"
+    )
 
 
 class _SlotHook(Extension):
