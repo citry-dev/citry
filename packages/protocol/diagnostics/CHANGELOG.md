@@ -2,6 +2,10 @@
 
 ## v1 - Unreleased
 
+- Added `citry.template.csp-incompatible`, reported by `citry check` and the
+  language server when the application's `security_csp` is `"warn"` (a
+  warning) or `"strict"` (an error). It is off by default, because
+  `security_csp` is.
 - Added `citry.template.undeclared-template-data-key`, the `citry check`
   warning for a key that `template_data()` writes as a literal but the
   component's `Lint.template_data_keys` leaves out.

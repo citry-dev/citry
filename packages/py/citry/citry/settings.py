@@ -662,7 +662,11 @@ class CitrySettings:
             elements, inline ``on*`` attributes, and ``javascript:`` URLs.
             ``"off"`` skips the check, ``"warn"`` keeps the output and emits
             one ``RuntimeWarning`` listing what it found, and ``"strict"``
-            raises instead of returning that output.
+            raises instead of returning that output. ``citry check`` and the
+            editor also report these problems where a template writes them
+            directly, as a warning with ``"warn"`` and an error with
+            ``"strict"``
+            (``citry.template.csp-incompatible``).
         security_javascript: JavaScript delivery policy. ``"allow"`` keeps
             current behavior, ``"warn"`` inventories client requirements,
             ``"omit"`` leaves Citry-managed JavaScript out, and ``"forbid"``

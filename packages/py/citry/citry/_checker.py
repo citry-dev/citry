@@ -2863,6 +2863,9 @@ def _checker_markup_lint_consumer(
     return MarkupLintConsumer(
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
         root_may_receive_attributes=_may_have_browser_code(component) and inherits_attributes,
+        # The engine's CSP policy decides whether its templates are checked
+        # for what a strict policy blocks.
+        csp=lint.security_csp,
     )
 
 

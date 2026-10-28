@@ -24,6 +24,9 @@ _MESSAGE_VARIANT_LABELS = {
     "unknown": "Template data could not be inspected",
     "inline": "Inline template",
     "file": "Template file",
+    "raw-tag": "Inline element",
+    "native-event": "Event attribute",
+    "javascript-url": "javascript: URL",
 }
 
 

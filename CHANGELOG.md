@@ -14,6 +14,16 @@
   pass it as `Citry(model_base=MyModel)`. A dataclass base or
   `typing.NamedTuple` works too
   ([details](https://citry.dev/concepts/inputs-and-validation/#model-base)).
+- `citry check` and the editor now report a `<script>` or `<style>`
+  element, an `on*` attribute such as `onclick`, or a `javascript:` URL
+  written directly in a template, when `security_csp` is `"warn"` or
+  `"strict"`. They are warnings with `"warn"` and errors with `"strict"`,
+  so a project that uses `"strict"` can see `citry check` fail after the
+  upgrade
+  ([details](https://citry.dev/ide/template-linting/#find-csp-problems)).
+  If your editor's language server runs an older citry-lsp, update it
+  too: once `security_csp` is set, it reports "App worker protocol
+  mismatch" and stops reading your app.
 - A component can pass Vue data to a fill, as a Vue scoped slot: write
   `<c-slot name="item" :row="row" />`, and read it in the fill with
   `<c-fill name="item" v-slot="{ row }">`. Python slot data (`c-item`,
