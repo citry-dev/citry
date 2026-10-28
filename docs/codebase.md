@@ -2225,13 +2225,14 @@ pytest phase.
 
 - Installs the whole workspace with `uv sync --locked --all-packages`, which builds the `citry_core` extension through maturin and installs `citry` editable, so both packages' suites run (`citry` did not run in CI before the uv workspace)
 - Runs the portable Python tests via
-  `uv run --no-sync pytest -m "not e2e" -n 4 --dist loadfile --durations 30`;
+  `uv run --no-sync pytest -m "not e2e" --ignore packages/py/citry/tests/test_server_reload.py -n 4 --dist loadfile --durations 30`;
   four file-level workers share one GitHub runner
 
 **Configuration**:
 
 - Python versions: 3.11, 3.12, 3.13, 3.14, 3.15
 - OS: ubuntu-latest and windows-latest, plus a macOS smoke pair (oldest and newest Python)
+- Leaves out the Linux cell for the Python that `repo--check.yml` uses (3.14), because that workflow runs the same tests there on every pull request
 - Requires Rust toolchain (`uv sync` builds the citry_core extension via maturin)
 - Uses Rust dependency caching
 
@@ -2296,7 +2297,10 @@ the Rust build entirely.
   `python scripts/check.py --profile full` (lint, types, coverage, validators,
   and single-environment portable tests)
 - **Dependencies**: Installed from the uv workspace lockfile; `--locked` keeps CI reproducible
-- **Matrix testing**: Python tests run across Python versions (3.11-3.15) and OSes
+- **Matrix testing**: Python tests run across Python versions (3.11-3.15) and OSes,
+  except Linux with Python 3.14, which the full gate in `repo--check.yml` already
+  covers on every pull request. The real-server reload tests run only there, in
+  check.py's serial "pytest reload servers" phase.
 
 ### Publishing
 

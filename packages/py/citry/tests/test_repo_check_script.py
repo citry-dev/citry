@@ -87,30 +87,24 @@ def test_node_phases_run_after_installing_from_the_lockfile(tmp_path: Path) -> N
         assert all(names.index("pnpm install") < names.index(name) for name in node_phases)
 
 
-def test_python_test_workflow_runs_reload_once_outside_the_platform_matrix() -> None:
-    workflow_path = _REPO_ROOT / ".github" / "workflows" / "py--tests.yml"
-    jobs = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))["jobs"]
+def test_reload_tests_run_once_in_the_check_workflow_and_nowhere_else() -> None:
+    workflows = _REPO_ROOT / ".github" / "workflows"
+    tests_jobs = yaml.safe_load((workflows / "py--tests.yml").read_text(encoding="utf-8"))["jobs"]
 
-    reload_job = jobs["reload-servers"]
-    assert reload_job["runs-on"] == "ubuntu-latest"
-    reload_steps = {step.get("name"): step for step in reload_job["steps"]}
-    assert reload_steps["Set up Python"]["with"]["python-version"] == "3.14"
-    reload_command = reload_steps["Run real-server reload tests serially"]["run"]
-    assert reload_command == f"uv run --no-sync pytest {_RELOAD_TEST_PATH} --durations 10"
-    assert "-n" not in reload_command.split()
-
-    matrix_steps = {step.get("name"): step for step in jobs["test"]["steps"]}
-    matrix_command = matrix_steps["Run Python tests"]["run"]
-    assert f"--ignore {_RELOAD_TEST_PATH}" in matrix_command
-    assert "Run real-server reload tests serially" not in matrix_steps
-
+    # The Python test matrix leaves the real-server reload tests out, because
+    # check.py runs them once, serially, in the Check workflow on every PR.
+    matrix_steps = {step.get("name"): step for step in tests_jobs["test"]["steps"]}
+    assert f"--ignore {_RELOAD_TEST_PATH}" in matrix_steps["Run Python tests"]["run"]
     reload_invocations = [
         step["run"]
-        for job in jobs.values()
+        for workflow in sorted(workflows.glob("*.yml"))
+        for job in (yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}).get("jobs", {}).values()
         for step in job.get("steps", ())
-        if f"pytest {_RELOAD_TEST_PATH}" in step.get("run", "")
+        if _RELOAD_TEST_PATH in step.get("run", "") and f"--ignore {_RELOAD_TEST_PATH}" not in step.get("run", "")
     ]
-    assert reload_invocations == [reload_command]
+    assert reload_invocations == []
+    check_steps = yaml.safe_load((workflows / "repo--check.yml").read_text(encoding="utf-8"))["jobs"]["check"]["steps"]
+    assert any("scripts/check.py --profile full" in step.get("run", "") for step in check_steps)
 
 
 def test_agent_capture_emits_heartbeats_without_losing_child_output(
