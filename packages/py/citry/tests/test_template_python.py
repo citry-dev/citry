@@ -305,7 +305,7 @@ def test_query_enumeration_covers_nested_and_structural_hosts_once() -> None:
     ],
 )
 def test_each_enumerated_query_is_the_query_at_its_start(source: str) -> None:
-    # `template_python_queries` walks the template once for every host,
+    # `template_python_queries` walks the template once for all hosts,
     # while `template_python_query_at` searches from the root for one
     # position, so the two must agree on every host's lexical context.
     template = parse_template(source)
@@ -318,7 +318,7 @@ def test_each_enumerated_query_is_the_query_at_its_start(source: str) -> None:
 
 
 def _condition_reads(monkeypatch: pytest.MonkeyPatch, depth: int) -> int:
-    """Count the nodes whose controls one enumeration reads, on a template nested ``depth`` levels deep."""
+    """Count how many times one enumeration reads a node's condition, on a template nested ``depth`` levels deep."""
     source = '<div c-title="t">' * depth + "{{ x }}" + "</div>" * depth
     template = parse_template(source)
     reads: list[object] = []
