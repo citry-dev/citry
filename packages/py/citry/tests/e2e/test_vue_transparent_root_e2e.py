@@ -142,8 +142,88 @@ def test_prepared_component_without_events_unmounts_cleanly(page, serve_document
     assert errors == []
 
 
+def _check_a_cancelled_late_script_is_requested_again(page, errors, wait_for_count) -> None:
+    # A fragment whose host goes away while its script loads must request
+    # the script again when the fragment is loaded once more.
+    late_script_routes = []
+    page.route("**/late-extension-script.js", lambda route: late_script_routes.append(route))
+    page.evaluate("""() => {
+      __citryRuntime.registerBrowserPlugin('fragment_test', 1, () => ({
+        install() {}, prepareRevision() { return {}; }, activateRevision() {}, commitRevision() {},
+        abortRevision() {}, rollbackRevision() {}, dispose() {},
+      }));
+      const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
+      const manifest = structuredClone(source);
+      const appId = 'fragment-late-script-' + source.vue.appId;
+      const host = document.createElement('div');
+      host.id = appId;
+      document.body.append(host);
+      manifest.vue.appId = appId;
+      manifest.vue.host = '#' + appId;
+      manifest.vue.prepared.host = '#' + appId;
+      manifest.vue.prepared.manifest.appId = appId;
+      manifest.vue.prepared.manifest.styles = [];
+      manifest.vue.prepared.manifest.extensions = {
+        fragment_test: {payload: {}, schemaVersion: 1, templateContextNames: []},
+      };
+      manifest.vue.prepared.manifest.scripts = [{
+        lazyAllowed: true, registersOptions: false,
+        owner: {kind: 'extension', extensionName: 'fragment_test'},
+        source: {kind: 'external', url: '/late-extension-script.js', attrs: {}},
+      }];
+      manifest.vue.prepared.manifest.scripts.push(
+        structuredClone(manifest.vue.prepared.manifest.scripts[0]),
+      );
+      globalThis.__lateScriptManifest = manifest;
+      globalThis.__lateScriptHost = host;
+      globalThis.__lateScriptAppId = appId;
+      globalThis.__lateScriptFirst = Citry.fragments.load(manifest).then(() => 'mounted', error => String(error));
+    }""")
+    page.wait_for_function(
+        "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
+    )
+    page.evaluate("""() => {
+      globalThis.__lateScriptElement = document.querySelector('script[src$="/late-extension-script.js"]');
+      globalThis.__lateScriptOnerror = __lateScriptElement.onerror;
+      __lateScriptHost.remove();
+    }""")
+    assert "host changed while mounting" in page.evaluate("() => __lateScriptFirst")
+    # The script element exists before its request reaches the route handler,
+    # so the list can still be empty here.
+    wait_for_count(late_script_routes, 1)
+    late_script_routes[0].abort()
+    # Route abort delivery and the script element's error cleanup are separate
+    # browser tasks. Wait for the cancelled request's actual script cleanup
+    # before mounting the replacement, otherwise both script elements can
+    # remain visible while the retry is waiting for its one deduplicated asset.
+    page.wait_for_function("() => !__lateScriptElement.isConnected")
+    page.evaluate("""() => {
+      const host = document.createElement('div');
+      host.id = __lateScriptAppId;
+      document.body.append(host);
+      globalThis.__lateScriptSecond = Citry.fragments.load(structuredClone(__lateScriptManifest));
+    }""")
+    page.wait_for_function(
+        "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
+    )
+    wait_for_count(late_script_routes, 2)
+    # Chromium reports the aborted request in the console, Firefox does not,
+    # so the browser message is allowed to be absent.
+    expected_abort_errors = [error for error in errors if "net::ERR_FAILED" in error]
+    assert len(expected_abort_errors) <= 1
+    for error in expected_abort_errors:
+        errors.remove(error)
+    page.evaluate("() => __lateScriptOnerror(new Event('error'))")
+    late_script_routes[1].fulfill(body="", content_type="application/javascript")
+    page.evaluate("() => __lateScriptSecond")
+    assert len(late_script_routes) == 2
+    assert page.evaluate("() => __citryRuntime._apps.has(__lateScriptAppId)") is True
+    page.evaluate("() => document.getElementById(__lateScriptAppId).remove()")
+    page.wait_for_function("() => !__citryRuntime._apps.has(__lateScriptAppId)")
+
+
 def test_fragment_manager_loads_and_mounts_python_composed_component(
-    page, serve_live, wait_for_citry_ready, wait_for_count
+    page, serve_live, wait_for_citry_ready, wait_for_count, browser_name
 ) -> None:
     errors: list[str] = []
     # Keep the message objects too: when the product logs an Error object,
@@ -409,81 +489,12 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
     page.evaluate("() => document.getElementById(__cancelledAppId).remove()")
     page.wait_for_function("() => !__citryRuntime._apps.has(__cancelledAppId)")
 
-    late_script_routes = []
-    page.route("**/late-extension-script.js", lambda route: late_script_routes.append(route))
-    page.evaluate("""() => {
-      __citryRuntime.registerBrowserPlugin('fragment_test', 1, () => ({
-        install() {}, prepareRevision() { return {}; }, activateRevision() {}, commitRevision() {},
-        abortRevision() {}, rollbackRevision() {}, dispose() {},
-      }));
-      const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
-      const manifest = structuredClone(source);
-      const appId = 'fragment-late-script-' + source.vue.appId;
-      const host = document.createElement('div');
-      host.id = appId;
-      document.body.append(host);
-      manifest.vue.appId = appId;
-      manifest.vue.host = '#' + appId;
-      manifest.vue.prepared.host = '#' + appId;
-      manifest.vue.prepared.manifest.appId = appId;
-      manifest.vue.prepared.manifest.styles = [];
-      manifest.vue.prepared.manifest.extensions = {
-        fragment_test: {payload: {}, schemaVersion: 1, templateContextNames: []},
-      };
-      manifest.vue.prepared.manifest.scripts = [{
-        lazyAllowed: true, registersOptions: false,
-        owner: {kind: 'extension', extensionName: 'fragment_test'},
-        source: {kind: 'external', url: '/late-extension-script.js', attrs: {}},
-      }];
-      manifest.vue.prepared.manifest.scripts.push(
-        structuredClone(manifest.vue.prepared.manifest.scripts[0]),
-      );
-      globalThis.__lateScriptManifest = manifest;
-      globalThis.__lateScriptHost = host;
-      globalThis.__lateScriptAppId = appId;
-      globalThis.__lateScriptFirst = Citry.fragments.load(manifest).then(() => 'mounted', error => String(error));
-    }""")
-    page.wait_for_function(
-        "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
-    )
-    page.evaluate("""() => {
-      globalThis.__lateScriptElement = document.querySelector('script[src$="/late-extension-script.js"]');
-      globalThis.__lateScriptOnerror = __lateScriptElement.onerror;
-      __lateScriptHost.remove();
-    }""")
-    assert "host changed while mounting" in page.evaluate("() => __lateScriptFirst")
-    # The script element exists before its request reaches the route handler,
-    # so the list can still be empty here.
-    wait_for_count(late_script_routes, 1)
-    late_script_routes[0].abort()
-    # Route abort delivery and the script element's error cleanup are separate
-    # browser tasks. Wait for the cancelled request's actual script cleanup
-    # before mounting the replacement, otherwise both script elements can
-    # remain visible while the retry is waiting for its one deduplicated asset.
-    page.wait_for_function("() => !__lateScriptElement.isConnected")
-    page.evaluate("""() => {
-      const host = document.createElement('div');
-      host.id = __lateScriptAppId;
-      document.body.append(host);
-      globalThis.__lateScriptSecond = Citry.fragments.load(structuredClone(__lateScriptManifest));
-    }""")
-    page.wait_for_function(
-        "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
-    )
-    wait_for_count(late_script_routes, 2)
-    # Chromium reports the aborted request in the console, Firefox does not,
-    # so the browser message is allowed to be absent.
-    expected_abort_errors = [error for error in errors if "net::ERR_FAILED" in error]
-    assert len(expected_abort_errors) <= 1
-    for error in expected_abort_errors:
-        errors.remove(error)
-    page.evaluate("() => __lateScriptOnerror(new Event('error'))")
-    late_script_routes[1].fulfill(body="", content_type="application/javascript")
-    page.evaluate("() => __lateScriptSecond")
-    assert len(late_script_routes) == 2
-    assert page.evaluate("() => __citryRuntime._apps.has(__lateScriptAppId)") is True
-    page.evaluate("() => document.getElementById(__lateScriptAppId).remove()")
-    page.wait_for_function("() => !__citryRuntime._apps.has(__lateScriptAppId)")
+    # In WebKit, after the test aborts the routed request for a script,
+    # Playwright fails the next load of that URL at once without calling the
+    # route. A real server does get the second request in WebKit, so this
+    # check runs only where the route sees it.
+    if browser_name != "webkit":
+        _check_a_cancelled_late_script_is_requested_again(page, errors, wait_for_count)
 
     page.evaluate("""async () => {
       const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
