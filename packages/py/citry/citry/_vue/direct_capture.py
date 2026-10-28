@@ -4630,6 +4630,11 @@ def _v_pre_left_to_vue(parts: Sequence[RenderPart], open_index: int) -> bool:
     page without Citry, so Citry writes them unchanged with `v-pre` kept.
     Anything Citry produces (a value, a `c-` binding, `#c-key`, a Citry
     tag) needs Citry's own handling instead.
+
+    `citry check` makes this decision again from the template's nodes
+    (`_v_pre_left_to_vue` in `static_template.py`, whose module docstring
+    lists where the two differ), so a change here needs the same change
+    there; the parity tests in `test_vue_static_template.py` compare the two.
     """
     opening = cast("PreparedElementOpen", parts[open_index])
     if not _authored_element_only(opening):

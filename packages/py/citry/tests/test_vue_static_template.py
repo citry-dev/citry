@@ -90,6 +90,30 @@ def _rendered_template(source: str) -> str:
         # Vue reads a `v-pre` element as written, so its form controls take no
         # ownership marker; the input after it does.
         "<main><div v-pre><input :value='q'></div><input v-pre :value='q'><input :value='q'></main>",
+        # Citry compiles a `v-pre` element that holds Citry values: it drops
+        # `v-pre`, adds the `v-citry-vue-owned` marker to form controls, and
+        # writes the contents as one block of HTML. The text contents of
+        # `<textarea>`, `<title>`, and `<style>` are compiled as usual.
+        "<main><textarea v-pre>{{ title }}</textarea><title v-pre>{{ title }}</title><style v-pre>{{ title }}</style>"
+        "</main>",
+        "<main><input v-pre c-value='title'><div v-pre c-class='cls'>x</div><div v-pre #c-key='title'>x</div></main>",
+        "<main><div v-pre>{{ title }}<input :value='q'></div><pre v-pre>\n{{ title }}</pre></main>",
+        "<main><div v-pre><b c-class='cls'>x</b></div><div v-pre><c-if cond='ok'><b>x</b></c-if></div>"
+        "<div v-pre><c-for each='i in items'>x</c-for></div></main>",
+        "<main><div v-pre><c-provide key='k' data='1'><b>x</b></c-provide></div>"
+        "<div v-pre><c-provide key='k' data='1'>{{ title }}</c-provide></div>"
+        "<div v-pre><c-provide key='k' data='1' #c-key='title'><b>x</b></c-provide></div></main>",
+        "<main><div v-pre><p v-pre>x</p>{{ title }}</div><div v-pre><c-raw><i>raw</i></c-raw></div>"
+        "<div v-pre #c-ignore>{{ title }}</div></main>",
+        # Where the browser cannot keep a block of HTML (a table, its rows and
+        # sections, or inside SVG), the contents are compiled as usual, and a
+        # `v-pre` element inside them is kept or compiled by what it holds.
+        "<main><table v-pre><tr><td>{{ title }}</td></tr></table><svg v-pre><text>{{ title }}</text></svg></main>",
+        "<table><tbody v-pre><tr><td v-pre>{{ title }}</td><td v-pre>x</td></tr></tbody></table>",
+        # A slot fallback sits inside the elements around its outlet, and
+        # fill content inside the elements around the component call.
+        "<svg><c-slot name='x'><g v-pre>{{ title }}</g></c-slot></svg><c-chip />",
+        "<main><c-chip><div v-pre>{{ title }}</div></c-chip></main>",
     ],
 )
 def test_check_writes_the_vue_template_a_render_compiles(source):
