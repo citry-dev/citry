@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
 import tomllib
 import yaml  # type: ignore[import-untyped]
 
@@ -200,38 +201,114 @@ def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
             # jobs that start a run need the condition. Without it, the
             # cancelling run would itself queue for runners.
             if "needs" not in job:
-                assert job.get("if") == "github.event.action != 'closed'", f"{name}: {job_name}"
+                # The Python tests' `changes` job also skips outside pull requests.
+                assert job.get("if") in {"github.event.action != 'closed'", _CHANGES_IF}, f"{name}: {job_name}"
     # Guards against the loop finding nothing because the trigger shape changed.
     assert {"repo--check.yml", "py--tests.yml"} <= checked
+
+
+# When the Python tests' `changes` job runs: on a pull request, except the
+# `closed` event, which must start no runner.
+_CHANGES_IF = "github.event_name == 'pull_request' && github.event.action != 'closed'"
+
+# The condition on each job that needs `changes`: it skips only on an
+# explicit "false", so a failed `changes` runs everything rather than leaving
+# a required check skipped, which GitHub counts as passing.
+_RUNS_UNLESS_NOTHING_CHANGED = (
+    "${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}"
+)
 
 
 def test_python_tests_start_on_every_pull_request_and_skip_without_python_changes() -> None:
     workflow = _load_workflow("py--tests.yml")
     # A required check in a workflow that never starts waits forever, so the
-    # pull-request trigger has no path filter and the `changes` job decides.
+    # pull-request trigger has no path list and the `changes` job decides.
     assert "paths" not in workflow["on"]["pull_request"]
     changes = workflow["jobs"]["changes"]
-    inputs = [line.strip() for line in changes["steps"][0]["env"]["PYTHON_INPUTS"].splitlines() if line.strip()]
-    # Both lists must name the same inputs, or a push and a pull request
+    assert changes["if"] == _CHANGES_IF
+    # The jobs below read this output; a renamed step or output would leave
+    # it empty, which runs everything rather than skipping it.
+    step = changes["steps"][0]
+    assert changes["outputs"]["python"] == f"${{{{ steps.{step['id']}.outputs.python }}}}"
+    inputs = [line.strip() for line in step["env"]["PYTHON_INPUTS"].splitlines() if line.strip()]
+    # Both lists must name the same paths, or a push and a pull request
     # would disagree about which changes the Python jobs test.
     assert inputs == workflow["on"]["push"]["paths"]
-    # The job's shell matcher understands only these two forms.
+    # The job's shell matcher understands only `folder/**` and an exact file
+    # path, so no other glob character may appear.
     for pattern in inputs:
         body = pattern.removesuffix("/**")
-        assert not any(char in body for char in "*?[]!"), pattern
+        assert not any(char in body for char in "*?[]!+{}"), pattern
 
     jobs = workflow["jobs"]
     for name, job in jobs.items():
         if name == "changes":
             continue
-        needs = job["needs"] if isinstance(job.get("needs"), list) else [job.get("needs")]
+        needs = job.get("needs")
+        needs = needs if isinstance(needs, list) else [needs]
+        assert needs != [None], f"{name} must need `changes` or a job that does"
         if "changes" in needs:
-            # A skipped job counts as passing a required check.
-            assert job["if"] == "needs.changes.outputs.python == 'true'", name
+            assert job["if"] == _RUNS_UNLESS_NOTHING_CHANGED, name
         else:
-            # A job that needs another one skips with it.
+            # A job below a gated one skips with it, as long as it does not
+            # override that with its own status check.
             assert all(jobs[parent].get("needs") == "changes" for parent in needs), name
+            assert "if" not in job, name
     assert "citry-ui-wheel-build" in jobs
+
+
+_BASH = shutil.which("bash")
+
+
+@pytest.mark.skipif(_BASH is None, reason="the changes job runs in bash")
+@pytest.mark.parametrize(
+    ("files", "changed_files", "head", "expected"),
+    [
+        (["docs_site/content/a.md", "CHANGELOG.md"], 2, "abc", "false"),
+        (["docs/notes.md", "packages/py/citry/x.py"], 2, "abc", "true"),
+        # Only the root README goes into the citry wheel's metadata.
+        (["README.md"], 1, "abc", "true"),
+        (["docs/README.md"], 1, "abc", "false"),
+        # A folder pattern does not match a longer folder name.
+        (["packages/pyx/a.py"], 1, "abc", "false"),
+        (["crates/a b/c.rs"], 1, "abc", "true"),
+        ([], 0, "abc", "false"),
+        # Too many files to list, or a pull request that moved on, runs everything.
+        (["docs/a.md"], 3000, "abc", "true"),
+        (["docs/a.md"], 1, "newer", "true"),
+    ],
+)
+def test_the_changes_job_matches_files_like_the_push_path_filter(
+    tmp_path: Path, files: list[str], changed_files: int, head: str, expected: str
+) -> None:
+    step = _load_workflow("py--tests.yml")["jobs"]["changes"]["steps"][0]
+    # A stand-in for `gh api`: the pull request itself, or its file list.
+    fake_gh = tmp_path / "gh"
+    listing = "\n".join(files)
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "$*" in\n'
+        f"  */files*) printf '%s\\n' {shlex.quote(listing)} ;;\n"
+        f"  *) echo '{changed_files} {head}' ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    output = tmp_path / "output"
+    output.write_text("", encoding="utf-8")
+    env = {
+        "PATH": f"{tmp_path}:/usr/bin:/bin",
+        "PYTHON_INPUTS": step["env"]["PYTHON_INPUTS"],
+        "REPOSITORY": "owner/repo",
+        "PR_NUMBER": "1",
+        "HEAD_SHA": "abc",
+        "GITHUB_OUTPUT": str(output),
+    }
+
+    assert _BASH is not None
+    subprocess.run([_BASH, "-c", step["run"]], env=env, check=True, capture_output=True)
+
+    assert output.read_text(encoding="utf-8").strip().splitlines()[-1] == f"python={expected}"
 
 
 _SUPPORTED_PYTHONS = ["3.11", "3.12", "3.13", "3.14", "3.15"]

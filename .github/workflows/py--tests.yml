@@ -45,9 +45,9 @@ on:
     # PR's queued or running checks once it merges or closes; every job
     # skips on that event, so the cancelling run needs no runner.
     types: [opened, synchronize, reopened, closed]
-    # No path filter here: the `changes` job below decides, so a required
-    # check in this workflow reports on every pull request (a workflow that
-    # never starts leaves a required check waiting forever).
+    # Every pull request starts this workflow, and the `changes` job below
+    # decides which jobs run, so a required check here always reports. A
+    # workflow that never starts leaves a required check waiting forever.
   workflow_dispatch:
 
 # A newer run cancels an older one for the same pull request, or for the same
@@ -69,12 +69,13 @@ env:
   PIP_WHEEL: "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
 
 jobs:
-  # Decides whether this run touches anything the jobs below test. A push to
-  # main or dev and a manual run always do: the push path filter above already
-  # chose them. A pull request lists its changed files and compares them with
-  # the same paths, kept in step with that filter by test_ci_workflows.py.
+  # Decides whether a pull request changes any file the jobs below test, by
+  # comparing its changed files with the push path list above (the two lists
+  # are kept in step by test_ci_workflows.py). It runs only for a pull
+  # request: a push was already filtered by that list, and a manual run tests
+  # everything, so for those the jobs below run without waiting for it.
   changes:
-    if: github.event.action != 'closed'
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
     runs-on: ubuntu-latest
     # Listing a pull request's files needs read access to pull requests.
     permissions:
@@ -87,9 +88,9 @@ jobs:
         id: match
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           # The same paths as `on.push.paths`. A path ending in `/**` matches
           # everything below that folder; any other path matches one file.
           PYTHON_INPUTS: |
@@ -127,20 +128,19 @@ jobs:
             .gitmodules
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo "python=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           # The files endpoint lists at most 3,000 files, so a larger pull
-          # request runs everything rather than risk a missed match.
-          count=$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER" --jq '.changed_files')
-          if [ "$count" -ge 3000 ]; then
+          # request runs everything rather than risk a missed match. A pull
+          # request that moved on since this run started also runs
+          # everything, since its file list may not be this run's commit.
+          read -r count head < <(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER" \
+            --jq '"\(.changed_files) \(.head.sha)"')
+          if [ "$count" -ge 3000 ] || [ "$head" != "$HEAD_SHA" ]; then
             echo "python=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # A renamed file counts under its old path too, so moving a file
           # out of a Python folder still runs the Python jobs.
-          files=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files" \
+          files=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
             --jq '.[] | .filename, (.previous_filename // empty)')
           python=false
           while IFS= read -r file; do
@@ -160,9 +160,11 @@ jobs:
           echo "python=$python" >> "$GITHUB_OUTPUT"
 
   i18n-release-qualification:
-    # The `closed` event skips `changes`, and with it this job.
+    # Runs unless `changes` found no changed input. A failed or skipped
+    # `changes` runs the job, so a required check is never skipped by
+    # mistake; the `closed` event still skips it.
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -210,9 +212,11 @@ jobs:
           if-no-files-found: error
 
   test:
-    # The `closed` event skips `changes`, and with it this job.
+    # Runs unless `changes` found no changed input. A failed or skipped
+    # `changes` runs the job, so a required check is never skipped by
+    # mistake; the `closed` event still skips it.
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ${{ matrix.os }}
     strategy:
       # A failure on one interpreter must not hide portability results from
@@ -292,9 +296,11 @@ jobs:
   # the same paths on all three engines. The `test` job above excludes `e2e`
   # explicitly and does not sync that dependency group.
   e2e:
-    # The `closed` event skips `changes`, and with it this job.
+    # Runs unless `changes` found no changed input. A failed or skipped
+    # `changes` runs the job, so a required check is never skipped by
+    # mistake; the `closed` event still skips it.
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -407,9 +413,11 @@ jobs:
           if-no-files-found: error
 
   citry-ui-wheel-build:
-    # The `closed` event skips `changes`, and with it this job.
+    # Runs unless `changes` found no changed input. A failed or skipped
+    # `changes` runs the job, so a required check is never skipped by
+    # mistake; the `closed` event still skips it.
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -732,9 +740,11 @@ jobs:
   # pull requests. The scheduled cross-browser workflow retains the broader
   # all-e2e sweep.
   vue-conformance:
-    # The `closed` event skips `changes`, and with it this job.
+    # Runs unless `changes` found no changed input. A failed or skipped
+    # `changes` runs the job, so a required check is never skipped by
+    # mistake; the `closed` event still skips it.
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

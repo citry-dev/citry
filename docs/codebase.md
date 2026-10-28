@@ -2260,12 +2260,27 @@ pytest phase.
 **Purpose**: Tests all Python packages.
 
 **Triggers**: A push to `main` or `dev` starts the workflow only when it
-changes one of the paths below. Every pull request starts it. Its first job,
-`changes`, lists the pull request's files and compares them with the same
-paths, and every other job skips when none of them match. A skipped job still
-reports a passing check, so a check from this workflow can be required on
-`main` without blocking a docs-only pull request. This costs a docs-only pull
-request one short job (a few seconds on one runner). The paths are:
+changes one of the paths below. Every pull request starts it. On a pull
+request, its first job, `changes`, lists the pull request's files and compares
+them with the same paths, and every other job skips when none of them match.
+A skipped job still reports a passing check, so a check from a job without a
+matrix, such as `citry-ui-wheel-build`, can be required on `main` without
+blocking a docs-only pull request. (A skipped matrix job reports under its
+plain name, such as `test`, not under each cell's name.)
+
+- **If `changes` fails** (for example, the GitHub API is down), every job
+  runs, so a required check is never skipped by mistake.
+- **Cost:** `changes` itself takes a few seconds, but every pull-request run
+  waits for it to get a runner before its other jobs start, about a minute
+  when runners are busy. A push or a manual run does not run `changes` and
+  does not wait.
+- **A retargeted pull request keeps its old result.** Changing a pull
+  request's base branch does not start a new run, so push a commit after
+  retargeting a stacked pull request.
+- The path list appears twice in the workflow, under `on.push.paths` and in
+  the `changes` job, and `test_ci_workflows.py` fails if they differ.
+
+The paths are:
 
 - `packages/py/**` - Python package code
 - `packages/js/citry-client/**` and `packages/protocol/**` - browser/runtime contracts exercised by Python jobs

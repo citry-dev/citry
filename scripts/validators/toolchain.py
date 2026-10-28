@@ -84,16 +84,16 @@ def check() -> list[str]:
 
     errors: list[str] = []
 
-    # A push filters at the trigger, and a pull request decides in the
-    # `changes` job, so each list is checked on its own: a duplicate in one
-    # cannot hide an omission in the other.
+    # A push is filtered by the trigger's path list, and a pull request by the
+    # `changes` job's PYTHON_INPUTS list, so each list is checked on its own:
+    # a duplicate in one cannot hide an omission in the other.
     python_test_workflow = yaml.safe_load(_PYTHON_TEST_WORKFLOW.read_text(encoding="utf-8"))
     # PyYAML reads the Actions key `on` as the boolean True.
     triggers = python_test_workflow.get(True) or python_test_workflow.get("on") or {}
     changes_steps = python_test_workflow.get("jobs", {}).get("changes", {}).get("steps", [])
     event_path_lists = {
-        "push": (triggers.get("push") or {}).get("paths", []),
-        "pull_request": [
+        "on.push.paths": (triggers.get("push") or {}).get("paths", []),
+        "the changes job's PYTHON_INPUTS": [
             line.strip()
             for step in changes_steps
             for line in step.get("env", {}).get("PYTHON_INPUTS", "").splitlines()
@@ -104,9 +104,9 @@ def check() -> list[str]:
         "scripts/verify_citry_ui_distribution.py",
         ".github/workflows/py--citry-ui--publish.yml",
     ):
-        for event, path_list in event_path_lists.items():
+        for label, path_list in event_path_lists.items():
             if path not in path_list:
-                errors.append(f"py--tests.yml {event} path filters must include {path!r}")
+                errors.append(f"py--tests.yml {label} must include {path!r}")
 
     errors.extend(nightly_pin_errors(REPO_ROOT))
     errors.extend(selected_toolchain_errors(REPO_ROOT))
