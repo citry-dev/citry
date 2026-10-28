@@ -662,6 +662,10 @@
 - On PyPy, `import citry` no longer fails with `No module named
   '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
   values and template types less fully, and both print a note saying so.
+- In Safari, when a stylesheet linked in the served page fails to load,
+  Citry now requests it again and reports an error if it still fails, as it
+  does in other browsers. Before, the page mounted without its styles and no
+  error appeared.
 
 ### Performance
 
