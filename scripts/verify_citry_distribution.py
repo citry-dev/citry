@@ -80,7 +80,7 @@ EXPECTED_REQUIRES_DIST: Final = {
     "markupsafe>=2.1",
     "typing-extensions>=4.10",
     "tzdata>=2026.3",
-    'ty==0.0.90; extra == "analysis-ty"',
+    'ty==0.0.91; extra == "analysis-ty"',
     'watchfiles>=1.0; extra == "watcher-watchfiles"',
     'watchdog>=4.0; extra == "watcher-watchdog"',
 }

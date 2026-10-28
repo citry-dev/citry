@@ -30,10 +30,12 @@ implementation never parses them back into a type system.
 
 ## Analyzer boundary
 
-Citry runs the published `ty==0.0.73` language server as one child process per
-Citry workspace. It communicates through the documented Language Server
-Protocol surface and converts the returned completion, hover, definition,
-signature, and diagnostic records into Citry-owned results.
+Citry runs the published `ty` language server, at the exact version
+named by `TY_VERSION` in `citry_lsp/type_analysis.py`, as one child
+process per Citry workspace. It communicates through the documented
+Language Server Protocol surface and converts the returned completion,
+hover, definition, signature, and diagnostic records into Citry-owned
+results.
 
 The executable must come from the selected interpreter's scripts directory and
 its installed package version must match the exact supported version. Citry
