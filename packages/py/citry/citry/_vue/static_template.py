@@ -28,6 +28,22 @@ branch a render may pick is compiled. It differs from a render in these ways:
 - A component that renders in place (a built-in such as `<c-provide>`, or a
   component the caller knows is `transparent` or `simple`) is written as its
   body, or as nothing when its own template decides what renders.
+- A render leaves a `v-pre` element to Vue, with `v-pre` kept, only when it
+  holds nothing Citry produces. Otherwise Citry handles the element itself:
+  it writes it without `v-pre`, and its contents as one block of HTML where
+  the browser can keep one (see `write_element_open`). Here,
+  any component inside the element counts as something Citry produces,
+  except `<c-js>`, `<c-css>`, and a `<c-provide>` or `<c-cache>` without
+  `#c-key`. A render also leaves the element to Vue when a transparent
+  component in it renders only markup its author wrote, but that
+  component's template is not known here.
+- A `c-` attribute whose value is None or False adds no attribute in a
+  render, so a render can still leave the `v-pre` element that carries or
+  encloses it to Vue. Here it always counts as something Citry produces.
+- Attributes Citry adds to a component's root element (such as the one
+  `css_data()` needs) are left out. A render handles a `v-pre` root element
+  that takes such an attribute itself; here it is left to Vue when it holds
+  only markup its author wrote.
 - The leaf program question is asked as for an ordinary component, before
   any constant is folded and without extension hooks, so a component that
   is `simple`, `pure`, or `transparent`, an application with an attribute
@@ -69,6 +85,7 @@ from .capture import (
 )
 from .compiler import _authored_vue_attr, _guard_template_braces
 from .direct_capture import (
+    _TEXT_ONLY_TAGS,
     _append_element_open,
     _append_opaque_html,
     _append_slot_outlet,
@@ -77,6 +94,7 @@ from .direct_capture import (
     _component_call_identity,
     _DefinitionFragment,
     _fill_opening,
+    _html_block_placement_problem,
     document_body_bounds,
 )
 from .leaf_program import branch_opening, compile_leaf_program, loop_empty_opening, loop_opening
@@ -281,10 +299,11 @@ class _Writer:
     scoped_fill_refusals: list[tuple[int, int, str]] = field(default_factory=list)
     # The elements open at this point, as `(tag, start of the opening tag)`.
     open_elements: list[tuple[str, int]] = field(default_factory=list)
-    # For each open element with an authored `v-pre`, the number of elements
-    # open outside it. Vue reads everything under it as written, so while
-    # one is open no ownership marker is written, as a render does for a
-    # `v-pre` element Vue reads as written.
+    # For each open element whose authored `v-pre` a render keeps (see
+    # `_v_pre_left_to_vue`), the number of elements open outside it. Vue
+    # reads everything under it as written, so while one is open no
+    # `v-citry-vue-owned` marker (the attribute that names the form
+    # properties a Vue binding owns) is written, as in a render.
     v_pre_depths: list[int] = field(default_factory=list)
     # Data keys only need to be distinct within one template.
     counter: int = 0
@@ -395,6 +414,17 @@ class _Writer:
         first_chunk = len(self.output.chunks)
         static = node._static_prepared
         own_v_pre = any(attr.key.casefold() == "v-pre" for attr in node._authored_vue_attrs)
+        # A render compiles a `v-pre` element itself when it holds anything
+        # Citry produces, and then writes it without `v-pre`, so Vue reads
+        # Citry's bindings on it and the contents follow as Citry writes them.
+        compiled_v_pre = own_v_pre and not _v_pre_left_to_vue(nodes, index)
+        # The `v-pre` such a render drops (see `_without_v_pre` in
+        # `direct_capture.py`) is left out here too.
+        source_attrs = [
+            (attr, text)
+            for attr, text in node._static_source_attrs
+            if not (compiled_v_pre and attr.key.casefold() == "v-pre")
+        ]
         if static is not None and not node._authored_vue_attrs:
             # The same markup a render joins into one block of static text.
             self.output.append(static_element_opening(static))
@@ -403,10 +433,7 @@ class _Writer:
                 node.source,
                 node.position,
                 node.tag,
-                tuple(
-                    PreparedAttribute(attr.key, "source", attr.position, text)
-                    for attr, text in node._static_source_attrs
-                ),
+                tuple(PreparedAttribute(attr.key, "source", attr.position, text) for attr, text in source_attrs),
                 node.is_void,
                 node.is_self_closing,
                 (),
@@ -421,24 +448,39 @@ class _Writer:
                 part,
                 self.next_key("citryAttrs") if has_data_attrs else None,
                 self.next_key("citryKey") if has_key else None,
-                under_v_pre=own_v_pre or bool(self.v_pre_depths),
+                # With its `v-pre` dropped, a `v-pre` element Citry compiles
+                # sits outside `v-pre`, so it takes the marker.
+                under_v_pre=(own_v_pre and not compiled_v_pre) or bool(self.v_pre_depths),
             )
         self.map_opening(
             start,
             "".join(self.output.chunks[first_chunk:]),
             node.position,
             node.tag,
-            [(attr.key, text, attr.position) for attr, text in node._static_source_attrs],
+            [(attr.key, text, attr.position) for attr, text in source_attrs],
         )
         if not node.is_void:
-            if own_v_pre:
+            if own_v_pre and not compiled_v_pre:
                 self.v_pre_depths.append(len(self.open_elements))
             self.open_elements.append((node.tag.lower(), node.position[0]))
-        ignored = any(name == "morph" and value == "ignore" for name, value in node.element_metadata)
-        if not ignored or node.is_void:
+        if node.is_void:
             return index + 1
-        # A render keeps a `#c-ignore` element's contents as HTML that Vue
-        # does not compile, so only the element's own tags are written.
+        ignored = any(name == "morph" and value == "ignore" for name, value in node.element_metadata)
+        # A render writes the contents of a `v-pre` element it compiles as one
+        # block of HTML, as for `#c-ignore`, unless the element holds text
+        # (such as `<textarea>`), is a table or one of its rows or sections,
+        # or sits inside SVG or MathML, where the browser cannot keep such a
+        # block. Those contents are then written as ordinary nodes, so this
+        # returns before the block is written.
+        v_pre_block = (
+            compiled_v_pre
+            and node.tag.lower() not in _TEXT_ONLY_TAGS
+            and _html_block_placement_problem(node.tag, [tag for tag, _start in self.open_elements], "v-pre") is None
+        )
+        if not ignored and not v_pre_block:
+            return index + 1
+        # A render keeps these contents as HTML that Vue does not compile, so
+        # only the element's own tags are written.
         close_index, close = _matching_close(nodes, index)
         start = self.output.byte_length
         _append_opaque_html(self.output, self.next_key("citryOpaque"), "raw")
@@ -642,7 +684,18 @@ class _Writer:
     def write_slot(self, node: SlotNode) -> Generator[Call, Any, None]:
         # The fallback is written on its own first, because the shared writer
         # takes it as one finished fragment.
-        fallback = _Writer(self.source, leaf=self.leaf, renders_in_place=self.renders_in_place, counter=self.counter)
+        fallback = _Writer(
+            self.source,
+            leaf=self.leaf,
+            renders_in_place=self.renders_in_place,
+            counter=self.counter,
+            # A render places the fallback inside the elements open here, so a
+            # `v-pre` element in it that sits inside an `<svg>` around the
+            # outlet has its contents compiled as usual, as in a render. An
+            # outlet makes any `v-pre` element around it Citry's, so no
+            # `v-pre` left to Vue encloses it and `v_pre_depths` starts empty.
+            open_elements=list(self.open_elements),
+        )
         yield Call(fallback.write_nodes, node.body)
         self.counter = fallback.counter
         # Element spans are authored positions, so they need no shift.
@@ -753,5 +806,69 @@ def _matching_close(nodes: Sequence[BodyItem], index: int) -> tuple[int, Prepare
             depth -= 1
             if depth == 0:
                 return position, node
-    msg = "a `#c-ignore` element has no close in the same body"
+    msg = f"the <{getattr(nodes[index], 'tag', '?')}> element has no close in the same body"
     raise UnsupportedStaticTemplate(msg)
+
+
+def _v_pre_left_to_vue(nodes: Sequence[BodyItem], index: int) -> bool:
+    """
+    Return whether a render leaves the `v-pre` element opened at `nodes[index]` to Vue.
+
+    A render does so when the element and its contents hold only markup the
+    author wrote (`_v_pre_left_to_vue` in `direct_capture.py`); Vue then reads
+    them as written, with `v-pre` kept. Anything Citry produces (a value, a
+    `c-` attribute, `#c-key`, a `<c-if>`, a component other than those the
+    module docstring lists) makes the render compile the element itself. The render asks this of the parts it
+    rendered, and this module has only the template's nodes, so the two
+    walks are separate; the parity tests in `test_vue_static_template.py`
+    keep them in step.
+    """
+    opening = nodes[index]
+    assert isinstance(opening, PreparedElementOpenNode)  # noqa: S101 - the caller dispatched on the type
+    if not _authored_opening(opening):
+        return False
+    if opening.is_void:
+        return True
+    close_index, _close = _matching_close(nodes, index)
+    return _authored_nodes_only(nodes[index + 1 : close_index])
+
+
+def _authored_opening(node: PreparedElementOpenNode) -> bool:
+    """Return whether an opening carries only attributes written in the template, and no Citry bindings."""
+    # The node builds its opening in advance only when it has no `c-`
+    # attribute, `#c-` metadata, or event, poll, or control binding. A
+    # render asks nearly the same of the opening it renders
+    # (`_authored_element_only`), except that a `c-` attribute whose value
+    # is None or False adds nothing there.
+    return node._static_prepared is not None
+
+
+def _authored_nodes_only(nodes: Sequence[BodyItem]) -> bool:
+    """Return whether these nodes render only markup the author wrote, as `_authored_markup_only` asks of a render."""
+    # A stack of node iterators keeps the number of Python frames the same
+    # however deep the template nests.
+    pending = [iter(nodes)]
+    while pending:
+        node = next(pending[-1], None)
+        if node is None:
+            pending.pop()
+            continue
+        if isinstance(node, (PreparedSourceTextNode, PreparedElementCloseNode)):
+            continue
+        if isinstance(node, PreparedElementOpenNode) and _authored_opening(node):
+            continue
+        if isinstance(node, ComponentNode) and node.name in {"js", "css"}:
+            # `<c-js />` and `<c-css />` write nothing in a component.
+            continue
+        if isinstance(node, ComponentNode) and node.name in _IN_PLACE_BODIES and node.key is None:
+            # A `<c-provide>` or `<c-cache>` renders its body in place and
+            # adds nothing for Vue to read, unless a `#c-key` wraps the body
+            # in a keyed Vue `<template>`.
+            pending.extend(iter(body) for _site_id, _span, body, _pattern in _fills(node))
+            continue
+        # A value, a `<c-if>` or `<c-for>` (whose branch or rows are data), a
+        # slot outlet, or any other component. A transparent component that
+        # renders only written markup is also left to Vue by a render, but
+        # its template is not known here, so it counts as Citry's.
+        return False
+    return True
