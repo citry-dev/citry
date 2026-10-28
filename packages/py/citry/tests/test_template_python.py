@@ -1229,11 +1229,12 @@ def test_static_input_queries_cover_quoted_component_attributes() -> None:
     queries = template_static_input_queries(parse_template(source))
 
     # Each source is the quoted text, a Python literal of the string the
-    # child receives. A value-less, empty, unquoted, or backslash value and
-    # an HTML element's attribute are left out.
+    # child receives, an empty one included. A value-less, unquoted, or
+    # backslash value and an HTML element's attribute are left out.
     assert [(query.source, query.attribute_target) for query in queries] == [
         ('"todo"', ("c-Card", "lane")),
         ("'a&amp;b'", ("c-Card", "mark")),
+        ('""', ("c-Card", "empty")),
         ('"5"', ("c-Inner", "n")),
     ]
     assert all(source.encode()[query.start_index : query.end_index].decode() == query.source for query in queries)

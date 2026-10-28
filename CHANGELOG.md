@@ -206,6 +206,23 @@
   too deep, and `citry check` reports it as `citry.parse.too-deep`; move
   the inner part into its own component. Plain elements nested more than
   512 deep used to render.
+- **Breaking:** a written empty value on a component tag, such as
+  `<c-Avatar alt="" />`, now passes `""` instead of `True`, so a `str`
+  input accepts it. To pass `True` to a `bool` input, write the bare
+  attribute, as in `<c-Grid compact />`; `compact=""` now fails with a
+  `TypeError` that says so. The same holds for data passed to a fill
+  (`<c-slot x="" />` gives the fill `""`), and `<c-cache enabled="">` and
+  `<c-i18n client="">` now raise too, with the same advice to write the
+  bare attribute. HTML elements are unchanged,
+  and so is the tag form `<c-if cond="">`. A component that forwards its
+  inputs to an element with `c-bind` now writes `alt=""` there instead
+  of a bare `alt`, which HTML reads the same way.
+
+  ```citry-html
+  <c-Avatar alt="" />      <!-- before: True; now "" -->
+  <c-Grid compact="" />    <!-- now "": a bool input rejects it -->
+  <c-Grid compact />       <!-- True, as before -->
+  ```
 - Output that an `on_render` hook passes to another component, as in
   `return Frame(body=result)`, or that an `on_component_rendered` hook
   passes on as `ctx.render`, no longer carries the component's own

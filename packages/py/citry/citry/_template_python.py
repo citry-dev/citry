@@ -271,6 +271,11 @@ def template_python_queries(
     return tuple(queries)
 
 
+# Built-in tags whose attributes are not a component's inputs, so an empty
+# value there is not a string some input receives.
+_NOT_INPUT_TAGS = frozenset({"c-slot", "c-fill", "c-element"})
+
+
 def template_static_input_queries(
     template: Any,
     *,
@@ -286,8 +291,11 @@ def template_static_input_queries(
     text as written, without decoding character references, so the literal
     matches it exactly. A value with a backslash, which Python would read
     as an escape, or with a line break, which a quoted literal cannot hold,
-    is left out. An unquoted value is left out too, and so is an empty or
-    missing one, which passes ``True`` rather than a string.
+    is left out. An unquoted value is left out too, and so is a missing one
+    (a bare attribute passes ``True``). An empty value such as ``alt=""``
+    passes ``""`` to a component and is reported like any other string, but
+    not on ``<c-slot>``, ``<c-fill>``, or ``<c-element>``, whose attributes
+    are not a component's inputs.
     """
     queries: list[TemplatePythonQuery] = []
     run(_collect_static_input_queries(template, queries, base_index=0, parse_nested=parse_nested))
@@ -327,7 +335,7 @@ def _collect_static_input_queries(
                 or value is None
                 or attr.quote_char not in {'"', "'"}
                 or attr.inner_value is None
-                or not attr.inner_value.content
+                or (not attr.inner_value.content and tag_name.lower() in _NOT_INPUT_TAGS)
                 or "\\" in value.content
                 or "\n" in value.content
                 or "\r" in value.content

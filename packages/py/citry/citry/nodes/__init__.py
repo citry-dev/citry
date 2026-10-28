@@ -1142,8 +1142,9 @@ class ElementAttrsNode(Node):
         self._resolved_keys = tuple(attr.key.removeprefix("c-") for attr in attrs)
         # A `class` or `style` written empty (`<p class c-class="c">`) joins
         # the class/style merge as an empty marker rather than the boolean
-        # `True` the parser gives it, which the merge rejects. Only a written
-        # attribute qualifies, so a `True` from Python data still raises.
+        # `True` the compiler gives it on an HTML element, which the merge
+        # rejects. Only a written attribute qualifies, so a `True` from
+        # Python data still raises.
         self._template_empty = tuple(
             type(attr) is StaticHtmlAttr and template_attr_value(attr.key, attr.value) is TEMPLATE_EMPTY_VALUE
             for attr in attrs

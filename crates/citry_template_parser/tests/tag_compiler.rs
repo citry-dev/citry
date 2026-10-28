@@ -801,4 +801,119 @@ mod tests {
             r#"[ComponentNode(source, (0, 19,), (StaticHtmlAttr(source, (7, 16,), """key""", """a\rb""", ()),), [], (), """foo""", False),]"#,
         );
     }
+
+    // =============================================================================
+    // EMPTY ATTRIBUTE VALUES
+    // A bare key is True everywhere. A written empty value (key="") is a string on
+    // component inputs and `<c-slot>` data, and True on HTML elements,
+    // `<c-fill>`, the slot's own `name`/`required`, and c-if.
+    // =============================================================================
+
+    #[test]
+    fn test_component_empty_value_compiles_to_string() {
+        // A written empty value on a component is a string; only a bare key is True.
+        assert_compile(
+            r#"<c-x alt="" />"#,
+            r#"[ComponentNode(source, (0, 14,), (StaticHtmlAttr(source, (5, 11,), """alt""", """""", ()),), [], (), """x""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_component_bare_attr_compiles_to_true() {
+        // A bare key on a component stays True.
+        assert_compile(
+            r#"<c-x alt />"#,
+            r#"[ComponentNode(source, (0, 11,), (StaticHtmlAttr(source, (5, 8,), """alt""", True, ()),), [], (), """x""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_component_single_quoted_empty_value_compiles_to_string() {
+        // Single quotes make no difference.
+        assert_compile(
+            r#"<c-x alt='' />"#,
+            r#"[ComponentNode(source, (0, 14,), (StaticHtmlAttr(source, (5, 11,), """alt""", """""", ()),), [], (), """x""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_slot_empty_data_compiles_to_string() {
+        // Slot data reaches the fill as written, so an empty value stays a
+        // string.
+        assert_compile(
+            r#"<c-slot name="a" x="" />"#,
+            r#"[SlotNode(source, (0, 24,), (StaticHtmlAttr(source, (8, 16,), """name""", """a""", ()), StaticHtmlAttr(source, (17, 21,), """x""", """""", ()),), [], (), ()),]"#,
+        );
+    }
+
+    #[test]
+    fn test_fill_empty_value_keeps_true() {
+        // Every c-fill attribute configures the fill rather than passing
+        // data, so a written empty value keeps True.
+        assert_compile(
+            r#"<c-x><c-fill name="f" fallback=""></c-fill></c-x>"#,
+            r#"[ComponentNode(source, (0, 49,), (), [FillNode(source, (5, 43,), (StaticHtmlAttr(source, (13, 21,), """name""", """f""", ()), StaticHtmlAttr(source, (22, 33,), """fallback""", True, ()),), [], (), ("",)),], (), """x""", True),]"#,
+        );
+    }
+
+    #[test]
+    fn test_slot_required_empty_value_keeps_true() {
+        // `required` configures the slot, so required="" still makes it
+        // required; only the slot's data keeps an empty string.
+        assert_compile(
+            r#"<c-slot name="a" required="" x="" />"#,
+            r#"[SlotNode(source, (0, 36,), (StaticHtmlAttr(source, (8, 16,), """name""", """a""", ()), StaticHtmlAttr(source, (17, 28,), """required""", True, ()), StaticHtmlAttr(source, (29, 33,), """x""", """""", ()),), [], (), ()),]"#,
+        );
+    }
+
+    #[test]
+    fn test_html_element_empty_value_stays_bare() {
+        // On an all-static HTML element, alt="" is written as a bare key.
+        assert_compile(r#"<img alt="">"#, r#"["""<img alt/>""",]"#);
+    }
+
+    #[test]
+    fn test_structured_html_element_empty_value_stays_true() {
+        // On an HTML element with dynamic attributes, class="" stays True.
+        assert_compile(
+            r#"<div class="" c-title="t"></div>"#,
+            r#"["""<div""", ElementAttrsNode(source, (0, 26,), (StaticHtmlAttr(source, (5, 13,), """class""", True, ()), ExprHtmlAttr(source, (14, 25,), """c-title""", """t""", ("t",)),), ("t",)), """></div>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_dynamic_element_empty_value_stays_true() {
+        // A dynamic c-element renders its attributes onto an HTML element, so an empty value stays True.
+        assert_compile(
+            r#"<c-element c-is="t" class=""></c-element>"#,
+            r#"[ComponentNode(source, (0, 41,), (ExprHtmlAttr(source, (11, 19,), """c-is""", """t""", ("t",)), StaticHtmlAttr(source, (20, 28,), """class""", True, ()),), [], ("t",), """element""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_if_empty_cond_stays_true() {
+        // c-if cond="" keeps its documented True.
+        assert_compile(
+            r#"<c-if cond="">a</c-if>"#,
+            r#"[IfNode(source, (((0, 22,), (StaticHtmlAttr(source, (6, 13,), """cond""", True, ()),), ["""a""",], (),),), ()),]"#,
+        );
+    }
+
+    #[test]
+    fn test_c_component_empty_value_compiles_to_string() {
+        // c-component forwards inputs, so alt="" is a string.
+        assert_compile(
+            r#"<c-component is="x" alt="" />"#,
+            r#"[ComponentNode(source, (0, 29,), (StaticHtmlAttr(source, (20, 26,), """alt""", """""", ()),), [], (), """x""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_c_provide_empty_value_compiles_to_string() {
+        // c-provide values follow the component rule.
+        assert_compile(
+            r#"<c-provide key="k" v=""></c-provide>"#,
+            r#"[ComponentNode(source, (0, 36,), (StaticHtmlAttr(source, (11, 18,), """key""", """k""", ()), StaticHtmlAttr(source, (19, 23,), """v""", """""", ()),), [], (), """provide""", False),]"#,
+        );
+    }
 }

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** `compile_template()` now compiles a written empty value,
+  such as `alt=""`, to `""` instead of `True` on a component tag and on
+  `<c-slot>` data. A bare attribute such as `compact` still compiles to
+  `True`. HTML elements, `<c-element>`, `<c-if cond="">`, and the
+  attributes that configure `<c-slot>` and `<c-fill>` (such as `name`,
+  `required`, and `fallback`) are unchanged.
+
 ### Fixed
 
 - `template_formatter.format_template()` no longer adds a line break where

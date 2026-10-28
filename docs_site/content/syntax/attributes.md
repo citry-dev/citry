@@ -97,7 +97,10 @@ including when the state is false:
 
 On a component tag, each attribute is one of the
 [component's inputs](/concepts/inputs-and-validation/). A plain attribute
-passes a string. A `c-` attribute passes the Python value with its type:
+passes a string, even an empty one: `alt=""` passes `""`. A bare
+attribute, such as `compact`, passes `True`, so a `bool` input needs the
+bare form: `compact=""` passes `""` and fails with a `TypeError`. A `c-`
+attribute passes the Python value with its type:
 
 ```citry-html
 <c-UserBadge

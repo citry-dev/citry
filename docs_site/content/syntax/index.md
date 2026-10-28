@@ -97,12 +97,15 @@ itself:
 
 `<span />` renders as `<span></span>`.
 
-A value-less attribute on an HTML element stays a bare attribute. On a
-component tag, it passes the Python value `True`:
+An attribute with no value, such as `required`, is a bare attribute. On
+an HTML element it stays bare. On a component tag it passes the Python
+value `True`. A written value always passes a string, even an empty one,
+so `alt=""` passes `""`:
 
 ```citry-html
 <input required>
 <c-Button compact />
+<c-Avatar alt="" />
 ```
 
 Attribute values may use double quotes, single quotes, or no quotes. Quote

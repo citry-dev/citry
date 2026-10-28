@@ -131,8 +131,9 @@ Also relevant in `packages/py/citry/citry/`:
   one escaping is safe in body and attribute position) and `Markup`
   with `__html__` passthrough for body text. Attribute values use
   `escape_attribute_value` instead, which escapes `Markup` too (section 3.1).
-- The static-attr path already normalizes `key=""` to the bare boolean form
-  at compile time (`compiler.rs:456-460`), and `StaticHtmlAttr.resolve`
+- The static-attr path already normalizes `key=""` on an HTML element to the
+  bare boolean form at compile time (`build_attr_struct` in `compiler.rs`;
+  component inputs get `""` instead, see #133), and `StaticHtmlAttr.resolve`
   returns `True` for value-less attributes (`nodes/__init__.py:405`). The
   runtime semantics below extend that same convention to dynamic values.
 - The Const pass marks `StaticHtmlAttr` and variable-free `ExprHtmlAttr`
@@ -353,9 +354,9 @@ Resolution per key:
   normalizes per section 3 at the end. Order is contribution order, so later
   entries override (style) or can disable (class dict) earlier ones.
 - a `class` or `style` written empty in the template (`<p class>` or
-  `<p style="">`, which compiles to `True`): it adds nothing when Python also
-  sets the attribute through `c-class`, `c-style`, or a `c-bind` key, even to
-  an empty value or `None`, so the element renders as if only the Python
+  `<p style="">` on an HTML element, which compiles to `True`): it adds
+  nothing when Python also sets the attribute through `c-class`,
+  `c-style`, or a `c-bind` key, even to an empty value or `None`, so the element renders as if only the Python
   value were there. When nothing from Python sets it, the element keeps the
   empty attribute as written. The renderer carries it through the merge as a
   private empty marker (`attrs.TEMPLATE_EMPTY_VALUE`), because a `True` from
@@ -642,7 +643,8 @@ Phases 1 and 2 unblock the benchmark small-scenario port
   `ElementAttrsNode`s fold; mixed ones fold their static members into the
   surrounding parts as today. No new pass needed.
 - **HTML serialization rules** (CLAUDE.md gotchas): the `key=""` -> boolean
-  normalization and void-element handling are unchanged; the new node emits
+  normalization (for HTML elements only; a component input gets `""`) and
+  void-element handling are unchanged; the new node emits
   the same conventions (bare key for `True`).
 - **`data-cid` injection** (`citry_html_transform`): operates on the
   serialized HTML string downstream; unaffected.

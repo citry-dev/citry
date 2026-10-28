@@ -2395,7 +2395,7 @@ class ExtensionManager:
         # Hooks may change the dict in place, so keep the names and values
         # they were given. Any Vue-named key in it was written in the template,
         # because c-bind and c-* keys with those names already failed.
-        # A written empty class or style reaches hooks as the parser's True,
+        # A written empty class or style reaches hooks as the compiler's True,
         # never as the renderer's private marker (hide_template_empty_values).
         hidden = hide_template_empty_values(attrs)
         before = dict(attrs)
