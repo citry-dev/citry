@@ -791,6 +791,71 @@ def assemble_typed_render(
             f"{{{{ title }}}}, works from any component."
         )
 
+    def describe_fallback_in_passed_content(
+        containing_slot: DirectProjectionRender,
+        caller_owner: str,
+        holder_owner: str,
+        current_owner: str,
+        part: DirectProjectionRender,
+    ) -> str:
+        """Explain a fallback a caller shows whose `<c-slot>` its receiver placed in content for another component."""
+        # Prefer the transparent component that wrote the fill, as the author
+        # knows it, over the component whose template it lands in.
+        caller = class_name_of(containing_slot.fill_source.lexical_render_id, caller_owner)
+        holder = class_name_of(part.fill_source.lexical_render_id, holder_owner)
+        # The component that wrote the `<c-slot>` into the passed content.
+        # It is usually the holder, but a transparent component in the
+        # caller's fill that passes its own slot on is copied into the
+        # holder's place, and the author knows it by its own name.
+        passer = class_name_of(part.receiver_render_id, holder_owner)
+        # The component the content is passed to is the first one below the
+        # holder on the way to the template being built.
+        passed_to = current_owner
+        steps = 0
+        while occurrence_parents.get(passed_to) not in (holder_owner, None) and steps <= len(occurrence_parents):
+            passed_to = cast("str", occurrence_parents[passed_to])
+            steps += 1
+        middle = class_name_of(None, passed_to)
+        return (
+            f"In a component that uses Vue, {caller} shows the fallback of {holder}'s"
+            f" '{part.fill_source.public_name}' slot through '<c-fill fallback=...>', but {passer} puts that"
+            f" '<c-slot>' inside the content it passes to {middle}, so Citry cannot place the fallback in"
+            f" {caller}'s template. Write the fallback content in {caller}'s fill itself, leave the slot unfilled"
+            f" so {holder} shows its own fallback, or move the '<c-slot>' out of the content {passer} passes to"
+            f" {middle}."
+        )
+
+    def describe_fallback_in_other_component(
+        containing_slot: DirectProjectionRender,
+        holder_owner: str,
+        part: DirectProjectionRender,
+    ) -> str:
+        """Explain a fallback a caller shows inside the slot of a component that is not transparent."""
+        caller_owner = _stable_owner(containing_slot.fill_source.lexical_render_id, render_to_occurrence)
+        caller = (
+            "A component"
+            if caller_owner is None
+            else class_name_of(containing_slot.fill_source.lexical_render_id, caller_owner)
+        )
+        # Prefer the component that wrote the fallback, as the author knows
+        # it, even when it is transparent and lands in another template.
+        holder = class_name_of(part.fill_source.lexical_render_id, holder_owner)
+        # The handle's receiver is the innermost component around it that is
+        # not transparent, because a transparent one is copied into its
+        # parent's template. Name that one: the fallback must leave it first,
+        # and each outer component gets its own error after that.
+        wrapper_owner = _stable_owner(part.receiver_render_id, render_to_occurrence)
+        wrapper = "another component" if wrapper_owner is None else class_name_of(None, wrapper_owner)
+        slot = part.fill_source.public_name
+        return (
+            f"In a component that uses Vue, {caller} shows the fallback of {holder}'s '{slot}' slot"
+            f" through '<c-fill fallback=...>', but it puts that fallback inside {wrapper}'s slot. Citry"
+            f" can show {holder}'s fallback inside another component only when that component is transparent. Use an"
+            f" HTML element in place of {wrapper}, or mark {wrapper} with 'transparent = True' if it only"
+            f" wraps content. You can also write the fallback content in {caller}'s fill itself, or leave the"
+            f" slot unfilled so {holder} shows its own fallback."
+        )
+
     def describe_caller_fallback(fallback: _CallerFallback, what: str) -> str:
         receiver = class_name_of(None, fallback.receiver_owner)
         caller = class_name_of(None, fallback.caller_owner)
@@ -1929,6 +1994,10 @@ def assemble_typed_render(
                     lexical_owner = _stable_owner(fill_source.lexical_render_id, render_to_occurrence)
                     if lexical_owner is None:
                         raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
+                    # The occurrence of the component that wrote the fill,
+                    # kept before a transparent author is replaced below by
+                    # the component whose template it is copied into.
+                    fill_author_owner = lexical_owner
                     # Vue compiles a fill in its author's render function and
                     # reads the fill's values from that component's
                     # $citryPrepared. A transparent author has no render
@@ -1972,11 +2041,37 @@ def assemble_typed_render(
                         except UnsupportedPreparedView:
                             flattened_transparent_receiver = True
                             copied_outside_author = True
+                    if (
+                        fill_source.kind == "fallback"
+                        and containing_slot is not None
+                        and not nested_template
+                        and not flattened_transparent_receiver
+                        and fill_author_owner != receiver_owner
+                    ):
+                        # The fallback handle (the Slot that `fallback="..."`
+                        # names, printed as `{{ fallback }}`) normally lands in
+                        # the outlet of the component that wrote the fallback.
+                        # Printed inside another component's slot, it lands
+                        # in that component's outlet instead, and that
+                        # component's template has no place for content
+                        # another component wrote as its fallback.
+                        raise UnsupportedPreparedView(
+                            describe_fallback_in_other_component(containing_slot, fill_author_owner, part)
+                        )
                     if not flattened_transparent_receiver:
                         # A transparent component's own outlet is copied in
                         # place, but any other outlet records which content
                         # it shows in a receiver's data.
-                        refuse_in_caller_fallback("a '<c-slot>' outlet")
+                        if nested_template:
+                            what = "a template value that it prints (a c- attribute written as a template)"
+                        elif part.from_outlet:
+                            what = "a '<c-slot>' outlet"
+                        else:
+                            # The fill's own slot name is not kept when a
+                            # render is replayed from the cache, so the label
+                            # names the kind of content only.
+                            what = "a Slot value that it prints, such as one taken from slots"
+                        refuse_in_caller_fallback(what)
                     # Calls inside this body are counted and keyed in the
                     # lexical owner's namespace, so two receivers that share
                     # one slot name must still give their bodies different
@@ -2127,6 +2222,26 @@ def assemble_typed_render(
                         containing_lexical = _stable_owner(
                             containing_slot.fill_source.lexical_render_id, render_to_occurrence
                         )
+                        if (
+                            containing_lexical is not None
+                            and containing_lexical != receiver_owner
+                            and part.fill_source.kind == "fallback"
+                            and _stable_owner(containing_slot.receiver_render_id, render_to_occurrence)
+                            == receiver_owner
+                        ):
+                            # A caller's `<c-fill fallback=...>` (the fill
+                            # around this fallback handle is the caller's
+                            # fill to this same receiver) shows the fallback
+                            # of a `<c-slot>` that the receiver put inside
+                            # content it passes to another component. That
+                            # `<c-slot>` sits in content the other component
+                            # shows through its own slot, so the caller's
+                            # template cannot hold the fallback.
+                            raise UnsupportedPreparedView(
+                                describe_fallback_in_passed_content(
+                                    containing_slot, containing_lexical, receiver_owner, occurrence_id, part
+                                )
+                            )
                         if containing_lexical != receiver_owner:
                             raise UnsupportedPreparedView(
                                 "direct slot result moved across unrelated receivers: "

@@ -3097,6 +3097,7 @@ class SlotNode(Node):
             source=self.source,
             span=self.position,
             vue_props=self.vue_props,
+            from_outlet=True,
         )
         with direct_execution_scope(execution), add_slot_to_error_message(type(component).__name__, name):
             part = _render_slot_value(slot_used, data, body_slot if fill is not None else None, context)
@@ -3211,6 +3212,7 @@ class SlotNode(Node):
             source=self.source,
             span=self.position,
             vue_props=self.vue_props,
+            from_outlet=True,
         )
 
         parts: list[RenderPart] = []

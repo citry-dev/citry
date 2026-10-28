@@ -24,6 +24,10 @@ on:
       - "tools/dom-members/**"
       - ".github/workflows/repo--dom-members.yml"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "crates/citry_vue_compiler/src/dom_members.rs"
       - "tools/dom-members/**"
@@ -39,6 +43,7 @@ concurrency:
 
 jobs:
   browsers:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

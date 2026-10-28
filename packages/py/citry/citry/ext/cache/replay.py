@@ -276,6 +276,8 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
                         origin=fill.origin,
                         vue_props=part.vue_props,
                         fill_vue_pattern=fill.vue_pattern,
+                        from_outlet=part.from_outlet,
+                        fill_public_name=None if fill.public_name == part.public_name else fill.public_name,
                     )
                 )
             elif isinstance(part, DirectCallRunRender):
@@ -632,7 +634,7 @@ def _replay_boundary_artifact(
                     session=replay_session,
                     lexical_render_id=lexical_render_id,
                     kind=item.kind,
-                    public_name=item.public_name,
+                    public_name=item.public_name if item.fill_public_name is None else item.fill_public_name,
                     source=item.fill_source,
                     span=item.span,
                     origin=item.origin,
@@ -650,6 +652,7 @@ def _replay_boundary_artifact(
                     item.span,
                     consumed=True,
                     vue_props=item.vue_props,
+                    from_outlet=item.from_outlet,
                 )
                 executions[item.execution] = execution
                 selected = yield Call(build, item.frame)
@@ -679,6 +682,7 @@ def _replay_boundary_artifact(
                             span=item.span,
                             # Only a slot outlet passes Vue slot props.
                             vue_props=item.vue_props,
+                            from_outlet=item.from_outlet,
                         )
                     )
             elif type(item) is ArtifactDirectCallRunPart:

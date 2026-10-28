@@ -29,6 +29,10 @@ on:
     branches:
       - "main"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "uv.lock"
       - "pyproject.toml"
@@ -56,6 +60,7 @@ permissions:
 
 jobs:
   python-audit:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -85,6 +90,7 @@ jobs:
           fi
 
   rust-audit:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     env:
       # cargo-deny only reads the dependency graph (`cargo metadata`), which
@@ -107,6 +113,7 @@ jobs:
         run: cargo deny check advisories
 
   js-audit:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

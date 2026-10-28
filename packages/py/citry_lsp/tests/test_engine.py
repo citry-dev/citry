@@ -1865,6 +1865,401 @@ def test_citry_event_binding_hover_explains_the_dom_event_and_links_to_docs():
     assert "Component.State.query" in state_result.contents.value
 
 
+_VUE_OWN_MODIFIERS = {
+    ".stop",
+    ".prevent",
+    ".self",
+    ".capture",
+    ".once",
+    ".passive",
+    ".ctrl",
+    ".shift",
+    ".alt",
+    ".meta",
+    ".exact",
+}
+_MOUSE_BUTTON_MODIFIERS = {".left", ".right", ".middle"}
+# Modifiers that read held keys or the mouse button, which `input` and
+# `scroll` events do not carry.
+_INPUT_STATE_MODIFIERS = {".ctrl", ".shift", ".alt", ".meta", ".exact"} | _MOUSE_BUTTON_MODIFIERS
+_KEY_MODIFIERS = {".enter", ".tab", ".delete", ".esc", ".escape", ".space", ".up", ".down", ".left", ".right"}
+_CITRY_LISTENER_MODIFIERS = {".outside", ".window", ".document", ".debounce", ".throttle"}
+_TIMING_DURATIONS = {".100ms", ".250ms", ".300ms", ".500ms", ".1s"}
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "expected"),
+    [
+        ("<div @click.></div>", "@click.", _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS),
+        (
+            '<div v-on:click.="x"></div>',
+            "v-on:click.",
+            _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS,
+        ),
+        # A keyboard event takes key names, and Vue ignores `.middle` there.
+        ("<div @keydown.></div>", "@keydown.", _VUE_OWN_MODIFIERS | _KEY_MODIFIERS | _CITRY_LISTENER_MODIFIERS),
+        # Only the browser knows a dynamic event, so no key names are
+        # offered, and Vue reads `.left` and `.right` there as keys too.
+        # Citry's modifiers need the event name written out.
+        ("<div @[name].></div>", "@[name].", _VUE_OWN_MODIFIERS | {".middle"}),
+        (
+            "<div @input.debounce.></div>",
+            "debounce.",
+            (_VUE_OWN_MODIFIERS | _CITRY_LISTENER_MODIFIERS | _TIMING_DURATIONS)
+            - {".debounce"}
+            - _INPUT_STATE_MODIFIERS,
+        ),
+        # An `input` event carries no held keys or mouse button.
+        ("<input @input.>", "@input.", (_VUE_OWN_MODIFIERS | _CITRY_LISTENER_MODIFIERS) - _INPUT_STATE_MODIFIERS),
+        ("<div @input.debounce.3></div>", "debounce.3", {".300ms"}),
+        (
+            "<div @click.outside.></div>",
+            "outside.",
+            (_VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | {".debounce", ".throttle"})
+            - {".self", ".capture", ".once"},
+        ),
+        (
+            "<div @click.window.></div>",
+            "window.",
+            _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | {".debounce", ".throttle"},
+        ),
+        (
+            "<div @click.self.></div>",
+            "self.",
+            (_VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS) - {".self", ".outside"},
+        ),
+        (
+            "<div @scroll.passive.></div>",
+            "passive.",
+            (_VUE_OWN_MODIFIERS | _CITRY_LISTENER_MODIFIERS) - {".passive", ".prevent"} - _INPUT_STATE_MODIFIERS,
+        ),
+        ("<div @click.o></div>", "@click.o", {".once", ".outside"}),
+        # `<c-element>` renders a plain HTML element.
+        (
+            '<c-element is="div" @click.></c-element>',
+            "@click.",
+            _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS,
+        ),
+    ],
+)
+def test_vue_listener_modifier_completion_offers_only_modifiers_the_parser_accepts(source, marker, expected):
+    project = _syntax_state()
+    cursor = _position(source, marker, len(marker))
+
+    items = completion_items(_document(source, project), cursor, project)
+
+    assert {item.label for item in items} == expected
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        '<div @click.{}="close"></div>',
+        '<div v-on:keydown.{}="close"></div>',
+        '<div @[name].{}="close"></div>',
+        '<div @click.outside.{}="close"></div>',
+        '<div @keydown.escape.window.{}="close"></div>',
+        '<input @input.debounce.{}="search">',
+        '<div @scroll.passive.{}="track"></div>',
+        '<c-element is="div" @click.{}="close" />',
+        '<c-card @click.{}="close" />',
+        '<template @click.{}="close"></template>',
+    ],
+)
+def test_every_offered_vue_listener_modifier_loads(template):
+    project = _syntax_state()
+    head = template.split("{}", 1)[0]
+    unfinished = head + template.split("{}", 1)[1]
+
+    items = completion_items(_document(unfinished, project), _position(unfinished, head, len(head)), project)
+
+    assert items
+    for item in items:
+        # Whatever the list offers, the parser must accept in that place.
+        source = template.format(item.text_edit.new_text)
+        assert _document(source, project).diagnostics == (), source
+
+
+@pytest.mark.parametrize(
+    ("template", "current", "expected"),
+    [
+        # A duration already follows the cursor, so only the two modifiers
+        # it can belong to fit, and a second duration would not.
+        ('<div @click.{}.300ms="close"></div>', "", {".debounce", ".throttle"}),
+        ('<div @click.debounce.{}.300ms="close"></div>', "", {".throttle"}),
+        # The cursor starts the segment, so the item replaces `debounce`.
+        ('<div @click.{}.300ms="close"></div>', "debounce", {".debounce", ".throttle"}),
+    ],
+)
+def test_vue_listener_modifier_completion_before_a_duration(template, current, expected):
+    project = _syntax_state()
+    head = template.split("{}", 1)[0]
+    unfinished = head + current + template.split("{}", 1)[1]
+
+    items = completion_items(_document(unfinished, project), _position(unfinished, head, len(head)), project)
+
+    assert {item.label for item in items} == expected
+    for item in items:
+        source = template.format(item.text_edit.new_text)
+        assert _document(source, project).diagnostics == (), source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "<c-card @click.></c-card>",
+        '<c-component is="card" @click.></c-component>',
+        "<template @click.></template>",
+        "<slot @click.></slot>",
+        "<component @click.></component>",
+        # Vue reads a tag that starts with a capital letter as a component.
+        "<MyThing @click.></MyThing>",
+    ],
+)
+def test_vue_listener_modifier_completion_leaves_citry_modifiers_off_non_elements(source):
+    project = _syntax_state()
+    cursor = _position(source, "@click.", len("@click."))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    # The parser rejects Citry's modifiers here but accepts Vue's own.
+    assert labels == _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS
+
+
+@pytest.mark.parametrize("source", ["<c-slot @click.></c-slot>", '<c-fill name="body" @click.></c-fill>'])
+def test_vue_listener_modifier_completion_is_empty_where_no_listener_fits(source):
+    project = _syntax_state()
+    cursor = _position(source, "@click.", len("@click."))
+
+    assert completion_items(_document(source, project), cursor, project) == []
+
+
+def test_vue_listener_modifier_completion_replaces_only_the_current_segment():
+    project = _syntax_state()
+    source = '<div @input.debounce.30.prevent="search"></div>'
+    cursor = _position(source, ".30", len(".30"))
+
+    items = completion_items(_document(source, project), cursor, project)
+
+    (duration,) = items
+    assert duration.label == ".300ms"
+    assert duration.text_edit is not None
+    assert duration.text_edit.new_text == "300ms"
+    assert duration.text_edit.range == types.Range(
+        _position(source, ".30", 1),
+        _position(source, ".30", len(".30")),
+    )
+    assert "how long `.debounce` waits after the last event" in duration.documentation.value
+
+
+def test_vue_listener_modifier_completion_maps_inline_python_templates():
+    project = _syntax_state()
+    source = (
+        'from citry import Component\nclass Card(Component):\n    template = """<div @click.out="close"></div>"""\n'
+    )
+    cursor = _position(source, ".out", len(".out"))
+
+    items = completion_items(_document(source, project, language_id="python"), cursor, project)
+
+    (outside,) = items
+    assert outside.label == ".outside"
+    assert outside.text_edit.range == types.Range(_position(source, ".out", 1), cursor)
+    assert "https://citry.dev/syntax/vue/#listener-modifiers" in outside.documentation.value
+
+
+def test_citry_binding_modifier_completion_is_unchanged_by_vue_listener_modifiers():
+    project = _syntax_state()
+    source = '<button @c-click.="save"></button>'
+    cursor = _position(source, "@c-click.", len("@c-click."))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert labels == {".prevent", ".stop", ".self", ".once", ".enter", ".escape", ".debounce", ".throttle"}
+
+
+@pytest.mark.parametrize(
+    ("source", "language_id"),
+    [
+        ('<input @input.debounce.300ms="search($event.target.value)">', "citry-html"),
+        ("<c-card c-body=\"<><input @input.debounce.300ms='search'></>\" />", "citry-html"),
+        (
+            "from citry import Component\nclass Card(Component):\n"
+            '    template = """<input @input.debounce.300ms="search">"""\n',
+            "python",
+        ),
+        # Two places to listen make the template invalid, so hover reads the
+        # attribute from the source text instead of the parsed tree.
+        ('<input @input.window.document.debounce.300ms="search">', "citry-html"),
+    ],
+)
+def test_vue_listener_modifier_hover_explains_each_segment(source, language_id):
+    project = _syntax_state()
+    document = _document(source, project, language_id=language_id)
+
+    modifier_hover = hover(document, _position(source, "debounce", 2), project)
+    duration_hover = hover(document, _position(source, "300ms", 2), project)
+
+    assert modifier_hover is not None
+    assert modifier_hover.contents.value.startswith("### `.debounce`")
+    assert "after 250 ms with no new event" in modifier_hover.contents.value
+    assert "https://citry.dev/syntax/vue/#listener-modifiers" in modifier_hover.contents.value
+    assert modifier_hover.range == types.Range(
+        _position(source, ".debounce"),
+        _position(source, ".debounce", len(".debounce")),
+    )
+    assert duration_hover is not None
+    assert duration_hover.contents.value.startswith("### `.300ms`")
+    assert "how long `.debounce` waits after the last event" in duration_hover.contents.value
+    assert duration_hover.range == types.Range(
+        _position(source, ".300ms"),
+        _position(source, ".300ms", len(".300ms")),
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "heading", "fragment"),
+    [
+        ('<div @click.outside="close"></div>', ".outside", "### `.outside`", "starts outside this element"),
+        ('<div @keydown.escape.window="close"></div>', ".window", "### `.window`", "Listen on `window`"),
+        ('<div @click.document="close"></div>', ".document", "### `.document`", "Listen on `document`"),
+        (
+            '<div @scroll.throttle.1s="track"></div>',
+            ".throttle",
+            "### `.throttle`",
+            "drop the events that follow for 250 ms",
+        ),
+        (
+            '<div v-on:scroll.throttle.1s="track"></div>',
+            ".1s",
+            "### `.1s`",
+            "how long `.throttle` drops events after each one it runs",
+        ),
+        ('<form @submit.prevent="save"></form>', ".prevent", "### `.prevent`", "preventDefault()"),
+        ('<div @keydown.left="back"></div>', ".left", "### `.left`", "Arrow Left"),
+        ('<div @click.left="pick"></div>', ".left", "### `.left`", "left mouse button"),
+        ('<div @[name].once="run"></div>', ".once", "### `.once`", "after its first event"),
+    ],
+)
+def test_vue_listener_modifier_hover_covers_vue_and_citry_modifiers(source, marker, heading, fragment):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 1), project)
+
+    assert result is not None
+    assert result.contents.value.startswith(heading)
+    assert fragment in result.contents.value
+    assert result.range == types.Range(_position(source, marker), _position(source, marker, len(marker)))
+
+
+def test_vue_listener_hover_keeps_the_listener_help_for_the_event_and_unknown_keys():
+    project = _syntax_state()
+    source = '<div @keydown.page-down="next"></div>'
+    document = _document(source, project)
+
+    for marker in ("@keydown", ".page-down"):
+        result = hover(document, _position(source, marker, 2), project)
+
+        assert result is not None
+        assert result.contents.value.startswith("### `@keydown.page-down`")
+        assert result.range == types.Range(
+            _position(source, "@keydown"),
+            _position(source, ".page-down", len(".page-down")),
+        )
+
+
+@pytest.mark.parametrize(
+    ("attribute", "message"),
+    [
+        ('@click.outside.window="close"', "combines '.outside' and '.window'"),
+        ('@click.window.document="close"', "combines '.window' and '.document'"),
+        ('@click.outside.self="close"', "combines '.outside' with '.self'"),
+        ('@click.outside.capture="close"', "combines '.outside' with '.capture'"),
+        ('@click.outside.once="close"', "combines '.outside' with '.once'"),
+        ('@wheel.passive.prevent.window="zoom"', "combines '.passive' with '.prevent'"),
+        ('@input.debounce.100ms.debounce.200ms="search"', "repeats '.debounce'"),
+        ('@input.300ms.debounce="search"', "has the time '.300ms' without '.debounce' or '.throttle'"),
+        ('@input.debounce.99999999999999999ms="search"', "longer than JavaScript can hold exactly"),
+        ('@input.debounce.300MS="search"', "gives '.300MS' as a time"),
+        ('@input.throttle.1m="search"', "gives '.1m' as a time"),
+        ('@input.debounce.500="search"', "gives '.500' as a time"),
+        ('@click.Outside="close"', "Write it in lowercase, '.outside'"),
+        ('v-on:click.Window="close"', "Write it in lowercase, '.window'"),
+        ('@keydown.minus="back"', "uses '.minus', which is not a Vue event modifier"),
+        ('@keydown.spacebar="jump"', "Use Vue's '.space' modifier instead."),
+        ('@click.away="close"', "Use Citry's '.outside' modifier instead."),
+        ('@citry-on-0="close"', "uses a name Citry's compiler writes for itself"),
+        ('v-on:citry-on0="close"', "uses a name Citry's compiler writes for itself"),
+        (':onCitryOn0="close"', "uses a name Citry's compiler writes for itself"),
+        ('onCitryOn0="close"', "uses a name Citry's compiler writes for itself"),
+    ],
+)
+def test_vue_listener_modifier_errors_mark_the_attribute(attribute, message):
+    source = f'<div>\n  <p\n    class="note"\n    {attribute}\n  ></p>\n</div>'
+    document = _document(source, _syntax_state())
+
+    (diagnostic,) = document.diagnostics
+    assert diagnostic.code == "citry.parse.syntax"
+    assert message in diagnostic.message
+    # The parser reports the whole attribute, name and value, at its line.
+    assert diagnostic.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "attribute"),
+    [
+        ('<c-card @click.outside="close" />', '@click.outside="close"'),
+        ('<c-component is="card" @click.window="close" />', '@click.window="close"'),
+        ('<template @click.window="close"></template>', '@click.window="close"'),
+        ('<slot @click.window="close"></slot>', '@click.window="close"'),
+        ('<component is="div" @scroll.throttle="track"></component>', '@scroll.throttle="track"'),
+    ],
+)
+def test_vue_listener_modifier_error_on_a_non_element_marks_the_attribute(source, attribute):
+    document = _document(source, _syntax_state())
+
+    (diagnostic,) = document.diagnostics
+    assert "uses a Citry listener modifier, which works only on HTML elements" in diagnostic.message
+    assert diagnostic.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+
+
+def test_vue_listener_modifier_error_maps_into_an_inline_python_template():
+    source = (
+        "from citry import Component\nclass Card(Component):\n"
+        '    template = """\n        <div @click.window.document="close"></div>\n    """\n'
+    )
+    attribute = '@click.window.document="close"'
+    document = _document(source, _syntax_state(), language_id="python")
+
+    (diagnostic,) = document.diagnostics
+    assert "combines '.window' and '.document'" in diagnostic.message
+    assert diagnostic.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<div @click.outside="open = false"></div>',
+        '<div @keydown.escape.window="close"></div>',
+        '<input @input.debounce.300ms="search($event.target.value)">',
+        '<div @scroll.throttle.1s="track"></div>',
+        '<div @input.debounce.100ms.throttle.200ms="search"></div>',
+        '<input @keydown.5.debounce="pick">',
+        '<c-element is="div" @click.outside="close" />',
+    ],
+)
+def test_accepted_vue_listener_modifiers_have_no_diagnostics(source):
+    assert _document(source, _syntax_state()).diagnostics == ()
+
+
 def test_callback_projection_delegates_closed_instance_and_official_vue_types(tmp_path):
     template_source = '<output v-text="title"></output>'
     js_source = """$component({

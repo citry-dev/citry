@@ -241,7 +241,7 @@ def payload_sizes(html: str) -> ClientPayloadSizes:
     document = html.encode("utf8")
     return ClientPayloadSizes(
         graph_raw=len(graph),
-        graph_gzip=len(gzip.compress(graph, mtime=0)),
+        graph_gzip=len(gzip.compress(graph, compresslevel=9, mtime=0)),
         document_raw=len(document),
-        document_gzip=len(gzip.compress(document, mtime=0)),
+        document_gzip=len(gzip.compress(document, compresslevel=9, mtime=0)),
     )

@@ -96,16 +96,18 @@ impl TagItemModel {
 /// A start tag the printer may re-lay out.
 ///
 /// `layout_column` is where the tag begins on its line, which fixes both the
-/// indent of wrapped attributes and the width still available. `adjacent_end_tag`
-/// is set when the end tag sits right beside it, as in `<div></div>`, so the
-/// pair is measured as the one line it occupies.
+/// indent of wrapped attributes and the width still available.
+/// `same_line_tail` is the text after the tag's `>` or `/>` that stays on the
+/// tag's last line whether or not the tag wraps, such as `{{ label }}</span>`
+/// or the end tag of `<div></div>`, so the tag is measured with the line it
+/// ends up on (see `same_line_tail()`).
 #[derive(Clone, Debug)]
 pub(crate) struct StartTagModel {
     pub(crate) span: Span,
     pub(crate) name: Span,
     pub(crate) delimiter: Span,
     pub(crate) items: Vec<TagItemModel>,
-    pub(crate) adjacent_end_tag: Option<Span>,
+    pub(crate) same_line_tail: Span,
     pub(crate) layout_column: usize,
 }
 
@@ -558,6 +560,32 @@ fn visit_template(
     Ok(suppression.terminal_enabled)
 }
 
+/// The text from `start` that stays on the same line as a start tag's `>`.
+///
+/// It runs to the end of the source line, or to the next start tag, which the
+/// formatter measures on its own. Text, expressions, comments and end tags in
+/// between all count, unless they contain `<` followed by a letter, where the
+/// scan stops early. So `<span class="x">{{ label }}</span>` is measured as
+/// the whole line it occupies. Text the formatter later moves to another line,
+/// such as spaces before a block child or a parent end tag, can still be
+/// counted here; the next pass measures the moved text again and corrects the
+/// choice.
+fn same_line_tail(source: &str, start: usize) -> Span {
+    let rest = source.get(start..).unwrap_or_default();
+    let bytes = rest.as_bytes();
+    let end = (0..bytes.len())
+        .find(|&index| {
+            matches!(bytes[index], b'\n' | b'\r')
+                || (bytes[index] == b'<'
+                    && bytes.get(index + 1).is_some_and(u8::is_ascii_alphabetic))
+        })
+        .unwrap_or(bytes.len());
+    Span {
+        start,
+        end: start + end,
+    }
+}
+
 // Each nested element adds a few frames here, and the parser accepts nesting
 // deeper than a small thread's stack can hold, so every level checks that
 // enough stack is left. The walk is pure Rust, so it can run on a stack
@@ -611,14 +639,8 @@ fn visit_node_on_stack(
         None
     };
     if let Some(start_tag_model) = &mut start_tag_model {
-        if let Node::WithBody {
-            start_tag, end_tag, ..
-        } = node
-            && start_tag.token.end_index == end_tag.token.start_index
-        {
-            start_tag_model.adjacent_end_tag =
-                Some(Span::from_token(&end_tag.token).offset(context.base));
-        }
+        start_tag_model.same_line_tail =
+            same_line_tail(context.root_source, start_tag_model.delimiter.end);
         start_tag_model.layout_column = layout.column;
     }
     let start_tag_suppression = scan_start_tag(
@@ -1218,7 +1240,11 @@ fn build_start_tag(
         name: name_span,
         delimiter,
         items,
-        adjacent_end_tag: None,
+        // The walk fills this in once it knows the source around the tag.
+        same_line_tail: Span {
+            start: delimiter.end,
+            end: delimiter.end,
+        },
         layout_column: 0,
     })
 }

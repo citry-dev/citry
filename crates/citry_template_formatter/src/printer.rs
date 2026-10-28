@@ -316,7 +316,13 @@ fn canonical_item(
     }
 }
 
-/// Whether the whole tag still fits within the preferred width.
+/// Whether the tag, with the text that shares its line, fits within the
+/// preferred width.
+///
+/// When the tag alone fits but the text after it does not, wrapping helps only
+/// when the line it creates, the delimiter at the tag's column followed by
+/// that text, fits. Otherwise the tag stays on one line, because wrapping
+/// it cannot shorten the line.
 ///
 /// Measured in characters rather than bytes, so a tag full of non-ASCII text is
 /// judged by how wide it looks rather than how many bytes it takes.
@@ -334,26 +340,23 @@ fn fits_one_line(
         },
     )?;
     let delimiter = source_slice(source, tag.delimiter)?;
-    // An empty element's end tag sits on the same line, so `<div></div>` has to
-    // be measured whole. Ignoring it would keep a tag on one line that then
-    // overflows once the end tag lands beside it.
-    let adjacent_end_tag = tag
-        .adjacent_end_tag
-        .map(|span| source_slice(source, span))
-        .transpose()?
-        .unwrap_or_default();
+    // What follows `>` on the same line, such as `{{ label }}</span>` or an
+    // empty element's end tag, already shares the tag's line, so leaving it
+    // out would keep the tag on one line even when the whole line is too long.
+    let tail_width = source_slice(source, tag.same_line_tail)?.chars().count();
     let item_width = item_sources
         .iter()
         .map(|item| item.chars().count())
         .sum::<usize>();
     let spaces = usize::from(!item_sources.is_empty()) * item_sources.len();
-    let width = line_prefix_width
-        + tag_head.chars().count()
-        + item_width
-        + spaces
-        + delimiter.chars().count()
-        + adjacent_end_tag.chars().count();
-    Ok(width <= PREFERRED_WIDTH)
+    let delimiter_width = delimiter.chars().count();
+    let tag_width =
+        line_prefix_width + tag_head.chars().count() + item_width + spaces + delimiter_width;
+    if tag_width + tail_width <= PREFERRED_WIDTH {
+        return Ok(true);
+    }
+    let wrapped_last_line = tag.layout_column + delimiter_width + tail_width;
+    Ok(tag_width <= PREFERRED_WIDTH && wrapped_last_line > PREFERRED_WIDTH)
 }
 
 /// Record an edit, unless it would change nothing or reach protected bytes.
