@@ -1268,9 +1268,13 @@ class CMenu(LibraryComponent):
             // stepping out of a shadow root. If that box keeps a fixed size
             // while only an inline wrapper inside it hides the trigger, the
             // episode lasts until the trigger next opens.
+            // TypeScript types a shadow root's host as `Element`, so `box` is typed that wide.
+            /** @type {Element} */
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
-              const next = box.parentElement ?? box.getRootNode().host;
+              // Step out of a shadow root to its host; a document has no host.
+              const boxRoot = box.getRootNode();
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
               if (!next) {
                 break;
               }

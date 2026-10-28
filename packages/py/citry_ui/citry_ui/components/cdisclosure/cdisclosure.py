@@ -762,7 +762,13 @@ class CDisclosure(LibraryComponent):
         inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
         onServerRender: ({component}) => {
           if (!anchoredLayerRuntimeCompatible) return;
-          const root = component.$el;
+          // The disclosure keeps its browser-side state on its root element, so a
+          // later server render that reruns this callback on the same element restores it.
+          /** @typedef {{logicalOpen?: boolean, baselineOpen?: boolean, serverFingerprint?: string | null}}
+           *   DisclosureRuntime */
+          const root = /** @type {HTMLDivElement & {__citryUiDisclosureRuntime?: DisclosureRuntime}} */ (
+            component.$el
+          );
           const data = component;
           const defaults = data.serverDefaults;
           const props = component.$props;

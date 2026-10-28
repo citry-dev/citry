@@ -841,7 +841,7 @@ class CMultiSelect(LibraryComponent):
           // however that happens, which a ResizeObserver notices; it watches
           // only while an episode lasts.
           let shownWatch=null;
-          const startBlockedEpisode=()=>{invalidEpisodes.add('blocked-open');if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(trigger.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;invalidEpisodes.delete('blocked-open');});let box=trigger;while(/^(inline|contents)/.test(getComputedStyle(box).display)){const next=box.parentElement??box.getRootNode().host;if(!next)break;box=next;}shownWatch.observe(box);};
+          const startBlockedEpisode=()=>{invalidEpisodes.add('blocked-open');if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(trigger.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;invalidEpisodes.delete('blocked-open');});let box=/** @type {Element} */(trigger);while(/^(inline|contents)/.test(getComputedStyle(box).display)){const boxRoot=box.getRootNode();const next=box.parentElement??(boxRoot instanceof ShadowRoot?boxRoot.host:null);if(!next)break;box=next;}shownWatch.observe(box);};
           let logicalOpen=false, highlightedValue=prior?.highlightedValue??null;
           let controlledValue=false, controlledOpen=false, clientValue, clientOpen;
           let onValueChange=null,onOpenChange=null,nativeInvalid=false,active=true,generation=0;
