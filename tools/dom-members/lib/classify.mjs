@@ -9,7 +9,13 @@
 // - Unknown: anything else, or any doubt. The server declines such a name.
 
 import { INTERFACES_WITHOUT_TAG } from "./data.mjs";
-import { PRESENCE_ONLY_BOOLEANS, NOT_MIRRORING, PROSE_MIRRORING, SUPPORTED_AT_FLOOR } from "./reviewed.mjs";
+import {
+  NOT_MIRRORING,
+  PRESENCE_ONLY_BOOLEANS,
+  PROSE_MIRRORING,
+  SUPPORTED_AT_FLOOR,
+  UNRECORDED_MEMBERS,
+} from "./reviewed.mjs";
 
 /**
  * The oldest browser versions Citry supports. The client already needs them,
@@ -37,12 +43,22 @@ export function isTableName(name) {
 export function classify(data) {
   assertAllClassified(data);
   const base = answersFor(data, UNKNOWN_ELEMENT);
+  // A name some browser has that no data records cannot be predicted, so
+  // it is Unknown on BASE and, below, on every element.
+  for (const name of UNRECORDED_MEMBERS) {
+    base[name] = "Unknown";
+  }
   const elements = {};
   for (const [tag, name] of [...data.elements].sort(([a], [b]) => byteOrder(a, b))) {
     if (ALL_UNKNOWN_TAGS.includes(tag)) {
       continue;
     }
     let answers = answersFor(data, name);
+    // Without this, the element's own chain would answer WritesText for the
+    // name and the comparison below would write that over BASE's Unknown.
+    for (const unrecorded of UNRECORDED_MEMBERS) {
+      answers[unrecorded] = "Unknown";
+    }
     // A browser at the floor that lacks this element's interface gives the
     // tag the unknown-element chain, so a name has to agree under both,
     // unless the attribute is listed in PRESENCE_ONLY_BOOLEANS.

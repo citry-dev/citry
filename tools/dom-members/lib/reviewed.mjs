@@ -1,6 +1,8 @@
-// Reviewed decisions for settable lowercase string attributes whose IDL
+// Reviewed decisions the generator cannot make from the IDL and browser data.
+// The first two lists cover settable lowercase string attributes whose IDL
 // carries no reflection marker. Each entry is `Interface.member`, and the
-// generator refuses to run while an element's member is on neither list.
+// generator refuses to run while such a member is on neither list. The later
+// lists each explain their own case.
 //
 // A member mirrors when setting it to a string leaves that same string in the
 // content attribute of the same name. The browser test checks each lowercase
@@ -120,3 +122,16 @@ export const PRESENCE_ONLY_BOOLEANS = new Set([
   "HTMLElement.inert",
   "HTMLElement.autofocus",
 ]);
+
+/**
+ * Names a browser build exposes on every HTML element although no IDL or
+ * browser data records them, so the generator cannot know them. Each is
+ * Unknown everywhere, so the server leaves an element that uses one to the
+ * browser, and the browser test does not check them.
+ *
+ * - `cue` and `cuebackground`: the WebKit build Playwright 1.64.1 installs
+ *   (WebKit 27.2) has them as boolean properties on every element. Their
+ *   names suggest WebKit's work on WebVTT cues; whether a shipping Safari
+ *   has them is not recorded anywhere the generator reads.
+ */
+export const UNRECORDED_MEMBERS = new Set(["cue", "cuebackground"]);

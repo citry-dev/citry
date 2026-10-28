@@ -337,9 +337,12 @@ header has to match the Vue version in
 `scripts/validators/generated_copies.py` fails the gate when it does not.
 
 Some members cannot be classified from the IDL alone, because the web
-standard describes them in prose. The generator reads the reviewed lists of
-these from `tools/dom-members/lib/reviewed.mjs`, and it stops until a new
-member that is on neither list has been reviewed.
+standard describes them in prose, because a boolean attribute does nothing
+when it is set to `false`, or because a browser has them although no data
+records them. The generator reads the reviewed lists of these from
+`tools/dom-members/lib/reviewed.mjs`. It stops when a string attribute with
+no reflection marker in the IDL is on neither of the two lists that say
+whether it mirrors, until someone reviews it.
 
 The "Generated files" workflow runs `check` and `test` on every pull request.
 `test:browser` runs in its own workflow,

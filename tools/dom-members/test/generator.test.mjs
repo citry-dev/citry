@@ -5,7 +5,9 @@
 // The reviewed lists in lib/reviewed.mjs are module constants, so every
 // member name below is made up (`zz...`) and cannot meet an entry on them.
 // The exception is `Element.id`, which the unreviewed-member test uses on
-// purpose because the PROSE_MIRRORING list names it.
+// purpose because the PROSE_MIRRORING list names it. UNRECORDED_MEMBERS
+// (`cue`, `cuebackground`) is Unknown in every classified table, whatever the
+// input, and one test checks that.
 
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -380,6 +382,16 @@ describe("classify", () => {
     assert.equal(table.base.inert, "ReflectBoolean");
     assert.equal(table.elements.dialog.open, "ReflectBoolean");
     assert.equal(table.base.zzlate, "Unknown");
+  });
+
+  it("answers Unknown for a name no data records, on BASE and every element", () => {
+    const { base, elements } = classify(makeData());
+    assert.equal(base.cue, "Unknown");
+    assert.equal(base.cuebackground, "Unknown");
+    for (const answers of Object.values(elements)) {
+      assert.equal("cue" in answers, false);
+      assert.equal("cuebackground" in answers, false);
+    }
   });
 
   it("calls a member only BCD knows Unknown", () => {

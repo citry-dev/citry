@@ -40,6 +40,8 @@ pub(crate) const BASE: &[(&str, DomAnswer)] = &[
     ("closest", DomAnswer::Unknown),
     ("constructor", DomAnswer::Unknown),
     ("contains", DomAnswer::Unknown),
+    ("cue", DomAnswer::Unknown),
+    ("cuebackground", DomAnswer::Unknown),
     ("dataset", DomAnswer::Unknown),
     ("draggable", DomAnswer::Unknown),
     ("focus", DomAnswer::Unknown),
