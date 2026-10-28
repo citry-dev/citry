@@ -177,8 +177,14 @@ def test_browser_record_stubs_list_exactly_the_fields_python_reads() -> None:
     assert sorted(stubbed) == sorted(_BROWSER_RECORDS)
     for name in _BROWSER_RECORDS:
         record = getattr(_rust.template_parser, name)
+        # PyPy also lists the interpreter's own `__dict__` and `__weakref__`
+        # descriptors on a class built in Rust; a `#[pyo3(get)]` field is
+        # never named `__dict__` or `__weakref__`, so leaving those out keeps
+        # the comparison exact.
         fields = {
-            attribute for attribute, value in vars(record).items() if type(value).__name__ == "getset_descriptor"
+            attribute
+            for attribute, value in vars(record).items()
+            if type(value).__name__ == "getset_descriptor" and attribute not in {"__dict__", "__weakref__"}
         }
         assert fields == stubbed[name], name
 
