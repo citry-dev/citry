@@ -234,6 +234,11 @@ fn count_braces(source: &str) -> (usize, Option<usize>) {
 /// so every parse takes a segment of this size from the heap and frees it
 /// afterwards. The grammar is pure Rust, so running it off the thread's own
 /// stack is safe.
+///
+/// The grammar keeps this reservation rather than a loop of its own: Pest's
+/// generated parser enters each rule by calling a function, so its stack
+/// use grows with how deeply the braces nest, and only a parser written
+/// outside Pest could change that.
 fn parse_grammar(
     source: &str,
     braces: usize,
@@ -828,7 +833,9 @@ fn process_template_string(
 ) -> Result<Template, ParseError> {
     // A template in an attribute value is parsed, and its own passes run,
     // while the parser reads the tag that holds it, so its frames sit on top
-    // of the outer parse.
+    // of the outer parse. Each such level is a whole parse called from inside
+    // another, so it keeps the guard: turning it into a loop would mean
+    // pausing the outer parse partway through reading a tag.
     crate::stack::with_enough_stack(|| {
         let content = &template_token.content;
 

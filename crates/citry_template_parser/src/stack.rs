@@ -1,11 +1,14 @@
 //! Give the recursive passes over a template tree enough stack, whatever
 //! thread runs them.
 //!
-//! The parser's passes over the finished tree (used variables, bindings,
-//! fills, the checks that run when a tag closes) and the compiler call
-//! themselves once per nesting level. A debug build used about 18 KB of
-//! stack per compiler level, so a template a few hundred levels deep
-//! overflowed a small thread and crashed the process.
+//! The compiler calls itself once per nesting level. A debug build used
+//! about 18 KB of stack per compiler level, so a template a few hundred
+//! levels deep overflowed a small thread and crashed the process. The
+//! parser also parses a template written in an attribute value by calling
+//! itself, and `Template`'s `Debug` prints each level by calling itself.
+//! The parser's passes over the finished tree, and `Template`'s clone,
+//! comparison and drop, keep their own list of what is left to visit
+//! instead, so they need no guard.
 //!
 //! Each recursion entry runs its work through `with_enough_stack`. When less
 //! than `RED_ZONE` is left, `stacker` runs the work on a new segment of
@@ -19,8 +22,8 @@
 //! block from the heap and frees it afterwards. When Python calls the
 //! parser, the Python bindings' own guard takes one block for the whole
 //! call, and the guards inside reuse it. When Rust code calls the parser
-//! with no guard around it, the fill check that runs for each closed tag
-//! takes about one block per closed tag.
+//! with no guard around it, each template written in an attribute value
+//! takes one block.
 
 /// Run the work on a new segment when less stack than this is left: enough
 /// for the largest frames between two guarded calls, about 18 KB per

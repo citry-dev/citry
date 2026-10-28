@@ -1,12 +1,14 @@
 """
 Deeply nested templates parse and compile on a small thread.
 
-The Rust parser and compiler call themselves once per nesting level, and
-so do copying and freeing the parsed tree. Each of those runs through a
-stack guard that moves the work to a new stack segment when the thread's
-own stack runs low. Here templates nested 512 tags deep (256 for control
-flow and components) are parsed and compiled on a thread with a 128 KiB
-stack, the default for threads on musl Linux.
+The Rust compiler calls itself once per nesting level, and so does the
+parser for a template written in an attribute value. Each of those runs
+through a stack guard that moves the work to a new stack segment when the
+thread's own stack runs low. The parser's other passes, and copying and
+freeing the parsed tree, keep their own list of what is left to visit.
+Here templates nested 512 tags deep (256 for control flow and components)
+are parsed and compiled on a thread with a 128 KiB stack, the default for
+threads on musl Linux.
 
 The checks run in a separate interpreter, so a crash fails one test instead
 of ending the pytest run.
