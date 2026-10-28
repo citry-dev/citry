@@ -1020,50 +1020,198 @@ pub struct Template {
     pub slots: Vec<StaticNamedSlot>,
 }
 
-/// Cloning a template copies its whole tree. That calls itself once per
-/// nesting level, with frames of about 4 KB in a debug build, so a tree a
-/// few dozen levels deep overflowed a 256 KiB thread. Each level passes
-/// through a `Template`, so each one runs through the stack guard, like the
-/// parser's own passes. PyO3 clones a template when Python reads a field
-/// that holds one, such as a node's `body`.
+/// Cloning a template copies its whole tree. A clone that called itself per
+/// level would grow the native stack with the tree's depth, so this one
+/// keeps its own stack of the bodies still being copied. PyO3 clones a
+/// template when Python reads a field that holds one, such as a node's
+/// `body`. Each body is copied before the node that holds it, from a copy of
+/// the node with an empty body, so the derived `Clone` of `Node` never runs
+/// for a node with a body.
 impl Clone for Template {
     fn clone(&self) -> Self {
-        let copy = || Template {
-            elements: self.elements.clone(),
-            comments: self.comments.clone(),
-            used_variables: self.used_variables.clone(),
-            slots: self.slots.clone(),
-        };
-        // Most bodies hold only text and expressions, which cannot nest, so
-        // they skip the guard and its closure.
-        if has_child_nodes(&self.elements) {
-            crate::stack::with_enough_stack(copy)
-        } else {
-            copy()
+        // Most bodies hold only text and expressions, which cannot nest,
+        // and PyO3 clones a body on every read of a node's `body`, so those
+        // skip the work list.
+        if !has_child_nodes(&self.elements) {
+            return Template {
+                elements: self.elements.clone(),
+                comments: self.comments.clone(),
+                used_variables: self.used_variables.clone(),
+                slots: self.slots.clone(),
+            };
+        }
+        /// One body being copied: its source elements still to copy, the
+        /// copies made so far, and the copied node (with an empty body)
+        /// waiting for them. The root has no node.
+        struct Frame<'a> {
+            rest: std::slice::Iter<'a, TemplateElement>,
+            done: Vec<TemplateElement>,
+            node: Option<Node>,
+        }
+
+        let mut stack = vec![Frame {
+            rest: self.elements.iter(),
+            done: Vec::with_capacity(self.elements.len()),
+            node: None,
+        }];
+        loop {
+            let frame = stack
+                .last_mut()
+                .expect("the root frame stays until the end");
+            match frame.rest.next() {
+                Some(TemplateElement::Node(node @ Node::WithBody { body, .. })) => {
+                    let shell = node_with_empty_body(node);
+                    stack.push(Frame {
+                        rest: body.elements.iter(),
+                        done: Vec::with_capacity(body.elements.len()),
+                        node: Some(shell),
+                    });
+                }
+                Some(element) => frame.done.push(element.clone()),
+                None => {
+                    let finished = stack.pop().expect("checked above");
+                    let Some(mut node) = finished.node else {
+                        return Template {
+                            elements: finished.done,
+                            comments: self.comments.clone(),
+                            used_variables: self.used_variables.clone(),
+                            slots: self.slots.clone(),
+                        };
+                    };
+                    if let Node::WithBody { body, .. } = &mut node {
+                        body.elements = finished.done;
+                    }
+                    let parent = stack.last_mut().expect("a body's frame has a parent");
+                    parent.done.push(TemplateElement::Node(node));
+                }
+            }
         }
     }
 }
 
-/// Comparing and printing a template also walk the whole tree, once per
-/// level. Python reaches both through `==` and `repr()`, and pytest calls
-/// `repr()` on a failed comparison, so they run through the stack guard too.
-/// The output is the same as the derived implementations'.
+/// A copy of `node` whose body holds everything but its elements.
+fn node_with_empty_body(node: &Node) -> Node {
+    match node {
+        Node::WithBody {
+            start_tag,
+            end_tag,
+            body,
+            used_variables,
+            introduced_variables,
+            comments,
+            contains_fills,
+        } => Node::WithBody {
+            start_tag: start_tag.clone(),
+            end_tag: end_tag.clone(),
+            body: Template {
+                elements: Vec::new(),
+                comments: body.comments.clone(),
+                used_variables: body.used_variables.clone(),
+                slots: body.slots.clone(),
+            },
+            used_variables: used_variables.clone(),
+            introduced_variables: introduced_variables.clone(),
+            comments: comments.clone(),
+            contains_fills: *contains_fills,
+        },
+        Node::SelfClosing { .. } => node.clone(),
+    }
+}
+
+/// Comparing two templates also walks both trees. It keeps its own stack of
+/// the element lists still to compare, so it does not grow the native stack
+/// with the depth, and it never runs the derived `PartialEq` of a node with
+/// a body. Python reaches it through `==`, for example in a test's
+/// `assert a == b`. The answer is the same as the derived implementation's.
 impl PartialEq for Template {
     fn eq(&self, other: &Self) -> bool {
-        let compare = || {
-            self.elements == other.elements
-                && self.comments == other.comments
-                && self.used_variables == other.used_variables
-                && self.slots == other.slots
-        };
-        if has_child_nodes(&self.elements) {
-            crate::stack::with_enough_stack(compare)
-        } else {
-            compare()
+        if !template_fields_equal(self, other) {
+            return false;
         }
+        // With no node on this side, any node on the other side is a
+        // different variant, so the plain comparison does not go deeper.
+        if !has_child_nodes(&self.elements) {
+            return self.elements == other.elements;
+        }
+        let mut pending = vec![(self.elements.iter(), other.elements.iter())];
+        while let Some((left, right)) = pending.last_mut() {
+            let (left, right) = match (left.next(), right.next()) {
+                (None, None) => {
+                    pending.pop();
+                    continue;
+                }
+                (Some(left), Some(right)) => (left, right),
+                _ => return false,
+            };
+            match (left, right) {
+                (
+                    TemplateElement::Node(Node::WithBody {
+                        start_tag: left_start,
+                        end_tag: left_end,
+                        body: left_body,
+                        used_variables: left_used,
+                        introduced_variables: left_introduced,
+                        comments: left_comments,
+                        contains_fills: left_fills,
+                    }),
+                    TemplateElement::Node(Node::WithBody {
+                        start_tag: right_start,
+                        end_tag: right_end,
+                        body: right_body,
+                        used_variables: right_used,
+                        introduced_variables: right_introduced,
+                        comments: right_comments,
+                        contains_fills: right_fills,
+                    }),
+                ) => {
+                    let same = left_start == right_start
+                        && left_end == right_end
+                        && template_fields_equal(left_body, right_body)
+                        && left_used == right_used
+                        && left_introduced == right_introduced
+                        && left_comments == right_comments
+                        && left_fills == right_fills;
+                    if !same {
+                        return false;
+                    }
+                    pending.push((left_body.elements.iter(), right_body.elements.iter()));
+                }
+                // Any other pair holds no body, so the derived comparison
+                // does not walk any further.
+                (left, right) => {
+                    if left != right {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
     }
 }
 
+/// Compare a template's own fields and how many elements it has, but not
+/// the elements themselves.
+fn template_fields_equal(left: &Template, right: &Template) -> bool {
+    // Naming every field makes the build fail when `Template` gains one, so
+    // a new field cannot be left out of the comparison by mistake.
+    let Template {
+        elements,
+        comments,
+        used_variables,
+        slots,
+    } = left;
+    elements.len() == right.elements.len()
+        && *comments == right.comments
+        && *used_variables == right.used_variables
+        && *slots == right.slots
+}
+
+/// Printing a template also walks the whole tree, once per level, through
+/// the derived `Debug` of its elements. Python reaches it through `repr()`,
+/// and pytest calls `repr()` on a failed comparison. Printing in the derived
+/// format without calling itself would mean writing that format by hand, so
+/// this one runs each level through the stack guard. The output is the same
+/// as the derived implementation's.
 impl std::fmt::Debug for Template {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let print = |formatter: &mut std::fmt::Formatter<'_>| {
@@ -1090,18 +1238,24 @@ fn has_child_nodes(elements: &[TemplateElement]) -> bool {
         .any(|element| matches!(element, TemplateElement::Node(_)))
 }
 
-/// Dropping a template frees its whole tree, which also calls itself once
-/// per nesting level. A template parsed from an attribute value is freed
-/// while the parser is still reading the tag that holds it, outside any
-/// guarded pass; there a 128 KiB thread ran out at 192 levels. So each level
-/// with child nodes frees its elements through the stack guard.
+/// Dropping a template frees its whole tree. A drop that called itself per
+/// level would grow the native stack with the depth: a template parsed from
+/// an attribute value is freed while the parser is still reading the tag
+/// that holds it, and there a 128 KiB thread ran out at 192 levels. So the
+/// drop moves every nested body's elements onto one list and frees them
+/// from there; each body is already empty when it is freed.
 impl Drop for Template {
     fn drop(&mut self) {
         // Only a body with child nodes can nest further; the rest are freed
         // here as usual.
-        if has_child_nodes(&self.elements) {
-            let elements = std::mem::take(&mut self.elements);
-            crate::stack::with_enough_stack(|| drop(elements));
+        if !has_child_nodes(&self.elements) {
+            return;
+        }
+        let mut pending = std::mem::take(&mut self.elements);
+        while let Some(element) = pending.pop() {
+            if let TemplateElement::Node(Node::WithBody { mut body, .. }) = element {
+                pending.append(&mut body.elements);
+            }
         }
     }
 }
@@ -1124,10 +1278,7 @@ impl Template {
     }
 
     fn __eq__(&self, other: &Template) -> bool {
-        self.elements == other.elements
-            && self.comments == other.comments
-            && self.used_variables == other.used_variables
-            && self.slots == other.slots
+        self == other
     }
 
     fn __repr__(&self) -> String {

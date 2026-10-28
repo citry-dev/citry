@@ -1,19 +1,17 @@
 //! Deeply nested templates parse and compile on a small thread.
 //!
-//! The parser's passes over the finished tree, and the compiler, call
-//! themselves once per nesting level, so without a guard a deep template
-//! overflows the stack and crashes the process. Each recursion entry now runs through a
-//! stack guard that moves the work to a new stack segment when the current
-//! one runs low.
+//! The compiler, the parse of a template written in an attribute value, and
+//! printing a `Template` call themselves once per nesting level, so each
+//! level runs through a stack guard that moves the work to a new stack
+//! segment when the current one runs low. The parser's other passes, and
+//! cloning, comparing and dropping a `Template`, keep their own list of
+//! what is left to visit.
 //!
 //! These tests parse, clone, compare, print, compile and drop templates up to
 //! 512 tags deep (512 for plain elements, 256 for control-flow and component
 //! tags) on threads with 256 KiB and 128 KiB stacks. 128 KiB is the default
 //! for threads on musl Linux, and Rust spawns threads with 2 MiB by default.
-//! Cloning, comparing, printing and dropping the tree also call themselves
-//! once per level. `Template`'s own implementations of them run each level
-//! through the same guard, and these tests check that their frames fit. A
-//! crash aborts this test binary, which fails the test run.
+//! A crash aborts this test binary, which fails the test run.
 
 use citry_template_parser::ast::{Comment, StaticNamedSlot, TemplateElement, Token};
 use citry_template_parser::compiler::{compile_prepared_template, compile_template};
