@@ -52,13 +52,18 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # `_vue/native_walk.py`, `_vue/native_leaf_json.py`). It also carries the
 # driver that runs recursive template walks without one Python call per level
 # (`_walk.py`), and the helper that copies deeply nested js_data() without a
-# Python call per level (`util/deep_json.py`). Between #380 (2026-10-25) and
-# 2026-10-27 the merged fixes and features added about 26 KB of compressed
-# Python source and no data files, so the CI wheel measured 1,463,548 bytes on
-# main at 9f8ee0d7d. This cap leaves about 19 KB above that.
+# Python call per level (`util/deep_json.py`). Between #439 (2026-10-27) and
+# 2026-10-28 the merged fixes and features added about 63 KB of compressed
+# Python source and no data files: the schema base classes for `model_base`
+# and Pydantic `State` (`_model_base.py`, #455, #461), scoped slot props for
+# `citry check` (`_slot_props.py`, #521), sub-path URLs (`_sub_path.py`,
+# #479), multi-line expressions (`_authored_expression.py`, #459), and the
+# v-pre fixes in `_vue/direct_capture.py` (#514, #525, #526). The CI wheel
+# measured 1,526,915 bytes on main at f67bb05a5. This cap leaves about 45 KB
+# above that, since the last 19 KB of headroom lasted a day.
 # A sizeable addition should raise the cap on purpose rather than use up the
 # headroom unnoticed.
-MAX_WHEEL_BYTES: Final = 1_448 * 1024
+MAX_WHEEL_BYTES: Final = 1_536 * 1024
 
 
 def _citry_core_version() -> str:
