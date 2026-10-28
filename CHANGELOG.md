@@ -728,11 +728,10 @@
   component nested to the limits took up to about a minute, and now takes
   less than a second.
 - The editor responds much faster on large and deeply nested templates.
-  On each edit it finds the variables each template expression can use in
-  one pass over the template. With a `<c-if>`/`<c-elif>` chain at each of
-  256 nesting levels, that step takes about 25 ms instead of about 3.7
-  seconds, and a template with 400 expressions side by side takes about
-  7 ms instead of about 1 second.
+  With a `<c-if>`/`<c-elif>` chain at each of 256 nesting levels, the work
+  it redoes on each edit takes about 24 ms instead of about 3.6 seconds.
+  On a template with 400 expressions in 200 sibling elements, it takes
+  about 7 ms instead of about 1 second.
 - With a shared cache such as Redis, a render no longer asks the cache
   about every component's JS and CSS and every served `Dependencies`
   file. Each process asks about each one at most once a minute, so if the

@@ -259,17 +259,18 @@ def template_python_queries(
     """
     Return every Python-valued host with its exact lexical context, in source order.
 
-    One walk visits each node once and carries the `c-if`, `c-for` and fill
-    controls that enclose each node down to the hosts inside it, so the cost
-    grows with the size of the template. Each query is
-    the one `template_python_query_at` returns at the host's start.
+    One walk visits each node once and carries what encloses it (its `c-if`
+    conditions, `c-for` variables and slot fill) down to the Python values
+    inside it, so the cost grows with the size of the template. Each query
+    is the one `template_python_query_at` returns at the value's start.
     """
     found: list[TemplatePythonQuery] = []
     run(_collect_template_queries(template, (), found, base_index=0, parse_nested=parse_nested))
     queries: list[TemplatePythonQuery] = []
     seen: set[tuple[int, int, str]] = set()
-    # The walk already reaches hosts in source order; the sort only
-    # guarantees that order, and costs little on a sorted list.
+    # The walk already reaches hosts in source order; the sort keeps that
+    # order guaranteed if the walk changes, and costs little on a list that
+    # is already sorted.
     for query in sorted(found, key=lambda item: item.start_index):
         key = query.start_index, query.end_index, query.host_kind
         if key not in seen:
@@ -2014,8 +2015,9 @@ def _collect_template_queries(
     Append the query of every host in one template, with the controls around it.
 
     This is the walk `_query_in_template` makes for one position, made once
-    for all of them: the same sibling conditions, controls and fill owner
-    reach each host, so each query matches the one found at its start.
+    for all of them: the same negated conditions of earlier `c-if`/`c-elif`
+    siblings, the same controls and the same fill owner reach each host, so
+    each query matches the one found at its start.
     """
     branch_conditions: list[tuple[str, tuple[str, ...]]] = []
     for element in template.elements:
@@ -2106,8 +2108,8 @@ def _collect_node_queries(
             continue
         if attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta:  # noqa: PLR1714
             found.append(_attribute_query(node, attr, controls, body_controls, condition, base_index))
-    # Like `_node_body_contains`, read a body only when the node has an end
-    # tag; every parsed body has one.
+    # Read a body only when the node has an end tag, as `_node_body_contains`
+    # does, so both searches visit the same bodies.
     body = getattr(node, "body", None)
     if body is not None and getattr(node, "end_tag", None) is not None:
         yield Call(
