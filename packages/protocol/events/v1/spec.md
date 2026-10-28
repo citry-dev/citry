@@ -538,8 +538,9 @@ the browser rejects such a result whole, and the call's promise rejects.
 ### Envelope limits
 
 One envelope carries at most 16 calls. More than 16 rejects the whole
-envelope with `payload_too_large`. A transport may also enforce a configured
-HTTP body limit before parsing, using the same error code. A client that wants
+envelope with `payload_too_large`. A transport may also enforce configured
+limits on the HTTP body size or the number of form fields before parsing,
+using the same error code. A client that wants
 to send more calls splits them into successive envelopes.
 
 ## The result envelope
@@ -865,7 +866,7 @@ Every wire error has exactly `status`, `code`, and `message`, plus optional
 | `conflict` | 409 | Application code reported a domain conflict. |
 | `error` | 400 to 599 | A deliberately raised application error with another status. |
 | `csrf_failed` | 403 | The transport's CSRF check rejected the request. |
-| `payload_too_large` | 413 | A call-count or configured transport-size limit rejected the envelope. |
+| `payload_too_large` | 413 | A call-count limit, or a configured transport limit on body size or form fields, rejected the request. |
 | `protocol_mismatch` | 400 | The envelope names an unsupported protocol, or a fixed protocol record is malformed. |
 | `handler_error` | 500 | Unexpected handler failure or a result that cannot be represented as strict JSON. |
 

@@ -44,6 +44,8 @@ def _snapshot(page: Any, source: str) -> dict[str, object]:
         "<p><span>A</span><span>B</span></p>",
         "<p><span>A</span> <span>B</span></p>",
         "<main><section>A</section><footer>B</footer></main>",
+        "<main> <section>A</section> <footer>B</footer> </main>",
+        "<table> <tr><td>A</td><td>B</td></tr> </table>",
         "<main><x-panel>A</x-panel><section>B</section></main>",
         "<main><c-card>A</c-card><section>B</section></main>",
         "<main><pre>  first\n second</pre><section>B</section></main>",

@@ -355,6 +355,36 @@ A plain `def` handler works with every framework integration. An
 integration. To support both without blocking the event loop, pass a plain
 `handler` and its async version as `handler_async`.
 
+A route that reads a request body can limit its size with
+`max_body_bytes`, a function that returns the limit in bytes. Citry calls
+it for each request and reads at most one byte past the limit. Under ASGI
+the server hands over the body in chunks, so Citry may read up to one
+chunk past it. `request.body` then holds at most the limit plus one byte,
+so the handler must reject a longer body, because it was cut short:
+
+```python
+from citry import RouteResponse, URLRoute
+
+LIMIT = 64_000
+
+
+def save(request):
+    if len(request.body) > LIMIT:
+        return RouteResponse(content="Too large", status=413)
+    return RouteResponse(content="Saved")
+
+
+route = URLRoute(
+    "save",
+    handler=save,
+    methods=("POST",),
+    max_body_bytes=lambda: LIMIT,
+)
+```
+
+A function that returns something other than a whole number of 0 or more
+makes the request fail with status 500.
+
 See [Web frameworks](/advanced/web-frameworks/) for mounting Citry's routes in your
 application.
 

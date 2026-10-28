@@ -32,7 +32,7 @@ pub(crate) const BASE: &[(&str, DomAnswer)] = &[
     ("append", DomAnswer::Unknown),
     ("attributes", DomAnswer::Unknown),
     ("autocorrect", DomAnswer::Unknown),
-    ("autofocus", DomAnswer::Unknown),
+    ("autofocus", DomAnswer::ReflectBoolean),
     ("before", DomAnswer::Unknown),
     ("blur", DomAnswer::Unknown),
     ("children", DomAnswer::Unknown),
@@ -40,11 +40,13 @@ pub(crate) const BASE: &[(&str, DomAnswer)] = &[
     ("closest", DomAnswer::Unknown),
     ("constructor", DomAnswer::Unknown),
     ("contains", DomAnswer::Unknown),
+    ("cue", DomAnswer::Unknown),
+    ("cuebackground", DomAnswer::Unknown),
     ("dataset", DomAnswer::Unknown),
     ("draggable", DomAnswer::Unknown),
     ("focus", DomAnswer::Unknown),
     ("hidden", DomAnswer::Unknown),
-    ("inert", DomAnswer::Unknown),
+    ("inert", DomAnswer::ReflectBoolean),
     ("matches", DomAnswer::Unknown),
     ("nonce", DomAnswer::Unknown),
     ("normalize", DomAnswer::Unknown),
@@ -126,7 +128,6 @@ pub(crate) const ELEMENTS: &[(&str, &[(&str, DomAnswer)])] = &[
     ("body", &[]),
     ("br", &[]),
     ("button", &[
-        ("autofocus", DomAnswer::ReflectBoolean),
         ("disabled", DomAnswer::ReflectBoolean),
         ("form", DomAnswer::Unknown),
         ("labels", DomAnswer::Unknown),
@@ -165,7 +166,7 @@ pub(crate) const ELEMENTS: &[(&str, &[(&str, DomAnswer)])] = &[
     ("dfn", &[]),
     ("dialog", &[
         ("close", DomAnswer::Unknown),
-        ("open", DomAnswer::Unknown),
+        ("open", DomAnswer::ReflectBoolean),
         ("show", DomAnswer::Unknown),
     ]),
     ("dir", &[
@@ -238,7 +239,6 @@ pub(crate) const ELEMENTS: &[(&str, &[(&str, DomAnswer)])] = &[
     ]),
     ("input", &[
         ("alpha", DomAnswer::Unknown),
-        ("autofocus", DomAnswer::ReflectBoolean),
         ("checked", DomAnswer::Unknown),
         ("disabled", DomAnswer::ReflectBoolean),
         ("files", DomAnswer::Unknown),
@@ -379,7 +379,6 @@ pub(crate) const ELEMENTS: &[(&str, &[(&str, DomAnswer)])] = &[
     ("section", &[]),
     ("select", &[
         ("add", DomAnswer::Unknown),
-        ("autofocus", DomAnswer::ReflectBoolean),
         ("disabled", DomAnswer::ReflectBoolean),
         ("form", DomAnswer::Unknown),
         ("item", DomAnswer::Unknown),
@@ -429,7 +428,6 @@ pub(crate) const ELEMENTS: &[(&str, &[(&str, DomAnswer)])] = &[
         ("content", DomAnswer::Unknown),
     ]),
     ("textarea", &[
-        ("autofocus", DomAnswer::ReflectBoolean),
         ("cols", DomAnswer::Unknown),
         ("disabled", DomAnswer::ReflectBoolean),
         ("form", DomAnswer::Unknown),

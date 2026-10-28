@@ -188,6 +188,19 @@ class URLRoute:
     Adapters answer any other method with 405 (``HEAD`` is always
     admitted). When a route admits more methods than its handler serves,
     the handler answers 405 for the rest.
+
+    ``max_body_bytes`` is an optional function that returns the largest
+    request body the route accepts. Citry calls it for each request, so the
+    limit can follow a setting. The ASGI, WSGI, and Django integrations then
+    read at most one byte more than the limit (under ASGI, at most one more
+    message), whatever ``Content-Length`` says, so a client cannot make the
+    server hold a large body in memory. ``request.body`` then holds at most
+    the limit plus one byte, and the handler must reject a body longer than
+    the limit, because that body was cut short. ``None`` (the default) reads
+    the whole body. The limit applies to this route only, not to its
+    ``children``. A function that returns something other than an ``int``
+    of 0 or more makes each request fail with an error, which the web
+    framework answers with status 500.
     """
 
     path: str
@@ -202,6 +215,7 @@ class URLRoute:
     name: str | None = None
     methods: tuple[str, ...] = ("GET",)
     extra: dict[str, Any] = field(default_factory=dict)
+    max_body_bytes: Callable[[], int] | None = None
 
     def __post_init__(self) -> None:
         if self.handler is not None and self.children:
@@ -215,12 +229,37 @@ class URLRoute:
             )
             raise ValueError(msg)
         _validate_route_methods(self.methods)
+        if self.max_body_bytes is not None and not callable(self.max_body_bytes):
+            msg = (
+                "URLRoute(max_body_bytes=...) must be a function that returns the limit in bytes,"
+                f" such as lambda: 64_000; got {self.max_body_bytes!r}."
+            )
+            raise TypeError(msg)
 
 
 # An HTTP method is an RFC 9110 token. Adapters compare the request's method
 # with these names exactly, so a lowercase name would never match and the
 # route would answer 405 to every request; only uppercase tokens are accepted.
 _ROUTE_METHOD_RE = re.compile(r"[!#$%&'*+.^_`|~0-9A-Z-]+")
+
+
+def body_read_limit(route: URLRoute) -> int | None:
+    """
+    Return how many body bytes an adapter reads for ``route``, or ``None`` to read the whole body.
+
+    One byte past the route's limit is enough for the handler to see that
+    the body is too long, so the adapter never reads more than that.
+    """
+    if route.max_body_bytes is None:
+        return None
+    limit = route.max_body_bytes()
+    if isinstance(limit, bool) or not isinstance(limit, int):
+        msg = f"URLRoute(max_body_bytes=...) must return an int byte count; got {limit!r}."
+        raise TypeError(msg)
+    if limit < 0:
+        msg = f"URLRoute(max_body_bytes=...) must return a byte count of 0 or more; got {limit!r}."
+        raise ValueError(msg)
+    return limit + 1
 
 
 def _validate_route_methods(methods: object) -> None:

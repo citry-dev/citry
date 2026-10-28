@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- `template_formatter.format_template()` no longer adds a line break where
+  two tags touch, such as between `<td>` cells or `<option>`s. That line
+  break was new text in the rendered HTML. Whitespace in the template is
+  still re-indented.
+
 ### Added
 
 - `parse_template()` accepts a Vue slot prop such as `:row="row"` on
@@ -19,6 +26,12 @@
 
 ### Fixed
 
+- Rendering a `simple='vue'` component whose template nests many `c-for`
+  or `c-if` blocks no longer crashes the process on a thread with a small
+  stack, such as the 128 KiB stack a thread gets by default on Alpine Linux. A template
+  nested more than 62 `c-for` or `c-if` blocks deep, or one that reads a
+  path more than 63 subscripts deep, now renders through Citry's Python
+  path instead, with the same output, only more slowly.
 - `parse_template()` now rejects Alpine's `.minus`, `.underscore`, and
   `.spacebar` key modifiers on a Vue listener, with a hint, because Vue
   matches none of these names and the listener would never run.
@@ -28,6 +41,12 @@
 - `format_template()` now wraps a start tag's attributes when the text after
   the tag on the same line, such as `{{ label }}</span>`, would make that
   line longer than 100 columns. It used to measure only the tag.
+- `format_template()` no longer fails on a Python expression with a comment
+  after parentheses, such as `(a + b)  # sum`, or with a string that spans
+  lines. When Ruff would move a comment, or a string spans lines, the
+  formatter leaves that expression as you wrote it.
+- `format_template()` no longer fails with "formatter did not converge" on a
+  very deeply nested expression split across lines.
 - `format_template()` now formats a Python expression that is valid only
   inside parentheses, such as a `{{ ... }}` split across lines with its
   `else` parts on their own lines, or `{{ x for x in items }}`. It used to

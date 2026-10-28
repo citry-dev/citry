@@ -4,6 +4,11 @@
 
 ### Added
 
+- An extension's route can cap its request body with
+  `URLRoute(max_body_bytes=...)`, a function Citry calls on each request.
+  Citry reads at most one byte past the limit, so the handler must reject
+  a longer body
+  ([details](https://citry.dev/advanced/extensions/#serve-extension-routes)).
 - You can write an Events `State` as a Pydantic v2 or v1 model, by hand or
   through `model_base`. A handler that sets a field to a value the model
   rejects fails that call, before Citry stores it
@@ -307,6 +312,23 @@
 
 ### Fixes
 
+- `citry format` and the editor's format command no longer add a line break
+  where two tags touch, such as between `<td>` cells or `<option>`s or just
+  inside a `<c-fill>`, or at the start or end of a template string written
+  right against its quotes. That line break was new text in the rendered
+  HTML. Whitespace you wrote is still re-indented; to spread compact markup
+  over lines, add a line break between the tags once.
+- An oversized request to Citry's event endpoints no longer fills the
+  server's memory: by default Citry stops reading a body past 1 MiB and
+  rejects a form post with more than 1,000 fields, both with
+  `payload_too_large`. Change the limits
+  with `_max_body_bytes` and `_max_form_fields` in
+  `extensions_defaults["events"]`
+  ([details](https://citry.dev/security/#limit-event-request-sizes)). On
+  Django, these limits now govern event requests in place of
+  `DATA_UPLOAD_MAX_MEMORY_SIZE`. If you set the undocumented
+  `_max_envelope_bytes`, `Citry(...)` now raises `ValueError`; rename it
+  to `_max_body_bytes`.
 - Apps served below a sub-path, such as `/shop`, now load Citry's
   scripts and styles and reach its Events endpoints. Citry's URLs start
   with the sub-path each request was served under, whether a proxy,
@@ -639,11 +661,16 @@
 - In a component that uses Vue, a static attribute that the element has
   no property for, or whose property mirrors the attribute as text, such as
   `foo="1"`, is now written by the server, where the element around it
-  used to be rendered in the browser. `inert`, `autofocus` outside form
-  controls, `<dialog open>`, and a `<form>` attribute that may match the `name` or
-  `id` of a control inside it now leave that part to the browser. Such a
-  form now leaves its parent, or the whole page when the form is at the
-  page root, to the browser.
+  used to be rendered in the browser. A `<form>` attribute that may match
+  the `name` or `id` of a control inside it now leaves the form's parent to
+  the browser, or the whole page when the form is at the page root.
+- On PyPy, `import citry` no longer fails with `No module named
+  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
+  values and template types less fully, and both print a note saying so.
+- In Safari, when a stylesheet linked in the served page fails to load,
+  Citry now requests it again and reports an error if it still fails, as it
+  does in other browsers. Before, the page mounted without its styles and no
+  error appeared.
 
 ### Performance
 

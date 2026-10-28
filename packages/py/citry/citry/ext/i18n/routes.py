@@ -50,7 +50,15 @@ def i18n_routes(extension: I18nExtension) -> list[URLRoute]:
 
     return [
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_i18n_runtime", methods=("GET",)),
-        URLRoute(MESSAGES_PATH, handler=serve_messages, name="citry_i18n_messages", methods=("POST",)),
+        URLRoute(
+            MESSAGES_PATH,
+            handler=serve_messages,
+            name="citry_i18n_messages",
+            methods=("POST",),
+            # The host adapters stop reading one byte past the size the
+            # handler rejects, so an oversized request is never held whole.
+            max_body_bytes=lambda: _MAX_REQUEST_BYTES,
+        ),
     ]
 
 

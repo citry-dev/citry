@@ -34,8 +34,9 @@ Each render path runs in its own subprocess, so the lowered recursion limit
 never reaches the pytest process, and in its own test file, so CI runs the
 two paths on separate workers. The Rust path takes about a minute and a
 half and the Python path, which also runs ``citry check``, about six
-minutes, so they are qualification tests that run only in the Linux
-version-matrix jobs: frame counts depend on the Python version, not the
+minutes, so they are qualification tests that run only on Linux, in
+the version-matrix jobs and, for the Check workflow's Python, in Check's
+qualification phase: frame counts depend on the Python version, not the
 operating system.
 The fast local gate does not run them; set
 ``CITRY_FRAME_BUDGET_ANY_OS=1`` to run them on another system.

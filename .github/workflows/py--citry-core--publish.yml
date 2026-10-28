@@ -391,6 +391,12 @@ jobs:
     if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: ubuntu-latest
+    env:
+      # Every cargo run in the checkout uses Rust 1.96.0, the version the
+      # wheels are built with, not the nightly that rust-toolchain.toml names.
+      # A job's env cannot read the workflow env, so the toolchain validator
+      # checks that this equals CITRY_CORE_RUST_TOOLCHAIN.
+      RUSTUP_TOOLCHAIN: "1.96.0"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -442,6 +448,11 @@ jobs:
         copy: [a, b]
     env:
       CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
+      # Every cargo run in the checkout uses Rust 1.96.0, the version the
+      # wheels are built with, not the nightly that rust-toolchain.toml names.
+      # A job's env cannot read the workflow env, so the toolchain validator
+      # checks that this equals CITRY_CORE_RUST_TOOLCHAIN.
+      RUSTUP_TOOLCHAIN: "1.96.0"
     steps:
       - uses: actions/checkout@v7
         with:

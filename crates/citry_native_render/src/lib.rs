@@ -45,8 +45,8 @@ pub use digest::DigestPrefix;
 pub use eval::EvalError;
 pub use json::{write_json_str, write_plain_json_str};
 pub use plan::{
-    Const, ExprSpec, Kinds, OpSpec, Plan, PlanError, PlanSpec, ReadNode, ReadNodeSpec,
-    SpreadLayout, SpreadLayoutError,
+    Const, DepthKind, ExprSpec, Kinds, MAX_BODY_DEPTH, MAX_READ_DEPTH, OpSpec, Plan, PlanError,
+    PlanSpec, ReadNode, ReadNodeSpec, SpreadLayout, SpreadLayoutError, too_deep,
 };
 pub use run::{OccurrenceItem, RunIds, first_repeat, write_occurrence_item};
 pub use value::{Attrs, Value};

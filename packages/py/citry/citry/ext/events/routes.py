@@ -75,7 +75,8 @@ __all__ = [
     "EVENTS_RUNTIME_SRC",
     "EVENT_PATH",
     "EVENT_ROUTE_METHODS",
-    "MAX_ENVELOPE_BYTES",
+    "MAX_BODY_BYTES",
+    "MAX_FORM_FIELDS",
     "RUNTIME_PATH",
     "STYLE_ASSET_PATH",
     "events_routes",
@@ -97,12 +98,18 @@ EVENT_PATH = "ext/events/e/{class_id}/{event}"
 # The committed browser bundle built from packages/js/citry-client.
 EVENTS_RUNTIME_SRC = Path(__file__).parents[2] / "_vue" / "runtime.js"
 
-# The default transport-layer byte cap on one envelope (design 7.4 abuse
-# limits; oversized bodies answer payload_too_large without being parsed).
-# Deployments size it per engine through
-# ``extensions_defaults["events"]["_max_envelope_bytes"]`` (design 3.5). The
-# protocol's calls-length cap is the dispatcher's; this one guards bytes.
-MAX_ENVELOPE_BYTES = 1024 * 1024
+# The default cap on one request body (design 7.4 abuse limits). The host
+# adapter stops reading one byte past it (one message past it under ASGI), and an oversized body answers
+# payload_too_large without being parsed. Deployments size it per engine
+# through ``extensions_defaults["events"]["_max_body_bytes"]`` (design 3.5).
+# The protocol's calls-length cap is the dispatcher's; this one guards bytes.
+MAX_BODY_BYTES = 1024 * 1024
+
+# The default cap on the fields of one urlencoded form post, the same as
+# Django's DATA_UPLOAD_MAX_NUMBER_FIELDS. A small body can still hold many
+# short fields, each of which costs a dict entry and a validation step.
+# Deployments size it through ``extensions_defaults["events"]["_max_form_fields"]``.
+MAX_FORM_FIELDS = 1000
 
 _JSON_CONTENT_TYPE = "application/json"
 _NO_STORE = ("Cache-Control", "no-store")
@@ -205,6 +212,12 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
         )
 
+    # The host adapters read at most one byte past the engine's body cap, so
+    # an oversized body is never held in memory whole. The cap is looked up
+    # per request, as _prepare_dispatch does.
+    def body_cap() -> int:
+        return _body_cap(citry)
+
     # Each dispatch route is a sync/async pair: the plain handler is what the
     # sync hosts (WSGI, sync Django) mount and run, and the async twin rides
     # URLRoute.handler_async so the ASGI adapter dispatches through
@@ -228,6 +241,7 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             handler_async=serve_batch_async,
             name="citry_events_call",
             methods=("POST",),
+            max_body_bytes=body_cap,
         ),
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_events_runtime", methods=("GET",)),
         URLRoute(
@@ -248,6 +262,7 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             handler_async=serve_event_async,
             name="citry_events_dispatch",
             methods=EVENT_ROUTE_METHODS,
+            max_body_bytes=body_cap,
         ),
     ]
 
@@ -341,9 +356,21 @@ def _prepare_dispatch(
     batch = url_event is None
     compat = not batch and _wants_compat(request)
 
-    cap = _envelope_cap(citry)
+    cap = _body_cap(citry)
     if len(request.body) > cap:
-        message = f"The request body is {len(request.body)} bytes; the cap is {cap}."
+        # The adapter stopped reading one byte past the cap, so the real size
+        # is unknown, only that it is over the cap.
+        message = (
+            f"The request body is larger than {cap} bytes, the most this endpoint accepts."
+            ' Raise extensions_defaults["events"]["_max_body_bytes"] to accept larger requests.'
+        )
+        return _edge_response(413, "payload_too_large", message, batch=batch, compat=compat)
+    field_cap = _form_field_cap(citry)
+    if _is_form_post(request) and _form_field_count(request.body) > field_cap:
+        message = (
+            f"The form post has more than {field_cap} fields, the most this endpoint accepts."
+            ' Raise extensions_defaults["events"]["_max_form_fields"] to accept more.'
+        )
         return _edge_response(413, "payload_too_large", message, batch=batch, compat=compat)
 
     # Best-effort handler resolution, for the pieces that need it before
@@ -455,17 +482,39 @@ def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any
     return json.dumps(envelope, separators=(",", ":"), allow_nan=False), envelope
 
 
-def _envelope_cap(citry: Citry) -> int:
+def _body_cap(citry: Citry) -> int:
     """
-    The engine's envelope byte cap: the configured value, else the default.
+    The engine's request body cap in bytes: the configured value, else the default.
 
     The cap guards the transport before any component resolves (a batch can
     span components), so it is engine-wide: the recognized
-    ``extensions_defaults["events"]["_max_envelope_bytes"]`` setting, whose
+    ``extensions_defaults["events"]["_max_body_bytes"]`` setting, whose
     value the events extension validates at engine construction.
     """
-    value = citry.settings.extensions_defaults.get("events", {}).get("_max_envelope_bytes")
-    return MAX_ENVELOPE_BYTES if value is None else value
+    value = citry.settings.extensions_defaults.get("events", {}).get("_max_body_bytes")
+    return MAX_BODY_BYTES if value is None else value
+
+
+def _form_field_cap(citry: Citry) -> int:
+    """The engine's cap on the fields of one form post: the configured value, else the default."""
+    value = citry.settings.extensions_defaults.get("events", {}).get("_max_form_fields")
+    return MAX_FORM_FIELDS if value is None else value
+
+
+def _is_form_post(request: RouteRequest) -> bool:
+    """Whether the request carries a urlencoded form body, the one body Citry splits into fields."""
+    return request.content_type.split(";")[0].strip().lower() == "application/x-www-form-urlencoded"
+
+
+def _form_field_count(body: bytes) -> int:
+    """
+    Count the fields of a urlencoded body without parsing it.
+
+    This is the count ``parse_qs`` checks against ``max_num_fields``: one
+    more than the number of ``&`` separators. Empty pieces count too, so it
+    can be higher than the number of fields parsing returns, never lower.
+    """
+    return body.count(b"&") + 1 if body else 0
 
 
 def _resolve_handler(citry: Citry, class_id: str | None, event: str | None) -> EventHandler | None:

@@ -125,6 +125,69 @@ pub struct PlanSpec {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanError(pub String);
 
+/// How many levels a template may nest its bodies and conditional
+/// expressions before Rust leaves it to the Python evaluator.
+///
+/// Building, evaluating and writing a plan, and the PyO3 layer's reading of
+/// Python's description of it, each call themselves once per level. That
+/// work reads Python objects, so it cannot move to a stack taken from the
+/// heap, and a template nested deeply enough would overflow a small
+/// thread's stack. The template's top level is level 1, each `c-if` branch
+/// and `c-for` body (or empty body) adds one, an operation's expression is
+/// one level below the operation, and each conditional expression adds one
+/// more. So a top-level `{{ name }}` reaches level 2, and `{{ n }}` inside
+/// six nested loops reaches level 8.
+///
+/// A debug build's stack frames are several times larger than a release
+/// build's, so each build has its own limit, chosen from how deep each
+/// template shape renders on a fresh thread of 128 KiB, the default thread
+/// stack on musl Linux. A release build reached about 140 levels, and its
+/// limit is about half that. A debug build reached 9 levels with 32 KiB of
+/// the stack held back, and its limit stays a level below. Python reads the
+/// active value as `citry_core._rust.NATIVE_RENDER_MAX_BODY_DEPTH`, and a
+/// test renders at the limit on a 128 KiB thread. See
+/// `docs/design/native_render.md`, "Templates nested too deeply".
+pub const MAX_BODY_DEPTH: usize = if cfg!(debug_assertions) { 8 } else { 64 };
+
+/// How many levels the paths a template reads may nest: a variable is one
+/// level, and each subscript of it, or each loop over it, adds one. The
+/// row's values are copied, checked and rebuilt one call per level, so this
+/// bounds that work's stack the way [`MAX_BODY_DEPTH`] bounds the plan's.
+/// A release build read the deepest path the expression parser accepts (96
+/// subscripts) on a 128 KiB thread; a debug build read 18 with 32 KiB held
+/// back. Python reads it as `citry_core._rust.NATIVE_RENDER_MAX_READ_DEPTH`.
+pub const MAX_READ_DEPTH: usize = if cfg!(debug_assertions) { 16 } else { 64 };
+
+/// The error that refuses a template nested past one of the limits. The
+/// PyO3 layer refuses Python's description with the same text, and Python
+/// recognizes it by the `too_deep` prefix.
+///
+/// It is kept out of line, so the recursive functions that check a limit do
+/// not reserve stack for building the message on every level.
+#[cold]
+#[inline(never)]
+pub fn too_deep(kind: DepthKind, limit: usize) -> PlanError {
+    PlanError(match kind {
+        DepthKind::Bodies => format!(
+            "too_deep: its c-if and c-for blocks, the expression inside them and that \
+             expression's conditionals nest more than {limit} levels deep (the template's top \
+             level is level 1)"
+        ),
+        DepthKind::ReadPaths => format!(
+            "too_deep: it reads a path more than {limit} levels deep (the variable is level 1)"
+        ),
+    })
+}
+
+/// Which limit a template is nested past.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DepthKind {
+    /// [`MAX_BODY_DEPTH`].
+    Bodies,
+    /// [`MAX_READ_DEPTH`].
+    ReadPaths,
+}
+
 impl fmt::Display for PlanError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
@@ -279,20 +342,28 @@ struct Local<'a> {
     node: &'a ReadNode,
 }
 
-fn plan_read_node(name: &str, spec: &ReadNodeSpec) -> ReadNode {
-    ReadNode {
+/// Plan one read-set node at `depth` (a root is depth 1).
+fn plan_read_node(name: &str, spec: &ReadNodeSpec, depth: usize) -> Result<ReadNode, PlanError> {
+    // Every later walk of the read set (copying, checking and rebuilding a
+    // row's values) calls itself once per level, so the depth is bounded
+    // here, where the read set is first walked.
+    if depth > MAX_READ_DEPTH {
+        return Err(too_deep(DepthKind::ReadPaths, MAX_READ_DEPTH));
+    }
+    let mut children = Vec::with_capacity(spec.children.len());
+    for (child_name, child) in &spec.children {
+        children.push(plan_read_node(child_name, child, depth + 1)?);
+    }
+    let items = match &spec.items {
+        Some(items) => Some(Box::new(plan_read_node("", items, depth + 1)?)),
+        None => None,
+    };
+    Ok(ReadNode {
         name: name.to_owned(),
         kinds: spec.kinds,
-        children: spec
-            .children
-            .iter()
-            .map(|(child_name, child)| plan_read_node(child_name, child))
-            .collect(),
-        items: spec
-            .items
-            .as_ref()
-            .map(|items| Box::new(plan_read_node("", items))),
-    }
+        children,
+        items,
+    })
 }
 
 impl<'a> Builder<'a> {
@@ -333,8 +404,20 @@ impl<'a> Builder<'a> {
 
     /// Lower an expression whose value is shown (`scalar`) or tested
     /// (`truth`), and confirm the read set checks that use, so evaluation
-    /// can never meet a value of a type the check did not admit.
-    fn expr(&self, expr: &ExprSpec, locals: &[Local<'a>], truth: bool) -> Result<Expr, PlanError> {
+    /// can never meet a value of a type the check did not admit. `depth`
+    /// counts the levels around it, as [`MAX_BODY_DEPTH`] describes.
+    fn expr(
+        &self,
+        expr: &ExprSpec,
+        locals: &[Local<'a>],
+        truth: bool,
+        depth: usize,
+    ) -> Result<Expr, PlanError> {
+        // Evaluation calls itself once per conditional, inside the calls
+        // for the bodies around it, so both count toward one limit.
+        if depth > MAX_BODY_DEPTH {
+            return Err(too_deep(DepthKind::Bodies, MAX_BODY_DEPTH));
+        }
         match expr {
             ExprSpec::Const(value) => Ok(Expr::Const(value.clone())),
             ExprSpec::Path { .. } => {
@@ -360,9 +443,9 @@ impl<'a> Builder<'a> {
                     return Err(PlanError("a conditional test must be a path".to_owned()));
                 }
                 Ok(Expr::If(
-                    Box::new(self.expr(test, locals, true)?),
-                    Box::new(self.expr(body, locals, truth)?),
-                    Box::new(self.expr(otherwise, locals, truth)?),
+                    Box::new(self.expr(test, locals, true, depth + 1)?),
+                    Box::new(self.expr(body, locals, truth, depth + 1)?),
+                    Box::new(self.expr(otherwise, locals, truth, depth + 1)?),
                 ))
             }
         }
@@ -375,13 +458,18 @@ impl<'a> Builder<'a> {
 
     /// Turn one scope into ops. Ranks are filled in afterwards, once every
     /// key is known, so this stores each key's text in a placeholder list.
+    /// `depth` is the scope's level (the template's top level is 1).
     fn ops(
         &mut self,
         ops: &'a [OpSpec],
         locals: &mut Vec<Local<'a>>,
         top_level: bool,
         out_keys: &mut Vec<String>,
+        depth: usize,
     ) -> Result<Vec<Op>, PlanError> {
+        if depth > MAX_BODY_DEPTH {
+            return Err(too_deep(DepthKind::Bodies, MAX_BODY_DEPTH));
+        }
         let mut lowered = Vec::with_capacity(ops.len());
         for op in ops {
             match op {
@@ -389,14 +477,14 @@ impl<'a> Builder<'a> {
                     out_keys.push(self.key(key));
                     lowered.push(Op::Text {
                         rank: 0,
-                        expr: self.expr(expr, locals, false)?,
+                        expr: self.expr(expr, locals, false, depth + 1)?,
                     });
                 }
                 OpSpec::Open { key, attributes } => {
                     out_keys.push(self.key(key));
                     let mut planned = Vec::with_capacity(attributes.len());
                     for (name, expr) in attributes {
-                        planned.push((name.clone(), self.expr(expr, locals, false)?));
+                        planned.push((name.clone(), self.expr(expr, locals, false, depth + 1)?));
                     }
                     planned.sort_by(|left, right| left.0.cmp(&right.0));
                     // Python writes these into one dict; a repeated name would
@@ -439,7 +527,7 @@ impl<'a> Builder<'a> {
                         let condition = match condition {
                             None => None,
                             Some(condition @ ExprSpec::Path { .. }) => {
-                                Some(self.expr(condition, locals, true)?)
+                                Some(self.expr(condition, locals, true, depth + 1)?)
                             }
                             Some(_) => {
                                 return Err(PlanError(
@@ -447,7 +535,10 @@ impl<'a> Builder<'a> {
                                 ));
                             }
                         };
-                        planned.push((condition, self.ops(body, locals, false, out_keys)?));
+                        planned.push((
+                            condition,
+                            self.ops(body, locals, false, out_keys, depth + 1)?,
+                        ));
                     }
                     lowered.push(Op::If {
                         rank: 0,
@@ -475,9 +566,9 @@ impl<'a> Builder<'a> {
                         name: target.as_str(),
                         node: items,
                     });
-                    let body = self.ops(body, locals, false, out_keys);
+                    let body = self.ops(body, locals, false, out_keys, depth + 1);
                     locals.pop();
-                    let empty = self.ops(empty, locals, false, out_keys)?;
+                    let empty = self.ops(empty, locals, false, out_keys, depth + 1)?;
                     lowered.push(Op::For {
                         rank: 0,
                         iterable: path,
@@ -521,8 +612,8 @@ impl Plan {
         let roots: Vec<ReadNode> = spec
             .roots
             .iter()
-            .map(|(name, node)| plan_read_node(name, node))
-            .collect();
+            .map(|(name, node)| plan_read_node(name, node, 1))
+            .collect::<Result<_, _>>()?;
         let mut builder = Builder {
             roots: &roots,
             keys: BTreeSet::new(),
@@ -530,7 +621,7 @@ impl Plan {
         };
         let mut locals = Vec::new();
         let mut op_keys = Vec::new();
-        let mut ops = builder.ops(&spec.ops, &mut locals, true, &mut op_keys)?;
+        let mut ops = builder.ops(&spec.ops, &mut locals, true, &mut op_keys, 1)?;
         // The root record also holds "calls", which assembly adds; a data
         // key with that name makes assembly raise, so Python keeps the row.
         if !builder.keys.insert("calls".to_owned()) {
