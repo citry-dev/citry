@@ -503,3 +503,29 @@ def test_build_one_points_the_snapshot_links_at_its_tag(tmp_path: Path, monkeypa
     assert "/blob/citry@v1.0.0/x.py#L3" in page
     # Editing always happens on main, so the edit link stays.
     assert "/edit/main/docs/x.md" in page
+
+
+def test_versions_check_runs_only_the_named_guard(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # The manifest lists a version with no dir on disk, which only the manifest
+    # guard reports; naming another guard leaves that problem unreported.
+    root = tmp_path / "versions"
+    _make_version(root, "0.1.0")
+    _write_versions(root, [("0.1.0", ()), ("0.9.0", ())])
+
+    rc = cli.main(["versions-check", "--versions-dir", str(root), "--guard", "snapshot_static_files"])
+
+    assert rc == 0
+    assert "does not exist" not in capsys.readouterr().out
+    assert cli.main(["versions-check", "--versions-dir", str(root), "--guard", "versions_manifest"]) == 1
+
+
+def test_versions_check_rejects_an_unknown_guard_name(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # A misspelt name must fail loudly rather than run no guard and pass.
+    root = tmp_path / "versions"
+    _make_version(root, "0.1.0")
+    _write_versions(root, [("0.1.0", ())])
+
+    rc = cli.main(["versions-check", "--versions-dir", str(root), "--guard", "snapshot_static_file"])
+
+    assert rc == 2
+    assert "Unknown version guard" in capsys.readouterr().out
