@@ -46,7 +46,7 @@ validation, the exact compiler output format), see
   over the finished tree, and `Template`'s `Clone`, `PartialEq` and `Drop`,
   keep a list of what is left to visit, so their stack use stays flat at any
   depth (the `walks_without_recursion` tests in `src/parser.rs` run them on a
-  64 KiB thread). Write a new pass the same way. Three tree walks call
+  64 KiB thread). Write a new pass the same way. Three parts of the parser call
   themselves once per level and wrap their body in
   `crate::stack::with_enough_stack`: the compiler, the parse of a template
   written in an attribute value, and `Template`'s `Debug`. The grammar has

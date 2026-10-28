@@ -1210,8 +1210,8 @@ fn template_fields_equal(left: &Template, right: &Template) -> bool {
 /// the derived `Debug` of its elements. Python reaches it through `repr()`,
 /// and pytest calls `repr()` on a failed comparison. Printing in the derived
 /// format without calling itself would mean writing that format by hand, so
-/// this one runs each level through the stack guard. The output is the same as the derived
-/// implementation's.
+/// this one runs each level through the stack guard. The output is the same
+/// as the derived implementation's.
 impl std::fmt::Debug for Template {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let print = |formatter: &mut std::fmt::Formatter<'_>| {
@@ -1243,7 +1243,7 @@ fn has_child_nodes(elements: &[TemplateElement]) -> bool {
 /// an attribute value is freed while the parser is still reading the tag
 /// that holds it, and there a 128 KiB thread ran out at 192 levels. So the
 /// drop moves every nested body's elements onto one list and frees them
-/// from there, so each body is already empty when it is freed.
+/// from there; each body is already empty when it is freed.
 impl Drop for Template {
     fn drop(&mut self) {
         // Only a body with child nodes can nest further; the rest are freed
@@ -1278,10 +1278,7 @@ impl Template {
     }
 
     fn __eq__(&self, other: &Template) -> bool {
-        self.elements == other.elements
-            && self.comments == other.comments
-            && self.used_variables == other.used_variables
-            && self.slots == other.slots
+        self == other
     }
 
     fn __repr__(&self) -> String {

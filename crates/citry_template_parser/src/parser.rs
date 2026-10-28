@@ -235,10 +235,11 @@ fn count_braces(source: &str) -> (usize, Option<usize>) {
 /// afterwards. The grammar is pure Rust, so running it off the thread's own
 /// stack is safe.
 ///
-/// The grammar runs with this reservation, not a loop of its own: Pest's
-/// generated parser enters each rule by calling a function, so its stack
-/// use grows with how deeply the braces nest, and only a parser written
-/// outside Pest could change that.
+/// The grammar runs with this reservation because `python_expr` and
+/// `python_nested_curly` call themselves once per `{`, so the stack the
+/// grammar needs grows with how deeply the braces nest. #300 tracks
+/// whether they can loop instead, keeping the open braces on Pest's own
+/// stack.
 fn parse_grammar(
     source: &str,
     braces: usize,
@@ -4370,9 +4371,9 @@ fn is_control_flow_attribute(attr_name: &str) -> bool {
 /// Collect all statically known loop/fill declarations in a template,
 /// including declarations nested inside template-valued attributes.
 fn collect_template_binding_tokens(template: &Template, context: &ParserContext) -> Vec<Token> {
-    // The element lists still being read, innermost last. A node's body is
-    // read before its next sibling, so the tokens come out in source order,
-    // without the stack use growing with the template's depth.
+    // The element lists still being read, innermost last. Each node gives
+    // its own declarations, then its body's, before its next sibling's, and
+    // the stack use does not grow with the template's depth.
     let mut bindings = Vec::new();
     let mut pending: Vec<std::slice::Iter<'_, TemplateElement>> = vec![template.elements.iter()];
     while let Some(elements) = pending.last_mut() {
@@ -4414,8 +4415,8 @@ fn validate_template_bindings(
     context: &ParserContext,
 ) -> Result<(), ParseError> {
     // The element lists still being read, innermost last, each with the
-    // names bound around it. A node's body is checked before its next
-    // sibling, so the first error reported is the first one in source
+    // names bound around it. Each node is checked, then its body, before
+    // its next sibling, so the first error found is the first in that
     // order, and the stack use does not grow with the depth.
     let mut pending: Vec<(std::slice::Iter<'_, TemplateElement>, Vec<String>)> =
         vec![(template.elements.iter(), active_bindings.to_vec())];
@@ -5675,8 +5676,7 @@ struct FillNodeInfo<'a> {
     inside_foreign_control: bool,
 }
 
-/// Collect all `<c-fill>` nodes from a template body, including those
-/// nested inside control flow.
+/// Collect all `<c-fill>` nodes from a template body.
 ///
 /// This searches through all elements, including those nested inside control flow nodes
 /// (`<c-if>/<c-elif>/<c-else>` and `<c-for>/<c-empty>`).
@@ -6116,8 +6116,8 @@ mod walks_without_recursion {
     //! The passes below, and `Template`'s clone, comparison and drop, keep
     //! their own stack of what is left to visit, so they run on a small
     //! thread whatever the template's depth. The tree is built by hand, far
-    //! deeper than the parser accepts (3,000 levels against its 512-tag
-    //! limit), and none of them has a stack
+    //! deeper than the parser accepts (3,000 `<c-if>` levels, where the
+    //! parser stops control flow at 256), and none of them has a stack
     //! guard, so one that called itself once per level would overflow the
     //! 64 KiB thread.
     use super::*;
