@@ -81,13 +81,18 @@ All notable changes to `citry-lsp` are documented here.
 - The editor and `citry check --types` warn when a `js_data()` value is a
   `citry.Secret`, alone or inside a list or dict
   (`citry.js-data.unsupported-type`).
+- After the dot in a Vue listener such as `@click.`, the editor suggests
+  the modifiers that fit there, including Citry's `.outside`, `.window`,
+  `.document`, `.debounce`, and `.throttle`, and a duration such as
+  `.300ms` after the last two. Hovering a modifier explains it.
 
 ### Changed
 
 - **Breaking:** citry-lsp now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing citry-lsp 0.2.0.
 - citry-lsp now requires Citry 0.7.0 or later, which provides the
-  custom-directive, `inheritAttrs`, and parser-error checks listed above.
+  custom-directive, `inheritAttrs`, and parser-error checks listed above,
+  and the Vue listener modifiers.
   Installing this citry-lsp upgrades Citry when needed. An earlier
   citry-lsp with Citry 0.7.0 can show a TypeScript error next to Citry's
   message on some broken Vue expressions, such as a listener that declares

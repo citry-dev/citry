@@ -4206,6 +4206,9 @@ def completion_result(
     modifier_result = _citry_binding_modifier_completion_result(document, position)
     if modifier_result is not None:
         return modifier_result
+    listener_modifier_result = _vue_listener_modifier_completion_result(document, position)
+    if listener_modifier_result is not None:
+        return listener_modifier_result
     browser_result = _browser_data_completion_result(document, position, project, open_documents)
     if browser_result is not None:
         return browser_result
@@ -4514,10 +4517,7 @@ def _citry_binding_modifier_markdown(reference: _CitryBindingReference) -> str |
         if reference.channel == "event" and reference.base_name == "poll":
             documentation = "Use one whole number of seconds, such as `.30s`, as the polling interval."
         elif reference.previous_modifier in {"debounce", "throttle"}:
-            documentation = (
-                "Use a whole number followed by `ms` or `s`, such as `.300ms` or `.1s`, "
-                f"as the `.{reference.previous_modifier}` duration."
-            )
+            documentation = f"{_CITRY_DURATION_DOCUMENTATION}, as the `.{reference.previous_modifier}` duration."
         else:
             return None
     else:
@@ -4607,6 +4607,16 @@ def hover(
     if syntax_reference is None:
         syntax_reference = _syntax_reference_from_source(source, cursor)
     if syntax_reference is not None:
+        # A listener's modifier gets its own explanation over its own span.
+        modifier_hover = _vue_listener_modifier_hover(source, syntax_reference, parser_index)
+        if modifier_hover is not None:
+            modifier_reference, modifier_markdown = modifier_hover
+            modifier_range = _mapped_syntax_range(document, region, source, modifier_reference)
+            if modifier_range is not None:
+                return types.Hover(
+                    types.MarkupContent(types.MarkupKind.Markdown, modifier_markdown),
+                    range=modifier_range,
+                )
         syntax_range = _mapped_syntax_range(document, region, source, syntax_reference)
         if syntax_range is not None:
             return types.Hover(
@@ -6273,6 +6283,233 @@ _CITRY_BINDING_MODIFIERS_BY_NAME = {spec.name: spec for spec in _CITRY_BINDING_M
 _CITRY_TIMING_EXAMPLES = ("100ms", "250ms", "300ms", "500ms", "1s")
 _CITRY_POLL_EXAMPLES = ("1s", "5s", "30s", "60s")
 _CITRY_TIME_SEGMENT = re.compile(r"[0-9]+(?:ms|s)\Z")
+
+
+@dataclass(frozen=True, slots=True)
+class _VueListenerModifierSpec:
+    """
+    One modifier a Vue listener (`@event` or `v-on:event`) accepts.
+
+    `scope` says which events the modifier belongs to: `keyboard` holds key
+    names, which the parser rejects on a static event name that is not a
+    keyboard event; `mouse` holds the mouse buttons. On a keyboard event
+    Vue reads `.left` and `.right` as arrow keys and ignores `.middle`.
+    `citry` marks the modifiers Citry adds, which the parser accepts only on
+    HTML elements.
+    """
+
+    name: str
+    detail: str
+    documentation: str
+    documentation_url: str
+    scope: Literal["any", "keyboard", "mouse"] = "any"
+    citry: bool = False
+
+
+_VUE_EVENT_HANDLING_URL = "https://vuejs.org/guide/essentials/event-handling.html"
+_VUE_EVENT_MODIFIERS_URL = f"{_VUE_EVENT_HANDLING_URL}#event-modifiers"
+_VUE_KEY_MODIFIERS_URL = f"{_VUE_EVENT_HANDLING_URL}#key-modifiers"
+_VUE_SYSTEM_KEYS_URL = f"{_VUE_EVENT_HANDLING_URL}#system-modifier-keys"
+_VUE_MOUSE_BUTTONS_URL = f"{_VUE_EVENT_HANDLING_URL}#mouse-button-modifiers"
+_CITRY_LISTENER_MODIFIERS_URL = "https://citry.dev/syntax/vue/#listener-modifiers"
+
+
+def _vue_key_modifier(name: str, key: str, note: str = "") -> _VueListenerModifierSpec:
+    """Describe one of Vue's key aliases, which match `event.key`."""
+    return _VueListenerModifierSpec(
+        name,
+        f"Require the {key} key",
+        f"Run the listener only when the pressed key is {key}.{f' {note}' if note else ''}",
+        _VUE_KEY_MODIFIERS_URL,
+        scope="keyboard",
+    )
+
+
+def _vue_system_key_modifier(name: str, key: str) -> _VueListenerModifierSpec:
+    """Describe one of Vue's modifier-key checks."""
+    return _VueListenerModifierSpec(
+        name,
+        f"Require the {key} key to be held",
+        f"Run the listener only while the {key} key is held down.",
+        _VUE_SYSTEM_KEYS_URL,
+    )
+
+
+# Keep the Vue part in step with the modifiers Vue's `compiler-dom` handles
+# itself (`VUE_NON_KEY_MODIFIERS` in
+# crates/citry_template_parser/src/parser.rs) and Vue's documented key
+# aliases, and the Citry part with `CITRY_LISTENER_MODIFIERS` in the same
+# file.
+_VUE_LISTENER_DURATION_HINT = "To change the 250 ms, add a duration after the modifier, such as `.300ms` or `.1s`."
+_VUE_LISTENER_MODIFIERS = (
+    _VueListenerModifierSpec(
+        "stop",
+        "Stop the event from reaching parent elements",
+        "Call `event.stopPropagation()` before the listener runs.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "prevent",
+        "Prevent the browser's default action",
+        "Call `event.preventDefault()` before the listener runs, for example so a form does not submit.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "self",
+        "Ignore events that start on a child",
+        "Run the listener only when the event starts on this element itself, not on a child. With "
+        "`.window` or `.document`, the event must start on the window or the document itself, as "
+        "`resize` does on the window and `selectionchange` on the document.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "capture",
+        "Run before inner elements' listeners",
+        "Run this listener before the listeners on the elements inside this one.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "once",
+        "Run at most once",
+        "Remove the listener after its first event.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "passive",
+        "Promise not to cancel the event",
+        "Tell the browser the listener never calls `preventDefault()`, so scrolling stays smooth. "
+        "Do not combine it with `.prevent`: a passive listener cannot cancel the event.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _vue_system_key_modifier("ctrl", "Ctrl"),
+    _vue_system_key_modifier("shift", "Shift"),
+    _vue_system_key_modifier("alt", "Alt"),
+    _VueListenerModifierSpec(
+        "meta",
+        "Require the Meta key to be held",
+        "Run the listener only while the Meta key is held: Command on macOS, the Windows key on Windows.",
+        _VUE_SYSTEM_KEYS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "exact",
+        "Require exactly these modifier keys",
+        "Run the listener only when exactly the keys named on it, such as `.ctrl`, are held, and no "
+        "other Ctrl, Shift, Alt or Meta key. Alone, `@click.exact` runs only when none is held.",
+        f"{_VUE_EVENT_HANDLING_URL}#exact-modifier",
+    ),
+    _VueListenerModifierSpec(
+        "left",
+        "Require the left mouse button",
+        "Run the listener only for the left mouse button.",
+        _VUE_MOUSE_BUTTONS_URL,
+        scope="mouse",
+    ),
+    _VueListenerModifierSpec(
+        "right",
+        "Require the right mouse button",
+        "Run the listener only for the right mouse button. On `@click.right`, Vue listens for "
+        "`contextmenu`, so the listener runs when the browser would open its context menu; add "
+        "`.prevent` to keep that menu closed.",
+        _VUE_MOUSE_BUTTONS_URL,
+        scope="mouse",
+    ),
+    _VueListenerModifierSpec(
+        "middle",
+        "Require the middle mouse button",
+        "Run the listener only for the middle mouse button. On `@click.middle`, Vue listens for "
+        "`mouseup`, because browsers send `auxclick`, not `click`, for the middle button.",
+        _VUE_MOUSE_BUTTONS_URL,
+        scope="mouse",
+    ),
+    _vue_key_modifier("enter", "Enter"),
+    _vue_key_modifier("tab", "Tab"),
+    _vue_key_modifier("delete", "Delete or Backspace"),
+    _vue_key_modifier("esc", "Escape", "Same as `.escape`."),
+    # Vue also matches any key name in kebab case; Citry's docs write
+    # `.escape`, so it is offered beside Vue's shorter alias.
+    _vue_key_modifier("escape", "Escape"),
+    _vue_key_modifier("space", "Space"),
+    _vue_key_modifier("up", "Arrow Up"),
+    _vue_key_modifier("down", "Arrow Down"),
+    _vue_key_modifier("left", "Arrow Left"),
+    _vue_key_modifier("right", "Arrow Right"),
+    _VueListenerModifierSpec(
+        "outside",
+        "Run for events outside this element",
+        "Run the listener for an event that starts outside this element. Citry skips the event while the "
+        "element is hidden, so a closed menu does not react to every click.",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+    _VueListenerModifierSpec(
+        "window",
+        "Listen on the whole window",
+        "Listen on `window`, for events such as `resize` or a key pressed anywhere on the page.",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+    _VueListenerModifierSpec(
+        "document",
+        "Listen on the whole document",
+        "Listen on `document`, for events that bubble up from anywhere on the page.",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+    _VueListenerModifierSpec(
+        "debounce",
+        "Wait for a quiet period",
+        f"Run the listener once, with the last event, after 250 ms with no new event. {_VUE_LISTENER_DURATION_HINT}",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+    _VueListenerModifierSpec(
+        "throttle",
+        "Limit how often the listener runs",
+        "Run the listener for the first event, then drop the events that follow for 250 ms. "
+        f"{_VUE_LISTENER_DURATION_HINT}",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+)
+# The parser rejects two of `.outside`, `.window` and `.document` together,
+# and `.outside` with `.self`, `.capture` or `.once`, because the listener
+# would never run or would run too early.
+_VUE_LISTENER_PLACES = frozenset({"outside", "window", "document"})
+_VUE_LISTENER_OUTSIDE_CONFLICTS = frozenset({"self", "capture", "once"})
+_VUE_KEYBOARD_EVENTS = frozenset({"keydown", "keyup", "keypress"})
+_CITRY_DURATION_DOCUMENTATION = "Use a whole number followed by `ms` or `s`, such as `.300ms` or `.1s`"
+_CITRY_DURATION_DETAIL = "Citry timing duration"
+# What each duration controls on a Vue listener. Throttle does not wait: it
+# runs the first event at once and drops the ones that follow.
+_VUE_LISTENER_DURATION_PURPOSE = {
+    "debounce": "for how long `.debounce` waits after the last event",
+    "throttle": "for how long `.throttle` drops events after each one it runs",
+}
+# Modifiers that read the keys held or the mouse button. Vue's checks find
+# neither on these events, so the listener never runs (`.ctrl` and the
+# other held keys) or the modifier does nothing (`.exact` and the buttons).
+_VUE_INPUT_STATE_MODIFIERS = frozenset({"ctrl", "shift", "alt", "meta", "exact", "left", "right", "middle"})
+_VUE_EVENTS_WITHOUT_INPUT_STATE = frozenset(
+    {
+        "input",
+        "beforeinput",
+        "change",
+        "submit",
+        "reset",
+        "invalid",
+        "select",
+        "toggle",
+        "scroll",
+        "scrollend",
+        "resize",
+        "focus",
+        "blur",
+        "focusin",
+        "focusout",
+        "load",
+        "error",
+    }
+)
 
 _VUE_SYNTAX = (
     _SyntaxSpec(
@@ -10527,11 +10764,18 @@ def _citry_state_key_completion_result(
     )
 
 
-def _citry_binding_modifier_completion_result(
+def _attribute_name_at_cursor(
     document: DocumentState,
     position: types.Position,
-) -> CompletionResult | None:
-    """Complete only modifiers accepted by the active Citry binding channel."""
+) -> tuple[TemplateRegion, str, str, _AttributeCompletionContext, int] | None:
+    """
+    Find the attribute name the cursor is typing in, with its tag.
+
+    Returns the template region, its source, the tag name, the attribute's
+    completion context, and the cursor's character index in the source. The modifier
+    completions read the attribute name from the source text, so they also
+    work while the half-typed attribute makes the template fail to parse.
+    """
     region = document.region_at(position)
     if region is None:
         return None
@@ -10540,10 +10784,12 @@ def _citry_binding_modifier_completion_result(
         return None
     source = region.source_map.template_source
     cursor = parser_char_index(source, parser_index)
+    # Truncating at the cursor proves the cursor sits in an authored start
+    # tag rather than in a comment or a raw body.
     chain = _unfinished_start_tag_chain(source[:cursor])
     if not chain:
         return None
-    tag_start, _tag_name, _tag_text = chain[-1]
+    tag_start, tag_name, _tag_text = chain[-1]
     context, attribute_position = _attribute_completion_context(
         document,
         region,
@@ -10553,6 +10799,18 @@ def _citry_binding_modifier_completion_result(
     )
     if not attribute_position or context is None:
         return None
+    return region, source, tag_name, context, cursor
+
+
+def _citry_binding_modifier_completion_result(
+    document: DocumentState,
+    position: types.Position,
+) -> CompletionResult | None:
+    """Complete only modifiers accepted by the active Citry binding channel."""
+    active = _attribute_name_at_cursor(document, position)
+    if active is None:
+        return None
+    region, source, _tag_name, context, cursor = active
     authored_name = context.authored_name
     if authored_name.startswith("@c-"):
         channel: Literal["event", "state"] = "event"
@@ -10633,8 +10891,8 @@ def _citry_binding_modifier_candidates(
                 f".{duration}",
                 duration,
                 duration,
-                "Citry timing duration",
-                "Use a whole number followed by `ms` or `s`, such as `.300ms` or `.1s`.",
+                _CITRY_DURATION_DETAIL,
+                f"{_CITRY_DURATION_DOCUMENTATION}.",
                 False,
             )
             for duration in _CITRY_TIMING_EXAMPLES
@@ -10660,6 +10918,246 @@ def _citry_binding_modifier_candidates(
             )
         )
     return tuple(candidates)
+
+
+def _vue_listener_name_parts(attribute_name: str) -> tuple[str | None, list[tuple[int, int, str]]] | None:
+    """
+    Split a Vue listener name into its event name and its modifier segments.
+
+    Returns `None` for anything but `@event` or `v-on:event`, and for a
+    `@c-*` Events binding, which has its own modifiers. The event name is
+    `None` for a dynamic name (`@[name]`), whose event only the browser
+    knows. Each segment is `(start, end, text)`, with `start` just after
+    its dot, as character offsets into the name.
+    """
+    if attribute_name.startswith("@c-"):
+        return None
+    if attribute_name.startswith("v-on:"):
+        listener_start = len("v-on:")
+    elif attribute_name.startswith("@"):
+        listener_start = 1
+    else:
+        return None
+    event: str | None
+    if attribute_name.startswith("[", listener_start):
+        # A dynamic name may itself contain dots, so the modifiers start
+        # after its closing bracket, as the parser reads them.
+        close = attribute_name.find("]", listener_start)
+        if close < 0:
+            return None
+        event = None
+        modifiers_start = close + 1
+    else:
+        dot = attribute_name.find(".", listener_start)
+        modifiers_start = len(attribute_name) if dot < 0 else dot
+        event = attribute_name[listener_start:modifiers_start]
+    segments: list[tuple[int, int, str]] = []
+    index = modifiers_start
+    while index < len(attribute_name) and attribute_name[index] == ".":
+        end = attribute_name.find(".", index + 1)
+        end = len(attribute_name) if end < 0 else end
+        segments.append((index + 1, end, attribute_name[index + 1 : end]))
+        index = end
+    return event, segments
+
+
+def _accepts_citry_listener_modifiers(tag_name: str) -> bool:
+    """
+    Whether the parser accepts `.outside`, `.window` and the rest on this tag.
+
+    This mirrors the parser's rule: the parser rejects them on component
+    tags, where the listener may receive the component's emitted events
+    rather than DOM events, and on Vue's `<template>`, `<slot>` and
+    `<component>`, which render no element of their own. A tag that starts
+    with a capital letter, such as `<MyThing>`, is a Vue component too.
+    `<c-element>` renders a plain HTML element, so it accepts them.
+    """
+    if tag_name.startswith("c-") and tag_name[2:].lower() != "element":
+        return False
+    if tag_name[:1].isupper():
+        return False
+    return tag_name.lower() not in {"template", "slot", "component"}
+
+
+def _vue_listener_modifier_spec(event: str | None, name: str) -> _VueListenerModifierSpec | None:
+    """Look up a modifier, reading `.left` and `.right` as Vue does for this event."""
+    # On a dynamic name Vue reads `.left` and `.right` as keys, which blocks
+    # every mouse event, and the event is known only in the browser, so
+    # they are left out.
+    if event is None and name in {"left", "right"}:
+        return None
+    # On a keyboard event they are arrow keys; on any other static event
+    # they are mouse buttons.
+    scopes = ("keyboard", "any") if event in _VUE_KEYBOARD_EVENTS else ("mouse", "any")
+    return next(
+        (spec for scope in scopes for spec in _VUE_LISTENER_MODIFIERS if spec.name == name and spec.scope == scope),
+        None,
+    )
+
+
+def _vue_listener_modifier_allowed(name: str, used: set[str]) -> bool:
+    """Leave out a modifier that repeats or conflicts with one already written."""
+    if name in used:
+        return False
+    if name in _VUE_LISTENER_PLACES and used & _VUE_LISTENER_PLACES:
+        return False
+    if name == "outside" and used & _VUE_LISTENER_OUTSIDE_CONFLICTS:
+        return False
+    if name in _VUE_LISTENER_OUTSIDE_CONFLICTS and "outside" in used:
+        return False
+    # A passive listener cannot cancel its event.
+    return not ((name == "passive" and "prevent" in used) or (name == "prevent" and "passive" in used))
+
+
+def _vue_listener_modifier_completion_result(
+    document: DocumentState,
+    position: types.Position,
+) -> CompletionResult | None:
+    """Complete the modifier segment of a Vue listener such as `@click.`."""
+    active = _attribute_name_at_cursor(document, position)
+    if active is None:
+        return None
+    region, source, tag_name, context, cursor = active
+    listener = _vue_listener_name_parts(context.authored_name)
+    if listener is None:
+        return None
+    event, segments = listener
+    relative_cursor = cursor - context.start_index
+    current = next(
+        (index for index, (start, end, _text) in enumerate(segments) if start <= relative_cursor <= end),
+        None,
+    )
+    # A cursor in the event name is left to the attribute completion.
+    if current is None:
+        return None
+    # `<c-slot>` and the structural tags take no listener, so no modifier
+    # fits there; the attribute names the general completion would offer
+    # do not belong after a dot either.
+    semantic_component = _is_semantic_component_tag(tag_name)
+    if _VUE_SYNTAX_BY_LABEL["v-on"] not in _vue_completion_specs(tag_name, semantic_component=semantic_component):
+        return CompletionResult((), is_incomplete=True)
+    segment_start, segment_end, _text = segments[current]
+    edit_range = _mapped_template_range(
+        region,
+        source,
+        context.start_index + segment_start,
+        context.start_index + segment_end,
+    )
+    if edit_range is None:
+        return CompletionResult((), is_incomplete=True)
+    prefix = context.authored_name[segment_start:relative_cursor]
+    previous = segments[current - 1][2] if current > 0 else None
+    following = segments[current + 1][2] if current + 1 < len(segments) else None
+    used = {text for index, (_start, _end, text) in enumerate(segments) if index != current and text}
+
+    items: list[types.CompletionItem] = []
+    # Citry's modifiers need the event name written out, so a dynamic name
+    # (`@[name]`) gets Vue's own modifiers only.
+    citry_modifiers = _accepts_citry_listener_modifiers(tag_name) and event is not None
+    # A duration already follows this segment, and the parser accepts it
+    # only right after `.debounce` or `.throttle`, so nothing else fits.
+    before_duration = following is not None and _CITRY_TIME_SEGMENT.fullmatch(following) is not None
+    if citry_modifiers and previous in _VUE_LISTENER_DURATION_PURPOSE and not before_duration:
+        # A duration applies to the `.debounce` or `.throttle` right before it.
+        items.extend(
+            types.CompletionItem(
+                label=f".{duration}",
+                kind=types.CompletionItemKind.Keyword,
+                detail=_CITRY_DURATION_DETAIL,
+                documentation=_markdown(
+                    f"{_CITRY_DURATION_DOCUMENTATION}, {_VUE_LISTENER_DURATION_PURPOSE[previous]}.\n\n"
+                    f"[Read the Citry documentation]({_CITRY_LISTENER_MODIFIERS_URL})"
+                ),
+                filter_text=duration,
+                text_edit=types.TextEdit(edit_range, duration),
+            )
+            for duration in _CITRY_TIMING_EXAMPLES
+            if duration.startswith(prefix)
+        )
+    names = dict.fromkeys(spec.name for spec in _VUE_LISTENER_MODIFIERS)
+    for name in names:
+        # The lookup leaves out key names on other events, which the parser
+        # rejects, and `.middle` on a keyboard event, which Vue ignores there.
+        spec = _vue_listener_modifier_spec(event, name)
+        if spec is None:
+            continue
+        if (spec.citry and not citry_modifiers) or not _vue_listener_modifier_allowed(name, used):
+            continue
+        if before_duration and name not in _VUE_LISTENER_DURATION_PURPOSE:
+            continue
+        if event in _VUE_EVENTS_WITHOUT_INPUT_STATE and name in _VUE_INPUT_STATE_MODIFIERS:
+            continue
+        if not name.startswith(prefix):
+            continue
+        items.append(
+            types.CompletionItem(
+                label=f".{name}",
+                kind=types.CompletionItemKind.Keyword,
+                detail=spec.detail,
+                documentation=_markdown(_vue_listener_modifier_documentation(spec)),
+                filter_text=name,
+                text_edit=types.TextEdit(edit_range, name),
+            )
+        )
+    return CompletionResult(tuple(items), is_incomplete=True)
+
+
+def _vue_listener_modifier_documentation(spec: _VueListenerModifierSpec) -> str:
+    """Render one modifier's explanation with a link to the Vue or Citry guide that documents it."""
+    owner = "Citry" if spec.citry else "Vue"
+    return f"{spec.documentation}\n\n[Read the {owner} documentation]({spec.documentation_url})"
+
+
+def _vue_listener_modifier_hover(
+    source: str,
+    reference: _SyntaxReference,
+    parser_index: int,
+) -> tuple[_SyntaxReference, str] | None:
+    """
+    Narrow a `v-on` hover to the modifier segment under the cursor.
+
+    Returns the segment's span, dot included, and its explanation, or
+    `None` when the cursor is on the event name or on a segment with no
+    explanation, such as a custom key name; the caller then explains the
+    whole listener.
+    """
+    if reference.spec is not _VUE_SYNTAX_BY_LABEL["v-on"] or reference.display_label is None:
+        return None
+    attribute_name = reference.display_label
+    listener = _vue_listener_name_parts(attribute_name)
+    if listener is None:
+        return None
+    event, segments = listener
+    try:
+        name_start = parser_char_index(source, reference.start_index)
+        relative_cursor = parser_char_index(source, parser_index) - name_start
+    except ValueError:
+        return None
+    for index, (start, end, text) in enumerate(segments):
+        # The dot belongs to its segment, as in the `@c-*` hover.
+        if not start - 1 <= relative_cursor < end:
+            continue
+        previous = segments[index - 1][2] if index > 0 else None
+        if _CITRY_TIME_SEGMENT.fullmatch(text):
+            if previous not in _VUE_LISTENER_DURATION_PURPOSE:
+                return None
+            documentation = (
+                f"{_CITRY_DURATION_DOCUMENTATION}, {_VUE_LISTENER_DURATION_PURPOSE[previous]}.\n\n"
+                f"[Read the Citry documentation]({_CITRY_LISTENER_MODIFIERS_URL})"
+            )
+        else:
+            spec = _vue_listener_modifier_spec(event, text)
+            if spec is None:
+                return None
+            documentation = _vue_listener_modifier_documentation(spec)
+        segment = replace(
+            reference,
+            start_index=_char_to_byte(source, name_start + start - 1),
+            end_index=_char_to_byte(source, name_start + end),
+            display_label=f".{text}",
+        )
+        return segment, f"### `.{text}`\n\n{documentation}"
+    return None
 
 
 def _browser_event_completion_result(

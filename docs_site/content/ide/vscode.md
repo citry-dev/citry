@@ -263,6 +263,35 @@ For `<c-element>`, a literal tag such as `is="form"` gets the attribute help
 for `<form>`. With a dynamic `c-is` or `c-bind`, only global HTML attributes
 are offered, because the final tag is not known.
 
+### Listener modifiers
+
+Type a dot after a Vue listener, such as `@click.` or `v-on:keydown.`, to
+see the modifiers that work on it. The list has Vue's own modifiers, such
+as `.stop`, and Citry's
+[extra listener modifiers](/syntax/vue/#listener-modifiers), such as
+`.outside`. On a keyboard event it also has key names, such as `.enter`.
+Hover a modifier to see what it does.
+
+After `.debounce` or `.throttle`, the list offers durations such as
+`.300ms`.
+
+The list leaves out:
+
+- a modifier the listener already has;
+- a modifier that conflicts with one already on it, such as `.window`
+  after `.outside`;
+- Citry's modifiers on a component tag, `<template>`, `<slot>`, or
+  `<component>`, where they cannot work;
+- `.ctrl`, `.shift`, `.alt`, `.meta`, `.exact`, and the mouse buttons on
+  events that carry no held keys or mouse button, such as `input`,
+  `scroll`, or `focus`;
+- anything but `.debounce` or `.throttle` right before a duration you
+  already typed.
+
+If you type a combination Citry rejects, such as `@click.outside.window`
+or `.outside` on a component tag, the editor underlines the whole
+attribute and the message says what to change.
+
 ## Check component inputs
 
 A `c-*` value on a component tag is a Python keyword argument, so Citry checks
