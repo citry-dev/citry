@@ -186,3 +186,4 @@ cost, and was likewise reverted; the implementation is preserved in commit
 
 For the reasoning behind these rules and the incidents that shaped them, see
 [`RATIONALE.md`](RATIONALE.md).
+
