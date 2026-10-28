@@ -22,8 +22,9 @@
 //! block from the heap and frees it afterwards. When Python calls the
 //! parser, the Python bindings' own guard takes one block for the whole
 //! call, and the guards inside reuse it. When Rust code calls the parser
-//! with no guard around it, each template written in an attribute value
-//! takes one block.
+//! with no guard around it, each outermost template written in an
+//! attribute value, and each embedded expression parsed outside one, takes
+//! one block.
 
 /// Run the work on a new segment when less stack than this is left: enough
 /// for the largest frames between two guarded calls, about 18 KB per
@@ -75,7 +76,7 @@ pub fn with_enough_stack_where_measurable<T>(work: impl FnOnce() -> T) -> T {
 /// Reporting an invalid expression needs far more stack than parsing a valid
 /// one: a debug build needed about 148 KiB for `{{ x + }}` and 48 KiB for
 /// `{{ x }}` (measured on macOS arm64), more than a 128 KiB thread has. So
-/// this call keeps a larger red zone than the tree passes.
+/// this call keeps a larger red zone than the general guard's `RED_ZONE`.
 pub(crate) fn with_stack_for_expression<T>(work: impl FnOnce() -> T) -> T {
     stacker::maybe_grow(EXPRESSION_RED_ZONE, NEW_SEGMENT, work)
 }

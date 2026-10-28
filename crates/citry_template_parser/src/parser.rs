@@ -235,7 +235,7 @@ fn count_braces(source: &str) -> (usize, Option<usize>) {
 /// afterwards. The grammar is pure Rust, so running it off the thread's own
 /// stack is safe.
 ///
-/// The grammar keeps this reservation rather than a loop of its own: Pest's
+/// The grammar runs with this reservation, not a loop of its own: Pest's
 /// generated parser enters each rule by calling a function, so its stack
 /// use grows with how deeply the braces nest, and only a parser written
 /// outside Pest could change that.
@@ -591,9 +591,10 @@ fn current_open_depth(tag_stack: &[TagStackEntry], context: &ParserContext) -> N
 /// Check that `start_tag`, inside tags at `open_depth`, stays within both
 /// nesting limits, and return the depth inside it.
 ///
-/// The error points at the tag. The parse stops here, before the passes that
-/// call themselves once per level run, so a template far past the limit
-/// costs one read of its text and nothing that grows with its depth.
+/// The error points at the tag. The parse stops here, before the compiler
+/// and the other walks over the finished tree run, so a template far past
+/// the limit costs one read of its text and nothing that grows with its
+/// depth.
 fn check_nesting_depth(
     start_tag: &HtmlStartTag,
     open_depth: NestingDepth,
@@ -786,8 +787,8 @@ fn process_expression(
     if value_span.is_none() && value_token.content.trim().is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
-    // An invalid expression's error path needs more stack than the tree
-    // passes leave room for.
+    // An invalid expression's error path needs more stack than the general
+    // stack guard (`RED_ZONE`) leaves room for.
     let transform_result = crate::stack::with_stack_for_expression(|| {
         context.lang.parse_expression(&value_token.content)
     })
@@ -834,7 +835,7 @@ fn process_template_string(
     // A template in an attribute value is parsed, and its own passes run,
     // while the parser reads the tag that holds it, so its frames sit on top
     // of the outer parse. Each such level is a whole parse called from inside
-    // another, so it keeps the guard: turning it into a loop would mean
+    // another, so it runs through the guard: turning it into a loop would mean
     // pausing the outer parse partway through reading a tag.
     crate::stack::with_enough_stack(|| {
         let content = &template_token.content;
@@ -4267,12 +4268,11 @@ fn recompute_template_used_variables(template: &mut Template) -> Vec<Token> {
                     // Visit the body first; the node waits in the new frame.
                     let elements = std::mem::take(&mut body.elements);
                     stack.push(Frame {
-                        owner: None,
+                        owner: Some(node),
                         done: Vec::with_capacity(elements.len()),
                         rest: elements.into_iter(),
                         used_variables: Vec::new(),
                     });
-                    stack.last_mut().expect("just pushed").owner = Some(node);
                 } else {
                     let variables = recompute_node_used_variables(&mut node, Vec::new());
                     frame.used_variables.extend(variables);
@@ -4371,9 +4371,8 @@ fn is_control_flow_attribute(attr_name: &str) -> bool {
 /// including declarations nested inside template-valued attributes.
 fn collect_template_binding_tokens(template: &Template, context: &ParserContext) -> Vec<Token> {
     // The element lists still being read, innermost last. A node's body is
-    // read before its next sibling, so the tokens come out in the same
-    // order as a walk that calls itself per level, without the stack use
-    // growing with the template's depth.
+    // read before its next sibling, so the tokens come out in source order,
+    // without the stack use growing with the template's depth.
     let mut bindings = Vec::new();
     let mut pending: Vec<std::slice::Iter<'_, TemplateElement>> = vec![template.elements.iter()];
     while let Some(elements) = pending.last_mut() {
@@ -4416,8 +4415,8 @@ fn validate_template_bindings(
 ) -> Result<(), ParseError> {
     // The element lists still being read, innermost last, each with the
     // names bound around it. A node's body is checked before its next
-    // sibling, so the first error is the same as for a walk that calls
-    // itself per level, and the stack use does not grow with the depth.
+    // sibling, so the first error reported is the first one in source
+    // order, and the stack use does not grow with the depth.
     let mut pending: Vec<(std::slice::Iter<'_, TemplateElement>, Vec<String>)> =
         vec![(template.elements.iter(), active_bindings.to_vec())];
     while let Some((elements, active_bindings)) = pending.last_mut() {
@@ -5676,7 +5675,8 @@ struct FillNodeInfo<'a> {
     inside_foreign_control: bool,
 }
 
-/// Recursively collect all `<c-fill>` nodes from a template body.
+/// Collect all `<c-fill>` nodes from a template body, including those
+/// nested inside control flow.
 ///
 /// This searches through all elements, including those nested inside control flow nodes
 /// (`<c-if>/<c-elif>/<c-else>` and `<c-for>/<c-empty>`).
@@ -6115,8 +6115,9 @@ fn validate_tag_grouping(
 mod walks_without_recursion {
     //! The passes below, and `Template`'s clone, comparison and drop, keep
     //! their own stack of what is left to visit, so they run on a small
-    //! thread whatever the template's depth. The tree is built by hand, six
-    //! times deeper than the parser accepts, and none of them has a stack
+    //! thread whatever the template's depth. The tree is built by hand, far
+    //! deeper than the parser accepts (3,000 levels against its 512-tag
+    //! limit), and none of them has a stack
     //! guard, so one that called itself once per level would overflow the
     //! 64 KiB thread.
     use super::*;

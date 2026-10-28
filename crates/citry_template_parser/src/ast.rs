@@ -1029,6 +1029,17 @@ pub struct Template {
 /// for a node with a body.
 impl Clone for Template {
     fn clone(&self) -> Self {
+        // Most bodies hold only text and expressions, which cannot nest,
+        // and PyO3 clones a body on every read of a node's `body`, so those
+        // skip the work list.
+        if !has_child_nodes(&self.elements) {
+            return Template {
+                elements: self.elements.clone(),
+                comments: self.comments.clone(),
+                used_variables: self.used_variables.clone(),
+                slots: self.slots.clone(),
+            };
+        }
         /// One body being copied: its source elements still to copy, the
         /// copies made so far, and the copied node (with an empty body)
         /// waiting for them. The root has no node.
@@ -1110,12 +1121,17 @@ fn node_with_empty_body(node: &Node) -> Node {
 /// Comparing two templates also walks both trees. It keeps its own stack of
 /// the element lists still to compare, so it does not grow the native stack
 /// with the depth, and it never runs the derived `PartialEq` of a node with
-/// a body. Python reaches it through `==`, and pytest compares on a failed
-/// assertion. The answer is the same as the derived implementation's.
+/// a body. Python reaches it through `==`, for example in a test's
+/// `assert a == b`. The answer is the same as the derived implementation's.
 impl PartialEq for Template {
     fn eq(&self, other: &Self) -> bool {
         if !template_fields_equal(self, other) {
             return false;
+        }
+        // With no node on this side, any node on the other side is a
+        // different variant, so the plain comparison does not go deeper.
+        if !has_child_nodes(&self.elements) {
+            return self.elements == other.elements;
         }
         let mut pending = vec![(self.elements.iter(), other.elements.iter())];
         while let Some((left, right)) = pending.last_mut() {
@@ -1173,19 +1189,28 @@ impl PartialEq for Template {
     }
 }
 
-/// Compare everything a template holds except its elements.
+/// Compare a template's own fields and how many elements it has, but not
+/// the elements themselves.
 fn template_fields_equal(left: &Template, right: &Template) -> bool {
-    left.elements.len() == right.elements.len()
-        && left.comments == right.comments
-        && left.used_variables == right.used_variables
-        && left.slots == right.slots
+    // Naming every field makes the build fail when `Template` gains one, so
+    // a new field cannot be left out of the comparison by mistake.
+    let Template {
+        elements,
+        comments,
+        used_variables,
+        slots,
+    } = left;
+    elements.len() == right.elements.len()
+        && *comments == right.comments
+        && *used_variables == right.used_variables
+        && *slots == right.slots
 }
 
 /// Printing a template also walks the whole tree, once per level, through
 /// the derived `Debug` of its elements. Python reaches it through `repr()`,
 /// and pytest calls `repr()` on a failed comparison. Printing in the derived
 /// format without calling itself would mean writing that format by hand, so
-/// this one keeps the stack guard. The output is the same as the derived
+/// this one runs each level through the stack guard. The output is the same as the derived
 /// implementation's.
 impl std::fmt::Debug for Template {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1218,7 +1243,7 @@ fn has_child_nodes(elements: &[TemplateElement]) -> bool {
 /// an attribute value is freed while the parser is still reading the tag
 /// that holds it, and there a 128 KiB thread ran out at 192 levels. So the
 /// drop moves every nested body's elements onto one list and frees them
-/// from there, each body already empty.
+/// from there, so each body is already empty when it is freed.
 impl Drop for Template {
     fn drop(&mut self) {
         // Only a body with child nodes can nest further; the rest are freed

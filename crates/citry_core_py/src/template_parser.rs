@@ -136,8 +136,9 @@ pub fn compile_template(template: PyRef<'_, Template>, lang: Option<&str>) -> Py
     // The template is borrowed rather than taken by value, so PyO3 does not
     // clone the whole tree while it converts the argument. A tree built by
     // hand can nest past the parser's limits, so its depth is checked first,
-    // with a loop instead of recursion. The clone then runs through the
-    // parser's stack guard.
+    // with a loop instead of recursion. The clone keeps its own list of what
+    // is left to copy, so its stack use does not grow with the depth; the
+    // compiler then runs inside this guard.
     check_template_depth(&template).map_err(compile_error_to_py)?;
     with_enough_stack(|| compile_template_rust((*template).clone(), lang_enum))
         .map_err(compile_error_to_py)

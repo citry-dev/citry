@@ -46,10 +46,11 @@ validation, the exact compiler output format), see
   over the finished tree, and `Template`'s `Clone`, `PartialEq` and `Drop`,
   keep a list of what is left to visit, so their stack use stays flat at any
   depth (the `walks_without_recursion` tests in `src/parser.rs` run them on a
-  64 KiB thread). Write a new pass the same way. Three places still call
+  64 KiB thread). Write a new pass the same way. Three tree walks call
   themselves once per level and wrap their body in
   `crate::stack::with_enough_stack`: the compiler, the parse of a template
-  written in an attribute value, and `Template`'s `Debug`. The guarded work
+  written in an attribute value, and `Template`'s `Debug`. The grammar has
+  its own stack reservation in `parse_grammar`. The guarded work
   must stay pure Rust, and `tests/deep_nesting.rs` checks the whole parser
   on 128 KiB. `LangSpecArgument` frees its children without recursion.
   Rust does not allow moving a field out of a type that has its own `Drop`,
