@@ -286,6 +286,10 @@
 
 ### Fixes
 
+- `citry check` now reports a `Secret` that a `js_data()` value sends when
+  the value spans several lines without parentheses, such as a conditional
+  with its `else` on its own line, and it checks a `c-values` that starts
+  on an indented line. It used to skip both.
 - `citry format` and the editor's format command no longer add trailing
   spaces to blank lines in a component's `template`, `js`, or `css` string
   in a Python file, which Ruff flags as `W293`.

@@ -521,6 +521,40 @@ class TestRegistryMode:
         assert "unknown fills: wrong" in report.findings[1].message
         assert "missing fills: link" in report.findings[1].message
 
+    def test_literal_trans_values_on_an_indented_line_are_checked(self, tmp_path):
+        # A multi-line `c-values` starts on an indented line, which Citry
+        # accepts. The check must read it, not skip the `<c-trans>`.
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+                # @param {str} $name
+                greeting = Hello { $name }
+            """
+            template = """
+                <c-trans
+                  message="greeting"
+                  c-values="
+                    {'extra': 'Ada'}
+                  "
+                />
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == ["citry.i18n.argument-invalid"]
+        assert "unknown values: extra" in report.findings[0].message
+        assert "missing values: name" in report.findings[0].message
+
     def test_missing_i18n_param_type_is_a_configurable_warning(self, tmp_path):
         engine = Citry(
             autodiscover=False,
