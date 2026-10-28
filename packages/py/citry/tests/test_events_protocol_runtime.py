@@ -392,3 +392,31 @@ def test_manifest_builder_escapes_only_at_the_html_transport_boundary() -> None:
     text = json.dumps(manifest, separators=(",", ":"), sort_keys=True, allow_nan=False).replace("<", "\\u003c")
     assert "</script>" not in text
     assert json.loads(text) == manifest
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param("text", id="string"),
+        pytest.param(None, id="null"),
+        pytest.param([1], id="array"),
+        pytest.param({}, id="object-without-request-id"),
+        pytest.param({"requestId": ""}, id="empty-request-id"),
+    ],
+)
+def test_rejected_call_envelope_without_a_request_id_is_the_valid_edge_error(raw: Any) -> None:
+    # The builder's output must pass the protocol's own validator. Without a
+    # usable request ID, the only envelope the schema allows is one
+    # uncorrelated transport-edge error.
+    built = events.build_rejected_call_envelope(raw, status=400, code="protocol_mismatch", message="Bad envelope.")
+
+    assert events.validate_result_envelope(built) is None
+    assert built == events.build_edge_error_envelope(400, "protocol_mismatch", "Bad envelope.")
+
+
+@pytest.mark.parametrize("raw", [pytest.param("text", id="string"), pytest.param({}, id="object")])
+def test_rejected_call_envelope_without_a_request_id_refuses_a_non_edge_code(raw: Any) -> None:
+    # A null request ID may carry only the two edge codes, so a builder asked
+    # for another code refuses, whatever shape the raw envelope had.
+    with pytest.raises(events.ProtocolValueError):
+        events.build_rejected_call_envelope(raw, status=404, code="not_found", message="Missing.")

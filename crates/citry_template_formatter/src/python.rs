@@ -57,6 +57,24 @@ const CLAUSE_PREFIX: &str = "None for ";
 /// Stable identity for the Python formatter pinned by this workspace.
 pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.16.6+22f65a2ab5";
 
+/// An authored expression as Citry's template parser reads it.
+///
+/// The parser wraps each expression in `(\n...\n)` before parsing it, so an
+/// author may write an expression that is valid only inside parentheses, such
+/// as a `{{ ... }}` whose `a if b` and `else c` parts sit on separate lines, or
+/// `{{ x for x in items }}`. Each parse of an authored `{{ ... }}` or attribute
+/// expression in this crate uses this text, so the formatter accepts what
+/// Citry accepts. A `c-for` clause already has its own wrapper (see
+/// `CLAUSE_PREFIX`) and must not be wrapped again, or its nesting count would
+/// pass the parser's limit.
+///
+/// The parentheses add no node to the syntax tree. They are still tokens, so a
+/// comment at either end of the expression is anchored to them; the text
+/// before and after formatting is parsed the same way so those anchors match.
+pub(crate) fn wrap_authored_expression(source: &str) -> String {
+    format!("(\n{source}\n)")
+}
+
 pub(crate) fn format_expression(
     source: &str,
     available_width: usize,
@@ -70,16 +88,32 @@ fn format_expression_on_stack(
     available_width: usize,
     newline: &str,
 ) -> Result<String, FormatError> {
-    let before = parse_expression(source).map_err(|error| {
+    format_parsed_expression(source, available_width, newline, wrap_authored_expression)
+}
+
+/// Format `source`, and parse `parse_text(source)` and `parse_text(formatted)`
+/// for the checks before and after.
+///
+/// An authored expression is parsed inside `(\n...\n)`, as the template
+/// parser does. A `c-for` clause arrives already wrapped as a generator, so
+/// it is parsed as it is.
+fn format_parsed_expression(
+    source: &str,
+    available_width: usize,
+    newline: &str,
+    parse_text: fn(&str) -> String,
+) -> Result<String, FormatError> {
+    let before_source = parse_text(source);
+    let before = parse_expression(&before_source).map_err(|error| {
         FormatError::invariant(format!(
             "Citry accepted a Python expression that the formatter provider rejected: {error}"
         ))
     })?;
-    let before_comments = comment_fingerprint(source, before.tokens());
+    let before_comments = comment_fingerprint(&before_source, before.tokens());
     // A `# fmt: skip` inside the expression is the author telling Ruff to leave
     // it alone, so return the region untouched rather than formatting it and
     // then failing a comparison.
-    if has_provider_suppression(source, before.tokens()) {
+    if has_provider_suppression(&before_source, before.tokens()) {
         return Ok(source.to_string());
     }
     let wrapped = format!("{EXPRESSION_WRAPPER}(({newline}{source}{newline})){newline}");
@@ -117,13 +151,14 @@ fn format_expression_on_stack(
     let formatted = extract_wrapped_expression(printed.as_code(), newline)?;
     // Ruff may add parentheses. They add no tree level, but the depth check
     // counts each bracket, so they raise the depth bound. Near the limit that
-    // could make the template parser, which checks each expression wrapped as
-    // `(\n...\n)`, refuse the formatted template, so the author's text is kept
+    // could make the template parser, which checks the text as `parse_text`
+    // builds it, refuse the formatted template, so the author's text is kept
     // as it is.
-    if check_nesting(&format!("(\n{formatted}\n)")).is_err() {
+    let after_source = parse_text(&formatted);
+    if check_nesting(&after_source).is_err() {
         return Ok(source.to_string());
     }
-    let after = parse_expression(&formatted).map_err(|error| {
+    let after = parse_expression(&after_source).map_err(|error| {
         FormatError::invariant(format!(
             "Python expression provider returned invalid syntax: {error}"
         ))
@@ -139,7 +174,7 @@ fn format_expression_on_stack(
             "Python expression provider changed the expression syntax tree",
         ));
     }
-    if before_comments != comment_fingerprint(&formatted, after.tokens()) {
+    if before_comments != comment_fingerprint(&after_source, after.tokens()) {
         return Err(FormatError::invariant(
             "Python expression provider changed Python comments",
         ));
@@ -148,7 +183,9 @@ fn format_expression_on_stack(
 }
 
 pub(crate) fn expression_is_provider_suppressed(source: &str) -> bool {
-    parse_expression(source).is_ok_and(|parsed| has_provider_suppression(source, parsed.tokens()))
+    let wrapped = wrap_authored_expression(source);
+    parse_expression(&wrapped)
+        .is_ok_and(|parsed| has_provider_suppression(&wrapped, parsed.tokens()))
 }
 
 pub(crate) fn for_clause_is_provider_suppressed(source: &str, newline: &str) -> bool {
@@ -177,7 +214,9 @@ fn format_for_clause_on_stack(
         ))
     })?;
     let before_comments = comment_fingerprint(&before_source, before.tokens());
-    let formatted_generator = format_expression(&before_source, available_width, newline)?;
+    // The clause is already wrapped as a generator, so it is parsed as it is.
+    let formatted_generator =
+        format_parsed_expression(&before_source, available_width, newline, str::to_string)?;
     let formatted = extract_for_clause(&formatted_generator)?;
     let after_source = format!("({CLAUSE_PREFIX}{formatted}\n)");
     // The template parser checks a clause wrapped exactly like this, so a
@@ -351,6 +390,34 @@ mod tests {
         let manifest = include_str!("../../../third_party/rust/ruff/crates/ruff/Cargo.toml");
         assert!(manifest.contains("version = \"0.16.6\""));
         assert_eq!(PYTHON_PROVIDER_IDENTITY, "ruff@0.16.6+22f65a2ab5");
+    }
+
+    #[test]
+    fn formats_an_expression_split_across_lines_without_parentheses() {
+        // The template parser accepts this, because it reads each expression
+        // inside `(\n...\n)`, so the formatter must accept it too.
+        let source = "first if a\nelse second if b\nelse third";
+        assert_eq!(
+            format_expression(source, 100, "\n").unwrap(),
+            "first if a else second if b else third"
+        );
+        // Too long for one line, so Ruff adds the parentheses itself.
+        assert_eq!(
+            format_expression(source, 20, "\n").unwrap(),
+            "(\n  first\n  if a\n  else second\n  if b\n  else third\n)"
+        );
+        // Other forms that are valid only inside parentheses.
+        for (form, formatted) in [
+            ("x  for x in y", "(x for x in y)"),
+            ("x  := 1", "(x := 1)"),
+            ("*a,  b", "(*a, b)"),
+        ] {
+            assert_eq!(format_expression(form, 100, "\n").unwrap(), formatted);
+        }
+        assert!(!super::expression_is_provider_suppressed(source));
+        assert!(super::expression_is_provider_suppressed(
+            "first if a  # fmt: skip\nelse second"
+        ));
     }
 
     #[test]

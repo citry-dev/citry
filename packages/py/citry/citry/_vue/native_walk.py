@@ -39,6 +39,7 @@ import ast
 from keyword import iskeyword
 from typing import TypeAlias, TypeGuard
 
+from citry._authored_expression import parse_authored_expression
 from citry_core.safe_eval import compile_expr
 
 PathSteps: TypeAlias = tuple[str | int, ...]
@@ -95,7 +96,7 @@ def _parsed_body(source: str) -> ast.expr | None:
     """Return Python's parse of ``source``, wrapped as the unsandboxed evaluator wraps it, or None."""
     try:
         # compile_expr wraps the text the same way, so a trailing comment parses alike.
-        return ast.parse(f"(\n{source}\n)", mode="eval").body
+        return parse_authored_expression(source).body
     except (SyntaxError, ValueError):
         # ValueError covers text Python cannot encode, such as a lone surrogate.
         return None

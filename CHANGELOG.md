@@ -2,14 +2,18 @@
 
 ## Unreleased
 
-### Fixed
-
-- On PyPy, `import citry` no longer fails with `No module named
-  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
-  values and template types less fully, and both print a note saying so.
-
 ### Added
 
+- You can write an Events `State` as a Pydantic v2 or v1 model, by hand or
+  through `model_base`. A handler that sets a field to a value the model
+  rejects fails that call, before Citry stores it
+  ([details](https://citry.dev/events/state/#pydantic-state)).
+- You can make every plain `class Kwargs:`, `TemplateData`, `JsData`,
+  `CssData`, `State`, and Events `data` class a Pydantic model that subclasses your
+  own `BaseModel` subclass, so its `model_config` applies to all of them:
+  pass it as `Citry(model_base=MyModel)`. A dataclass base or
+  `typing.NamedTuple` works too
+  ([details](https://citry.dev/concepts/inputs-and-validation/#model-base)).
 - A component can pass Vue data to a fill, as a Vue scoped slot: write
   `<c-slot name="item" :row="row" />`, and read it in the fill with
   `<c-fill name="item" v-slot="{ row }">`. Python slot data (`c-item`,
@@ -294,6 +298,13 @@
   instead of reporting an internal error. When the receiving component is
   transparent, this used to render without the fallback and now fails with
   the same error.
+- `citry check` now reports a `Secret` that a `js_data()` value sends when
+  the value spans several lines without parentheses, such as a conditional
+  with its `else` on its own line, and it checks a `c-values` that starts
+  on an indented line. It used to skip both.
+- `citry format` and the editor's format command no longer add trailing
+  spaces to blank lines in a component's `template`, `js`, or `css` string
+  in a Python file, which Ruff flags as `W293`.
 - A Vue listener with Alpine's `.minus`, `.underscore`, or `.spacebar` key
   modifier now fails when the template loads and says what to write
   instead. Vue matches none of these names, so the listener never ran.
@@ -592,6 +603,10 @@
   `id` of a control inside it now leave that part to the browser. Such a
   form now leaves its parent, or the whole page when the form is at the
   page root, to the browser.
+
+- On PyPy, `import citry` no longer fails with `No module named
+  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
+  values and template types less fully, and both print a note saying so.
 
 ### Performance
 

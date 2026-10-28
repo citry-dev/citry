@@ -20,6 +20,10 @@ on:
       - ".github/workflows/py--examples--tests.yml"
       - "scripts/build_constraints.py"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "examples/**"
       - "packages/py/citry/**"
@@ -49,6 +53,7 @@ concurrency:
 
 jobs:
   clean-copy:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -111,6 +116,7 @@ jobs:
           if-no-files-found: error
 
   browser:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 pytest.importorskip("pytest_playwright")
@@ -1017,3 +1019,126 @@ def test_correlated_rerender_retains_open_state_edits_and_one_layer(
     assert page.evaluate("document.querySelector('#survey-note') === window.__surveyNote") is True
     assert page.evaluate("window[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length") == 1
     assert page.get_by_role("heading", name="Survey step 1").count() == 1
+
+
+# Owner focus probe: the owner's `onOpenChange(false, ...)` moves focus to a
+# button outside the popover. Focus has to stay there once the popover has
+# closed. The orders cover an uncontrolled owner (just focus), a controlled
+# owner that focuses before it accepts the close, and one that accepts the
+# close first and focuses in the same callback.
+_OWNER_STEPS = {
+    "uncontrolled": "window.__ownerFocus();",
+    "focus-first": "window.__ownerFocus(); open = false;",
+    "close-first": "open = false; window.__ownerFocus();",
+}
+
+_OWNER_FOCUS_CASES = [
+    pytest.param(False, "uncontrolled", id="uncontrolled"),
+    pytest.param(True, "focus-first", id="controlled-focus-first"),
+    pytest.param(True, "close-first", id="controlled-close-first"),
+]
+
+_TWO_FRAMES_ACTIVE_ID = """() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(
+  () => {
+    // An element without an id is named by its tag and text, so a failure says where focus went.
+    const element = document.activeElement;
+    resolve(element.id || `${element.tagName.toLowerCase()}:${(element.textContent || "").trim().slice(0, 24)}`);
+  }
+)))"""
+
+
+def _owner_focus_page(*, controlled: bool, order: str) -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+    open_binding = ':open="open"' if controlled else ""
+
+    class OwnerFocusPage(Component):
+        citry = app
+        js = """
+          $component({
+            data() {
+              return { open: false };
+            },
+          });
+        """
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body>
+              <c-CPopover
+                id="probe"
+                OPEN_BINDING
+                :onOpenChange="(next, detail) => {
+                    if (next) {
+                      open = true;
+                      return;
+                    }
+                    OWNER_STEPS
+                  }"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <c-CButton c-attrs="activator_attrs">Open probe</c-CButton>
+                </c-fill>
+                <c-fill name="title">Probe</c-fill>
+                <c-fill name="default">
+                  <p>Probe content.</p>
+                </c-fill>
+              </c-CPopover>
+              <button id="target" type="button">Owner target</button>
+              <div id="empty-area" style="min-block-size: 3rem">Empty area</div>
+              <c-js />
+            </body>
+          </html>
+        """.replace("OPEN_BINDING", open_binding).replace("OWNER_STEPS", _OWNER_STEPS[order])
+
+    return str(OwnerFocusPage())
+
+
+def _load_owner_focus(page: Any, *, controlled: bool, order: str) -> list[str]:
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_owner_focus_page(controlled=controlled, order=order), wait_until="load")
+    page.wait_for_selector("[data-citry-popover-initialized]")
+    # The hook runs inside the owner's callback, so the test controls what it does.
+    page.evaluate("window.__ownerFocus = () => document.getElementById('target').focus()")
+    return errors
+
+
+@pytest.mark.parametrize(
+    "close",
+    [
+        pytest.param(
+            "outside",
+            marks=pytest.mark.xfail(
+                raises=AssertionError,
+                strict=True,
+                reason=(
+                    "#442: owner focus in onOpenChange is lost: the Popover closes on pointerdown, "
+                    "and the browser then moves focus to the body on mousedown"
+                ),
+            ),
+        ),
+        "escape",
+    ],
+)
+@pytest.mark.parametrize(("controlled", "order"), _OWNER_FOCUS_CASES)
+def test_owner_focus_move_in_on_open_change_survives_the_popover_closing(
+    page: Any, controlled: bool, order: str, close: str
+) -> None:
+    errors = _load_owner_focus(page, controlled=controlled, order=order)
+    surface = page.get_by_role("dialog", name="Probe")
+    page.get_by_role("button", name="Open probe").click()
+    surface.wait_for(state="visible")
+    if close == "escape":
+        page.keyboard.press("Escape")
+    else:
+        # A click on a plain area that cannot take focus is an outside pointer
+        # press; the browser then moves focus to the body.
+        page.locator("#empty-area").click()
+    surface.wait_for(state="hidden")
+    # Two frames let any deferred focus-return step run before we look.
+    final = page.evaluate(_TWO_FRAMES_ACTIVE_ID)
+    assert final == "target"
+    assert errors == []

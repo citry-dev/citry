@@ -151,10 +151,10 @@ class ProjectTabs(Component):
         state: dict
 
     template_file = "project_tabs.html"
-    js = (
-        "$component({setup(){const activeTab=Vue.ref('outputs');"
-        "Vue.provide('citry-benchmark-active-tab',activeTab);return {activeTab};}});"
-    )
+    # A backslash at each line end joins the lines, so the script is one line.
+    js = """\
+$component({setup(){const activeTab=Vue.ref('outputs');\
+Vue.provide('citry-benchmark-active-tab',activeTab);return {activeTab};}});"""
 
 
 class Board(Component):
@@ -211,12 +211,13 @@ $component({onServerRender({component, revision}) {
 
 class LocalDisclosure(Component):
     citry = engine
-    template = (
-        '<aside id="local-disclosure"><button type="button" data-bench-action="disclosure" '
-        '@click="open = !open" :aria-expanded="open">Local details</button><p :hidden="!open" '
-        'id="disclosure-content">This disclosure needs no server request.</p><label for="preserved-input">'
-        'Local draft</label><input id="preserved-input" value="Unchanged draft"></aside>'
-    )
+    # A backslash at each line end joins the lines, so the HTML has no extra
+    # whitespace between or around its tags.
+    template = """\
+<aside id="local-disclosure"><button type="button" data-bench-action="disclosure" \
+@click="open = !open" :aria-expanded="open">Local details</button><p :hidden="!open" \
+id="disclosure-content">This disclosure needs no server request.</p><label for="preserved-input">\
+Local draft</label><input id="preserved-input" value="Unchanged draft"></aside>"""
     js = "$component({data(){return {open: false};}});"
 
 

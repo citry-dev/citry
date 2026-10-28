@@ -1,0 +1,9 @@
+<span
+  class="status"
+  c-data-state="'busy' if state == 'loading'
+    else 'idle'"
+>{{
+    tr('loading') if state == 'loading' and loading_label
+    else tr('error') if state == 'error' and error_label
+    else announcement
+  }}</span>

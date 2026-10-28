@@ -249,6 +249,122 @@ checks their names and value types like a plain class. A dataclass that
 writes its own `__init__` controls its own values, so Citry skips the type
 check for it.
 
+### Share one schema base { #model-base }
+
+Citry turns each schema class on this page (`Kwargs`, `TemplateData`, and
+the others below) that lists plain annotated fields into a class it
+generates, a dataclass by default.
+To make all of them Pydantic models with the same settings, without
+writing `BaseModel` on each one, set `model_base` on `Citry`:
+
+```citry
+from citry import Citry, Component
+from pydantic import BaseModel, ConfigDict
+
+
+class Model(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+app = Citry(model_base=Model)
+
+
+class AgeBadge(Component):
+    citry = app  # use app's settings
+
+    class Kwargs:
+        age: int
+
+    template = """
+      <span class="age-badge">Age {{ age }}</span>
+    """
+```
+
+`AgeBadge.Kwargs` is now a `Model`, so Pydantic checks its values with
+`extra="forbid"` and `strict=True`. With `strict=True`, `"42"` fails for
+`age: int`, as it does under Citry's own check; without it, Pydantic turns
+the text into a number. Pydantic ignores an unknown name unless the
+base's `model_config` sets `extra="forbid"`, so without it a misspelled
+input passed from Python is dropped silently.
+
+The setting applies to the plain declarations of `Kwargs`,
+`TemplateData`, `JsData`, `CssData`, `State`, and Events `data` classes
+(see [Pydantic State](/events/state/#pydantic-state)). A
+class that is, or inherits, a dataclass or a model keeps that type, so a
+child component's `class Kwargs(Parent.Kwargs):` keeps its parent's.
+`Slots`, Citry's own components, and the components of a library you
+install with `register_library()` keep the classes their authors wrote.
+
+`model_base` takes one of these values:
+
+| Value | What Citry generates |
+|---|---|
+| `None` (the default) | dataclasses |
+| a Pydantic v2 model class, such as `BaseModel` | Pydantic v2 models that subclass it |
+| a Pydantic v1 model class, such as `pydantic.v1.BaseModel` | Pydantic v1 models that subclass it |
+| a dataclass, such as `@dataclass(frozen=True) class Model: ...` | dataclasses that subclass it and copy its options |
+| `typing.NamedTuple` | named tuples |
+
+You can also pass an import string, such as `"pydantic.BaseModel"`, so a
+settings module does not import the class itself. Citry imports it when
+`Citry(...)` is built, and raises `ImportError` there if the import fails,
+or `TypeError` if the class is not one of the kinds above (or the string
+has no module part).
+
+A generated model or named tuple does not inherit the class you wrote, so
+a few things work differently:
+
+- Its ordinary methods and properties are copied. A method that calls
+  `super()` fails when the component class is defined; call the parent
+  method directly, such as `Base.label(self)` when `Kwargs` subclasses
+  `Base`, or decorate `Kwargs` with `@dataclass` to keep it a dataclass.
+- `isinstance()` checks against the class you wrote, or its plain base
+  classes, return `False`. The component's own `Kwargs` is the generated
+  class.
+- Read the fields as attributes, such as `kwargs.age`. Code that calls
+  `dataclasses.fields()` on a schema only works for dataclasses.
+- A Pydantic model never calls `__post_init__`; write
+  `model_post_init(self, context)` instead, or decorate `Kwargs` with
+  `@dataclass`.
+- Under Pydantic v2, a class constant whose name starts with `_`, such as
+  `_cache = {}`, becomes a private attribute that each instance copies.
+
+These fail when the component class is defined, with a message that names
+the component:
+
+- A field type Pydantic cannot check. The message names the field.
+- Under Pydantic, a field whose name starts with `_` (Pydantic keeps it as
+  a private attribute), and a field with `field(init=False)`.
+- Under `typing.NamedTuple`, a field without a default after one with a
+  default, a field with `field(default_factory=...)`, and a list,
+  dictionary, or set written as a default. A child
+  `Kwargs` cannot add fields to its parent's named tuple either.
+- `State` under a frozen dataclass base, a frozen model base, or
+  `typing.NamedTuple`, because handlers change `State`.
+- An Events `data` class under `typing.NamedTuple` or a Pydantic v1 base,
+  because Events validation reads dataclasses and Pydantic v2 models.
+
+A name imported only under `if TYPE_CHECKING:`, which Citry's own check
+skips, cannot be read when the class is defined. Under a Pydantic v2 base
+it fails at the first render with Pydantic's "not fully defined" error.
+Under a v1 base it fails once a value is passed for that field, and so
+does a field that names a class defined later in the module; call
+`Kwargs.update_forward_refs()` after that class is defined. Import the
+type normally where you can.
+
+`Citry(...)` raises `TypeError` when `model_base` is a named tuple class
+with fields (pass `typing.NamedTuple` instead), a dataclass with its own
+`__init__` (use `__post_init__`), a Pydantic dataclass, or a root model.
+
+Under Pydantic, string values from a browser form or a query string reach
+an Events `data` class as text, and `strict=True` rejects text for a
+number field. A field whose type is a plain class, such as
+`lines: list[Line]`, fails under Pydantic when the component class is
+defined; make `Line` a Pydantic model or a dataclass.
+
+With a dataclass base, Python 3.11 does not record `kw_only=True` or
+`match_args`, so those options have no effect there.
+
 ## `field()` defaults
 
 A list, dictionary, or set written directly as a default would be shared by

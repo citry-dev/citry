@@ -26,6 +26,7 @@ from typing import Literal
 import pytest
 
 from citry import Citry, Component
+from citry._protocol import events
 from citry.ext.events import actions, event
 from citry.ext.events import dispatcher as dispatcher_module
 from citry.ext.events.dispatcher import (
@@ -917,6 +918,8 @@ class TestErrors:
         result = EventsDispatcher().dispatch(["nope"], _ctx(c))
         assert result["requestId"] is None
         assert result["results"][0]["error"]["code"] == "protocol_mismatch"
+        # The answer must be a valid result envelope, not just carry the code.
+        assert events.validate_result_envelope(result) is None
         # No calls.
         result = EventsDispatcher().dispatch({"protocol": "citry-events/1", "requestId": "r1", "calls": []}, _ctx(c))
         assert result["results"][0]["error"]["code"] == "protocol_mismatch"

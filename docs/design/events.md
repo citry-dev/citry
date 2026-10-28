@@ -4277,8 +4277,12 @@ Rules, each closing a named prior-art hole:
   the component and the State field. Kwargs are unconstrained; only State
   must serialize. No pickle, no rich-object revival, ever: verified state
   re-enters through `cls.State(**s)`, a plain dataclass constructor that
-  raises on unknown or missing keys. There is no hydration machinery to
-  attack (section 7.6).
+  raises on unknown or missing keys, or, for a Pydantic model State, the
+  model's own validation of the JSON the token holds, which rebuilds only
+  the field types the model declares (dates, nested models); unknown keys
+  follow the model's `extra` setting (ignored by default), and a
+  `ValidationError` answers `stale_state`.
+  There is no hydration machinery to attack (section 7.6).
 - Size-capped (State meta `_max_bytes`, default 8192). The cap is a **design
   smell canary, not a technical limit**: the audit measured real tokens
   at 150 to 300 bytes (section 1.4), so a component approaching the cap

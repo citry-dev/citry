@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import fields
 from typing import TYPE_CHECKING, Any, cast
 
 from citry.ext.cache.errors import CacheArtifactError
+from citry.ext.events.state import restore_state, state_field_names, state_model_kind
 from citry.extension import RenderCacheWrite, StagedRenderCacheContribution
 
 from .emission import EXTRA_KEY, EventInstanceEntry
@@ -127,15 +127,23 @@ def stage_events_cache(
                 )
             except StateTokenError as err:
                 raise CacheArtifactError(f"{path}.state.token is no longer replayable: {err}") from err
-            state_fields = tuple(field.name for field in fields(info.state_cls))
+            state_fields = state_field_names(info.state_cls)
             if set(verified.state_kwargs) != set(state_fields):
                 raise CacheArtifactError(f"{path}.state.token fields do not match the current State class.")
-            hints = _resolve_hints(info.state_cls)
-            for field_name in state_fields:
-                if not _value_matches(verified.state_kwargs[field_name], hints.get(field_name)):
-                    raise CacheArtifactError(
-                        f"{path}.state.token field {field_name!r} does not match its current type."
-                    )
+            if state_model_kind(info.state_cls) is not None:
+                # A model State's token holds its JSON form, so the model
+                # itself says whether the values still fit.
+                try:
+                    restore_state(info.state_cls, dict(verified.state_kwargs))
+                except Exception as err:
+                    raise CacheArtifactError(f"{path}.state.token no longer fits the current State class.") from err
+            else:
+                hints = _resolve_hints(info.state_cls)
+                for field_name in state_fields:
+                    if not _value_matches(verified.state_kwargs[field_name], hints.get(field_name)):
+                        raise CacheArtifactError(
+                            f"{path}.state.token field {field_name!r} does not match its current type."
+                        )
             expected_public = {name: verified.state_kwargs[name] for name in info.state_meta.public}
             if not _exact_json_equal(public_values, expected_public):
                 raise CacheArtifactError(f"{path}.state.values do not match the protected token.")
