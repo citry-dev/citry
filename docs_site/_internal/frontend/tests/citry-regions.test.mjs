@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { classHighlighter, highlightTree } from "@lezer/highlight";
 import { BrowserIdeSession, templateRegions } from "../src/browser_ide.js";
-import { citryPython } from "../src/citry_editor.js";
+import { citryPython, parseCompleted } from "../src/citry_editor.js";
 import { citryAssetAt } from "../src/citry_regions.js";
 
 function asset(source, start = source.indexOf('"""'), end = source.lastIndexOf('"""') + 3) {
@@ -54,6 +54,8 @@ test("the mixed Python tree publishes only authored template bodies", () => {
   js = """<c-for></c-for>"""
 `;
   const state = EditorState.create({ doc: source, extensions: [citryPython] });
+  // The first parse only gets a short time budget, so finish it before reading.
+  assert.ok(ensureSyntaxTree(state, state.doc.length, 5000));
 
   const regions = templateRegions(state);
 
@@ -70,14 +72,32 @@ test("the mixed Python tree colors component messages as Fluent", () => {
 `;
   const state = EditorState.create({ doc: source, extensions: [citryPython] });
   const highlighted = [];
+  // The first parse only gets a short time budget, so finish it before reading.
+  const tree = ensureSyntaxTree(state, state.doc.length, 5000);
+  assert.ok(tree);
 
-  highlightTree(syntaxTree(state), classHighlighter, (from, to, classes) => {
+  highlightTree(tree, classHighlighter, (from, to, classes) => {
     highlighted.push({ classes, text: source.slice(from, to) });
   });
 
   assert.ok(highlighted.some(({ classes, text }) => classes === "tok-comment" && text.startsWith("# @param")));
   assert.ok(highlighted.some(({ classes, text }) => classes === "tok-labelName" && text === "account-title"));
   assert.ok(highlighted.some(({ classes, text }) => classes === "tok-variableName" && text === "$name"));
+});
+
+test("a finished background parse is reported as an update without an edit", () => {
+  // A long document leaves the first parse unfinished, like a slow machine does.
+  const doc = "x = 1\n".repeat(200000);
+  const startState = EditorState.create({ doc, extensions: [citryPython] });
+  const partial = syntaxTree(startState);
+  assert.ok(partial.length < doc.length);
+  assert.ok(ensureSyntaxTree(startState, doc.length, 20000));
+
+  // An empty transaction is what the editor view dispatches when the parse ends.
+  const state = startState.update({}).state;
+
+  assert.equal(parseCompleted({ state, startState }), true);
+  assert.equal(parseCompleted({ state: state.update({}).state, startState: state }), false);
 });
 
 test("stale Worker responses resolve to no editor result", async () => {
