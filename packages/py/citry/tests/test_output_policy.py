@@ -427,13 +427,45 @@ def test_a_finding_in_slot_content_names_the_component_that_renders_the_slot() -
     ]
 
 
-def test_an_element_the_browser_moves_out_of_a_component_root_is_not_named_after_it() -> None:
+def test_an_element_the_browser_moves_out_of_every_root_is_not_named_after_a_component() -> None:
+    app = Citry(autodiscover=False, security_javascript="warn")
+
+    class Inner(Component):
+        citry = app
+        template = """
+<div>y</div>
+"""
+
+    class Outer(Component):
+        citry = app
+        # Inner's `<div>` closes Outer's open `<p>`, so the browser puts the
+        # link after both components' roots. Each component's roots are
+        # marked on their own, so the link sits inside Outer's `<p>` in the
+        # source, and the report must follow the browser's tree instead.
+        template = """
+<p><c-Inner /><a href="javascript:void(0)">x</a></p>
+"""
+
+    assert _serialize_warnings(Outer) == [
+        _lines(
+            [
+                "security_javascript='warn' found 1 client behavior requirement(s):",
+                "- settled render output, attribute 'href', settled HTML bytes s:e: a javascript: URL in "
+                "'href' remains executable browser code",
+            ]
+        )
+    ]
+
+
+def test_an_element_after_a_paragraph_the_browser_closes_is_named_after_the_component() -> None:
     app = Citry(autodiscover=False, security_javascript="warn")
 
     class Paragraph(Component):
         citry = app
-        # The `<div>` closes the open `<p>`, so the browser puts the link
-        # after the component's root, not inside it.
+        # The `<div>` closes the open `<p>`, so the browser makes the
+        # `<div>` a second top-level element of the component. It carries
+        # the component's marker too, so the link inside it is named after
+        # the component.
         template = """
 <p>text<div><a href="javascript:void(0)">x</a></div></p>
 """
@@ -442,7 +474,7 @@ def test_an_element_the_browser_moves_out_of_a_component_root_is_not_named_after
         _lines(
             [
                 "security_javascript='warn' found 1 client behavior requirement(s):",
-                "- settled render output, attribute 'href', settled HTML bytes s:e: a javascript: URL in "
+                "- Paragraph, attribute 'href', settled HTML bytes s:e: a javascript: URL in "
                 "'href' remains executable browser code",
             ]
         )
