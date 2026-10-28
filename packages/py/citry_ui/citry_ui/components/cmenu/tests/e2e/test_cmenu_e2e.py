@@ -1011,13 +1011,15 @@ def test_keyboard_moves_reveal_items_inside_a_menu_that_scrolls(page):
     _trigger(page).click()
     surface = _surface(page)
     page.wait_for_function("(menu => menu.scrollHeight > menu.clientHeight)(document.querySelector('#library-menu'))")
-    # The item must sit inside the menu's border, where it can be seen.
+    # The item must sit inside the menu's border, where it can be seen. WebKit
+    # drops the fraction from scroll offsets, so the item can stick out past
+    # the edge by up to 1 px.
     focused_item_is_shown = """() => {
       const menu = document.querySelector('#library-menu');
       const outer = menu.getBoundingClientRect();
       const top = outer.top + menu.clientTop;
       const item = document.activeElement.getBoundingClientRect();
-      return item.top >= top - 0.5 && item.bottom <= top + menu.clientHeight + 0.5;
+      return item.top >= top - 1 && item.bottom <= top + menu.clientHeight + 1;
     }"""
     page.keyboard.press("End")
 
