@@ -281,6 +281,11 @@ class _Writer:
     scoped_fill_refusals: list[tuple[int, int, str]] = field(default_factory=list)
     # The elements open at this point, as `(tag, start of the opening tag)`.
     open_elements: list[tuple[str, int]] = field(default_factory=list)
+    # For each open element with an authored `v-pre`, the number of elements
+    # open outside it. Vue reads everything under it as written, so while
+    # one is open no ownership marker is written, as a render does for a
+    # `v-pre` element Vue reads as written.
+    v_pre_depths: list[int] = field(default_factory=list)
     # Data keys only need to be distinct within one template.
     counter: int = 0
 
@@ -313,6 +318,8 @@ class _Writer:
             if self.open_elements and self.open_elements[-1][0] == node.tag.lower():
                 tag, start = self.open_elements.pop()
                 self.elements.append((tag, start, node.position[0], node.position[1]))
+                if self.v_pre_depths and self.v_pre_depths[-1] == len(self.open_elements):
+                    self.v_pre_depths.pop()
         elif isinstance(node, IfNode):
             yield Call(self.write_if, node)
         elif isinstance(node, ForNode):
@@ -387,6 +394,7 @@ class _Writer:
         start = self.output.byte_length
         first_chunk = len(self.output.chunks)
         static = node._static_prepared
+        own_v_pre = any(attr.key.casefold() == "v-pre" for attr in node._authored_vue_attrs)
         if static is not None and not node._authored_vue_attrs:
             # The same markup a render joins into one block of static text.
             self.output.append(static_element_opening(static))
@@ -413,6 +421,7 @@ class _Writer:
                 part,
                 self.next_key("citryAttrs") if has_data_attrs else None,
                 self.next_key("citryKey") if has_key else None,
+                under_v_pre=own_v_pre or bool(self.v_pre_depths),
             )
         self.map_opening(
             start,
@@ -422,6 +431,8 @@ class _Writer:
             [(attr.key, text, attr.position) for attr, text in node._static_source_attrs],
         )
         if not node.is_void:
+            if own_v_pre:
+                self.v_pre_depths.append(len(self.open_elements))
             self.open_elements.append((node.tag.lower(), node.position[0]))
         ignored = any(name == "morph" and value == "ignore" for name, value in node.element_metadata)
         if not ignored or node.is_void:

@@ -185,6 +185,38 @@ def test_compatibility_definition_composer_emits_native_state_metadata() -> None
     assert '<input v-citry-vue-owned="[]"></input>' in template
 
 
+def test_compatibility_definition_composer_marks_no_form_control_under_v_pre() -> None:
+    # Vue reads everything under `v-pre` as written, so a marker there would
+    # reach the page; the input after the `v-pre` element closes gets one.
+    view = PreparedView(
+        0,
+        "root",
+        (PreparedOccurrence("root", "Root", "root-def", {}, {}, None, None),),
+        (
+            PreparedDefinition(
+                "root-def",
+                "Root",
+                (
+                    ElementOpen("div", ("v-pre",), None, None, (0, 1)),
+                    ElementOpen("input", (":value='y'",), None, None, (1, 2)),
+                    ElementClose("input", (2, 3)),
+                    ElementClose("div", (3, 4)),
+                    ElementOpen("input", ("v-pre", ":value='y'"), None, None, (4, 5)),
+                    ElementClose("input", (5, 6)),
+                    ElementOpen("input", (":value='y'",), None, None, (6, 7)),
+                    ElementClose("input", (7, 8)),
+                ),
+            ),
+        ),
+    )
+
+    template = definition_compile_inputs(view)["root-def"].template
+    assert template == (
+        "<div v-pre><input :value='y'></input></div><input v-pre :value='y'></input>"
+        "<input :value='y' v-citry-vue-owned=\"'value'\"></input>"
+    )
+
+
 def test_direct_capture_keys_slots_by_nearest_prepared_element_and_preserves_void_boundaries() -> None:
     source = """
         <div #c-key="'outer'">
