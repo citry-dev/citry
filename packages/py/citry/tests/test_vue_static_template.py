@@ -87,6 +87,9 @@ def _rendered_template(source: str) -> str:
         '<p v-if="ok">x</p><c-chip v-else @close="n++" /><c-chip v-show="ok" :p="title" />',
         '<c-chip><c-fill name="default" data="d">{{ title }}</c-fill></c-chip>',
         '<p v-if="ok">1</p><c-provide key="k" data="1"><p v-else>{{ title }}</p></c-provide><c-chip />',
+        # Vue reads a `v-pre` element as written, so its form controls take no
+        # ownership marker; the input after it does.
+        "<main><div v-pre><input :value='q'></div><input v-pre :value='q'><input :value='q'></main>",
     ],
 )
 def test_check_writes_the_vue_template_a_render_compiles(source):

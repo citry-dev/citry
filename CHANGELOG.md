@@ -690,6 +690,15 @@
   Citry now requests it again and reports an error if it still fails, as it
   does in other browsers. Before, the page mounted without its styles and no
   error appeared.
+- In a component that uses Vue, an `<input>`, `<select>`, `<option>`, or
+  `<textarea>` inside or carrying `v-pre` no longer gets a stray
+  `v-citry-vue-owned` attribute in the page. A `v-pre` element also no
+  longer fails to render when it holds a transparent component with
+  `#c-key`, such as `<c-provide>`, or when it holds Vue attributes such as
+  `:title` and sits in slot content that a component writes for another
+  component it does not enclose. At the root of a component with `css_data()`, a
+  `v-pre` element now renders, or raises an error that says what to move,
+  where it used to fail with an internal compiler error.
 
 ### Performance
 

@@ -21,7 +21,12 @@ from citry_core import _rust
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator, Mapping
 
-from .capture import prepared_spread_index
+from .capture import (
+    prepared_spread_index,
+    vue_owned_native_marker,
+    vue_owned_native_properties,
+    writes_vue_owned_marker,
+)
 from .prepared import (
     ComponentCall,
     ElementClose,
@@ -1375,7 +1380,9 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
     parts: list[str] = []
     local_calls: list[dict[str, object]] = []
     element_bindings: list[dict[str, object]] = []
-    element_stack: list[tuple[str, _SlotKeyScope | None]] = []
+    # Each open element's tag, key scope, and whether it sits under an
+    # authored `v-pre` (its own or an ancestor's).
+    element_stack: list[tuple[str, _SlotKeyScope | None, bool]] = []
     slot_key_scopes: list[_SlotKeyScope] = []
     byte_position = 0
 
@@ -1398,6 +1405,11 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
             elif isinstance(node, ElementOpen):
                 start = byte_position
                 attrs = list(node.authored_attrs)
+                # Vue reads an element under `v-pre` as written, so the
+                # ownership marker below would reach the page as a plain attribute.
+                under_v_pre = (bool(element_stack) and element_stack[-1][2]) or any(
+                    attr.casefold().partition("=")[0] == "v-pre" for attr in node.authored_attrs
+                )
                 if node.attrs_binding_key is not None:
                     spread = f'v-bind="$citryPrepared.{node.attrs_binding_key}"'
                     spread_index = prepared_spread_index(node.authored_attrs)
@@ -1411,12 +1423,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 # contract as the direct assembler.  ``ElementOpen`` predates
                 # the typed ``has_spread`` field, so its generated attrs
                 # binding is the only spread provenance available here.
-                if node.tag.casefold() in {"input", "textarea", "select", "option"}:
-                    from .capture import (  # noqa: PLC0415
-                        vue_owned_native_marker,
-                        vue_owned_native_properties,
-                    )
-
+                if writes_vue_owned_marker(node.tag, under_v_pre=under_v_pre):
                     attrs.append(
                         vue_owned_native_marker(
                             vue_owned_native_properties(
@@ -1456,13 +1463,13 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 element_scope = (
                     None if node.key_binding_key is None else _SlotKeyScope(f"$citryPrepared.{node.key_binding_key}")
                 )
-                element_stack.append((node.tag, element_scope))
+                element_stack.append((node.tag, element_scope, under_v_pre))
                 if element_scope is not None:
                     slot_key_scopes.append(element_scope)
             elif isinstance(node, ElementClose):
                 if not element_stack or element_stack[-1][0].lower() != node.tag.lower():
                     raise ValueError("prepared element close has no matching opening")
-                _, element_scope = element_stack.pop()
+                _, element_scope, _ = element_stack.pop()
                 if element_scope is not None:
                     if not slot_key_scopes or slot_key_scopes[-1] is not element_scope:
                         raise ValueError("prepared element key scope changed before its close")

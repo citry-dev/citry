@@ -727,6 +727,12 @@ def _v_pre_page(template: str, data: dict[str, object]) -> type[Component]:
             '<main><div v-pre><c-element c-is="\'b\'" :x="y">{{ name }}</c-element><c-js /></div></main>',
             '<main><div><!--[--><b :x="y">Ann &amp; Bo</b><!--]--></div></main>',
         ),
+        # A `#c-key` on a transparent component wraps its body in a keyed
+        # Vue `<template>`, which Vue would not read under `v-pre`.
+        (
+            "<main><div v-pre><c-provide key='x' value='1' #c-key=\"'k'\"><b :x='y'>t</b></c-provide></div></main>",
+            "<main><div><!--[--><b :x='y'>t</b><!--]--></div></main>",
+        ),
     ],
 )
 def test_citry_values_inside_v_pre_are_written_as_the_server_renders_them(template: str, host: str) -> None:
@@ -1672,3 +1678,148 @@ def test_a_v_pre_elements_colon_attribute_is_written_on_the_server() -> None:
     rendered, admission = _hydrated_host(page)
     assert rendered == '<main><table><tbody><tr><td><b :x="y" title="t">A</b></td></tr></tbody></table></main>'
     assert admission.declines == ()
+
+
+@pytest.mark.parametrize(
+    ("template", "compiled", "host"),
+    [
+        # Vue reads a `v-pre` element that holds only written markup as it
+        # is, so its `:value` and `:selected` are plain attributes and take
+        # no ownership marker. A real binding outside keeps its marker.
+        (
+            "<main><div v-pre><input :value='y'></div><input :value='name'></main>",
+            "<main><div v-pre><input :value='y'></div><input :value='name' v-citry-vue-owned=\"'value'\"></main>",
+            '<main><div><input :value="y"></div><input></main>',
+        ),
+        (
+            "<main><div v-pre><select><option :selected='y'>a</option></select></div></main>",
+            "<main><div v-pre><select><option :selected='y'>a</option></select></div></main>",
+            '<main><div><select><option :selected="y">a</option></select></div></main>',
+        ),
+        # The element's own `v-pre` covers its own attributes too.
+        (
+            "<main><input v-pre :value='y'><input :value='name'></main>",
+            "<main><input v-pre :value='y'><input :value='name' v-citry-vue-owned=\"'value'\"></main>",
+            '<main><input :value="y"><input></main>',
+        ),
+        # A nested `v-pre` closes before its parent; the input between the
+        # two closes is still inside the outer one.
+        (
+            "<main><div v-pre><div v-pre><input :value='y'></div><input :value='y'></div><input :value='name'></main>",
+            "<main><div v-pre><div v-pre><input :value='y'></div><input :value='y'></div>"
+            "<input :value='name' v-citry-vue-owned=\"'value'\"></main>",
+            '<main><div><div v-pre=""><input :value="y"></div><input :value="y"></div><input></main>',
+        ),
+        (
+            "<main><table v-pre><tr><td><input :value='y'></td></tr></table></main>",
+            "<main><table v-pre><tr><td><input :value='y'></td></tr></table></main>",
+            '<main><table><tbody><tr><td><input :value="y"></td></tr></tbody></table></main>',
+        ),
+        # A transparent component's body is walked on its own, and it still
+        # sits inside the `v-pre` element.
+        (
+            "<main><div v-pre><c-provide key='x' value='1'><select><option :selected='y'>a</option>"
+            "</select></c-provide><input :value='y'></div><select><option :selected='name'>b</option>"
+            "</select></main>",
+            "<main><div v-pre><select><option :selected='y'>a</option></select><input :value='y'></div>"
+            "<select><option :selected='name' v-citry-vue-owned=\"'selected'\">b</option></select></main>",
+            '<main><div><select><option :selected="y">a</option></select><input :value="y"></div>'
+            "<select><option>b</option></select></main>",
+        ),
+        # A `v-pre` element with a Citry value is written as one block of
+        # HTML, which carries no marker either.
+        (
+            "<main><div v-pre><input :value='y'>{{ name }}</div><input :value='name'></main>",
+            '<main><div><citry-opaque-html :record="$citryPrepared.opaqueHtml.citryOpaque0"></citry-opaque-html>'
+            "</div><input :value='name' v-citry-vue-owned=\"'value'\"></main>",
+            "<main><div><!--[--><input :value='y'>Ann<!--]--></div><input></main>",
+        ),
+    ],
+)
+def test_a_v_pre_form_control_gets_no_vue_ownership_marker(
+    template: str, compiled: str, host: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The marker tells the browser which form properties a Vue binding
+    # owns. Inside `v-pre` nothing is a binding, and Vue would write the
+    # marker into the page as a plain attribute.
+    templates: list[str] = []
+    compile_vue = _rust.vue._compile_vue
+
+    def record(*args: Any) -> str:
+        templates.append(args[0])
+        return compile_vue(*args)
+
+    monkeypatch.setattr(_rust.vue, "_compile_vue", record)
+    rendered, admission = _hydrated_host(_v_pre_page(template, {"name": "Ann"}))
+    assert templates == [compiled]
+    assert rendered == host
+    assert admission.declines == ()
+
+
+def _css_data_page(child_template: str) -> type[Component]:
+    """Return a Vue page that renders one child whose `css_data()` gives its root element an attribute."""
+    engine = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = engine
+        template = child_template
+        css = """
+div { color: var(--color); }
+"""
+
+        def css_data(self, kwargs: object, slots: object) -> dict[str, object]:
+            return {"color": "red"}
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><c-Child /></main>
+"""
+        js = """
+$component({});
+"""
+
+    return Page
+
+
+@pytest.mark.parametrize(
+    ("child_template", "host"),
+    [
+        # Citry adds the attribute `css_data()` needs with a Vue binding,
+        # which Vue would not read on a `v-pre` element. So Citry compiles
+        # such a root without `v-pre` and writes its contents as one block
+        # of HTML.
+        ("<div v-pre><b :x='y'>a</b></div>", "<main><div {marker}><!--[--><b :x='y'>a</b><!--]--></div></main>"),
+        ("<div v-pre>plain</div>", "<main><div {marker}><!--[-->plain<!--]--></div></main>"),
+        # A `v-pre` element below the root takes no such attribute, so it
+        # is still left to Vue, which drops `v-pre` from the page.
+        (
+            "<section><div v-pre><b :x='y'>a</b></div></section>",
+            '<main><section {marker}><div><b :x="y">a</b></div></section></main>',
+        ),
+    ],
+)
+def test_a_v_pre_component_root_keeps_its_root_markers(child_template: str, host: str) -> None:
+    rendered, admission = _hydrated_host(_css_data_page(child_template))
+    marker = re.search(r'data-ccss-[0-9a-f]+=""', rendered)
+    assert marker is not None, rendered
+    assert rendered == host.format(marker=marker.group(0))
+    assert admission.declines == ()
+
+
+def test_a_v_pre_component_roots_own_vue_attribute_is_refused_with_the_reason() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"also has the Vue attribute ':title'.* because it is the root element of its component and Citry"
+        r" adds attributes to it, such as the one 'css_data\(\)' needs\. Wrap the 'v-pre' element in another"
+        r" element, or remove ':title'\.",
+    ):
+        _css_data_page("<div v-pre :title='y'>a</div>")().render().serialize()
+
+
+def test_a_v_pre_component_root_names_its_root_only_when_that_is_the_reason() -> None:
+    # The `{{ }}` value is why Citry compiles this root, so the error does
+    # not blame the attribute `css_data()` needs.
+    with pytest.raises(TypeError, match=r"also has the Vue attribute ':title'") as error:
+        _css_data_page("<div v-pre :title='y'>{{ 'v' }}</div>")().render().serialize()
+    assert "root element" not in str(error.value)
