@@ -28,7 +28,7 @@ def _wheel(tmp_path, *, extra=()):
         **dict.fromkeys(EXPECTED_RUNTIME_FILES, b""),
         **dict.fromkeys(EXPECTED_I18N_FILES, b""),
         f"{dist}/METADATA": (
-            b"Name: citry-ui\nVersion: 0.1.0\nRequires-Python: >=3.11, <4.0\nRequires-Dist: citry>=0.6.0\n"
+            b"Name: citry-ui\nVersion: 0.1.0\nRequires-Python: >=3.11, <4.0\nRequires-Dist: citry>=0.7.0\n"
         ),
         f"{dist}/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
         f"{dist}/licenses/LICENSE": _LICENSE,

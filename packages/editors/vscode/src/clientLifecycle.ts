@@ -38,10 +38,11 @@ export interface PendingFileChange<T> {
 
 /**
  * Accept the language-server lines that speak client protocol version 1:
- * 0.1.x for Citry 0.5.x projects and 0.2.x for Citry 0.6.x projects.
+ * 0.1.x for Citry 0.5.x projects, 0.2.x for Citry 0.6.x projects, and
+ * 0.3.x for Citry 0.7.x projects.
  */
 export function supportsLanguageServerVersion(version: string): boolean {
-	return /^0\.[12]\.\d+(?:[+.-][0-9A-Za-z.-]+)?$/.test(version);
+	return /^0\.[1-3]\.\d+(?:[+.-][0-9A-Za-z.-]+)?$/.test(version);
 }
 
 /** Collect save bursts into one watched-files notification per workspace. */

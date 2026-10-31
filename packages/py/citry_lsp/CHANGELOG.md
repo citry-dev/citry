@@ -2,16 +2,15 @@
 
 All notable changes to `citry-lsp` are documented here.
 
-## Unreleased
+## [0.3.0] - 2026-10-31
 
 ### Added
 
 - With your application's `security_csp` set to `"warn"` or `"strict"`,
   the editor marks an inline `<script>` or `<style>`, an `on*` attribute
   such as `onclick`, or a `javascript:` URL in a template: a warning with
-  `"warn"`, an error with `"strict"`. Use it with a `citry` of the same
-  release; an older citry-lsp rejects the project's lint data once
-  `security_csp` is set.
+  `"warn"`, an error with `"strict"`. citry-lsp 0.2.0 cannot read the
+  project's lint data once `security_csp` is set.
 - The editor suggests `:row="..."` on `<c-slot>` and `v-slot="{ row }"` on
   `<c-fill>`, for passing Vue data from a slot to its fill. In the fill,
   it suggests the props the slot passes, shows their types on hover,
@@ -37,14 +36,16 @@ All notable changes to `citry-lsp` are documented here.
   rejects, such as a `<div>` directly inside a `<table>` or a `v-else` with
   no `v-if` before it, at the severity `rule_vue_compile_error` sets. It
   works before your application loads.
-- The editor reports a typo in a Vue directive, such as `v-iff`, a
-  boolean attribute with a value such as `disabled="false"`, and, once
-  your application loads, a lowercase listener on a component for an
-  event the child does not declare, such as `@hdie`. Once your
-  application loads, a custom directive that the component registers in
-  the `directives` option of `$component()` is not reported, and a
-  component's only top-level `<img>` without alt text is reported when
-  the component sets `inheritAttrs: false`.
+- The editor reports a typo in a Vue directive, such as `v-iff`, and a
+  boolean attribute with a value such as `disabled="false"`.
+- Once your application loads, the editor reports a lowercase listener on
+  a component for an event the child does not declare, such as `@hdie`.
+- Once your application loads, the editor does not report a custom
+  directive that the component registers in the `directives` option of
+  `$component()`.
+- Once your application loads, the editor reports a component's only
+  top-level `<img>` without alt text when the component sets
+  `inheritAttrs: false`.
 - Once your application loads, the editor reports a component that
   assigns to its own prop, such as `@click="open = false"` in its
   template or `this.open = false` in its JavaScript, at the severity
@@ -54,8 +55,7 @@ All notable changes to `citry-lsp` are documented here.
   for an `int` field, and a control in a submitted form whose `name` the
   handler does not accept, such as `<input name="qeury">`, as
   `citry check` does. It skips a handler while the handler or its data
-  class has unsaved changes, and every handler of an application on an
-  older Citry, which does not say how the server checks the arguments.
+  class has unsaved changes.
 - Once your application loads, the editor and `citry check --types`
   check a fill's `data` name, such as `card` in `<c-fill data="card">`,
   against the slot's `SlotInput[T]`, so
@@ -94,14 +94,19 @@ All notable changes to `citry-lsp` are documented here.
   the modifiers that fit there, including Citry's `.outside`, `.window`,
   `.document`, `.debounce`, and `.throttle`, and a duration such as
   `.300ms` after the last two. Hovering a modifier explains it.
+- Once your application loads, the editor offers the names a component
+  lists in `Lint.template_data_keys` in completion, and reports only
+  names outside the list.
+- citry-lsp now runs on PyPy, where it checks `js_data()` values and
+  template types less fully and shows a note saying so.
 
 ### Changed
 
 - **Breaking:** citry-lsp now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing citry-lsp 0.2.0.
-- citry-lsp now requires Citry 0.7.0 or later, which provides the
-  custom-directive, `inheritAttrs`, and parser-error checks listed above,
-  the Vue listener modifiers, and the scoped-slot checks.
+- **Breaking:** citry-lsp now requires Citry 0.7.0 or later, which
+  provides the custom-directive, `inheritAttrs`, and parser-error checks
+  listed above, the Vue listener modifiers, and the scoped-slot checks.
   Installing this citry-lsp upgrades Citry when needed. An earlier
   citry-lsp with Citry 0.7.0 can show a TypeScript error next to Citry's
   message on some broken Vue expressions, such as a listener that declares
@@ -129,6 +134,9 @@ All notable changes to `citry-lsp` are documented here.
   `template_data()` or `js_data()` comes from a class in an installed
   package, an editable install, or a `.venv` inside the project. An inline
   template is checked when its class subclasses `Component` directly.
+- The editor now leaves Vue syntax on or inside a `v-pre` element as
+  written, as Vue does: it reports no unknown names or wrong attribute
+  values there and offers no Vue completion or hover help.
 
 ## [0.2.0] - 2026-10-19
 
