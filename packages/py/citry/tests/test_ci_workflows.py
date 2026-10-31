@@ -199,13 +199,18 @@ def test_check_workflows_cancel_a_pull_requests_runs_when_it_closes() -> None:
         for job_name, job in workflow["jobs"].items():
             # A job with `needs` is skipped with the job it needs, so only the
             # jobs that start a run need the condition. Without it, the
-            # cancelling run would itself queue for runners.
+            # cancelling run would itself queue for runners. Jobs that need
+            # the Python tests' `changes` job check `closed` themselves; the
+            # next test covers them.
             if "needs" not in job:
                 # The Python tests' `changes` job also skips outside pull requests.
-                assert job.get("if") in {"github.event.action != 'closed'", _CHANGES_IF}, f"{name}: {job_name}"
+                expected = _CHANGES_IF if (name, job_name) == ("py--tests.yml", "changes") else _SKIPS_ON_CLOSE
+                assert job.get("if") == expected, f"{name}: {job_name}"
     # Guards against the loop finding nothing because the trigger shape changed.
     assert {"repo--check.yml", "py--tests.yml"} <= checked
 
+
+_SKIPS_ON_CLOSE = "github.event.action != 'closed'"
 
 # When the Python tests' `changes` job runs: on a pull request, except the
 # `closed` event, which must start no runner.
@@ -218,6 +223,10 @@ _RUNS_UNLESS_NOTHING_CHANGED = (
     "${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}"
 )
 
+# The condition on a job below the wheel build. GitHub's default condition
+# would skip it on every push, because `changes` is skipped there.
+_RUNS_AFTER_THE_WHEEL_BUILD = "${{ !cancelled() && needs.citry-ui-wheel-build.result == 'success' }}"
+
 
 def test_python_tests_start_on_every_pull_request_and_skip_without_python_changes() -> None:
     workflow = _load_workflow("py--tests.yml")
@@ -226,11 +235,14 @@ def test_python_tests_start_on_every_pull_request_and_skip_without_python_change
     assert "paths" not in workflow["on"]["pull_request"]
     changes = workflow["jobs"]["changes"]
     assert changes["if"] == _CHANGES_IF
-    # The jobs below read this output; a renamed step or output would leave
-    # it empty, which runs everything rather than skipping it.
+    # The gated jobs read this output. If the step id or output name changed,
+    # the output would be empty and every job would run on every pull request.
     step = changes["steps"][0]
     assert changes["outputs"]["python"] == f"${{{{ steps.{step['id']}.outputs.python }}}}"
-    inputs = [line.strip() for line in step["env"]["PYTHON_INPUTS"].splitlines() if line.strip()]
+    # The shell matcher compares each line as it is, so a stray space would
+    # make a path never match.
+    inputs = [line for line in step["env"]["PYTHON_INPUTS"].splitlines() if line]
+    assert all(line == line.strip() for line in inputs), inputs
     # Both lists must name the same paths, or a push and a pull request
     # would disagree about which changes the Python jobs test.
     assert inputs == workflow["on"]["push"]["paths"]
@@ -250,54 +262,74 @@ def test_python_tests_start_on_every_pull_request_and_skip_without_python_change
         if "changes" in needs:
             assert job["if"] == _RUNS_UNLESS_NOTHING_CHANGED, name
         else:
-            # A job below a gated one skips with it, as long as it does not
-            # override that with its own status check.
-            assert all(jobs[parent].get("needs") == "changes" for parent in needs), name
-            assert "if" not in job, name
+            # A job below a gated one must check its parent's result itself.
+            # GitHub's default check skips it whenever any job further up was
+            # skipped, and `changes` is skipped on every push.
+            assert needs == ["citry-ui-wheel-build"], name
+            assert job["if"] == _RUNS_AFTER_THE_WHEEL_BUILD, name
     assert "citry-ui-wheel-build" in jobs
 
 
 _BASH = shutil.which("bash")
+_JQ = shutil.which("jq")
 
 
-@pytest.mark.skipif(_BASH is None, reason="the changes job runs in bash")
+def _files(*names: str) -> list[dict[str, str]]:
+    return [{"filename": name} for name in names]
+
+
+@pytest.mark.skipif(_BASH is None or _JQ is None, reason="the changes job runs in bash and reads JSON with jq")
 @pytest.mark.parametrize(
     ("files", "changed_files", "head", "expected"),
     [
-        (["docs_site/content/a.md", "CHANGELOG.md"], 2, "abc", "false"),
-        (["docs/notes.md", "packages/py/citry/x.py"], 2, "abc", "true"),
+        (_files("docs_site/content/a.md", "CHANGELOG.md"), 2, "abc", "false"),
+        (_files("docs/notes.md", "packages/py/citry/x.py"), 2, "abc", "true"),
         # Only the root README goes into the citry wheel's metadata.
-        (["README.md"], 1, "abc", "true"),
-        (["docs/README.md"], 1, "abc", "false"),
+        (_files("README.md"), 1, "abc", "true"),
+        (_files("docs/README.md"), 1, "abc", "false"),
         # A folder pattern does not match a longer folder name.
-        (["packages/pyx/a.py"], 1, "abc", "false"),
-        (["crates/a b/c.rs"], 1, "abc", "true"),
+        (_files("packages/pyx/a.py"), 1, "abc", "false"),
+        (_files("crates/a b/c.rs"), 1, "abc", "true"),
         ([], 0, "abc", "false"),
-        # Too many files to list, or a pull request that moved on, runs everything.
-        (["docs/a.md"], 3000, "abc", "true"),
-        (["docs/a.md"], 1, "newer", "true"),
+        # Moving a file out of a Python folder counts under its old path.
+        ([{"filename": "docs/x.md", "previous_filename": "packages/py/x.md"}], 1, "abc", "true"),
+        # A match on a later page of the listing still counts.
+        (_files("a.md", "b.md", "c.md", "d.md", "crates/x.rs"), 5, "abc", "true"),
+        # A list shorter than the pull request (more than 3,000 files, or a
+        # listing that lags a push), or a pull request that got a newer
+        # commit, runs everything.
+        (_files("docs/a.md"), 3001, "abc", "true"),
+        (_files("docs/a.md"), 1, "newer", "true"),
     ],
 )
 def test_the_changes_job_matches_files_like_the_push_path_filter(
-    tmp_path: Path, files: list[str], changed_files: int, head: str, expected: str
+    tmp_path: Path, files: list[dict[str, str]], changed_files: int, head: str, expected: str
 ) -> None:
     step = _load_workflow("py--tests.yml")["jobs"]["changes"]["steps"][0]
-    # A stand-in for `gh api`: the pull request itself, or its file list.
-    fake_gh = tmp_path / "gh"
-    listing = "\n".join(files)
+    # A stand-in for `gh api` that returns the JSON GitHub would: the pull
+    # request itself, or its file list as pages of two, the way
+    # `gh api --paginate` prints them. The job's own jq then reads it.
+    pull = tmp_path / "pull.json"
+    pull.write_text(json.dumps({"changed_files": changed_files, "head": {"sha": head}}), encoding="utf-8")
+    pages = tmp_path / "pages.json"
+    pages.write_text("".join(json.dumps(files[i : i + 2]) for i in range(0, max(len(files), 1), 2)), encoding="utf-8")
+    fake_gh = tmp_path / "bin" / "gh"
+    fake_gh.parent.mkdir()
     fake_gh.write_text(
         "#!/usr/bin/env bash\n"
         'case "$*" in\n'
-        f"  */files*) printf '%s\\n' {shlex.quote(listing)} ;;\n"
-        f"  *) echo '{changed_files} {head}' ;;\n"
+        f"  */files*) cat {shlex.quote(str(pages))} ;;\n"
+        f"  *) cat {shlex.quote(str(pull))} ;;\n"
         "esac\n",
         encoding="utf-8",
     )
     fake_gh.chmod(0o755)
     output = tmp_path / "output"
     output.write_text("", encoding="utf-8")
+    assert _BASH is not None
+    assert _JQ is not None
     env = {
-        "PATH": f"{tmp_path}:/usr/bin:/bin",
+        "PATH": f"{fake_gh.parent}:{Path(_JQ).parent}:/usr/bin:/bin",
         "PYTHON_INPUTS": step["env"]["PYTHON_INPUTS"],
         "REPOSITORY": "owner/repo",
         "PR_NUMBER": "1",
@@ -305,10 +337,9 @@ def test_the_changes_job_matches_files_like_the_push_path_filter(
         "GITHUB_OUTPUT": str(output),
     }
 
-    assert _BASH is not None
     subprocess.run([_BASH, "-c", step["run"]], env=env, check=True, capture_output=True)
 
-    assert output.read_text(encoding="utf-8").strip().splitlines()[-1] == f"python={expected}"
+    assert output.read_text(encoding="utf-8").strip().splitlines() == [f"python={expected}"]
 
 
 _SUPPORTED_PYTHONS = ["3.11", "3.12", "3.13", "3.14", "3.15"]

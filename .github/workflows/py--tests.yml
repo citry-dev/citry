@@ -69,11 +69,11 @@ env:
   PIP_WHEEL: "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
 
 jobs:
-  # Decides whether a pull request changes any file the jobs below test, by
-  # comparing its changed files with the push path list above (the two lists
-  # are kept in step by test_ci_workflows.py). It runs only for a pull
-  # request: a push was already filtered by that list, and a manual run tests
-  # everything, so for those the jobs below run without waiting for it.
+  # This job checks whether a pull request changes any file that the jobs
+  # below test. It compares the pull request's files with the
+  # `on.push.paths` list above, and test_ci_workflows.py fails if the two
+  # lists differ. It runs only on a pull request: the push trigger already
+  # filters a push by that list, and a manual run tests everything.
   changes:
     if: github.event_name == 'pull_request' && github.event.action != 'closed'
     runs-on: ubuntu-latest
@@ -128,22 +128,35 @@ jobs:
             .gitmodules
         run: |
           set -euo pipefail
-          # The files endpoint lists at most 3,000 files, so a larger pull
-          # request runs everything rather than risk a missed match. A pull
-          # request that moved on since this run started also runs
-          # everything, since its file list may not be this run's commit.
-          read -r count head < <(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER" \
-            --jq '"\(.changed_files) \(.head.sha)"')
-          if [ "$count" -ge 3000 ] || [ "$head" != "$HEAD_SHA" ]; then
+          # gh returns raw JSON and jq reads it here, so the test in
+          # test_ci_workflows.py runs this exact parsing against a fake gh.
+          pull=$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER")
+          count=$(jq -r '.changed_files' <<< "$pull")
+          head=$(jq -r '.head.sha' <<< "$pull")
+          # A pull request that got a new commit after this run started runs
+          # everything, because the API would list the newer commit's files.
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "The pull request has a newer commit; running every job."
+            echo "python=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Each page is one JSON array; `jq -s 'add'` joins them.
+          pages=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files?per_page=100")
+          listed=$(jq -s 'add // [] | length' <<< "$pages")
+          # The API lists at most 3,000 of a pull request's files, and can
+          # briefly list fewer right after a push. A short list could hide a
+          # Python file, so it runs everything.
+          if [ "$listed" != "$count" ]; then
+            echo "The API listed $listed of $count files; running every job."
             echo "python=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # A renamed file counts under its old path too, so moving a file
           # out of a Python folder still runs the Python jobs.
-          files=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
-            --jq '.[] | .filename, (.previous_filename // empty)')
+          files=$(jq -rs 'add // [] | .[] | .filename, (.previous_filename // empty)' <<< "$pages")
           python=false
           while IFS= read -r file; do
+            [ -n "$file" ] || continue
             while IFS= read -r pattern; do
               [ -n "$pattern" ] || continue
               case "$pattern" in
@@ -160,9 +173,10 @@ jobs:
           echo "python=$python" >> "$GITHUB_OUTPUT"
 
   i18n-release-qualification:
-    # Runs unless `changes` found no changed input. A failed or skipped
-    # `changes` runs the job, so a required check is never skipped by
-    # mistake; the `closed` event still skips it.
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
     needs: changes
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
@@ -212,9 +226,10 @@ jobs:
           if-no-files-found: error
 
   test:
-    # Runs unless `changes` found no changed input. A failed or skipped
-    # `changes` runs the job, so a required check is never skipped by
-    # mistake; the `closed` event still skips it.
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
     needs: changes
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ${{ matrix.os }}
@@ -296,9 +311,10 @@ jobs:
   # the same paths on all three engines. The `test` job above excludes `e2e`
   # explicitly and does not sync that dependency group.
   e2e:
-    # Runs unless `changes` found no changed input. A failed or skipped
-    # `changes` runs the job, so a required check is never skipped by
-    # mistake; the `closed` event still skips it.
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
     needs: changes
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
@@ -413,9 +429,10 @@ jobs:
           if-no-files-found: error
 
   citry-ui-wheel-build:
-    # Runs unless `changes` found no changed input. A failed or skipped
-    # `changes` runs the job, so a required check is never skipped by
-    # mistake; the `closed` event still skips it.
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
     needs: changes
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
@@ -501,6 +518,10 @@ jobs:
 
   citry-ui-wheel-install:
     needs: citry-ui-wheel-build
+    # GitHub's default condition skips a job when any job further up was
+    # skipped, and `changes` is skipped on every push and manual run, so this
+    # job checks only the wheel build it needs.
+    if: ${{ !cancelled() && needs.citry-ui-wheel-build.result == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -637,6 +658,10 @@ jobs:
 
   citry-ui-wheel-browser:
     needs: citry-ui-wheel-build
+    # GitHub's default condition skips a job when any job further up was
+    # skipped, and `changes` is skipped on every push and manual run, so this
+    # job checks only the wheel build it needs.
+    if: ${{ !cancelled() && needs.citry-ui-wheel-build.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
@@ -740,9 +765,10 @@ jobs:
   # pull requests. The scheduled cross-browser workflow retains the broader
   # all-e2e sweep.
   vue-conformance:
-    # Runs unless `changes` found no changed input. A failed or skipped
-    # `changes` runs the job, so a required check is never skipped by
-    # mistake; the `closed` event still skips it.
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
     needs: changes
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest

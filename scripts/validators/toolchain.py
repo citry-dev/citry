@@ -93,7 +93,7 @@ def check() -> list[str]:
     changes_steps = python_test_workflow.get("jobs", {}).get("changes", {}).get("steps", [])
     event_path_lists = {
         "on.push.paths": (triggers.get("push") or {}).get("paths", []),
-        "the changes job's PYTHON_INPUTS": [
+        "jobs.changes PYTHON_INPUTS": [
             line.strip()
             for step in changes_steps
             for line in step.get("env", {}).get("PYTHON_INPUTS", "").splitlines()

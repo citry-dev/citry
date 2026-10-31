@@ -2263,22 +2263,30 @@ pytest phase.
 changes one of the paths below. Every pull request starts it. On a pull
 request, its first job, `changes`, lists the pull request's files and compares
 them with the same paths, and every other job skips when none of them match.
-A skipped job still reports a passing check, so a check from a job without a
-matrix, such as `citry-ui-wheel-build`, can be required on `main` without
-blocking a docs-only pull request. (A skipped matrix job reports under its
-plain name, such as `test`, not under each cell's name.)
+GitHub counts a skipped job's check as passing, so a check from a job without
+a matrix, such as `citry-ui-wheel-build`, can be required on `main` without
+blocking a docs-only pull request. (A skipped matrix job reports only its
+plain name, such as `test`, so do not require a matrix cell such as
+`test (3.11, ubuntu-latest)`: it never reports on a docs-only pull request.)
 
 - **If `changes` fails** (for example, the GitHub API is down), every job
-  runs, so a required check is never skipped by mistake.
+  runs, so a required check is never skipped by mistake. The same happens
+  when the API lists fewer files than the pull request has (it lists at most
+  3,000), or when the pull request gets a newer commit while `changes` runs.
+- **The jobs below the wheel build check its result directly.**
+  `citry-ui-wheel-install` and `citry-ui-wheel-browser` run when
+  `citry-ui-wheel-build` succeeds. GitHub's default condition would skip them
+  on every push, because `changes` is skipped there.
 - **Cost:** `changes` itself takes a few seconds, but every pull-request run
   waits for it to get a runner before its other jobs start, about a minute
   when runners are busy. A push or a manual run does not run `changes` and
   does not wait.
 - **A retargeted pull request keeps its old result.** Changing a pull
   request's base branch does not start a new run, so push a commit after
-  retargeting a stacked pull request.
-- The path list appears twice in the workflow, under `on.push.paths` and in
-  the `changes` job, and `test_ci_workflows.py` fails if they differ.
+  retargeting a pull request (for example, one that was based on another
+  pull request's branch).
+- **The path list appears twice.** It is under `on.push.paths` and in the
+  `changes` job, and `test_ci_workflows.py` fails if they differ.
 
 The paths are:
 
