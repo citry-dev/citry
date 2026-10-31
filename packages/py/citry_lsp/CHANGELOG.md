@@ -42,8 +42,10 @@ All notable changes to `citry-lsp` are documented here.
   a component for an event the child does not declare, such as `@hdie`.
 - Once your application loads, the editor does not report a custom
   directive that the component registers in the `directives` option of
-  `$component()`, and it reports a component's only top-level `<img>`
-  without alt text when the component sets `inheritAttrs: false`.
+  `$component()`.
+- Once your application loads, the editor reports a component's only
+  top-level `<img>` without alt text when the component sets
+  `inheritAttrs: false`.
 - Once your application loads, the editor reports a component that
   assigns to its own prop, such as `@click="open = false"` in its
   template or `this.open = false` in its JavaScript, at the severity
@@ -102,9 +104,9 @@ All notable changes to `citry-lsp` are documented here.
 
 - **Breaking:** citry-lsp now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing citry-lsp 0.2.0.
-- citry-lsp now requires Citry 0.7.0 or later, which provides the
-  custom-directive, `inheritAttrs`, and parser-error checks listed above,
-  the Vue listener modifiers, and the scoped-slot checks.
+- **Breaking:** citry-lsp now requires Citry 0.7.0 or later, which
+  provides the custom-directive, `inheritAttrs`, and parser-error checks
+  listed above, the Vue listener modifiers, and the scoped-slot checks.
   Installing this citry-lsp upgrades Citry when needed. An earlier
   citry-lsp with Citry 0.7.0 can show a TypeScript error next to Citry's
   message on some broken Vue expressions, such as a listener that declares

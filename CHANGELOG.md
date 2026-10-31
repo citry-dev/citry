@@ -2,35 +2,54 @@
 
 ## v0.7.0
 
-Citry 0.7.0 checks much more of your project before it runs: a component
-input of the wrong type now raises `TypeError`, and `citry check` and the
-editor report many HTML, Vue, and Events mistakes they used to pass over.
-Pages that repeat a `simple = "vue"` component render much faster on the
-server, Vue scoped slots and listener modifiers such as `.outside` work in
-templates, and Citry supports Python 3.15 and needs 3.11 or newer.
+Citry 0.7.0 catches more mistakes. A component input of the wrong type
+now raises `TypeError` when the component renders, and `citry check` and
+the editor report many HTML, Vue, and Events mistakes they used to miss.
+Pages that repeat a `simple = "vue"` component render much faster on
+standard CPython. Vue scoped slots and listener modifiers such as
+`.outside` now work in templates. Citry supports Python 3.15 and needs
+3.11 or newer.
 
 ### Upgrading from 0.6.x
 
 - **Upgrade the packages together:** install `citry-ui` 0.4.0 and
   `citry-lsp` 0.3.0 with Citry 0.7.0. Citry UI 0.3.0 rejects some valid
-  inputs under the new type check, and citry-lsp 0.2.0 stops reading your
-  app once `security_csp` is set. The VS Code extension 0.3.0 accepts
-  citry-lsp 0.3.0.
+  inputs under the new type check, and citry-lsp 0.2.0 cannot read your
+  app's lint data once `security_csp` is set. The VS Code extension 0.3.0
+  accepts citry-lsp 0.3.0.
 - **Python 3.11 or newer:** raise `requires-python` to `">=3.11"` before
   upgrading.
 - **Inputs of the wrong type raise `TypeError`:** fix the value or widen
-  the annotation, or set `check_input_types = False` to keep the old
-  behavior.
+  the annotation. To keep the old behavior, set
+  `check_input_types = False` in a component's nested `class Lint:` or in
+  `LintSettings`.
 - **`alt=""` on a component tag passes `""`:** write a bare attribute,
-  such as `<c-Grid compact />`, to pass `True`.
+  such as `<c-Grid compact />`, to pass `True`. `<c-cache enabled="">`
+  and `<c-i18n client="">` now raise.
 - **Deep templates have a limit:** a template can nest tags at most 512
-  levels deep, 256 of them Citry logic.
+  levels deep, and at most 256 of those levels can be `c-` tags or
+  `c-if`/`c-for` attributes. Move a deeper part into its own component.
+- **Some expressions are now errors:** `{{ }}` and an expression with an
+  unmatched `)` raise `SyntaxError`.
 - **`citry check` may fail on a project that passed before:** the new
-  rules for HTML, Vue, Events, and `security_csp` report errors by
-  default. Each has a `rule_*` setting to change its severity.
+  HTML, Vue, and Events rules can fail the check; each has a `rule_*`
+  setting. With `security_csp` set, the check also reports inline
+  scripts, styles, and `on*` attributes.
+- **`citry check --format json` ranges count from 0,** with columns in
+  UTF-16 code units.
+- **Forms send text:** with `@c-submit`, number and range inputs send
+  `"3"`, not `3`, so a Pydantic model in strict mode needs a change.
+- **A `<c-fill fallback="...">` with a `@c-` handler or a Vue binding
+  that reads Vue data now raises.**
+- **`citry.contrib.django.secret()` returns a list** when
+  `SECRET_KEY_FALLBACKS` is set.
+- **`ext-preview` needs Playwright 1.64.1 or newer;** run
+  `playwright install chromium` again.
 - **Event request limits:** if you set `_max_envelope_bytes`, rename it to
-  `_max_body_bytes`. If you passed your sub-path to `set_mounted_prefix()`
-  to work around sub-path URLs, remove it there.
+  `_max_body_bytes`.
+- **Sub-path URLs:** if you passed your sub-path to `set_mounted_prefix()`
+  in a process that also calls `mount()` or `urlpatterns()`, remove it
+  there, or the URLs start with it twice.
 
 The sections below list every change.
 
@@ -259,12 +278,15 @@ The sections below list every change.
     <c-Grid compact />       <!-- True, as before -->
     ```
 
-- When an `on_render` hook passes its output to another component, as in
-  `return Frame(body=result)`, or an `on_component_rendered` hook passes
-  on `ctx.render`, the other component's root element now counts as the
-  component's root, as it does for content passed as a nested template.
-  When both components set the same `css_data` variable, the passed
-  output takes the value from that root.
+- Output that an `on_render` hook passes to another component, as in
+  `return Frame(body=result)`, or that an `on_component_rendered` hook
+  passes on as `ctx.render`, no longer carries the component's own
+  `data-cid-*` and `data-ccss-*` markers on its top elements, the same as
+  content passed as a nested template. The other component's root
+  element, which is now the component's root, still carries them, so
+  scoped CSS and `[data-cid-*]` selectors match that root instead. When
+  both components set the same `css_data` variable, the passed output
+  takes the value from that root.
 - **Breaking:** Citry now requires Python 3.11 or newer, because Python
   3.10 reached its end of life on October 1, 2026. On Python 3.10, pip
   keeps installing Citry 0.6.x. If your project declares
@@ -367,16 +389,16 @@ The sections below list every change.
 
 ### Fixes
 
-- In a component that uses Vue, an element with `v-pre` now renders as
-  Vue renders it. Vue syntax inside it, such as `v-once`,
-  `@click.bogus`, or `<transition>`, stays as written instead of stopping
-  the template from loading. A `<slot>`, `<component>`, `<teleport>`, or
-  `<keep-alive>` there is a plain element. An attribute such as
-  `:x="y"` there is in the served page, where it used to appear only once
-  Vue ran. Citry's `{{ }}` values, `c-` bindings such as `c-title`,
-  `<c-if>`, `<c-for>`, and `simple = True` and transparent components
-  inside it now render, and the `v-pre` element's own `c-` bindings and
-  `#c-key` work. The page used to show internal names such as
+- In a component that uses Vue, Vue syntax inside an element with `v-pre`
+  stays as written, as Vue does. `v-once`, `@click.bogus`, or
+  `<transition>` there no longer stops the template from loading, and a
+  `<slot>`, `<component>`, `<teleport>`, or `<keep-alive>` there is a
+  plain element. The server now writes an attribute such as `:x="y"`
+  there; it used to appear only after Vue ran.
+- In a component that uses Vue, Citry's `{{ }}` values, `c-` bindings
+  such as `c-title`, `<c-if>`, `<c-for>`, and `simple = True` and
+  transparent components inside an element with `v-pre` now render, and
+  the `v-pre` element's own `c-` bindings and `#c-key` work. The page used to show internal names such as
   `{{ $citryPrepared.citryText0 }}`, or the template failed to compile.
   Where Citry's values meet something Vue reads, such as a child
   component, a `<c-slot>`, or a `:title` on the `v-pre` element itself,
@@ -655,7 +677,10 @@ The sections below list every change.
   `Markup` values in text and in `c-` attributes such as `c-href`, the
   `security_csp` and `security_javascript` checks in `serialize()`, and
   any attribute of a page with a `<textarea>` that serializes without
-  JavaScript.
+  JavaScript. An Events timing with that many digits, such as
+  `@c-input.debounce.<5,000 digits>ms`, now fails with the JavaScript
+  safe-integer error, and one written with digits other than ASCII
+  `0`-`9` is now an unknown modifier.
 - In an interactive component, a `<c-raw>` block or `Markup` value whose
   HTML writes a character reference the browser reads as text, such as
   `&copy 2026` without `;`, `&nbsp`, `&#127;` or `&#x80;`, now renders.
@@ -703,8 +728,11 @@ The sections below list every change.
   a Vue page it failed even for a component used on its own, as did a
   hook that returns `result` unchanged.
 - In a component that uses Vue, the server now writes more elements whose
-  attributes are plain text, such as `foo="1"`, so less of the page waits
-  for the browser to build it.
+  attributes the browser reads as plain text, such as `foo="1"`, so less
+  of the page waits for the browser to build it. A `<form>` with an
+  attribute that may match the `name` or `id` of a control inside it now
+  leaves the form's parent to the browser, or the whole page when the
+  form is at the page root.
 - In Safari, when a stylesheet linked in the served page fails to load,
   Citry now requests it again and reports an error if it still fails, as it
   does in other browsers. Before, the page mounted without its styles and no
@@ -718,7 +746,6 @@ The sections below list every change.
   component it does not enclose. At the root of a component with `css_data()`, a
   `v-pre` element now renders, or raises an error that says what to move,
   where it used to fail with an internal compiler error.
-
 - Rendering, checking, or formatting a deeply nested template, or a page
   whose data nests hundreds of levels, no longer crashes the Python
   process on a thread with a small stack, such as a thread on musl Linux
@@ -726,9 +753,6 @@ The sections below list every change.
 - In a component that uses Vue, the server now writes elements nested up
   to 400 deep, where it used to stop at about 130 and leave the rest of
   that part of the page for the browser to build.
-- When the server sends an update while you type with an input method,
-  such as for Chinese or Japanese, Citry no longer moves the caret in that
-  field.
 - A component's scoped CSS now reaches all of its top-level tags, and only
   those, when `Markup` or a `<c-raw>` block in it holds a self-closed tag
   such as `<div/>`, the content of `<xmp>` or `<iframe>`, or tags the
@@ -737,9 +761,10 @@ The sections below list every change.
   there, where the page showed Citry's internal `<template c-render-id>`
   placeholder.
 - `citry format` now wraps a tag when the text after it makes the line
-  too long, formats an expression that is valid only inside parentheses,
-  and leaves an expression as you wrote it when it cannot reformat it
-  safely. It used to fail on such templates.
+  too long, where it used to measure only the tag.
+- `citry format` no longer fails on an expression that is valid only
+  inside parentheses, and it leaves an expression as you wrote it when it
+  cannot reformat it safely.
 
 ### Performance
 
@@ -761,11 +786,12 @@ The sections below list every change.
   invalid expression spread over thousands of lines, in well under a
   second. A 20,000-line expression with an error took more than a minute to
   report.
-- On CPython, pages that repeat a `simple = "vue"` component render much
-  faster on the server. In Citry's board benchmark at 1,400 rows,
-  rendering and serializing the page takes about 55 ms instead of about
-  99 ms. PyPy and Pyodide use Citry's Python renderer, which is up to
-  about 9% faster.
+- On standard CPython (built with the GIL), pages that repeat a
+  `simple = "vue"` component render much faster on the server. In Citry's
+  board benchmark at 1,400 rows, these changes cut rendering and
+  serializing the page from about 99 ms to about 55 ms. On PyPy, Pyodide,
+  and free-threaded CPython, which do not use Citry's Rust renderer, the
+  gain is smaller.
 - `serialize()` with `security_csp` or `security_javascript` set is much
   faster on large pages. On a page with 1,400 table rows,
   `serialize(security_csp="strict")` takes about 100 ms instead of about

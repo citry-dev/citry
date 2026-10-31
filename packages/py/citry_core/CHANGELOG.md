@@ -115,7 +115,9 @@
   elements end, so it marks every root-level tag, and only those, when
   the HTML holds a self-closed tag such as `<i/>` or `<div/>`, the
   content of `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>` or
-  `<plaintext>`, or tags the browser closes on its own.
+  `<plaintext>`, or tags the browser closes on its own. It now also
+  reports a `<template>` placeholder inside `<textarea>`, `<xmp>`, or
+  another element whose content is text.
 - `html_transform.validate_html_fragment_boundary()` now rejects a
   fragment that self-closes an element whose contents the browser reads
   as text, such as `<iframe/>`, `<textarea/>`, `<style/>`, or
@@ -139,9 +141,7 @@
   is no longer dropped, and `f'{x=}'` shows `x=` before the value.
 - On Python 3.14, `safe_eval()` of a t-string now gives each
   `Interpolation` its source text as `expression`, as Python does
-  (`t'{x + 1}'` gives `'x + 1'`). It used to be `''`. A self-documenting
-  interpolation (`{x=}`) that holds a comment now leaves the comment out
-  of its `x=` text, as Python does.
+  (`t'{x + 1}'` gives `'x + 1'`). It used to be `''`.
 - `template_formatter.format_template()` no longer adds a line break where
   two tags touch, such as between `<td>` cells or `<option>`s. That line
   break was new text in the rendered HTML. Whitespace in the template is
