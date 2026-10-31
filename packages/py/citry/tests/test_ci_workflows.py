@@ -8,6 +8,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -278,7 +279,12 @@ def _files(*names: str) -> list[dict[str, str]]:
     return [{"filename": name} for name in names]
 
 
-@pytest.mark.skipif(_BASH is None or _JQ is None, reason="the changes job runs in bash and reads JSON with jq")
+# The job runs on Ubuntu; on Windows the fake `gh` folder could not go on
+# bash's PATH, which separates entries with colons.
+@pytest.mark.skipif(
+    _BASH is None or _JQ is None or sys.platform == "win32",
+    reason="the changes job runs in bash on Linux and reads JSON with jq",
+)
 @pytest.mark.parametrize(
     ("files", "changed_files", "head", "expected"),
     [
@@ -308,7 +314,8 @@ def test_the_changes_job_matches_files_like_the_push_path_filter(
     step = _load_workflow("py--tests.yml")["jobs"]["changes"]["steps"][0]
     # A stand-in for `gh api` that returns the JSON GitHub would: the pull
     # request itself, or its file list as pages of two, the way
-    # `gh api --paginate` prints them. The job's own jq then reads it.
+    # `gh api --paginate` prints them. The job's own jq then reads it. Any
+    # other command line fails, so a dropped `--paginate` fails the test.
     pull = tmp_path / "pull.json"
     pull.write_text(json.dumps({"changed_files": changed_files, "head": {"sha": head}}), encoding="utf-8")
     pages = tmp_path / "pages.json"
@@ -318,8 +325,10 @@ def test_the_changes_job_matches_files_like_the_push_path_filter(
     fake_gh.write_text(
         "#!/usr/bin/env bash\n"
         'case "$*" in\n'
-        f"  */files*) cat {shlex.quote(str(pages))} ;;\n"
-        f"  *) cat {shlex.quote(str(pull))} ;;\n"
+        '  "api --paginate repos/owner/repo/pulls/1/files?per_page=100")'
+        f" cat {shlex.quote(str(pages))} ;;\n"
+        f'  "api repos/owner/repo/pulls/1") cat {shlex.quote(str(pull))} ;;\n'
+        "  *) exit 9 ;;\n"
         "esac\n",
         encoding="utf-8",
     )

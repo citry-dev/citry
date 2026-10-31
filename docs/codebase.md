@@ -2273,7 +2273,7 @@ plain name, such as `test`, so do not require a matrix cell such as
   runs, so a required check is never skipped by mistake. The same happens
   when the API lists fewer files than the pull request has (it lists at most
   3,000), or when the pull request gets a newer commit while `changes` runs.
-- **The jobs below the wheel build check its result directly.**
+- **The two jobs that need the wheel build check its result directly.**
   `citry-ui-wheel-install` and `citry-ui-wheel-browser` run when
   `citry-ui-wheel-build` succeeds. GitHub's default condition would skip them
   on every push, because `changes` is skipped there.
