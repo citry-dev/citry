@@ -26,6 +26,9 @@ The test also measures how many frames a render needs: the deepest stack at
 the limit may be at most 20 frames above the deepest stack at depth 8, or,
 with Vue, at depth 128 (see `VUE_COMPARISON_DEPTH`), plus the fixed cost of
 copying the first levels of the data Vue receives (`VUE_DIRECT_JSON_FRAMES`).
+A ``simple="vue"`` component's template is the exception: it uses one
+frame per level by design, so its stack may also grow by one frame for
+each level between the two depths (see `SIMPLE_VUE_FRAMES_PER_LEVEL`).
 A chain of components that pass a template fill on with
 ``<c-fill><c-slot /></c-fill>`` renders in the body renderer that is
 already running, so a chain of 150 may use at most 20 frames more than a
@@ -98,6 +101,24 @@ VUE_DIRECT_JSON_FRAMES = _DIRECT_JSON_DEPTH * (2 if sys.version_info < (3, 12) e
 # passed-on fills nests one level of that data per link, so a long chain
 # with Vue reaches this fixed cost, and stays there.
 VUE_WALK_FRAMES = _INLINE_WALK_FRAMES
+# A `simple="vue"` component has no Python instance, so Citry renders it
+# with Python code generated from its template: one function for each
+# `<c-if>` branch and `<c-for>` body, each calling the next. Each level of
+# such a template therefore adds one Python frame, and the fixtures in
+# `SIMPLE_VUE_FIXTURES` may grow by that much between the depth they are
+# compared with and the limit, on top of `ALLOWED_GROWTH`. On CPython 3.15
+# the fixture's deepest stack measured 268 frames at the limit on both
+# render paths, 239 more than at depth 8 and well inside `BUDGET`. Running
+# the deeper bodies as generators, which `citry._walk.run` steps through
+# from a list, kept the stack flat but made these components up to 2.9
+# times slower to evaluate (#299), so the frames are the accepted cost.
+# Two frames per level would fail here.
+SIMPLE_VUE_FRAMES_PER_LEVEL = 1
+SIMPLE_VUE_FIXTURES = ("simple_vue_template",)
+# With i18n settings, Citry renders a `simple="vue"` component the
+# ordinary way, which keeps a flat stack, so that variant gets no
+# allowance and must stay within `ALLOWED_GROWTH` like the others.
+SIMPLE_VUE_VARIANTS = ("html", "vue")
 
 
 # The two test files mark their test with this.
@@ -174,9 +195,13 @@ FIXTURES: dict[str, Callable[[int], str]] = {
     "template_in_an_attribute": lambda d: "<c-Titled c-title='"
     + _nest(d - 1, '<c-if cond="flag">', "<b>{{ n }}</b>", "</c-if>")
     + "' />",
-    # These two nest inside the component's own template, built at `depth`.
+    # These three nest inside the component's own template, built at `depth`.
     "pure_component": lambda _d: "<c-PureLeaf /><c-PureLeaf />",
     "cached_component": lambda _d: "<c-Cached />",
+    # A `simple="vue"` component renders only through the Python function
+    # Citry generates from its template, which uses one frame per level
+    # (see `SIMPLE_VUE_FRAMES_PER_LEVEL`).
+    "simple_vue_template": lambda _d: '<c-DeepVue c-flag="flag" c-n="n" c-items="items" />',
     "plain_elements": lambda d: _nest(2 * d, "<div>", "{{ n }}", "</div>"),
 }
 
@@ -246,6 +271,13 @@ def _build(fixture: str, depth: int, *, variant: str) -> tuple[Citry, type[Compo
         template_data=_cached_data,
         **js,
     )
+    # Alternating `<c-if>` and `<c-for>` levels, so the generated code has
+    # both kinds of nested body. Each loop binds its own name.
+    deep_vue_steps = [
+        (f'<c-for each="x{level} in items">', "</c-for>") if level % 2 else ('<c-if cond="flag">', "</c-if>")
+        for level in range(depth)
+    ]
+    component("DeepVue", _cycle(depth, deep_vue_steps, "{{ n }}"), simple="vue")
     page = type(
         "Page",
         (Component,),
@@ -490,6 +522,16 @@ def _worker(*, run_check: bool) -> None:
     print(json.dumps(results))  # noqa: T201 - the parent test reads this
 
 
+def _allowed_growth(name: str, numbers: dict[str, Any]) -> int:
+    """Return how many frames the deepest stack of result `name` may grow between the two depths."""
+    allowed = ALLOWED_GROWTH + (VUE_DIRECT_JSON_FRAMES if numbers["uses_vue"] else 0)
+    fixture, _, variant = name.removesuffix("]").partition("[")
+    if fixture in SIMPLE_VUE_FIXTURES and variant in SIMPLE_VUE_VARIANTS:
+        # One frame for each level between the compared depth and the limit.
+        allowed += SIMPLE_VUE_FRAMES_PER_LEVEL * (LOGIC_LIMIT - numbers["comparison_depth"])
+    return allowed
+
+
 def check_render_path(render_path: str) -> None:
     """
     Run every fixture on one render path in a subprocess, and check the results.
@@ -532,8 +574,7 @@ def check_render_path(render_path: str) -> None:
     grew = {
         name: (numbers["comparison_depth"], numbers["comparison_peak"], numbers["deep_peak"])
         for name, numbers in results.items()
-        if numbers["deep_peak"] - numbers["comparison_peak"]
-        > ALLOWED_GROWTH + (VUE_DIRECT_JSON_FRAMES if numbers["uses_vue"] else 0)
+        if numbers["deep_peak"] - numbers["comparison_peak"] > _allowed_growth(name, numbers)
     }
     assert not grew, f"(depth compared, frames there, frames at {LOGIC_LIMIT}): {grew}"
     for variant in ("html", "vue"):
