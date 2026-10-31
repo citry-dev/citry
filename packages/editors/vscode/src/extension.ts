@@ -518,7 +518,7 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		entry.status = await client.sendRequest<ProjectStatus>(statusMethod, {});
 		if (environmentFile !== null && entry.status.environment_file === undefined) {
 			throw new Error(
-				'Configured citry.envFile is not supported by this citry-lsp installation. Upgrade it with `python -m pip install --upgrade "citry-lsp>=0.1,<0.3"`.',
+				'Configured citry.envFile is not supported by this citry-lsp installation. Upgrade it with `python -m pip install --upgrade "citry-lsp>=0.1,<0.4"`.',
 			);
 		}
 		if (entry.status.environment_file !== undefined && entry.status.environment_file !== null) {
@@ -544,7 +544,7 @@ async function probeLanguageServer(python: string, cwd: string): Promise<void> {
 			{ cwd, timeout: 10_000, windowsHide: true, maxBuffer: 1024 },
 			(error, stdout) => {
 				if (error !== null) {
-					reject(new Error('Install it in that environment with `python -m pip install "citry-lsp>=0.1,<0.3"`.'));
+					reject(new Error('Install it in that environment with `python -m pip install "citry-lsp>=0.1,<0.4"`.'));
 					return;
 				}
 				resolve(stdout.trim());
@@ -553,7 +553,7 @@ async function probeLanguageServer(python: string, cwd: string): Promise<void> {
 	});
 	if (!supportsLanguageServerVersion(version)) {
 		throw new Error(
-			`Found citry-lsp ${version || "with no version"}; this extension requires citry-lsp 0.1.x or 0.2.x.`,
+			`Found citry-lsp ${version || "with no version"}; this extension requires citry-lsp 0.1.x, 0.2.x, or 0.3.x.`,
 		);
 	}
 }
