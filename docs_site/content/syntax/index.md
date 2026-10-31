@@ -159,6 +159,17 @@ instead, such as `{{ content }}` where `template_data()` returns
 fill, uses about 11 levels of Python's stack for each component, so a
 chain of about 80 of those can raise `RecursionError`.
 
+Other components render any depth of `c-if` and `c-for` in a fixed
+amount of Python's stack. A
+[`simple = "vue"`](/performance/simple-components/#give-a-simple-component-its-own-vue-state)
+component uses one level of Python's stack for each level of `c-if` or
+`c-for` nesting in its template, written as a tag or as an attribute. A
+template with 256 such levels uses about 270 levels of Python's stack to
+render. Python's default recursion limit is 1,000, which leaves about
+700 for your web framework and the code around the render. If the whole
+stack goes past that limit, rendering raises `RecursionError`, so nest
+fewer `c-if` and `c-for` levels in that component.
+
 In a component that uses Vue, the server writes at most 400 levels of
 elements inside the component, which leaves room in Chrome for the page
 around it. Past that depth, the server writes a preview of the deeper
