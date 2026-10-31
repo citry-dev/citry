@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry"
-version = "0.6.0"
+version = "0.7.0"
 requires-python = ">=3.11, <4.0"
 description = "Fully typed frontend framework for Python with server events and compiled Vue interactivity"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
