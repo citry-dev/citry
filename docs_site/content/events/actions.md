@@ -267,8 +267,9 @@ send by default. Use a path that starts with `/` instead when your page:
 
 - sets a `Referrer-Policy` that stops the browser sending the full address.
   With no `Referer`, the visitor lands next to the handler's URL, usually on
-  a "not found" page, and the server logs a warning. With only the site's
-  address, the visitor lands next to the home page, with no warning.
+  a "not found" page, and for a form that posts, the server logs a warning.
+  With only the site's address, the URL resolves against the home page,
+  with no warning.
 - sets `<base href>`, which changes what the browser resolves against but
   not what it sends.
 

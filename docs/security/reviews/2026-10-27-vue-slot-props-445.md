@@ -161,10 +161,10 @@ five cases, it built the same slot in a plain Vue 3.5.44 page to compare.
 - On `<c-slot>` and `<c-fill>`, a refused `c-bind` key raises a plain
   `RuntimeError`, while the same refusal on an element raises
   `citry.VueCodeError`. Code that catches `VueCodeError` misses it.
-- The "Scoped slots" docs (`docs_site/content/vue/slots.md`) say that
-  `c-bind` cannot set a prop or a pattern. They do not say that the `:`
-  expression and the `v-slot` pattern are JavaScript the browser runs, so
-  they must be written in the template and never built from request data.
+- Done in [#562](https://github.com/citry-dev/citry/pull/562): the
+  "Scoped slots" docs (`docs_site/content/vue/slots.md`) now say that the
+  `:` binding on `<c-slot>` and the `v-slot` value on `<c-fill>` are part
+  of the template, so only the template author writes them.
 - Done in [#562](https://github.com/citry-dev/citry/pull/562): the Vue
   slots page now warns against binding request data with `v-html`,
   `:href` or `:src`.

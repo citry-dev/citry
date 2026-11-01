@@ -656,9 +656,10 @@ def _compat_response(envelope: Mapping[str, Any], request: RouteRequest) -> Rout
 _URL_LEADING_STRIP = "".join(chr(code) for code in range(0x21))
 
 
-# The (handler path, URL) pairs already warned about. The cap keeps a client
-# that varies the path from growing it without limit; past it, every
-# request warns again, which costs log volume and nothing else.
+# The (handler path, URL) pairs already warned about, for the life of the
+# process. The cap keeps a client that varies the path from growing it
+# without limit; once it is full, a pair not yet recorded warns on every
+# request, which costs log volume and nothing else.
 _WARNED_REDIRECTS: set[tuple[str, str]] = set()
 _MAX_WARNED_REDIRECTS = 1024
 
@@ -705,8 +706,8 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
         return _join_like_a_browser(base, stripped)
 
     # A GET handler URL opened directly is the page itself, so resolving
-    # against it is right there; and one line per URL and handler is enough
-    # to find the problem without a line for every visitor.
+    # against it is correct. One warning per handler and URL is enough to
+    # find the problem without a line for every visitor.
     warning_key = (request.path, url)
     if request.method != "GET" and warning_key not in _WARNED_REDIRECTS:
         if len(_WARNED_REDIRECTS) < _MAX_WARNED_REDIRECTS:
@@ -734,8 +735,8 @@ def _join_like_a_browser(base: SplitResult, reference: str) -> str:
     so it turns a page at ``//a/b`` into ``/a/b``; a browser keeps them. This
     follows the WHATWG URL rules for ``http`` and ``https`` instead, so for
     an ASCII URL the 303 lands where ``location.assign()`` would. It does not
-    percent-encode, so a non-ASCII URL is sent as the host adapter encodes
-    the header.
+    percent-encode, so a non-ASCII URL goes out however the web framework's
+    adapter encodes the ``Location`` header.
     """
     # Browsers drop tabs and newlines anywhere in a URL before parsing it.
     reference = reference.translate({9: None, 10: None, 13: None}).rstrip(_URL_LEADING_STRIP)
