@@ -143,7 +143,7 @@ The `:` binding on `<c-slot>` and the `v-slot` value on `<c-fill>` are
 part of the template, so only the template author writes them. Request
 data reaches the fill only as the values of slot props, such as `row`.
 
-!!! warning "Vue does not clean HTML or URLs"
+!!! warning "Vue does not check HTML, URLs, or attributes"
 
     Do not bind request data, or text a site visitor saved, with
     `v-html` or with a URL binding such as `:href` or `:src`, in a fill
@@ -151,6 +151,11 @@ data reaches the fill only as the values of slot props, such as `row`.
     URL's scheme, so that text could run as script on the page. Show
     visitor text with `v-text`. On the server, allow only `https:` or
     `http:` URLs and paths on your own site.
+
+    Do not spread an object built from request data with
+    `v-bind="..."` either. Vue turns each of its keys into an attribute or an event
+    handler on the element, whatever the key is. Bind each value you
+    need under a name you write, such as `:title="row.title"`.
 
 `<c-slot>` also accepts `v-bind:row`. `v-slot` takes one object pattern,
 such as `{ row }`, or one name, such as `props`, which then holds every
