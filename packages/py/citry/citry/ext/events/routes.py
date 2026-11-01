@@ -802,21 +802,20 @@ def _encode_location(url: str) -> str:
     HTTP headers carry bytes, and Citry's ASGI and WSGI adapters send
     header text as Latin-1, so a URL such as ``"/caf\u00e9"`` must go out
     as ``"/caf%C3%A9"``, the form a browser gives it when
-    ``location.assign()`` navigates to it. Every character outside
-    printable ASCII becomes UTF-8 ``%XX`` escapes, the host included;
-    printable ASCII, including reserved characters and existing escapes,
-    stays as is.
+    ``location.assign()`` navigates to it. Every space and every character
+    outside printable ASCII becomes UTF-8 ``%XX`` escapes, the host
+    included; other printable ASCII, including reserved characters and
+    existing escapes, stays as is.
 
     The host stays percent-encoded rather than converted to its ASCII
     ``xn--`` form (IDNA). A browser decodes the escapes in an ``http`` or
-    ``https`` host and converts it with its own rules, so it lands where
-    ``location.assign()`` would. Python's ``idna`` codec follows older
-    rules that send some hosts elsewhere.
+    ``https`` host and converts it with its own rules, so the redirect
+    lands where ``location.assign()`` would.
     """
     # Most URLs are already printable ASCII, and browsers read those as written.
     if all("!" <= char <= "~" for char in url):
         return url
-    # Do what browsers do before they parse: drop control characters and
+    # Do what browsers do before they parse: drop ASCII control characters and
     # spaces at both ends, tabs and newlines anywhere, and replace lone surrogates.
     url = url.strip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
     url = _LONE_SURROGATE.sub("\ufffd", url)

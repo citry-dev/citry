@@ -701,7 +701,7 @@ def _mounted(c):
 
 
 def _landing_asgi(c):
-    """Citry under /citry; every other path answers 200 with the path it received."""
+    """Citry under /citry; every other path answers 200 with the path and query it received."""
     citry_app = asgi_app(c)
 
     async def app(scope, receive, send):
@@ -718,7 +718,7 @@ def _landing_asgi(c):
 
 
 def _landing_wsgi(c):
-    """The WSGI twin of ``_landing_asgi``; it moves /citry into SCRIPT_NAME, as a WSGI server would."""
+    """The WSGI twin of ``_landing_asgi``; it moves /citry into SCRIPT_NAME, as a mounting dispatcher would."""
     citry_app = wsgi_app(c)
 
     def app(environ, start_response):
@@ -1644,7 +1644,7 @@ class TestCompatMode:
         ("target", "location", "landed"),
         [
             # A non-ASCII path, query, and fragment become UTF-8 escapes, as
-            # location.assign() would send them. The fragment never reaches
+            # location.assign() would encode them. The fragment never reaches
             # the server.
             ("/café?q=ü#ß", "/caf%C3%A9?q=%C3%BC#%C3%9F", "/caf%C3%A9?q=%C3%BC"),
             # A relative URL is resolved against the Referer, then encoded.
@@ -1681,7 +1681,8 @@ class TestCompatMode:
             # A browser decodes the escapes in the host and converts it itself.
             ("https://bücher.de/ä?x=é#ö", "https://b%C3%BCcher.de/%C3%A4?x=%C3%A9#%C3%B6"),
             # Full-width "/" and "@" stay escaped, so they never become
-            # delimiters; browsers reject these URLs, as location.assign() does.
+            # delimiters; the browser rejects the 303 target, as location.assign()
+            # rejects the original URL.
             ("https://evil.example\uff0f.good.test/", "https://evil.example%EF%BC%8F.good.test/"),
             ("https://a\uff20evil.example/", "https://a%EF%BC%A0evil.example/"),
         ],
@@ -1701,7 +1702,7 @@ class TestCompatMode:
 
     def test_unparsable_referer_counts_as_no_referer(self):
         # urlsplit raises on a host such as "[::1"; the client sent it, so
-        # the redirect passes through instead of failing with a 500.
+        # the redirect URL goes out unchanged instead of failing with a 500.
         c = _citry()
         jumper = _jumper(c)
         response = _mounted(c).post(
@@ -1733,7 +1734,7 @@ class TestCompatMode:
             (" /a b\n", "/a%20b"),
             # A lone surrogate becomes U+FFFD, as it does in a browser.
             ("/x\ud800", "/x%EF%BF%BD"),
-            # A printable ASCII URL is returned as written.
+            # A URL of printable ASCII without spaces is returned as written.
             ("/a/%zz?b=c#d", "/a/%zz?b=c#d"),
         ],
     )

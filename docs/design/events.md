@@ -4218,9 +4218,10 @@ a `GET` handler URL opened directly is itself the page. Two cases resolve differ
 runtime and cannot be detected: a `Referrer-Policy` that sends only the
 origin (resolved against the site root) and a page with `<base href>`.
 The user docs ask those pages to use a path starting with `/`.
-Header values must be ASCII, so the server then percent-encodes every
-character outside printable ASCII as UTF-8, host included, and leaves
-printable ASCII as written. A browser decodes the escapes in the host and
+After resolving, the server percent-encodes the URL, because Citry's
+adapters send header text as Latin-1 and a browser expects UTF-8 escapes.
+It encodes spaces and every character outside printable ASCII as UTF-8,
+host included, and leaves the rest of printable ASCII as written. A browser decodes the escapes in the host and
 converts it with its own rules, so the 303 and `location.assign()` land on
 the same URL.
 
