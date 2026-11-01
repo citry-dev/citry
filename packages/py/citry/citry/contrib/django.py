@@ -70,11 +70,8 @@ from citry.util.routing import (
     body_read_limit,
     flatten_routes,
     normalize_mount_prefix,
-<<<<<<< HEAD
-    sent_headers,
-=======
     route_allows_method,
->>>>>>> fix(routing): route only the exact path, admit HEAD only on routes that list GET
+    sent_headers,
 )
 
 if TYPE_CHECKING:
@@ -173,19 +170,14 @@ def _make_view(route: URLRoute) -> Any:
     from django.http import HttpResponse, HttpResponseNotAllowed  # noqa: PLC0415
 
     def view(request: Any, **kwargs: Any) -> Any:
-<<<<<<< HEAD
-        if request.method not in route.methods and request.method != "HEAD":
-            not_allowed = HttpResponseNotAllowed(route.methods)
-            # The same standard header every other Citry response carries.
-            not_allowed["X-Content-Type-Options"] = "nosniff"
-            return not_allowed
-=======
         # The shared rule keeps HEAD off POST-only routes. That matters most
         # here: CsrfViewMiddleware skips its token check for HEAD, so a HEAD
         # that reached a POST handler would run it without the token.
         if not route_allows_method(route, request.method):
-            return HttpResponseNotAllowed(route.methods)
->>>>>>> fix(routing): route only the exact path, admit HEAD only on routes that list GET
+            not_allowed = HttpResponseNotAllowed(route.methods)
+            # The same standard header every other Citry response carries.
+            not_allowed["X-Content-Type-Options"] = "nosniff"
+            return not_allowed
         handler = route.handler
         assert handler is not None  # noqa: S101 - flatten_routes only yields handler routes
         # urlpatterns() rejected async handlers up front, so the call returns

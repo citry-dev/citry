@@ -28,9 +28,6 @@ import inspect
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs
 
-<<<<<<< HEAD
-from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, body_read_limit, match_route, sent_headers
-=======
 from citry.util.routing import (
     RouteHeaders,
     RouteRequest,
@@ -38,8 +35,8 @@ from citry.util.routing import (
     body_read_limit,
     match_path_below_mount,
     route_allows_method,
+    sent_headers,
 )
->>>>>>> fix(routing): route only the exact path, admit HEAD only on routes that list GET
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable

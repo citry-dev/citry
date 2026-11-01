@@ -14,9 +14,6 @@ from urllib.request import ProxyHandler, build_opener
 from typing_extensions import Self
 
 from citry.contrib.asgi import asgi_app
-<<<<<<< HEAD
-from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, call_maybe_sync, match_route, sent_headers
-=======
 from citry.util.routing import (
     RouteHeaders,
     RouteRequest,
@@ -24,8 +21,8 @@ from citry.util.routing import (
     call_maybe_sync,
     match_route,
     route_allows_method,
+    sent_headers,
 )
->>>>>>> fix(routing): route only the exact path, admit HEAD only on routes that list GET
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, MutableMapping
