@@ -82,7 +82,7 @@
 	"dependencies": {
 		"@vscode/python-extension": "1.0.6",
 		"prettier": "3.9.10",
-		"vscode-languageclient": "10.1.2"
+		"vscode-languageclient": "11.0.0"
 	},
 	"contributes": {
 		"languages": [
