@@ -13,7 +13,9 @@
 # - Python and JavaScript: an advisory in a dependency that ships to users
 #   (the runtime dependencies and extras of each published Python package,
 #   and `pnpm audit --prod`). Dev, docs and benchmark tooling is audited
-#   too, but only reported.
+#   too, but only reported. JavaScript exceptions live under `auditConfig`
+#   in pnpm-workspace.yaml, each with a comment giving its reason and
+#   tracking issue.
 # - Rust: any advisory, because nearly everything in Cargo.lock ships in
 #   the citry-core wheel (the only exception is a test-only crate).
 #   Accepted exceptions live in deny.toml, each with its reason and
