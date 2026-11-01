@@ -1593,46 +1593,73 @@ uv run maturin develop
 
 ### Pin build backends
 
-Every build backend uv downloads for a workspace package is pinned to an exact
-version and hash in the root `pyproject.toml`. When you change a package's
+Every build backend uv downloads for a workspace package or a benchmark runner
+is pinned to an exact version and hash. When you change a project's
 `[build-system] requires`, want a newer backend release, or see the
-`build_backend_pins` validator fail, refresh the pins:
+`build_backend_pins` validator fail, refresh the pins and record them in each
+lockfile:
 
 ```bash
 python scripts/build_constraints.py update
 uv lock
+uv lock --directory benchmarks/web/runner
+uv lock --directory benchmarks/errors/runner
 ```
 
 When uv builds or syncs a workspace package, it first downloads that package's
 build backend from PyPI: setuptools for citry, citry-lsp, citry-ui, and
-pygments-citry, and maturin for citry-core. `uv.lock` records the packages
-Citry installs, but not these build-time downloads. So the root
-`pyproject.toml` lists every build backend, and each package a backend needs,
-in `[tool.uv] build-constraint-dependencies` with an exact version and the sha256 hash of
-each file PyPI publishes for it. It also sets `require-build-hashes = true`.
+pygments-citry, and maturin for citry-core. The two benchmark runners build with
+hatchling, which also needs `editables` while uv installs the runner as an
+editable project. `uv.lock` records the packages Citry installs, but not these
+build-time downloads. So the root `pyproject.toml` lists every build backend of
+the workspace packages, and each package a backend needs, in `[tool.uv]
+build-constraint-dependencies` with an exact version and the sha256 hash of each
+file PyPI publishes for it. It also sets `require-build-hashes = true`.
 uv then stops the build when a download does not match a listed hash, or when
 a build needs a package the list leaves out. uv reuses a workspace package
 wheel it has already built and cached without checking the backend again.
 
-uv reads the pins only when it runs inside this workspace: from the repository
-root, or on a path inside it. A command run from a project outside the
-workspace, such as an example project copied to a temporary folder, has to
-pass the pins itself (`examples/_internal/qualify.py` does this for
-`--editable-root`). The published citry-core wheels are built by
+uv reads `require-build-hashes` from the nearest `pyproject.toml` that has a
+`[tool.uv]` table, but it reads the pins, and the copy of them in `uv.lock`,
+from the root of the workspace that the project belongs to. The workspace
+packages belong to the repository's workspace, so they use the root table. A
+benchmark runner sits under the repository root without being a workspace
+member, so it is a workspace root itself. uv applies the root's
+`require-build-hashes` to a runner that has no `[tool.uv]` table, but does not
+read the root's pins for it, so `uv sync --frozen` there stops with
+`Hash-checking is required, but no trusted hash was provided for: hatchling`.
+Each runner's `pyproject.toml` therefore has its own `[tool.uv]` table with the
+same two settings, because a table of its own stops uv from inheriting the
+root's, and a generated block of pins for its backend.
+`uv lock --directory <runner>` copies the pins into the runner's `uv.lock`.
+The benchmark apps and error-benchmark baselines have a `[tool.uv]` table of
+their own and no build backend, so the setting does not reach them. The
+example projects have no `[tool.uv]` table, so they inherit
+`require-build-hashes` but not the pins; they have no build backend, and
+`uv sync --frozen` only installs wheels for them. A command run from a project
+outside the repository, such as an example project copied to a temporary
+folder, has to pass the pins itself (`examples/_internal/qualify.py` does this
+for `--editable-root`). The published citry-core wheels are built by
 maturin-action, which downloads maturin from GitHub itself and does not use
 these pins.
 
 `update` resolves every `[build-system] requires` entry under `packages/py/`
 for Python 3.11 and later on every platform, then rewrites the lines between
-the `BEGIN build constraints` and `END build constraints` comments. `uv lock`
-copies the pins into `uv.lock`. The `build_backend_pins` validator fails when
-a package asks for a backend or a version range the list does not cover, and
-its message names these two commands.
+the `BEGIN build constraints` and `END build constraints` comments in the root
+`pyproject.toml`. It does the same in each benchmark runner's `pyproject.toml`
+(`STANDALONE_PROJECT_PATTERNS` in `scripts/build_constraints.py`), resolving
+only that runner's backend and the extras in `BACKEND_EXTRA_REQUIREMENTS`. A new
+standalone project that builds with a backend needs its `pyproject.toml` path
+added to `STANDALONE_PROJECT_PATTERNS`. `uv lock` copies the pins into each
+`uv.lock`. The `build_backend_pins` validator fails when a project asks for a
+backend or a version range its table does not cover, or when a runner's
+`uv.lock` does not record its table, and its message names the command that
+repairs it.
 
 The release verifiers and the Citry UI rebuild in `py--tests.yml` pass
 `--no-config` when they rebuild a wheel from a fresh sdist, so they never read
-the root table. Those builds export the pins to a
-file (`python scripts/build_constraints.py export <file>`, or
+the root table. Those builds export the pins to a file
+(`python scripts/build_constraints.py export <file>`, or
 `build_constraints.export()` from Python) and pass
 `--build-constraints <file> --require-hashes` to `uv build`.
 
@@ -1657,15 +1684,16 @@ release that changes this setting cannot break CI before the pin moves; the
 setting is still marked experimental (`build-dependency-hashes`), so check
 uv's release notes when raising the pin.
 
-The pins cover the build backends of this repository's own packages, plus
-the ones in `THIRD_PARTY_BUILD_REQUIREMENTS` in `scripts/build_constraints.py`:
-backends that a locked third-party package needs on a supported interpreter it
-ships no wheel for, such as Cython for PyYAML on CPython 3.15 and PyPy 3.11,
-and pkgconfig for Brotli on free-threaded CPython 3.14.
-When uv has to build some other third-party package from its sdist, that
-backend has no pin and the build stops with `Hash-checking is required, but no
-trusted hash was provided`. Add the backend to that list, then run
-`python scripts/build_constraints.py update && uv lock`.
+The pins cover the build backends of this repository's own packages and
+benchmark runners, plus the ones in `THIRD_PARTY_BUILD_REQUIREMENTS` in
+`scripts/build_constraints.py`: backends that a locked third-party package
+needs on a supported interpreter it ships no wheel for, such as Cython for
+PyYAML on CPython 3.15 and PyPy 3.11, and pkgconfig for Brotli on free-threaded
+CPython 3.14. When uv has to build some other third-party package from its
+sdist, that backend has no pin and the build stops with `Hash-checking is
+required, but no trusted hash was provided`. Add the backend to that list, then
+run `python scripts/build_constraints.py update` and the `uv lock` commands it
+prints.
 
 ### Root pyproject.toml Protection
 
