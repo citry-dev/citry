@@ -30,6 +30,7 @@ from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
 from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
+from citry.ext.events import routes as events_routes
 from citry.ext.events.routes import _join_like_a_browser, get_event_url
 from citry.ext.events.schemas import StringArgs
 from citry.ext.events.tokens import mint_state_token
@@ -679,6 +680,10 @@ def _jumper(c):
         class Events:
             def go(self, data: GoIn):
                 # Tests only: real handlers must check a URL from the request.
+                return actions.Redirect(data.to)
+
+            @event(methods=["GET"])
+            def look(self, data: GoIn):
                 return actions.Redirect(data.to)
 
     return Jumper
@@ -1481,10 +1486,15 @@ class TestCompatMode:
             {},
             {"Referer": "http://other.example/shop/list"},
             {"Referer": "not a url"},
+            # A different port is a different host, as for the Origin check.
+            {"Referer": "http://testserver:8080/shop/list"},
         ],
-        ids=["missing", "other-host", "malformed"],
+        ids=["missing", "other-host", "malformed", "other-port"],
     )
-    def test_redirect_without_a_same_host_referer_passes_through_and_warns(self, headers, caplog):
+    def test_redirect_without_a_same_host_referer_passes_through_and_warns(self, headers, caplog, monkeypatch):
+        # Start with no warnings recorded, so an earlier test's warning for the
+        # same handler and URL does not hide this one.
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
         c = _citry()
         jumper = _jumper(c)
         with caplog.at_level("WARNING", logger="citry"):
@@ -1500,6 +1510,73 @@ class TestCompatMode:
         assert len(warnings) == 1
         assert "actions.Redirect('next') is a relative URL" in warnings[0]
         assert "starts with '/'" in warnings[0]
+
+    def test_redirect_warns_once_per_handler_and_url(self, caplog, monkeypatch):
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        client = _mounted(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            for _ in range(3):
+                client.post(_event_url(jumper, "go"), data={"to": "next"}, follow_redirects=False)
+        warnings = [r for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+        assert len(warnings) == 1
+
+    def test_resolved_redirect_logs_no_warning(self, caplog, monkeypatch):
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            _mounted(c).post(
+                _event_url(jumper, "go"),
+                data={"to": "next"},
+                headers={"Referer": "http://testserver/shop/list"},
+                follow_redirects=False,
+            )
+        assert not [r for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+
+    def test_origin_only_referer_resolves_against_the_site_root(self):
+        # Referrer-Policy "origin" sends only "http://host/", which the server
+        # cannot tell apart from a page at the root; the docs cover this case.
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": "next"},
+            headers={"Referer": "http://testserver/"},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == "http://testserver/next"
+
+    def test_get_handler_opened_directly_passes_through_without_a_warning(self, caplog, monkeypatch):
+        # Opened with no Referer, the handler URL is the page, so resolving
+        # against it is right and nothing is logged.
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            response = _mounted(c).get(
+                _event_url(jumper, "look"),
+                params={"to": "next"},
+                headers={"Accept": "text/html"},
+                follow_redirects=False,
+            )
+        assert response.status_code == 303
+        assert response.headers["location"] == "next"
+        assert not [r for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+
+    def test_get_handler_opened_from_a_link_resolves_against_the_linking_page(self):
+        # A link click sends the linking page as the Referer, and location.assign()
+        # on that page would resolve against it too.
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).get(
+            _event_url(jumper, "look"),
+            params={"to": "next"},
+            headers={"Accept": "text/html", "Referer": "http://testserver/shop/list"},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == "http://testserver/shop/next"
 
     def test_redirect_followed_lands_on_the_posting_page_sibling(self):
         # Follow the 303 the way a browser does: the next request goes to the

@@ -134,7 +134,9 @@ if data.next.startswith("/"):
 ```
 
 Use a check that parses the URL the way a browser does. Under Django, use
-`url_has_allowed_host_and_scheme`:
+`url_has_allowed_host_and_scheme`. In this example the login page copies
+its `next` query parameter into a hidden `<input name="next">`, so the
+handler receives it as `data.next`:
 
 ```python
 from django.utils.http import (
@@ -144,6 +146,7 @@ from django.utils.http import (
 
 class Events:
     def login(self, data: LoginIn, request):
+        # log_in is your own code that checks the password
         log_in(request, data)
         host = request.native.get_host()
         is_safe = url_has_allowed_host_and_scheme(
@@ -155,8 +158,8 @@ class Events:
         return actions.Redirect(target)
 ```
 
-Outside Django, the same function works as a model for your own check.
-Citry plans its own helper for this check
+Outside Django, follow the cases Django's function rejects when you write
+your own check. Citry plans a built-in check
 ([#568](https://github.com/citry-dev/citry/issues/568)).
 
 ## Protect against CSRF { #protect-event-posts-from-csrf }

@@ -165,8 +165,9 @@ five cases, it built the same slot in a plain Vue 3.5.44 page to compare.
   `c-bind` cannot set a prop or a pattern. They do not say that the `:`
   expression and the `v-slot` pattern are JavaScript the browser runs, so
   they must be written in the template and never built from request data.
-- Citry's docs do not yet warn against binding request data with
-  `v-html`, `:href` or `:src`.
+- Done in [#562](https://github.com/citry-dev/citry/pull/562): the Vue
+  slots page now warns against binding request data with `v-html`,
+  `:href` or `:src`.
 - `v-slot` refuses names that start with `$`, `_` or `citry`, which Citry
   uses for its own values, but a `v-for` alias accepts them, so an author
   can reuse one by mistake. Only the template author writes either one.

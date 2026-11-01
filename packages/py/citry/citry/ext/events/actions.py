@@ -311,17 +311,19 @@ class Redirect(Action):
     """
     Navigate the page to a URL.
 
-    A redirect is an ordinary action, not an HTTP 30x: it applies in list
-    order like everything else. Actions listed after it race the navigation,
-    so put it last, or give it ``delay`` / ``wait`` timing when something
-    (say a farewell toast) must be seen first:
+    With JavaScript, a redirect is an ordinary action, not an HTTP 30x: it
+    applies in list order like everything else. Actions listed after it race
+    the navigation, so put it last, or give it ``delay`` / ``wait`` timing
+    when something (say a farewell toast) must be seen first:
     ``actions.Redirect(url, delay=5, wait=False)``.
 
-    A relative URL such as ``"?page=2"`` or ``"next"`` is resolved against
-    the page the visitor is on. When a plain HTML form posts without
-    JavaScript, the server finds that page in the request's ``Referer``
-    header, so on a page that sends no Referer, or only the site's origin,
-    use a path that starts with ``/``.
+    The browser resolves a relative URL such as ``"?page=2"`` or ``"next"``
+    against the visitor's page. When a plain HTML form posts without
+    JavaScript, the server reads that page from the ``Referer`` header. If
+    no ``Referer`` from the same host arrives, the visitor lands relative
+    to the handler URL, usually on a "not found" page, and the server logs
+    a warning. Use a path that starts with ``/`` on a page that sends no
+    ``Referer`` or only the site's origin, or that sets ``<base href>``.
 
     Attributes:
         url: The URL to navigate to.

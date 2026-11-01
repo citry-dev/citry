@@ -651,9 +651,16 @@ def _compat_response(envelope: Mapping[str, Any], request: RouteRequest) -> Rout
     return RouteResponse(status=204)
 
 
-# Leading characters browsers skip before they parse a URL (C0 controls and
-# space), so " //host" means the same as "//host" to them.
+# Characters browsers strip from both ends of a URL before they parse it (C0
+# controls and space), so " //host" means the same as "//host" to them.
 _URL_LEADING_STRIP = "".join(chr(code) for code in range(0x21))
+
+
+# The (handler path, URL) pairs already warned about. The cap keeps a client
+# that varies the path from growing it without limit; past it, every
+# request warns again, which costs log volume and nothing else.
+_WARNED_REDIRECTS: set[tuple[str, str]] = set()
+_MAX_WARNED_REDIRECTS = 1024
 
 
 def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
@@ -671,11 +678,15 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     ``/`` or ``\``, which browsers read like ``/``) passes through as is.
     When the request has no Referer, or one from another host, the URL also
     passes through unchanged and the browser resolves it against the handler
-    URL. That is right when someone opens a ``GET`` handler URL directly, but
-    sends a form post to the wrong page, so a warning names the fix. A page
-    whose ``Referrer-Policy`` sends only the origin produces a Referer of
-    ``https://host/``, which cannot be told apart from a page at the site
-    root; the docs ask such pages to redirect to a path starting with ``/``.
+    URL. That is right when someone opens a ``GET`` handler URL directly, so
+    only other methods log a warning that names the fix. Two cases resolve
+    differently from ``location.assign()`` and cannot be detected here, so
+    the docs ask those pages to use a path that starts with ``/``:
+
+    - a ``Referrer-Policy`` that sends only the origin gives a Referer of
+      ``https://host/``, which looks like a page at the site root;
+    - a ``<base href>`` changes what the browser resolves against, but the
+      Referer still names the page's own URL.
     """
     stripped = url.lstrip(_URL_LEADING_STRIP)
     if urlsplit(stripped).scheme or stripped.startswith(("/", "\\")):
@@ -684,20 +695,28 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     referer = request.headers.get("referer") or ""
     base = urlsplit(referer)
     host = (request.headers.get("host") or "").lower()
-    # Compare the Referer's host with the request's own Host, as the CSRF
-    # floor does for Origin: a page from another site is not the page this
-    # redirect is relative to.
+    # Compare the Referer's host with the request's own Host, as the always-on
+    # CSRF check (enforce_floor) does for Origin: a page from another site is
+    # not the page this redirect is relative to.
     if base.scheme in ("http", "https") and base.netloc and base.netloc.lower() == host:
         # Answer with the absolute URL: the base is the visitor's own page on
         # this host, and an absolute Location keeps a page path such as
         # "//other/x" from turning the result into a link to another host.
         return _join_like_a_browser(base, stripped)
 
-    logger.warning(
-        f"actions.Redirect({url!r}) is a relative URL, and the no-JavaScript request to {request.path!r}"
-        " sent no Referer header from this site to resolve it against, so the browser will resolve"
-        " it against the handler URL. Redirect to a path that starts with '/' to avoid this."
-    )
+    # A GET handler URL opened directly is the page itself, so resolving
+    # against it is right there; and one line per URL and handler is enough
+    # to find the problem without a line for every visitor.
+    warning_key = (request.path, url)
+    if request.method != "GET" and warning_key not in _WARNED_REDIRECTS:
+        if len(_WARNED_REDIRECTS) < _MAX_WARNED_REDIRECTS:
+            _WARNED_REDIRECTS.add(warning_key)
+        logger.warning(
+            f"actions.Redirect({url!r}) is a relative URL, but the request to {request.path!r} has no"
+            " Referer header naming a page on this site, so the browser will resolve it against the"
+            " handler URL and likely show a 404. Redirect to a path that starts with '/', or check"
+            " the page's Referrer-Policy."
+        )
     return url
 
 
@@ -713,8 +732,10 @@ def _join_like_a_browser(base: SplitResult, reference: str) -> str:
 
     ``urllib.parse.urljoin`` follows RFC 3986 and drops empty path segments,
     so it turns a page at ``//a/b`` into ``/a/b``; a browser keeps them. This
-    follows the WHATWG URL rules for ``http`` and ``https`` instead, so the
-    303 lands exactly where ``location.assign()`` would.
+    follows the WHATWG URL rules for ``http`` and ``https`` instead, so for
+    an ASCII URL the 303 lands where ``location.assign()`` would. It does not
+    percent-encode, so a non-ASCII URL is sent as the host adapter encodes
+    the header.
     """
     # Browsers drop tabs and newlines anywhere in a URL before parsing it.
     reference = reference.translate({9: None, 10: None, 13: None}).rstrip(_URL_LEADING_STRIP)

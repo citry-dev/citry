@@ -4213,7 +4213,13 @@ against the posting page named by the `Referer` header and sends the
 absolute result. When the request has no `Referer` from the same host, the
 URL goes out unchanged, the browser resolves it against the handler URL,
 and the server logs a warning that names the fix (a path starting with
-`/`). Two things fall out, both intentional: a plain
+`/`), once per handler and URL and never for `GET`, where the handler URL
+opened directly is the page. Two cases resolve differently from the
+runtime and cannot be detected: a `Referrer-Policy` that sends only the
+origin (resolved against the site root) and a page with `<base href>`.
+The user docs ask those pages to use a path starting with `/`.
+
+Two things follow from the HTML-shaped response, both intentional: a plain
 `<form method="post" c-action="submit_url">` (the URL provided by
 `template_data` from `self.events.url("submit")`) works with
 JavaScript disabled, and htmx or Turbo users can point `hx-post` at an
