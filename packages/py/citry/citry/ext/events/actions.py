@@ -317,6 +317,12 @@ class Redirect(Action):
     (say a farewell toast) must be seen first:
     ``actions.Redirect(url, delay=5, wait=False)``.
 
+    A relative URL such as ``"?page=2"`` or ``"next"`` is resolved against
+    the page the visitor is on. When a plain HTML form posts without
+    JavaScript, the server finds that page in the request's ``Referer``
+    header, so on a page that sends no Referer, or only the site's origin,
+    use a path that starts with ``/``.
+
     Attributes:
         url: The URL to navigate to.
         delay: Seconds the client waits before applying the action.

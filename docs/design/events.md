@@ -4207,7 +4207,13 @@ resolver.
 `Accept: text/html` (or a classic form post without the `X-Citry-Events`
 header), the response is not an envelope: the primary render action's HTML
 is the body, a redirect becomes HTTP 303, and errors carry their HTTP
-status. Two things fall out, both intentional: a plain
+status. The 303's `Location` must take the visitor where the runtime's
+`location.assign()` would, so the server resolves a relative redirect URL
+against the posting page named by the `Referer` header and sends the
+absolute result. When the request has no `Referer` from the same host, the
+URL goes out unchanged, the browser resolves it against the handler URL,
+and the server logs a warning that names the fix (a path starting with
+`/`). Two things fall out, both intentional: a plain
 `<form method="post" c-action="submit_url">` (the URL provided by
 `template_data` from `self.events.url("submit")`) works with
 JavaScript disabled, and htmx or Turbo users can point `hx-post` at an

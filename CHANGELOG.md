@@ -339,6 +339,13 @@
 
 ### Fixes
 
+- An Events `actions.Redirect` with a relative URL, such as `"?page=2"` or
+  `"next"`, now takes a visitor who posts a plain HTML form without
+  JavaScript to the same page as the JavaScript path does. Before, the
+  browser resolved the URL against the event handler's address and showed
+  a "not found" page. The server finds the visitor's page in the `Referer`
+  header; when a page sends none, use a path that starts with `/`
+  ([details](https://citry.dev/events/actions/#redirect-to-a-page)).
 - Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
   modifier (`@click.bogus`), or a built-in such as `<transition>` no
   longer stops the template from loading. A `<slot>`, `<component>`,

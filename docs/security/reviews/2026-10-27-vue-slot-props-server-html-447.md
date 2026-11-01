@@ -191,9 +191,9 @@ Nothing recorded.
 
 ## Follow-ups
 
-- Citry's docs do not yet warn against binding request data with
-  `v-html`, `:href` or `:src`, a follow-up from the
-  [#445 review](2026-10-27-vue-slot-props-445.md). The same warning
-  should cover an object from request data spread with `v-bind`, which
-  lets the data choose attribute names in the server's HTML and in the
-  browser. No issue tracks this yet.
+- Done in [#562](https://github.com/citry-dev/citry/pull/562): the
+  Vue slots page now warns against binding request data with `v-html`,
+  `:href` or `:src` in a fill, and against spreading an object from
+  request data with `v-bind`, which lets the data choose attribute names
+  in the server's HTML and in the browser. This was a follow-up from the
+  [#445 review](2026-10-27-vue-slot-props-445.md).

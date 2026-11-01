@@ -12,6 +12,7 @@ come from packages/protocol/events/v1/tests/.
 import asyncio
 import json
 from decimal import Decimal
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -29,7 +30,7 @@ from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
 from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
-from citry.ext.events.routes import get_event_url
+from citry.ext.events.routes import _join_like_a_browser, get_event_url
 from citry.ext.events.schemas import StringArgs
 from citry.ext.events.tokens import mint_state_token
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
@@ -663,6 +664,24 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 RUNTIME_HEADERS = {"X-Citry-Events": "1"}
 ENVELOPE_CONTENT_TYPE = "application/citry-events+json"
+
+
+def _jumper(c):
+    """A component whose handler redirects to the URL a form field names."""
+
+    class GoIn:
+        to: str
+
+    class Jumper(Component):
+        citry = c
+        template = "<p>jump</p>"
+
+        class Events:
+            def go(self, data: GoIn):
+                # Tests only: real handlers must check a URL from the request.
+                return actions.Redirect(data.to)
+
+    return Jumper
 
 
 def _mounted(c):
@@ -1398,6 +1417,104 @@ class TestCompatMode:
         )
         assert response.status_code == 303
         assert response.headers["location"] == "/done"
+
+    @pytest.mark.parametrize(
+        ("target", "expected"),
+        [
+            # Each relative form resolves against the posting page, as the
+            # runtime's location.assign() does, so the 303 reaches the same place.
+            ("?page=2", "http://testserver/shop/list?page=2"),
+            ("next", "http://testserver/shop/next"),
+            ("../x", "http://testserver/x"),
+            ("#top", "http://testserver/shop/list?x=1#top"),
+            # These do not depend on the page, so they pass through unchanged.
+            ("/abs", "/abs"),
+            ("//cdn.example/x", "//cdn.example/x"),
+            ("/\\cdn.example/x", "/\\cdn.example/x"),
+            ("https://other.example/", "https://other.example/"),
+        ],
+    )
+    def test_redirect_resolves_a_relative_url_against_the_referer(self, target, expected):
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": target},
+            headers={"Referer": "http://testserver/shop/list?x=1"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == expected
+
+    @pytest.mark.parametrize(
+        ("page", "target", "expected"),
+        [
+            # Expected values come from Node's WHATWG URL, the parser browsers use.
+            ("http://h/a/b", "..", "http://h/"),
+            ("http://h/a/b", "./", "http://h/a/"),
+            ("http://h/a/b", "c\\d", "http://h/a/c/d"),
+            ("http://h/a/b", "%2e%2E/z", "http://h/z"),
+            ("http://h/a//b", "../x", "http://h/a/x"),
+            ("http://h:8080/a/b/?q=1", "?q#f", "http://h:8080/a/b/?q#f"),
+            ("http://h/a/b", "n\text", "http://h/a/next"),
+        ],
+    )
+    def test_relative_redirect_resolves_like_the_url_standard(self, page, target, expected):
+        assert _join_like_a_browser(urlsplit(page), target) == expected
+
+    def test_redirect_keeps_a_double_slash_page_path_on_this_host(self):
+        # A page path such as "//cdn.example/p" must not turn the resolved
+        # Location into a link to another host.
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": "next"},
+            headers={"Referer": "http://testserver//cdn.example/p"},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == "http://testserver//cdn.example/next"
+
+    @pytest.mark.parametrize(
+        "headers",
+        [
+            {},
+            {"Referer": "http://other.example/shop/list"},
+            {"Referer": "not a url"},
+        ],
+        ids=["missing", "other-host", "malformed"],
+    )
+    def test_redirect_without_a_same_host_referer_passes_through_and_warns(self, headers, caplog):
+        c = _citry()
+        jumper = _jumper(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            response = _mounted(c).post(
+                _event_url(jumper, "go"),
+                data={"to": "next"},
+                headers=headers,
+                follow_redirects=False,
+            )
+        assert response.status_code == 303
+        assert response.headers["location"] == "next"
+        warnings = [r.getMessage() for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "actions.Redirect('next') is a relative URL" in warnings[0]
+        assert "starts with '/'" in warnings[0]
+
+    def test_redirect_followed_lands_on_the_posting_page_sibling(self):
+        # Follow the 303 the way a browser does: the next request goes to the
+        # page next to the form's page, not next to the handler URL.
+        c = _citry()
+        jumper = _jumper(c)
+        client = _mounted(c)
+        response = client.post(
+            _event_url(jumper, "go"),
+            data={"to": "next"},
+            headers={"Referer": "http://testserver/shop/list"},
+            follow_redirects=True,
+        )
+        assert str(response.url) == "http://testserver/shop/next"
+        assert response.history[0].status_code == 303
 
     def test_acknowledged_call_is_a_204(self):
         c = _citry()
