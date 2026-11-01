@@ -260,9 +260,18 @@ reach outside the template:
 | Unsafe functions such as `eval`, `exec`, and `open` | Call blocked |
 | `str.format()` and `str.format_map()` | Call blocked; use an f-string |
 
-A blocked operation raises [`SecurityError`][citry.SecurityError]. Read
-[Security](/security/) for the full sandbox rules and the settings that
-control it.
+A blocked operation raises [`SecurityError`][citry.SecurityError].
+
+Only the template author writes expressions. Data from a request, or
+text a site visitor saved, reaches a template only as a value, such as
+the `user` in `user.name`. Never build template or expression text from
+that data.
+
+The sandbox does not limit how long an expression runs or how much
+memory it uses.
+
+Read [Security](/security/#sandbox-python-template-expressions) for the
+full sandbox rules and the settings that control them.
 
 ## Less common rules
 

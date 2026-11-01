@@ -68,6 +68,13 @@ A message defined in one component is available to every component
 registered with the same engine. Any of them can call
 `my-app-account-greeting`, even when `AccountCard` has not rendered.
 
+You write the `messages` block as part of your source code, like the
+template, and your translators write the catalog files. Citry reads
+message text as Fluent, where braces pull in other messages and
+variables, so never build message text from request data or from text a
+site visitor saved. Pass a visitor's value as a variable instead, as
+`name=name` does above, and it shows as text.
+
 Messages work without any i18n settings. Citry then translates on the
 server into the source language only; it adds no browser code, language
 switching, or named formats until you configure them.
@@ -216,7 +223,8 @@ class AccountCard(Component):
 
 A component has either `messages` or `messages_file`, not both. They
 load, inherit, and reload like a component's other files, such as
-`template_file`.
+`template_file`. Like `messages`, you write this file yourself; never
+generate it from request data.
 
 ## Reuse text
 

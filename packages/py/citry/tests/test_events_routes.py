@@ -12,12 +12,16 @@ come from packages/protocol/events/v1/tests/.
 import asyncio
 import json
 from decimal import Decimal
+from urllib.parse import quote, urlsplit
 
 import pytest
 
 from citry import Citry, Component
 from citry._vue import events as vue_events
+from citry.contrib.asgi import asgi_app
+from citry.contrib.wsgi import wsgi_app
 from citry.ext.events import actions, event
+from citry.ext.events import routes as events_routes
 from citry.ext.events.codecs import (
     EnvelopeCodec,
     FlatJsonCodec,
@@ -29,7 +33,7 @@ from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
 from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
-from citry.ext.events.routes import get_event_url
+from citry.ext.events.routes import _encode_location, _join_like_a_browser, get_event_url
 from citry.ext.events.schemas import StringArgs
 from citry.ext.events.tokens import mint_state_token
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
@@ -659,10 +663,33 @@ class TestEventUrls:
 fastapi = pytest.importorskip("fastapi", reason="the events route tests need fastapi + httpx2")
 pytest.importorskip("httpx2", reason="Starlette's TestClient needs httpx2")
 
+import httpx2  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 RUNTIME_HEADERS = {"X-Citry-Events": "1"}
 ENVELOPE_CONTENT_TYPE = "application/citry-events+json"
+
+
+def _jumper(c):
+    """A component whose handler redirects to the URL a form field names."""
+
+    class GoIn:
+        to: str
+
+    class Jumper(Component):
+        citry = c
+        template = "<p>jump</p>"
+
+        class Events:
+            def go(self, data: GoIn):
+                # Tests only: real handlers must check a URL from the request.
+                return actions.Redirect(data.to)
+
+            @event(methods=["GET"])
+            def look(self, data: GoIn):
+                return actions.Redirect(data.to)
+
+    return Jumper
 
 
 def _mounted(c):
@@ -671,6 +698,49 @@ def _mounted(c):
     app = fastapi.FastAPI()
     mount(app, c)
     return TestClient(app)
+
+
+def _landing_asgi(c):
+    """Citry under /citry; every other path answers 200 with the path and query it received."""
+    citry_app = asgi_app(c)
+
+    async def app(scope, receive, send):
+        # Citry's app also answers the lifespan messages the test client sends.
+        if scope["type"] != "http" or scope["path"].startswith("/citry/"):
+            await citry_app({**scope, "root_path": "/citry"}, receive, send)
+            return
+        # Echo the bytes the client put on the wire, so the test sees the encoding.
+        landed = scope["raw_path"] + (b"?" + scope["query_string"] if scope["query_string"] else b"")
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"text/plain")]})
+        await send({"type": "http.response.body", "body": landed})
+
+    return app
+
+
+def _landing_wsgi(c):
+    """The WSGI twin of ``_landing_asgi``; it moves /citry into SCRIPT_NAME, as a mounting dispatcher would."""
+    citry_app = wsgi_app(c)
+
+    def app(environ, start_response):
+        path = environ["PATH_INFO"]
+        if path.startswith("/citry/"):
+            inner = {**environ, "SCRIPT_NAME": "/citry", "PATH_INFO": path[len("/citry") :]}
+            return citry_app(inner, start_response)
+        # httpx2's WSGI transport decodes the request path as UTF-8 into
+        # PATH_INFO, so encode it back to show what the client sent.
+        landed = quote(path.encode("utf-8"), safe="/%")
+        if environ.get("QUERY_STRING"):
+            landed += "?" + environ["QUERY_STRING"]
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [landed.encode("ascii")]
+
+    return app
+
+
+def _landing_client(c, adapter):
+    if adapter == "asgi":
+        return TestClient(_landing_asgi(c))
+    return httpx2.Client(transport=httpx2.WSGITransport(app=_landing_wsgi(c)), base_url="http://testserver")
 
 
 def _event_url(comp_cls, name):
@@ -1398,6 +1468,278 @@ class TestCompatMode:
         )
         assert response.status_code == 303
         assert response.headers["location"] == "/done"
+
+    @pytest.mark.parametrize(
+        ("target", "expected"),
+        [
+            # Each relative form resolves against the posting page, as the
+            # runtime's location.assign() does, so the 303 reaches the same place.
+            ("?page=2", "http://testserver/shop/list?page=2"),
+            ("next", "http://testserver/shop/next"),
+            ("../x", "http://testserver/x"),
+            ("#top", "http://testserver/shop/list?x=1#top"),
+            # These do not depend on the page, so they pass through unchanged.
+            ("/abs", "/abs"),
+            ("//cdn.example/x", "//cdn.example/x"),
+            ("/\\cdn.example/x", "/\\cdn.example/x"),
+            ("https://other.example/", "https://other.example/"),
+        ],
+    )
+    def test_redirect_resolves_a_relative_url_against_the_referer(self, target, expected):
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": target},
+            headers={"Referer": "http://testserver/shop/list?x=1"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == expected
+
+    @pytest.mark.parametrize(
+        ("page", "target", "expected"),
+        [
+            # Expected values come from Node's WHATWG URL, the parser browsers use.
+            ("http://h/a/b", "..", "http://h/"),
+            ("http://h/a/b", "./", "http://h/a/"),
+            ("http://h/a/b", "c\\d", "http://h/a/c/d"),
+            ("http://h/a/b", "%2e%2E/z", "http://h/z"),
+            ("http://h/a//b", "../x", "http://h/a/x"),
+            ("http://h:8080/a/b/?q=1", "?q#f", "http://h:8080/a/b/?q#f"),
+            ("http://h/a/b", "n\text", "http://h/a/next"),
+        ],
+    )
+    def test_relative_redirect_resolves_like_the_url_standard(self, page, target, expected):
+        assert _join_like_a_browser(urlsplit(page), target) == expected
+
+    def test_redirect_keeps_a_double_slash_page_path_on_this_host(self):
+        # A page path such as "//cdn.example/p" must not turn the resolved
+        # Location into a link to another host.
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": "next"},
+            headers={"Referer": "http://testserver//cdn.example/p"},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == "http://testserver//cdn.example/next"
+
+    @pytest.mark.parametrize(
+        "headers",
+        [
+            {},
+            {"Referer": "http://other.example/shop/list"},
+            {"Referer": "not a url"},
+            # A different port is a different host, as for the Origin check.
+            {"Referer": "http://testserver:8080/shop/list"},
+        ],
+        ids=["missing", "other-host", "malformed", "other-port"],
+    )
+    def test_redirect_without_a_same_host_referer_passes_through_and_warns(self, headers, caplog, monkeypatch):
+        # Start with no warnings recorded, so an earlier test's warning for the
+        # same handler and URL does not hide this one.
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            response = _mounted(c).post(
+                _event_url(jumper, "go"),
+                data={"to": "next"},
+                headers=headers,
+                follow_redirects=False,
+            )
+        assert response.status_code == 303
+        assert response.headers["location"] == "next"
+        warnings = [r.getMessage() for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "actions.Redirect('next') is a relative URL" in warnings[0]
+        assert "starts with '/'" in warnings[0]
+
+    def test_redirect_warns_once_per_handler_and_url(self, caplog, monkeypatch):
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        client = _mounted(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            for _ in range(3):
+                client.post(_event_url(jumper, "go"), data={"to": "next"}, follow_redirects=False)
+        warnings = [r for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+        assert len(warnings) == 1
+
+    def test_resolved_redirect_logs_no_warning(self, caplog, monkeypatch):
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            _mounted(c).post(
+                _event_url(jumper, "go"),
+                data={"to": "next"},
+                headers={"Referer": "http://testserver/shop/list"},
+                follow_redirects=False,
+            )
+        assert not [r for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+
+    def test_origin_only_referer_resolves_against_the_site_root(self):
+        # Referrer-Policy "origin" sends only "http://host/", which the server
+        # cannot tell apart from a page at the root; the docs cover this case.
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": "next"},
+            headers={"Referer": "http://testserver/"},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == "http://testserver/next"
+
+    def test_get_handler_opened_directly_passes_through_without_a_warning(self, caplog, monkeypatch):
+        # Opened with no Referer, the handler URL is the page, so resolving
+        # against it is right and nothing is logged.
+        monkeypatch.setattr(events_routes, "_WARNED_REDIRECTS", set())
+        c = _citry()
+        jumper = _jumper(c)
+        with caplog.at_level("WARNING", logger="citry"):
+            response = _mounted(c).get(
+                _event_url(jumper, "look"),
+                params={"to": "next"},
+                headers={"Accept": "text/html"},
+                follow_redirects=False,
+            )
+        assert response.status_code == 303
+        assert response.headers["location"] == "next"
+        assert not [r for r in caplog.records if r.name == "citry" and r.levelname == "WARNING"]
+
+    def test_get_handler_opened_from_a_link_resolves_against_the_linking_page(self):
+        # A link click sends the linking page as the Referer, and location.assign()
+        # on that page would resolve against it too.
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).get(
+            _event_url(jumper, "look"),
+            params={"to": "next"},
+            headers={"Accept": "text/html", "Referer": "http://testserver/shop/list"},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == "http://testserver/shop/next"
+
+    def test_redirect_followed_lands_on_the_posting_page_sibling(self):
+        # Follow the 303 the way a browser does: the next request goes to the
+        # page next to the form's page, not next to the handler URL.
+        c = _citry()
+        jumper = _jumper(c)
+        client = _mounted(c)
+        response = client.post(
+            _event_url(jumper, "go"),
+            data={"to": "next"},
+            headers={"Referer": "http://testserver/shop/list"},
+            follow_redirects=True,
+        )
+        assert str(response.url) == "http://testserver/shop/next"
+        assert response.history[0].status_code == 303
+
+    @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
+    @pytest.mark.parametrize(
+        ("target", "location", "landed"),
+        [
+            # A non-ASCII path, query, and fragment become UTF-8 escapes, as
+            # location.assign() would encode them. The fragment never reaches
+            # the server.
+            ("/café?q=ü#ß", "/caf%C3%A9?q=%C3%BC#%C3%9F", "/caf%C3%A9?q=%C3%BC"),
+            # A relative URL is resolved against the Referer, then encoded.
+            ("é/ñ?x=ü", "http://testserver/shop/%C3%A9/%C3%B1?x=%C3%BC", "/shop/%C3%A9/%C3%B1?x=%C3%BC"),
+            # Escapes and reserved characters already in the URL stay as written.
+            ("/already%C3%A9?a=b&c=%20", "/already%C3%A9?a=b&c=%20", "/already%C3%A9?a=b&c=%20"),
+        ],
+    )
+    def test_non_ascii_redirect_is_percent_encoded_and_followed(self, adapter, target, location, landed):
+        c = _citry()
+        jumper = _jumper(c)
+        with _landing_client(c, adapter) as client:
+            response = client.post(
+                _event_url(jumper, "go"),
+                data={"to": target},
+                headers={"Referer": "http://testserver/shop/list"},
+                follow_redirects=False,
+            )
+            assert response.status_code == 303
+            assert response.headers["location"] == location
+            followed = client.post(
+                _event_url(jumper, "go"),
+                data={"to": target},
+                headers={"Referer": "http://testserver/shop/list"},
+                follow_redirects=True,
+            )
+        assert followed.status_code == 200
+        assert followed.text == landed
+
+    @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
+    @pytest.mark.parametrize(
+        ("target", "location"),
+        [
+            # A browser decodes the escapes in the host and converts it itself.
+            ("https://bücher.de/ä?x=é#ö", "https://b%C3%BCcher.de/%C3%A4?x=%C3%A9#%C3%B6"),
+            # Full-width "/" and "@" stay escaped, so they never become
+            # delimiters; the browser rejects the 303 target, as location.assign()
+            # rejects the original URL.
+            ("https://evil.example\uff0f.good.test/", "https://evil.example%EF%BC%8F.good.test/"),
+            ("https://a\uff20evil.example/", "https://a%EF%BC%A0evil.example/"),
+        ],
+    )
+    def test_non_ascii_host_is_percent_encoded(self, adapter, target, location):
+        c = _citry()
+        jumper = _jumper(c)
+        with _landing_client(c, adapter) as client:
+            response = client.post(
+                _event_url(jumper, "go"),
+                data={"to": target},
+                headers={"Referer": "http://testserver/shop/list"},
+                follow_redirects=False,
+            )
+        assert response.status_code == 303
+        assert response.headers["location"] == location
+
+    def test_unparsable_referer_counts_as_no_referer(self):
+        # urlsplit raises on a host such as "[::1"; the client sent it, so
+        # the redirect URL goes out unchanged instead of failing with a 500.
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": "next"},
+            headers={"Referer": "http://[::1/shop/list"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "next"
+
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            # Checked in Chromium and Firefox: new URL() of the encoded form
+            # equals new URL() of the original, on a page at /shop/list.
+            ("//bücher.de/x", "//b%C3%BCcher.de/x"),
+            ("https://user:pä@例え.jp:8080/p", "https://user:p%C3%A4@%E4%BE%8B%E3%81%88.jp:8080/p"),
+            ("https://[::1]:80/é", "https://[::1]:80/%C3%A9"),
+            ("https://faß.de/", "https://fa%C3%9F.de/"),
+            # Characters whose host conversion changed after Unicode 3.2, or
+            # that convert to a dot or a digit; the browser decides for each.
+            ("https://bank\u2488com/", "https://bank%E2%92%88com/"),
+            ("https://x\u3164y.com/", "https://x%E3%85%A4y.com/"),
+            ("https://\u2132.com/", "https://%E2%84%B2.com/"),
+            ("foo://hö/st", "foo://h%C3%B6/st"),
+            ("mailto:jü@x.de", "mailto:j%C3%BC@x.de"),
+            # Browsers drop outer spaces and newlines and encode inner spaces.
+            (" /a b\n", "/a%20b"),
+            # A lone surrogate becomes U+FFFD, as it does in a browser.
+            ("/x\ud800", "/x%EF%BF%BD"),
+            # A URL of printable ASCII without spaces is returned as written.
+            ("/a/%zz?b=c#d", "/a/%zz?b=c#d"),
+        ],
+    )
+    def test_location_encoding_matches_browsers(self, url, expected):
+        assert _encode_location(url) == expected
 
     def test_acknowledged_call_is_a_204(self):
         c = _citry()
