@@ -115,6 +115,10 @@ as above, not inside `lifespan`. Starlette accepts middleware only until
 then, so a later `mount()` skips the middleware, and Citry's URLs use
 `app.root_path` only.
 
+Your middleware runs for Citry's routes, but `dependencies=` on the app
+does not, so a login check written as a dependency does not protect
+Citry's events. See [Protect Citry's routes](#protect-citrys-routes).
+
 ## Flask
 
 `mount()` sends requests under the prefix to Citry and every other request
@@ -137,6 +141,10 @@ def create_app():
 
 Flask's `mount()` rejects the root prefix `"/"` with `ValueError`, because
 every request would then go to Citry and none to your Flask routes.
+
+Requests under the prefix go to Citry before Flask sees them, so your
+`before_request` hooks, and extensions built on them, do not run for
+Citry's routes. See [Protect Citry's routes](#protect-citrys-routes).
 
 ## Django
 
@@ -227,6 +235,104 @@ Both sub-apps answer `404 Not Found` for a path they do not serve and
 sub-app knows your app's routes, so with only these mounted, `citry check`
 checks no links and prints one note saying so.
 
+## Protect Citry's routes { #protect-citrys-routes }
+
+Check who may call an event in the component: a `_guard` method on its
+`Events` class runs before every handler, and `@event(guard=...)` runs
+before one handler. These checks run under every framework; see
+[Authorize every event](/security/#authorize-every-event).
+
+Do not rely on a login check that your framework runs only for its own
+routes. On FastAPI, Starlette, and Flask, requests under the prefix go to
+Citry before your framework's own routing, so some of the code you attach
+to your app does not run for them. Citry's own
+CSRF checks still run (see
+[What Citry always checks](/security/#what-citry-always-checks)), but a
+token check you add yourself may not:
+
+| Framework | Runs for Citry's routes | Does not run for them |
+|---|---|---|
+| FastAPI, Starlette | Middleware, such as `@app.middleware("http")` | `dependencies=` on the app |
+| Flask | WSGI middleware that wraps `app.wsgi_app` after `mount()`, or wraps the Flask app object | `before_request`, `after_request`, other request hooks, and extensions that use them, such as Flask-WTF's `CSRFProtect` |
+| Django | Everything in `MIDDLEWARE`; Citry's routes are ordinary views | Nothing |
+| Bare ASGI, WSGI | Middleware that wraps the app you serve (on WSGI, after you add the `DispatcherMiddleware`) | Nothing |
+
+Use middleware for code that must run on every request, such as rate
+limits or response headers. With the bare sub-apps, you can also wrap
+only Citry's routes, as in `MyMiddleware(asgi_app(citry))` or
+`{"/citry": MyMiddleware(wsgi_app(citry))}`.
+
+On Django, middleware that requires a login for every view, such as
+`LoginRequiredMiddleware` (Django 5.1 and later), also applies to Citry's
+routes. Visitors who are not logged in then get a redirect instead of
+Citry's scripts, and the interactive parts of a public page do not start.
+Mark Citry's views as open to everyone, and check the login in a guard:
+
+```python
+from django.contrib.auth.decorators import login_not_required
+
+citry_patterns = citry_urls(citry_instance, prefix="/citry")
+for pattern in citry_patterns:
+    pattern.callback = login_not_required(pattern.callback)
+```
+
+### Read the Flask session
+
+A guard that checks the logged-in user needs the session. Using
+`flask.request`, `session`, or `g` in an event handler or guard raises
+`RuntimeError: Working outside of request context`, because Flask never
+handled the call. To read the session, give Flask the request back:
+`request.native` holds the raw WSGI request data (the `environ` dict the
+server passes to the app), and `app.request_context()` turns it into a
+Flask request:
+
+```citry
+from citry import Component
+from citry.ext.events import EventError
+from flask import session
+
+from myapp import app  # the Flask app you passed to mount()
+
+
+class Profile(Component):
+    class Events:
+        def save(self, data: ProfileIn, request):
+            with app.request_context(request.native):
+                user_id = session.get("user_id")
+            if user_id is None:
+                raise EventError("Log in first.", status=403)
+            update_profile(user_id, data)
+```
+
+In a guard, pass `self.request.native` instead.
+
+Changes to the session inside this block are not saved, because Flask
+writes the session cookie only on its own responses. Set session values
+in a Flask route instead. With an app factory such as `create_app()`,
+there is no module-level `app` to import. Store the app that
+`create_app()` returns in a module, such as `myapp/wsgi.py`, and import
+it from there.
+
+### Order WSGI middleware
+
+`mount()` replaces `app.wsgi_app` with a function that sends Citry's
+paths to Citry and everything else to the `app.wsgi_app` it found. A
+middleware that wraps `app.wsgi_app` before `mount()` ends up on the
+Flask side only, so it never sees Citry's routes:
+
+```python
+# Wrong: Citry's routes skip this middleware
+app.wsgi_app = MyMiddleware(app.wsgi_app)
+mount(app, citry)
+
+# Right: the middleware sees every request
+mount(app, citry)
+app.wsgi_app = MyMiddleware(app.wsgi_app)
+```
+
+The same goes for the bare WSGI sub-app: wrap `app.wsgi_app` after you
+add the `DispatcherMiddleware`.
+
 ## Share the cache { #share-the-cache-between-worker-processes }
 
 With several worker processes, an interactive page can show its HTML but
@@ -289,7 +395,9 @@ must come from your own deployment, never from a visitor. Set it with
 header such as `X-Forwarded-Prefix`, read that header only from the proxy
 you run, for example with Werkzeug's `ProxyFix(x_prefix=1)` behind exactly
 one trusted proxy, and make sure the proxy sets or removes that header on
-every request, replacing any value the visitor sent. Otherwise a visitor
+every request, replacing any value the visitor sent. On Flask, wrap
+`ProxyFix` after `mount()`, as
+[Order WSGI middleware](#order-wsgi-middleware) shows. Otherwise a visitor
 can make the page load scripts from another path on your site, and a
 shared HTTP cache that ignores the header can serve that page to others.
 With [`security_script_integrity="citry"`](/security/#pin-citry-managed-scripts-with-sri),
@@ -322,6 +430,42 @@ Some setups need care:
   a process that never calls `mount()` or `urlpatterns()`. Those already
   add the sub-path from the app's setting, so the URLs would start with
   `/shop/shop`.
+
+## Run behind a proxy
+
+**Symptom:** pages load, but every event call that is not a `GET` fails
+with status 403 and the message "The call failed the CSRF check; reload
+the page and try again."
+
+On each such call, the browser sends an `Origin` header with the site's
+address, and Citry checks that its host and port match the request's
+`Host` header (see
+[What Citry always checks](/security/#what-citry-always-checks)). A
+reverse proxy that replaces `Host` with your app server's address, such
+as `127.0.0.1:8000`, makes every call fail that check. To confirm the
+cause, turn on the `citry` logger's `DEBUG` level locally: it logs
+`Origin '...' does not match the request host '127.0.0.1:8000'`.
+
+Have the proxy pass the `Host` header the browser sent. Caddy and Traefik
+do this by default. nginx does not, so set it. Use `$http_host`, not
+`$host`, which drops the port:
+
+```text
+location / {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $http_host;
+}
+```
+
+With Apache, turn on `ProxyPreserveHost On`.
+
+Citry reads only the `Host` header, not `X-Forwarded-Host`, and Django's
+`USE_X_FORWARDED_HOST` setting does not change that. If the proxy already
+sends the browser's host in `X-Forwarded-Host` and you cannot change its
+`Host`, a WSGI middleware that copies `X-Forwarded-Host` into `Host`, such as
+Werkzeug's `ProxyFix(x_host=1)`, also works. Use it only behind a proxy
+you run, and on Flask, wrap it after `mount()`
+([Order WSGI middleware](#order-wsgi-middleware)).
 
 ## URLs Citry serves
 
