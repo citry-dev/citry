@@ -190,6 +190,9 @@
 
 ### Changed
 
+- An Events error lists at most 20 field errors in `fieldErrors`. When a
+  call has more, the error's `message` ends with how many were left out,
+  as in "1,000 more field errors are not shown."
 - `citry.contrib.django.secret()` now includes Django's
   `SECRET_KEY_FALLBACKS`, so `Citry(secret=secret())` keeps accepting
   values signed with an old key while you rotate `SECRET_KEY`. With
@@ -339,6 +342,8 @@
 
 ### Fixes
 
+- A form field named `__proto__` now reaches its Events handler like any
+  other field.
 - Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
   modifier (`@click.bogus`), or a built-in such as `<transition>` no
   longer stops the template from loading. A `<slot>`, `<component>`,

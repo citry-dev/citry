@@ -1266,6 +1266,55 @@ test("collectFormArgs sends every value as the form's text", () => {
   }
 });
 
+test("collectFormArgs sends a field named __proto__ like any other field", () => {
+  const prototypeNames = Object.getOwnPropertyNames(Object.prototype);
+  const cases = [
+    {
+      entries: [
+        ["__proto__", "x"],
+        ["q", "alpha"],
+      ],
+      value: "x",
+      json: '{"__proto__":"x","q":"alpha"}',
+    },
+    {
+      entries: [
+        ["__proto__", "x"],
+        ["__proto__", "y"],
+        ["q", "alpha"],
+      ],
+      value: ["x", "y"],
+      json: '{"__proto__":["x","y"],"q":"alpha"}',
+    },
+  ];
+  const form = {};
+  const previous = globalThis.FormData;
+  try {
+    for (const { entries, value, json } of cases) {
+      // Node has no DOM form, so a stand-in FormData replays the entries a
+      // browser would read from a form with these named controls.
+      globalThis.FormData = class {
+        forEach(callback) {
+          for (const [name, text] of entries) callback(text, name);
+        }
+      };
+      const result = bridgeModule.collectFormArgs(form, new Set());
+      // The field is the result's own key, not its prototype, so it
+      // reaches the server and the result is still a plain object.
+      assert.equal(Object.hasOwn(result, "__proto__"), true);
+      assert.deepEqual(Object.getOwnPropertyDescriptor(result, "__proto__")?.value, value);
+      assert.equal(Object.getPrototypeOf(result), Object.prototype);
+      assert.equal(result.q, "alpha");
+      assert.equal(JSON.stringify(result), json);
+      // Nothing the form sent became a property of every object.
+      assert.equal({}.polluted, undefined);
+      assert.deepEqual(Object.getOwnPropertyNames(Object.prototype), prototypeNames);
+    }
+  } finally {
+    globalThis.FormData = previous;
+  }
+});
+
 test("collectFormArgs sends the button that submitted the form, as a post without JavaScript does", () => {
   const form = {};
   const previous = { FormData: globalThis.FormData, HTMLButtonElement: globalThis.HTMLButtonElement };

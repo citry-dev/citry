@@ -20,7 +20,7 @@ from citry import Citry, Component
 from citry._vue.events import default_events_producer
 from citry.citry_render import CitryRender
 from citry.ext.events import actions
-from citry.ext.events.errors import EventError, invalid_args_error, wire_error
+from citry.ext.events.errors import MAX_FIELD_ERRORS, EventError, build_field_error, invalid_args_error, wire_error
 from citry.ext.events.renderers import VuePreparedRenderEncoder
 from citry.ext.events.results import (
     RenderEncodingContext,
@@ -817,6 +817,49 @@ class TestEventError:
             "code": "forbidden",
             "message": "You cannot edit this document.",
         }
+
+    def test_build_field_error_lists_every_field_up_to_the_limit(self):
+        fields = {f"f{i:02d}": f"Message {i}." for i in range(MAX_FIELD_ERRORS)}
+        error = build_field_error(422, "invalid_args", "Fix these.", fields)
+        # Exactly at the limit nothing is cut, so the message stays as given.
+        assert error == {"status": 422, "code": "invalid_args", "message": "Fix these.", "fieldErrors": fields}
+
+    @pytest.mark.parametrize(
+        ("count", "tail"),
+        [
+            (MAX_FIELD_ERRORS + 1, "1 more field error is not shown."),
+            (MAX_FIELD_ERRORS + 2, "2 more field errors are not shown."),
+            (MAX_FIELD_ERRORS + 1_000, "1,000 more field errors are not shown."),
+        ],
+    )
+    def test_build_field_error_keeps_the_first_fields_and_counts_the_rest(self, count, tail):
+        fields = {f"f{i:04d}": f"Message {i}." for i in range(count)}
+        error = build_field_error(422, "invalid_args", "Fix these.", fields)
+        assert error["message"] == f"Fix these. {tail}"
+        # The first fields in the given order are the ones listed.
+        assert list(error["fieldErrors"]) == list(fields)[:MAX_FIELD_ERRORS]
+        assert error["fieldErrors"] == dict(list(fields.items())[:MAX_FIELD_ERRORS])
+        # The status and code pass through, and the caller's mapping is not trimmed.
+        assert error["status"] == 422
+        assert error["code"] == "invalid_args"
+        assert len(fields) == count
+
+    @pytest.mark.parametrize("fields", [None, {}])
+    def test_build_field_error_without_fields_has_no_field_errors_key(self, fields):
+        assert build_field_error(403, "forbidden", "No.", fields) == {
+            "status": 403,
+            "code": "forbidden",
+            "message": "No.",
+        }
+
+    def test_wire_error_caps_an_event_error_with_many_fields(self):
+        fields = {f"f{i:02d}": f"Message {i}." for i in range(MAX_FIELD_ERRORS + 1)}
+        raised = EventError("Fix these.", fields=fields)
+        error = wire_error(raised)
+        assert error["message"] == "Fix these. 1 more field error is not shown."
+        assert list(error["fieldErrors"]) == list(fields)[:MAX_FIELD_ERRORS]
+        # The raised error keeps all its fields; only the wire object is capped.
+        assert len(raised.fields) == MAX_FIELD_ERRORS + 1
 
     def test_a_failed_validation_maps_to_the_422_object(self):
         # The WP9 validator's structured result becomes the same wire shape a

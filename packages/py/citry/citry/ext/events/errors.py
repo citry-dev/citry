@@ -17,6 +17,7 @@ messages as ``fieldErrors``.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from itertools import islice
 from typing import TYPE_CHECKING, Any
 
 from citry._protocol.events import build_error
@@ -37,6 +38,12 @@ _STATUS_CODES = {
     422: "invalid_args",
 }
 _FALLBACK_CODE = "error"
+
+# The most per-field messages one error response lists. A request can name
+# any number of unknown or invalid fields, and listing every one would make
+# the response many times the size of the request; the rest are counted in
+# the message instead, which keeps the wire shape unchanged.
+MAX_FIELD_ERRORS = 20
 
 # What schema-validation failures say as the human summary; the real content
 # is the per-field map (design events.md 3.7).
@@ -59,7 +66,8 @@ class EventError(Exception):
         message: The human summary of the error.
         fields: Per-field error messages, keyed by data-schema field name
             (e.g. ``{"email": "Enter a valid email address."}``). Empty when
-            the error is not about specific fields.
+            the error is not about specific fields. The response lists the
+            first 20 of them, and its message says how many more there were.
         status: The HTTP status of the error (400 to 599). ``422`` (the
             default) is a validation failure; ``403``, ``404``, and ``409``
             cover forbidden, not found, and conflict.
@@ -158,4 +166,38 @@ def wire_error(error: EventError) -> dict[str, Any]:
         The JSON-ready error object.
 
     """
-    return build_error(error.status, error.code, error.message, error.fields)
+    return build_field_error(error.status, error.code, error.message, error.fields)
+
+
+def build_field_error(
+    status: int,
+    code: str,
+    message: str,
+    fields: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """
+    Build a wire error object, listing at most ``MAX_FIELD_ERRORS`` field messages.
+
+    Every Events path that sends per-field messages builds its error here,
+    so the same limit applies to schema validation, State updates, and
+    errors a handler raises. The first messages are kept in the order
+    given, and the message ends with the number left out.
+
+    Args:
+        status: The HTTP status of the error.
+        code: The stable wire code.
+        message: The human summary.
+        fields: Per-field messages, or ``None`` when there are none.
+
+    Returns:
+        The JSON-ready error object.
+
+    """
+    if fields and len(fields) > MAX_FIELD_ERRORS:
+        omitted = len(fields) - MAX_FIELD_ERRORS
+        # The protocol fixes the error's keys, so the count goes in the
+        # human summary rather than in a new field.
+        noun = "field error is" if omitted == 1 else "field errors are"
+        message = f"{message} {omitted:,} more {noun} not shown."
+        fields = dict(islice(fields.items(), MAX_FIELD_ERRORS))
+    return build_error(status, code, message, fields)

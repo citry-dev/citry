@@ -1832,7 +1832,12 @@ signature verifies. On the per-event route
 the HTTP status mirrors the call's status; the batch endpoint answers 200
 with per-call statuses inside (one batch can mix outcomes). `fieldErrors` is
 the per-field error map, surfaced client-side as
-`$error(handler).fieldErrors` (5.5).
+`$error(handler).fieldErrors` (5.5). The server lists at most 20 entries
+in it, keeping the first 20 in their order (sorted by field path for
+schema validation), so a request that names thousands of bad fields
+cannot make the response much larger than itself. When it leaves
+entries out, `message` ends with how many, as in "1,000 more field
+errors are not shown."; the error keeps the protocol's fixed keys.
 
 ### 4.4 How the state token reaches the client
 

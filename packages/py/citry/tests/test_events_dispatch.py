@@ -36,7 +36,7 @@ from citry.ext.events.dispatcher import (
     EventsDispatcher,
     TransportContext,
 )
-from citry.ext.events.errors import EventError
+from citry.ext.events.errors import MAX_FIELD_ERRORS, EventError
 from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
@@ -858,6 +858,58 @@ class TestErrors:
         error = result["results"][0]["error"]
         assert error["code"] == "invalid_args"
         assert error["fieldErrors"] == {"oops": "Unexpected field: not declared on the schema."}
+
+    @pytest.mark.parametrize(
+        ("count", "tail"),
+        [
+            (MAX_FIELD_ERRORS, None),
+            (MAX_FIELD_ERRORS + 1, "1 more field error is not shown."),
+            (100, "80 more field errors are not shown."),
+        ],
+    )
+    @pytest.mark.parametrize("path", ["data_schema", "no_data_schema", "state_updates"])
+    def test_a_call_with_many_bad_fields_gets_a_capped_field_list(self, path, count, tail):
+        c = _citry()
+        counter = _counter(c)
+        # Built in reverse so the listed fields come from the sorted order,
+        # not from whichever order the browser happened to send them in.
+        unknown = {f"u{i:03d}": 1 for i in reversed(range(count))}
+        call = {"componentClassId": counter.class_id, "stateToken": _token(counter)}
+        if path == "data_schema":
+            # `name` is valid, so every error comes from an unknown key.
+            call |= {"handlerName": "rename", "args": {"name": "Tally", **unknown}}
+            summary = "The args for event 'rename' on component 'Counter' did not validate."
+        elif path == "no_data_schema":
+            call |= {"handlerName": "increment", "args": unknown}
+            summary = "The args for event 'increment' on component 'Counter' did not validate."
+        else:
+            call |= {"handlerName": "increment", "stateUpdates": unknown}
+            summary = "Some state updates were rejected; see the field messages."
+
+        error = _dispatch(c, call)["results"][0]["error"]
+
+        assert error["status"] == 422
+        assert error["code"] == "invalid_args"
+        # Up to the limit the summary is untouched; past it the count is appended.
+        assert error["message"] == (summary if tail is None else f"{summary} {tail}")
+        assert list(error["fieldErrors"]) == [f"u{i:03d}" for i in range(min(count, MAX_FIELD_ERRORS))]
+
+    def test_a_handler_error_with_many_fields_gets_a_capped_field_list(self):
+        c = _citry()
+        fields = {f"f{i:02d}": "Taken." for i in range(MAX_FIELD_ERRORS + 5)}
+
+        class Signup(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class Events:
+                def submit(self):
+                    raise EventError("Fix the form.", fields=fields)
+
+        result = _dispatch(c, {"componentClassId": Signup.class_id, "handlerName": "submit"})
+        error = result["results"][0]["error"]
+        assert error["message"] == "Fix the form. 5 more field errors are not shown."
+        assert list(error["fieldErrors"]) == list(fields)[:MAX_FIELD_ERRORS]
 
     def test_handler_error_is_generic_without_debug(self):
         c = _citry()
