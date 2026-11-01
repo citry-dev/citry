@@ -574,6 +574,13 @@
   `Markup("a&#127;b")`, now keeps a character such as U+007F, or the
   Unicode noncharacter U+FDD0, that a numeric reference names, as the
   same component without Vue does. It used to drop it and show `ab`.
+- The `security_csp` and `security_javascript` checks now also report a
+  `javascript:` URL that an SVG `<animate>` or `<set>` writes into a link,
+  such as `<set attributeName="href" to="javascript:...">`, the same as
+  they report `href="javascript:..."`. A page that has one raises
+  `ValueError` under `security_csp="strict"` and
+  `security_javascript="forbid"`, and warns under `security_csp="warn"` and
+  `security_javascript="warn"` or `"omit"`. Use a normal URL instead.
 - In a component that uses Vue, an attribute value such as
   `href="/search?q=x&region=eu"` now keeps `&region=eu` as written, as
   the browser and Vue do. Citry used to read `&reg` in it as `®`,

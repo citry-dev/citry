@@ -25,7 +25,9 @@ use std::collections::HashSet;
 
 use html5ever::data::NAMED_ENTITIES;
 
-use crate::output_scanner::{scan_output_html, scan_output_html_with, OutputTag, TagContext};
+use crate::output_scanner::{
+    scan_output_html, scan_output_html_with, OutputAttribute, OutputTag, TagContext,
+};
 
 /// Which of the two checks of one page runs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -273,6 +275,12 @@ impl CheckState<'_, '_> {
         // omit-mode rules read. It is built only when one of them runs.
         let mut first_values: Option<HashMap<Cow<'_, str>, Cow<'_, str>>> = None;
         let mut activation_attrs: Vec<Cow<'_, str>> = Vec::new();
+        // Whether this tag is an SVG animation that writes a link's `href`,
+        // which makes its `to`, `from`, `by` and `values` URL attributes.
+        // It is worked out once per tag, so a tag with many attributes is
+        // not scanned again for each one.
+        let animates_href = (self.options.csp || javascript.is_some())
+            && animation_sets_href(name, &tag.attributes);
         for attr in &tag.attributes {
             let attr_name = ascii_lower(&attr.name);
             let raw_value: &str = if attr.has_value { &attr.value } else { "" };
@@ -284,7 +292,7 @@ impl CheckState<'_, '_> {
             };
             let value_end = value_start + raw_value.len();
             let mut decoded: Option<Cow<'_, str>> = None;
-            let url_attribute = is_url_attribute(name, &attr_name);
+            let url_attribute = is_url_value(name, &attr_name, animates_href);
             if self.options.csp {
                 if is_native_event_attribute(&attr_name) {
                     self.push_finding_in(
@@ -298,7 +306,8 @@ impl CheckState<'_, '_> {
                     );
                 }
                 if url_attribute
-                    && is_javascript_url(
+                    && is_javascript_url_value(
+                        &attr_name,
                         decoded.get_or_insert_with(|| decode_html_attribute(raw_value)),
                     )
                 {
@@ -359,7 +368,8 @@ impl CheckState<'_, '_> {
                 );
             }
             if url_attribute
-                && is_javascript_url(
+                && is_javascript_url_value(
+                    &attr_name,
                     decoded.get_or_insert_with(|| decode_html_attribute(raw_value)),
                 )
             {
@@ -596,6 +606,66 @@ pub fn is_url_attribute(tag: &str, name: &str) -> bool {
         name,
         "action" | "formaction" | "href" | "src" | "xlink:href"
     ) || (tag == "object" && name == "data")
+}
+
+/// Whether an SVG `<animate>` or `<set>` writes the `href` (or
+/// `xlink:href`) of the element it animates.
+///
+/// Such an element carries the new link in its `to`, `from`, `by` or
+/// `values` attribute, so those attributes are URLs, as `href` is. The
+/// browser reads the first `attributeName` when there are two and compares
+/// it exactly. When this was written, Chromium 156 and Firefox 157 ran an
+/// animation named `href`. They did not run `xlink:href`, `HREF`, or a name
+/// with spaces around it, but this check reports those too, in case another
+/// browser reads the name more loosely. The same two browsers did not run
+/// `attributeName=href` on `<animateTransform>` or `<animateMotion>`, and
+/// this check leaves those alone. It reads the tag by name, so an
+/// `<animate>` outside `<svg>`, which the browser ignores, counts as well.
+/// `tag` is the tag name in lowercase.
+pub fn animation_sets_href(tag: &str, attributes: &[OutputAttribute]) -> bool {
+    if !matches!(tag, "animate" | "set") {
+        return false;
+    }
+    let Some(attribute_name) = attributes
+        .iter()
+        .find(|attr| attr.name.eq_ignore_ascii_case("attributeName"))
+    else {
+        return false;
+    };
+    let value = decode_html_attribute(if attribute_name.has_value {
+        &attribute_name.value
+    } else {
+        ""
+    });
+    let value = value.trim_matches(is_html_space);
+    value.eq_ignore_ascii_case("href") || value.eq_ignore_ascii_case("xlink:href")
+}
+
+/// The attributes of an animation that hold the value it sets.
+fn is_animation_value_attribute(name: &str) -> bool {
+    matches!(name, "to" | "from" | "by" | "values")
+}
+
+/// Whether the browser may use an attribute's value as a URL: a URL
+/// attribute, or the value of an animation that sets `href`
+/// (`animates_href` comes from [`animation_sets_href`]).
+pub fn is_url_value(tag: &str, name: &str, animates_href: bool) -> bool {
+    is_url_attribute(tag, name) || (animates_href && is_animation_value_attribute(name))
+}
+
+/// Whether a URL attribute's value, with its character references already
+/// decoded, starts with `javascript:`. The page check and the
+/// embedded-document check both call this, so they cannot disagree.
+///
+/// `values` is a list that the browser's SVG animation code (SMIL) splits on
+/// `;`, and an item can be any of the values the animation passes through,
+/// so any item counts. Any other attribute is one URL.
+pub fn is_javascript_url_value(name: &str, value: &str) -> bool {
+    if name == "values" {
+        value.split(';').any(is_javascript_url)
+    } else {
+        is_javascript_url(value)
+    }
 }
 
 /// A Vue directive spelling, which needs the browser runtime to mean anything.
@@ -844,11 +914,13 @@ fn html_document_requires_javascript(html: &str, depth: usize) -> bool {
         if name == "script" && raw_script_is_executable(&tag) {
             return true;
         }
+        let animates_href = animation_sets_href(&name, &tag.attributes);
         for attr in &tag.attributes {
             let attr_name = ascii_lower(&attr.name);
             let value = decode_html_attribute(if attr.has_value { &attr.value } else { "" });
             if is_native_event_attribute(&attr_name)
-                || (is_url_attribute(&name, &attr_name) && is_javascript_url(&value))
+                || (is_url_value(&name, &attr_name, animates_href)
+                    && is_javascript_url_value(&attr_name, &value))
             {
                 return true;
             }
@@ -1920,5 +1992,156 @@ mod tests {
     fn each_problem_has_the_name_python_uses() {
         assert_eq!(CspAttributeProblem::NativeEvent.code(), "native-event");
         assert_eq!(CspAttributeProblem::JavascriptUrl.code(), "javascript-url");
+    }
+
+    /// The attributes that carry a `javascript:` URL finding, in order, for
+    /// each of the two rules that report one.
+    fn url_findings(html: &str) -> (Vec<String>, Vec<String>) {
+        let names = |csp: bool, javascript: Option<JavascriptMode>, rule: Rule| -> Vec<String> {
+            check(html, PolicyPass::Settled, csp, javascript, None, &[], None)
+                .events
+                .into_iter()
+                .filter_map(|event| match event {
+                    PolicyEvent::Finding(finding) if finding.rule == rule => finding.attribute,
+                    _ => None,
+                })
+                .collect()
+        };
+        (
+            names(true, None, Rule::CspJavascriptUrl),
+            names(false, Some(JavascriptMode::Warn), Rule::JsJavascriptUrl),
+        )
+    }
+
+    #[test]
+    fn an_animation_that_sets_href_to_a_javascript_url_is_reported_like_href() {
+        // (page, the attribute that holds the URL)
+        let reported: [(&str, &[&str]); 16] = [
+            (
+                "<svg><a><animate attributeName=href values='javascript:x' dur=1s></a></svg>",
+                &["values"],
+            ),
+            (
+                "<svg><a><animate attributeName=href to='javascript:x' dur=1s></a></svg>",
+                &["to"],
+            ),
+            (
+                "<svg><a><animate attributeName=href from='javascript:x' to='#a'></a></svg>",
+                &["from"],
+            ),
+            (
+                "<svg><a><animate attributeName=href by='javascript:x'></a></svg>",
+                &["by"],
+            ),
+            (
+                "<svg><a><set attributeName=href to='javascript:x'></a></svg>",
+                &["to"],
+            ),
+            (
+                "<svg><a><set attributeName=xlink:href to='javascript:x'></a></svg>",
+                &["to"],
+            ),
+            // The animation may name its target with its own `href`, which
+            // is not the value that is set.
+            (
+                "<svg><a id=a></a><set href='#a' attributeName=href to='javascript:x'></svg>",
+                &["to"],
+            ),
+            // `values` is a list split on `;`, so each item is read alone.
+            (
+                "<svg><a><animate attributeName=href values='#a; #b ;javascript:x;#c'></a></svg>",
+                &["values"],
+            ),
+            (
+                "<svg><a><animate attributeName=href values='javascript:x;#b'></a></svg>",
+                &["values"],
+            ),
+            // Character references in both the name and the value.
+            (
+                "<svg><a><set attributeName='hr&#101;f' to='java&#115;cript&colon;x'></a></svg>",
+                &["to"],
+            ),
+            (
+                "<svg><a><set attributeName=href to='java&#9;script:x'></a></svg>",
+                &["to"],
+            ),
+            (
+                "<svg><a><set attributeName=href to='  &#1;JavaScript:x'></a></svg>",
+                &["to"],
+            ),
+            // Chromium and Firefox did not run these spellings, but the
+            // check reports them in case another browser does.
+            (
+                "<svg><a><set attributeName=HREF to='javascript:x'></a></svg>",
+                &["to"],
+            ),
+            (
+                "<svg><a><set attributeName=' XLINK:Href\t' to='javascript:x'></a></svg>",
+                &["to"],
+            ),
+            // Every value attribute that holds a URL is reported.
+            (
+                "<svg><a><set attributeName=href to='javascript:x' from='javascript:y'></a></svg>",
+                &["to", "from"],
+            ),
+            // Uppercase tag and attribute names are read as the browser reads them
+            // (the tokenizer lowercases attribute names).
+            (
+                "<SVG><A><SET ATTRIBUTENAME=href TO='javascript:x'></A></SVG>",
+                &["to"],
+            ),
+        ];
+        for (html, attributes) in reported {
+            let (csp, javascript) = url_findings(html);
+            assert_eq!(csp, attributes, "csp: {html}");
+            assert_eq!(javascript, attributes, "javascript: {html}");
+        }
+    }
+
+    #[test]
+    fn an_animation_that_sets_no_javascript_url_is_not_reported() {
+        for html in [
+            "<svg><a><set attributeName=href to='#x'></a></svg>",
+            "<svg><a><animate attributeName=href values='#a;#b'></a></svg>",
+            // Only `href` and `xlink:href` set a link.
+            "<svg><rect><set attributeName=fill to='javascript:x'></rect></svg>",
+            "<svg><a><set attributeName=hrefx to='javascript:x'></a></svg>",
+            "<svg><a><set attributeName=svg:href to='javascript:x'></a></svg>",
+            "<svg><a><set to='javascript:x'></a></svg>",
+            "<svg><a><set attributeName to='javascript:x'></a></svg>",
+            // The browser keeps the first of two same-named attributes.
+            "<svg><a><set attributeName=x attributeName=href to='javascript:x'></a></svg>",
+            // Not a scheme: a control character inside it, a missing colon,
+            // or text before it.
+            "<svg><a><set attributeName=href to='java\u{1}script:x'></a></svg>",
+            "<svg><a><set attributeName=href to='javascript'></a></svg>",
+            "<svg><a><set attributeName=href to='/javascript:x'></a></svg>",
+            // `animateTransform` does not set a link in the browsers tested.
+            "<svg><rect><animateTransform attributeName=href to='javascript:x'></rect></svg>",
+            "<div attributeName=href to='javascript:x'></div>",
+            // An attribute that is not a value the animation sets.
+            "<svg><a><set attributeName=href title='javascript:x' begin='javascript:x'></a></svg>",
+            // A `;` is a list separator only in `values`.
+            "<svg><a><set attributeName=href to='#a;javascript:x'></a></svg>",
+        ] {
+            assert_eq!(url_findings(html), (Vec::new(), Vec::new()), "{html}");
+        }
+    }
+
+    #[test]
+    fn an_animation_in_an_embedded_document_makes_it_run_code() {
+        let document = "<svg><a><set attributeName=href to='javascript:x'></a></svg>";
+        assert!(html_document_requires_javascript(document, 0));
+        assert!(!html_document_requires_javascript(
+            "<svg><a><set attributeName=href to='#x'></a></svg>",
+            0
+        ));
+        assert!(embedded_document_reported(&format!(
+            "<iframe srcdoc=\"{}\"></iframe>",
+            document
+                .replace('\'', "&#39;")
+                .replace('<', "&lt;")
+                .replace('>', "&gt;")
+        )));
     }
 }

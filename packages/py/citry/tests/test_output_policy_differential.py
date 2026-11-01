@@ -111,6 +111,37 @@ def _javascript_text(rng: random.Random) -> str:
     return "".join(out)
 
 
+_ANIMATION_NAMES = [
+    "href", "xlink:href", "HREF", "XLink:Href", " href", "href ", "\thref\n", "hr&#101;f", "&#104;ref", "x", "",
+    "svg:href", "hrefx", "xlink:href;x", "\x0bhref", "\u00a0href", "\x1chref",
+]  # fmt: skip
+_ANIMATION_VALUE_KEYS = ["to", "from", "by", "values", "TO", "Values", "title", "begin", "dur"]
+
+
+def _animation_value(rng: random.Random, key: str) -> str:
+    """A value for an animation's `to`, `from`, `by` or `values`, often hiding `javascript:` in a list."""
+    if key.lower() != "values":
+        return rng.choice([_javascript_text(rng)] * 3 + ["#x", "", "1s"])
+    items = [rng.choice([_javascript_text(rng), "#a", " #b ", "", "x"]) for _ in range(rng.randint(1, 4))]
+    return rng.choice([";", "&#59;", ";", ";"]).join(items)
+
+
+def _animation(rng: random.Random) -> str:
+    """An SVG `<animate>` or `<set>`: whether it writes `href`, and which value attributes it carries."""
+    tag = rng.choice(["animate", "set", "set", "SET", "animateTransform", "animateMotion"])
+    attributes = []
+    # Most animations name `href`, so the value attributes below decide the outcome often.
+    names = ["href", "href", "xlink:href", *_ANIMATION_NAMES]
+    for _ in range(rng.choice([1, 1, 1, 1, 2, 2])):
+        spelled = f'attributeName="{rng.choice(names)}"'
+        attributes.append(rng.choice([spelled, spelled, spelled, "attributeName", "ATTRIBUTENAME=href"]))
+    for _ in range(rng.randint(1, 3)):
+        key = rng.choice(_ANIMATION_VALUE_KEYS)
+        attributes.append(f'{key}="{_animation_value(rng, key).replace(chr(34), "")}"')
+    rng.shuffle(attributes)
+    return f"<svg><a {rng.choice(['', 'href=#'])}><{tag} {' '.join(attributes)}/></a></svg>"
+
+
 def _document(rng: random.Random, depth: int) -> str:
     """A small HTML document for `srcdoc` and `data:` URLs."""
     pieces = [rng.choice(["<p>hi</p>", "<b>x</b>", "", "text"])]
@@ -136,6 +167,8 @@ def _document(rng: random.Random, depth: int) -> str:
             pieces.append(f'<embed src="{_data_url(rng, nested)}">')
     elif roll < 0.8:
         pieces.append("<title><script>inert()</script></title>")
+    elif roll < 0.9:
+        pieces.append(_animation(rng))
     return "".join(pieces)
 
 
@@ -311,6 +344,8 @@ def _piece(rng: random.Random, depth: int, marker: bool) -> str:
         return rng.choice(["text", "a &amp; b", "<!-- <script>x</script> -->", "\u00e9", " "])
     if roll < 0.85:
         return "<!DOCTYPE html>"
+    if roll < 0.9:
+        return _animation(rng)
     return rng.choice(["<br>", "<img src=x onerror=y>", "<svg><script/></svg>", "<svg><style>s</style></svg>"])
 
 
@@ -595,3 +630,20 @@ def test_rust_output_checks_match_the_python_rules(chunk: int) -> None:
             # so neither allowed difference can occur and no page is needed.
             block_differences = _differences(_blocks_results(blocks), "", component_classes={})
             assert not block_differences, (blocks, block_differences)
+
+
+def test_the_generated_animations_include_both_reported_and_inert_ones() -> None:
+    # The comparison above proves nothing about animations if the generator
+    # rarely makes one that sets `href` to a `javascript:` URL, or never makes
+    # one that looks like it and does not.
+    rng = random.Random(f"{SEED}-animation")  # noqa: S311 - a seeded page generator, not a secret
+    reported = 0
+    inert = 0
+    for _ in range(PAGES):
+        events = _output_policy.check_output_html(_animation(rng), csp=True).events
+        if any(event[0] == "csp-javascript-url" and event[1] in {"animate", "set"} for event in events):
+            reported += 1
+        else:
+            inert += 1
+    assert reported > PAGES // 20
+    assert inert > PAGES // 20

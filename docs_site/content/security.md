@@ -632,6 +632,18 @@ reports:
 - native event attributes such as `onclick`, in any letter case;
 - `javascript:` URLs.
 
+The URL check reads the attributes that hold a link: `href`, `src`,
+`action`, `formaction`, `xlink:href`, and `data` on `<object>`. An SVG
+`<animate>` or `<set>` that animates `href` or `xlink:href` counts too,
+because it can write its `to`, `from`, `by`, or `values` into the link
+while the page is open. For `values`, which is a list separated by `;`,
+any item that starts with `javascript:` is reported. The check decodes
+character references and skips the tabs and line breaks that browsers
+remove from a URL, so `java&#9;script:` is reported. It also reports a few
+spellings that Chromium and Firefox did not run when tested, such as
+`attributeName="HREF"`, in case another browser reads the name more
+loosely.
+
 Use a Vue binding such as `@click` instead of `onclick`, and move scripts
 and styles to `Component.js`, `Component.css`, or structured
 [`Dependencies`][citry.Component.Dependencies].
@@ -686,9 +698,12 @@ Any other value raises `ValueError`.
 
 Citry looks for these when it decides what needs JavaScript: Vue and Events
 bindings that are in use, executable scripts, native `on*` attributes,
-`javascript:` URLs, and HTML that runs scripts through `iframe srcdoc` or
-an HTML data URL. It checks dependencies and HTML after extensions have
-changed them. An `Events` method that no template calls does not count.
+`javascript:` URLs (including the ones an SVG `<animate>` or `<set>` writes
+into a link, as [described for
+`security_csp`](#choose-a-csp-compatibility-mode)), and HTML that runs
+scripts through `iframe srcdoc` or an HTML data URL. It checks dependencies
+and HTML after extensions have changed them. An `Events` method that no
+template calls does not count.
 
 ### What `"omit"` leaves
 

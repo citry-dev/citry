@@ -45,6 +45,8 @@ _JAVASCRIPT_URL_RE = re.compile(
     re.IGNORECASE,
 )
 _URL_ATTRIBUTES = frozenset({"action", "formaction", "href", "src", "xlink:href"})
+_ANIMATION_VALUE_ATTRIBUTES = frozenset({"to", "from", "by", "values"})
+_HTML_SPACE = " \t\n\r\x0c"
 # A decimal reference this short converts to an int directly: `&#` plus
 # twelve digits plus `;`.
 _MAX_PLAIN_DECIMAL_REFERENCE = 15
@@ -170,8 +172,9 @@ class ReferenceCspValidator(_CspRenderValidator):
                     self._add_raw_tag(
                         tag, component, own_instance, node.start_tag.name.start_index, node.start_tag.name.end_index
                     )
+            animates_href = _animation_sets_href(tag, attrs)
             for attr in attrs:
-                self._validate_attribute(tag, attr, component, own_instance)
+                self._validate_attribute(tag, attr, component, own_instance, animates_href=animates_href)
             body = getattr(node, "body", None)
             if body is not None:
                 self._walk_template(
@@ -248,7 +251,9 @@ class ReferenceCspValidator(_CspRenderValidator):
             dedupe_key=self._site_key(instance, (component, "raw-tag", tag)),
         )
 
-    def _validate_attribute(self, tag: str, attr: OutputAttr, component: str, instance: str | None) -> None:
+    def _validate_attribute(
+        self, tag: str, attr: OutputAttr, component: str, instance: str | None, *, animates_href: bool
+    ) -> None:
         name = attr.key.content.translate(_ASCII_LOWER)
         inner = attr.inner_value
         raw_source = "" if inner is None else inner.content
@@ -263,7 +268,7 @@ class ReferenceCspValidator(_CspRenderValidator):
                 attribute=attr.key.content,
                 dedupe_key=self._site_key(instance, (component, "native-event", name, decoded)),
             )
-        if _is_url_attribute(tag, name) and _javascript_url(decoded):
+        if _is_url_value(tag, name, animates_href) and _javascript_url_value(name, decoded):
             self._add(
                 f"a javascript: URL in {attr.key.content!r}; use a normal URL or a Vue handler",
                 component,
@@ -437,6 +442,7 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
                     )
 
             activation_attrs: list[str] = []
+            animates_href = _animation_sets_href(tag, attrs)
             for attr in attrs:
                 name = attr.key.content.translate(_ASCII_LOWER)
                 decoded = _decoded_attr(attr)
@@ -476,7 +482,7 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
                         end=attr.key.end_index,
                         key=self._site_key(own_instance, ("native", name, attr.key.start_index)),
                     )
-                if _is_url_attribute(tag, name) and _javascript_url(decoded):
+                if _is_url_value(tag, name, animates_href) and _javascript_url_value(name, decoded):
                     inner_value = attr.inner_value
                     start = attr.key.end_index if inner_value is None else inner_value.start_index
                     self._add(
@@ -671,6 +677,33 @@ def _is_url_attribute(tag: str, name: str) -> bool:
     return name in _URL_ATTRIBUTES or (tag == "object" and name == "data")
 
 
+def _animation_sets_href(tag: str, attrs: tuple[OutputAttr, ...]) -> bool:
+    """Whether an SVG `<animate>` or `<set>` writes the `href` or `xlink:href` of its target."""
+    if tag not in {"animate", "set"}:
+        return False
+    # The browser reads the first of two same-named attributes. The name is
+    # compared without case and without the spaces around it, which is wider
+    # than the browsers tested, so a looser browser is covered too.
+    first = next((attr for attr in attrs if attr.key.content.translate(_ASCII_LOWER) == "attributename"), None)
+    if first is None:
+        return False
+    name = _decoded_attr(first).strip(_HTML_SPACE).translate(_ASCII_LOWER)
+    return name in {"href", "xlink:href"}
+
+
+def _is_url_value(tag: str, name: str, animates_href: bool) -> bool:
+    """An attribute whose value the browser may use as a URL, including what an href animation sets."""
+    return _is_url_attribute(tag, name) or (animates_href and name in _ANIMATION_VALUE_ATTRIBUTES)
+
+
+def _javascript_url_value(name: str, value: str) -> bool:
+    # `values` is a list the browser's SVG animation code (SMIL) splits on
+    # `;`, and any item can become the URL.
+    if name == "values":
+        return any(_javascript_url(item) for item in value.split(";"))
+    return _javascript_url(value)
+
+
 def _attribute_map(attrs: tuple[OutputAttr, ...]) -> dict[str, str]:
     result: dict[str, str] = {}
     for attr in attrs:
@@ -800,10 +833,13 @@ def _parsed_document_requires_javascript(template: OutputTemplate, *, depth: int
         tag = node.start_tag.name.content.translate(_ASCII_LOWER)
         if tag == "script" and _raw_script_is_executable(attrs):
             return True
+        animates_href = _animation_sets_href(tag, attrs)
         for attr in attrs:
             name = attr.key.content.translate(_ASCII_LOWER)
             value = _decoded_attr(attr)
-            if _is_native_event_attribute(name) or (_is_url_attribute(tag, name) and _javascript_url(value)):
+            if _is_native_event_attribute(name) or (
+                _is_url_value(tag, name, animates_href) and _javascript_url_value(name, value)
+            ):
                 return True
             if tag == "iframe" and name == "srcdoc" and _html_document_requires_javascript(value, depth=depth + 1):
                 return True

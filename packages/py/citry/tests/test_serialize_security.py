@@ -1798,3 +1798,104 @@ class TestJavascriptDeliveryPolicy:
 
         # No finding, so forbid serializes without raising.
         Card().render().serialize(deps_strategy="ignore")
+
+
+class TestSvgAnimationUrls:
+    """
+    An SVG `<animate>` or `<set>` that sets `href` to a `javascript:` URL.
+
+    The animation writes its value into the link's `href` while the page is
+    open, so the output checks read it the way they read a plain `href`.
+    """
+
+    _ANIMATIONS = [
+        '<svg><a><animate attributeName="href" values="javascript:run()" dur="1s"/></a></svg>',
+        '<svg><a><animate attributeName="href" to="javascript:run()" dur="1s" fill="freeze"/></a></svg>',
+        '<svg><a><animate attributeName="href" from="javascript:run()" to="#x" dur="60s"/></a></svg>',
+        '<svg><a><animate attributeName="href" by="javascript:run()" dur="1s"/></a></svg>',
+        '<svg><a><set attributeName="href" to="javascript:run()"/></a></svg>',
+        '<svg><a><set attributeName="xlink:href" to="javascript:run()"/></a></svg>',
+        '<svg><a id="a"></a><set href="#a" attributeName="href" to="javascript:run()"/></svg>',
+        # `values` is a list split on `;`, so a later item counts too.
+        '<svg><a><animate attributeName="href" values="#a; #b ;javascript:run();#c" dur="1s"/></a></svg>',
+        # The browser decodes character references in both attributes.
+        '<svg><a><set attributeName="hr&#101;f" to="java&#115;cript&colon;run()"/></a></svg>',
+        '<svg><a><set attributeName="href" to="java&#9;script:run()"/></a></svg>',
+        '<svg><a><set attributeName="href" to="  &#1;JAVASCRIPT:run()"/></a></svg>',
+        # Chromium and Firefox did not run these spellings, but the check
+        # reports them anyway.
+        '<svg><a><set attributeName="HREF" to="javascript:run()"/></a></svg>',
+        '<svg><a><set attributeName=" xlink:href " to="javascript:run()"/></a></svg>',
+        # Only the first attributeName counts, as in the browser.
+        '<svg><a><set attributeName="href" attributeName="x" to="javascript:run()"/></a></svg>',
+    ]
+    _INERT_ANIMATIONS = [
+        '<svg><a><set attributeName="href" to="#x"/></a></svg>',
+        '<svg><a><animate attributeName="href" values="#a;#b" dur="1s"/></a></svg>',
+        # Only `href` and `xlink:href` are links.
+        '<svg><rect><set attributeName="fill" to="javascript:run()"/></rect></svg>',
+        '<svg><a><set attributeName="x" attributeName="href" to="javascript:run()"/></a></svg>',
+        '<svg><a><set attributeName="href"/></a></svg>',
+        '<svg><a><set to="javascript:run()"/></a></svg>',
+        # A control character inside the scheme is not `javascript:`.
+        '<svg><a><set attributeName="href" to="java\x01script:run()"/></a></svg>',
+        '<svg><a><set attributeName="href" to="javascript"/></a></svg>',
+        '<svg><a><set attributeName="href" to="/javascript:run()"/></a></svg>',
+        # Not an attribute that holds a value to set.
+        '<svg><a><set attributeName="href" title="javascript:run()"/></a></svg>',
+        # `animateTransform` sets a transform, not a link.
+        '<svg><rect><animateTransform attributeName="transform" to="javascript:run()"/></rect></svg>',
+    ]
+
+    @staticmethod
+    def _card(app, markup):
+        class Card(Component):
+            citry = app
+            template = "{{ body }}"
+
+            def template_data(self, kwargs, slots):
+                return {"body": Markup(markup)}  # noqa: S704 - the test writes fixed markup
+
+        return Card().render()
+
+    @pytest.mark.parametrize("markup", _ANIMATIONS)
+    def test_forbid_rejects_an_animation_that_sets_a_javascript_url(self, markup):
+        rendered = self._card(Citry(security_javascript="forbid"), markup)
+        with pytest.raises(ValueError, match="javascript: URL"):
+            rendered.serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize("markup", _ANIMATIONS)
+    def test_warn_reports_an_animation_that_sets_a_javascript_url(self, markup):
+        rendered = self._card(Citry(security_javascript="warn"), markup)
+        with pytest.warns(RuntimeWarning, match="javascript: URL"):
+            rendered.serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize("markup", _ANIMATIONS)
+    def test_strict_csp_rejects_an_animation_that_sets_a_javascript_url(self, markup):
+        rendered = self._card(Citry(security_csp="strict"), markup)
+        with pytest.raises(ValueError, match="javascript: URL"):
+            rendered.serialize(deps_strategy="ignore", csp_nonce="requestNonce")
+
+    @pytest.mark.parametrize("markup", _INERT_ANIMATIONS)
+    def test_an_animation_that_sets_no_javascript_url_passes(self, markup):
+        # Both checks run, so one test shows neither reports the page.
+        for app, options in (
+            (Citry(security_javascript="forbid"), {}),
+            (Citry(security_csp="strict"), {"csp_nonce": "requestNonce"}),
+        ):
+            self._card(app, markup).serialize(deps_strategy="ignore", **options)
+
+    def test_the_finding_names_the_attribute_that_holds_the_url(self):
+        rendered = self._card(
+            Citry(security_javascript="forbid"),
+            '<svg><a><set attributeName="href" to="javascript:run()"/></a></svg>',
+        )
+        with pytest.raises(ValueError, match="attribute 'to'"):
+            rendered.serialize(deps_strategy="ignore")
+
+    def test_an_embedded_document_with_such_an_animation_is_reported(self):
+        document = '<svg><a><set attributeName="href" to="javascript:run()"/></a></svg>'
+        escaped = document.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        rendered = self._card(Citry(security_javascript="forbid"), f'<iframe srcdoc="{escaped}"></iframe>')
+        with pytest.raises(ValueError, match="embedded HTML document"):
+            rendered.serialize(deps_strategy="ignore")
