@@ -3558,7 +3558,7 @@ def test_dynamic_element_rejects_bare_object_event_binding() -> None:
         render_prepared_direct(App())
 
 
-@pytest.mark.parametrize("tag", ["script", "STYLE", "template", "textarea", "iframe"])
+@pytest.mark.parametrize("tag", ["script", "STYLE", "template", "xmp", "iframe"])
 def test_dynamic_element_rejects_unsafe_or_semantically_different_raw_tags(tag: str) -> None:
     registry = Citry(autodiscover=False)
 

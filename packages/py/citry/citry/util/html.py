@@ -383,11 +383,13 @@ __all__ = [
 
 # Tags whose contents or attributes the browser does not treat as ordinary
 # page text and markup: it runs or loads them (script, iframe, object), reads
-# them as raw text (style, textarea, title, xmp), or changes how the rest of
-# the page is read (base, meta, plaintext). Citry escapes an element's body as
-# HTML text, which is not right for these tags, so a `<c-element>` with `c-is`
-# or `c-bind` refuses them, compared in any letter case, however the page is
-# rendered.
+# them as raw text without decoding `&lt;` (style, xmp), or changes how the
+# rest of the page is read (base, meta, plaintext). Citry escapes an element's
+# body as HTML text, which is not right for these tags, so a `<c-element>` with
+# `c-is` or `c-bind` refuses them, compared in any letter case, however the
+# page is rendered. `textarea` and `title` are allowed: the browser reads tags
+# inside them as text but still decodes character references, so Citry's
+# escaped text comes out as written and cannot close the element early.
 _REFUSED_DYNAMIC_ELEMENT_TAGS: frozenset[str] = frozenset(
     {
         "applet",
@@ -406,8 +408,6 @@ _REFUSED_DYNAMIC_ELEMENT_TAGS: frozenset[str] = frozenset(
         "script",
         "style",
         "template",
-        "textarea",
-        "title",
         "xmp",
     }
 )

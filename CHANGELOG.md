@@ -288,11 +288,14 @@
     and that contains whitespace, a control character, a quote, a
     byte-order mark, a lone surrogate, or a Unicode noncharacter. Rename
     the key.
-  - A tag such as `script`, `style`, `iframe`, or `textarea`, whose
+  - A tag such as `script`, `style`, `iframe`, or `xmp`, whose
     contents the browser reads as raw text or code, passed to a
     `<c-element>` that has `c-is` or `c-bind`, or to the built-in
     `element` component in a Python call. Write such an element directly
     in the template.
+  - Markup inside a `<c-element>` that renders `textarea` or `title` in
+    an interactive component, such as a tag, a child component,
+    `<c-raw>`, or a `Markup` value (a `TypeError`). Put only text there.
   - A `css_data()` value that has a comment, a brace, `<`, or a backslash
     outside a string or `url()`; a `;` or `!` outside brackets; an
     unbalanced bracket; or a malformed string or `url()`. A null or

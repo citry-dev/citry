@@ -221,6 +221,22 @@ class _CacheReplayIdentity:
 _CACHE_REPLAY_IDENTITY_KEY = object()
 
 
+def _refuse_element_in_text_element(element_stack: list[str], what: str) -> None:
+    """Refuse an element or child component inside a `<textarea>` or `<title>` of a component with Vue."""
+    # The browser reads a tag the server writes here as text, but Vue's client render of a
+    # dynamic `<c-element>` creates it as a real child element, so the page would change once
+    # Vue starts. A `<textarea>` or `<title>` written in the template never gets here: the
+    # template parser already reads its body as text. Inside `<svg>` or `<math>` a `<title>`
+    # holds ordinary child elements, so the check does not apply there.
+    parent_tag = element_stack[-1] if element_stack else None
+    if parent_tag in {"textarea", "title"} and not any(tag in {"svg", "math"} for tag in element_stack):
+        msg = (
+            f"{what} cannot sit inside <{parent_tag}> in an interactive component, because"
+            f" <{parent_tag}> holds text, not HTML. Write the text directly inside <{parent_tag}>."
+        )
+        raise UnsupportedPreparedView(msg)
+
+
 def _issue_cache_replay_identity(
     context: CitryContext,
     citry: Citry,
@@ -2534,6 +2550,9 @@ def assemble_typed_render(
                     )
                     if not child_type:
                         raise UnsupportedPreparedView("nested component has no stable class id")
+                    # Vue renders a child component's elements as real children, which a
+                    # <textarea> or <title> cannot hold the way the server writes them.
+                    _refuse_element_in_text_element(element_stack, f"The component {child_type}")
                     if python_call:
                         python_ordinal = python_counts_by_route[placement_route]
                         python_counts_by_route[placement_route] += 1
@@ -2992,6 +3011,7 @@ def assemble_typed_render(
                     if structure is not None:
                         for operation, tag in structure.tag_transitions:
                             if operation == "open":
+                                _refuse_element_in_text_element(element_stack, f"<{tag}>")
                                 element_stack.append(tag)
                                 element_keys.append(None)
                             elif (
@@ -3334,6 +3354,7 @@ def assemble_typed_render(
                         # count again.
                         v_pre_closes.append(_ignored_element_close_index(parts, part_index))
                         authored_v_pre_depth += 1
+                    _refuse_element_in_text_element(element_stack, f"<{part.tag}>")
                     if not part.is_void:
                         element_stack.append(part.tag.lower())
                         element_keys.append(
@@ -3517,6 +3538,7 @@ def assemble_typed_render(
                                 "steps": [],
                             }
                         )
+                    _refuse_element_in_text_element(element_stack, f"<{part.tag}>")
                     if part.is_void:
                         # Balance the parser-level custom alias even though its
                         # validated runtime tag is void, so following siblings

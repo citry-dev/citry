@@ -176,17 +176,25 @@ A `<c-element>` that has `c-is` or `c-bind` will not render a tag the
 browser handles in a special way, in any letter case. It raises
 `ValueError` for `script`, `style`, `base`, `meta`, `link`, `iframe`,
 `frame`, `frameset`, `object`, `embed`, `applet`, `plaintext`, `xmp`,
-`noembed`, `noframes`, `noscript`, `title`, `textarea`, and `template`.
-Some of them make the browser run or load something, some make it read
-their contents as raw text, and some change how it reads the rest of the
-page. Calling the built-in `element` component from Python with one of
-these tags raises too.
+`noembed`, `noframes`, `noscript`, and `template`. Some of them make the
+browser run or load something, some make it read their contents as raw
+text, and some change how it reads the rest of the page. Calling the
+built-in `element` component from Python with one of these tags raises
+too.
 
 Citry escapes an element's body as HTML text, which does not fit these
 tags. When you need one, write it directly in the template, for example in
 a `c-if` branch. A `<c-element>` with a fixed `is` and no `c-bind` renders
 like the same tag written in the template, so this check does not apply to
 it.
+
+`textarea` and `title` work. The browser shows any tag inside them as
+text, and Citry escapes your values, so text shows exactly as written. On
+a page without Vue, a tag you write inside one shows as literal text. In
+an interactive component (one with `js` or server events), put only text
+inside them: a tag, a child component, `<c-raw>`, or a `Markup` value
+there raises an error, because Vue would build real elements there and
+the page would change once Vue starts.
 
 ### Letter case of `is`
 

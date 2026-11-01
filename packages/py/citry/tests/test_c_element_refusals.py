@@ -48,8 +48,6 @@ REFUSED_TAGS = frozenset(
         "script",
         "style",
         "template",
-        "textarea",
-        "title",
         "xmp",
     }
 )

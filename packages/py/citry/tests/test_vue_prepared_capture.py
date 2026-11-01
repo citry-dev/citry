@@ -276,9 +276,52 @@ def test_trusted_html_rejects_raw_text_and_rcdata_contexts() -> None:
         def template_data(self, kwargs, slots):
             return {"tag": "textarea"}
 
-    # `<c-element>` refuses a text-only tag such as <textarea> while it renders.
-    with pytest.raises(ValueError, match=r"cannot render a <textarea> element"):
-        render_prepared(DynamicRcdataRaw())
+    # A dynamic <textarea> holds text like a written one, so trusted HTML inside it is refused the same way.
+    with pytest.raises(UnsupportedPreparedView, match="holds text, not HTML"):
+        assemble_typed_render(render_prepared(DynamicRcdataRaw()), revision=0, tag_for_type=lambda _key: "x-dyn")
+
+    class DynamicRcdataTag(Component):
+        citry = registry
+        template = '<c-element c-is="tag">a<i>b</i></c-element>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": kwargs["tag"]}
+
+    class TextChild(Component):
+        citry = registry
+        template = '<b class="child">{{ v }}</b>'
+
+        def template_data(self, kwargs, slots):
+            return {"v": kwargs["v"]}
+
+    class DynamicRcdataChild(Component):
+        citry = registry
+        template = '<c-element c-is="tag"><c-TextChild c-v="tag" /></c-element>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": kwargs["tag"]}
+
+    # The browser would read the <i>, or the child component's <b>, as text, while Vue would
+    # build it as an element, so both are refused.
+    for tag in ("textarea", "title"):
+        with pytest.raises(UnsupportedPreparedView, match=rf"<i> cannot sit inside <{tag}>.*holds text, not HTML"):
+            assemble_typed_render(
+                render_prepared(DynamicRcdataTag(tag=tag)), revision=0, tag_for_type=lambda _key: "x-dyn-tag"
+            )
+        with pytest.raises(UnsupportedPreparedView, match=rf"The component TextChild_\w+ cannot sit inside <{tag}>"):
+            assemble_typed_render(
+                render_prepared(DynamicRcdataChild(tag=tag)), revision=0, tag_for_type=lambda _key: "x-dyn-child"
+            )
+
+    class SvgTitle(Component):
+        citry = registry
+        template = '<svg><c-element c-is="tag"><tspan>t</tspan></c-element></svg>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": "title"}
+
+    # An SVG <title> holds ordinary child elements, so it is not refused.
+    assemble_typed_render(render_prepared(SvgTitle()), revision=0, tag_for_type=lambda _key: "x-svg-title")
 
 
 def test_opaque_html_rejects_component_and_slot_placement_under_foreign_content() -> None:
