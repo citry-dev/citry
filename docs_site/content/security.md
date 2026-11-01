@@ -178,7 +178,9 @@ Every event call that is not a `GET` must pass these checks:
 - A call with a JSON body must send the `X-Citry-Events` header. Citry's
   browser code adds it for you.
 - When the browser sends an `Origin` header, its host must match the
-  request's `Host` header.
+  request's `Host` header. Behind a reverse proxy, the proxy must pass the
+  browser's `Host` header on; see
+  [Run behind a proxy](/advanced/web-frameworks/#run-behind-a-proxy).
 - When the browser sends a `Sec-Fetch-Site` header, it must be
   `same-origin` or `none`.
 
@@ -498,6 +500,31 @@ shows as `***`.
 Citry detects only the values you wrap. A secret kept in a plain string
 is sent like any other text. See [Secrets](/advanced/secrets/) for a
 full example.
+
+## Keep debug logs off { #keep-debug-logs-off-in-production }
+
+When an event handler, or its guard, raises an unexpected exception, the
+call fails with status 500 and the browser gets the message "The event handler
+raised an unexpected error." With debug logs on, the message also
+includes the exception's type and text, such as
+`RuntimeError: connection to db-internal:5432 refused`. That text can
+reveal internal details to anyone who triggers the error.
+
+Citry adds the exception text when the `citry` logger's level is `DEBUG`
+or lower, including Citry's `TRACE` level (5). It makes no
+difference whether you set that level on the `citry` logger or it comes
+from the root logger, as with `logging.basicConfig(level=logging.DEBUG)`. Django's `DEBUG` setting
+and Flask's debug mode do not affect it. In production, set the `citry`
+logger to `INFO` or `WARNING`:
+
+```python
+import logging
+
+logging.getLogger("citry").setLevel(logging.INFO)
+```
+
+With debug logs on or off, Citry logs the full traceback on the server
+at `ERROR` level, and the browser never receives it.
 
 ## Use a CSP nonce { #apply-a-request-csp-nonce-centrally }
 
