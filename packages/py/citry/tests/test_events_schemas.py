@@ -206,6 +206,25 @@ class WithFiles:
     attachments: list[UploadedFile]
 
 
+# Thirty required fields, to show that missing-field messages are never limited.
+Wide = type("Wide", (), {"__annotations__": {f"f{index:02d}": int for index in range(30)}})
+
+
+def _unknown_keys(count):
+    """
+    ``count`` payload keys no schema declares.
+
+    Built in reverse so the keys a test sees listed come from the sorted
+    order, not from the order the payload happened to send them in.
+    """
+    return {f"u{index:03d}": 1 for index in reversed(range(count))}
+
+
+def _sorted_unknown(count, prefix=""):
+    """The names ``_unknown_keys(count)`` gets, in the order the errors list them."""
+    return [f"{prefix}u{index:03d}" for index in range(count)]
+
+
 class Pager:
     page: int
 
@@ -750,14 +769,6 @@ class TestContainerCoercion:
         assert result.fields == {"blob": "Expected an object, got list."}
 
 
-class TestFieldErrorOrder:
-    def test_list_indexes_sort_in_number_order(self):
-        # The error response keeps only the first messages, so the earliest
-        # rows must come first: index 2 before index 10.
-        result = validate_args(TagsList, {"tags": ["x"] * 12})
-        assert list(result.fields) == [f"tags.{index}" for index in range(12)]
-
-
 class TestUnhashableSetItems:
     # Wire arrays may nest arrays or objects; turning those into a set must be
     # a per-field error, never a TypeError out of validate_args.
@@ -839,6 +850,105 @@ class TestNestedSchemas:
             "lines.1.qty": "Expected int, got str.",
             "lines.1.sku": REQUIRED_MESSAGE,
         }
+
+
+class TestUnexpectedFieldLimit:
+    @pytest.mark.parametrize("count", [21, 100])
+    def test_a_declared_error_is_kept_and_unknown_keys_stop_at_twenty(self, count):
+        result = validate_args(Plain, {"count": "x", **_unknown_keys(count)})
+        assert result.value is None
+        # `count` sorts before the `u...` names, so it comes first; the
+        # unknown keys listed are the first twenty in sorted order.
+        assert list(result.fields) == ["count", *_sorted_unknown(20)]
+        assert result.fields["count"] == "Expected int, got str."
+        assert all(result.fields[name] == EXTRA_MESSAGE for name in _sorted_unknown(20))
+        assert result.unlisted_fields == count - 20
+
+    def test_exactly_twenty_unknown_keys_are_all_listed(self):
+        result = validate_args(Plain, {"count": 1, **_unknown_keys(20)})
+        assert list(result.fields) == _sorted_unknown(20)
+        assert result.unlisted_fields == 0
+
+    def test_one_past_twenty_unknown_keys_leaves_one_out(self):
+        result = validate_args(Plain, {"count": 1, **_unknown_keys(21)})
+        assert list(result.fields) == _sorted_unknown(20)
+        assert result.unlisted_fields == 1
+
+    def test_a_form_payload_is_limited_like_a_json_payload(self):
+        result = validate_args(Plain, StringArgs({"count": "x", **_unknown_keys(30)}))
+        assert list(result.fields) == ["count", *_sorted_unknown(20)]
+        assert result.unlisted_fields == 10
+
+    def test_nothing_is_unlisted_when_validation_succeeds(self):
+        result = validate_args(Plain, {"count": 1})
+        assert result.ok
+        assert result.unlisted_fields == 0
+
+    @pytest.mark.parametrize("payload", [{}, {"count": "x"}, [1, 2]])
+    def test_nothing_is_unlisted_when_no_unknown_key_was_sent(self, payload):
+        result = validate_args(Plain, payload)
+        assert not result.ok
+        assert result.unlisted_fields == 0
+
+    def test_unknown_keys_inside_a_nested_object_count(self):
+        result = validate_args(AddressIn, {"address": {"city": 5, **_unknown_keys(25)}})
+        assert result.fields["address.city"] == "Expected str, got int."
+        assert [name for name in result.fields if name != "address.city"] == _sorted_unknown(20, "address.")
+        assert result.unlisted_fields == 5
+
+    def test_nested_and_top_level_unknown_keys_share_one_limit(self):
+        nested = {f"n{index:02d}": 1 for index in range(12)}
+        top = {f"t{index:02d}": 1 for index in range(12)}
+        result = validate_args(AddressIn, {"address": {"city": "Brno", **nested}, **top})
+        # 24 unknown keys in all. `address.n..` sorts before `t..`, so the
+        # twelve nested names and the first eight top-level names are listed.
+        assert list(result.fields) == [
+            *(f"address.n{index:02d}" for index in range(12)),
+            *(f"t{index:02d}" for index in range(8)),
+        ]
+        assert result.unlisted_fields == 4
+
+    def test_unknown_keys_inside_an_optional_nested_object_count(self):
+        class MaybeAddressIn:
+            address: Address | None = None
+
+        result = validate_args(MaybeAddressIn, {"address": {"city": "Brno", **_unknown_keys(22)}})
+        assert list(result.fields) == _sorted_unknown(20, "address.")
+        assert result.unlisted_fields == 2
+
+    def test_unknown_keys_inside_list_rows_count(self):
+        lines = [{"sku": "a", "qty": 1, f"x{index:02d}": 1} for index in range(25)]
+        result = validate_args(Order, {"lines": lines})
+        # The names are cut in sorted (string) order, so `lines.10...` comes before `lines.2...`.
+        assert list(result.fields) == sorted(f"lines.{index}.x{index:02d}" for index in range(25))[:20]
+        assert result.unlisted_fields == 5
+
+    def test_every_bad_list_item_is_listed(self):
+        # Item errors are declared-field errors: the cap does not apply.
+        result = validate_args(TagsList, {"tags": ["x"] * 30})
+        assert sorted(result.fields) == sorted(f"tags.{index}" for index in range(30))
+        assert set(result.fields.values()) == {"Expected int, got str."}
+        assert result.unlisted_fields == 0
+
+    def test_list_item_errors_are_kept_beside_limited_unknown_keys(self):
+        result = validate_args(TagsList, {"tags": ["x"] * 30, **_unknown_keys(25)})
+        item_names = [name for name in result.fields if name.startswith("tags.")]
+        assert len(item_names) == 30
+        assert [name for name in result.fields if name.startswith("u")] == _sorted_unknown(20)
+        assert result.unlisted_fields == 5
+
+    def test_every_missing_required_field_is_listed(self):
+        result = validate_args(Wide, {})
+        assert len(result.fields) == 30
+        assert set(result.fields.values()) == {REQUIRED_MESSAGE}
+        assert result.unlisted_fields == 0
+
+    def test_missing_required_fields_are_kept_beside_limited_unknown_keys(self):
+        result = validate_args(Wide, _unknown_keys(25))
+        required = [name for name in result.fields if name.startswith("f")]
+        assert required == [f"f{index:02d}" for index in range(30)]
+        assert [name for name in result.fields if name.startswith("u")] == _sorted_unknown(20)
+        assert result.unlisted_fields == 5
 
 
 class TestUnionsAndOptional:
@@ -1082,6 +1192,67 @@ class TestPydanticDelegation:
         result = validate_args(HasInner, {"inner": {"x": "abc"}})
         assert list(result.fields) == ["inner.x"]
         assert result.fields["inner.x"].startswith("Input should be a valid integer")
+
+
+@requires_pydantic
+class TestPydanticUnexpectedFieldLimit:
+    @staticmethod
+    def _forbidding_model():
+        class PModel(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(extra="forbid")
+            x: int
+
+        return PModel
+
+    def test_forbidden_extra_keys_stop_at_twenty_and_other_errors_stay(self):
+        result = validate_args(self._forbidding_model(), {"x": "nope", **_unknown_keys(25)})
+        assert result.value is None
+        # `x` sorts after the `u...` names.
+        assert list(result.fields) == [*_sorted_unknown(20), "x"]
+        assert result.fields["x"].startswith("Input should be a valid integer")
+        # The extras carry Pydantic's own wording.
+        assert result.fields["u000"].startswith("Extra inputs are not permitted")
+        assert result.unlisted_fields == 5
+
+    def test_exactly_twenty_forbidden_extra_keys_are_all_listed(self):
+        result = validate_args(self._forbidding_model(), {"x": 1, **_unknown_keys(20)})
+        assert list(result.fields) == _sorted_unknown(20)
+        assert result.unlisted_fields == 0
+
+    def test_forbidden_extra_keys_inside_a_nested_model_count(self):
+        forbidding = self._forbidding_model()
+
+        class HasInner:
+            inner: forbidding
+
+        result = validate_args(HasInner, {"inner": {"x": 1, **_unknown_keys(23)}})
+        assert list(result.fields) == _sorted_unknown(20, "inner.")
+        assert result.unlisted_fields == 3
+
+    def test_every_missing_model_field_is_listed(self):
+        wide = pydantic.create_model("Wide", **{f"f{index:02d}": (int, ...) for index in range(30)})
+        result = validate_args(wide, {})
+        assert len(result.fields) == 30
+        assert result.unlisted_fields == 0
+
+    def test_missing_model_fields_are_kept_beside_limited_extras(self):
+        wide = pydantic.create_model(
+            "Wide",
+            __config__=pydantic.ConfigDict(extra="forbid"),
+            **{f"f{index:02d}": (int, ...) for index in range(30)},
+        )
+        result = validate_args(wide, _unknown_keys(25))
+        assert [name for name in result.fields if name.startswith("f")] == [f"f{index:02d}" for index in range(30)]
+        assert [name for name in result.fields if name.startswith("u")] == _sorted_unknown(20)
+        assert result.unlisted_fields == 5
+
+    def test_ignored_extra_keys_are_not_errors_at_all(self):
+        class PModel(pydantic.BaseModel):
+            x: int
+
+        result = validate_args(PModel, {"x": 1, **_unknown_keys(50)})
+        assert result.ok
+        assert result.unlisted_fields == 0
 
 
 class TestWithoutPydantic:

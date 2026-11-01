@@ -66,7 +66,7 @@ from citry._protocol.events import (
 # of a broken user policy.
 from citry.ext.events.actions import Render, _download_content_disposition
 from citry.ext.events.csrf import _MSG_CSRF_FAILED, csrf_field_names
-from citry.ext.events.errors import EventError, build_field_error, wire_error
+from citry.ext.events.errors import EventError, limit_unexpected_fields, unlisted_fields_note, wire_error
 from citry.ext.events.handlers import event_options
 from citry.ext.events.results import (
     HTML_RENDER_ENCODER,
@@ -751,11 +751,7 @@ class EventsDispatcher:
             try:
                 csrf_check(handler)
             except EventError as err:
-                # Every error that carries field messages goes through
-                # build_field_error, which keeps the list short.
-                return build_error_result(
-                    build_field_error(403, "csrf_failed", err.message, err.fields), send_sequence
-                )
+                return build_error_result(build_error(403, "csrf_failed", err.message, err.fields), send_sequence)
             except Exception:  # noqa: BLE001 - a broken user policy still answers the fixed wire error
                 logger.exception(f"The CSRF policy for event {event_name!r} on {comp_cls.__name__} raised.")
                 return build_error_result(build_error(403, "csrf_failed", _MSG_CSRF_FAILED), send_sequence)
@@ -830,9 +826,7 @@ class EventsDispatcher:
                 try:
                     apply_state_updates(state, updates, model_fields=info.state_meta.model)
                 except StateUpdateError as err:
-                    return build_error_result(
-                        build_field_error(422, "invalid_args", err.message, err.fields), send_sequence
-                    )
+                    return build_error_result(build_error(422, "invalid_args", err.message, err.fields), send_sequence)
                 # A browser update for a tuple field also arrives as a list.
                 _restore_json_tuples(state, info.state_cls)
 
@@ -853,16 +847,21 @@ class EventsDispatcher:
             validation = validate_args(handler.data_schema, args)
             if not validation.ok:
                 message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
-                return build_error_result(
-                    build_field_error(422, "invalid_args", message, validation.fields), send_sequence
-                )
+                # Validation listed only the first undeclared keys; the
+                # message counts the rest.
+                message += unlisted_fields_note(validation.unlisted_fields)
+                return build_error_result(build_error(422, "invalid_args", message, validation.fields), send_sequence)
             data_value = validation.value
         elif args:
             # A handler that declares no data takes no input; extra keys are
             # a 422 here exactly as they are on a schema (design 3.3).
             message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
             extra = dict.fromkeys(sorted(str(key) for key in args), "Unexpected field: not declared on the schema.")
-            return build_error_result(build_field_error(422, "invalid_args", message, extra), send_sequence)
+            # Every key here is undeclared, so the request decides how many
+            # there are: list the first few and count the rest.
+            extra, unlisted = limit_unexpected_fields(extra, extra.keys())
+            message += unlisted_fields_note(unlisted)
+            return build_error_result(build_error(422, "invalid_args", message, extra), send_sequence)
 
         # The per-call events instance: the woven config class (the
         # component's Events class as the extension manager rebuilt it on the
@@ -1417,8 +1416,4 @@ class EventsDispatcher:
             candidate["sendSequence"] = send_sequence
         if validate_result(candidate) is not None:
             return None
-        # A replacement from an extension gets the same short field list as
-        # every other error.
-        error = candidate["error"]
-        capped = build_field_error(error["status"], error["code"], error["message"], error.get("fieldErrors"))
-        return build_error_result(capped, send_sequence)
+        return build_error_result(candidate["error"], send_sequence)

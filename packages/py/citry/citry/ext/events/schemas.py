@@ -55,6 +55,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get
 from uuid import UUID
 
 from citry._nested_declarations import _is_plain_field_family, convert_plain_declaration
+from citry.ext.events.errors import limit_unexpected_fields
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.state import convert_state_class
@@ -78,6 +79,8 @@ _INVALID: Any = object()
 
 _REQUIRED_MESSAGE = "This field is required."
 _EXTRA_MESSAGE = "Unexpected field: not declared on the schema."
+# Pydantic's error types for a key the model does not declare: v2, then v1.
+_PYDANTIC_EXTRA_TYPES = frozenset({"extra_forbidden", "value_error.extra"})
 # File parts only exist once the multipart payload codec produces them; any
 # plain wire value on a file-typed field is a validation error until then.
 _FILE_MESSAGE = "Expected an uploaded file: file fields arrive as multipart form data, not as JSON values."
@@ -106,11 +109,17 @@ class ValidationResult:
             (nested fields use dotted paths like ``"address.city"``, list
             elements ``"tags.1"``). Sorted by field path, so the error
             object is deterministic. Empty when validation succeeded.
+            Every declared field's message is listed, but at most 20
+            messages for fields the payload sent and the schema does not
+            declare.
+        unlisted_fields: How many of those undeclared-field messages were
+            left out of ``fields``. ``0`` when none were.
 
     """
 
     value: Any
     fields: dict[str, str]
+    unlisted_fields: int = 0
 
     @property
     def ok(self) -> bool:
@@ -260,40 +269,48 @@ def validate_args(
     Returns:
         A [`ValidationResult`][citry.ext.events.schemas.ValidationResult]:
         either the schema instance, or the per-field messages sorted by
-        field path, with list indexes in number order. A schema ``__post_init__`` (or Pydantic validator) that
+        field path. A schema ``__post_init__`` (or Pydantic validator) that
         raises something other than a validation error propagates to the
         caller.
 
     """
     if bind_strings is None:
         bind_strings = isinstance(args, StringArgs)
-    errors: dict[str, str] = {}
     if not isinstance(args, Mapping):
-        errors[""] = f"Expected an object, got {_value_type_name(args)}."
-        return ValidationResult(value=None, fields=errors)
+        return ValidationResult(value=None, fields={"": f"Expected an object, got {_value_type_name(args)}."})
+    errors = _FieldErrors()
     instance = _validate_object(schema_cls, args, "", errors, bind_strings=bind_strings)
     if instance is _INVALID:
-        return ValidationResult(value=None, fields=dict(sorted(errors.items(), key=_field_path_order)))
+        # The payload alone decides how many undeclared keys it sends, so
+        # only those are limited; the sort first keeps the same names listed
+        # on every call.
+        fields, unlisted = limit_unexpected_fields(dict(sorted(errors.items())), errors.unexpected)
+        return ValidationResult(value=None, fields=fields, unlisted_fields=unlisted)
     return ValidationResult(value=instance, fields={})
-
-
-def _field_path_order(item: tuple[str, str]) -> tuple[tuple[int, int, str], ...]:
-    """
-    Sort one ``(field path, message)`` pair by its path, with list indexes in number order.
-
-    The error response lists only the first few messages, so ``items.2``
-    must come before ``items.10`` for the earliest rows to be the ones kept.
-    """
-    # Each segment sorts as (0, number) when it is a list index and as
-    # (1, text) otherwise, so the two kinds are never compared directly.
-    return tuple(
-        (0, int(part), "") if part.isascii() and part.isdigit() else (1, 0, part) for part in item[0].split(".")
-    )
 
 
 ################################################
 # SCHEMA-OBJECT VALIDATION
 ################################################
+
+
+class _FieldErrors(dict[str, str]):
+    """The per-field messages of one validation, plus which paths name undeclared keys."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.unexpected: set[str] = set()
+
+
+def _record_unexpected(errors: dict[str, str], path: str, message: str) -> None:
+    """Record a message for a key the schema does not declare, and mark it as one."""
+    if path in errors:
+        return
+    errors[path] = message
+    # Only validate_args passes the marking dict; a plain dict just keeps
+    # the message.
+    if isinstance(errors, _FieldErrors):
+        errors.unexpected.add(path)
 
 
 class _FieldSpec(NamedTuple):
@@ -445,7 +462,7 @@ def _validate_object(
 
     for key in mapping:
         if key not in accepted:
-            errors.setdefault(prefix + str(key), _EXTRA_MESSAGE)
+            _record_unexpected(errors, prefix + str(key), _EXTRA_MESSAGE)
             ok = False
 
     values: dict[str, Any] = {}
@@ -477,7 +494,10 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], prefix: str
         for entry in err.errors():
             location = ".".join(str(part) for part in entry["loc"])
             key = prefix + location if location else prefix.rstrip(".")
-            errors.setdefault(key, str(entry["msg"]))
+            if entry.get("type") in _PYDANTIC_EXTRA_TYPES:
+                _record_unexpected(errors, key, str(entry["msg"]))
+            else:
+                errors.setdefault(key, str(entry["msg"]))
         return _INVALID
     except Exception:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
         # Pydantic turns only ValueError and AssertionError in a validator

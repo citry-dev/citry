@@ -14,7 +14,7 @@ from urllib.request import ProxyHandler, build_opener
 from typing_extensions import Self
 
 from citry.contrib.asgi import asgi_app
-from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, call_maybe_sync, match_route
+from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, call_maybe_sync, match_route, sent_headers
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, MutableMapping
@@ -39,7 +39,7 @@ async def _respond(send: Send, response: RouteResponse, *, head: bool = False) -
     headers = [(b"content-type", response.content_type.encode("latin-1")), (b"cache-control", b"no-store")]
     headers.extend(
         (name.lower().encode("latin-1"), value.encode("latin-1"))
-        for name, value in response.headers
+        for name, value in sent_headers(response)
         if name.lower() != "cache-control"
     )
     await send({"type": "http.response.start", "status": response.status, "headers": headers})

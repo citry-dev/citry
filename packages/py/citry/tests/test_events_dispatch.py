@@ -36,7 +36,7 @@ from citry.ext.events.dispatcher import (
     EventsDispatcher,
     TransportContext,
 )
-from citry.ext.events.errors import MAX_FIELD_ERRORS, EventError
+from citry.ext.events.errors import EventError
 from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
@@ -860,43 +860,89 @@ class TestErrors:
         assert error["fieldErrors"] == {"oops": "Unexpected field: not declared on the schema."}
 
     @pytest.mark.parametrize(
-        ("count", "tail"),
+        ("count", "note"),
         [
-            (MAX_FIELD_ERRORS, None),
-            (MAX_FIELD_ERRORS + 1, "1 more field error is not shown."),
-            (100, "80 more field errors are not shown."),
+            (20, ""),
+            (21, " 1 more unexpected field is not shown."),
+            (100, " 80 more unexpected fields are not shown."),
         ],
     )
-    @pytest.mark.parametrize("path", ["data_schema", "no_data_schema", "state_updates"])
-    def test_a_call_with_many_bad_fields_gets_a_capped_field_list(self, path, count, tail):
+    @pytest.mark.parametrize("path", ["data_class", "no_data_class", "state_updates"])
+    def test_a_call_with_many_unexpected_names_gets_a_limited_field_list(self, path, count, note):
         c = _citry()
         counter = _counter(c)
-        # Built in reverse so the listed fields come from the sorted order,
+        # Built in reverse so the listed names come from the sorted order,
         # not from whichever order the browser happened to send them in.
-        unknown = {f"u{i:03d}": 1 for i in reversed(range(count))}
+        unknown = {f"u{index:03d}": 1 for index in reversed(range(count))}
         call = {"componentClassId": counter.class_id, "stateToken": _token(counter)}
-        if path == "data_schema":
+        if path == "data_class":
             # `name` is valid, so every error comes from an unknown key.
             call |= {"handlerName": "rename", "args": {"name": "Tally", **unknown}}
             summary = "The args for event 'rename' on component 'Counter' did not validate."
-        elif path == "no_data_schema":
+            reason = "Unexpected field: not declared on the schema."
+        elif path == "no_data_class":
             call |= {"handlerName": "increment", "args": unknown}
             summary = "The args for event 'increment' on component 'Counter' did not validate."
+            reason = "Unexpected field: not declared on the schema."
         else:
+            # Counter's State fields are all writable, so these names are
+            # outside the State, and each one is a rejected write.
             call |= {"handlerName": "increment", "stateUpdates": unknown}
             summary = "Some state updates were rejected; see the field messages."
+            reason = "This field cannot be written from the client (it is not in the State _model set)."
 
         error = _dispatch(c, call)["results"][0]["error"]
 
         assert error["status"] == 422
         assert error["code"] == "invalid_args"
         # Up to the limit the summary is untouched; past it the count is appended.
-        assert error["message"] == (summary if tail is None else f"{summary} {tail}")
-        assert list(error["fieldErrors"]) == [f"u{i:03d}" for i in range(min(count, MAX_FIELD_ERRORS))]
+        assert error["message"] == summary + note
+        expected = [f"u{index:03d}" for index in range(min(count, 20))]
+        assert list(error["fieldErrors"]) == expected
+        assert set(error["fieldErrors"].values()) == {reason}
 
-    def test_a_handler_error_with_many_fields_gets_a_capped_field_list(self):
+    def test_a_declared_field_error_is_kept_beside_limited_unexpected_names(self):
         c = _citry()
-        fields = {f"f{i:02d}": "Taken." for i in range(MAX_FIELD_ERRORS + 5)}
+        counter = _counter(c)
+        unknown = {f"u{index:03d}": 1 for index in range(25)}
+        call = {
+            "componentClassId": counter.class_id,
+            "stateToken": _token(counter),
+            "handlerName": "rename",
+            "args": {"name": 5, **unknown},
+        }
+
+        error = _dispatch(c, call)["results"][0]["error"]
+
+        assert error["message"] == (
+            "The args for event 'rename' on component 'Counter' did not validate."
+            " 5 more unexpected fields are not shown."
+        )
+        assert error["fieldErrors"]["name"] == "Expected str, got int."
+        assert len(error["fieldErrors"]) == 21
+
+    def test_a_wrong_typed_state_write_is_kept_beside_limited_unwritable_names(self):
+        c = _citry()
+        counter = _counter(c)
+        unknown = {f"u{index:03d}": 1 for index in range(25)}
+        call = {
+            "componentClassId": counter.class_id,
+            "stateToken": _token(counter),
+            "handlerName": "increment",
+            "stateUpdates": {"count": "many", **unknown},
+        }
+
+        error = _dispatch(c, call)["results"][0]["error"]
+
+        assert error["message"] == (
+            "Some state updates were rejected; see the field messages. 5 more unexpected fields are not shown."
+        )
+        assert error["fieldErrors"]["count"] == "Expected int, got str."
+        assert [name for name in error["fieldErrors"] if name != "count"] == [f"u{index:03d}" for index in range(20)]
+
+    def test_a_handler_error_lists_every_field_it_names(self):
+        c = _citry()
+        fields = {f"f{index:02d}": "Taken." for index in range(25)}
 
         class Signup(Component):
             citry = c
@@ -908,8 +954,10 @@ class TestErrors:
 
         result = _dispatch(c, {"componentClassId": Signup.class_id, "handlerName": "submit"})
         error = result["results"][0]["error"]
-        assert error["message"] == "Fix the form. 5 more field errors are not shown."
-        assert list(error["fieldErrors"]) == list(fields)[:MAX_FIELD_ERRORS]
+        # The author wrote these fields, so nothing is left out and the
+        # message stays as written.
+        assert error["message"] == "Fix the form."
+        assert error["fieldErrors"] == fields
 
     def test_handler_error_is_generic_without_debug(self):
         c = _citry()
@@ -1633,8 +1681,8 @@ class TestPipelineOrder:
         assert result["results"][0]["error"]["message"] == "Reported."
         assert result["results"][0]["error"]["fieldErrors"] == {"report": "saved"}
 
-    def test_on_event_error_replacement_gets_a_capped_field_list(self):
-        fields = {f"f{i:02d}": "saved" for i in range(MAX_FIELD_ERRORS + 2)}
+    def test_on_event_error_replacement_keeps_every_field_it_names(self):
+        fields = {f"f{index:02d}": "saved" for index in range(25)}
 
         class Reporter(Extension):
             name = "reporter"
@@ -1647,8 +1695,9 @@ class TestPipelineOrder:
         counter = _counter(c)
         call = {"componentClassId": counter.class_id, "handlerName": "crash", "stateToken": _token(counter)}
         error = _dispatch(c, call)["results"][0]["error"]
-        assert error["message"] == "Reported. 2 more field errors are not shown."
-        assert list(error["fieldErrors"]) == list(fields)[:MAX_FIELD_ERRORS]
+        # The extension's own error is sent as it wrote it.
+        assert error["message"] == "Reported."
+        assert error["fieldErrors"] == fields
 
     def test_error_hook_non_json_mapping_retains_the_generic_result(self):
         class MappingReporter(Extension):
@@ -1920,18 +1969,18 @@ class TestPipelineOrder:
             },
         }
 
-    def test_event_error_from_csrf_policy_gets_a_capped_field_list(self):
+    def test_event_error_from_csrf_policy_keeps_every_field_it_names(self):
         c = _citry()
         counter = _counter(c)
-        fields = {f"f{i:02d}": "Expired." for i in range(MAX_FIELD_ERRORS + 1)}
+        fields = {f"f{index:02d}": "Expired." for index in range(25)}
 
         def denied(handler):
             raise EventError("No access.", fields=fields, status=403)
 
         call = {"componentClassId": counter.class_id, "handlerName": "square", "args": {"value": 2}}
         [item] = _dispatch(c, call, csrf_check=denied)["results"]
-        assert item["error"]["message"] == "No access. 1 more field error is not shown."
-        assert list(item["error"]["fieldErrors"]) == list(fields)[:MAX_FIELD_ERRORS]
+        assert item["error"]["message"] == "No access."
+        assert item["error"]["fieldErrors"] == fields
 
 
 class TestInjection:

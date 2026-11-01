@@ -58,11 +58,12 @@ from weakref import WeakKeyDictionary
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _static_class_namespace_copy
 from citry._vue.json_data import _secret_key_path
+from citry.ext.events.errors import limit_unexpected_fields, unlisted_fields_note
 from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Collection, Iterable, Mapping
     from datetime import timedelta
 
     from citry.cache import CitryCache
@@ -729,13 +730,15 @@ def apply_state_updates(
         return _apply_model_state_updates(state, updates, writable)
     hints = _resolve_hints(type(state))
     errors: dict[str, str] = {}
+    unwritable: set[str] = set()
     to_apply: list[tuple[str, Any]] = []
     # Sorted iteration keeps the per-field error order (and the applied list)
     # deterministic regardless of the wire dict's key order.
     for name in sorted(updates):
         value = updates[name]
         if name not in writable:
-            errors[name] = "This field cannot be written from the client (it is not in the State _model set)."
+            errors[name] = _UNWRITABLE_MESSAGE
+            unwritable.add(name)
             continue
         hint = hints.get(name)
         if not _value_matches(value, hint):
@@ -743,10 +746,26 @@ def apply_state_updates(
             continue
         to_apply.append((name, value))
     if errors:
-        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors)
+        raise _rejected_updates(errors, unwritable)
     for name, value in to_apply:
         setattr(state, name, value)
     return tuple(name for name, _ in to_apply)
+
+
+_UNWRITABLE_MESSAGE = "This field cannot be written from the client (it is not in the State _model set)."
+
+
+def _rejected_updates(errors: dict[str, str], unwritable: Collection[str]) -> StateUpdateError:
+    """
+    Build the error for a rejected batch of browser writes.
+
+    The browser decides how many names outside ``_model`` it sends, so
+    only the first few of those are listed and the message counts the rest.
+    Messages about writable fields are all kept.
+    """
+    fields, unlisted = limit_unexpected_fields(errors, unwritable)
+    message = "Some state updates were rejected; see the field messages." + unlisted_fields_note(unlisted)
+    return StateUpdateError(message, fields=fields)
 
 
 def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable: frozenset[str]) -> tuple[str, ...]:
@@ -763,13 +782,9 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
             message for each field it names.
 
     """
-    errors = {
-        name: "This field cannot be written from the client (it is not in the State _model set)."
-        for name in sorted(updates)
-        if name not in writable
-    }
+    errors = {name: _UNWRITABLE_MESSAGE for name in sorted(updates) if name not in writable}
     if errors:
-        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors)
+        raise _rejected_updates(errors, errors.keys())
     # The writes are JSON, as the token is, so they are merged into the
     # token's form and read back the same way a restore reads them.
     merged = {**state_wire_values(state), **updates}

@@ -16,8 +16,7 @@ messages as ``fieldErrors``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from itertools import islice
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Any
 
 from citry._protocol.events import build_error
@@ -39,11 +38,12 @@ _STATUS_CODES = {
 }
 _FALLBACK_CODE = "error"
 
-# The most per-field messages one error response lists. A request can name
-# any number of unknown or invalid fields, and listing every one would make
-# the response many times the size of the request; the rest are counted in
-# the message instead, which keeps the wire shape unchanged.
-MAX_FIELD_ERRORS = 20
+# The most "unexpected field" messages one error lists. Those are the
+# fields a request names but the schema or State does not declare, so a
+# request alone decides how many there are; listing every one could make
+# the response many times the size of the request. Messages about declared
+# fields, and fields an author passes to EventError, are always listed.
+MAX_UNEXPECTED_FIELDS = 20
 
 # What schema-validation failures say as the human summary; the real content
 # is the per-field map (design events.md 3.7).
@@ -66,9 +66,7 @@ class EventError(Exception):
         message: The human summary of the error.
         fields: Per-field error messages, keyed by data-schema field name
             (e.g. ``{"email": "Enter a valid email address."}``). Empty when
-            the error is not about specific fields. The response lists the
-            first 20, and the error's ``message`` says how many more there
-            were.
+            the error is not about specific fields.
         status: The HTTP status of the error (400 to 599). ``422`` (the
             default) is a validation failure; ``403``, ``404``, and ``409``
             cover forbidden, not found, and conflict.
@@ -128,6 +126,50 @@ class EventError(Exception):
         return _STATUS_CODES.get(self.status, _FALLBACK_CODE)
 
 
+def limit_unexpected_fields(fields: Mapping[str, str], unexpected: Collection[str]) -> tuple[dict[str, str], int]:
+    """
+    Keep the first ``MAX_UNEXPECTED_FIELDS`` unexpected-field messages and drop the rest.
+
+    Every other message is kept. "First" follows the order of ``fields``,
+    so a caller that sorts its messages keeps the same names on every call.
+
+    Args:
+        fields: The per-field messages.
+        unexpected: The names in ``fields`` that the request sent but the
+            schema or State does not declare.
+
+    Returns:
+        The kept messages, and how many unexpected-field messages were
+        dropped.
+
+    """
+    if len(unexpected) <= MAX_UNEXPECTED_FIELDS:
+        return dict(fields), 0
+    kept: dict[str, str] = {}
+    listed = 0
+    for name, message in fields.items():
+        if name in unexpected:
+            # Past the limit an unexpected name is only counted.
+            if listed >= MAX_UNEXPECTED_FIELDS:
+                continue
+            listed += 1
+        kept[name] = message
+    return kept, len(unexpected) - listed
+
+
+def unlisted_fields_note(count: int) -> str:
+    """
+    The sentence an error message ends with when unexpected fields were left out.
+
+    Returns an empty string for a count of 0, so a caller can append it
+    unconditionally. The text starts with a space.
+    """
+    if count <= 0:
+        return ""
+    noun = "unexpected field is" if count == 1 else "unexpected fields are"
+    return f" {count:,} more {noun} not shown."
+
+
 def invalid_args_error(result: ValidationResult) -> EventError:
     """
     The ``EventError`` for a failed schema validation.
@@ -150,7 +192,8 @@ def invalid_args_error(result: ValidationResult) -> EventError:
     if result.ok:
         msg = "invalid_args_error() takes a failed ValidationResult; this one succeeded."
         raise ValueError(msg)
-    return EventError(_INVALID_ARGS_MESSAGE, fields=result.fields, status=422)
+    message = _INVALID_ARGS_MESSAGE + unlisted_fields_note(result.unlisted_fields)
+    return EventError(message, fields=result.fields, status=422)
 
 
 def wire_error(error: EventError) -> dict[str, Any]:
@@ -167,39 +210,4 @@ def wire_error(error: EventError) -> dict[str, Any]:
         The JSON-ready error object.
 
     """
-    return build_field_error(error.status, error.code, error.message, error.fields)
-
-
-def build_field_error(
-    status: int,
-    code: str,
-    message: str,
-    fields: Mapping[str, str] | None = None,
-) -> dict[str, Any]:
-    """
-    Build a wire error object, listing at most ``MAX_FIELD_ERRORS`` field messages.
-
-    Every Events path that sends per-field messages builds its error here,
-    so the same limit applies to schema validation, State updates, and
-    errors a handler, guard, or hook raises. The first field messages are
-    kept in the order given, and the summary ends with how many were left
-    out.
-
-    Args:
-        status: The HTTP status of the error.
-        code: The stable wire code.
-        message: The human summary.
-        fields: Per-field messages, or ``None`` when there are none.
-
-    Returns:
-        The JSON-ready error object.
-
-    """
-    if fields and len(fields) > MAX_FIELD_ERRORS:
-        omitted = len(fields) - MAX_FIELD_ERRORS
-        # The protocol fixes the error's keys, so the count goes in the
-        # human summary rather than in a new field.
-        noun = "field error is" if omitted == 1 else "field errors are"
-        message = f"{message} {omitted:,} more {noun} not shown."
-        fields = dict(islice(fields.items(), MAX_FIELD_ERRORS))
-    return build_error(status, code, message, fields)
+    return build_error(error.status, error.code, error.message, error.fields)

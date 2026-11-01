@@ -190,11 +190,15 @@
 
 ### Changed
 
-- `$error(handler).fieldErrors` now lists at most 20 fields, including
-  the fields of an `EventError` you raise. When there are more, `message`
-  ends with how many were left out, as in "1,000 more field errors are
-  not shown." List rows keep their number order, so `items.2` comes
-  before `items.10`.
+- When an Events call sends fields that its `data` class or `State`
+  does not declare, `$error(handler).fieldErrors` lists at most 20 of
+  them, and `message` ends with how many more there were, as in "1,000
+  more unexpected fields are not shown." Errors for declared fields, and
+  the fields of an `EventError` you raise, are always listed in full.
+- Every response from a Citry route now has the standard
+  `X-Content-Type-Options: nosniff` header, so the browser uses the
+  route's `Content-Type` as given. If an extension route of yours serves
+  JavaScript or CSS, give it the right `content_type`.
 - `citry.contrib.django.secret()` now includes Django's
   `SECRET_KEY_FALLBACKS`, so `Citry(secret=secret())` keeps accepting
   values signed with an old key while you rotate `SECRET_KEY`. With
