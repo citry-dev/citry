@@ -15,6 +15,12 @@
 	"extensionKind": [
 		"workspace"
 	],
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": false,
+			"description": "Citry runs the workspace's Python interpreter and, when citry.app is set, imports the project's app to read its components, so it runs only in a trusted workspace."
+		}
+	},
 	"activationEvents": [
 		"onLanguage:python",
 		"onLanguage:citry-html",

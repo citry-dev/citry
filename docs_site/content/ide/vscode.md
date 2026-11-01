@@ -62,6 +62,14 @@ interpreter, application, and Citry version in use.
 The extension needs desktop VS Code 1.101 or newer, or a compatible fork. It
 also works in remote workspaces, but not in VS Code for the Web.
 
+The extension starts the Python interpreter from your project's
+environment and imports your app. VS Code opens a folder you have not
+trusted in
+[Restricted Mode](https://code.visualstudio.com/docs/editing/workspaces/workspace-trust),
+and there it turns the extension off completely: no highlighting, and no
+Citry status bar item.
+Trust the workspace to turn it on.
+
 ## Connect your app
 
 Set `citry.app` in your workspace settings to the `module:attribute` path of
