@@ -1117,6 +1117,59 @@ def test_checked_is_also_written_as_an_attribute() -> None:
     assert host == '<form><input type="checkbox" value="yes" checked=""><input type="checkbox" value="no"></form>'
 
 
+def test_hidden_and_boolean_attributes_are_written_as_vues_server_renderer_writes_them() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Hidden(Component):
+        citry = engine
+        template = """
+<div>
+<p c-hidden="text">text</p>
+<p c-hidden="false_text">false text</p>
+<p c-hidden="zero_text">zero text</p>
+<p c-hidden="until_found">until found</p>
+<p c-hidden="markup">markup</p>
+<p c-hidden="empty_text">empty text</p>
+<p c-hidden="one">one</p>
+<p c-hidden="zero">zero</p>
+<p c-hidden="yes">yes</p>
+<p c-hidden="no">no</p>
+<p c-hidden="nothing">nothing</p>
+<input c-disabled="false_text">
+<input c-disabled="zero">
+</div>
+"""
+        js = "$component({});"
+
+        def template_data(self, kwargs, slots):
+            return {
+                "text": "foo",
+                "false_text": "false",
+                "zero_text": "0",
+                "until_found": "until-found",
+                "markup": 'a&"b',
+                "empty_text": "",
+                "one": 1,
+                "zero": 0,
+                "yes": True,
+                "no": False,
+                "nothing": None,
+            }
+
+    host, _ = _hydrated_host(Hidden)
+
+    # Hydration keeps the server's attribute, so it matches Vue 3.5.44's
+    # `renderToString`: `hidden` keeps a string as written (escaped), and
+    # `hidden` with a boolean or number, like `disabled`, is present for a
+    # truthy value or "" and left out for 0, False or None.
+    assert host == (
+        '<div><p hidden="foo">text</p><p hidden="false">false text</p><p hidden="0">zero text</p>'
+        '<p hidden="until-found">until found</p><p hidden="a&amp;&quot;b">markup</p>'
+        '<p hidden="">empty text</p><p hidden="">one</p><p>zero</p><p hidden="">yes</p>'
+        '<p>no</p><p>nothing</p><input disabled=""><input></div>'
+    )
+
+
 def test_document_page_hydrates_with_title_and_textarea() -> None:
     engine = Citry(autodiscover=False)
 

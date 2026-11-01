@@ -491,7 +491,17 @@ printing it as text or as an attribute is declined.
 
 Attributes follow Vue's `runtime-dom` `patchProp`, not its server renderer:
 the server writes what the element holds after Vue's first render in the
-browser. `class` is normalized and a null class is removed; `style` is
+browser. Boolean attributes and `hidden` are the exception: for these
+names the server writes what Vue's server renderer writes. Vue keeps that
+attribute on a key it does not patch while hydrating (a `v-bind` spread,
+which is how `c-*` attributes reach Vue), and its dev hydration check
+compares every key with it. A name in Vue's `isBooleanAttr` list
+(`disabled`, `checked`, `readonly`, `open`, ...) is written with no value
+for a truthy value or `""` and left out otherwise, even on an element
+without that property (`disabled` on a `div`). `hidden` keeps a string as
+written (`"until-found"`, `"false"`), is written like a boolean name for a
+boolean or number, and is left out for an object or array. `class` is
+normalized and a null class is removed; `style` is
 written as authored from a string and as Vue's server renderer writes a
 style object (`name:value;`, camelCase names hyphenated), which the browser
 reads as the same declarations the client sets. A style object is declined
@@ -508,8 +518,9 @@ or two styles meeting in `mergeProps` are joined as Vue joins them. Inside
 a shell's contents, a class or style with a browser-only part is written
 from the parts the server knows; `value` on `input`, `button`, `option` and
 `data`, `checked` on `input` and `selected` on `option` are written as
-attributes; `hidden` is written for `true`, `false`, `null` or `""`; names
-containing `-`, `:` or `_`, a fixed list of attribute-only names (`for`,
+attributes; `hidden` and the boolean names are written as described
+above; names containing `-`, `:` or `_`, a fixed list of attribute-only
+names (`for`,
 `tabindex`, `colspan`, ...), the names Vue always sets as attributes
 (`spellcheck`, `draggable`, `translate`, `form`, and `width`/`height` on
 media elements) and a fixed table of reflected DOM properties per tag are
@@ -662,7 +673,11 @@ The hydrated page equals a page Vue mounted in the browser, except that
 shells keep their marker, a static `style` attribute keeps its authored text
 where client mount leaves the browser's normalized form, and Fragment
 boundaries (raw HTML blocks included) are the server's comment nodes where
-client mount uses empty text nodes. The host also lacks `data-v-app`, which Vue's runtime-dom adds
+client mount uses empty text nodes. On a key Vue does not patch while
+hydrating, a boolean attribute or `hidden` keeps the text Vue's server
+renderer writes (`hidden="foo"` where client mount leaves `hidden=""`, no
+`disabled` on a `div` where client mount leaves `disabled="false"`). The
+host also lacks `data-v-app`, which Vue's runtime-dom adds
 only in `createApp().mount`; tests wait for `citry:ready` instead. Before
 Vue starts, parts hidden by browser state are visible and
 typed input is replaced when Vue sets `value`; `vue-runtime.md` documents

@@ -743,6 +743,12 @@
   component it does not enclose. At the root of a component with `css_data()`, a
   `v-pre` element now renders, or raises an error that says what to move,
   where it used to fail with an internal compiler error.
+- In a component that uses Vue, the server now writes `hidden`,
+  `disabled`, `readonly` and the other boolean attributes the way Vue's
+  server renderer does, so an element whose `hidden` is a string such as
+  `'false'` or `'until-found'`, or a number other than 0, is hidden (or
+  searchable) in the HTML the server sends instead of showing until Vue
+  starts.
 
 ### Performance
 
