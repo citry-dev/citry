@@ -25,14 +25,17 @@ use python_safe_eval::safe_eval as safe_eval_rust;
 /// **Examples:**
 ///
 ///     >>> safe_eval("my_var + 1")
-///     'variable("my_var") + 1'
+///     "_sx_variable(_sx_context, _sx_source, (0, 6), 'my_var') + 1"
 ///
 ///     >>> safe_eval("lambda x: x + my_var")
-///     'lambda x: x + variable("my_var")'
+///     "lambda x: x + _sx_variable(_sx_context, _sx_source, (14, 20), 'my_var')"
 ///
 /// **Transformations:**
 ///
-/// The following transformations are applied to make expressions safe for evaluation:
+/// The following transformations are applied to make expressions safe for evaluation.
+/// The list shows short forms: each helper's real name starts with `_sx_` (such as
+/// `_sx_variable`), and each call also receives `_sx_context`, `_sx_source`, and the
+/// source span first (see the examples above):
 ///
 /// 1. **Variable access** - `my_var` → `variable("my_var")`
 /// 2. **Function calls** - `foo(1, 2, a=3, *args, **kwargs)` → `call(foo, 1, 2, a=x, *args, **kwargs)`

@@ -11,17 +11,13 @@
   attributes that configure `<c-slot>` and `<c-fill>` (such as `name`,
   `required`, and `fallback`) are unchanged.
 
-- **Breaking:** the expression sandbox now raises `SyntaxError` for a lambda
-  parameter or comprehension variable named `variable`, `attribute`,
-  `subscript`, `call`, `assign`, `slice`, `interpolation`, `template`,
-  `format`, `source`, or `context`, because the name would replace one of
-  the sandbox's own checks inside that scope. Rename the variable, and
-  that includes the variable of a `<c-for>` loop. Reading a context
-  variable with one of these names still works, and so does assigning one
-  with `:=`.
-
 ### Fixed
 
+- A lambda parameter or loop variable in a sandboxed expression can no
+  longer replace one of the sandbox's own checks. The sandbox's
+  helpers now have names that start with `_sx_`, and a lambda parameter or
+  loop variable with that prefix raises `SyntaxError`. Every other name
+  works as before, including `source`, `context`, and `call`.
 - The expression sandbox now refuses `format` and `format_map` on string
   subclasses such as `markupsafe.Markup`, on `collections.UserString`, and
   on any other string type, as it already did for `str`. It also refuses

@@ -33,32 +33,34 @@ It works by:
    - F-strings → `format("...")` calls with transformed arguments
    - T-strings → `template(...)` calls with interpolation objects
 
+   The list shows short forms. The generated helper names start with `_sx_`, so the transformer can refuse them as lambda parameters and loop variables, and a template cannot read them. Every call also receives the context mapping (`_sx_context`), the expression text (`_sx_source`), and the source span first.
+
    **Example conversions:**
 
    ```python
    # Before: Simple variable access
    x
    # After:
-   variable(context, source, (0, 1), 'x')
+   _sx_variable(_sx_context, _sx_source, (0, 1), 'x')
 
    # Before: Function call
    foo(x, 2)
    # After:
-   call(context, source, (0, 10), variable(context, source, (0, 3), 'foo'), variable(context, source, (4, 5), 'x'), 2)
+   _sx_call(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), _sx_variable(_sx_context, _sx_source, (4, 5), 'x'), 2)
 
    # Before: Attribute access
    obj.attr
    # After:
-   attribute(context, source, (0, 8), variable(context, source, (0, 3), 'obj'), 'attr')
+   _sx_attribute(_sx_context, _sx_source, (0, 8), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'attr')
 
    # Before: Complex nested access
    obj.items[key].value
    # After:
-   attribute(context, source, (0, 20), subscript(context, source, (0, 14), attribute(context, source, (0, 9), variable(context, source, (0, 3), 'obj'), 'items'), variable(context, source, (10, 13), 'key')), 'value')
+   _sx_attribute(_sx_context, _sx_source, (0, 20), _sx_subscript(_sx_context, _sx_source, (0, 14), _sx_attribute(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'items'), _sx_variable(_sx_context, _sx_source, (10, 13), 'key')), 'value')
    ```
 
 4. Re-generating Python code from the modified AST using `ruff_python_codegen`
-5. On the Python side we define `call()`, `variable()`, etc.
+5. On the Python side we define `_sx_call()`, `_sx_variable()`, etc.
    - This is the logic that runs when the target expression uses e.g. function calls.
      Here we implement similar safety measures as Jinja.
 6. User receives back a function to evaluate the compiled code.
@@ -293,7 +295,7 @@ Here's a list of all unsafe scenarios that will trigger `SecurityError`:
   - Django methods marked with `alters_data = True`
   - `format` and `format_map` of any string type (`str`, its subclasses such as `markupsafe.Markup`, and `collections.UserString`), every method of a `string.Formatter`, and building an `operator.attrgetter` or `operator.methodcaller` (use f-strings instead)
 - **Internal attributes**: Prevents access to frame, code, and other internal Python object attributes
-- **Names the sandbox uses itself**: A lambda parameter or comprehension variable named `variable`, `attribute`, `subscript`, `call`, `assign`, `slice`, `interpolation`, `template`, `format`, `source`, or `context` is a `SyntaxError`, because it would replace one of the sandbox's own checks.
+- **Names the sandbox uses itself**: A lambda parameter or comprehension variable whose name starts with `_sx_` is a `SyntaxError`, because the sandbox's own helpers use that prefix and the name could replace one of them.
 
 ## Security and safety considerations
 

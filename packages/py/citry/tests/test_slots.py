@@ -669,6 +669,17 @@ class TestDynamicSlotNameReadsOnlyDeclaredFields:
         assert "DEFAULT-HEADER" not in html
         assert "SlotContext" not in html
 
+    def test_a_slots_class_whose_fields_citry_cannot_list_accepts_no_name(self):
+        # A plain tuple subclass has no `_fields`, so Citry cannot tell which of its
+        # attributes are slots. A name from data then picks none of them.
+        class Slots(tuple):
+            __slots__ = ()
+            header = "DEFAULT-HEADER"
+
+        html = self._render(Slots, "header")
+        assert "FALLBACK" in html
+        assert "DEFAULT-HEADER" not in html
+
 
 class TestSlotFieldDefaultFill:
     """

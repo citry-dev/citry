@@ -354,8 +354,11 @@ def _is_declared_slot_field(slots_class: type, name: str) -> bool:
     if name.startswith("_"):
         return False
     declared = _schema_field_names(slots_class)
-    # A ``Slots`` class whose fields Citry cannot list still gets the ``_`` rule above.
-    return declared is None or name in declared
+    # A ``Slots`` class whose fields Citry cannot list accepts no name, so a
+    # name from data never reads an attribute Citry cannot vouch for. A static
+    # ``name="..."`` gets no default fill from such a class either, because
+    # Citry cannot tell which attributes are slots.
+    return declared is not None and name in declared
 
 
 def _validate_introduced_variables(

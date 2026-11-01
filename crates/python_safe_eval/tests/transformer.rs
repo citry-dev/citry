@@ -250,7 +250,7 @@ mod tests {
         // Note: The code generator doesn't preserve formatting, so output is on one line
         _test_transformation(
             "[\n  x,\n  y,\n  z\n]",
-            "[variable(context, source, (4, 5), 'x'), variable(context, source, (9, 10), 'y'), variable(context, source, (14, 15), 'z')]",
+            "[_sx_variable(_sx_context, _sx_source, (4, 5), 'x'), _sx_variable(_sx_context, _sx_source, (9, 10), 'y'), _sx_variable(_sx_context, _sx_source, (14, 15), 'z')]",
             vec![
                 ("x", 4, 5, (2, 3)),
                 ("y", 9, 10, (3, 3)),
@@ -272,12 +272,12 @@ mod tests {
 
     // NOTE: As can be seen below, it's not possible to construct empty
     // sets, because `set` will be interpreted as a variable and replaced
-    // with `variable('set', context)`.
+    // with `_sx_variable(_sx_context, _sx_source, (0, 3), 'set')`.
     #[test]
     fn test_allow_set_empty() {
         _test_transformation(
             "set()",
-            "call(context, source, (0, 5), variable(context, source, (0, 3), 'set'))",
+            "_sx_call(_sx_context, _sx_source, (0, 5), _sx_variable(_sx_context, _sx_source, (0, 3), 'set'))",
             vec![("set", 0, 3, (1, 1))],
             vec![],
         );
@@ -494,7 +494,7 @@ mod tests {
     fn test_allow_comparison_is() {
         _test_transformation(
             "x is None",
-            "variable(context, source, (0, 1), 'x') is None",
+            "_sx_variable(_sx_context, _sx_source, (0, 1), 'x') is None",
             vec![("x", 0, 1, (1, 1))],
             vec![],
         );
@@ -504,7 +504,7 @@ mod tests {
     fn test_allow_comparison_is_not() {
         _test_transformation(
             "x is not None",
-            "variable(context, source, (0, 1), 'x') is not None",
+            "_sx_variable(_sx_context, _sx_source, (0, 1), 'x') is not None",
             vec![("x", 0, 1, (1, 1))],
             vec![],
         );
@@ -526,7 +526,7 @@ mod tests {
     fn test_allow_list_comprehension() {
         _test_transformation(
             "[x for x in items]",
-            "[x for x in variable(context, source, (12, 17), 'items')]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items')]",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -536,7 +536,7 @@ mod tests {
     fn test_allow_list_comprehension_with_condition() {
         _test_transformation(
             "[x for x in items if x > 0]",
-            "[x for x in variable(context, source, (12, 17), 'items') if x > 0]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items') if x > 0]",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -550,7 +550,7 @@ mod tests {
         // - Mix of local variables (x, y) and external variables (items, multiplier, min_val, max_val)
         _test_transformation(
             "[x * y * multiplier for x in items for y in x.values if x > min_val if y < max_val]",
-            "[x * y * variable(context, source, (9, 19), 'multiplier') for x in variable(context, source, (29, 34), 'items') for y in attribute(context, source, (44, 52), x, 'values') if x > variable(context, source, (60, 67), 'min_val') if y < variable(context, source, (75, 82), 'max_val')]",
+            "[x * y * _sx_variable(_sx_context, _sx_source, (9, 19), 'multiplier') for x in _sx_variable(_sx_context, _sx_source, (29, 34), 'items') for y in _sx_attribute(_sx_context, _sx_source, (44, 52), x, 'values') if x > _sx_variable(_sx_context, _sx_source, (60, 67), 'min_val') if y < _sx_variable(_sx_context, _sx_source, (75, 82), 'max_val')]",
             vec![
                 ("multiplier", 9, 19, (1, 10)),
                 ("items", 29, 34, (1, 30)),
@@ -573,7 +573,7 @@ mod tests {
     fn test_allow_set_comprehension() {
         _test_transformation(
             "{x for x in items}",
-            "{x for x in variable(context, source, (12, 17), 'items')}",
+            "{x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items')}",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -591,7 +591,7 @@ mod tests {
     fn test_allow_dict_comprehension() {
         _test_transformation(
             "{x: x*2 for x in items}",
-            "{x: x * 2 for x in variable(context, source, (17, 22), 'items')}",
+            "{x: x * 2 for x in _sx_variable(_sx_context, _sx_source, (17, 22), 'items')}",
             vec![("items", 17, 22, (1, 18))],
             vec![],
         );
@@ -609,7 +609,7 @@ mod tests {
     fn test_allow_generator_expression() {
         _test_transformation(
             "(x for x in items)",
-            "(x for x in variable(context, source, (12, 17), 'items'))",
+            "(x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items'))",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -627,7 +627,7 @@ mod tests {
     fn test_allow_multiple_comprehensions() {
         _test_transformation(
             "[x for x in items for y in x.children]",
-            "[x for x in variable(context, source, (12, 17), 'items') for y in attribute(context, source, (27, 37), x, 'children')]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items') for y in _sx_attribute(_sx_context, _sx_source, (27, 37), x, 'children')]",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -637,7 +637,7 @@ mod tests {
     fn test_allow_comprehension_with_multiple_conditions() {
         _test_transformation(
             "[x for x in items if x > 0 if x < 10]",
-            "[x for x in variable(context, source, (12, 17), 'items') if x > 0 if x < 10]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items') if x > 0 if x < 10]",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -647,7 +647,7 @@ mod tests {
     fn test_allow_nested_comprehension() {
         _test_transformation(
             "[[x for x in row] for row in matrix]",
-            "[[x for x in row] for row in variable(context, source, (29, 35), 'matrix')]",
+            "[[x for x in row] for row in _sx_variable(_sx_context, _sx_source, (29, 35), 'matrix')]",
             vec![("matrix", 29, 35, (1, 30))],
             vec![],
         );
@@ -659,7 +659,7 @@ mod tests {
     fn test_transform_function_call_simple() {
         _test_transformation(
             "foo()",
-            "call(context, source, (0, 5), variable(context, source, (0, 3), 'foo'))",
+            "_sx_call(_sx_context, _sx_source, (0, 5), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'))",
             vec![("foo", 0, 3, (1, 1))],
             vec![],
         );
@@ -669,7 +669,7 @@ mod tests {
     fn test_transform_function_call_with_positional_args() {
         _test_transformation(
             "foo(x, 2, 3)",
-            "call(context, source, (0, 12), variable(context, source, (0, 3), 'foo'), variable(context, source, (4, 5), 'x'), 2, 3)",
+            "_sx_call(_sx_context, _sx_source, (0, 12), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), _sx_variable(_sx_context, _sx_source, (4, 5), 'x'), 2, 3)",
             vec![("foo", 0, 3, (1, 1)), ("x", 4, 5, (1, 5))],
             vec![],
         );
@@ -679,7 +679,7 @@ mod tests {
     fn test_transform_function_call_with_keyword_args() {
         _test_transformation(
             "foo(a=1, b=x)",
-            "call(context, source, (0, 13), variable(context, source, (0, 3), 'foo'), a=1, b=variable(context, source, (11, 12), 'x'))",
+            "_sx_call(_sx_context, _sx_source, (0, 13), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), a=1, b=_sx_variable(_sx_context, _sx_source, (11, 12), 'x'))",
             vec![("foo", 0, 3, (1, 1)), ("x", 11, 12, (1, 12))],
             vec![],
         );
@@ -689,7 +689,7 @@ mod tests {
     fn test_transform_function_call_with_mixed_args() {
         _test_transformation(
             "foo(1, x, a=y, b=4)",
-            "call(context, source, (0, 19), variable(context, source, (0, 3), 'foo'), 1, variable(context, source, (7, 8), 'x'), a=variable(context, source, (12, 13), 'y'), b=4)",
+            "_sx_call(_sx_context, _sx_source, (0, 19), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), 1, _sx_variable(_sx_context, _sx_source, (7, 8), 'x'), a=_sx_variable(_sx_context, _sx_source, (12, 13), 'y'), b=4)",
             vec![
                 ("foo", 0, 3, (1, 1)),
                 ("x", 7, 8, (1, 8)),
@@ -703,7 +703,7 @@ mod tests {
     fn test_transform_nested_function_calls() {
         _test_transformation(
             "foo(bar(1, x))",
-            "call(context, source, (0, 14), variable(context, source, (0, 3), 'foo'), call(context, source, (4, 13), variable(context, source, (4, 7), 'bar'), 1, variable(context, source, (11, 12), 'x')))",
+            "_sx_call(_sx_context, _sx_source, (0, 14), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), _sx_call(_sx_context, _sx_source, (4, 13), _sx_variable(_sx_context, _sx_source, (4, 7), 'bar'), 1, _sx_variable(_sx_context, _sx_source, (11, 12), 'x')))",
             vec![
                 ("foo", 0, 3, (1, 1)),
                 ("bar", 4, 7, (1, 5)),
@@ -717,7 +717,7 @@ mod tests {
     fn test_transform_method_call() {
         _test_transformation(
             "obj.method()",
-            "call(context, source, (0, 12), attribute(context, source, (0, 10), variable(context, source, (0, 3), 'obj'), 'method'))",
+            "_sx_call(_sx_context, _sx_source, (0, 12), _sx_attribute(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'method'))",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -727,7 +727,7 @@ mod tests {
     fn test_transform_function_call_with_variable_args() {
         _test_transformation(
             "foo(x, y, z)",
-            "call(context, source, (0, 12), variable(context, source, (0, 3), 'foo'), variable(context, source, (4, 5), 'x'), variable(context, source, (7, 8), 'y'), variable(context, source, (10, 11), 'z'))",
+            "_sx_call(_sx_context, _sx_source, (0, 12), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), _sx_variable(_sx_context, _sx_source, (4, 5), 'x'), _sx_variable(_sx_context, _sx_source, (7, 8), 'y'), _sx_variable(_sx_context, _sx_source, (10, 11), 'z'))",
             vec![
                 ("foo", 0, 3, (1, 1)),
                 ("x", 4, 5, (1, 5)),
@@ -742,7 +742,7 @@ mod tests {
     fn test_transform_function_call_with_variable_kwargs() {
         _test_transformation(
             "foo(a=x, b=y)",
-            "call(context, source, (0, 13), variable(context, source, (0, 3), 'foo'), a=variable(context, source, (6, 7), 'x'), b=variable(context, source, (11, 12), 'y'))",
+            "_sx_call(_sx_context, _sx_source, (0, 13), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), a=_sx_variable(_sx_context, _sx_source, (6, 7), 'x'), b=_sx_variable(_sx_context, _sx_source, (11, 12), 'y'))",
             vec![
                 ("foo", 0, 3, (1, 1)),
                 ("x", 6, 7, (1, 7)),
@@ -756,7 +756,7 @@ mod tests {
     fn test_transform_function_call_with_spread_args() {
         _test_transformation(
             "foo(*args)",
-            "call(context, source, (0, 10), variable(context, source, (0, 3), 'foo'), *variable(context, source, (5, 9), 'args'))",
+            "_sx_call(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), *_sx_variable(_sx_context, _sx_source, (5, 9), 'args'))",
             vec![("foo", 0, 3, (1, 1)), ("args", 5, 9, (1, 6))],
             vec![],
         );
@@ -766,7 +766,7 @@ mod tests {
     fn test_transform_function_call_with_spread_kwargs() {
         _test_transformation(
             "foo(**kwargs)",
-            "call(context, source, (0, 13), variable(context, source, (0, 3), 'foo'), **variable(context, source, (6, 12), 'kwargs'))",
+            "_sx_call(_sx_context, _sx_source, (0, 13), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), **_sx_variable(_sx_context, _sx_source, (6, 12), 'kwargs'))",
             vec![("foo", 0, 3, (1, 1)), ("kwargs", 6, 12, (1, 7))],
             vec![],
         );
@@ -776,7 +776,7 @@ mod tests {
     fn test_transform_function_call_with_mixed_spreads() {
         _test_transformation(
             "foo(1, *args, a=2, **kwargs)",
-            "call(context, source, (0, 28), variable(context, source, (0, 3), 'foo'), 1, *variable(context, source, (8, 12), 'args'), a=2, **variable(context, source, (21, 27), 'kwargs'))",
+            "_sx_call(_sx_context, _sx_source, (0, 28), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), 1, *_sx_variable(_sx_context, _sx_source, (8, 12), 'args'), a=2, **_sx_variable(_sx_context, _sx_source, (21, 27), 'kwargs'))",
             vec![
                 ("foo", 0, 3, (1, 1)),
                 ("args", 8, 12, (1, 9)),
@@ -790,7 +790,7 @@ mod tests {
     fn test_transform_function_call_with_nested_call_as_arg() {
         _test_transformation(
             "foo(a=get_item())",
-            "call(context, source, (0, 17), variable(context, source, (0, 3), 'foo'), a=call(context, source, (6, 16), variable(context, source, (6, 14), 'get_item')))",
+            "_sx_call(_sx_context, _sx_source, (0, 17), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), a=_sx_call(_sx_context, _sx_source, (6, 16), _sx_variable(_sx_context, _sx_source, (6, 14), 'get_item')))",
             vec![("foo", 0, 3, (1, 1)), ("get_item", 6, 14, (1, 7))],
             vec![],
         );
@@ -800,7 +800,7 @@ mod tests {
     fn test_transform_function_call_complex_signature() {
         _test_transformation(
             "foo(x, y, 3, *args, a=get_item(), b=5, **kwargs)",
-            "call(context, source, (0, 48), variable(context, source, (0, 3), 'foo'), variable(context, source, (4, 5), 'x'), variable(context, source, (7, 8), 'y'), 3, *variable(context, source, (14, 18), 'args'), a=call(context, source, (22, 32), variable(context, source, (22, 30), 'get_item')), b=5, **variable(context, source, (41, 47), 'kwargs'))",
+            "_sx_call(_sx_context, _sx_source, (0, 48), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), _sx_variable(_sx_context, _sx_source, (4, 5), 'x'), _sx_variable(_sx_context, _sx_source, (7, 8), 'y'), 3, *_sx_variable(_sx_context, _sx_source, (14, 18), 'args'), a=_sx_call(_sx_context, _sx_source, (22, 32), _sx_variable(_sx_context, _sx_source, (22, 30), 'get_item')), b=5, **_sx_variable(_sx_context, _sx_source, (41, 47), 'kwargs'))",
             vec![
                 ("foo", 0, 3, (1, 1)),
                 ("x", 4, 5, (1, 5)),
@@ -817,7 +817,7 @@ mod tests {
     fn test_transform_variable_as_callable() {
         _test_transformation(
             "my_func(1, 2)",
-            "call(context, source, (0, 13), variable(context, source, (0, 7), 'my_func'), 1, 2)",
+            "_sx_call(_sx_context, _sx_source, (0, 13), _sx_variable(_sx_context, _sx_source, (0, 7), 'my_func'), 1, 2)",
             vec![("my_func", 0, 7, (1, 1))],
             vec![],
         );
@@ -829,7 +829,7 @@ mod tests {
     fn test_transform_attribute_access_simple() {
         _test_transformation(
             "obj.attr",
-            "attribute(context, source, (0, 8), variable(context, source, (0, 3), 'obj'), 'attr')",
+            "_sx_attribute(_sx_context, _sx_source, (0, 8), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'attr')",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -839,7 +839,7 @@ mod tests {
     fn test_transform_attribute_access_chained() {
         _test_transformation(
             "obj.foo.bar",
-            "attribute(context, source, (0, 11), attribute(context, source, (0, 7), variable(context, source, (0, 3), 'obj'), 'foo'), 'bar')",
+            "_sx_attribute(_sx_context, _sx_source, (0, 11), _sx_attribute(_sx_context, _sx_source, (0, 7), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'foo'), 'bar')",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -849,7 +849,7 @@ mod tests {
     fn test_transform_attribute_access_with_method_call() {
         _test_transformation(
             "obj.method()",
-            "call(context, source, (0, 12), attribute(context, source, (0, 10), variable(context, source, (0, 3), 'obj'), 'method'))",
+            "_sx_call(_sx_context, _sx_source, (0, 12), _sx_attribute(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'method'))",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -859,7 +859,7 @@ mod tests {
     fn test_transform_attribute_access_with_args() {
         _test_transformation(
             "obj.method(1, x)",
-            "call(context, source, (0, 16), attribute(context, source, (0, 10), variable(context, source, (0, 3), 'obj'), 'method'), 1, variable(context, source, (14, 15), 'x'))",
+            "_sx_call(_sx_context, _sx_source, (0, 16), _sx_attribute(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'method'), 1, _sx_variable(_sx_context, _sx_source, (14, 15), 'x'))",
             vec![("obj", 0, 3, (1, 1)), ("x", 14, 15, (1, 15))],
             vec![],
         );
@@ -869,7 +869,7 @@ mod tests {
     fn test_transform_nested_attribute_method_call() {
         _test_transformation(
             "obj.foo.bar.baz()",
-            "call(context, source, (0, 17), attribute(context, source, (0, 15), attribute(context, source, (0, 11), attribute(context, source, (0, 7), variable(context, source, (0, 3), 'obj'), 'foo'), 'bar'), 'baz'))",
+            "_sx_call(_sx_context, _sx_source, (0, 17), _sx_attribute(_sx_context, _sx_source, (0, 15), _sx_attribute(_sx_context, _sx_source, (0, 11), _sx_attribute(_sx_context, _sx_source, (0, 7), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'foo'), 'bar'), 'baz'))",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -879,7 +879,7 @@ mod tests {
     fn test_transform_attribute_in_expression() {
         _test_transformation(
             "obj.value + 10",
-            "attribute(context, source, (0, 9), variable(context, source, (0, 3), 'obj'), 'value') + 10",
+            "_sx_attribute(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'value') + 10",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -889,7 +889,7 @@ mod tests {
     fn test_transform_attribute_in_comprehension() {
         _test_transformation(
             "[item.name for item in items]",
-            "[attribute(context, source, (1, 10), item, 'name') for item in variable(context, source, (23, 28), 'items')]",
+            "[_sx_attribute(_sx_context, _sx_source, (1, 10), item, 'name') for item in _sx_variable(_sx_context, _sx_source, (23, 28), 'items')]",
             vec![("items", 23, 28, (1, 24))],
             vec![],
         );
@@ -901,7 +901,7 @@ mod tests {
     fn test_transform_attribute_with_underscore() {
         _test_transformation(
             "obj._private",
-            "attribute(context, source, (0, 12), variable(context, source, (0, 3), 'obj'), '_private')",
+            "_sx_attribute(_sx_context, _sx_source, (0, 12), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), '_private')",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -913,7 +913,7 @@ mod tests {
     fn test_transform_attribute_with_dunder() {
         _test_transformation(
             "obj.__class__",
-            "attribute(context, source, (0, 13), variable(context, source, (0, 3), 'obj'), '__class__')",
+            "_sx_attribute(_sx_context, _sx_source, (0, 13), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), '__class__')",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -925,7 +925,7 @@ mod tests {
     fn test_transform_subscript_access_simple() {
         _test_transformation(
             "obj[0]",
-            "subscript(context, source, (0, 6), variable(context, source, (0, 3), 'obj'), 0)",
+            "_sx_subscript(_sx_context, _sx_source, (0, 6), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 0)",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -935,7 +935,7 @@ mod tests {
     fn test_transform_subscript_access_with_variable_key() {
         _test_transformation(
             "obj[key]",
-            "subscript(context, source, (0, 8), variable(context, source, (0, 3), 'obj'), variable(context, source, (4, 7), 'key'))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 8), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), _sx_variable(_sx_context, _sx_source, (4, 7), 'key'))",
             vec![("obj", 0, 3, (1, 1)), ("key", 4, 7, (1, 5))],
             vec![],
         );
@@ -945,7 +945,7 @@ mod tests {
     fn test_transform_subscript_access_with_string_key() {
         _test_transformation(
             "obj['name']",
-            "subscript(context, source, (0, 11), variable(context, source, (0, 3), 'obj'), 'name')",
+            "_sx_subscript(_sx_context, _sx_source, (0, 11), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'name')",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -955,7 +955,7 @@ mod tests {
     fn test_transform_subscript_access_chained() {
         _test_transformation(
             "obj[0][1]",
-            "subscript(context, source, (0, 9), subscript(context, source, (0, 6), variable(context, source, (0, 3), 'obj'), 0), 1)",
+            "_sx_subscript(_sx_context, _sx_source, (0, 9), _sx_subscript(_sx_context, _sx_source, (0, 6), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 0), 1)",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -965,7 +965,7 @@ mod tests {
     fn test_transform_subscript_access_with_expression_key() {
         _test_transformation(
             "obj[x + 1]",
-            "subscript(context, source, (0, 10), variable(context, source, (0, 3), 'obj'), variable(context, source, (4, 5), 'x') + 1)",
+            "_sx_subscript(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), _sx_variable(_sx_context, _sx_source, (4, 5), 'x') + 1)",
             vec![("obj", 0, 3, (1, 1)), ("x", 4, 5, (1, 5))],
             vec![],
         );
@@ -975,7 +975,7 @@ mod tests {
     fn test_transform_subscript_access_in_expression() {
         _test_transformation(
             "obj[0] + 10",
-            "subscript(context, source, (0, 6), variable(context, source, (0, 3), 'obj'), 0) + 10",
+            "_sx_subscript(_sx_context, _sx_source, (0, 6), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 0) + 10",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -985,7 +985,7 @@ mod tests {
     fn test_transform_subscript_access_in_comprehension() {
         _test_transformation(
             "[item[0] for item in items]",
-            "[subscript(context, source, (1, 8), item, 0) for item in variable(context, source, (21, 26), 'items')]",
+            "[_sx_subscript(_sx_context, _sx_source, (1, 8), item, 0) for item in _sx_variable(_sx_context, _sx_source, (21, 26), 'items')]",
             vec![("items", 21, 26, (1, 22))],
             vec![],
         );
@@ -995,7 +995,7 @@ mod tests {
     fn test_transform_mixed_attribute_and_subscript() {
         _test_transformation(
             "obj.items[0]",
-            "subscript(context, source, (0, 12), attribute(context, source, (0, 9), variable(context, source, (0, 3), 'obj'), 'items'), 0)",
+            "_sx_subscript(_sx_context, _sx_source, (0, 12), _sx_attribute(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'items'), 0)",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -1005,7 +1005,7 @@ mod tests {
     fn test_transform_subscript_then_attribute() {
         _test_transformation(
             "obj[0].name",
-            "attribute(context, source, (0, 11), subscript(context, source, (0, 6), variable(context, source, (0, 3), 'obj'), 0), 'name')",
+            "_sx_attribute(_sx_context, _sx_source, (0, 11), _sx_subscript(_sx_context, _sx_source, (0, 6), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 0), 'name')",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -1015,7 +1015,7 @@ mod tests {
     fn test_transform_subscript_with_method_call() {
         _test_transformation(
             "obj[0].method()",
-            "call(context, source, (0, 15), attribute(context, source, (0, 13), subscript(context, source, (0, 6), variable(context, source, (0, 3), 'obj'), 0), 'method'))",
+            "_sx_call(_sx_context, _sx_source, (0, 15), _sx_attribute(_sx_context, _sx_source, (0, 13), _sx_subscript(_sx_context, _sx_source, (0, 6), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 0), 'method'))",
             vec![("obj", 0, 3, (1, 1))],
             vec![],
         );
@@ -1025,7 +1025,7 @@ mod tests {
     fn test_transform_complex_nested_access() {
         _test_transformation(
             "obj.items[key].value",
-            "attribute(context, source, (0, 20), subscript(context, source, (0, 14), attribute(context, source, (0, 9), variable(context, source, (0, 3), 'obj'), 'items'), variable(context, source, (10, 13), 'key')), 'value')",
+            "_sx_attribute(_sx_context, _sx_source, (0, 20), _sx_subscript(_sx_context, _sx_source, (0, 14), _sx_attribute(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'items'), _sx_variable(_sx_context, _sx_source, (10, 13), 'key')), 'value')",
             vec![("obj", 0, 3, (1, 1)), ("key", 10, 13, (1, 11))],
             vec![],
         );
@@ -1037,7 +1037,7 @@ mod tests {
     fn test_transform_slice_start_stop() {
         _test_transformation(
             "list[1:x]",
-            "subscript(context, source, (0, 9), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 8), 1, variable(context, source, (7, 8), 'x'), None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 8), 1, _sx_variable(_sx_context, _sx_source, (7, 8), 'x'), None))",
             vec![("list", 0, 4, (1, 1)), ("x", 7, 8, (1, 8))],
             vec![],
         );
@@ -1047,7 +1047,7 @@ mod tests {
     fn test_transform_slice_stop_only() {
         _test_transformation(
             "list[:x]",
-            "subscript(context, source, (0, 8), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 7), None, variable(context, source, (6, 7), 'x'), None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 8), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 7), None, _sx_variable(_sx_context, _sx_source, (6, 7), 'x'), None))",
             vec![("list", 0, 4, (1, 1)), ("x", 6, 7, (1, 7))],
             vec![],
         );
@@ -1057,7 +1057,7 @@ mod tests {
     fn test_transform_slice_start_only() {
         _test_transformation(
             "list[1:]",
-            "subscript(context, source, (0, 8), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 7), 1, None, None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 8), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 7), 1, None, None))",
             vec![("list", 0, 4, (1, 1))],
             vec![],
         );
@@ -1067,7 +1067,7 @@ mod tests {
     fn test_transform_slice_all() {
         _test_transformation(
             "list[:]",
-            "subscript(context, source, (0, 7), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 6), None, None, None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 7), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 6), None, None, None))",
             vec![("list", 0, 4, (1, 1))],
             vec![],
         );
@@ -1077,7 +1077,7 @@ mod tests {
     fn test_transform_slice_with_step() {
         _test_transformation(
             "list[::]",
-            "subscript(context, source, (0, 8), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 7), None, None, None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 8), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 7), None, None, None))",
             vec![("list", 0, 4, (1, 1))],
             vec![],
         );
@@ -1087,7 +1087,7 @@ mod tests {
     fn test_transform_slice_reverse() {
         _test_transformation(
             "list[::-1]",
-            "subscript(context, source, (0, 10), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 9), None, None, -1))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 9), None, None, -1))",
             vec![("list", 0, 4, (1, 1))],
             vec![],
         );
@@ -1097,7 +1097,7 @@ mod tests {
     fn test_transform_slice_full() {
         _test_transformation(
             "list[1:-2:1]",
-            "subscript(context, source, (0, 12), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 11), 1, -2, 1))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 12), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 11), 1, -2, 1))",
             vec![("list", 0, 4, (1, 1))],
             vec![],
         );
@@ -1107,7 +1107,7 @@ mod tests {
     fn test_transform_slice_start_with_step() {
         _test_transformation(
             "list[1::]",
-            "subscript(context, source, (0, 9), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 8), 1, None, None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 8), 1, None, None))",
             vec![("list", 0, 4, (1, 1))],
             vec![],
         );
@@ -1117,7 +1117,7 @@ mod tests {
     fn test_transform_slice_start_stop_with_step() {
         _test_transformation(
             "list[1:2:]",
-            "subscript(context, source, (0, 10), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 9), 1, 2, None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 9), 1, 2, None))",
             vec![("list", 0, 4, (1, 1))],
             vec![],
         );
@@ -1127,7 +1127,7 @@ mod tests {
     fn test_transform_slice_with_variables() {
         _test_transformation(
             "list[start:end:step]",
-            "subscript(context, source, (0, 20), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 19), variable(context, source, (5, 10), 'start'), variable(context, source, (11, 14), 'end'), variable(context, source, (15, 19), 'step')))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 20), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 19), _sx_variable(_sx_context, _sx_source, (5, 10), 'start'), _sx_variable(_sx_context, _sx_source, (11, 14), 'end'), _sx_variable(_sx_context, _sx_source, (15, 19), 'step')))",
             vec![
                 ("list", 0, 4, (1, 1)),
                 ("start", 5, 10, (1, 6)),
@@ -1142,7 +1142,7 @@ mod tests {
     fn test_transform_slice_with_expressions() {
         _test_transformation(
             "list[x + 1:y - 1]",
-            "subscript(context, source, (0, 17), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 16), variable(context, source, (5, 6), 'x') + 1, variable(context, source, (11, 12), 'y') - 1, None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 17), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 16), _sx_variable(_sx_context, _sx_source, (5, 6), 'x') + 1, _sx_variable(_sx_context, _sx_source, (11, 12), 'y') - 1, None))",
             vec![
                 ("list", 0, 4, (1, 1)),
                 ("x", 5, 6, (1, 6)),
@@ -1156,7 +1156,7 @@ mod tests {
     fn test_transform_slice_with_function_call() {
         _test_transformation(
             "list[get_start():get_end()]",
-            "subscript(context, source, (0, 27), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 26), call(context, source, (5, 16), variable(context, source, (5, 14), 'get_start')), call(context, source, (17, 26), variable(context, source, (17, 24), 'get_end')), None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 27), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 26), _sx_call(_sx_context, _sx_source, (5, 16), _sx_variable(_sx_context, _sx_source, (5, 14), 'get_start')), _sx_call(_sx_context, _sx_source, (17, 26), _sx_variable(_sx_context, _sx_source, (17, 24), 'get_end')), None))",
             vec![
                 ("list", 0, 4, (1, 1)),
                 ("get_start", 5, 14, (1, 6)),
@@ -1170,7 +1170,7 @@ mod tests {
     fn test_transform_slice_with_attribute_access() {
         _test_transformation(
             "list[obj.start:obj.end]",
-            "subscript(context, source, (0, 23), variable(context, source, (0, 4), 'list'), slice(context, source, (5, 22), attribute(context, source, (5, 14), variable(context, source, (5, 8), 'obj'), 'start'), attribute(context, source, (15, 22), variable(context, source, (15, 18), 'obj'), 'end'), None))",
+            "_sx_subscript(_sx_context, _sx_source, (0, 23), _sx_variable(_sx_context, _sx_source, (0, 4), 'list'), _sx_slice(_sx_context, _sx_source, (5, 22), _sx_attribute(_sx_context, _sx_source, (5, 14), _sx_variable(_sx_context, _sx_source, (5, 8), 'obj'), 'start'), _sx_attribute(_sx_context, _sx_source, (15, 22), _sx_variable(_sx_context, _sx_source, (15, 18), 'obj'), 'end'), None))",
             vec![
                 ("list", 0, 4, (1, 1)),
                 ("obj", 5, 8, (1, 6)),
@@ -1186,7 +1186,7 @@ mod tests {
     fn test_transform_walrus_simple() {
         _test_transformation(
             "(x := 5)",
-            "assign(context, source, (1, 7), 'x', 5)",
+            "_sx_assign(_sx_context, _sx_source, (1, 7), 'x', 5)",
             vec![],
             vec![("x", 1, 2, (1, 2))],
         );
@@ -1196,7 +1196,7 @@ mod tests {
     fn test_transform_walrus_with_variable() {
         _test_transformation(
             "(x := y)",
-            "assign(context, source, (1, 7), 'x', variable(context, source, (6, 7), 'y'))",
+            "_sx_assign(_sx_context, _sx_source, (1, 7), 'x', _sx_variable(_sx_context, _sx_source, (6, 7), 'y'))",
             vec![("y", 6, 7, (1, 7))],
             vec![("x", 1, 2, (1, 2))],
         );
@@ -1206,7 +1206,7 @@ mod tests {
     fn test_transform_walrus_with_expression() {
         _test_transformation(
             "(x := y + 1)",
-            "assign(context, source, (1, 11), 'x', variable(context, source, (6, 7), 'y') + 1)",
+            "_sx_assign(_sx_context, _sx_source, (1, 11), 'x', _sx_variable(_sx_context, _sx_source, (6, 7), 'y') + 1)",
             vec![("y", 6, 7, (1, 7))],
             vec![("x", 1, 2, (1, 2))],
         );
@@ -1216,7 +1216,7 @@ mod tests {
     fn test_transform_walrus_with_function_call() {
         _test_transformation(
             "(result := get_value())",
-            "assign(context, source, (1, 22), 'result', call(context, source, (11, 22), variable(context, source, (11, 20), 'get_value')))",
+            "_sx_assign(_sx_context, _sx_source, (1, 22), 'result', _sx_call(_sx_context, _sx_source, (11, 22), _sx_variable(_sx_context, _sx_source, (11, 20), 'get_value')))",
             vec![("get_value", 11, 20, (1, 12))],
             vec![("result", 1, 7, (1, 2))],
         );
@@ -1226,7 +1226,7 @@ mod tests {
     fn test_transform_walrus_with_attribute_access() {
         _test_transformation(
             "(x := obj.value)",
-            "assign(context, source, (1, 15), 'x', attribute(context, source, (6, 15), variable(context, source, (6, 9), 'obj'), 'value'))",
+            "_sx_assign(_sx_context, _sx_source, (1, 15), 'x', _sx_attribute(_sx_context, _sx_source, (6, 15), _sx_variable(_sx_context, _sx_source, (6, 9), 'obj'), 'value'))",
             vec![("obj", 6, 9, (1, 7))],
             vec![("x", 1, 2, (1, 2))],
         );
@@ -1236,7 +1236,7 @@ mod tests {
     fn test_transform_walrus_in_if_expression() {
         _test_transformation(
             "(x := get_value()) if (x := get_value()) else 0",
-            "assign(context, source, (1, 17), 'x', call(context, source, (6, 17), variable(context, source, (6, 15), 'get_value'))) if assign(context, source, (23, 39), 'x', call(context, source, (28, 39), variable(context, source, (28, 37), 'get_value'))) else 0",
+            "_sx_assign(_sx_context, _sx_source, (1, 17), 'x', _sx_call(_sx_context, _sx_source, (6, 17), _sx_variable(_sx_context, _sx_source, (6, 15), 'get_value'))) if _sx_assign(_sx_context, _sx_source, (23, 39), 'x', _sx_call(_sx_context, _sx_source, (28, 39), _sx_variable(_sx_context, _sx_source, (28, 37), 'get_value'))) else 0",
             vec![("get_value", 6, 15, (1, 7)), ("get_value", 28, 37, (1, 29))],
             vec![("x", 1, 2, (1, 2)), ("x", 23, 24, (1, 24))],
         );
@@ -1246,7 +1246,7 @@ mod tests {
     fn test_transform_walrus_in_comprehension() {
         _test_transformation(
             "[y for x in items if (y := x.value)]",
-            "[variable(context, source, (1, 2), 'y') for x in variable(context, source, (12, 17), 'items') if assign(context, source, (22, 34), 'y', attribute(context, source, (27, 34), x, 'value'))]",
+            "[_sx_variable(_sx_context, _sx_source, (1, 2), 'y') for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items') if _sx_assign(_sx_context, _sx_source, (22, 34), 'y', _sx_attribute(_sx_context, _sx_source, (27, 34), x, 'value'))]",
             vec![("y", 1, 2, (1, 2)), ("items", 12, 17, (1, 13))],
             vec![("y", 22, 23, (1, 23))],
         );
@@ -1256,7 +1256,7 @@ mod tests {
     fn test_transform_walrus_chained() {
         _test_transformation(
             "(x := (y := 5))",
-            "assign(context, source, (1, 14), 'x', assign(context, source, (7, 13), 'y', 5))",
+            "_sx_assign(_sx_context, _sx_source, (1, 14), 'x', _sx_assign(_sx_context, _sx_source, (7, 13), 'y', 5))",
             vec![],
             vec![("x", 1, 2, (1, 2)), ("y", 7, 8, (1, 8))],
         );
@@ -1266,7 +1266,7 @@ mod tests {
     fn test_transform_walrus_in_function_call() {
         _test_transformation(
             "foo(x := get_value())",
-            "call(context, source, (0, 21), variable(context, source, (0, 3), 'foo'), assign(context, source, (4, 20), 'x', call(context, source, (9, 20), variable(context, source, (9, 18), 'get_value'))))",
+            "_sx_call(_sx_context, _sx_source, (0, 21), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), _sx_assign(_sx_context, _sx_source, (4, 20), 'x', _sx_call(_sx_context, _sx_source, (9, 20), _sx_variable(_sx_context, _sx_source, (9, 18), 'get_value'))))",
             vec![("foo", 0, 3, (1, 1)), ("get_value", 9, 18, (1, 10))],
             vec![("x", 4, 5, (1, 5))],
         );
@@ -1281,7 +1281,7 @@ mod tests {
         // So even after `assign()`, we now expect to see `variable(...)`.
         _test_transformation(
             "foo([(a := i) for i in items], a)",
-            "call(context, source, (0, 33), variable(context, source, (0, 3), 'foo'), [assign(context, source, (6, 12), 'a', i) for i in variable(context, source, (23, 28), 'items')], variable(context, source, (31, 32), 'a'))",
+            "_sx_call(_sx_context, _sx_source, (0, 33), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), [_sx_assign(_sx_context, _sx_source, (6, 12), 'a', i) for i in _sx_variable(_sx_context, _sx_source, (23, 28), 'items')], _sx_variable(_sx_context, _sx_source, (31, 32), 'a'))",
             vec![
                 ("foo", 0, 3, (1, 1)),
                 ("items", 23, 28, (1, 24)),
@@ -1300,7 +1300,7 @@ mod tests {
         // So even after `assign()`, we now expect to see `variable(...)`.
         _test_transformation(
             "[(x := i, y := i*2) for i in items] and x + y",
-            "[(assign(context, source, (2, 8), 'x', i), assign(context, source, (10, 18), 'y', i * 2)) for i in variable(context, source, (29, 34), 'items')] and variable(context, source, (40, 41), 'x') + variable(context, source, (44, 45), 'y')",
+            "[(_sx_assign(_sx_context, _sx_source, (2, 8), 'x', i), _sx_assign(_sx_context, _sx_source, (10, 18), 'y', i * 2)) for i in _sx_variable(_sx_context, _sx_source, (29, 34), 'items')] and _sx_variable(_sx_context, _sx_source, (40, 41), 'x') + _sx_variable(_sx_context, _sx_source, (44, 45), 'y')",
             vec![
                 ("items", 29, 34, (1, 30)),
                 ("x", 40, 41, (1, 41)),
@@ -1314,7 +1314,7 @@ mod tests {
     fn test_transform_walrus_sequential_usage() {
         _test_transformation(
             "(x := 5) + x",
-            "assign(context, source, (1, 7), 'x', 5) + variable(context, source, (11, 12), 'x')",
+            "_sx_assign(_sx_context, _sx_source, (1, 7), 'x', 5) + _sx_variable(_sx_context, _sx_source, (11, 12), 'x')",
             vec![("x", 11, 12, (1, 12))],
             vec![("x", 1, 2, (1, 2))],
         );
@@ -1324,7 +1324,7 @@ mod tests {
     fn test_transform_walrus_before_comprehension() {
         _test_transformation(
             "(limit := 10) and [x for x in items if x < limit]",
-            "assign(context, source, (1, 12), 'limit', 10) and [x for x in variable(context, source, (30, 35), 'items') if x < variable(context, source, (43, 48), 'limit')]",
+            "_sx_assign(_sx_context, _sx_source, (1, 12), 'limit', 10) and [x for x in _sx_variable(_sx_context, _sx_source, (30, 35), 'items') if x < _sx_variable(_sx_context, _sx_source, (43, 48), 'limit')]",
             vec![("items", 30, 35, (1, 31)), ("limit", 43, 48, (1, 44))],
             vec![("limit", 1, 6, (1, 2))],
         );
@@ -1353,7 +1353,7 @@ mod tests {
         //   - `i`, `x` unknown (NOT in this scope). If `i`, `x` were defined then inner comps would be leaky.
         _test_transformation(
             "[y + x + a + b + i for x in [(a := i) for i in items] if (b := a + 1)] and y + x + a + b + i",
-            "[variable(context, source, (1, 2), 'y') + x + variable(context, source, (9, 10), 'a') + variable(context, source, (13, 14), 'b') + variable(context, source, (17, 18), 'i') for x in [assign(context, source, (30, 36), 'a', i) for i in variable(context, source, (47, 52), 'items')] if assign(context, source, (58, 68), 'b', variable(context, source, (63, 64), 'a') + 1)] and variable(context, source, (75, 76), 'y') + variable(context, source, (79, 80), 'x') + variable(context, source, (83, 84), 'a') + variable(context, source, (87, 88), 'b') + variable(context, source, (91, 92), 'i')",
+            "[_sx_variable(_sx_context, _sx_source, (1, 2), 'y') + x + _sx_variable(_sx_context, _sx_source, (9, 10), 'a') + _sx_variable(_sx_context, _sx_source, (13, 14), 'b') + _sx_variable(_sx_context, _sx_source, (17, 18), 'i') for x in [_sx_assign(_sx_context, _sx_source, (30, 36), 'a', i) for i in _sx_variable(_sx_context, _sx_source, (47, 52), 'items')] if _sx_assign(_sx_context, _sx_source, (58, 68), 'b', _sx_variable(_sx_context, _sx_source, (63, 64), 'a') + 1)] and _sx_variable(_sx_context, _sx_source, (75, 76), 'y') + _sx_variable(_sx_context, _sx_source, (79, 80), 'x') + _sx_variable(_sx_context, _sx_source, (83, 84), 'a') + _sx_variable(_sx_context, _sx_source, (87, 88), 'b') + _sx_variable(_sx_context, _sx_source, (91, 92), 'i')",
             vec![
                 ("y", 1, 2, (1, 2)),
                 ("a", 9, 10, (1, 10)),
@@ -1395,7 +1395,7 @@ mod tests {
         // `fn_with_callback(on_done=lambda res: (data := res)) }}`
         _test_transformation(
             "(lambda: (y := 42) and y)",
-            r#"lambda: assign(context, source, (10, 17), 'y', 42) and variable(context, source, (23, 24), 'y')"#,
+            r#"lambda: _sx_assign(_sx_context, _sx_source, (10, 17), 'y', 42) and _sx_variable(_sx_context, _sx_source, (23, 24), 'y')"#,
             vec![("y", 23, 24, (1, 24))],
             vec![("y", 10, 11, (1, 11))],
         );
@@ -1410,7 +1410,7 @@ mod tests {
         // `fn_with_callback(on_done=lambda res: (data := res)) }}`
         _test_transformation(
             "[lambda: (temp := item * 2) for item in items] and temp + item",
-            r#"[lambda: assign(context, source, (10, 26), 'temp', item * 2) for item in variable(context, source, (40, 45), 'items')] and variable(context, source, (51, 55), 'temp') + variable(context, source, (58, 62), 'item')"#,
+            r#"[lambda: _sx_assign(_sx_context, _sx_source, (10, 26), 'temp', item * 2) for item in _sx_variable(_sx_context, _sx_source, (40, 45), 'items')] and _sx_variable(_sx_context, _sx_source, (51, 55), 'temp') + _sx_variable(_sx_context, _sx_source, (58, 62), 'item')"#,
             vec![
                 ("items", 40, 45, (1, 41)),
                 ("temp", 51, 55, (1, 52)),
@@ -1430,7 +1430,7 @@ mod tests {
         // Note that the `+ [y]` at the end is STILL part of lambda and should NOT be transformed.
         _test_transformation(
             "lambda: [y for x in items if (y := x * 2)] + [y]",
-            r#"lambda: [variable(context, source, (9, 10), 'y') for x in variable(context, source, (20, 25), 'items') if assign(context, source, (30, 40), 'y', x * 2)] + [variable(context, source, (46, 47), 'y')]"#,
+            r#"lambda: [_sx_variable(_sx_context, _sx_source, (9, 10), 'y') for x in _sx_variable(_sx_context, _sx_source, (20, 25), 'items') if _sx_assign(_sx_context, _sx_source, (30, 40), 'y', x * 2)] + [_sx_variable(_sx_context, _sx_source, (46, 47), 'y')]"#,
             vec![
                 ("y", 9, 10, (1, 10)),
                 ("items", 20, 25, (1, 21)),
@@ -1450,7 +1450,7 @@ mod tests {
         // Note that the `+ [y]` at the end is STILL part of lambda and should NOT be transformed.
         _test_transformation(
             "(lambda: [y for x in items if (y := x * 2)] + [y])",
-            r#"lambda: [variable(context, source, (10, 11), 'y') for x in variable(context, source, (21, 26), 'items') if assign(context, source, (31, 41), 'y', x * 2)] + [variable(context, source, (47, 48), 'y')]"#,
+            r#"lambda: [_sx_variable(_sx_context, _sx_source, (10, 11), 'y') for x in _sx_variable(_sx_context, _sx_source, (21, 26), 'items') if _sx_assign(_sx_context, _sx_source, (31, 41), 'y', x * 2)] + [_sx_variable(_sx_context, _sx_source, (47, 48), 'y')]"#,
             vec![
                 ("y", 10, 11, (1, 11)),
                 ("items", 21, 26, (1, 22)),
@@ -1469,7 +1469,7 @@ mod tests {
         // `fn_with_callback(on_done=lambda res: (data := res)) }}`
         _test_transformation(
             "(lambda: [y for x in items if (y := x * 2)]) + y",
-            r#"(lambda: [variable(context, source, (10, 11), 'y') for x in variable(context, source, (21, 26), 'items') if assign(context, source, (31, 41), 'y', x * 2)]) + variable(context, source, (47, 48), 'y')"#,
+            r#"(lambda: [_sx_variable(_sx_context, _sx_source, (10, 11), 'y') for x in _sx_variable(_sx_context, _sx_source, (21, 26), 'items') if _sx_assign(_sx_context, _sx_source, (31, 41), 'y', x * 2)]) + _sx_variable(_sx_context, _sx_source, (47, 48), 'y')"#,
             vec![
                 ("y", 10, 11, (1, 11)),
                 ("items", 21, 26, (1, 22)),
@@ -1523,7 +1523,7 @@ mod tests {
         // Only the arguments (interpolated expressions) are transformed
         _test_transformation(
             "f'Hello {name}'",
-            "format(context, source, (0, 15), 'Hello {}', (variable(context, source, (9, 13), 'name'), None, ''))",
+            "_sx_format(_sx_context, _sx_source, (0, 15), 'Hello {}', (_sx_variable(_sx_context, _sx_source, (9, 13), 'name'), None, ''))",
             vec![("name", 9, 13, (1, 10))],
             vec![],
         );
@@ -1533,7 +1533,7 @@ mod tests {
     fn test_transform_fstring_with_expression() {
         _test_transformation(
             "f'Result: {x + 1}'",
-            "format(context, source, (0, 18), 'Result: {}', (variable(context, source, (11, 12), 'x') + 1, None, ''))",
+            "_sx_format(_sx_context, _sx_source, (0, 18), 'Result: {}', (_sx_variable(_sx_context, _sx_source, (11, 12), 'x') + 1, None, ''))",
             vec![("x", 11, 12, (1, 12))],
             vec![],
         );
@@ -1543,7 +1543,7 @@ mod tests {
     fn test_transform_fstring_with_function_call() {
         _test_transformation(
             "f'Value: {get_value()}'",
-            "format(context, source, (0, 23), 'Value: {}', (call(context, source, (10, 21), variable(context, source, (10, 19), 'get_value')), None, ''))",
+            "_sx_format(_sx_context, _sx_source, (0, 23), 'Value: {}', (_sx_call(_sx_context, _sx_source, (10, 21), _sx_variable(_sx_context, _sx_source, (10, 19), 'get_value')), None, ''))",
             vec![("get_value", 10, 19, (1, 11))],
             vec![],
         );
@@ -1553,7 +1553,7 @@ mod tests {
     fn test_transform_fstring_with_attribute() {
         _test_transformation(
             "f'Name: {obj.name}'",
-            "format(context, source, (0, 19), 'Name: {}', (attribute(context, source, (9, 17), variable(context, source, (9, 12), 'obj'), 'name'), None, ''))",
+            "_sx_format(_sx_context, _sx_source, (0, 19), 'Name: {}', (_sx_attribute(_sx_context, _sx_source, (9, 17), _sx_variable(_sx_context, _sx_source, (9, 12), 'obj'), 'name'), None, ''))",
             vec![("obj", 9, 12, (1, 10))],
             vec![],
         );
@@ -1563,7 +1563,7 @@ mod tests {
     fn test_transform_fstring_multiple_interpolations() {
         _test_transformation(
             "f'{x} and {y}'",
-            "format(context, source, (0, 14), '{} and {}', (variable(context, source, (3, 4), 'x'), None, ''), (variable(context, source, (11, 12), 'y'), None, ''))",
+            "_sx_format(_sx_context, _sx_source, (0, 14), '{} and {}', (_sx_variable(_sx_context, _sx_source, (3, 4), 'x'), None, ''), (_sx_variable(_sx_context, _sx_source, (11, 12), 'y'), None, ''))",
             vec![("x", 3, 4, (1, 4)), ("y", 11, 12, (1, 12))],
             vec![],
         );
@@ -1573,7 +1573,7 @@ mod tests {
     fn test_transform_fstring_nested_expression() {
         _test_transformation(
             "f'start {obj.method(x, y)} end'",
-            "format(context, source, (0, 31), 'start {} end', (call(context, source, (9, 25), attribute(context, source, (9, 19), variable(context, source, (9, 12), 'obj'), 'method'), variable(context, source, (20, 21), 'x'), variable(context, source, (23, 24), 'y')), None, ''))",
+            "_sx_format(_sx_context, _sx_source, (0, 31), 'start {} end', (_sx_call(_sx_context, _sx_source, (9, 25), _sx_attribute(_sx_context, _sx_source, (9, 19), _sx_variable(_sx_context, _sx_source, (9, 12), 'obj'), 'method'), _sx_variable(_sx_context, _sx_source, (20, 21), 'x'), _sx_variable(_sx_context, _sx_source, (23, 24), 'y')), None, ''))",
             vec![
                 ("obj", 9, 12, (1, 10)),
                 ("x", 20, 21, (1, 21)),
@@ -1588,7 +1588,7 @@ mod tests {
         // Format spec is applied using format(value, ".2f")
         _test_transformation(
             "f'start {value:.2f} end'",
-            "format(context, source, (0, 24), 'start {} end', (variable(context, source, (9, 14), 'value'), None, '.2f'))",
+            "_sx_format(_sx_context, _sx_source, (0, 24), 'start {} end', (_sx_variable(_sx_context, _sx_source, (9, 14), 'value'), None, '.2f'))",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1598,7 +1598,7 @@ mod tests {
     fn test_transform_fstring_with_format_spec_alignment() {
         _test_transformation(
             "f'start {name:>10} end'",
-            "format(context, source, (0, 23), 'start {} end', (variable(context, source, (9, 13), 'name'), None, '>10'))",
+            "_sx_format(_sx_context, _sx_source, (0, 23), 'start {} end', (_sx_variable(_sx_context, _sx_source, (9, 13), 'name'), None, '>10'))",
             vec![("name", 9, 13, (1, 10))],
             vec![],
         );
@@ -1609,7 +1609,7 @@ mod tests {
         // Conversion !r is applied using repr()
         _test_transformation(
             "f'start {value!r} end'",
-            "format(context, source, (0, 22), 'start {} end', (variable(context, source, (9, 14), 'value'), 'r', ''))",
+            "_sx_format(_sx_context, _sx_source, (0, 22), 'start {} end', (_sx_variable(_sx_context, _sx_source, (9, 14), 'value'), 'r', ''))",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1619,7 +1619,7 @@ mod tests {
     fn test_transform_fstring_with_conversion_str() {
         _test_transformation(
             "f'start {value!s} end'",
-            "format(context, source, (0, 22), 'start {} end', (variable(context, source, (9, 14), 'value'), 's', ''))",
+            "_sx_format(_sx_context, _sx_source, (0, 22), 'start {} end', (_sx_variable(_sx_context, _sx_source, (9, 14), 'value'), 's', ''))",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1630,7 +1630,7 @@ mod tests {
         // Both conversion and format spec are applied
         _test_transformation(
             "f'start {value!r:>20} end'",
-            "format(context, source, (0, 26), 'start {} end', (variable(context, source, (9, 14), 'value'), 'r', '>20'))",
+            "_sx_format(_sx_context, _sx_source, (0, 26), 'start {} end', (_sx_variable(_sx_context, _sx_source, (9, 14), 'value'), 'r', '>20'))",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1641,7 +1641,7 @@ mod tests {
         // Dynamic format spec: the format spec itself is built using .format()
         _test_transformation(
             "f'start {value:{width}.{precision}f} end'",
-            "format(context, source, (0, 41), 'start {} end', (variable(context, source, (9, 14), 'value'), None, ('{}.{}f', variable(context, source, (16, 21), 'width'), variable(context, source, (24, 33), 'precision'))))",
+            "_sx_format(_sx_context, _sx_source, (0, 41), 'start {} end', (_sx_variable(_sx_context, _sx_source, (9, 14), 'value'), None, ('{}.{}f', _sx_variable(_sx_context, _sx_source, (16, 21), 'width'), _sx_variable(_sx_context, _sx_source, (24, 33), 'precision'))))",
             vec![
                 ("value", 9, 14, (1, 10)),
                 ("width", 16, 21, (1, 17)),
@@ -1655,7 +1655,7 @@ mod tests {
     fn test_transform_percent_formatting() {
         _test_transformation(
             "'text %s' % var",
-            "'text %s' % variable(context, source, (12, 15), 'var')",
+            "'text %s' % _sx_variable(_sx_context, _sx_source, (12, 15), 'var')",
             vec![("var", 12, 15, (1, 13))],
             vec![],
         );
@@ -1665,7 +1665,7 @@ mod tests {
     fn test_transform_percent_formatting_tuple() {
         _test_transformation(
             "'%s and %s' % (x, y)",
-            "'%s and %s' % (variable(context, source, (15, 16), 'x'), variable(context, source, (18, 19), 'y'))",
+            "'%s and %s' % (_sx_variable(_sx_context, _sx_source, (15, 16), 'x'), _sx_variable(_sx_context, _sx_source, (18, 19), 'y'))",
             vec![("x", 15, 16, (1, 16)), ("y", 18, 19, (1, 19))],
             vec![],
         );
@@ -1678,7 +1678,7 @@ mod tests {
         // t-strings become template() function calls
         _test_transformation(
             "t'Hello {name}'",
-            "template(context, source, (0, 15), 'Hello ', interpolation(context, source, (8, 14), variable(context, source, (9, 13), 'name'), 'name', None, ''))",
+            "_sx_template(_sx_context, _sx_source, (0, 15), 'Hello ', _sx_interpolation(_sx_context, _sx_source, (8, 14), _sx_variable(_sx_context, _sx_source, (9, 13), 'name'), 'name', None, ''))",
             vec![("name", 9, 13, (1, 10))],
             vec![],
         );
@@ -1688,7 +1688,7 @@ mod tests {
     fn test_transform_tstring_with_expression() {
         _test_transformation(
             "t'Result: {x + 1}'",
-            "template(context, source, (0, 18), 'Result: ', interpolation(context, source, (10, 17), variable(context, source, (11, 12), 'x') + 1, 'x + 1', None, ''))",
+            "_sx_template(_sx_context, _sx_source, (0, 18), 'Result: ', _sx_interpolation(_sx_context, _sx_source, (10, 17), _sx_variable(_sx_context, _sx_source, (11, 12), 'x') + 1, 'x + 1', None, ''))",
             vec![("x", 11, 12, (1, 12))],
             vec![],
         );
@@ -1698,7 +1698,7 @@ mod tests {
     fn test_transform_tstring_multiple_interpolations() {
         _test_transformation(
             "t'{x} and {y}'",
-            "template(context, source, (0, 14), interpolation(context, source, (2, 5), variable(context, source, (3, 4), 'x'), 'x', None, ''), ' and ', interpolation(context, source, (10, 13), variable(context, source, (11, 12), 'y'), 'y', None, ''))",
+            "_sx_template(_sx_context, _sx_source, (0, 14), _sx_interpolation(_sx_context, _sx_source, (2, 5), _sx_variable(_sx_context, _sx_source, (3, 4), 'x'), 'x', None, ''), ' and ', _sx_interpolation(_sx_context, _sx_source, (10, 13), _sx_variable(_sx_context, _sx_source, (11, 12), 'y'), 'y', None, ''))",
             vec![("x", 3, 4, (1, 4)), ("y", 11, 12, (1, 12))],
             vec![],
         );
@@ -1709,7 +1709,7 @@ mod tests {
         // Format spec is stored in the interpolation object
         _test_transformation(
             "t'start {value:.2f} end'",
-            "template(context, source, (0, 24), 'start ', interpolation(context, source, (8, 19), variable(context, source, (9, 14), 'value'), 'value', None, '.2f'), ' end')",
+            "_sx_template(_sx_context, _sx_source, (0, 24), 'start ', _sx_interpolation(_sx_context, _sx_source, (8, 19), _sx_variable(_sx_context, _sx_source, (9, 14), 'value'), 'value', None, '.2f'), ' end')",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1720,7 +1720,7 @@ mod tests {
         // Conversion flag is stored in the interpolation object
         _test_transformation(
             "t'start {value!r} end'",
-            "template(context, source, (0, 22), 'start ', interpolation(context, source, (8, 17), variable(context, source, (9, 14), 'value'), 'value', 'r', ''), ' end')",
+            "_sx_template(_sx_context, _sx_source, (0, 22), 'start ', _sx_interpolation(_sx_context, _sx_source, (8, 17), _sx_variable(_sx_context, _sx_source, (9, 14), 'value'), 'value', 'r', ''), ' end')",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1731,7 +1731,7 @@ mod tests {
         // Both conversion and format spec are stored in the interpolation object
         _test_transformation(
             "t'start {value!r:>20} end'",
-            "template(context, source, (0, 26), 'start ', interpolation(context, source, (8, 21), variable(context, source, (9, 14), 'value'), 'value', 'r', '>20'), ' end')",
+            "_sx_template(_sx_context, _sx_source, (0, 26), 'start ', _sx_interpolation(_sx_context, _sx_source, (8, 21), _sx_variable(_sx_context, _sx_source, (9, 14), 'value'), 'value', 'r', '>20'), ' end')",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1742,7 +1742,7 @@ mod tests {
         // Dynamic format spec: the format spec itself is built using .format()
         _test_transformation(
             "t'start {value:{width}.{precision}f} end'",
-            "template(context, source, (0, 41), 'start ', interpolation(context, source, (8, 36), variable(context, source, (9, 14), 'value'), 'value', None, '{}.{}f'.format(variable(context, source, (16, 21), 'width'), variable(context, source, (24, 33), 'precision'))), ' end')",
+            "_sx_template(_sx_context, _sx_source, (0, 41), 'start ', _sx_interpolation(_sx_context, _sx_source, (8, 36), _sx_variable(_sx_context, _sx_source, (9, 14), 'value'), 'value', None, '{}.{}f'.format(_sx_variable(_sx_context, _sx_source, (16, 21), 'width'), _sx_variable(_sx_context, _sx_source, (24, 33), 'precision'))), ' end')",
             vec![
                 ("value", 9, 14, (1, 10)),
                 ("width", 16, 21, (1, 17)),
@@ -1758,7 +1758,7 @@ mod tests {
     fn test_allow_simple_variable() {
         _test_transformation(
             "x",
-            "variable(context, source, (0, 1), 'x')",
+            "_sx_variable(_sx_context, _sx_source, (0, 1), 'x')",
             vec![("x", 0, 1, (1, 1))],
             vec![],
         );
@@ -1768,7 +1768,7 @@ mod tests {
     fn test_transform_variable_in_binary_operation() {
         _test_transformation(
             "x + y",
-            "variable(context, source, (0, 1), 'x') + variable(context, source, (4, 5), 'y')",
+            "_sx_variable(_sx_context, _sx_source, (0, 1), 'x') + _sx_variable(_sx_context, _sx_source, (4, 5), 'y')",
             vec![("x", 0, 1, (1, 1)), ("y", 4, 5, (1, 5))],
             vec![],
         );
@@ -1778,7 +1778,7 @@ mod tests {
     fn test_transform_variable_in_comparison() {
         _test_transformation(
             "x > 5",
-            "variable(context, source, (0, 1), 'x') > 5",
+            "_sx_variable(_sx_context, _sx_source, (0, 1), 'x') > 5",
             vec![("x", 0, 1, (1, 1))],
             vec![],
         );
@@ -1788,7 +1788,7 @@ mod tests {
     fn test_transform_variable_in_boolean_operation() {
         _test_transformation(
             "x and y",
-            "variable(context, source, (0, 1), 'x') and variable(context, source, (6, 7), 'y')",
+            "_sx_variable(_sx_context, _sx_source, (0, 1), 'x') and _sx_variable(_sx_context, _sx_source, (6, 7), 'y')",
             vec![("x", 0, 1, (1, 1)), ("y", 6, 7, (1, 7))],
             vec![],
         );
@@ -1798,7 +1798,7 @@ mod tests {
     fn test_transform_variable_in_list() {
         _test_transformation(
             "[x, y, z]",
-            "[variable(context, source, (1, 2), 'x'), variable(context, source, (4, 5), 'y'), variable(context, source, (7, 8), 'z')]",
+            "[_sx_variable(_sx_context, _sx_source, (1, 2), 'x'), _sx_variable(_sx_context, _sx_source, (4, 5), 'y'), _sx_variable(_sx_context, _sx_source, (7, 8), 'z')]",
             vec![
                 ("x", 1, 2, (1, 2)),
                 ("y", 4, 5, (1, 5)),
@@ -1812,7 +1812,7 @@ mod tests {
     fn test_transform_variable_in_dict() {
         _test_transformation(
             "{'key': x}",
-            "{'key': variable(context, source, (8, 9), 'x')}",
+            "{'key': _sx_variable(_sx_context, _sx_source, (8, 9), 'x')}",
             vec![("x", 8, 9, (1, 9))],
             vec![],
         );
@@ -1822,7 +1822,7 @@ mod tests {
     fn test_transform_variable_in_unary_operation() {
         _test_transformation(
             "-x",
-            "-variable(context, source, (1, 2), 'x')",
+            "-_sx_variable(_sx_context, _sx_source, (1, 2), 'x')",
             vec![("x", 1, 2, (1, 2))],
             vec![],
         );
@@ -1832,7 +1832,7 @@ mod tests {
     fn test_transform_variable_in_complex_expression() {
         _test_transformation(
             "x + y * z > 10",
-            "variable(context, source, (0, 1), 'x') + variable(context, source, (4, 5), 'y') * variable(context, source, (8, 9), 'z') > 10",
+            "_sx_variable(_sx_context, _sx_source, (0, 1), 'x') + _sx_variable(_sx_context, _sx_source, (4, 5), 'y') * _sx_variable(_sx_context, _sx_source, (8, 9), 'z') > 10",
             vec![
                 ("x", 0, 1, (1, 1)),
                 ("y", 4, 5, (1, 5)),
@@ -1846,7 +1846,7 @@ mod tests {
     fn test_transform_variable_names_with_underscores() {
         _test_transformation(
             "my_variable",
-            "variable(context, source, (0, 11), 'my_variable')",
+            "_sx_variable(_sx_context, _sx_source, (0, 11), 'my_variable')",
             vec![("my_variable", 0, 11, (1, 1))],
             vec![],
         );
@@ -1856,7 +1856,7 @@ mod tests {
     fn test_transform_variable_names_with_numbers() {
         _test_transformation(
             "var123",
-            "variable(context, source, (0, 6), 'var123')",
+            "_sx_variable(_sx_context, _sx_source, (0, 6), 'var123')",
             vec![("var123", 0, 6, (1, 1))],
             vec![],
         );
@@ -1868,7 +1868,7 @@ mod tests {
     fn test_lambda_simple() {
         _test_transformation(
             "lambda x: x + 1 + y",
-            "lambda x: x + 1 + variable(context, source, (18, 19), 'y')",
+            "lambda x: x + 1 + _sx_variable(_sx_context, _sx_source, (18, 19), 'y')",
             vec![("y", 18, 19, (1, 19))],
             vec![],
         );
@@ -1878,7 +1878,7 @@ mod tests {
     fn test_lambda_no_params() {
         _test_transformation(
             "lambda: 42 + y",
-            "lambda: 42 + variable(context, source, (13, 14), 'y')",
+            "lambda: 42 + _sx_variable(_sx_context, _sx_source, (13, 14), 'y')",
             vec![("y", 13, 14, (1, 14))],
             vec![],
         );
@@ -1888,7 +1888,7 @@ mod tests {
     fn test_lambda_multiple_params() {
         _test_transformation(
             "lambda x, y: x + y + z",
-            "lambda x, y: x + y + variable(context, source, (21, 22), 'z')",
+            "lambda x, y: x + y + _sx_variable(_sx_context, _sx_source, (21, 22), 'z')",
             vec![("z", 21, 22, (1, 22))],
             vec![],
         );
@@ -1898,7 +1898,7 @@ mod tests {
     fn test_lambda_with_defaults() {
         _test_transformation(
             "lambda x=1, y=c: x + y + c",
-            r#"lambda x=1, y=variable(context, source, (14, 15), 'c'): x + y + variable(context, source, (25, 26), 'c')"#,
+            r#"lambda x=1, y=_sx_variable(_sx_context, _sx_source, (14, 15), 'c'): x + y + _sx_variable(_sx_context, _sx_source, (25, 26), 'c')"#,
             vec![("c", 14, 15, (1, 15)), ("c", 25, 26, (1, 26))],
             vec![],
         );
@@ -1910,7 +1910,7 @@ mod tests {
         // The '/' separator marks parameters before it as positional-only
         _test_transformation(
             "lambda x=a, y=b, /: x + y + a + b",
-            r#"lambda x=variable(context, source, (9, 10), 'a'), y=variable(context, source, (14, 15), 'b'), /: x + y + variable(context, source, (28, 29), 'a') + variable(context, source, (32, 33), 'b')"#,
+            r#"lambda x=_sx_variable(_sx_context, _sx_source, (9, 10), 'a'), y=_sx_variable(_sx_context, _sx_source, (14, 15), 'b'), /: x + y + _sx_variable(_sx_context, _sx_source, (28, 29), 'a') + _sx_variable(_sx_context, _sx_source, (32, 33), 'b')"#,
             vec![
                 ("a", 9, 10, (1, 10)),
                 ("b", 14, 15, (1, 15)),
@@ -1927,7 +1927,7 @@ mod tests {
         // The '*' separator marks parameters after it as keyword-only
         _test_transformation(
             "lambda *, x=a, y=b: x + y + a + b",
-            r#"lambda *, x=variable(context, source, (12, 13), 'a'), y=variable(context, source, (17, 18), 'b'): x + y + variable(context, source, (28, 29), 'a') + variable(context, source, (32, 33), 'b')"#,
+            r#"lambda *, x=_sx_variable(_sx_context, _sx_source, (12, 13), 'a'), y=_sx_variable(_sx_context, _sx_source, (17, 18), 'b'): x + y + _sx_variable(_sx_context, _sx_source, (28, 29), 'a') + _sx_variable(_sx_context, _sx_source, (32, 33), 'b')"#,
             vec![
                 ("a", 12, 13, (1, 13)),
                 ("b", 17, 18, (1, 18)),
@@ -1944,7 +1944,7 @@ mod tests {
         // Note: After a parameter with a default, all following positional params must have defaults too
         _test_transformation(
             "lambda a, /, b, c=y, *args, d, e=z, **kwargs: a + b + c + d + e + args + kwargs + y + z",
-            r#"lambda a, /, b, c=variable(context, source, (18, 19), 'y'), *args, d, e=variable(context, source, (33, 34), 'z'), **kwargs: a + b + c + d + e + args + kwargs + variable(context, source, (82, 83), 'y') + variable(context, source, (86, 87), 'z')"#,
+            r#"lambda a, /, b, c=_sx_variable(_sx_context, _sx_source, (18, 19), 'y'), *args, d, e=_sx_variable(_sx_context, _sx_source, (33, 34), 'z'), **kwargs: a + b + c + d + e + args + kwargs + _sx_variable(_sx_context, _sx_source, (82, 83), 'y') + _sx_variable(_sx_context, _sx_source, (86, 87), 'z')"#,
             vec![
                 ("y", 18, 19, (1, 19)),
                 ("z", 33, 34, (1, 34)),
@@ -1959,7 +1959,7 @@ mod tests {
     fn test_lambda_with_varargs() {
         _test_transformation(
             "lambda *args: len(args)",
-            "lambda *args: call(context, source, (14, 23), variable(context, source, (14, 17), 'len'), args)",
+            "lambda *args: _sx_call(_sx_context, _sx_source, (14, 23), _sx_variable(_sx_context, _sx_source, (14, 17), 'len'), args)",
             vec![("len", 14, 17, (1, 15))],
             vec![],
         );
@@ -1969,7 +1969,7 @@ mod tests {
     fn test_lambda_with_kwargs() {
         _test_transformation(
             "lambda **kwargs: len(kwargs)",
-            "lambda **kwargs: call(context, source, (17, 28), variable(context, source, (17, 20), 'len'), kwargs)",
+            "lambda **kwargs: _sx_call(_sx_context, _sx_source, (17, 28), _sx_variable(_sx_context, _sx_source, (17, 20), 'len'), kwargs)",
             vec![("len", 17, 20, (1, 18))],
             vec![],
         );
@@ -1981,7 +1981,7 @@ mod tests {
         // but external variable 'items' SHOULD be transformed
         _test_transformation(
             "lambda x: x in items",
-            r#"lambda x: x in variable(context, source, (15, 20), 'items')"#,
+            r#"lambda x: x in _sx_variable(_sx_context, _sx_source, (15, 20), 'items')"#,
             vec![("items", 15, 20, (1, 16))],
             vec![],
         );
@@ -1993,7 +1993,7 @@ mod tests {
         // but 'z' SHOULD be transformed as it's an external variable
         _test_transformation(
             "lambda x: lambda y: x + y + z",
-            r#"lambda x: lambda y: x + y + variable(context, source, (28, 29), 'z')"#,
+            r#"lambda x: lambda y: x + y + _sx_variable(_sx_context, _sx_source, (28, 29), 'z')"#,
             vec![("z", 28, 29, (1, 29))],
             vec![],
         );
@@ -2007,7 +2007,7 @@ mod tests {
         // External variable 'n' should be transformed in both contexts
         _test_transformation(
             "[lambda x: x * item * n for item in items]",
-            r#"[lambda x: x * item * variable(context, source, (22, 23), 'n') for item in variable(context, source, (36, 41), 'items')]"#,
+            r#"[lambda x: x * item * _sx_variable(_sx_context, _sx_source, (22, 23), 'n') for item in _sx_variable(_sx_context, _sx_source, (36, 41), 'items')]"#,
             vec![("n", 22, 23, (1, 23)), ("items", 36, 41, (1, 37))],
             vec![],
         );
@@ -2021,7 +2021,7 @@ mod tests {
         // Both should be accessible in their respective scopes
         _test_transformation(
             "lambda n: [i * n * c for i in items]",
-            r#"lambda n: [i * n * variable(context, source, (19, 20), 'c') for i in variable(context, source, (30, 35), 'items')]"#,
+            r#"lambda n: [i * n * _sx_variable(_sx_context, _sx_source, (19, 20), 'c') for i in _sx_variable(_sx_context, _sx_source, (30, 35), 'items')]"#,
             vec![("c", 19, 20, (1, 20)), ("items", 30, 35, (1, 31))],
             vec![],
         );
@@ -2036,7 +2036,7 @@ mod tests {
         // 'c' (external var) should be transformed
         _test_transformation(
             "lambda x: [lambda y: x + y + item + c for item in items]",
-            r#"lambda x: [lambda y: x + y + item + variable(context, source, (36, 37), 'c') for item in variable(context, source, (50, 55), 'items')]"#,
+            r#"lambda x: [lambda y: x + y + item + _sx_variable(_sx_context, _sx_source, (36, 37), 'c') for item in _sx_variable(_sx_context, _sx_source, (50, 55), 'items')]"#,
             vec![("c", 36, 37, (1, 37)), ("items", 50, 55, (1, 51))],
             vec![],
         );
@@ -2047,7 +2047,7 @@ mod tests {
         // Comprehension using a lambda in the filter condition
         _test_transformation(
             "lambda: [item for item in items if (lambda x: x > threshold)(item)]",
-            r#"lambda: [item for item in variable(context, source, (26, 31), 'items') if call(context, source, (35, 66), lambda x: x > variable(context, source, (50, 59), 'threshold'), item)]"#,
+            r#"lambda: [item for item in _sx_variable(_sx_context, _sx_source, (26, 31), 'items') if _sx_call(_sx_context, _sx_source, (35, 66), lambda x: x > _sx_variable(_sx_context, _sx_source, (50, 59), 'threshold'), item)]"#,
             vec![("items", 26, 31, (1, 27)), ("threshold", 50, 59, (1, 51))],
             vec![],
         );
@@ -2059,7 +2059,7 @@ mod tests {
     fn test_ternary_if_simple() {
         _test_transformation(
             "x + 1 if condition else y + 2",
-            r#"variable(context, source, (0, 1), 'x') + 1 if variable(context, source, (9, 18), 'condition') else variable(context, source, (24, 25), 'y') + 2"#,
+            r#"_sx_variable(_sx_context, _sx_source, (0, 1), 'x') + 1 if _sx_variable(_sx_context, _sx_source, (9, 18), 'condition') else _sx_variable(_sx_context, _sx_source, (24, 25), 'y') + 2"#,
             vec![
                 ("x", 0, 1, (1, 1)),
                 ("condition", 9, 18, (1, 10)),
@@ -2074,7 +2074,7 @@ mod tests {
         // Nested ternary expressions
         _test_transformation(
             "a if x else b if y else c",
-            r#"variable(context, source, (0, 1), 'a') if variable(context, source, (5, 6), 'x') else variable(context, source, (12, 13), 'b') if variable(context, source, (17, 18), 'y') else variable(context, source, (24, 25), 'c')"#,
+            r#"_sx_variable(_sx_context, _sx_source, (0, 1), 'a') if _sx_variable(_sx_context, _sx_source, (5, 6), 'x') else _sx_variable(_sx_context, _sx_source, (12, 13), 'b') if _sx_variable(_sx_context, _sx_source, (17, 18), 'y') else _sx_variable(_sx_context, _sx_source, (24, 25), 'c')"#,
             vec![
                 ("a", 0, 1, (1, 1)),
                 ("x", 5, 6, (1, 6)),
@@ -2091,7 +2091,7 @@ mod tests {
         // Ternary used within a larger expression
         _test_transformation(
             "result + (x if flag else y) * 2",
-            r#"variable(context, source, (0, 6), 'result') + (variable(context, source, (10, 11), 'x') if variable(context, source, (15, 19), 'flag') else variable(context, source, (25, 26), 'y')) * 2"#,
+            r#"_sx_variable(_sx_context, _sx_source, (0, 6), 'result') + (_sx_variable(_sx_context, _sx_source, (10, 11), 'x') if _sx_variable(_sx_context, _sx_source, (15, 19), 'flag') else _sx_variable(_sx_context, _sx_source, (25, 26), 'y')) * 2"#,
             vec![
                 ("result", 0, 6, (1, 1)),
                 ("x", 10, 11, (1, 11)),
@@ -2107,7 +2107,7 @@ mod tests {
         // Ternary with function calls
         _test_transformation(
             "max(a, b) if a > 0 else min(a, b)",
-            r#"call(context, source, (0, 9), variable(context, source, (0, 3), 'max'), variable(context, source, (4, 5), 'a'), variable(context, source, (7, 8), 'b')) if variable(context, source, (13, 14), 'a') > 0 else call(context, source, (24, 33), variable(context, source, (24, 27), 'min'), variable(context, source, (28, 29), 'a'), variable(context, source, (31, 32), 'b'))"#,
+            r#"_sx_call(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 3), 'max'), _sx_variable(_sx_context, _sx_source, (4, 5), 'a'), _sx_variable(_sx_context, _sx_source, (7, 8), 'b')) if _sx_variable(_sx_context, _sx_source, (13, 14), 'a') > 0 else _sx_call(_sx_context, _sx_source, (24, 33), _sx_variable(_sx_context, _sx_source, (24, 27), 'min'), _sx_variable(_sx_context, _sx_source, (28, 29), 'a'), _sx_variable(_sx_context, _sx_source, (31, 32), 'b'))"#,
             vec![
                 ("max", 0, 3, (1, 1)),
                 ("a", 4, 5, (1, 5)),
@@ -2126,7 +2126,7 @@ mod tests {
         // Ternary used in list comprehension
         _test_transformation(
             "[x if x > 0 else 0 for x in items]",
-            r#"[x if x > 0 else 0 for x in variable(context, source, (28, 33), 'items')]"#,
+            r#"[x if x > 0 else 0 for x in _sx_variable(_sx_context, _sx_source, (28, 33), 'items')]"#,
             vec![("items", 28, 33, (1, 29))],
             vec![],
         );
@@ -2137,7 +2137,7 @@ mod tests {
         // Ternary in lambda body
         _test_transformation(
             "lambda x: x if x > threshold else 0",
-            r#"lambda x: x if x > variable(context, source, (19, 28), 'threshold') else 0"#,
+            r#"lambda x: x if x > _sx_variable(_sx_context, _sx_source, (19, 28), 'threshold') else 0"#,
             vec![("threshold", 19, 28, (1, 20))],
             vec![],
         );
@@ -2148,7 +2148,7 @@ mod tests {
         // Ternary with walrus operator in condition
         _test_transformation(
             "x if (y := compute()) else default",
-            r#"variable(context, source, (0, 1), 'x') if assign(context, source, (6, 20), 'y', call(context, source, (11, 20), variable(context, source, (11, 18), 'compute'))) else variable(context, source, (27, 34), 'default')"#,
+            r#"_sx_variable(_sx_context, _sx_source, (0, 1), 'x') if _sx_assign(_sx_context, _sx_source, (6, 20), 'y', _sx_call(_sx_context, _sx_source, (11, 20), _sx_variable(_sx_context, _sx_source, (11, 18), 'compute'))) else _sx_variable(_sx_context, _sx_source, (27, 34), 'default')"#,
             vec![
                 ("x", 0, 1, (1, 1)),
                 ("compute", 11, 18, (1, 12)),
@@ -2163,7 +2163,7 @@ mod tests {
         // condition branch runs first, so y in either branch should be already known
         _test_transformation(
             "y if (y := compute()) else y",
-            r#"variable(context, source, (0, 1), 'y') if assign(context, source, (6, 20), 'y', call(context, source, (11, 20), variable(context, source, (11, 18), 'compute'))) else variable(context, source, (27, 28), 'y')"#,
+            r#"_sx_variable(_sx_context, _sx_source, (0, 1), 'y') if _sx_assign(_sx_context, _sx_source, (6, 20), 'y', _sx_call(_sx_context, _sx_source, (11, 20), _sx_variable(_sx_context, _sx_source, (11, 18), 'compute'))) else _sx_variable(_sx_context, _sx_source, (27, 28), 'y')"#,
             vec![
                 ("y", 0, 1, (1, 1)),
                 ("compute", 11, 18, (1, 12)),
@@ -2178,7 +2178,7 @@ mod tests {
         // Ternary with attribute access
         _test_transformation(
             "obj.value if obj.is_valid else obj.default",
-            r#"attribute(context, source, (0, 9), variable(context, source, (0, 3), 'obj'), 'value') if attribute(context, source, (13, 25), variable(context, source, (13, 16), 'obj'), 'is_valid') else attribute(context, source, (31, 42), variable(context, source, (31, 34), 'obj'), 'default')"#,
+            r#"_sx_attribute(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'value') if _sx_attribute(_sx_context, _sx_source, (13, 25), _sx_variable(_sx_context, _sx_source, (13, 16), 'obj'), 'is_valid') else _sx_attribute(_sx_context, _sx_source, (31, 42), _sx_variable(_sx_context, _sx_source, (31, 34), 'obj'), 'default')"#,
             vec![
                 ("obj", 0, 3, (1, 1)),
                 ("obj", 13, 16, (1, 14)),
@@ -2193,7 +2193,7 @@ mod tests {
         // Ternary with subscript access
         _test_transformation(
             "data[key] if key in data else None",
-            r#"subscript(context, source, (0, 9), variable(context, source, (0, 4), 'data'), variable(context, source, (5, 8), 'key')) if variable(context, source, (13, 16), 'key') in variable(context, source, (20, 24), 'data') else None"#,
+            r#"_sx_subscript(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 4), 'data'), _sx_variable(_sx_context, _sx_source, (5, 8), 'key')) if _sx_variable(_sx_context, _sx_source, (13, 16), 'key') in _sx_variable(_sx_context, _sx_source, (20, 24), 'data') else None"#,
             vec![
                 ("data", 0, 4, (1, 1)),
                 ("key", 5, 8, (1, 6)),
@@ -2486,7 +2486,7 @@ mod tests {
     fn test_local_variable_tracking_in_comprehensions() {
         _test_transformation(
             "[x for x in items]",
-            "[x for x in variable(context, source, (12, 17), 'items')]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items')]",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -2496,7 +2496,7 @@ mod tests {
     fn test_local_variable_tracking_in_nested_comprehensions() {
         _test_transformation(
             "[[x for x in row] for row in matrix]",
-            "[[x for x in row] for row in variable(context, source, (29, 35), 'matrix')]",
+            "[[x for x in row] for row in _sx_variable(_sx_context, _sx_source, (29, 35), 'matrix')]",
             vec![("matrix", 29, 35, (1, 30))],
             vec![],
         );
@@ -2506,7 +2506,7 @@ mod tests {
     fn test_local_variable_tracking_in_multiple_comprehensions() {
         _test_transformation(
             "[x for x in items for y in x.children]",
-            "[x for x in variable(context, source, (12, 17), 'items') for y in attribute(context, source, (27, 37), x, 'children')]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items') for y in _sx_attribute(_sx_context, _sx_source, (27, 37), x, 'children')]",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -2516,7 +2516,7 @@ mod tests {
     fn test_local_variable_tracking_in_comprehension_conditions() {
         _test_transformation(
             "[x for x in items if x > 0]",
-            "[x for x in variable(context, source, (12, 17), 'items') if x > 0]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items') if x > 0]",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -2526,7 +2526,7 @@ mod tests {
     fn test_local_variable_tracking_in_multiple_comprehension_conditions() {
         _test_transformation(
             "[x for x in items for y in x.children if y > 0]",
-            "[x for x in variable(context, source, (12, 17), 'items') for y in attribute(context, source, (27, 37), x, 'children') if y > 0]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 17), 'items') for y in _sx_attribute(_sx_context, _sx_source, (27, 37), x, 'children') if y > 0]",
             vec![("items", 12, 17, (1, 13))],
             vec![],
         );
@@ -2733,45 +2733,45 @@ mod tests {
         _test_generated(&[
             (
                 r#"row['\ud800']"#,
-                r#"subscript(context, source, (0, 13), variable(context, source, (0, 3), 'row'), '\ud800')"#,
+                r#"_sx_subscript(_sx_context, _sx_source, (0, 13), _sx_variable(_sx_context, _sx_source, (0, 3), 'row'), '\ud800')"#,
             ),
             (r#"'\U0000dfff'"#, r#"'\U0000dfff'"#),
             (r#"'\ud800' 'a'"#, r#"'\ud800' 'a'"#),
             (
                 r#"f'\ud800{x}'"#,
-                r#"format(context, source, (0, 12), '{}{}', ('\ud800', None, ''), (variable(context, source, (9, 10), 'x'), None, ''))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 12), '{}{}', ('\ud800', None, ''), (_sx_variable(_sx_context, _sx_source, (9, 10), 'x'), None, ''))"#,
             ),
             (
                 r#"f'{x:\ud800}'"#,
-                r#"format(context, source, (0, 13), '{}', (variable(context, source, (3, 4), 'x'), None, '\ud800'))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 13), '{}', (_sx_variable(_sx_context, _sx_source, (3, 4), 'x'), None, '\ud800'))"#,
             ),
             (
                 r#"f'{x:{w}\ud800}'"#,
-                r#"format(context, source, (0, 16), '{}', (variable(context, source, (3, 4), 'x'), None, ('{}{}', variable(context, source, (6, 7), 'w'), '\ud800')))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 16), '{}', (_sx_variable(_sx_context, _sx_source, (3, 4), 'x'), None, ('{}{}', _sx_variable(_sx_context, _sx_source, (6, 7), 'w'), '\ud800')))"#,
             ),
             (
                 r#"'\ud800' f'{x}'"#,
-                r#"format(context, source, (0, 15), '{}{}', ('\ud800', None, ''), (variable(context, source, (12, 13), 'x'), None, ''))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 15), '{}{}', ('\ud800', None, ''), (_sx_variable(_sx_context, _sx_source, (12, 13), 'x'), None, ''))"#,
             ),
             (
                 r#"f'''\ud800'{x}'''"#,
-                r#"format(context, source, (0, 17), '{}{}', ('''\ud800\'''', None, ''), (variable(context, source, (12, 13), 'x'), None, ''))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 17), '{}{}', ('''\ud800\'''', None, ''), (_sx_variable(_sx_context, _sx_source, (12, 13), 'x'), None, ''))"#,
             ),
             (
                 r#"f'\N{BULLET}{{\ud800}}{x}'"#,
-                r#"format(context, source, (0, 26), '{}{}', ('\N{BULLET}{\ud800}', None, ''), (variable(context, source, (23, 24), 'x'), None, ''))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 26), '{}{}', ('\N{BULLET}{\ud800}', None, ''), (_sx_variable(_sx_context, _sx_source, (23, 24), 'x'), None, ''))"#,
             ),
             (
                 r#"t'\ud800{x}'"#,
-                r#"template(context, source, (0, 12), '\ud800', interpolation(context, source, (8, 11), variable(context, source, (9, 10), 'x'), 'x', None, ''))"#,
+                r#"_sx_template(_sx_context, _sx_source, (0, 12), '\ud800', _sx_interpolation(_sx_context, _sx_source, (8, 11), _sx_variable(_sx_context, _sx_source, (9, 10), 'x'), 'x', None, ''))"#,
             ),
             (
                 r#"t'{x:\ud800}'"#,
-                r#"template(context, source, (0, 13), interpolation(context, source, (2, 12), variable(context, source, (3, 4), 'x'), 'x', None, '\ud800'))"#,
+                r#"_sx_template(_sx_context, _sx_source, (0, 13), _sx_interpolation(_sx_context, _sx_source, (2, 12), _sx_variable(_sx_context, _sx_source, (3, 4), 'x'), 'x', None, '\ud800'))"#,
             ),
             (
                 r#"t'{x:{w}\ud800}'"#,
-                r#"template(context, source, (0, 16), interpolation(context, source, (2, 15), variable(context, source, (3, 4), 'x'), 'x', None, '{}{}'.format(variable(context, source, (6, 7), 'w'), '\ud800')))"#,
+                r#"_sx_template(_sx_context, _sx_source, (0, 16), _sx_interpolation(_sx_context, _sx_source, (2, 15), _sx_variable(_sx_context, _sx_source, (3, 4), 'x'), 'x', None, '{}{}'.format(_sx_variable(_sx_context, _sx_source, (6, 7), 'w'), '\ud800')))"#,
             ),
         ]);
     }
@@ -2783,7 +2783,7 @@ mod tests {
         // not escape the closing quote.
         _test_generated(&[(
             r#"f'\ud800\{x}'"#,
-            r#"format(context, source, (0, 13), '{}{}', ('\ud800\\', None, ''), (variable(context, source, (10, 11), 'x'), None, ''))"#,
+            r#"_sx_format(_sx_context, _sx_source, (0, 13), '{}{}', ('\ud800\\', None, ''), (_sx_variable(_sx_context, _sx_source, (10, 11), 'x'), None, ''))"#,
         )]);
     }
 
@@ -2794,19 +2794,19 @@ mod tests {
         _test_generated(&[
             (
                 "f'{x=}'",
-                "format(context, source, (0, 7), 'x={}', (variable(context, source, (3, 4), 'x'), 'r', ''))",
+                "_sx_format(_sx_context, _sx_source, (0, 7), 'x={}', (_sx_variable(_sx_context, _sx_source, (3, 4), 'x'), 'r', ''))",
             ),
             (
                 "f'{x=:>4}'",
-                "format(context, source, (0, 10), 'x={}', (variable(context, source, (3, 4), 'x'), None, '>4'))",
+                "_sx_format(_sx_context, _sx_source, (0, 10), 'x={}', (_sx_variable(_sx_context, _sx_source, (3, 4), 'x'), None, '>4'))",
             ),
             (
                 "f'{ {1:2}[1] = }'",
-                "format(context, source, (0, 17), ' {{1:2}}[1] = {}', (subscript(context, source, (4, 12), {1: 2}, 1), 'r', ''))",
+                "_sx_format(_sx_context, _sx_source, (0, 17), ' {{1:2}}[1] = {}', (_sx_subscript(_sx_context, _sx_source, (4, 12), {1: 2}, 1), 'r', ''))",
             ),
             (
                 "t'{x=}'",
-                "template(context, source, (0, 7), 'x=', interpolation(context, source, (2, 6), variable(context, source, (3, 4), 'x'), 'x', 'r', ''))",
+                "_sx_template(_sx_context, _sx_source, (0, 7), 'x=', _sx_interpolation(_sx_context, _sx_source, (2, 6), _sx_variable(_sx_context, _sx_source, (3, 4), 'x'), 'x', 'r', ''))",
             ),
         ]);
     }
@@ -2819,38 +2819,38 @@ mod tests {
         _test_generated(&[
             (
                 "t'{ x }'",
-                "template(context, source, (0, 8), interpolation(context, source, (2, 7), variable(context, source, (4, 5), 'x'), ' x ', None, ''))",
+                "_sx_template(_sx_context, _sx_source, (0, 8), _sx_interpolation(_sx_context, _sx_source, (2, 7), _sx_variable(_sx_context, _sx_source, (4, 5), 'x'), ' x ', None, ''))",
             ),
             (
                 "t'{ (x) }'",
-                "template(context, source, (0, 10), interpolation(context, source, (2, 9), variable(context, source, (5, 6), 'x'), ' (x) ', None, ''))",
+                "_sx_template(_sx_context, _sx_source, (0, 10), _sx_interpolation(_sx_context, _sx_source, (2, 9), _sx_variable(_sx_context, _sx_source, (5, 6), 'x'), ' (x) ', None, ''))",
             ),
             (
                 "t'{x == 1}'",
-                "template(context, source, (0, 11), interpolation(context, source, (2, 10), variable(context, source, (3, 4), 'x') == 1, 'x == 1', None, ''))",
+                "_sx_template(_sx_context, _sx_source, (0, 11), _sx_interpolation(_sx_context, _sx_source, (2, 10), _sx_variable(_sx_context, _sx_source, (3, 4), 'x') == 1, 'x == 1', None, ''))",
             ),
             (
                 "t'{ x = }'",
-                "template(context, source, (0, 10), ' x = ', interpolation(context, source, (2, 9), variable(context, source, (4, 5), 'x'), ' x ', 'r', ''))",
+                "_sx_template(_sx_context, _sx_source, (0, 10), ' x = ', _sx_interpolation(_sx_context, _sx_source, (2, 9), _sx_variable(_sx_context, _sx_source, (4, 5), 'x'), ' x ', 'r', ''))",
             ),
             (
                 "t'''{x # c\n}'''",
-                "template(context, source, (0, 15), interpolation(context, source, (4, 12), variable(context, source, (5, 6), 'x'), 'x \\n', None, ''))",
+                "_sx_template(_sx_context, _sx_source, (0, 15), _sx_interpolation(_sx_context, _sx_source, (4, 12), _sx_variable(_sx_context, _sx_source, (5, 6), 'x'), 'x \\n', None, ''))",
             ),
             // A comment inside a nested string stays in that string's text.
             (
                 "t'''{f\"\"\"{x # c\n}\"\"\"}'''",
-                "template(context, source, (0, 24), interpolation(context, source, (4, 21), format(context, source, (5, 20), '{}', (variable(context, source, (10, 11), 'x'), None, '')), 'f\"\"\"{x # c\\n}\"\"\"', None, ''))",
+                "_sx_template(_sx_context, _sx_source, (0, 24), _sx_interpolation(_sx_context, _sx_source, (4, 21), _sx_format(_sx_context, _sx_source, (5, 20), '{}', (_sx_variable(_sx_context, _sx_source, (10, 11), 'x'), None, '')), 'f\"\"\"{x # c\\n}\"\"\"', None, ''))",
             ),
             // A backslash line continuation after the expression is part of it.
             (
                 "t'''{x \\\n}'''",
-                "template(context, source, (0, 13), interpolation(context, source, (4, 10), variable(context, source, (5, 6), 'x'), 'x \\\\\\n', None, ''))",
+                "_sx_template(_sx_context, _sx_source, (0, 13), _sx_interpolation(_sx_context, _sx_source, (4, 10), _sx_variable(_sx_context, _sx_source, (5, 6), 'x'), 'x \\\\\\n', None, ''))",
             ),
             // A self-documenting interpolation's `x=` text drops its comments.
             (
                 "f'''{x # c\n=}'''",
-                "format(context, source, (0, 16), 'x \\n={}', (variable(context, source, (5, 6), 'x'), 'r', ''))",
+                "_sx_format(_sx_context, _sx_source, (0, 16), 'x \\n={}', (_sx_variable(_sx_context, _sx_source, (5, 6), 'x'), 'r', ''))",
             ),
         ]);
     }
@@ -2865,7 +2865,7 @@ mod tests {
             (r#"b'\ud800'"#, r#"b'\\ud800'"#),
             (
                 r#"rf'\ud800{x}'"#,
-                r#"format(context, source, (0, 13), '\\ud800{}', (variable(context, source, (10, 11), 'x'), None, ''))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 13), '\\ud800{}', (_sx_variable(_sx_context, _sx_source, (10, 11), 'x'), None, ''))"#,
             ),
         ]);
     }
@@ -2876,31 +2876,50 @@ mod tests {
         // written doubled, and an ordinary literal joined to the f-string is
         // part of the text.
         _test_generated(&[
-            (r#"f'{{a}}'"#, r#"format(context, source, (0, 8), '{{a}}')"#),
+            (
+                r#"f'{{a}}'"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 8), '{{a}}')"#,
+            ),
             (
                 r#"'x' f'{x}'"#,
-                r#"format(context, source, (0, 10), 'x{}', (variable(context, source, (7, 8), 'x'), None, ''))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 10), 'x{}', (_sx_variable(_sx_context, _sx_source, (7, 8), 'x'), None, ''))"#,
             ),
             (
                 r#"f'{x}' 'z{'"#,
-                r#"format(context, source, (0, 11), '{}z{{', (variable(context, source, (3, 4), 'x'), None, ''))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 11), '{}z{{', (_sx_variable(_sx_context, _sx_source, (3, 4), 'x'), None, ''))"#,
             ),
             (
                 r#"f'{x:>{w}}{{'"#,
-                r#"format(context, source, (0, 13), '{}{{', (variable(context, source, (3, 4), 'x'), None, ('>{}', variable(context, source, (7, 8), 'w'))))"#,
+                r#"_sx_format(_sx_context, _sx_source, (0, 13), '{}{{', (_sx_variable(_sx_context, _sx_source, (3, 4), 'x'), None, ('>{}', _sx_variable(_sx_context, _sx_source, (7, 8), 'w'))))"#,
             ),
         ]);
     }
 
     // === NAMES THE GENERATED CODE USES FOR ITS OWN HELPERS ===
     //
-    // The generated code calls `variable(context, source, ...)`, `attribute(...)` and the
-    // other helpers by their plain names. A lambda parameter or a comprehension variable
-    // with one of those names would replace the helper for the code inside it. Every
-    // check the helper makes would then be skipped, or run by a function the template
-    // author wrote, with the real `context` mapping as its first argument.
+    // The generated code calls `_sx_variable(_sx_context, _sx_source, ...)` and the other
+    // helpers by name. Every one of those names starts with `_sx_`. A template reads a free
+    // name through `_sx_variable()`, which refuses `_` names at run time, and the
+    // transformer refuses a lambda parameter or comprehension variable with the prefix. So a
+    // template name can never replace a helper, and every other name stays free to use.
 
-    use python_safe_eval::transformer::GENERATED_NAMES;
+    use python_safe_eval::transformer::{GENERATED_NAME_PREFIX, GENERATED_NAMES};
+
+    // The words the helpers are named after. Templates use them as ordinary names, such
+    // as `<source c-for="source in sources">`.
+    const HELPER_WORDS: [&str; 11] = [
+        "variable",
+        "attribute",
+        "subscript",
+        "call",
+        "assign",
+        "slice",
+        "interpolation",
+        "template",
+        "format",
+        "source",
+        "context",
+    ];
 
     fn _transform_error(input: &str) -> String {
         match transform_expression_string(input) {
@@ -2913,11 +2932,12 @@ mod tests {
         }
     }
 
-    fn _assert_name_refused(input: &str, name: &str, what: &str) {
+    fn _assert_prefix_refused(input: &str, name: &str, what: &str) {
         let error = _transform_error(input);
         assert!(
             error.starts_with("SyntaxError: ")
                 && error.contains(&format!("'{}'", name))
+                && error.contains("'_sx_'")
                 && error.contains(what),
             "Unexpected error for input {}: {}",
             input,
@@ -2927,36 +2947,26 @@ mod tests {
 
     #[test]
     fn test_generated_names_list_matches_what_the_transformer_writes() {
-        // One expression that makes the transformer write every helper. The list the
-        // refusal uses must hold each name the generated code calls, plus the two
-        // arguments (`context`, `source`) it passes to every helper. A new helper that
-        // is not added to the list would be open to shadowing.
+        // One expression that makes the transformer write every helper. Each name the
+        // generated code reads must be in the list the Python runtime mirrors, and each
+        // must carry the prefix the transformer refuses as a bound name.
         let result = transform_expression_string(
             "[(w := a.b[1:2](c)) for a in d if f'{a!r:{w}}'] or t'{x}'",
         )
         .unwrap();
         let code = generate_python_code(&result.expression);
         let mut written: Vec<String> = Vec::new();
-        let helper_call = regex::Regex::new(r"\b([A-Za-z_]+)\(context, source, ").unwrap();
+        let helper_call = regex::Regex::new(r"\b([A-Za-z_]+)\(_sx_context, _sx_source, ").unwrap();
         for captures in helper_call.captures_iter(&code) {
             let name = captures[1].to_string();
             if !written.contains(&name) {
                 written.push(name);
             }
         }
-        for name in [
-            "variable",
-            "attribute",
-            "subscript",
-            "call",
-            "slice",
-            "assign",
-            "format",
-            "template",
-            "interpolation",
-        ] {
+        for word in &HELPER_WORDS[..9] {
+            let name = format!("{GENERATED_NAME_PREFIX}{word}");
             assert!(
-                written.iter().any(|w| w == name),
+                written.contains(&name),
                 "helper {name} not exercised: {code}"
             );
         }
@@ -2966,112 +2976,126 @@ mod tests {
                 "{name} is missing from GENERATED_NAMES"
             );
         }
-        for name in ["context", "source"] {
-            assert!(GENERATED_NAMES.contains(&name));
+        for name in GENERATED_NAMES {
+            assert!(name.starts_with(GENERATED_NAME_PREFIX), "{name}");
         }
-        assert_eq!(GENERATED_NAMES.len(), 11);
+        assert!(GENERATED_NAMES.contains(&"_sx_context"));
+        assert!(GENERATED_NAMES.contains(&"_sx_source"));
     }
 
     #[test]
-    fn test_helper_names_refused_as_lambda_parameters() {
-        for name in GENERATED_NAMES {
+    fn test_helper_words_are_ordinary_lambda_parameters() {
+        // A parameter is a local name of the lambda. It is not looked up through
+        // `_sx_variable()`, and the helper calls in the body keep their own names.
+        _test_transformation(
+            "lambda source: source.alt",
+            "lambda source: _sx_attribute(_sx_context, _sx_source, (15, 25), source, 'alt')",
+            vec![],
+            vec![],
+        );
+        for word in HELPER_WORDS {
             for input in [
-                format!("lambda {name}: 1"),
-                format!("lambda a, {name}: 1"),
-                format!("lambda a, /, {name}: 1"),
-                format!("lambda {name}, /, b: 1"),
-                format!("lambda a, *, {name}: 1"),
-                format!("lambda a, *, {name}=1: 1"),
-                format!("lambda {name}=1: 1"),
-                format!("lambda *{name}: 1"),
-                format!("lambda **{name}: 1"),
-                format!("lambda a, *b, **{name}: 1"),
-                format!("lambda: (lambda {name}: 1)"),
+                format!("lambda {word}: {word}"),
+                format!("lambda a, /, {word}, *, b={word}: x"),
+                format!("lambda *{word}, **kw: {word}"),
+                format!("lambda **{word}: {word}.y"),
+                format!("(lambda {word}: x.y)(1)"),
             ] {
-                _assert_name_refused(&input, name, "lambda parameter");
+                let result = transform_expression_string(&input);
+                assert!(result.is_ok(), "{input} was refused: {:?}", result.err());
             }
         }
     }
 
     #[test]
-    fn test_the_context_leak_through_a_shadowed_helper_is_refused() {
-        // The two expressions below leak the real context mapping on a version without
-        // the refusal. The first replaces `variable`, the second `context`.
-        _assert_name_refused(
-            "(lambda variable: x)(lambda ctx, *a: ctx)",
-            "variable",
-            "lambda parameter",
+    fn test_helper_words_are_ordinary_comprehension_variables() {
+        // `<source c-for="source in sources">` compiles to a comprehension like this one.
+        _test_transformation(
+            "[source.src for source in sources]",
+            "[_sx_attribute(_sx_context, _sx_source, (1, 11), source, 'src') for source in _sx_variable(_sx_context, _sx_source, (26, 33), 'sources')]",
+            vec![("sources", 26, 33, (1, 27))],
+            vec![],
         );
-        _assert_name_refused(
-            "(lambda context: (planted := 1))(target)",
-            "context",
-            "lambda parameter",
-        );
+        for word in HELPER_WORDS {
+            for input in [
+                format!("[{word} for {word} in items]"),
+                format!("{{{word}: 1 for {word} in items}}"),
+                format!("(x.y for a, {word} in items)"),
+                format!("[1 for a in items for {word} in a]"),
+            ] {
+                let result = transform_expression_string(&input);
+                assert!(result.is_ok(), "{input} was refused: {:?}", result.err());
+            }
+        }
     }
 
     #[test]
-    fn test_helper_names_refused_as_comprehension_variables() {
-        for name in GENERATED_NAMES {
+    fn test_names_with_the_generated_prefix_are_refused_as_lambda_parameters() {
+        for name in GENERATED_NAMES.iter().copied().chain(["_sx_", "_sx_other"]) {
+            for input in [
+                format!("lambda {name}: 1"),
+                format!("lambda a, /, {name}: 1"),
+                format!("lambda {name}, /, b: 1"),
+                format!("lambda a, *, {name}=1: 1"),
+                format!("lambda *{name}: 1"),
+                format!("lambda **{name}: 1"),
+                format!("lambda: (lambda {name}: 1)"),
+            ] {
+                _assert_prefix_refused(&input, name, "lambda parameter");
+            }
+        }
+    }
+
+    #[test]
+    fn test_names_with_the_generated_prefix_are_refused_as_comprehension_variables() {
+        for name in GENERATED_NAMES.iter().copied().chain(["_sx_", "_sx_other"]) {
             for input in [
                 format!("[1 for {name} in items]"),
                 format!("{{1 for {name} in items}}"),
                 format!("{{1: 2 for {name} in items}}"),
                 format!("(1 for {name} in items)"),
-                format!("[1 for a, {name} in items]"),
-                format!("[1 for ({name}, a) in items]"),
+                format!("[1 for (a, {name}) in items]"),
                 format!("[1 for a in items for {name} in a]"),
-                format!("[[1 for {name} in a] for a in items]"),
                 format!("[1 for a in items if (lambda: [1 for {name} in a])()]"),
             ] {
-                _assert_name_refused(&input, name, "comprehension variable");
+                _assert_prefix_refused(&input, name, "comprehension variable");
             }
         }
     }
 
     #[test]
-    fn test_the_context_leak_through_a_comprehension_variable_is_refused() {
-        // The first iterable is evaluated outside the comprehension, so `[context]` reads
-        // the generated lambda's real `context` while `context` is also the loop name.
-        _assert_name_refused(
-            "[c for c in [context] for context in [0]]",
-            "context",
-            "comprehension variable",
-        );
-        _assert_name_refused(
-            "[h for h in [call] for call in [0]]",
-            "call",
-            "comprehension variable",
-        );
-    }
-
-    #[test]
-    fn test_helper_names_spelled_with_other_unicode_forms_are_refused() {
-        // Python reads identifiers in NFKC form, so the full-width spelling is the same
-        // name once the generated code is compiled.
-        _assert_name_refused(
-            "lambda \u{ff41}\u{ff54}\u{ff54}\u{ff52}\u{ff49}\u{ff42}\u{ff55}\u{ff54}\u{ff45}: 1",
-            "attribute",
+    fn test_replacing_a_helper_through_a_bound_name_is_refused() {
+        // With the prefix not refused, the first expression would hand the real context
+        // mapping to the template's lambda, and the second would read it directly.
+        _assert_prefix_refused(
+            "(lambda _sx_variable: x)(lambda ctx, *a: ctx)",
+            "_sx_variable",
             "lambda parameter",
         );
-        _assert_name_refused(
-            "[1 for \u{ff56}\u{ff41}\u{ff52}\u{ff49}\u{ff41}\u{ff42}\u{ff4c}\u{ff45} in items]",
-            "variable",
+        _assert_prefix_refused(
+            "[c for c in [1] for _sx_context in [0]]",
+            "_sx_context",
             "comprehension variable",
+        );
+        // Python reads identifiers in NFKC form, so the full-width `sx` is the same name
+        // once the generated code is compiled.
+        _assert_prefix_refused(
+            "lambda _\u{ff53}\u{ff58}_variable: 1",
+            "_sx_variable",
+            "lambda parameter",
         );
     }
 
     #[test]
-    fn test_names_close_to_helper_names_are_allowed() {
+    fn test_names_close_to_the_prefix_are_allowed() {
         for input in [
-            "lambda variables: variables",
-            "lambda sources, formats: sources",
+            "lambda _: 1",
             "lambda _context, _source: _context",
-            "lambda Source, Context: Source",
-            "lambda callable: callable",
-            "lambda call_: call_",
-            "[x for contexts in items for x in contexts]",
-            "[template_name for template_name in items]",
-            "(lambda a, *rest, **options: a)",
+            "lambda _sx: _sx",
+            "lambda sx_variable: sx_variable",
+            "lambda __sx_variable: 1",
+            "[1 for _ in items]",
+            "[1 for _s_x in items]",
         ] {
             let result = transform_expression_string(input);
             assert!(result.is_ok(), "{input} was refused: {:?}", result.err());
@@ -3079,12 +3103,12 @@ mod tests {
     }
 
     #[test]
-    fn test_helper_names_stay_readable_as_context_variables() {
-        // A name the template reads from the context, not a name it introduces, is
-        // transformed into a lookup, so it cannot reach the helper of the same name.
+    fn test_helper_words_read_from_the_context_are_lookups() {
+        // A name the template reads from the context is transformed into a lookup, so a
+        // context variable named like a helper is just another variable.
         _test_transformation(
             "context + source + call",
-            "variable(context, source, (0, 7), 'context') + variable(context, source, (10, 16), 'source') + variable(context, source, (19, 23), 'call')",
+            "_sx_variable(_sx_context, _sx_source, (0, 7), 'context') + _sx_variable(_sx_context, _sx_source, (10, 16), 'source') + _sx_variable(_sx_context, _sx_source, (19, 23), 'call')",
             vec![
                 ("context", 0, 7, (1, 1)),
                 ("source", 10, 16, (1, 11)),
@@ -3095,21 +3119,22 @@ mod tests {
     }
 
     #[test]
-    fn test_helper_names_as_walrus_targets_do_not_shadow_a_helper() {
-        // A walrus target is written to the context by `assign(...)`, never bound as a
-        // Python name, so it cannot replace a helper. These stay allowed.
+    fn test_walrus_targets_are_written_to_the_context() {
+        // A walrus target is written to the context by `_sx_assign(...)`, never bound as
+        // a Python name, so even a name with the prefix cannot replace a helper. The
+        // Python runtime then refuses a `_` name when it reads one back.
         _test_transformation(
             "(variable := 1)",
-            "assign(context, source, (1, 14), 'variable', 1)",
+            "_sx_assign(_sx_context, _sx_source, (1, 14), 'variable', 1)",
             vec![],
             vec![("variable", 1, 9, (1, 2))],
         );
-        for name in GENERATED_NAMES {
+        for name in HELPER_WORDS.iter().chain(GENERATED_NAMES.iter()) {
             let input = format!("({name} := 1)");
             let result = transform_expression_string(&input).unwrap();
             let code = generate_python_code(&result.expression);
             assert!(
-                code.starts_with("assign(context, source, "),
+                code.starts_with("_sx_assign(_sx_context, _sx_source, "),
                 "{input} generated {code}"
             );
         }

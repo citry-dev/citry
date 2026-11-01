@@ -31,7 +31,7 @@ pub use transformer::{
 /// 1. Parses the Python expression into an AST
 /// 2. Validates that the AST contains only a set of allowed nodes
 /// 3. Transforms unsafe syntax patterns / nodes into safe ones so we can intercept them.
-///    E.g. `foo(1)` -> `call(foo, 1)`
+///    E.g. `foo(1)` -> `_sx_call(_sx_context, _sx_source, (0, 6), _sx_variable(..., 'foo'), 1)`
 /// 4. Re-generates the now-modified Python code from the modified AST
 /// 5. Returns the generated code
 ///
@@ -45,15 +45,17 @@ pub use transformer::{
 /// let result = safe_eval("1 + my_var.foo");
 /// assert_eq!(
 ///     result,
-///     Ok("1 + attribute(context, source, (4, 14), variable(context, source, (4, 10), 'my_var'), 'foo')".to_string()),
+///     Ok("1 + _sx_attribute(_sx_context, _sx_source, (4, 14), _sx_variable(_sx_context, _sx_source, (4, 10), 'my_var'), 'foo')".to_string()),
 /// );
 /// ```
 ///
 /// ### Transformations
 ///
 /// The following transformations are applied to make expressions safe for evaluation.
-/// The list shows simplified forms; the actual generated calls also receive `context`,
-/// `source`, and the source span as leading arguments (see the example above):
+/// The list shows simplified forms. The actual helper names start with `_sx_` (such as
+/// `_sx_variable`), so the transformer can refuse them as lambda parameters and loop
+/// variables, and a template cannot read them. Each call also receives `_sx_context`,
+/// `_sx_source`, and the source span as leading arguments (see the example above):
 ///
 /// 1. **Variable access** - `my_var` → `variable("my_var")`
 /// 2. **Function calls** - `foo(1, 2, a=3, *args, **kwargs)` → `call(foo, 1, 2, a=x, *args, **kwargs)`

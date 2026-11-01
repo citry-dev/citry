@@ -259,11 +259,11 @@ expression could reach outside the template:
 | Dunder attributes such as `__class__` | Access blocked |
 | Unsafe functions such as `eval`, `exec`, and `open` | Call blocked |
 | `format()` and `format_map()` on any string, `Markup` included | Blocked; use an f-string |
-| A lambda parameter or loop variable named `call`, `context`, `source`, `format`, or another name the sandbox uses | `SyntaxError` |
+| A lambda parameter or loop variable whose name starts with `_sx_`, the prefix of the sandbox's own helpers | `SyntaxError` |
 
 A blocked operation raises [`SecurityError`][citry.SecurityError] when the
-expression runs. A reserved name raises `SyntaxError` when Citry compiles
-the template.
+expression runs. A lambda parameter or loop variable that starts with
+`_sx_` raises `SyntaxError` when Citry compiles the template.
 
 The sandbox checks the names and calls that the expression writes. It does
 not check what the objects in the render context can do: an expression can

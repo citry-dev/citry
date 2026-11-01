@@ -16,17 +16,17 @@
 //!
 //! The following transformations are applied to make expressions safe for evaluation:
 //!
-//! 1. **Variable access** - `my_var` → `variable(context, source, token, "my_var")` where `token` is `(start_index, end_index)`
-//! 2. **Function calls** - `foo(1, 2, a=3, *args, **kwargs)` → `call(context, source, token, foo, 1, 2, a=x, *args, **kwargs)`
-//! 3. **Attribute access** - `obj.attr` → `attribute(context, source, token, obj, "attr")`
-//! 4. **Subscript access** - `obj[key]` → `subscript(context, source, token, obj, key)`
-//! 5. **Walrus operator** - `(x := value)` → `assign(context, source, token, "x", value)` where `token` contains the entire expression range
+//! 1. **Variable access** - `my_var` → `_sx_variable(_sx_context, _sx_source, token, "my_var")` where `token` is `(start_index, end_index)`
+//! 2. **Function calls** - `foo(1, 2, a=3, *args, **kwargs)` → `_sx_call(_sx_context, _sx_source, token, foo, 1, 2, a=x, *args, **kwargs)`
+//! 3. **Attribute access** - `obj.attr` → `_sx_attribute(_sx_context, _sx_source, token, obj, "attr")`
+//! 4. **Subscript access** - `obj[key]` → `_sx_subscript(_sx_context, _sx_source, token, obj, key)`
+//! 5. **Walrus operator** - `(x := value)` → `_sx_assign(_sx_context, _sx_source, token, "x", value)` where `token` contains the entire expression range
 //!
 //! Because of the changes above, we also need to transform:
 //!
-//! 6. **Slice notation** - `obj[1:10:2]` → `subscript(context, source, token, obj, slice(context, source, token, 1, 10, 2))` - Because slice syntax is valid only inside square brackets.
-//! 7. **F-strings** - `f"Hello {price!r:.2f}"` → `format(context, source, token, "Hello {}", (variable(context, source, token, "price"), "r", ".2f"))` - To avoid issues with quote escaping and enable error reporting
-//! 8. **T-strings** - `t"Hello {name!r:>10}"` → `template(context, source, token, "Hello ", interpolation(context, source, token, variable(context, source, token, "name"), "expr", "r", ">10"))` - To avoid issues with quote escaping
+//! 6. **Slice notation** - `obj[1:10:2]` → `_sx_subscript(_sx_context, _sx_source, token, obj, _sx_slice(_sx_context, _sx_source, token, 1, 10, 2))` - Because slice syntax is valid only inside square brackets.
+//! 7. **F-strings** - `f"Hello {price!r:.2f}"` → `_sx_format(_sx_context, _sx_source, token, "Hello {}", (_sx_variable(_sx_context, _sx_source, token, "price"), "r", ".2f"))` - To avoid issues with quote escaping and enable error reporting
+//! 8. **T-strings** - `t"Hello {name!r:>10}"` → `_sx_template(_sx_context, _sx_source, token, "Hello ", _sx_interpolation(_sx_context, _sx_source, token, _sx_variable(_sx_context, _sx_source, token, "name"), "expr", "r", ">10"))` - To avoid issues with quote escaping
 //!
 //! ## Variable Scoping
 //!
@@ -34,11 +34,11 @@
 //!
 //! ### Comprehensions
 //! Variables introduced in comprehensions are local to the comprehension and NOT transformed:
-//! - `[x for x in items]` → `[x for x in variable(context, source, token, "items")]`
+//! - `[x for x in items]` → `[x for x in _sx_variable(_sx_context, _sx_source, token, "items")]`
 //! - The variable `x` is NOT transformed because it's local to the comprehension
 //!
 //! Walrus assignments in comprehensions ARE transformed and DO leak out (matching Python behavior):
-//! - `[y for x in items if (y := x + 1)]` → `[assign(context, source, token, "y", x + 1) for x in variable(context, source, token, "items")]`
+//! - `[y for x in items if (y := x + 1)]` → `[_sx_assign(_sx_context, _sx_source, token, "y", x + 1) for x in _sx_variable(_sx_context, _sx_source, token, "items")]`
 //! - the variable `y` is accessible after the comprehension
 //!
 //! If you define walrus variable with the same name as comprehension variables,
@@ -146,7 +146,7 @@
 // - 🔵✅ Dict             - ExprDict
 //
 // Variables:
-// - 🔵⚠️ Name           - ExprName           (variable name) - Wrap in `variable(context, source, token, "name")`
+// - 🔵⚠️ Name           - ExprName           (variable name) - Wrap in `_sx_variable(_sx_context, _sx_source, token, "name")`
 // - 🔵✅ Load           - ExprContext::Load  (x)
 // - 🔵❌ Store          - ExprContext::Store (x = 1)
 // - 🔵❌ Del            - ExprContext::Del   (del x)
@@ -258,7 +258,7 @@ use crate::utils::literal_source::{
     escape_format_braces, has_surrogate_escape, interpolated_text_as_plain_body,
     plain_literal_text, source_text,
 };
-pub use crate::utils::python_ast::GENERATED_NAMES;
+pub use crate::utils::python_ast::{GENERATED_NAME_PREFIX, GENERATED_NAMES};
 use crate::utils::python_ast::{
     attribute, call, get_expr_range, interceptor_call, none_literal, string_literal,
 };
@@ -663,8 +663,8 @@ pub struct SandboxTransformer {
     // Each tuple is (variable_name, start_index, end_index).
     assignments: RefCell<Vec<(String, usize, usize)>>,
     // Track variables that are needed from the outside context (not local).
-    // These are variables that need to be accessed via variable(context, source, token, "name").
-    // When we transform `var_name` to `variable(context, source, token, "var_name")`, we record
+    // These are variables that need to be accessed via _sx_variable(_sx_context, _sx_source, token, "name").
+    // When we transform `var_name` to `_sx_variable(_sx_context, _sx_source, token, "var_name")`, we record
     // that `var_name` is needed. This helps determine what variables the expression
     // requires from the context in which it's evaluated.
     // We use a Vec to store all occurrences with their positions.
@@ -885,7 +885,7 @@ impl SandboxTransformer {
     }
 
     /// Record a variable that is needed from the outside context.
-    /// This is called when we transform a variable access to variable(context, source, token, "name").
+    /// This is called when we transform a variable access to _sx_variable(_sx_context, _sx_source, token, "name").
     /// Records all occurrences of each variable name.
     fn add_used_variable(&self, var_name: String, start_index: usize, end_index: usize) {
         self.used_variables
@@ -952,24 +952,25 @@ impl SandboxTransformer {
         self.propagate_from_child(&child_transformer);
     }
 
-    /// Refuse a name that a lambda or comprehension introduces when the generated code
-    /// already uses that name for its own helpers or arguments (see `GENERATED_NAMES`).
+    /// Refuse a name that a lambda or comprehension introduces when it starts with the
+    /// prefix the generated code uses for its own helpers and arguments
+    /// (`GENERATED_NAME_PREFIX`).
     ///
-    /// The generated code calls its helpers by plain name. Inside a lambda or a
-    /// comprehension that introduces `attribute`, the call `attribute(context, ...)` that
-    /// guards `obj.name` would call the template's own value instead, and a helper that
-    /// receives the real `context` mapping hands it to that value. Returns true when the
-    /// name was refused, so the caller can stop visiting the scope.
+    /// Python binds a lambda parameter or comprehension variable directly, without the
+    /// `_sx_variable()` check that refuses `_` names. Inside a lambda that introduces
+    /// `_sx_attribute`, the call that guards `obj.name` would call the template's own
+    /// value instead, and hand it the real context mapping. Returns true when the name was
+    /// refused, so the caller can stop visiting the scope.
     ///
-    /// Ruff reads identifiers in NFKC form, as Python does, so the full-width spelling of
-    /// a helper name arrives here already as the plain name.
+    /// Ruff reads identifiers in NFKC form, as Python does, so a compatibility spelling
+    /// such as `_ｓｘ_` arrives here as `_sx_`.
     fn refuse_generated_name(&self, name: &str, what: &str) -> bool {
-        if !GENERATED_NAMES.contains(&name) {
+        if !name.starts_with(GENERATED_NAME_PREFIX) {
             return false;
         }
         self.set_error(format!(
-            "SyntaxError: '{}' is a name the sandbox uses for its own checks, so it cannot be a {}. Use a different name.",
-            name, what
+            "SyntaxError: '{}' starts with '{}', which the sandbox keeps for its own checks, so it cannot be a {}. Use a different name.",
+            name, GENERATED_NAME_PREFIX, what
         ));
         true
     }
@@ -1302,16 +1303,16 @@ impl Transformer for SandboxTransformer {
                 });
             }
 
-            // ⚠️ Variable names transform from `my_var` to `variable(context, source, token, "my_var")`
+            // ⚠️ Variable names transform from `my_var` to `_sx_variable(_sx_context, _sx_source, token, "my_var")`
             Expr::Name(name) => {
                 // Check if this is a locally introduced variable (from comprehensions, lambdas, etc.)
                 // or if it was assigned via walrus operator
                 let var_name = name.id.as_str();
                 if self.is_local_variable(var_name) {
-                    // This is a local variable, don't transform it to variable(context, source, token, "name")
+                    // This is a local variable, don't transform it to _sx_variable(_sx_context, _sx_source, token, "name")
                     // Just allow it as-is
                 } else {
-                    // Transform `var_name` to `variable(context, source, token, "var_name")`.
+                    // Transform `var_name` to `_sx_variable(_sx_context, _sx_source, token, "var_name")`.
                     // That way, when evaluating the modified expression, we can plug in
                     // the definition of `variable()` and safely handle the variable access.
                     // The token tuple contains (start_index, end_index) for error reporting.
@@ -1328,7 +1329,7 @@ impl Transformer for SandboxTransformer {
                     // Create a StringLiteral for the variable name
                     let var_name_literal = string_literal(&var_name, range);
 
-                    // `variable(context, source, (start_index, end_index), "var_name")`
+                    // `_sx_variable(_sx_context, _sx_source, (start_index, end_index), "var_name")`
                     let adjusted_range = self.adjust_range(range);
                     let call_expr = interceptor_call(
                         "variable",
@@ -1356,7 +1357,7 @@ impl Transformer for SandboxTransformer {
                 let mut args = vec![*call_expr.func.clone()];
                 args.extend(call_expr.arguments.args.to_vec());
 
-                // `call(context, source, (start_index, end_index), fn, *args, **kwargs)`
+                // `_sx_call(_sx_context, _sx_source, (start_index, end_index), fn, *args, **kwargs)`
                 let adjusted_range = self.adjust_range(call_expr.range());
                 let wrapper_call = interceptor_call(
                     "call",
@@ -1387,7 +1388,7 @@ impl Transformer for SandboxTransformer {
                 // Create a StringLiteral for the attribute name
                 let attr_name_literal = string_literal(&attr_name, range);
 
-                // `attribute(context, source, (start_index, end_index), obj, "attr_name")`
+                // `_sx_attribute(_sx_context, _sx_source, (start_index, end_index), obj, "attr_name")`
                 let adjusted_range = self.adjust_range(range);
                 let wrapper_call = interceptor_call(
                     "attribute",
@@ -1410,7 +1411,7 @@ impl Transformer for SandboxTransformer {
                 // Now wrap the subscript access in subscript(obj, key)
                 let range = subscript.range;
 
-                // `subscript(context, source, (start_index, end_index), obj, key)`
+                // `_sx_subscript(_sx_context, _sx_source, (start_index, end_index), obj, key)`
                 let adjusted_range = self.adjust_range(range);
                 let wrapper_call = interceptor_call(
                     "subscript",
@@ -1463,7 +1464,7 @@ impl Transformer for SandboxTransformer {
                         .unwrap_or_else(|| none_literal(range)),
                 ];
 
-                // `slice(context, source, (start_index, end_index), lower, upper, step)`
+                // `_sx_slice(_sx_context, _sx_source, (start_index, end_index), lower, upper, step)`
                 let adjusted_range = self.adjust_range(range);
                 let slice_call = interceptor_call("slice", slice_args, vec![], adjusted_range);
 
@@ -1471,7 +1472,7 @@ impl Transformer for SandboxTransformer {
                 *expr = slice_call;
             }
 
-            // ⚠️ Walrus operator transform from `x := y` to `assign(context, source, token, "x", y)`
+            // ⚠️ Walrus operator transform from `x := y` to `_sx_assign(_sx_context, _sx_source, token, "x", y)`
             // We always transform to assign() even in lambdas, so assignments leak out to the context
             // This allows patterns like: fn_with_callback(on_done=lambda res: (data:= res))
             // However, we raise SyntaxError if the assignment conflicts with comprehension or lambda variables
@@ -1524,7 +1525,7 @@ impl Transformer for SandboxTransformer {
                 // Create a StringLiteral for the variable name
                 let var_name_literal = string_literal(&var_name, range);
 
-                // `assign(context, source, (start_index, end_index), "var_name", value)`
+                // `_sx_assign(_sx_context, _sx_source, (start_index, end_index), "var_name", value)`
                 let adjusted_range = self.adjust_range(range);
                 let wrapper_call = interceptor_call(
                     "assign",
@@ -1537,7 +1538,7 @@ impl Transformer for SandboxTransformer {
                 *expr = wrapper_call;
             }
 
-            // ⚠️ F-string transform from `f"Hello {price!r:.2f}"` to `format(context, source, token, "Hello {}", (variable(context, source, token, "price"), "r", ".2f"))`
+            // ⚠️ F-string transform from `f"Hello {price!r:.2f}"` to `_sx_format(_sx_context, _sx_source, token, "Hello {}", (_sx_variable(_sx_context, _sx_source, token, "price"), "r", ".2f"))`
             Expr::FString(f_string) => {
                 // Transform f-strings to .format() calls to avoid quote escaping issues
                 // f"Hello {name}" becomes "Hello {}".format(name)
@@ -1667,7 +1668,7 @@ impl Transformer for SandboxTransformer {
                 // Create a string literal for the template
                 let template_literal = string_literal(&template_str, range);
 
-                // `format(context, source, token, "template {}", *args)`
+                // `_sx_format(_sx_context, _sx_source, token, "template {}", *args)`
                 // We use an intercepted format() function instead of the built-in .format() method
                 // so that errors inside f-strings get nice error reporting with underlining
                 let mut format_args_with_template = vec![template_literal];
@@ -1681,7 +1682,7 @@ impl Transformer for SandboxTransformer {
                 *expr = format_call;
             }
 
-            // ⚠️ T-string transform from `t"Hello {name!r:>10}"` to `template(context, source, token, "Hello ", interpolation(context, source, token, variable(context, source, token, "name"), "expr", "r", ">10"))`
+            // ⚠️ T-string transform from `t"Hello {name!r:>10}"` to `_sx_template(_sx_context, _sx_source, token, "Hello ", _sx_interpolation(_sx_context, _sx_source, token, _sx_variable(_sx_context, _sx_source, token, "name"), "expr", "r", ">10"))`
             Expr::TString(t_string) => {
                 // Transform t-strings to Template() constructor calls
                 // t"Hello {name}" becomes Template("Hello ", Interpolation(name, "name", None, ""), "")
@@ -1757,7 +1758,7 @@ impl Transformer for SandboxTransformer {
                                     None => string_literal("", interpolation.range),
                                 };
 
-                                // `interpolation(context, source, token, value, expression, conversion, format_spec)`
+                                // `_sx_interpolation(_sx_context, _sx_source, token, value, expression, conversion, format_spec)`
                                 // Use interpolation.range for error reporting to point to the exact {expression!r:format} location
                                 let adjusted_interpolation_range =
                                     self.adjust_range(interpolation.range);
@@ -1788,7 +1789,7 @@ impl Transformer for SandboxTransformer {
                     }
                 }
 
-                // `template(context, source, token, ...)`
+                // `_sx_template(_sx_context, _sx_source, token, ...)`
                 let adjusted_range = self.adjust_range(range);
                 let template_call =
                     interceptor_call("template", template_args, vec![], adjusted_range);
@@ -1843,8 +1844,8 @@ impl Transformer for SandboxTransformer {
                         parameter_names.push(kwarg.name().to_string());
                     }
                 }
-                // A parameter named like a generated helper would replace that helper for
-                // the whole body (see `refuse_generated_name`), so stop before the body.
+                // A parameter with the generated code's prefix could replace a helper for the
+                // whole body (see `refuse_generated_name`), so stop before the body.
                 for name in &parameter_names {
                     if self.refuse_generated_name(name, "lambda parameter") {
                         return;

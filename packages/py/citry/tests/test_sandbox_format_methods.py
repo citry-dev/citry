@@ -87,13 +87,25 @@ def test_other_markup_methods_still_work():
 
 
 @pytest.mark.parametrize("sandbox", [True, False])
-def test_a_loop_variable_named_like_a_sandbox_helper_is_a_syntax_error(sandbox):
-    # The loop is a generator expression, so its variable must not replace the helper
-    # the generated code calls. The message tells the author to pick another name.
+@pytest.mark.parametrize("name", ["source", "template", "context", "call", "variable"])
+def test_a_loop_variable_named_like_a_sandbox_helper_renders(sandbox, name):
+    # The sandbox's own helpers have `_sx_` names, so a loop variable such as
+    # `source` in `<source c-for="source in sources">` is an ordinary name.
     page = _component(
         Citry(sandbox_expressions=sandbox),
-        '<ul><c-for each="template in items"><li>{{ template.upper() }}</li></c-for></ul>',
+        f'<ul><c-for each="{name} in items"><li>{{{{ {name}.upper() }}}}</li></c-for></ul>',
+        items=["a", "b"],
+    )
+    html = page().render().serialize()
+    assert "<li>A</li><li>B</li>" in html
+
+
+@pytest.mark.parametrize("sandbox", [True, False])
+def test_a_loop_variable_with_the_sandbox_prefix_is_a_syntax_error(sandbox):
+    page = _component(
+        Citry(sandbox_expressions=sandbox),
+        '<ul><c-for each="_sx_item in items"><li>{{ _sx_item }}</li></c-for></ul>',
         items=["a"],
     )
-    with pytest.raises(SyntaxError, match="'template' is a name the sandbox uses"):
+    with pytest.raises(SyntaxError, match="'_sx_item' starts with '_sx_'"):
         page().render().serialize()

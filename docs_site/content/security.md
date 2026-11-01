@@ -394,13 +394,11 @@ do. Two things decide how much you can trust a template with:
   instead.
 - **Statements.** Assignments, `del`, `import`, `raise`, `assert`,
   `async`/`await`, and `yield` are not expressions.
-- **Names the sandbox uses itself.** A lambda parameter or loop variable
-  named `variable`, `attribute`, `subscript`, `call`, `assign`, `slice`,
-  `interpolation`, `template`, `format`, `source`, or `context` fails with
-  `SyntaxError`, because it would replace one of the sandbox's own checks.
-  A `<c-for>` loop variable with one of these names can fail the same way,
-  so pick another name. Reading a context variable with one of these names
-  works.
+- **Names the sandbox uses itself.** The sandbox's own helpers have names
+  that start with `_sx_`. A lambda parameter or loop variable with that
+  prefix, including a `<c-for>` loop variable, fails with `SyntaxError`,
+  because it could replace one of the sandbox's checks. Every other name
+  works, such as `source` in `<source c-for="source in sources">`.
 
 A statement fails with `SyntaxError` when Citry compiles the template. A
 blocked access fails with [`SecurityError`][citry.SecurityError] only when

@@ -42,10 +42,10 @@ It is a second layer of protection. It does not make a template from a stranger 
 - The expression text must come from the template author. Request data belongs in the
   context, as a value.
 
-A name the generated code uses for its own checks (`variable`, `attribute`, `subscript`,
-`call`, `assign`, `slice`, `interpolation`, `template`, `format`, `source`, `context`) cannot
-be a lambda parameter or comprehension variable. The Rust transformer refuses it with a
-`SyntaxError`, because the name would replace the check inside that scope.
+The generated code names its own helpers and arguments with the `_sx_` prefix
+(`_sx_variable`, `_sx_context`, and so on). A template cannot read a name that starts with
+`_`, and the Rust transformer raises `SyntaxError` for a lambda parameter or comprehension
+variable that starts with `_sx_`, so no template name can replace a check.
 
 We do NOT support:
 - Builtins. If you need to use `len()`, `str()`, `int()`, `list()`, `dict()`, etc.,
