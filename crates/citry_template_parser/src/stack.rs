@@ -29,7 +29,10 @@
 /// Run the work on a new segment when less stack than this is left: enough
 /// for the largest frames between two guarded calls, about 18 KB per
 /// compiler level in a debug build, with a wide margin.
-const RED_ZONE: usize = 100 * 1024;
+///
+/// The `deep_nesting` tests enter the guard with just over this much left,
+/// the least a guarded caller can bring.
+pub const RED_ZONE: usize = 100 * 1024;
 
 /// The red zone for parsing one embedded expression, which covers the
 /// measured 100 KiB of its error path with a margin.
