@@ -41,10 +41,11 @@ error naming ``EventsDispatcher.dispatch_async`` and the deployment fix.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from citry._owned_resource import PUBLIC_ASSET_CORS_HEADERS, _OwnedResource
 from citry._protocol.events import (
@@ -639,7 +640,9 @@ def _compat_response(envelope: Mapping[str, Any], request: RouteRequest) -> Rout
     actions = first.get("actions") or []
     redirect = next((action for action in actions if action.get("action") == "redirect"), None)
     if redirect is not None:
-        location = _resolve_redirect_url(redirect["url"], request)
+        # Resolve first, then encode: the resolver works on the URL as the
+        # handler wrote it, and the header must carry only ASCII.
+        location = _encode_location(_resolve_redirect_url(redirect["url"], request))
         return RouteResponse(status=303, headers=(("Location", location),))
     render = next((action for action in actions if action.get("action") == "render"), None)
     if render is not None:
@@ -654,6 +657,12 @@ def _compat_response(envelope: Mapping[str, Any], request: RouteRequest) -> Rout
 # Characters browsers strip from both ends of a URL before they parse it (C0
 # controls and space), so " //host" means the same as "//host" to them.
 _URL_LEADING_STRIP = "".join(chr(code) for code in range(0x21))
+
+
+# A URL scheme as browsers read it: a letter, then letters, digits, "+",
+# "-", or ".", then ":". A regex rather than urlsplit, which raises on
+# some non-ASCII hosts and would turn the redirect into a 500.
+_URL_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 
 
 # The (handler path, URL) pairs already warned about, for the life of the
@@ -689,12 +698,17 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     - a ``<base href>`` changes what the browser resolves against, but the
       Referer still names the page's own URL.
     """
-    stripped = url.lstrip(_URL_LEADING_STRIP)
-    if urlsplit(stripped).scheme or stripped.startswith(("/", "\\")):
+    stripped = url.lstrip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
+    if _URL_SCHEME.match(stripped) or stripped.startswith(("/", "\\")):
         return url
 
     referer = request.headers.get("referer") or ""
-    base = urlsplit(referer)
+    try:
+        base = urlsplit(referer)
+    except ValueError:
+        # urlsplit rejects some hosts, such as "[::1" or ones with full-width
+        # delimiters; the client sent it, so treat it as no Referer.
+        base = urlsplit("")
     host = (request.headers.get("host") or "").lower()
     # Compare the Referer's host with the request's own Host, as the always-on
     # CSRF check (enforce_floor) does for Origin: a page from another site is
@@ -733,10 +747,9 @@ def _join_like_a_browser(base: SplitResult, reference: str) -> str:
 
     ``urllib.parse.urljoin`` follows RFC 3986 and drops empty path segments,
     so it turns a page at ``//a/b`` into ``/a/b``; a browser keeps them. This
-    follows the WHATWG URL rules for ``http`` and ``https`` instead, so for
-    an ASCII URL the 303 lands where ``location.assign()`` would. It does not
-    percent-encode, so a non-ASCII URL goes out however the web framework's
-    adapter encodes the ``Location`` header.
+    follows the WHATWG URL rules for ``http`` and ``https`` instead, so the
+    303 lands where ``location.assign()`` would. It keeps the characters as
+    written; ``_encode_location`` percent-encodes the result afterwards.
     """
     # Browsers drop tabs and newlines anywhere in a URL before parsing it.
     reference = reference.translate({9: None, 10: None, 13: None}).rstrip(_URL_LEADING_STRIP)
@@ -770,6 +783,43 @@ def _join_like_a_browser(base: SplitResult, reference: str) -> str:
             segments.append(segment)
     resolved_query = f"{question_mark}{query}"
     return f"{origin}/{'/'.join(segments)}{resolved_query}{tail}"
+
+
+# Every printable ASCII character except space. These pass into the header
+# as written: a browser reads reserved characters and "%XX" escapes in a
+# Location exactly as it reads them in location.assign().
+_LOCATION_SAFE = "".join(chr(code) for code in range(0x21, 0x7F))
+
+# A lone surrogate cannot be encoded as UTF-8. Browsers turn one into U+FFFD
+# when a string becomes a URL, so the server does the same.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def _encode_location(url: str) -> str:
+    """
+    Turn a redirect URL into the ASCII form a ``Location`` header needs.
+
+    HTTP headers carry bytes, and Citry's ASGI and WSGI adapters send
+    header text as Latin-1, so a URL such as ``"/caf\u00e9"`` must go out
+    as ``"/caf%C3%A9"``, the form a browser gives it when
+    ``location.assign()`` navigates to it. Every space and every character
+    outside printable ASCII becomes UTF-8 ``%XX`` escapes, the host
+    included; other printable ASCII, including reserved characters and
+    existing escapes, stays as is.
+
+    The host stays percent-encoded rather than converted to its ASCII
+    ``xn--`` form (IDNA). A browser decodes the escapes in an ``http`` or
+    ``https`` host and converts it with its own rules, so the redirect
+    lands where ``location.assign()`` would.
+    """
+    # Most URLs are already printable ASCII, and browsers read those as written.
+    if all("!" <= char <= "~" for char in url):
+        return url
+    # Do what browsers do before they parse: drop ASCII control characters and
+    # spaces at both ends, tabs and newlines anywhere, and replace lone surrogates.
+    url = url.strip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
+    url = _LONE_SURROGATE.sub("\ufffd", url)
+    return quote(url, safe=_LOCATION_SAFE)
 
 
 def _with_no_store(response: RouteResponse) -> RouteResponse:
