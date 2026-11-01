@@ -719,6 +719,20 @@ extension's routes, and `Citry.urls` exposes the combined table:
 The first three are the `dependencies` extension's own `urls`; the `ext/`
 namespace mirrors DJC's `urls.py` layout.
 
+A URL whose hash is a hash of the bytes served (a class version, or a served
+`asset/<hash>.<ext>` file) answers with
+`Cache-Control: public, max-age=31536000, immutable`. A URL whose bytes can
+change at the same address answers with `Cache-Control: no-cache` and an
+`ETag`, and returns `304` with no body when the request's `If-None-Match` names
+the current tag (`_OwnedResource.revalidated_response` in
+`citry/_owned_resource.py`). That covers `cache/<class_id>.<js|css>`,
+`citry.js`, and the variables script: its hash covers the `css_data()` values,
+while the stylesheet text around them comes from Citry's code. An
+`If-None-Match` that names no current tag, or a handler run without a request,
+gets the full file. A missing class, unknown type, or missing hashed entry
+answers `404` with `Cache-Control: no-store`, because another worker may store
+the entry a moment later.
+
 Handlers stay framework-neutral by keeping the logic out of them: the
 endpoint body is a plain function on the extension,
 `get_cached_script(class_id, script_type, vars_hash) -> (content, mime) |

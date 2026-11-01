@@ -344,3 +344,28 @@ the browser posts event calls to, and one URL per event handler. See
 [Server events](/events/), and read
 [Security](/security/#protect-event-posts-from-csrf) before you deploy
 those routes.
+
+### How browsers cache files
+
+A component's script or stylesheet named by a hash of its content
+(`{prefix}/cache/{class_id}.{hash}.js`), a file served from
+`{prefix}/asset/` (its name is a hash of the file), and the Events
+definitions and stylesheets never change at their URL. Citry sends them
+with `Cache-Control: public, max-age=31536000, immutable`, so the browser
+keeps them for a year without asking again. When the content changes, the
+page links a new URL.
+
+`{prefix}/citry.js`, `{prefix}/cache/{class_id}.{script_type}`, and the
+stylesheet built from one render's `css_data()` can change at the same
+URL, for example when you upgrade Citry. Citry sends them with
+`Cache-Control: no-cache` and an `ETag`. The browser keeps a copy but asks
+before each use, and Citry answers `304 Not Modified`, with no body, while
+the copy is current. The Events and i18n browser scripts
+(`{prefix}/ext/events/runtime.js` and `{prefix}/ext/i18n/runtime.js`) are
+sent with `Cache-Control: no-store`, so the browser downloads them on each
+page load. A missing file gets `404` with `no-store`, because another
+worker may store it a moment later.
+
+A CDN or proxy in front of your app should pass these headers through
+unchanged. If it drops `no-cache` and stores a file anyway, visitors keep
+the old `citry.js` after you upgrade Citry.

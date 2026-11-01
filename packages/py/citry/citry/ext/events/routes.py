@@ -47,7 +47,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlsplit
 
-from citry._owned_resource import PUBLIC_ASSET_CORS_HEADERS, _OwnedResource
+from citry._owned_resource import IMMUTABLE_CACHE_CONTROL, PUBLIC_ASSET_CORS_HEADERS, _OwnedResource
 from citry._protocol.events import (
     ProtocolValueError,
     add_route_identity,
@@ -197,7 +197,7 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             content_type="text/javascript",
             # Content-addressed and public; the CORS header lets the browser
             # check the integrity the runtime puts on this request.
-            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
+            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", IMMUTABLE_CACHE_CONTROL)),
         )
 
     def serve_style_asset(_request: RouteRequest, *, digest: str) -> RouteResponse:
@@ -213,7 +213,7 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             content_type="text/css",
             # Content-addressed and public; the CORS header lets the browser
             # check the integrity the runtime puts on this request.
-            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
+            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", IMMUTABLE_CACHE_CONTROL)),
         )
 
     # The host adapters read at most one byte past the engine's body cap, so
