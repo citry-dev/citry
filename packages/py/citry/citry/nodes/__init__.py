@@ -3073,7 +3073,9 @@ class SlotNode(Node):
         # default (or a dynamic name that is not a field) yields no fill, so the
         # in-template body below stays the fallback and a required slot still
         # raises. A passed fill always wins over the default.
-        if fill is None and type(component).Slots is not None and _is_declared_slot_field(type(component).Slots, name):
+        # Read `Slots` once so the type checker sees the narrowed, non-None class.
+        slots_class = type(component).Slots
+        if fill is None and slots_class is not None and _is_declared_slot_field(slots_class, name):
             default = getattr(component.slots, name, None)
             if default is not None:
                 fill = normalize_slot_fills({name: default}, component_name=type(component).__name__).get(name)
