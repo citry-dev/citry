@@ -97,7 +97,7 @@ def test_a_new_backend_without_a_pin_is_reported(root: Path) -> None:
     assert len(errors) == 1
     assert "packages/py/third/pyproject.toml" in errors[0]
     # Every pin error tells the reader how to repair it.
-    assert "python scripts/build_constraints.py update && uv lock" in errors[0]
+    assert "python scripts/build_constraints.py update`, then the `uv lock` commands it prints" in errors[0]
 
 
 def test_a_requirement_the_pin_no_longer_satisfies_is_reported(root: Path) -> None:
@@ -206,8 +206,8 @@ def test_a_standalone_project_gets_no_pins_from_the_root(root: Path) -> None:
     )
     errors = build_pin_errors(root)
     assert any(f"{_RUNNER}/pyproject.toml builds with 'hatchling==1.27.0'" in error for error in errors)
-    # The message names the command that repairs this project, including its own lock.
-    assert any(f"uv lock --directory {_RUNNER}" in error for error in errors)
+    # The unpinned-backend error names `update`, which prints the lock commands for the root and each runner.
+    assert any("builds with" in error and "then the `uv lock` commands it prints" in error for error in errors)
     assert any("require-build-hashes = true" in error and f"add the line to {_RUNNER}" in error for error in errors)
 
 
@@ -225,7 +225,8 @@ def test_a_standalone_lock_that_lags_behind_its_pins_is_reported(root: Path) -> 
     errors = build_pin_errors(root)
     assert len(errors) == 1
     assert f"{_RUNNER}/uv.lock does not record" in errors[0]
-    assert f"uv lock --directory {_RUNNER}" in errors[0]
+    # Only the lock is stale, so relocking that folder repairs it; refreshing the pins would not be needed.
+    assert errors[0].endswith(f"run `uv lock --directory {_RUNNER}`")
 
 
 def test_a_standalone_lock_with_other_hashes_is_reported(root: Path) -> None:
@@ -266,3 +267,23 @@ def test_only_hatchling_gets_extra_build_requirements(tmp_path: Path) -> None:
         project.parent.mkdir()
         project.write_text(f"[build-system]\nrequires = {requires}\nbuild-backend = 'x'\n", encoding="utf-8")
         assert build_constraints.project_requirements(project) == expected
+
+
+def test_a_standalone_lock_without_a_manifest_is_reported(root: Path) -> None:
+    # A lock written before the pins existed has no [manifest] table at all.
+    project = _standalone(root)
+    (project / "uv.lock").write_text("version = 1\nrevision = 3\n", encoding="utf-8")
+    assert any("does not record" in error for error in build_pin_errors(root))
+
+
+def test_a_standalone_project_without_a_lock_is_left_to_uv(root: Path) -> None:
+    # A missing lock fails `uv sync --frozen` with its own message, so the pin check has nothing to compare.
+    project = _standalone(root)
+    (project / "uv.lock").unlink()
+    assert build_pin_errors(root) == []
+
+
+def test_the_root_lock_is_not_compared_here(root: Path) -> None:
+    # `uv lock --check` covers the root lock; a root lock with no manifest must not be reported by this check.
+    (root / "uv.lock").write_text("version = 1\nrevision = 3\n", encoding="utf-8")
+    assert build_pin_errors(root) == []

@@ -1610,11 +1610,11 @@ When uv builds or syncs a workspace package, it first downloads that package's
 build backend from PyPI: setuptools for citry, citry-lsp, citry-ui, and
 pygments-citry, and maturin for citry-core. The two benchmark runners build with
 hatchling, which also needs `editables` while uv installs the runner as an
-editable project. `uv.lock` records the packages
-Citry installs, but not these build-time downloads. So the root
-`pyproject.toml` lists every build backend, and each package a backend needs,
-in `[tool.uv] build-constraint-dependencies` with an exact version and the sha256 hash of
-each file PyPI publishes for it. It also sets `require-build-hashes = true`.
+editable project. `uv.lock` records the packages Citry installs, but not these
+build-time downloads. So the root `pyproject.toml` lists every build backend of
+the workspace packages, and each package a backend needs, in `[tool.uv]
+build-constraint-dependencies` with an exact version and the sha256 hash of each
+file PyPI publishes for it. It also sets `require-build-hashes = true`.
 uv then stops the build when a download does not match a listed hash, or when
 a build needs a package the list leaves out. uv reuses a workspace package
 wheel it has already built and cached without checking the backend again.
@@ -1624,12 +1624,15 @@ uv reads `require-build-hashes` from the nearest `pyproject.toml` that has a
 from the root of the workspace that the project belongs to. The workspace
 packages belong to the repository's workspace, so they use the root table. A
 benchmark runner sits under the repository root without being a workspace
-member, so it is a workspace root itself: uv skips the root table for it, and
-`uv sync --frozen` there stops with `Hash-checking is required, but no trusted
-hash was provided for: hatchling`. Each runner's `pyproject.toml` therefore has
-its own `[tool.uv]` table with the same two settings and a generated block of
-pins for its backend, and `uv lock --directory <runner>` copies them into the
-runner's `uv.lock`. The benchmark apps and error-benchmark baselines have a
+member, so it is a workspace root itself. uv applies the root's
+`require-build-hashes` to a runner that has no `[tool.uv]` table, but does not
+read the root's pins for it, so `uv sync --frozen` there stops with
+`Hash-checking is required, but no trusted hash was provided for: hatchling`.
+Each runner's `pyproject.toml` therefore has its own `[tool.uv]` table with the
+same two settings, because a table of its own stops uv from inheriting the
+root's, and a generated block of pins for its backend.
+`uv lock --directory <runner>` copies the pins into the runner's `uv.lock`. The
+benchmark apps and error-benchmark baselines have a
 `[tool.uv]` table of their own and no build backend, so the setting does not
 reach them. The example projects have no `[tool.uv]` table, so they inherit
 `require-build-hashes` but not the pins; they have no build backend, and
@@ -1681,15 +1684,15 @@ setting is still marked experimental (`build-dependency-hashes`), so check
 uv's release notes when raising the pin.
 
 The pins cover the build backends of this repository's own packages and
-benchmark runners, plus
-the ones in `THIRD_PARTY_BUILD_REQUIREMENTS` in `scripts/build_constraints.py`:
-backends that a locked third-party package needs on a supported interpreter it
-ships no wheel for, such as Cython for PyYAML on CPython 3.15 and PyPy 3.11,
-and pkgconfig for Brotli on free-threaded CPython 3.14.
-When uv has to build some other third-party package from its sdist, that
-backend has no pin and the build stops with `Hash-checking is required, but no
-trusted hash was provided`. Add the backend to that list, then run
-`python scripts/build_constraints.py update && uv lock`.
+benchmark runners, plus the ones in `THIRD_PARTY_BUILD_REQUIREMENTS` in
+`scripts/build_constraints.py`: backends that a locked third-party package
+needs on a supported interpreter it ships no wheel for, such as Cython for
+PyYAML on CPython 3.15 and PyPy 3.11, and pkgconfig for Brotli on free-threaded
+CPython 3.14. When uv has to build some other third-party package from its
+sdist, that backend has no pin and the build stops with `Hash-checking is
+required, but no trusted hash was provided`. Add the backend to that list, then
+run `python scripts/build_constraints.py update` and the `uv lock` commands it
+prints.
 
 ### Root pyproject.toml Protection
 

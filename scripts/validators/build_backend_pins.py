@@ -29,7 +29,7 @@ except ImportError:  # validate.py runs with scripts/ itself on sys.path.
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREVIEW_FEATURE = "build-dependency-hashes"
-FIX = "run `python scripts/build_constraints.py update && uv lock`"
+FIX = "run `python scripts/build_constraints.py update`, then the `uv lock` commands it prints"
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 
 
@@ -41,7 +41,7 @@ def _pinned_version(requirement: Requirement) -> str | None:
     return None
 
 
-def _constraint_errors(entries: Any, fix: str) -> tuple[list[str], dict[str, list[str]], set[str]]:
+def _constraint_errors(entries: Any) -> tuple[list[str], dict[str, list[str]], set[str]]:
     """
     Check each entry's shape and return the pins that apply on every Python, by package name.
 
@@ -51,24 +51,24 @@ def _constraint_errors(entries: Any, fix: str) -> tuple[list[str], dict[str, lis
     pinned: dict[str, list[str]] = {}
     marked: set[str] = set()
     if not isinstance(entries, list) or not entries:
-        return [f"[tool.uv] build-constraint-dependencies is missing or empty; {fix}"], pinned, marked
+        return [f"[tool.uv] build-constraint-dependencies is missing or empty; {FIX}"], pinned, marked
     for entry in entries:
         # A bare string constraint carries no hash, so uv would refuse the download.
         if not isinstance(entry, dict) or not isinstance(entry.get("requirement"), str):
-            errors.append(f"build constraint {entry!r} must be {{ requirement = ..., hashes = [...] }}; {fix}")
+            errors.append(f"build constraint {entry!r} must be {{ requirement = ..., hashes = [...] }}; {FIX}")
             continue
         try:
             requirement = Requirement(entry["requirement"])
         except InvalidRequirement as error:
-            errors.append(f"build constraint {entry['requirement']!r} is not a valid requirement ({error}); {fix}")
+            errors.append(f"build constraint {entry['requirement']!r} is not a valid requirement ({error}); {FIX}")
             continue
         version = _pinned_version(requirement)
         if version is None:
-            errors.append(f"build constraint {entry['requirement']!r} must pin one exact version with ==; {fix}")
+            errors.append(f"build constraint {entry['requirement']!r} must pin one exact version with ==; {FIX}")
             continue
         hashes = entry.get("hashes")
         if not isinstance(hashes, list) or not hashes or not all(_SHA256.fullmatch(str(h)) for h in hashes):
-            errors.append(f"build constraint {entry['requirement']!r} needs at least one sha256 hash; {fix}")
+            errors.append(f"build constraint {entry['requirement']!r} needs at least one sha256 hash; {FIX}")
             continue
         name = canonicalize_name(requirement.name)
         # A marked pin (one limited to some Python versions) cannot stand in for
@@ -80,7 +80,7 @@ def _constraint_errors(entries: Any, fix: str) -> tuple[list[str], dict[str, lis
     return errors, pinned, marked
 
 
-def _pin_table_errors(root: Path, pyproject: Path, projects: list[Path], fix: str) -> list[str]:
+def _pin_table_errors(root: Path, pyproject: Path, projects: list[Path]) -> list[str]:
     """Return the problems in one pyproject's pin table, checked against the projects it must cover."""
     label = pyproject.relative_to(root).as_posix()
     text = pyproject.read_text(encoding="utf-8")
@@ -102,7 +102,7 @@ def _pin_table_errors(root: Path, pyproject: Path, projects: list[Path], fix: st
         )
 
     entries = uv_settings.get("build-constraint-dependencies")
-    entry_errors, pinned, marked = _constraint_errors(entries, fix)
+    entry_errors, pinned, marked = _constraint_errors(entries)
     errors.extend(entry_errors)
 
     # The --no-config builders read the marked block as text, so it must hold
@@ -113,7 +113,7 @@ def _pin_table_errors(root: Path, pyproject: Path, projects: list[Path], fix: st
         # `update` needs the markers too, so the fix starts with restoring them.
         errors.append(
             f"{error}; restore the `{build_constraints.BEGIN_MARKER}` and `{build_constraints.END_MARKER}` "
-            f"lines in {label}, then {fix}"
+            f"lines in {label}, then {FIX}"
         )
     else:
         table = [
@@ -124,7 +124,7 @@ def _pin_table_errors(root: Path, pyproject: Path, projects: list[Path], fix: st
             # `update` rewrites only the marked lines, so the stray entry has to go by hand.
             errors.append(
                 "build-constraint-dependencies has an entry outside the generated block, which --no-config "
-                f"builds would not export; delete it, then {fix}"
+                f"builds would not export; delete it, then {FIX}"
             )
 
     for project in projects:
@@ -136,21 +136,21 @@ def _pin_table_errors(root: Path, pyproject: Path, projects: list[Path], fix: st
             if not versions and canonicalize_name(requirement.name) in marked:
                 errors.append(
                     f"{relative} builds with {raw!r}, but its build constraint applies only under an "
-                    f"environment marker; {fix}"
+                    f"environment marker; {FIX}"
                 )
             elif not versions:
-                errors.append(f"{relative} builds with {raw!r}, which has no hashed build constraint; {fix}")
+                errors.append(f"{relative} builds with {raw!r}, which has no hashed build constraint; {FIX}")
             elif not any(requirement.specifier.contains(version, prereleases=True) for version in versions):
                 errors.append(
-                    f"{relative} builds with {raw!r}, but the build constraint pins {', '.join(versions)}; {fix}"
+                    f"{relative} builds with {raw!r}, but the build constraint pins {', '.join(versions)}; {FIX}"
                 )
     # Entries that failed their shape check would only add noise to the lock comparison.
     if not entry_errors:
-        errors.extend(_lock_errors(root, pyproject, entries, fix))
+        errors.extend(_lock_errors(root, pyproject, entries))
     return errors
 
 
-def _lock_errors(root: Path, pyproject: Path, entries: Any, fix: str) -> list[str]:
+def _lock_errors(root: Path, pyproject: Path, entries: Any) -> list[str]:
     """Return a problem when a standalone project's uv.lock does not record its pyproject's pins."""
     lock = pyproject.with_name("uv.lock")
     # The root lock is checked by `uv lock --check`; a project with no lock fails elsewhere, with its own message.
@@ -168,18 +168,17 @@ def _lock_errors(root: Path, pyproject: Path, entries: Any, fix: str) -> list[st
         return []
     return [
         f"{lock.relative_to(root).as_posix()} does not record the build constraints of "
-        f"{pyproject.relative_to(root).as_posix()}, so `uv sync --frozen` there rejects the build backend; {fix}"
+        f"{pyproject.relative_to(root).as_posix()}, so `uv sync --frozen` there rejects the build backend; "
+        f"run `uv lock --directory {pyproject.parent.relative_to(root).as_posix()}`"
     ]
 
 
 def build_pin_errors(root: Path) -> list[str]:
     """Return a problem for each build backend that is not pinned with a hash in `root`."""
-    errors = _pin_table_errors(root, root / "pyproject.toml", build_constraints.workspace_project_files(root), FIX)
+    errors = _pin_table_errors(root, root / "pyproject.toml", build_constraints.workspace_project_files(root))
     for project in build_constraints.standalone_project_files(root):
         # The project is its own uv workspace root, so its table and its lock are the ones uv reads.
-        directory = project.parent.relative_to(root).as_posix()
-        fix = f"run `python scripts/build_constraints.py update`, then `uv lock --directory {directory}`"
-        errors.extend(_pin_table_errors(root, project, [project], fix))
+        errors.extend(_pin_table_errors(root, project, [project]))
     return errors
 
 

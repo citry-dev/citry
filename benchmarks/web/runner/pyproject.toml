@@ -13,10 +13,10 @@ requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
 
 [tool.uv]
-# This folder is its own uv workspace root, so uv reads neither the repository
-# root's build pins nor its [tool.uv] settings here. A table in this file does two
-# jobs: it repeats the root's two settings, so a build download without a hash
-# still fails, and it holds the pins for this project's build backend.
+# This folder is not a member of the repository's uv workspace, so uv reads
+# build pins only from this file and the uv.lock beside it. A [tool.uv] table
+# here also stops uv from inheriting the root's settings, so the table repeats
+# the root's two settings: a build download without a hash still fails.
 # `python scripts/build_constraints.py update` rewrites the pins; run `uv lock`
 # in this folder afterwards, because `uv sync --frozen` reads them from uv.lock.
 require-build-hashes = true
