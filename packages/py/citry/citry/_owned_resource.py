@@ -44,7 +44,7 @@ for a year and use it without asking the server again.
 REVALIDATE_CACHE_CONTROL = "no-cache"
 """
 The ``Cache-Control`` value for a file served at a URL that stays the same
-when its content changes, such as ``citry.js``.
+when its content changes, such as ``cache/<class_id>.js``.
 
 The browser may keep a copy, but it must ask the server before each use. It
 sends the copy's ``ETag`` back, and the server answers ``304 Not Modified``
@@ -119,7 +119,7 @@ class _OwnedResource:
 
 @lru_cache(maxsize=64)
 def _etag(content: str | bytes) -> str:
-    """Return the tag for one file's content, kept so ``citry.js`` is not hashed again on each request."""
+    """Return the tag for one file's content, kept so a file is not hashed again on each request."""
     body = content.encode() if isinstance(content, str) else content
     return f'"{sha256(body).hexdigest()[:32]}"'
 

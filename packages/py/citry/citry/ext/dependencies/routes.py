@@ -22,6 +22,7 @@ Handlers are framework-neutral (they return ``RouteResponse``); the
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from citry._owned_resource import _OwnedResource
@@ -147,15 +148,18 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
             content_type=asset_content_type(extension),
         ).immutable_response()
 
-    def serve_runtime(request: RouteRequest | None) -> RouteResponse:
+    def serve_runtime(request: RouteRequest | None) -> RouteResponse:  # noqa: ARG001 - unused
         # Imported here, not at module load: emission imports this module's
         # sibling helpers, so a top-level import back into it would be
         # circular.
         from citry.ext.dependencies.emission import _runtime_resource  # noqa: PLC0415
 
-        # `citry.js` keeps its URL across Citry upgrades, so the browser
-        # must check it is current before each use.
-        return _runtime_resource(citry).revalidated_response(request)
+        # `citry.js` keeps its URL across upgrades and is the same file as
+        # the Events runtime, so it keeps that route's `no-store`: a stored
+        # copy reused on back/forward navigation could pair a page with the
+        # wrong runtime and fail its integrity check.
+        resource = _runtime_resource(citry)
+        return replace(resource, headers=(*resource.headers, *_NO_STORE)).response()
 
     return [
         # Content-addressed Component.js/css and the variables stylesheet

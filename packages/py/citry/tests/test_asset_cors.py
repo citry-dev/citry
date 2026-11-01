@@ -12,8 +12,9 @@ responses, assets and request routes alike, also carries
 
 Each public file also tells the browser how long it may keep a copy: a URL
 that carries a hash of its content is kept for a year, and a URL whose content
-can change (``citry.js``, ``cache/<class_id>.js``) is checked with the server
-before each use.
+can change (``cache/<class_id>.js``) is checked with the server before each
+use. The browser runtimes (``citry.js`` and the Events and i18n scripts) are
+never stored.
 """
 
 from __future__ import annotations
@@ -329,11 +330,11 @@ def _get(
 def test_every_public_asset_route_sends_a_cache_policy(adapter: str) -> None:
     app = _app()
     paths = _asset_paths(app)
-    # The Events and i18n runtimes keep `no-store`, as the Events plan's
-    # runtime-route amendment decided; every other file says how long the
-    # browser may keep it.
+    # The three browser runtimes share one unversioned URL each and keep
+    # `no-store`, as the Events plan's runtime-route amendment decided;
+    # every other file says how long the browser may reuse its copy.
     expected = {
-        "/citry.js": "no-cache",
+        "/citry.js": "no-store",
         "/ext/events/runtime.js": "no-store",
         "/ext/i18n/runtime.js": "no-store",
         paths[3]: IMMUTABLE_CACHE_CONTROL,
@@ -355,7 +356,7 @@ def test_every_public_asset_route_sends_a_cache_policy(adapter: str) -> None:
 def test_a_current_copy_of_a_changing_url_gets_304(adapter: str) -> None:
     app = _app()
     unhashed = _asset_paths(app)[5]
-    for path in ("/citry.js", unhashed):
+    for path in (unhashed,):
         status, headers = _get(adapter, app, path)
         etag = headers["etag"]
         # The browser sends back the tag of the copy it holds.
@@ -464,9 +465,19 @@ def test_a_missing_file_is_never_kept() -> None:
         assert dict(response.headers)["Cache-Control"] == "no-store", path
 
 
-def test_every_worker_gives_citry_js_the_same_tag() -> None:
+def test_every_worker_gives_a_file_the_same_tag() -> None:
     # Two processes behind one load balancer must agree on the tag, or a
     # copy checked against the other worker would be downloaded again.
-    first = dict(_serve(_app(), "citry.js").headers)["ETag"]
-    second = dict(_serve(_app(), "citry.js").headers)["ETag"]
-    assert first == second
+    def tag() -> str:
+        app = _app()
+
+        class Widget(Component):
+            citry = app
+            template = "<span>w</span>"
+            js = """
+                console.log("same bytes");
+            """
+
+        return dict(_serve(app, f"cache/{Widget.class_id}.js").headers)["ETag"]
+
+    assert tag() == tag()
