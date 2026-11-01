@@ -215,7 +215,10 @@ def _number_ids(text: str) -> str:
 
 def _without_test_path(text: str) -> str:
     """Replace this file's path in `text` with a placeholder."""
-    return text.replace(str(Path(__file__)), "<this test file>")
+    path = str(Path(__file__))
+    # `str()` of a KeyError is the repr of its message, which doubles each
+    # Windows backslash, so the doubled spelling is replaced too.
+    return text.replace(path.replace("\\", "\\\\"), "<this test file>").replace(path, "<this test file>")
 
 
 def _observe(page: type[Component], *, uses_vue: bool) -> dict[str, Any]:
