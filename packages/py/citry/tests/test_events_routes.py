@@ -19,6 +19,7 @@ import pytest
 from citry import Citry, Component
 from citry._vue import events as vue_events
 from citry.ext.events import actions, event
+from citry.ext.events import routes as events_routes
 from citry.ext.events.codecs import (
     EnvelopeCodec,
     FlatJsonCodec,
@@ -30,7 +31,6 @@ from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
 from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
-from citry.ext.events import routes as events_routes
 from citry.ext.events.routes import _join_like_a_browser, get_event_url
 from citry.ext.events.schemas import StringArgs
 from citry.ext.events.tokens import mint_state_token
