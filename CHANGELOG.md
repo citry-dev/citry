@@ -831,6 +831,12 @@
 - In browsers such as Safari, an i18n message given an exact decimal with
   a long run of zeros before its last digit, such as 100,000 zeros, no
   longer holds up the page for seconds.
+- When a page hydrates, the server now writes a Vue element's merged or
+  array `:style`, and an object spread onto it with `v-bind`, in time
+  proportional to the size of the value; before, the time grew with its
+  square. A `:style` holding 40,000 declarations took several seconds and
+  now takes tens of milliseconds. The HTML is the same as before: style
+  text is split and keys are ordered by the same rules.
 
 ## v0.6.0
 
