@@ -44,17 +44,19 @@ their own models).
 from __future__ import annotations
 
 import math
+import sys
 import threading
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import MISSING, dataclass, fields
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import UnionType
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from citry._nested_declarations import _is_plain_field_family, convert_plain_declaration
+from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, limit_item_errors, limit_unexpected_fields
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.state import convert_state_class
@@ -104,13 +106,20 @@ class ValidationResult:
             failed.
         fields: One message per failed field, keyed by the field's path
             (nested fields use dotted paths like ``"address.city"``, list
-            elements ``"tags.1"``). Sorted by field path, so the error
-            object is deterministic. Empty when validation succeeded.
+            elements ``"tags.1"``). Sorted by field path, with list indexes
+            in number order, so the error object is deterministic. Empty
+            when validation succeeded. It lists at most 20 messages for
+            fields the payload sent and the schema does not declare, and at
+            most 20 for the items of each list or dict field; every other
+            message is listed.
+        unlisted_fields: How many messages those two limits left out of
+            ``fields``. ``0`` when none were.
 
     """
 
     value: Any
     fields: dict[str, str]
+    unlisted_fields: int = 0
 
     @property
     def ok(self) -> bool:
@@ -260,26 +269,74 @@ def validate_args(
     Returns:
         A [`ValidationResult`][citry.ext.events.schemas.ValidationResult]:
         either the schema instance, or the per-field messages sorted by
-        field path. A schema ``__post_init__`` (or Pydantic validator) that
-        raises something other than a validation error propagates to the
-        caller.
+        field path, with list indexes in number order. A schema
+        ``__post_init__`` (or Pydantic validator) that raises something
+        other than a validation error propagates to the caller.
 
     """
     if bind_strings is None:
         bind_strings = isinstance(args, StringArgs)
-    errors: dict[str, str] = {}
     if not isinstance(args, Mapping):
-        errors[""] = f"Expected an object, got {_value_type_name(args)}."
-        return ValidationResult(value=None, fields=errors)
+        return ValidationResult(value=None, fields={"": f"Expected an object, got {_value_type_name(args)}."})
+    errors = _FieldErrors()
     instance = _validate_object(schema_cls, args, "", errors, bind_strings=bind_strings)
     if instance is _INVALID:
-        return ValidationResult(value=None, fields=dict(sorted(errors.items())))
+        # The payload alone decides how many undeclared keys and how many
+        # list or dict items it sends, so only those messages are limited;
+        # the sort first keeps the same names listed on every call.
+        ordered = dict(sorted(errors.items(), key=_field_path_order))
+        fields, unexpected_dropped = limit_unexpected_fields(ordered, errors.unexpected)
+        fields, items_dropped = limit_item_errors(fields, errors.containers)
+        return ValidationResult(value=None, fields=fields, unlisted_fields=unexpected_dropped + items_dropped)
     return ValidationResult(value=instance, fields={})
 
 
 ################################################
 # SCHEMA-OBJECT VALIDATION
 ################################################
+
+
+def _field_path_order(item: tuple[str, str]) -> tuple[tuple[int, int, str, str], ...]:
+    """
+    Sort one ``(field path, message)`` pair by its path, with list indexes in number order.
+
+    Only the first 20 item messages of a list are kept, so ``tags.2`` must
+    come before ``tags.10`` for the earliest items to be the ones kept.
+    """
+    # An all-digit segment sorts by its length without leading zeros, then
+    # by its digits, which is number order without converting it: a key
+    # the request sends can be thousands of digits long. Text segments sort
+    # after numbers, so the two kinds are never compared directly.
+    order: list[tuple[int, int, str, str]] = []
+    for part in item[0].split("."):
+        if part.isascii() and part.isdigit():
+            digits = part.lstrip("0")
+            order.append((0, len(digits), digits, part))
+        else:
+            order.append((1, 0, part, part))
+    return tuple(order)
+
+
+class _FieldErrors(dict[str, str]):
+    """The per-field messages of one validation, plus which paths name undeclared keys or containers."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.unexpected: set[str] = set()
+        # The paths of the list and dict fields the payload filled, so the
+        # messages for their items can be limited per field.
+        self.containers: set[str] = set()
+
+
+def _record_unexpected(errors: dict[str, str], path: str, message: str) -> None:
+    """Record a message for a key the schema does not declare, and mark it as one."""
+    if path in errors:
+        return
+    errors[path] = message
+    # Only validate_args passes the marking dict; a plain dict just keeps
+    # the message.
+    if isinstance(errors, _FieldErrors):
+        errors.unexpected.add(path)
 
 
 class _FieldSpec(NamedTuple):
@@ -431,7 +488,7 @@ def _validate_object(
 
     for key in mapping:
         if key not in accepted:
-            errors.setdefault(prefix + str(key), _EXTRA_MESSAGE)
+            _record_unexpected(errors, prefix + str(key), _EXTRA_MESSAGE)
             ok = False
 
     values: dict[str, Any] = {}
@@ -460,10 +517,17 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], prefix: str
     try:
         return validate(dict(mapping))
     except pydantic.ValidationError as err:
-        for entry in err.errors():
+        entries = err.errors()
+        if isinstance(errors, _FieldErrors):
+            for container in pydantic_container_paths(schema_cls, (entry["loc"] for entry in entries)):
+                errors.containers.add(prefix + container)
+        for entry in entries:
             location = ".".join(str(part) for part in entry["loc"])
             key = prefix + location if location else prefix.rstrip(".")
-            errors.setdefault(key, str(entry["msg"]))
+            if entry.get("type") in PYDANTIC_EXTRA_TYPES:
+                _record_unexpected(errors, key, str(entry["msg"]))
+            else:
+                errors.setdefault(key, str(entry["msg"]))
         return _INVALID
     except Exception:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
         # Pydantic turns only ValueError and AssertionError in a validator
@@ -472,6 +536,103 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], prefix: str
         logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
         errors.setdefault(prefix.rstrip(".") or "_args", "The value could not be checked.")
         return _INVALID
+
+
+def pydantic_container_paths(model_cls: type, locations: Iterable[Sequence[Any]]) -> set[str]:
+    """
+    Return the dotted paths of the list and dict fields that Pydantic error locations pass through.
+
+    Pydantic reports a list item as ``("tags", 3)``, so a whole-number part
+    always means the parts before it are a list. A dict value is
+    ``("scores", "alice")``, where the location alone cannot tell a dict key
+    from a field name, so those are found by walking the model's
+    annotations along the location. The walk follows field names and
+    aliases, ``Optional`` and ``Annotated``, and the member tag Pydantic
+    adds for a union with exactly one dict member; anything else ends it.
+    """
+    containers: set[str] = set()
+    # Many locations share one shape (rows.0.x, rows.1.x, ...), so the walk
+    # runs once per shape, with list indexes replaced by a marker.
+    walked: dict[tuple[Any, ...], tuple[int, ...]] = {}
+    for location in locations:
+        shape = tuple(_INDEX if isinstance(part, int) else part for part in location)
+        depths = walked.get(shape)
+        if depths is None:
+            depths = walked[shape] = _container_depths(model_cls, shape)
+        for depth in depths:
+            containers.add(".".join(str(part) for part in location[:depth]))
+    containers.discard("")
+    return containers
+
+
+# Stands in for a list index in a location shape.
+_INDEX = object()
+
+
+def _container_depths(model_cls: type, shape: tuple[Any, ...]) -> tuple[int, ...]:
+    """Return how many leading parts of ``shape`` name each list or dict it passes through."""
+    depths = {depth for depth, part in enumerate(shape) if part is _INDEX}
+    annotation: Any = model_cls
+    for depth, part in enumerate(shape):
+        annotation = _single_shape(annotation)
+        origin = get_origin(annotation)
+        if isinstance(annotation, type) and (_is_pydantic_model(annotation) or _is_pydantic_v1_model(annotation)):
+            annotation = _pydantic_field_annotation(annotation, part)
+        elif origin in (list, tuple, set, frozenset) or origin is Sequence:
+            args = get_args(annotation)
+            # Only a homogeneous container holds as many items as the request sends.
+            annotation = args[0] if args and (origin is not tuple or args[-1] is Ellipsis) else None
+        elif origin is dict or origin is Mapping:
+            depths.add(depth)
+            args = get_args(annotation)
+            annotation = args[1] if len(args) == 2 else None
+        elif origin in (Union, UnionType) and isinstance(part, str):
+            # Pydantic names the union member it tried; a single dict member
+            # is the only one this walk can identify from that tag alone.
+            dicts = [arg for arg in get_args(annotation) if get_origin(_single_shape(arg)) in (dict, Mapping)]
+            annotation = dicts[0] if len(dicts) == 1 else None
+            continue
+        else:
+            break
+        if annotation is None:
+            break
+    return tuple(sorted(depths))
+
+
+def _single_shape(annotation: Any) -> Any:
+    """Unwrap ``Annotated`` and ``Optional``; a union of several shapes is returned as is."""
+    while get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    if get_origin(annotation) in (Union, UnionType):
+        options = [arg for arg in get_args(annotation) if arg is not type(None)]
+        if len(options) == 1:
+            return _single_shape(options[0])
+    return annotation
+
+
+def _pydantic_field_annotation(model_cls: type, name: Any) -> Any:
+    """Return the annotation of the Pydantic v2 or v1 field that ``name`` or its alias names, or ``None``."""
+    fields = getattr(model_cls, "model_fields", None)
+    if isinstance(fields, Mapping):
+        # An error location uses the key the payload sent, which may be an alias.
+        field = fields.get(name) or next(
+            (info for info in fields.values() if name in _pydantic_input_names(info)), None
+        )
+        return None if field is None else field.annotation
+    # Pydantic v1 keeps the full annotation, list[int] for example, as outer_type_.
+    v1_fields = getattr(model_cls, "__fields__", {})
+    field = v1_fields.get(name) or next((info for info in v1_fields.values() if info.alias == name), None)
+    return None if field is None else field.outer_type_
+
+
+def _is_pydantic_v1_model(annotation: type) -> bool:
+    """Whether ``annotation`` is a Pydantic v1 model, which a v1 State or a v2 install's ``pydantic.v1`` provides."""
+    # A v1 model exists only once its module is loaded, so this never imports it.
+    for module_name in ("pydantic.v1", "pydantic"):
+        base = getattr(sys.modules.get(module_name), "BaseModel", None)
+        if isinstance(base, type) and issubclass(annotation, base) and hasattr(annotation, "__fields__"):
+            return True
+    return False
 
 
 def _is_pydantic_model(schema_cls: type) -> bool:
@@ -761,6 +922,8 @@ def _coerce_container(
     else:
         element_annotations = [args[0]] * len(value)
 
+    if isinstance(errors, _FieldErrors):
+        errors.containers.add(path)
     items = []
     ok = True
     for index, (item, element_annotation) in enumerate(zip(value, element_annotations, strict=True)):

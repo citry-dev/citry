@@ -6,7 +6,9 @@ itself. A page inside a sandboxed iframe has an opaque origin, so the browser
 treats every one of those requests as cross-origin and checks the digest only
 when the response carries ``Access-Control-Allow-Origin``. These tests drive
 the real WSGI and ASGI adapters, so they prove the header reaches the wire and
-stays off the routes that run events or read request data.
+stays off the routes that run events or read request data. Every one of those
+responses, assets and request routes alike, also carries
+``X-Content-Type-Options: nosniff``.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from citry.ext.dependencies.emission import _preloader_script
 from citry.ext.dependencies.routes import script_url
 
 CORS = "access-control-allow-origin"
+NOSNIFF = "x-content-type-options"
 
 
 def _app() -> Citry:
@@ -175,6 +178,32 @@ def test_request_routes_do_not_send_a_cors_header(adapter: str) -> None:
         assert CORS not in headers, path
 
 
+@pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
+def test_asset_and_request_routes_tell_the_browser_not_to_sniff_the_type(adapter: str) -> None:
+    app = _app()
+
+    class Clicker(Component):
+        citry = app
+        template = "<button>go</button>"
+
+        def on_click(self) -> None:
+            return None
+
+    # Every public asset, then the routes that run events, then the misses:
+    # the browser must take each response as the type it declares.
+    requests = [
+        *(("GET", path, b"") for path in _asset_paths(app)),
+        ("POST", "/ext/events/call", b"{}"),
+        ("POST", f"/ext/events/e/{Clicker.class_id}/on_click", b"{}"),
+        ("POST", "/ext/i18n/messages", b"{}"),
+        ("GET", f"/ext/events/definitions/{'0' * 64}.js", b""),
+        ("GET", "/no-such-route", b""),
+    ]
+    for method, path, body in requests:
+        headers = _wsgi(app, method, path, body)[1] if adapter == "wsgi" else _asgi(app, method, path, body)[1]
+        assert headers.get(NOSNIFF) == "nosniff", (method, path)
+
+
 def test_django_adapter_sends_the_cors_header_on_asset_routes() -> None:
     django = pytest.importorskip("django", reason="the Django adapter test needs django")
     from django.conf import settings
@@ -201,6 +230,8 @@ def test_django_adapter_sends_the_cors_header_on_asset_routes() -> None:
     )
     assert response.status_code == 200
     assert response["Access-Control-Allow-Origin"] == "*"
+    # The same response also tells the browser to take it as the JavaScript it declares.
+    assert response["X-Content-Type-Options"] == "nosniff"
 
 
 def test_preload_hints_request_owned_files_with_the_runtime_crossorigin_value() -> None:

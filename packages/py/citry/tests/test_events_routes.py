@@ -1766,6 +1766,23 @@ class TestCompatMode:
         assert response.headers["content-type"].startswith("text/plain")
         assert "state token" in response.text
 
+    def test_a_form_with_many_unknown_fields_lists_twenty_and_counts_the_rest(self):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        unknown = {f"u{index:03d}": "1" for index in reversed(range(25))}
+        response = client.post(
+            _event_url(greeter, "save"),
+            data={"text": "No JS", "_citry_state_token": _token(greeter), **unknown},
+        )
+        assert response.status_code == 422
+        assert response.headers["content-type"].startswith("text/plain")
+        summary, *lines = response.text.split("\n")
+        assert summary == (
+            "The args for event 'save' on component 'Greeter' did not validate. 5 more field errors are not shown."
+        )
+        assert lines == [f"u{index:03d}: Unexpected field: not declared on the schema." for index in range(20)]
+
     def test_pasted_get_url_answers_the_data_value(self):
         # A GET URL opened in a browser (Accept: text/html) still shows the
         # handler's data instead of an envelope.

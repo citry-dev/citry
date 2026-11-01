@@ -14,7 +14,8 @@ from citry.ext.preview.host import PreviewServer, preview_app
 from citry.util.routing import RouteResponse, URLRoute, flatten_routes
 
 
-def _request(app, path, *, method="GET", query=b"", root_path=""):
+def _messages(app, path, *, method="GET", query=b"", root_path=""):
+    """Run one request through the ASGI app and return the messages it sent."""
     messages = []
 
     async def receive():
@@ -37,7 +38,18 @@ def _request(app, path, *, method="GET", query=b"", root_path=""):
             send,
         )
     )
+    return messages
+
+
+def _request(app, path, **kwargs):
+    messages = _messages(app, path, **kwargs)
     return messages[0]["status"], dict(messages[0]["headers"]), messages[1]["body"]
+
+
+def _sniffing_values(app, path, **kwargs):
+    """Every value the response sends for X-Content-Type-Options, so a repeated header shows up twice."""
+    start = _messages(app, path, **kwargs)[0]
+    return [value for name, value in start["headers"] if name.lower() == b"x-content-type-options"]
 
 
 def test_routes_are_private_and_delegate_assets():
@@ -70,6 +82,35 @@ def test_request_translation_head_methods_and_unknown_paths():
     assert _request(app, "/citry/ext/preview/catalog", method="HEAD", query=b"variant=one&variant=&x=a+b")[2] == b""
     assert _request(app, "/citry/ext/preview/catalog", method="POST")[0] == 405
     assert _request(app, "/citry/ext/preview/missing", method="HEAD")[::2] == (404, b"")
+
+
+def test_every_response_carries_nosniff_once():
+    routes = (URLRoute("catalog", handler=lambda _request: RouteResponse("catalog", content_type="application/json")),)
+    app = preview_app(Citry(), routes)
+    catalog = "/citry/ext/preview/catalog"
+    cases = [
+        # A preview route, with and without a body.
+        (catalog, {}, 200),
+        (catalog, {"method": "HEAD"}, 200),
+        # Answers the preview host makes itself.
+        ("/citry/ext/preview/missing", {}, 404),
+        (catalog, {"method": "POST"}, 405),
+        ("/elsewhere", {}, 404),
+        # The ordinary adapter's assets and its own 404 behind the mount.
+        ("/citry/citry.js", {}, 200),
+        ("/citry/nope", {}, 404),
+    ]
+    for path, kwargs, status in cases:
+        assert _request(app, path, **kwargs)[0] == status, (path, kwargs)
+        assert _sniffing_values(app, path, **kwargs) == [b"nosniff"], (path, kwargs)
+
+
+def test_a_preview_route_that_sets_the_sniffing_header_keeps_its_value():
+    def handler(_request):
+        return RouteResponse("catalog", headers=(("X-Content-Type-Options", "custom"),))
+
+    app = preview_app(Citry(), (URLRoute("catalog", handler=handler),))
+    assert _sniffing_values(app, "/citry/ext/preview/catalog") == [b"custom"]
 
 
 def test_async_twin_is_preferred():
