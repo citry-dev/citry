@@ -10,6 +10,7 @@ from citry import LibraryComponent, SlotInput
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._shared_component_assets import build_shared_component_assets
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -62,6 +63,15 @@ def _reject_link_form_attrs(attrs: Mapping[str, object] | None) -> None:
         raise ValueError(msg)
 
 
+def _check_formaction(attrs: Mapping[str, object] | None) -> None:
+    # A submit Button's formaction replaces its form's action, so it gets the
+    # same link check as CForm action. CSplitButton's primary_attrs reach here
+    # through _build_button_snapshot too.
+    for key, value in (attrs or {}).items():
+        if key.lower() == "formaction" and value is not None and not isinstance(value, bool):
+            check_link_url("CButton attrs 'formaction'", str(value))
+
+
 def _pop_case_insensitive(attrs: dict[str, object], name: str) -> object | None:
     value: object | None = None
     for authored_name in tuple(attrs):
@@ -98,6 +108,10 @@ def _build_button_snapshot(component: Any, kwargs: Any) -> dict[str, Any]:
     if kwargs.href is not None and not isinstance(kwargs.href, str):
         msg = f"CButton href must be a string or None, got {kwargs.href!r}."
         raise TypeError(msg)
+    if kwargs.href is not None:
+        # A link Button's href often comes from app data, so it must not be
+        # able to run script on click.
+        check_link_url("CButton href", kwargs.href)
     if kwargs.href is not None and kwargs.type != "button":
         msg = "CButton type applies only to action buttons and must remain 'button' when href is set."
         raise ValueError(msg)
@@ -131,6 +145,7 @@ def _build_button_snapshot(component: Any, kwargs: Any) -> dict[str, Any]:
     reject_vue_directive_attrs(kwargs.attrs, "CButton")
     if kwargs.href is not None:
         _reject_link_form_attrs(kwargs.attrs)
+    _check_formaction(kwargs.attrs)
 
     form = component.inject(FORM_CONTEXT_KEY, None)
     disabled = (bool(form.disabled) if form is not None else False) or kwargs.disabled
@@ -224,7 +239,9 @@ class CButton(LibraryComponent):
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
         return {
-            "href": kwargs.href,
+            # The browser runtime writes this back into the link, so it gets
+            # the same check as the server-rendered href.
+            "href": None if kwargs.href is None else check_link_url("CButton href", kwargs.href),
             "tabIndex": _get_case_insensitive(kwargs.attrs, "tabindex"),
             "serverDefaults": {
                 "disabled": kwargs.disabled,

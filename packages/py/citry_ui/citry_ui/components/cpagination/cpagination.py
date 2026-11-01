@@ -11,6 +11,7 @@ from typing import Any, Literal, TypedDict
 from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CPaginationVariant = Literal["soft", "outline", "plain"]
@@ -158,6 +159,10 @@ class CPagination(LibraryComponent):
         href = _plain("href", kwargs.href, optional=True)
         if href is not None and "{page}" not in href:
             raise ValueError("CPagination href must contain the literal {page} placeholder.")
+        if href is not None:
+            # Any page number gives the same result as page 1: a digit can sit
+            # in a scheme but cannot start one, and no allowed scheme contains one.
+            check_link_url("CPagination href", href.replace("{page}", "1"))
         validate_boolean("CPagination", "show_controls", kwargs.show_controls)
         validate_boolean("CPagination", "show_edges", kwargs.show_edges)
         validate_boolean("CPagination", "disabled", kwargs.disabled)

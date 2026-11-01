@@ -8,6 +8,7 @@ from typing import Any, Literal, TypedDict, overload
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CNavigationMenuOrientation = Literal["horizontal", "vertical"]
@@ -807,7 +808,9 @@ class CNavigationMenuLink(LibraryComponent):
         self.unprovide(_CONTEXT_KEY)
         validate_boolean("CNavigationMenuLink", "current", kwargs.current)
         return {
-            "href": _plain("CNavigationMenuLink href", kwargs.href),
+            # Site navigation is often built from records, so the link must
+            # not be able to run script on click.
+            "href": check_link_url("CNavigationMenuLink href", _plain("CNavigationMenuLink href", kwargs.href)),
             "current": bool(kwargs.current),
             "target": _plain("CNavigationMenuLink target", kwargs.target, optional=True),
             "rel": _plain("CNavigationMenuLink rel", kwargs.rel, optional=True),

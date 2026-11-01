@@ -10,7 +10,7 @@ inputs:
     entries:
       - {id: pages, name: pages, type: int, default: {kind: required}, effect: Sets the finite page count; must be at least 1.}
       - {id: page, name: page, type: int, default: {kind: literal, value: 1}, effect: Sets the current page between 1 and pages.}
-      - {id: href, name: href, type: 'str | None', default: {kind: literal, value: null}, effect: 'Creates native links by replacing a required `{page}` placeholder; None creates client-owned Buttons.'}
+      - {id: href, name: href, type: 'str | None', default: {kind: literal, value: null}, effect: 'Creates native links by replacing a required `{page}` placeholder. The filled-in URL must be a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL; any other scheme raises `ValueError`. None creates client-owned Buttons.'}
       - {id: siblings, name: siblings, type: int, default: {kind: literal, value: 1}, effect: Keeps this many pages on either side of the current page.}
       - {id: boundaries, name: boundaries, type: int, default: {kind: literal, value: 1}, effect: Keeps this many pages at both sequence edges.}
       - {id: show-controls, name: show_controls, type: bool, default: {kind: literal, value: true}, effect: Renders previous and next controls.}

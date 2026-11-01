@@ -16,6 +16,7 @@ from citry_ui.components._anchored_layer import (
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._direct_output import feed_typed_direct_output
 from citry_ui.components._shared_component_assets import build_shared_component_assets
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -658,6 +659,10 @@ def _item_snapshot(
         if href is not None and "\0" in href:
             msg = "CMenuItem href cannot contain U+0000."
             raise ValueError(msg)
+        if href is not None:
+            # Menu links are often built from app data, and the browser
+            # runtime reuses this snapshot, so one check covers both paths.
+            check_link_url(f"{component_name} href", href)
         if value is not None:
             value = _plain_identity(component_name, "value", value)
         if value is not None and href is not None:

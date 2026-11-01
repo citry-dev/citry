@@ -63,8 +63,8 @@ Variants style the fallback. Sizes and shapes control the fixed visual frame.
 
 ## Update the image in the browser
 
-Client inputs are passed with native Vue `:` bindings and callback props. `src` accepts a URL or
-`null`; `onStatusChange` reports fallback, loading, loaded, and error states.
+Client inputs are passed with native Vue `:` bindings and callback props. `src` accepts a URL that
+follows the server `src` rule, or `null`; `onStatusChange` reports fallback, loading, loaded, and error states.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cavatar/snippets/reactive_sources.py"

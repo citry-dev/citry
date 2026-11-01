@@ -16,6 +16,7 @@ from citry_ui.components._attrs import (
     is_vue_directive_attribute,
     merge_root_attrs,
 )
+from citry_ui.components._url import check_image_url
 
 CImageFit = Literal["contain", "cover", "fill", "none", "scale-down"]
 CImageLoading = Literal["eager", "lazy"]
@@ -98,7 +99,6 @@ _IMAGE_OWNED = frozenset(
     }
 )
 _MIME_ESSENCE = re.compile(r"image/[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
-_WIDTH_DESCRIPTOR = re.compile(r"(?:^|,)\s*[^,]+\s+[1-9][0-9]*w\s*(?=,|$)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,20 +220,16 @@ def _plain_string(
 
 def _plain_url(name: str, value: object) -> str:
     plain = cast("str", _plain_string(name, value))
-    normalized = plain.lstrip(" ").casefold()
-    if normalized.startswith(("javascript:", "vbscript:")):
-        msg = f"CImage {name} cannot use an active URL scheme."
-        raise ValueError(msg)
-    return plain
+    # Citry UI shares one image URL rule, so CImage and CAvatar accept the same sources.
+    return check_image_url(f"CImage {name}", plain)
 
 
 def _plain_srcset(name: str, value: object, *, optional: bool = False) -> str | None:
     plain = _plain_string(name, value, optional=optional)
-    if plain is not None and any(
-        candidate.casefold().startswith(("javascript:", "vbscript:")) for candidate in _srcset_urls(plain)
-    ):
-        msg = f"CImage {name} cannot use an active URL scheme."
-        raise ValueError(msg)
+    if plain is not None:
+        # The browser may load any candidate, so each one must pass the rule.
+        for candidate in _srcset_urls(plain):
+            check_image_url(f"CImage {name}", candidate)
     return plain
 
 
@@ -251,15 +247,18 @@ def _srcset_urls(value: str) -> tuple[str, ...]:
             urls.append(candidate)
         if index > start and value[index - 1] == ",":
             continue
-        depth = 0
+        # The HTML descriptor tokenizer does not nest parentheses: one "("
+        # enters the parenthesized state and the next ")" leaves it. Counting
+        # depth here would hide a candidate that the browser still loads.
+        in_parens = False
         while index < len(value):
             character = value[index]
             index += 1
             if character == "(":
-                depth += 1
-            elif character == ")" and depth:
-                depth -= 1
-            elif character == "," and depth == 0:
+                in_parens = True
+            elif character == ")":
+                in_parens = False
+            elif character == "," and not in_parens:
                 break
     return tuple(urls)
 
@@ -298,7 +297,24 @@ def _boolean(name: str, value: object) -> bool:
 
 
 def _uses_width_descriptor(srcset: str | None) -> bool:
-    return srcset is not None and _WIDTH_DESCRIPTOR.search(srcset) is not None
+    # A candidate uses a width descriptor when its comma-separated piece ends
+    # in whitespace, then digits that do not start with 0, then "w". Plain
+    # loops keep the check linear in the input length; a regex for this rule
+    # backtracks heavily on a long run of whitespace.
+    if srcset is None:
+        return False
+    for piece in srcset.split(","):
+        text = piece.rstrip()
+        if not text.endswith("w"):
+            continue
+        digits = len(text) - 1
+        while digits > 0 and "0" <= text[digits - 1] <= "9":
+            digits -= 1
+        # The digits need a nonzero first digit, whitespace before them, and
+        # at least one more character (the URL) before that whitespace.
+        if digits < len(text) - 1 and text[digits] != "0" and digits >= 2 and text[digits - 1].isspace():
+            return True
+    return False
 
 
 def _uses_auto_sizes(sizes: str | None) -> bool:
@@ -884,38 +900,69 @@ class CImage(LibraryComponent):
               position: text("position"),
               draggable: bool("draggable"),
             };
-            const activeSource = (value) => typeof value === "string"
-              && /^\\s*(?:javascript|vbscript)\\s*:/i.test(value);
-            const activeSet = (value) => {
+            // This repeats the image URL rule from _url.py in the browser, so a
+            // client prop cannot load a URL the server would refuse.
+            const isImageUrlAllowed = (value) => {
+              // Strip C0 controls and spaces from both ends with loops: a regex
+              // anchored only at the end slows down on a long run of spaces.
+              let start = 0;
+              let end = value.length;
+              while (start < end && value.charCodeAt(start) <= 0x20) start += 1;
+              while (end > start && value.charCodeAt(end - 1) <= 0x20) end -= 1;
+              const text = value.slice(start, end).replace(/[\\t\\n\\r]/g, "");
+              const match = /^([a-z][a-z0-9+.-]*):/i.exec(text);
+              if (match === null) return true;
+              const scheme = match[1].toLowerCase();
+              if (scheme === "data") {
+                return /^[\\t\\n\\f\\r ]*image\\//i.test(text.slice(match[0].length));
+              }
+              return ["http", "https", "blob"].includes(scheme);
+            };
+            const refusedSource = (value) => typeof value === "string" && !isImageUrlAllowed(value);
+            const refusedSet = (value) => {
               if (typeof value !== "string") return false;
               let index = 0;
               while (index < value.length) {
                 while (index < value.length && (/[\\s,]/.test(value[index]))) index += 1;
                 const start = index;
                 while (index < value.length && !/\\s/.test(value[index])) index += 1;
-                const candidate = value.slice(start, index).replace(/,+$/, "");
-                if (/^(?:javascript|vbscript)\\s*:/i.test(candidate)) return true;
+                // Drop trailing commas with a loop, which stays linear on a long run of commas.
+                let stop = index;
+                while (stop > start && value[stop - 1] === ",") stop -= 1;
+                const candidate = value.slice(start, stop);
+                if (candidate && !isImageUrlAllowed(candidate)) return true;
                 if (index > start && value[index - 1] === ",") continue;
-                let depth = 0;
+                // Parentheses do not nest, as in the Python _srcset_urls.
+                let inParens = false;
                 while (index < value.length) {
                   const character = value[index++];
-                  if (character === "(") depth += 1;
-                  else if (character === ")" && depth) depth -= 1;
-                  else if (character === "," && depth === 0) break;
+                  if (character === "(") inParens = true;
+                  else if (character === ")") inParens = false;
+                  else if (character === "," && !inParens) break;
                 }
               }
               return false;
             };
-            if (activeSource(next.src)) {
+            if (refusedSource(next.src)) {
               report("src", next.src);
               next.src = configuration?.src ?? data.src;
             }
-            if (activeSet(next.srcset)) {
+            if (refusedSet(next.srcset)) {
               report("srcset", next.srcset);
               next.srcset = configuration?.srcset ?? data.srcset;
             }
-            const widthCandidates = typeof next.srcset === "string"
-              && /(?:^|,)\\s*[^,]+\\s+[1-9][0-9]*w\\s*(?=,|$)/.test(next.srcset);
+            // Mirrors the Python _uses_width_descriptor (each side uses its own
+            // language's whitespace set), with plain loops so a long run of
+            // whitespace cannot slow it down.
+            const usesWidthDescriptor = (value) => value.split(",").some((piece) => {
+              const text = piece.trimEnd();
+              if (!text.endsWith("w")) return false;
+              let digits = text.length - 1;
+              while (digits > 0 && text[digits - 1] >= "0" && text[digits - 1] <= "9") digits -= 1;
+              return digits < text.length - 1 && text[digits] !== "0" && digits >= 2
+                && /\\s/.test(text[digits - 1]);
+            });
+            const widthCandidates = typeof next.srcset === "string" && usesWidthDescriptor(next.srcset);
             const autoSizes = typeof next.sizes === "string"
               && /^auto(?:\\s*,|\\s*$)/i.test(next.sizes.trim());
             const sourceAutoSizes = data.sources.some((source) => typeof source.sizes === "string"

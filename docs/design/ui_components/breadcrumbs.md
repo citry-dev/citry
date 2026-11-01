@@ -138,8 +138,12 @@ normalize line endings, and reject U+0000. Labels and landmark names must be
 nonempty; supplied href must be nonempty. Attribute maps are copied and reject
 owned semantics, runtime namespaces, structural directives, object spreads,
 visibility removal, href replacement, role replacement, and current-page
-replacement. Href scheme policy remains application-owned trusted navigation
-input.
+replacement. Each supplied href goes through Citry UI's shared link check, which
+accepts a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:`
+URL, and any other scheme (such as `javascript:`, `vbscript:`, or `data:`)
+raises `ValueError` at render. It reads the scheme the way the browser's URL
+parser does, so letter case, surrounding spaces, and tab or newline characters
+inside the scheme do not change the result.
 
 ## 16. Assets and performance
 

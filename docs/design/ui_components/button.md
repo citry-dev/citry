@@ -359,8 +359,14 @@ reactivation.
 
 Slot text follows Citry's ordinary escaping rules. Trusted HTML remains an
 explicit application decision. `attrs` cannot replace owned activation,
-semantic, state, or part attributes. URLs in `href` and native form attributes
-are consumer-owned and are not treated as trusted by Citry UI.
+semantic, state, or part attributes. `href` goes through Citry UI's shared link
+check, which accepts a relative URL or an `http:`, `https:`, `mailto:`, `sms:`,
+or `tel:` URL, and any other scheme (such as `javascript:`, `vbscript:`, or
+`data:`) raises `ValueError` at render. It reads the scheme the way the
+browser's URL parser does, so letter case, surrounding spaces, and tab or
+newline characters inside the scheme do not change the result. A `formaction` in
+`attrs` goes through the same check. Other native form attributes passed through
+`attrs` remain consumer-owned.
 
 ## 16. Assets and performance
 

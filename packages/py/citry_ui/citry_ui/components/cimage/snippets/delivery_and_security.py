@@ -50,7 +50,7 @@ class ImageDeliveryAndSecurity(Component):
         <aside>
           <h3>Application trust boundary</h3>
           <ul>
-            <li>Relative, HTTPS, data, blob, raster, and SVG URLs remain consumer-owned.</li>
+            <li>Relative, HTTPS, data image, blob, raster, and SVG URLs remain consumer-owned.</li>
             <li>Do not log signed URLs, currentSrc, query strings, or response bodies.</li>
             <li>Blob lifetime, data-URL size, metadata privacy, and remote tracking are application policy.</li>
           </ul>

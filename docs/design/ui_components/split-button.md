@@ -553,6 +553,9 @@ For the primary Button:
   three `type` values, matching CButton and native HTML; browsers apply
   `formaction`, `formenctype`, `formmethod`, `formnovalidate`, and `formtarget`
   only when the Button is a submitter and ignore them on `button`/`reset`;
+- a `formaction` in `primary_attrs` goes through CButton's link check: a
+  relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL
+  renders, and any other scheme raises `ValueError` at render;
 - native constraint validation, `SubmitEvent.submitter`, FormData submitter
   name/value, `requestSubmit(primary)`, and reset behavior are preserved;
 - disabled primary is not a successful submitter; and

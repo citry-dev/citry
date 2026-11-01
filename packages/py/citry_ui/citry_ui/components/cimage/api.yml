@@ -10,11 +10,11 @@ inputs:
     channel: server
     column_widths: [fit, 17rem, 13rem, auto]
     entries:
-      - {id: src, name: src, type: str, default: {kind: required}, effect: Sets the required nonempty escaped fallback image URL.}
+      - {id: src, name: src, type: str, default: {kind: required}, effect: 'Sets the required nonempty escaped fallback image URL: a relative URL or an `http:`, `https:`, `blob:`, or `data:image/` URL; anything else raises `ValueError`.'}
       - {id: alt, name: alt, type: str, default: {kind: required}, effect: Sets the required native text alternative; an exact empty string is an intentional decorative choice.}
       - {id: width, name: width, type: positive int, default: {kind: required}, effect: Sets native intrinsic width and reserves geometry; bool is rejected.}
       - {id: height, name: height, type: positive int, default: {kind: required}, effect: Sets native intrinsic height and reserves geometry; bool is rejected.}
-      - {id: srcset, name: srcset, type: 'str | None', default: {kind: literal, value: null}, effect: Adds native responsive candidates; width descriptors require sizes.}
+      - {id: srcset, name: srcset, type: 'str | None', default: {kind: literal, value: null}, effect: 'Adds native responsive candidates; width descriptors require sizes. Each candidate URL follows the `src` rule.'}
       - {id: sizes, name: sizes, type: 'str | None', default: {kind: literal, value: null}, effect: Adds native image source sizes; auto sizes require lazy loading.}
       - {id: sources, name: sources, type: 'Sequence[CImageSource]', default: {kind: derived, display: '()'}, effect: Snapshots up to 32 ordered source records and emits picture only when nonempty.}
       - {id: loading, name: loading, type: {display: '"eager" | "lazy"', interfaces: [CImageLoading]}, default: {kind: literal, value: eager}, effect: Selects the native loading hint.}
@@ -36,11 +36,11 @@ inputs:
     channel: client
     column_widths: [fit, 16rem, 15rem, auto]
     entries:
-      - {id: src, name: src, type: str, omitted: Uses the immutable server baseline; null has the same effect., effect: Replaces the fallback URL and begins a new request generation.}
+      - {id: src, name: src, type: str, omitted: Uses the immutable server baseline; null has the same effect., effect: 'Replaces the fallback URL and begins a new request generation. If the server would refuse the URL, the component logs an error and keeps the last valid value.'}
       - {id: alt, name: alt, type: str, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates the native alternative without creating a second semantic owner.}
       - {id: width, name: width, type: positive integer, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates native intrinsic width.}
       - {id: height, name: height, type: positive integer, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates native intrinsic height.}
-      - {id: srcset, name: srcset, type: 'string | null', omitted: Uses the immutable server baseline., effect: Updates final-image candidates and begins a new request generation when effective selection metadata changes.}
+      - {id: srcset, name: srcset, type: 'string | null', omitted: Uses the immutable server baseline., effect: 'Updates final-image candidates and begins a new request generation when effective selection metadata changes. If the server would refuse a candidate URL, the component logs an error and keeps the last valid value.'}
       - {id: sizes, name: sizes, type: 'string | null', omitted: Uses the immutable server baseline., effect: Updates final-image sizes and request selection.}
       - {id: loading, name: loading, type: {display: '"eager" | "lazy"', interfaces: [CImageLoading]}, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates the native loading hint without fabricating settlement.}
       - {id: decoding, name: decoding, type: {display: '"auto" | "sync" | "async"', interfaces: [CImageDecoding]}, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates the native decoding hint.}
@@ -141,7 +141,7 @@ interfaces:
     kind: record
     name: CImageSource
     entries:
-      - {id: srcset, name: srcset, type: str, meaning: Required native candidate string for one ordered source.}
+      - {id: srcset, name: srcset, type: str, meaning: 'Required native candidate string for one ordered source. Each candidate URL follows the `src` rule.'}
       - {id: media, name: media, type: 'str | None', meaning: Optional native media discriminator.}
       - {id: type, name: type, type: 'str | None', meaning: Optional image MIME essence discriminator.}
       - {id: sizes, name: sizes, type: 'str | None', meaning: Optional native source sizes; required for width descriptors.}

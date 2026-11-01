@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
 from citry.attrs import validate_html_attr_name
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._url import check_image_url
 from citry_ui.components._validation import reject_owned_attrs
 
 CAvatarVariant = Literal["soft", "solid", "outline"]
@@ -183,8 +184,11 @@ class CAvatar(LibraryComponent):
         )
 
     def _normalized(self, kwargs: Kwargs) -> dict[str, object]:
+        src = _plain_string("src", kwargs.src, optional=True, empty=False)
         return {
-            "src": _plain_string("src", kwargs.src, optional=True, empty=False),
+            # Avatar URLs often come from user profiles, so the same image
+            # rule as CImage applies before the URL reaches the page.
+            "src": None if src is None else check_image_url("CAvatar src", src),
             "alt": _plain_string("alt", kwargs.alt),
             "variant": _plain_choice("variant", kwargs.variant, _VARIANTS),
             "size": _plain_choice("size", kwargs.size, _SIZES),
@@ -361,9 +365,30 @@ class CAvatar(LibraryComponent):
             reportInvalid(name, value);
             return data[name];
           };
+          // This repeats the image URL rule from _url.py in the browser, so a
+          // client prop cannot load a URL the server would refuse.
+          const isImageUrlAllowed = (value) => {
+            // Strip C0 controls and spaces from both ends with loops: a regex
+            // anchored only at the end slows down on a long run of spaces.
+            let start = 0;
+            let end = value.length;
+            while (start < end && value.charCodeAt(start) <= 0x20) start += 1;
+            while (end > start && value.charCodeAt(end - 1) <= 0x20) end -= 1;
+            const text = value.slice(start, end).replace(/[\\t\\n\\r]/g, "");
+            const match = /^([a-z][a-z0-9+.-]*):/i.exec(text);
+            if (match === null) return true;
+            const scheme = match[1].toLowerCase();
+            if (scheme === "data") {
+              return /^[\\t\\n\\f\\r ]*image\\//i.test(text.slice(match[0].length));
+            }
+            return ["http", "https", "blob"].includes(scheme);
+          };
           const resolveSource = () => {
             const value = props.src === undefined ? data.src : props.src;
-            if (value === null || (typeof value === "string" && value && !value.includes("\\u0000"))) {
+            if (
+              value === null
+              || (typeof value === "string" && value && !value.includes("\\u0000") && isImageUrlAllowed(value))
+            ) {
               invalidEpisodes.delete("src");
               return value;
             }

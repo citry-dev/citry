@@ -63,7 +63,7 @@ Output is complete semantic HTML/CSS with zero family JavaScript. Server context
 
 ## 15. Security and content trust
 
-href/label strings are de-trusted. Attribute maps are copied. Root attrs cannot replace list semantics/children/runtime fields. Surface attrs cannot replace element identity, href, disabled/current semantics, children, focus ownership, or runtime fields. Slot markup remains trusted author content under the documented content model.
+href/label strings are de-trusted. `href` goes through the shared link check: a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL renders, and any other scheme raises `ValueError` at render. Attribute maps are copied. Root attrs cannot replace list semantics/children/runtime fields. Surface attrs cannot replace element identity, href, disabled/current semantics, children, focus ownership, or runtime fields. Slot markup remains trusted author content under the documented content model.
 
 ## 16. Assets and performance
 

@@ -9,6 +9,7 @@ from typing import Any, Literal
 from citry import LibraryComponent, SlotInput
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -61,6 +62,10 @@ class CForm(LibraryComponent):
             raise ValueError(msg)
         validate_html_id("CForm", kwargs.id)
         validate_optional_string("CForm", "action", kwargs.action)
+        if kwargs.action is not None:
+            # A javascript: action runs script on submit, so it gets the same
+            # check as a link.
+            check_link_url("CForm action", kwargs.action)
         if kwargs.method is not None:
             validate_choice("CForm", "method", kwargs.method, ("get", "post", "dialog"))
         if kwargs.enctype is not None:

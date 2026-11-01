@@ -211,9 +211,13 @@ Native submitter attributes pass through the server `attrs` mapping.
 />
 
 Supported native attributes include `name`, `value`, `form`, `formaction`,
-`formenctype`, `formmethod`, `formnovalidate`, and `formtarget`. Listen to native
-`click`, `submit`, and `reset` events with Vue. `CButton` does not duplicate
-them with component callbacks or custom DOM events.
+`formenctype`, `formmethod`, `formnovalidate`, and `formtarget`. A `formaction`
+value follows the same rule as `CForm`'s `action`: a relative URL or an `http:`,
+`https:`, `mailto:`, `sms:`, or `tel:` URL, and any other scheme raises
+`ValueError`. Other `attrs` values are written as given, so do not pass request
+data into them unchecked. Listen to native `click`, `submit`, and `reset` events
+with Vue. `CButton` does not duplicate them with component callbacks or custom
+DOM events.
 
 Form attributes and `type="submit"` or `type="reset"` are incompatible with
 `href`. Use a Button for form actions and a link for navigation.
