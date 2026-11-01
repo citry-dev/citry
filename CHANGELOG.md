@@ -370,6 +370,13 @@
 
 ### Fixes
 
+- Citry now labels the JavaScript and CSS files it serves as UTF-8, and
+  writes each non-ASCII character in a `css_data()` value as a CSS escape
+  (`表` becomes `\8868`). Before, a page declared in an encoding such as
+  GBK or Big5 could misread such a character in a linked stylesheet and end
+  a quoted string early. Styles render the same, but script that reads the
+  custom property with `getComputedStyle()` now gets the escape text instead
+  of the character.
 - An oversized request to Citry's event endpoints no longer fills the
   server's memory: by default Citry stops reading a body past 1 MiB and
   rejects a form post with more than 1,000 fields, both with

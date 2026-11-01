@@ -381,7 +381,7 @@ class TestServedLocalFiles:
         response = matched.route.handler(None, **matched.params)
         assert response.status == 200
         assert response.content == ".t { color: teal; }"
-        assert response.content_type == "text/css"
+        assert response.content_type == "text/css; charset=utf-8"
 
     def test_serve_mode_emits_stable_fingerprinted_js_url(self, tmp_path):
         source = "globalThis.vendorLoaded = true;"
@@ -413,7 +413,7 @@ class TestServedLocalFiles:
         response = matched.route.handler(None, **matched.params)
         assert response.status == 200
         assert response.content == source
-        assert response.content_type == "text/javascript"
+        assert response.content_type == "text/javascript; charset=utf-8"
 
     def test_serve_mode_falls_back_to_inline_when_unmounted(self, tmp_path):
         c = Citry(dirs=[tmp_path], extensions_defaults={"dependencies": {"local_files": "serve"}})

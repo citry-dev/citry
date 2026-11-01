@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from citry._owned_resource import _OwnedResource
+from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, _OwnedResource
 from citry.cache import _forget_stored_key
 from citry.ext.dependencies.scripts import (
     component_script_hash,
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from citry.component import Component
     from citry.ext.dependencies.types import ScriptType
 
-_CONTENT_TYPES = {"js": "text/javascript", "css": "text/css"}
+_CONTENT_TYPES = {"js": JAVASCRIPT_CONTENT_TYPE, "css": CSS_CONTENT_TYPE}
 
 RUNTIME_PATH = "citry.js"
 """Route path of the client runtime (under the mounted prefix)."""

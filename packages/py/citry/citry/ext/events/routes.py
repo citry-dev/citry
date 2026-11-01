@@ -45,7 +45,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from citry._owned_resource import PUBLIC_ASSET_CORS_HEADERS, _OwnedResource
+from citry._owned_resource import (
+    CSS_CONTENT_TYPE,
+    JAVASCRIPT_CONTENT_TYPE,
+    _OwnedResource,
+)
 from citry._protocol.events import (
     ProtocolValueError,
     add_route_identity,
@@ -188,13 +192,14 @@ def events_routes(citry: Citry) -> list[URLRoute]:
         content = definition_bundle(citry, digest)
         if content is None:
             return RouteResponse("", status=404, content_type="text/plain")
-        return RouteResponse(
-            content.decode(),
-            content_type="text/javascript",
-            # Content-addressed and public; the CORS header lets the browser
-            # check the integrity the runtime puts on this request.
-            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
-        )
+        # Content-addressed and public; response() adds the CORS header that lets the
+        # browser check the integrity the runtime puts on this request.
+        return _OwnedResource(
+            url="",
+            content=content.decode(),
+            content_type=JAVASCRIPT_CONTENT_TYPE,
+            headers=(("Cache-Control", "public, max-age=31536000, immutable"),),
+        ).response()
 
     def serve_style_asset(_request: RouteRequest, *, digest: str) -> RouteResponse:
         from citry._vue.events import style_asset  # noqa: PLC0415
@@ -204,13 +209,14 @@ def events_routes(citry: Citry) -> list[URLRoute]:
         content = style_asset(citry, digest)
         if content is None:
             return RouteResponse("", status=404, content_type="text/plain")
-        return RouteResponse(
-            content.decode(),
-            content_type="text/css",
-            # Content-addressed and public; the CORS header lets the browser
-            # check the integrity the runtime puts on this request.
-            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
-        )
+        # Content-addressed and public; response() adds the CORS header that lets the
+        # browser check the integrity the runtime puts on this request.
+        return _OwnedResource(
+            url="",
+            content=content.decode(),
+            content_type=CSS_CONTENT_TYPE,
+            headers=(("Cache-Control", "public, max-age=31536000, immutable"),),
+        ).response()
 
     # The host adapters read at most one byte past the engine's body cap, so
     # an oversized body is never held in memory whole. The cap is looked up
@@ -272,7 +278,7 @@ def _runtime_resource(citry: Citry) -> _OwnedResource:
     return _OwnedResource(
         url=citry.build_url(RUNTIME_PATH),
         content=EVENTS_RUNTIME_SRC.read_text(encoding="utf8"),
-        content_type="text/javascript",
+        content_type=JAVASCRIPT_CONTENT_TYPE,
         headers=(("Cache-Control", "no-store"),),
     )
 

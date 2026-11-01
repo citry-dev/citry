@@ -297,7 +297,7 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
     runtime._owned_resource = _OwnedResource(
         url=runtime.url or "",
         content="runtime bytes",
-        content_type="text/javascript",
+        content_type="text/javascript; charset=utf-8",
     )
     security = _ScriptSecurityMaterializer(collect_integrity=True, csp_nonce="response-nonce")
     plan = VueSerializationPlan(
@@ -352,7 +352,7 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
     unsupported_runtime._owned_resource = _OwnedResource(
         url=unsupported_runtime.url or "",
         content="runtime bytes",
-        content_type="text/javascript",
+        content_type="text/javascript; charset=utf-8",
     )
     unsupported_plan = VueSerializationPlan(
         shell_html='<div id="mount"></div>',
@@ -382,13 +382,13 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
     managed_runtime._owned_resource = _OwnedResource(
         url=managed_runtime.url or "",
         content="runtime bytes",
-        content_type="text/javascript",
+        content_type="text/javascript; charset=utf-8",
     )
     events_runtime = Script(url="/citry/ext/events/runtime.js")
     events_runtime._owned_resource = _OwnedResource(
         url=events_runtime.url or "",
         content="events runtime bytes",
-        content_type="text/javascript",
+        content_type="text/javascript; charset=utf-8",
     )
     managed_context = CitryContext(
         component=SimpleNamespace(citry=app),

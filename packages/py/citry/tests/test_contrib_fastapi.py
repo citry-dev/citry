@@ -81,7 +81,7 @@ class TestServedEndpoints:
         client = _build_app(c)
         response = client.get("/citry/citry.js")
         assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/javascript")
+        assert response.headers["content-type"] == "text/javascript; charset=utf-8"
         assert "Citry interactive runtime." in response.text
 
     def test_serves_class_scripts(self):
@@ -95,7 +95,7 @@ class TestServedEndpoints:
         css = client.get(f"/citry/cache/{widget.class_id}.css")
         assert css.status_code == 200
         assert css.text == ".w {}"
-        assert css.headers["content-type"].startswith("text/css")
+        assert css.headers["content-type"] == "text/css; charset=utf-8"
 
     def test_unknown_paths_404_and_post_405(self):
         c = Citry()

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import io
-from typing import Any
+import re
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -26,6 +27,9 @@ from citry.contrib.asgi import asgi_app
 from citry.contrib.wsgi import wsgi_app
 from citry.ext.dependencies.emission import _preloader_script
 from citry.ext.dependencies.routes import script_url
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 CORS = "access-control-allow-origin"
 
@@ -101,6 +105,15 @@ def _asset_paths(app: Citry) -> list[str]:
             main { color: teal; }
         """
 
+        def css_data(self, kwargs: Any, slots: Any) -> dict[str, str]:
+            return {"accent": "teal"}
+
+    # The stylesheet built from css_data() has its own URL, which the page links.
+    rendered = Widget().render()
+    rendered.serialize(deps_strategy="fragment")
+    record = next(item for item in rendered.context.extra["dependencies"] if item.class_id == Widget.class_id)
+    assert record.css_vars_hash is not None
+
     payload = default_events_producer(app).prepare_from_render(
         render_prepared_direct(Widget()), citry=app, app_id="app", revision=0
     )
@@ -112,6 +125,7 @@ def _asset_paths(app: Citry) -> list[str]:
         "/ext/i18n/runtime.js",
         script_url(Widget, "js").removeprefix("/citry"),
         script_url(Widget, "css").removeprefix("/citry"),
+        f"/cache/{Widget.class_id}.{record.css_vars_hash}.css",
         f"/cache/{Widget.class_id}.js",
         definition.removeprefix("/citry"),
         stylesheet.removeprefix("/citry"),
@@ -120,12 +134,15 @@ def _asset_paths(app: Citry) -> list[str]:
 
 def test_owned_resource_response_always_allows_any_origin() -> None:
     # Every Citry-owned file goes through this one response builder.
-    response = _OwnedResource(url="/x.js", content="x", content_type="text/javascript").response()
+    response = _OwnedResource(url="/x.js", content="x", content_type="text/javascript; charset=utf-8").response()
     assert response.headers == (("Access-Control-Allow-Origin", "*"),)
 
     # A route's own headers (such as Cache-Control) are kept beside it.
     with_cache = _OwnedResource(
-        url="/x.js", content="x", content_type="text/javascript", headers=(("Cache-Control", "no-store"),)
+        url="/x.js",
+        content="x",
+        content_type="text/javascript; charset=utf-8",
+        headers=(("Cache-Control", "no-store"),),
     ).response()
     assert with_cache.headers == (("Access-Control-Allow-Origin", "*"), ("Cache-Control", "no-store"))
 
@@ -146,6 +163,90 @@ def test_public_asset_routes_send_a_wildcard_cors_header(adapter: str) -> None:
         # depend on the caller, so neither of these headers belongs here.
         assert "access-control-allow-credentials" not in headers, path
         assert "vary" not in headers, path
+
+
+@pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
+def test_public_asset_routes_name_the_utf8_charset(adapter: str, tmp_path: Path) -> None:
+    # Citry sends these files as UTF-8 bytes. A header with no charset lets the
+    # browser decode them with the encoding of the page that links them, and on a
+    # page in GBK or Big5 that can end a quoted css_data() value early.
+    app = _app()
+    paths = _asset_paths(app)
+    # The route for local files that Citry serves by a fingerprinted URL (`asset/<hash>.css`).
+    served = Citry(
+        dirs=[tmp_path],
+        autodiscover=False,
+        extensions_defaults={"dependencies": {"local_files": "serve"}},
+    )
+    served.set_mounted_prefix("/citry")
+    (tmp_path / "theme.css").write_text(".t { color: teal; }")
+    (tmp_path / "vendor.js").write_text("globalThis.vendorLoaded = true;")
+
+    class Card(Component):
+        citry = served
+        template = "<p>card</p>"
+
+        class Dependencies:
+            css = "theme.css"
+            js = "vendor.js"
+
+    html = str(Card())
+    asset_paths = [match.removeprefix("/citry") for match in re.findall(r'(?:href|src)="(/citry/asset/[^"]+)"', html)]
+    assert len(asset_paths) == 2, html
+    for app_under_test, app_paths in ((app, paths), (served, asset_paths)):
+        _check_charset(app_under_test, app_paths, adapter)
+
+
+def _check_charset(app: Citry, paths: list[str], adapter: str) -> None:
+    for path in paths:
+        headers = _wsgi(app, "GET", path)[1] if adapter == "wsgi" else _asgi(app, "GET", path)[1]
+        expected = "text/css; charset=utf-8" if path.endswith(".css") else "text/javascript; charset=utf-8"
+        assert headers["content-type"] == expected, path
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "text/css",
+        "text/javascript",
+        "text/plain",
+        "TEXT/CSS;boundary=x",
+        # A charset parameter that does not make the browser decode the file as UTF-8.
+        "text/css; charset=",
+        "text/css; charset=bogus",
+        "text/css; charset=gbk",
+        "text/css; charset=iso-2022-jp",
+        "text/css; x-charset=utf-8",
+        'text/css; foo="charset=utf-8"',
+        'text/css; foo=";charset=utf-8"',
+        # JavaScript types that the browser decodes with the page's encoding too.
+        "application/javascript",
+        "application/x-javascript",
+        "application/ecmascript",
+        "application/javascript; charset=gbk",
+    ],
+)
+def test_owned_resource_refuses_a_text_or_script_type_that_does_not_say_utf8(content_type: str) -> None:
+    # Citry builds every script and stylesheet it serves through this class, so a route
+    # that forgets the charset fails here instead of serving a file the browser misreads.
+    with pytest.raises(ValueError, match=r"does not say charset=utf-8"):
+        _OwnedResource(url="/x", content="x", content_type=content_type)
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "text/css; charset=utf-8",
+        "text/css;Charset=UTF-8",
+        'text/css; charset="utf-8"',
+        "text/javascript; charset=utf-8",
+        "application/javascript; charset=utf-8",
+        "application/octet-stream",
+        "application/json",
+    ],
+)
+def test_owned_resource_accepts_utf8_or_a_type_the_browser_does_not_decode_as_text(content_type: str) -> None:
+    assert _OwnedResource(url="/x", content="x", content_type=content_type).response().content_type == content_type
 
 
 @pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
@@ -252,7 +353,9 @@ def test_integrity_mode_owned_script_tag_requests_cors_unless_declared() -> None
 
     def owned(attrs: dict[str, str | bool]) -> Script:
         script = Script(url="/citry/citry.js", attrs=attrs)
-        script._owned_resource = _OwnedResource(url="/citry/citry.js", content="x", content_type="text/javascript")
+        script._owned_resource = _OwnedResource(
+            url="/citry/citry.js", content="x", content_type="text/javascript; charset=utf-8"
+        )
         return script
 
     security = _ScriptSecurityMaterializer(collect_integrity=True, csp_nonce=None)

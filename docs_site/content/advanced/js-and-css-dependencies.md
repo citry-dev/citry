@@ -213,6 +213,14 @@ holds for scripts: send data with `js_data()`, not `{{ }}` inside a
 `<script>` element. Citry escapes `{{ }}` for HTML, which does not make a
 value safe inside script or style text.
 
+Citry checks your value first, then writes each non-ASCII character in it
+as a CSS escape, such as `\8868` for `表` (the escape ends with a space,
+which CSS reads as part of it). Without this, a page declared in an
+encoding such as GBK or Big5 can misread a non-ASCII character in a linked
+stylesheet and end a quoted string early. Styles render the same, but
+script that reads the property with `getComputedStyle()` gets the escape
+text.
+
 !!! warning "Keep secrets out of CSS data"
 
     Citry can deliver these values as a stylesheet at a URL. Anyone who

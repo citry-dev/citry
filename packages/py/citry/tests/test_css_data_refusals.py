@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import random
 import string
 from typing import TYPE_CHECKING
@@ -9,7 +10,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from citry import Citry, Component
-from citry.util.css import serialize_css_var_value, validate_css_var_value
+from citry.contrib.wsgi import wsgi_app
+from citry.util.css import _escape_beyond_printable_ascii, serialize_css_var_value, validate_css_var_value
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -154,8 +156,10 @@ _URL_READINGS = {
 )
 def test_css_data_url_token_starts_only_at_the_start_of_a_token(not_a_url_token: str, a_url_token: str) -> None:
     # A `;` inside the brackets is nested, so these values are accepted and
-    # stay in one declaration.
-    assert serialize_css_var_value(not_a_url_token) == not_a_url_token
+    # stay in one declaration. Only a non-ASCII character is rewritten, as a
+    # hex escape.
+    written = "".join(char if char.isascii() else f"\\{ord(char):x} " for char in not_a_url_token)
+    assert serialize_css_var_value(not_a_url_token) == written
     # Whitespace or a bracket inside the parentheses is what an unquoted url()
     # refuses; a plain function accepts both.
     prefix = not_a_url_token.split("url(")[0]
@@ -591,3 +595,142 @@ def test_css_data_refuses_a_null_or_surrogate_in_every_token(value: str) -> None
     assert _implementation_accepts(value) is False
     with pytest.raises(ValueError, match=r"null character|surrogate"):
         serialize_css_var_value(value)
+
+
+# ---------------------------------------------------------------------------
+# A stylesheet of printable ASCII and CSS whitespace reads the same in each
+# encoding that keeps ASCII bytes as they are. So the serializer writes every
+# other character as a hex escape, which the browser reads as that character.
+# Without the escape, on a page in GBK or Big5 the last byte of a non-ASCII
+# character is read together with the next ASCII byte, which can hide the
+# backslash of an escaped quote.
+# ---------------------------------------------------------------------------
+_ESCAPED_OUTPUT = [
+    pytest.param('"\u8868"', '"\\8868 "', id="a_string"),
+    pytest.param('"\u8868\\";}.evil{--evil:1}"', '"\\8868 \\";}.evil{--evil:1}"', id="the_breakout_on_a_gbk_page"),
+    pytest.param("url(\u8868.png)", "url(\\8868 .png)", id="an_unquoted_url"),
+    pytest.param('"\\\u8868"', '"\\8868 "', id="a_backslash_before_the_character_is_one_escape"),
+    pytest.param('"a\\\\\u8868"', '"a\\\\\\8868 "', id="an_escaped_backslash_then_the_character"),
+    pytest.param('"\\41\u8868"', '"\\41\\8868 "', id="a_hex_escape_then_the_character"),
+    pytest.param('url("\\41 \u8868")', 'url("\\41 \\8868 ")', id="a_hex_escape_ended_by_a_space_then_the_character"),
+    pytest.param('"\U0001f600"', '"\\1f600 "', id="a_character_outside_the_basic_plane"),
+    pytest.param('"\u00e9"', '"\\e9 "', id="a_latin_letter"),
+    pytest.param('"\x1b$B"', '"\\1b $B"', id="the_escape_character_that_switches_a_japanese_encoding"),
+    pytest.param('"\x7f"', '"\\7f "', id="delete"),
+    pytest.param("\u8868 x", '"\\8868  x"', id="text_with_a_space_is_quoted_then_escaped"),
+    pytest.param("calc(1px + 2px)", "calc(1px + 2px)", id="ascii_is_unchanged"),
+    pytest.param('"a\\"b"', '"a\\"b"', id="an_escaped_quote_is_unchanged"),
+    pytest.param('url("a\\\nb")', 'url("a\\\nb")', id="a_line_continuation_is_unchanged"),
+]
+
+
+@pytest.mark.parametrize(("value", "expected"), _ESCAPED_OUTPUT)
+def test_css_data_writes_characters_beyond_printable_ascii_as_hex_escapes(value: str, expected: str) -> None:
+    assert serialize_css_var_value(value) == expected
+
+
+def _decode_css_escapes(text: str) -> str:
+    """Read `text` the way CSS Syntax reads escapes: up to 6 hex digits and one whitespace, or any one character."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\f", "\n")
+    decoded: list[str] = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        index += 1
+        if char != "\\" or index >= len(text):
+            decoded.append(char)
+            continue
+        if text[index] == "\n":
+            index += 1
+            continue
+        digits = ""
+        while index < len(text) and len(digits) < 6 and text[index] in _HEX_DIGITS:
+            digits += text[index]
+            index += 1
+        if not digits:
+            decoded.append(text[index])
+            index += 1
+            continue
+        if index < len(text) and text[index] in _WHITESPACE:
+            index += 1
+        codepoint = int(digits, 16)
+        decoded.append(
+            "\ufffd" if codepoint == 0 or codepoint > 0x10FFFF or 0xD800 <= codepoint < 0xE000 else chr(codepoint)
+        )
+    return "".join(decoded)
+
+
+_PIECES_BEYOND_PRINTABLE_ASCII = [
+    "\u8868",
+    "\u00e9",
+    "\U0001f600",
+    "\u00a0",
+    "\u2028",
+    "\x85",
+    "\x1b",
+    "\x7f",
+    "\\\u8868",
+    "\\\x1b",
+    "\\\u00e9\\41",
+]
+
+
+def _random_value_with_other_characters(rng: random.Random) -> str:
+    pieces = [*_PIECES, *_PIECES_BEYOND_PRINTABLE_ASCII]
+    return "".join(rng.choice(pieces) for _ in range(rng.randrange(15)))
+
+
+def test_css_data_escape_keeps_every_character_and_leaves_only_printable_ascii_and_css_whitespace() -> None:
+    rng = random.Random(4_417)  # noqa: S311 - test data, not secrets
+    changed = 0
+    for _ in range(40_000):
+        value = _random_value_with_other_characters(rng)
+        if not _implementation_accepts(value):
+            continue
+        escaped = _escape_beyond_printable_ascii(value)
+        # Only printable ASCII and CSS whitespace remain.
+        assert all(char in "\n\r\t\f" or " " <= char <= "~" for char in escaped), repr(value)
+        # The browser reads the same characters before and after.
+        assert _decode_css_escapes(escaped) == _decode_css_escapes(value), repr(value)
+        # Escaping twice changes nothing more.
+        assert _escape_beyond_printable_ascii(escaped) == escaped, repr(value)
+        changed += escaped != value
+
+    # The comparison means something only if many values hold such a character.
+    assert changed > 1_000
+
+
+def test_css_data_renders_the_same_ascii_text_inline_and_in_the_linked_stylesheet() -> None:
+    app = Citry()
+    app.set_mounted_prefix("/citry")
+
+    class Widget(Component):
+        citry = app
+        template = """
+            <span class="w">w</span>
+        """
+        css = """
+            .w { color: var(--x); }
+        """
+
+        def css_data(self, kwargs, slots):
+            return {"x": '"\u8868\\";}.evil{--evil:1}"', "y": "1"}
+
+    inline = Widget().render().serialize(deps_strategy="document")
+    assert '--x: "\\8868 \\";}.evil{--evil:1}";' in inline
+    assert "\u8868" not in inline
+
+    # The stylesheet the page links is the same ASCII text, served through the real route.
+    rendered = Widget().render()
+    rendered.serialize(deps_strategy="fragment")
+    record = next(item for item in rendered.context.extra["dependencies"] if item.class_id == Widget.class_id)
+    environ = {
+        "REQUEST_METHOD": "GET",
+        "PATH_INFO": f"/cache/{Widget.class_id}.{record.css_vars_hash}.css",
+        "SCRIPT_NAME": "",
+        "QUERY_STRING": "",
+        "wsgi.input": io.BytesIO(b""),
+    }
+    body = b"".join(wsgi_app(app)(environ, lambda _status, _headers: None))
+    assert body.isascii()
+    assert b'--x: "\\8868 \\";}.evil{--evil:1}";' in body

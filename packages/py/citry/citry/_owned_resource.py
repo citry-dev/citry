@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from email.message import Message
+from functools import cache
 
 from citry.util.routing import RouteResponse
 
@@ -27,6 +29,36 @@ send it. The value does not depend on the request's ``Origin``, so the
 response needs no ``Vary`` header.
 """
 
+JAVASCRIPT_CONTENT_TYPE = "text/javascript; charset=utf-8"
+CSS_CONTENT_TYPE = "text/css; charset=utf-8"
+r"""
+The ``Content-Type`` of every JavaScript and CSS file Citry serves.
+
+Citry sends these files as UTF-8. With no charset in the header, the browser
+decodes the file with the encoding of the page that links it. On a page in
+GBK or Big5, the browser reads the backslash in ``\"`` inside a ``css_data()``
+string as the second byte of a two-byte character, so the quote after it ends
+the string.
+"""
+
+_JAVASCRIPT_MEDIA_TYPES = frozenset(
+    {"application/javascript", "application/x-javascript", "application/ecmascript", "application/x-ecmascript"}
+)
+
+
+@cache
+def _lacks_utf8_charset(content_type: str) -> bool:
+    """Whether ``content_type`` names a text or JavaScript file without saying ``charset=utf-8``."""
+    # The standard library reads the parameters the way a browser does: a quoted value
+    # that holds "charset=utf-8" or a parameter named "x-charset" does not count.
+    header = Message()
+    header["Content-Type"] = content_type
+    media_type = header.get_content_type()
+    if not (media_type.startswith("text/") or media_type in _JAVASCRIPT_MEDIA_TYPES):
+        return False
+    return header.get_content_charset() != "utf-8"
+
+
 OWNED_ASSET_CROSSORIGIN = "anonymous"
 """
 The ``crossorigin`` value Citry puts on every tag that fetches its own files.
@@ -47,6 +79,19 @@ class _OwnedResource:
     content: str | bytes
     content_type: str
     headers: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        # A string body is sent as UTF-8. A text or JavaScript type that does not say so
+        # leaves the browser to decode the file with the linking page's encoding. Citry builds
+        # every script and stylesheet it serves through this class, so a route that forgets
+        # the charset fails in the tests instead of shipping.
+        if _lacks_utf8_charset(self.content_type):
+            msg = (
+                f"The content type {self.content_type!r} of a served text or JavaScript file does not say "
+                "charset=utf-8, so the browser would decode the file with the encoding of the page that "
+                "links it. Add '; charset=utf-8'."
+            )
+            raise ValueError(msg)
 
     @property
     def body(self) -> bytes:

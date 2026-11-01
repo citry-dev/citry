@@ -278,6 +278,49 @@ def _scan_css_url(value: str, start: int) -> int:
     raise ValueError(f"CSS value contains an unclosed url() from offset {start}.")
 
 
+def _escape_beyond_printable_ascii(value: str) -> str:
+    r"""
+    Write every character that is not printable ASCII or CSS whitespace as a CSS hex escape.
+
+    The stylesheet that holds the value is then plain ASCII. A browser that
+    decodes the file with a multi-byte encoding such as GBK or Big5 reads the
+    last byte of a non-ASCII character together with the next ASCII byte as
+    one character, which can hide the backslash of an escaped quote and end a
+    string early. In ISO-2022-JP, the ESC control character changes how the
+    bytes after it are read. Printable ASCII reads the same in every encoding
+    that keeps ASCII bytes as they are. A browser that decodes the file as
+    UTF-16 or one of the replacement encodings drops the whole stylesheet, so
+    Citry also serves it with ``charset=utf-8``.
+
+    The escape ends in a space, which CSS reads as part of the escape, so a hex
+    digit that follows is not taken as one more digit of it. The value is
+    already checked, so escaping changes how each character is written, not
+    which characters the CSS holds. The escaped text is not meant to be checked
+    again: ``validate_css_var_value`` refuses a backslash outside a string.
+    """
+    if all(char in _CSS_WHITESPACE or " " <= char <= "~" for char in value):
+        return value
+    parts: list[str] = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char == "\\" and index + 1 < len(value):
+            following = value[index + 1]
+            if following in _CSS_WHITESPACE or " " <= following <= "~":
+                # Keep a backslash and the character after it together, so the second
+                # backslash in `\\\\` is not read as the start of another escape.
+                parts.append(char + following)
+                index += 2
+                continue
+            # A backslash before a non-ASCII or control character escapes that character. The
+            # hex escape below says the same thing, so the backslash is dropped.
+            index += 1
+            char = following
+        parts.append(char if char in _CSS_WHITESPACE or " " <= char <= "~" else f"\\{ord(char):x} ")
+        index += 1
+    return "".join(parts)
+
+
 def serialize_css_var_value(value: object) -> str:
     """
     Turn one ``css_data()`` scalar into structurally contained CSS text.
@@ -287,6 +330,10 @@ def serialize_css_var_value(value: object) -> str:
     quoted and escaped unless it begins with a CSS function. Raw values are
     checked for declaration and style-tag breakout, balanced blocks, strings,
     and comments. This is not a full CSS grammar or property-type validator.
+
+    The text that is returned holds only printable ASCII and CSS whitespace:
+    any other character is written as a CSS hex escape, which means the same
+    thing to the browser.
 
     Booleans and structured values are rejected rather than serialized with
     Python ``str()`` representations.
@@ -315,4 +362,6 @@ def serialize_css_var_value(value: object) -> str:
         raise TypeError(msg)
 
     validate_css_var_value(serialized)
-    return serialized
+    # Check first, escape after: an error message then points into the text the
+    # caller wrote, and the escape cannot change what the check accepted.
+    return _escape_beyond_printable_ascii(serialized)

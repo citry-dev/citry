@@ -26,7 +26,7 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from citry._owned_resource import OWNED_ASSET_CROSSORIGIN, _OwnedResource
+from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, OWNED_ASSET_CROSSORIGIN, _OwnedResource
 from citry.assets import HasHtml
 from citry.citry_render import CitryRender, selected_render_ids
 from citry.ext.dependencies.routes import RUNTIME_PATH, runtime_url, script_url
@@ -732,7 +732,7 @@ def _runtime_js() -> str:
 
 def _runtime_resource(citry: Citry) -> _OwnedResource:
     url = runtime_url(citry) if citry.mounted_prefix is not None else RUNTIME_PATH
-    return _OwnedResource(url=url, content=_runtime_js(), content_type="text/javascript")
+    return _OwnedResource(url=url, content=_runtime_js(), content_type=JAVASCRIPT_CONTENT_TYPE)
 
 
 def _owned_script(
@@ -762,7 +762,7 @@ def _cached_js_resource(comp_cls: type[Component]) -> _OwnedResource | None:
     return _OwnedResource(
         url=script_url(comp_cls, "js"),
         content=dependency.content,
-        content_type="text/javascript",
+        content_type=JAVASCRIPT_CONTENT_TYPE,
     )
 
 
@@ -1152,7 +1152,11 @@ def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> _OwnedReso
     # what the asset endpoint serves under that name.
     file_name = cache_asset(citry, content, extension)
     content_type = (
-        "text/javascript" if extension == "js" else "text/css" if extension == "css" else "application/octet-stream"
+        JAVASCRIPT_CONTENT_TYPE
+        if extension == "js"
+        else CSS_CONTENT_TYPE
+        if extension == "css"
+        else "application/octet-stream"
     )
     return _OwnedResource(
         url=citry.build_url(f"asset/{file_name}"),
