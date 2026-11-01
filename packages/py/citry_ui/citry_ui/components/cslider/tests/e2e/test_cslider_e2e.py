@@ -82,7 +82,16 @@ def _page_html() -> str:
             </body>
           </html>
         """
-        js = "$component({data(){return {controlled:'2',accept:false,gap:2};}});"
+        js = """
+            $component({
+              data() {
+                return { controlled: '2', accept: false, gap: 2 };
+              },
+              mounted() {
+                window.__sliderState = this;
+              },
+            });
+        """
 
         def template_data(self, kwargs, slots):
             return {
@@ -201,4 +210,32 @@ def test_pointer_geometry_and_rtl_keyboard_are_deterministic(slider_page) -> Non
     assert rtl_box is not None
     page.mouse.click(rtl_box["x"] + rtl_box["width"] * 0.1, rtl_box["y"] + rtl_box["height"] * 0.5)
     assert rtl.get_attribute("aria-valuenow") == "9"
+    assert errors == []
+
+
+def test_long_zero_run_in_controlled_value_is_rejected_quickly(slider_page) -> None:
+    page, errors = slider_page
+    thumb = page.locator('.cui-slider:has(#controlled) [data-citry-ui-part="thumb"]')
+
+    # Short input: an accepted owner value with trailing zeros moves the thumb to its canonical value.
+    page.evaluate("window.__sliderState.controlled = '3.50'")
+    page.wait_for_function(
+        """document.querySelector('.cui-slider:has(#controlled) [data-citry-ui-part=thumb]')
+          .getAttribute('aria-valuenow') === '3.5'"""
+    )
+
+    # A valid decimal with a very long run of zeros before the last digit is the slow case for a regex
+    # anchored to the end. Only a regex engine that backtracks, such as WebKit's, is slow on it. The
+    # value is past the 128-digit limit, so the slider rejects it and keeps the last accepted value.
+    elapsed = page.evaluate(
+        """async text => {
+          const start = performance.now();
+          window.__sliderState.controlled = text;
+          await new Promise(resolve => setTimeout(resolve, 0));
+          return performance.now() - start;
+        }""",
+        "1." + "0" * 100_000 + "1",
+    )
+    assert elapsed < 1000
+    assert thumb.get_attribute("aria-valuenow") == "3.5"
     assert errors == []

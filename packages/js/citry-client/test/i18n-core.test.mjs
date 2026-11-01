@@ -709,3 +709,26 @@ test("fallback text is isolated against an explicit provider direction", async (
   assert.equal(service.tr("greeting"), `${LRI}Hello${PDI}`);
   assert.equal(service.resolve("greeting").direction, "ltr");
 });
+
+test("trailing zeros are removed in time that grows with the input, not its square", async () => {
+  const { createPureI18nHelpers, withoutTrailingZeros } = await coreModule();
+  const { normalizedDecimal } = createPureI18nHelpers((code, message) => {
+    throw new Error(`${code}: ${message}`);
+  });
+  assert.equal(withoutTrailingZeros(""), "");
+  assert.equal(withoutTrailingZeros("000"), "");
+  assert.equal(withoutTrailingZeros("1200"), "12");
+  assert.equal(withoutTrailingZeros("1020"), "102");
+  assert.equal(normalizedDecimal("1.500"), "1.5");
+  assert.equal(normalizedDecimal("-0.000"), "0");
+  assert.equal(normalizedDecimal("12.000"), "12");
+
+  // A long run of zeros that ends in another digit is the slow case for a
+  // regex anchored to the end; 100,000 digits must finish well under half
+  // a second.
+  const zeros = "0".repeat(100_000);
+  const started = performance.now();
+  assert.equal(normalizedDecimal(`1.${zeros}1`), `1.${zeros}1`);
+  assert.equal(normalizedDecimal(`1.1${zeros}`), "1.1");
+  assert.ok(performance.now() - started < 500, "normalizedDecimal took too long on a long input");
+});

@@ -436,6 +436,45 @@ def _auto_sizes_page() -> str:
     return str(Page())
 
 
+def _srcset_page() -> str:
+    app = _app()
+
+    class Page(Component):
+        citry = app
+
+        def template_data(self, kwargs, slots):
+            return {"green": GREEN}
+
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /></head>
+            <body>
+              <c-CImage
+                c-src="green"
+                alt="Srcset plate"
+                c-width="80"
+                c-height="40"
+                c-attrs="{'id': 'srcset-image'}"
+                :srcset="imageSrcset"
+              />
+              <c-js />
+            </body>
+          </html>
+        """
+        js = """
+            $component({
+              data() {
+                const state = Citry.vue.reactive({ imageSrcset: undefined });
+                window.__state = state;
+                return state;
+              },
+            });
+        """
+
+    return str(Page())
+
+
 def _events_page() -> tuple[Citry, str]:
     app = Citry(secret="citry-ui-image-e2e", autodiscover=False)  # noqa: S106
     app.set_mounted_prefix("/citry")
@@ -956,3 +995,45 @@ def test_clone_hostile_anatomy_shadow_move_and_cleanup_are_owner_guarded(page: A
         "[citry-ui] CImage lost its owned native anatomy; component behavior was removed.",
         "[citry-ui] CImage lost its owned native anatomy; component behavior was removed.",
     ]
+
+
+def test_srcset_scheme_check_stays_fast_with_a_long_run_of_commas(page: Any) -> None:
+    page.set_content(_srcset_page(), wait_until="load")
+    page.wait_for_selector("#srcset-image[data-citry-image-initialized]")
+    image = page.locator("#srcset-image img")
+    assert image.get_attribute("srcset") is None
+
+    # A candidate with a very long run of commas before its last character is the slow case for a regex
+    # that strips trailing commas, so this measures the check inside the page. Only a regex engine that
+    # backtracks, such as WebKit's, is slow on it. It has no `javascript:` or `vbscript:` scheme, so the
+    # component applies it.
+    plain = "a" + "," * 100_000 + "b"
+    elapsed = page.evaluate(
+        """async text => {
+          const start = performance.now();
+          window.__state.imageSrcset = text;
+          await new Promise(resolve => setTimeout(resolve, 0));
+          return performance.now() - start;
+        }""",
+        plain,
+    )
+    assert elapsed < 1000
+    page.wait_for_function(
+        "(text) => document.querySelector('#srcset-image img').getAttribute('srcset') === text", arg=plain
+    )
+
+    # The same long run after a javascript: URL is still caught, so the component keeps the previous
+    # srcset instead of applying it.
+    active = "javascript:alert(1)" + "," * 100_000 + "b"
+    elapsed = page.evaluate(
+        """async text => {
+          const start = performance.now();
+          window.__state.imageSrcset = text;
+          await new Promise(resolve => setTimeout(resolve, 0));
+          return performance.now() - start;
+        }""",
+        active,
+    )
+    assert elapsed < 1000
+    page.wait_for_timeout(50)
+    assert image.get_attribute("srcset") == plain

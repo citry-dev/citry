@@ -770,6 +770,9 @@
   faster on large pages. On a page with 1,400 table rows,
   `serialize(security_csp="strict")` takes about 100 ms instead of about
   560 ms.
+- In browsers such as Safari, an i18n message given an exact decimal with
+  a long run of zeros before its last digit, such as 100,000 zeros, no
+  longer holds up the page for seconds.
 
 ## v0.6.0
 

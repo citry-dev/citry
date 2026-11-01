@@ -893,7 +893,11 @@ class CImage(LibraryComponent):
                 while (index < value.length && (/[\\s,]/.test(value[index]))) index += 1;
                 const start = index;
                 while (index < value.length && !/\\s/.test(value[index])) index += 1;
-                const candidate = value.slice(start, index).replace(/,+$/, "");
+                // Drop the URL's trailing commas with a plain loop, so the time grows only in
+                // step with the length, even for a long run of commas.
+                let candidateEnd = index;
+                while (candidateEnd > start && value[candidateEnd - 1] === ",") candidateEnd -= 1;
+                const candidate = value.slice(start, candidateEnd);
                 if (/^(?:javascript|vbscript)\\s*:/i.test(candidate)) return true;
                 if (index > start && value[index - 1] === ",") continue;
                 let depth = 0;

@@ -55,6 +55,10 @@
 
 ### Fixed
 
+- `CTagsInput` no longer holds up the page for seconds when a typed or
+  pasted tag has a long run of spaces inside it, and `CNumberInput`,
+  `CSlider`, and `CImage` no longer slow down in Safari on a value with a
+  very long run of zeros or commas.
 - `CMenu` and `CAccordion` now accept a self-closed element such as
   `<span/>` in an item's label or title, and write it as `<span></span>`,
   as Citry does elsewhere. They used to reject it.
