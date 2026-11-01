@@ -134,7 +134,7 @@ def test_forbid_reports_every_settled_rule_in_page_order() -> None:
             "- Card, attribute 'href', settled HTML bytes 50:62: a javascript: URL in 'href' "
             "remains executable browser code",
             "- Card, attribute 'srcdoc', settled HTML bytes 85:99: 'srcdoc' contains an embedded "
-            "HTML document with executable browser code",
+            "document with executable browser code",
             "- Card, dependency bytes 111:117: a raw executable <script> remains outside Citry's dependency policy",
             "- Card, dependency bytes 133:139: a raw Citry browser manifest requires the client manager",
         ]

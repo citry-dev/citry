@@ -634,15 +634,15 @@ reports:
 
 The URL check reads the attributes that hold a link: `href`, `src`,
 `action`, `formaction`, `xlink:href`, and `data` on `<object>`. An SVG
-`<animate>` or `<set>` that animates `href` or `xlink:href` counts too,
+`<animate>` or `<set>` whose `attributeName` is `href` counts too,
 because it can write its `to`, `from`, `by`, or `values` into the link
 while the page is open. For `values`, which is a list separated by `;`,
 any item that starts with `javascript:` is reported. The check decodes
 character references and skips the tabs and line breaks that browsers
 remove from a URL, so `java&#9;script:` is reported. It also reports a few
 spellings that Chromium and Firefox did not run when tested, such as
-`attributeName="HREF"`, in case another browser reads the name more
-loosely.
+`xlink:href` and `attributeName="HREF"`, in case another browser reads the
+name more loosely.
 
 Use a Vue binding such as `@click` instead of `onclick`, and move scripts
 and styles to `Component.js`, `Component.css`, or structured
@@ -701,7 +701,19 @@ bindings that are in use, executable scripts, native `on*` attributes,
 `javascript:` URLs (including the ones an SVG `<animate>` or `<set>` writes
 into a link, as [described for
 `security_csp`](#choose-a-csp-compatibility-mode)), and HTML that runs
-scripts through `iframe srcdoc` or an HTML data URL. It checks dependencies
+scripts through `iframe srcdoc` or a data URL. Citry checks every data
+URL the page loads or opens as a document: in an `iframe`, `frame`,
+`object`, or `embed`, in a link or form (`href`, `xlink:href`, `action`,
+`formaction`, and the value of an SVG animation of a link, since any link
+can open in a frame), and in a `<meta http-equiv="refresh">`. It reads an HTML data URL, and counts any
+other type as needing JavaScript, with or without a script, because the
+browser runs the scripts of an SVG or other XML document. A data URL of
+plain text, CSS, CSV, JSON, an image, audio, video, a font, a PDF, or
+`application/octet-stream` does not count. An HTML data URL counts when
+it has a script or when Citry cannot read it, such as invalid base64 or
+UTF-16. A download link (`<a download>`) counts too, so give a file you
+offer for download one of those types, such as
+`application/octet-stream`, or serve it from a URL. It checks dependencies
 and HTML after extensions have changed them. An `Events` method that no
 template calls does not count.
 

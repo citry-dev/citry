@@ -1694,7 +1694,7 @@ class TestJavascriptDeliveryPolicy:
             citry = c
 
         Card.template = template
-        with pytest.raises(ValueError, match="embedded HTML document"):
+        with pytest.raises(ValueError, match="embedded document"):
             Card().render().serialize(deps_strategy="ignore")
 
     @pytest.mark.parametrize(
@@ -1720,7 +1720,7 @@ class TestJavascriptDeliveryPolicy:
         if not reported:
             rendered.serialize(deps_strategy="ignore")
             return
-        with pytest.raises(ValueError, match="embedded HTML document"):
+        with pytest.raises(ValueError, match="embedded document"):
             rendered.serialize(deps_strategy="ignore")
 
     # Embedded documents whose script the browser runs, written with
@@ -1747,7 +1747,7 @@ class TestJavascriptDeliveryPolicy:
             def template_data(self, kwargs, slots):
                 return {"body": Markup(markup)}  # noqa: S704 - the test writes fixed markup
 
-        with pytest.raises(ValueError, match="embedded HTML document"):
+        with pytest.raises(ValueError, match="embedded document"):
             Card().render().serialize(deps_strategy="ignore")
 
     @pytest.mark.parametrize("markup", _EMBEDDED_WITH_SCRIPT)
@@ -1761,7 +1761,7 @@ class TestJavascriptDeliveryPolicy:
             def template_data(self, kwargs, slots):
                 return {"body": Markup(markup)}  # noqa: S704 - the test writes fixed markup
 
-        with pytest.warns(RuntimeWarning, match="embedded HTML document"):
+        with pytest.warns(RuntimeWarning, match="embedded document"):
             Card().render().serialize(deps_strategy="ignore")
 
     def test_forbid_still_passes_an_inert_embedded_document(self):
@@ -1897,5 +1897,124 @@ class TestSvgAnimationUrls:
         document = '<svg><a><set attributeName="href" to="javascript:run()"/></a></svg>'
         escaped = document.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
         rendered = self._card(Citry(security_javascript="forbid"), f'<iframe srcdoc="{escaped}"></iframe>')
-        with pytest.raises(ValueError, match="embedded HTML document"):
+        with pytest.raises(ValueError, match="embedded document"):
+            rendered.serialize(deps_strategy="ignore")
+
+
+class TestEmbeddedDataUrlDocuments:
+    """
+    A `data:` URL in a frame, a link, a form, or a meta refresh that is not plain HTML.
+
+    The browser runs the scripts of an SVG or other XML document there, and
+    Firefox reads some unknown types as HTML. The check reads only HTML, so
+    it reports every such document, with or without a script. A type the
+    browser shows as text, an image, media, or a download is not reported.
+    """
+
+    # An SVG document whose script calls `run()`.
+    _SVG = "%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cscript%3Erun()%3C/script%3E%3C/svg%3E"
+    _SCRIPT = "%3Cscript%3Erun()%3C/script%3E"
+    _UNREAD_DOCUMENTS = [
+        f'<iframe src="data:image/svg+xml,{_SVG}"></iframe>',
+        f'<object data="data:image/svg+xml,{_SVG}"></object>',
+        f'<embed src="data:image/svg+xml,{_SVG}">',
+        f'<frameset><frame src="data:image/svg+xml,{_SVG}"></frameset>',
+        f'<iframe src="data:application/xhtml+xml,{_SVG}"></iframe>',
+        f'<iframe src="data:text/xml,{_SVG}"></iframe>',
+        f'<iframe src="data:application/xml,{_SVG}"></iframe>',
+        # Any type whose subtype ends in `+xml` loads as XML.
+        f'<iframe src="data:application/rss+xml,{_SVG}"></iframe>',
+        # Chromium runs a `text/xsl` document too.
+        f'<iframe src="data:text/xsl,{_SVG}"></iframe>',
+        # Firefox reads these as HTML; other unknown types count as well.
+        f'<iframe src="data:*/*,{_SCRIPT}"></iframe>',
+        f'<iframe src="data:application/x-unknown-content-type,{_SCRIPT}"></iframe>',
+        # The type is read without case, parameters, or spaces around it.
+        f'<iframe src="DATA:Image/SVG+XML;charset=utf-8,{_SVG}"></iframe>',
+        f'<iframe src="data: image/svg+xml ;base64,{base64.b64encode(b"<svg/>").decode()}"></iframe>',
+        # The browser drops tabs and line breaks anywhere in the URL.
+        f'<iframe src="da&#9;ta:image/svg+xml,{_SVG}"></iframe>',
+        # A document without a script counts too.
+        '<iframe src="data:image/svg+xml,%3Csvg/%3E"></iframe>',
+    ]
+    _HTML_WITH_SCRIPT = [
+        # Tabs and line breaks are dropped, also inside the type and payload.
+        f'<iframe src="data:text/ht&#10;ml,{_SCRIPT}"></iframe>',
+        '<iframe src="data:text/html,&lt;scr&#9;ipt&gt;run()&lt;/script&gt;"></iframe>',
+        # Spaces before `base64` still mark base64.
+        '<iframe src="data:text/html; base64,PHNjcmlwdD5ydW4oKTwvc2NyaXB0Pg=="></iframe>',
+        # UTF-16, by charset or byte order mark, and an ISO-2022-JP escape.
+        '<iframe src="data:text/html;charset=utf-16le,%3C%00s%00c%00r%00i%00p%00t%00%3E%00"></iframe>',
+        '<iframe src="data:text/html,%FF%FE%3C%00s%00c%00r%00i%00p%00t%00%3E%00"></iframe>',
+        '<iframe src="data:text/html,%3Cscr%1B(Bipt%3Erun()%3C/script%3E"></iframe>',
+    ]
+    # A link or form opens a `data:` document in a frame, which `target` or
+    # `<base target>` can pick, and a meta refresh opens one in the page's
+    # own frame, so each counts like a frame's URL.
+    _OPENED_DOCUMENTS = [
+        f'<a href="data:image/svg+xml,{_SVG}">x</a>',
+        f'<a target="f" href="data:text/html,{_SCRIPT}">x</a>',
+        f'<map><area href="data:image/svg+xml,{_SVG}"></map>',
+        f'<svg><a xlink:href="data:image/svg+xml,{_SVG}"></a></svg>',
+        f'<form action="data:text/xml,{_SVG}"></form>',
+        f'<button formaction="data:text/xml,{_SVG}">x</button>',
+        f'<svg><a><set attributeName="href" to="data:image/svg+xml,{_SVG}"/></a></svg>',
+        f'<meta http-equiv="refresh" content="0;url=data:image/svg+xml,{_SVG}">',
+        f'<meta http-equiv="Refresh" content="0; URL=\'data:text/html,{_SCRIPT}\'">',
+    ]
+    _NOT_OPENED_DOCUMENTS = [
+        f'<a href="data:image/png,{_SCRIPT}">x</a>',
+        '<a href="data:text/html,%3Cp%3Ehi%3C/p%3E">x</a>',
+        # A stylesheet or an SVG reference is not opened as a page.
+        '<link rel="stylesheet" href="data:text/css,p{}">',
+        f'<svg><use href="data:image/svg+xml,{_SVG}"></use></svg>',
+        '<meta http-equiv="refresh" content="0;url=/next">',
+        f'<meta name="refresh" content="0;url=data:text/xml,{_SVG}">',
+    ]
+    _NOT_DOCUMENTS = [
+        # Shown as text, an image, media, or a download.
+        f'<iframe src="data:image/svg,{_SVG}"></iframe>',
+        f'<iframe src="data:text/plain,{_SVG}"></iframe>',
+        f'<iframe src="data:,{_SVG}"></iframe>',
+        f'<iframe src="data:image/png,{_SCRIPT}"></iframe>',
+        f'<embed src="data:video/mp4,{_SCRIPT}">',
+        f'<object data="data:application/pdf,{_SCRIPT}"></object>',
+        # An image runs no script.
+        f'<img src="data:image/svg+xml,{_SVG}">',
+        # HTML without a script.
+        '<iframe src="data:text/html; base64,PHA+aGk8L3A+"></iframe>',
+    ]
+
+    @staticmethod
+    def _card(app, markup):
+        class Card(Component):
+            citry = app
+            template = "{{ body }}"
+
+            def template_data(self, kwargs, slots):
+                return {"body": Markup(markup)}  # noqa: S704 - the test writes fixed markup
+
+        return Card().render()
+
+    @pytest.mark.parametrize("markup", _UNREAD_DOCUMENTS + _HTML_WITH_SCRIPT + _OPENED_DOCUMENTS)
+    def test_forbid_rejects_an_embedded_document_that_may_run_code(self, markup):
+        rendered = self._card(Citry(security_javascript="forbid"), markup)
+        with pytest.raises(ValueError, match="embedded document"):
+            rendered.serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize("markup", _UNREAD_DOCUMENTS + _HTML_WITH_SCRIPT + _OPENED_DOCUMENTS)
+    def test_warn_reports_an_embedded_document_that_may_run_code(self, markup):
+        rendered = self._card(Citry(security_javascript="warn"), markup)
+        with pytest.warns(RuntimeWarning, match="embedded document"):
+            rendered.serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize("markup", _NOT_DOCUMENTS + _NOT_OPENED_DOCUMENTS)
+    def test_forbid_passes_a_data_url_that_runs_no_code(self, markup):
+        self._card(Citry(security_javascript="forbid"), markup).serialize(deps_strategy="ignore")
+
+    def test_an_svg_document_inside_an_embedded_html_document_is_reported(self):
+        inner = f'<iframe src="data:image/svg+xml,{self._SVG}"></iframe>'
+        escaped = inner.replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
+        rendered = self._card(Citry(security_javascript="forbid"), f'<iframe srcdoc="{escaped}"></iframe>')
+        with pytest.raises(ValueError, match="embedded document"):
             rendered.serialize(deps_strategy="ignore")

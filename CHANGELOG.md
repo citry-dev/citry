@@ -581,6 +581,20 @@
   `ValueError` under `security_csp="strict"` and
   `security_javascript="forbid"`, and warns under `security_csp="warn"` and
   `security_javascript="warn"` or `"omit"`. Use a normal URL instead.
+- `security_javascript` now reports a `data:` URL of an SVG, other XML,
+  or unknown type, such as `data:image/svg+xml,...`, with or without a
+  script, wherever the page loads or opens it as a document: in an
+  `iframe`, `frame`, `object`, or `embed`, in a link or form, or in a
+  `<meta http-equiv="refresh">`. The browser can run scripts in such a
+  document, and Citry does not read it. It also checks HTML `data:` URLs
+  there for a script, including one with tabs or line breaks or written
+  with `; base64`, and reports one in UTF-16. `"forbid"` raises
+  `ValueError`, and `"warn"` and `"omit"` warn. To show an SVG image, use
+  `<img>`, which runs no scripts and is not reported. A download link
+  such as `<a download href="data:application/zip;base64,...">` is
+  reported too unless its type is plain text, CSS, CSV, JSON, an image,
+  media, a font, a PDF, or `application/octet-stream`; serve the file
+  from a URL or give it the type `application/octet-stream`.
 - In a component that uses Vue, an attribute value such as
   `href="/search?q=x&region=eu"` now keeps `&region=eu` as written, as
   the browser and Vue do. Citry used to read `&reg` in it as `®`,

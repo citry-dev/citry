@@ -281,6 +281,12 @@ impl CheckState<'_, '_> {
         // not scanned again for each one.
         let animates_href = (self.options.csp || javascript.is_some())
             && animation_sets_href(name, &tag.attributes);
+        // Whether this tag is a `<meta http-equiv="refresh">`, which opens
+        // the URL in its `content`; only the JavaScript policy reads it.
+        let facts = DocumentFacts {
+            animates_href,
+            refreshes: javascript.is_some() && meta_refreshes(name, &tag.attributes),
+        };
         for attr in &tag.attributes {
             let attr_name = ascii_lower(&attr.name);
             let raw_value: &str = if attr.has_value { &attr.value } else { "" };
@@ -383,11 +389,13 @@ impl CheckState<'_, '_> {
                     value_end,
                 );
             }
-            if may_embed_document(name, &attr_name)
-                && embedded_document_requires_javascript(
+            if may_hold_document(name, &attr_name, facts)
+                && attribute_document_requires_javascript(
                     name,
                     &attr_name,
                     decoded.get_or_insert_with(|| decode_html_attribute(raw_value)),
+                    facts,
+                    0,
                 )
             {
                 self.push_finding_in(
@@ -654,7 +662,8 @@ pub fn is_url_value(tag: &str, name: &str, animates_href: bool) -> bool {
 }
 
 /// Whether a URL attribute's value, with its character references already
-/// decoded, starts with `javascript:`. The page check and the
+/// decoded, starts with `javascript:`, or for `values`, whether any
+/// `;`-separated item does. The page check and the
 /// embedded-document check both call this, so they cannot disagree.
 ///
 /// `values` is a list that the browser's SVG animation code (SMIL) splits on
@@ -881,24 +890,166 @@ fn is_handler_only_control(
 // Embedded documents
 // ---------------------------------------------------------------------------
 
-/// The attributes that can hold a whole HTML document.
-fn may_embed_document(tag: &str, name: &str) -> bool {
+/// What a tag's other attributes say about how its URLs are opened,
+/// worked out once per tag so a tag with many attributes is not rescanned.
+#[derive(Clone, Copy, Default)]
+struct DocumentFacts {
+    /// The tag is an SVG animation that writes a link's `href`
+    /// ([`animation_sets_href`]).
+    animates_href: bool,
+    /// The tag is a `<meta http-equiv="refresh">`, whose `content` names a
+    /// URL the browser opens ([`meta_refreshes`]).
+    refreshes: bool,
+}
+
+impl DocumentFacts {
+    fn of(tag: &str, attributes: &[OutputAttribute]) -> Self {
+        Self {
+            animates_href: animation_sets_href(tag, attributes),
+            refreshes: meta_refreshes(tag, attributes),
+        }
+    }
+}
+
+/// Whether a tag is a `<meta>` whose first `http-equiv` is `refresh`, so
+/// the browser opens the URL in its `content` after the given delay.
+fn meta_refreshes(tag: &str, attributes: &[OutputAttribute]) -> bool {
+    tag == "meta"
+        && attributes
+            .iter()
+            .find(|attr| attr.name.eq_ignore_ascii_case("http-equiv"))
+            .is_some_and(|attr| {
+                let value = decode_html_attribute(if attr.has_value { &attr.value } else { "" });
+                value
+                    .trim_matches(is_html_space)
+                    .eq_ignore_ascii_case("refresh")
+            })
+}
+
+/// The attributes whose URL the browser loads as a document in a frame.
+fn loads_document_url(tag: &str, name: &str) -> bool {
     matches!(
         (tag, name),
-        ("iframe", "srcdoc") | ("iframe", "src") | ("object", "data") | ("embed", "src")
+        ("iframe", "src") | ("frame", "src") | ("object", "data") | ("embed", "src")
     )
 }
 
-/// Whether an attribute value holds an HTML document with code the browser
-/// would run: an `iframe srcdoc`, or a `data:text/html` URL in `iframe src`,
-/// `object data`, or `embed src`.
-fn embedded_document_requires_javascript(tag: &str, name: &str, value: &str) -> bool {
-    if tag == "iframe" && name == "srcdoc" {
-        return html_document_requires_javascript(value, 0);
+/// Whether the browser may open an attribute's URL as a document, in a
+/// frame or in a window: the frame attributes of [`loads_document_url`], a
+/// link (`href` on `<a>` or `<area>`, `xlink:href` on an SVG `<a>`), a form
+/// (`action`, `formaction`), or the value of an SVG animation that sets a
+/// link. A link or form opens a `data:` document only in a frame, but any
+/// link can be sent to one by its `target` or by `<base target>`, so every
+/// link counts.
+fn opens_document_url(tag: &str, name: &str, facts: DocumentFacts) -> bool {
+    loads_document_url(tag, name)
+        || matches!(
+            (tag, name),
+            ("a" | "area", "href")
+                | ("a", "xlink:href")
+                | ("form", "action")
+                | ("button" | "input", "formaction")
+        )
+        || (facts.animates_href && is_animation_value_attribute(name))
+}
+
+/// Whether an attribute can hold or open a whole document, so its value
+/// must go through [`attribute_document_requires_javascript`].
+fn may_hold_document(tag: &str, name: &str, facts: DocumentFacts) -> bool {
+    (tag == "iframe" && name == "srcdoc")
+        || (facts.refreshes && name == "content")
+        || opens_document_url(tag, name, facts)
+}
+
+/// The `data:` URL a `<meta http-equiv="refresh">` opens, read from its
+/// `content` the way the HTML standard reads a refresh: a delay of digits
+/// and `.`, spaces, `;` or `,`, spaces, an optional `url` and `=`, an
+/// optional quote, then the URL. It is `None` when that URL does not start
+/// with `data:`.
+///
+/// The delay is optional here although the browser needs one, and the text
+/// after the URL's closing quote is kept, so the check can only read more
+/// than the browser opens.
+fn refresh_data_url(content: &str) -> Option<String> {
+    // The browser drops tabs and line breaks from a URL, so `da\tta:`
+    // still starts one.
+    let content = content.replace(['\t', '\n', '\r'], "");
+    let rest = content
+        .trim_start_matches(is_html_space)
+        .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.')
+        .trim_start_matches(is_html_space);
+    let rest = rest.strip_prefix([';', ',']).unwrap_or(rest);
+    let rest = rest.trim_start_matches(is_html_space);
+    // After `url` the browser expects `=`; without one, both readings are
+    // tried, so neither can hide a `data:` URL.
+    let mut candidates = vec![rest];
+    if rest
+        .get(..3)
+        .is_some_and(|word| word.eq_ignore_ascii_case("url"))
+    {
+        let after = rest[3..].trim_start_matches(is_html_space);
+        candidates.push(after.strip_prefix('=').unwrap_or(after));
     }
-    may_embed_document(tag, name)
-        && decode_html_data_url(value)
-            .is_some_and(|document| html_document_requires_javascript(&document, 0))
+    candidates.into_iter().find_map(|candidate| {
+        let candidate = candidate.trim_start_matches(is_html_space);
+        let candidate = candidate.strip_prefix(['"', '\'']).unwrap_or(candidate);
+        // The URL parser drops leading control characters and spaces.
+        let url = candidate.trim_start_matches(|c: char| c <= '\u{20}');
+        url.get(..5)
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:"))
+            .then(|| url.to_owned())
+    })
+}
+
+/// Whether an attribute value holds or opens a document with code the
+/// browser would run: an `iframe srcdoc`, or a `data:` URL that
+/// [`data_url_requires_javascript`] reports, in a frame, a link, a form, an
+/// SVG animation of a link, or a `<meta http-equiv="refresh">`.
+fn attribute_document_requires_javascript(
+    tag: &str,
+    name: &str,
+    value: &str,
+    facts: DocumentFacts,
+    depth: usize,
+) -> bool {
+    if tag == "iframe" && name == "srcdoc" {
+        return html_document_requires_javascript(value, depth);
+    }
+    if facts.refreshes && name == "content" {
+        return refresh_data_url(value)
+            .is_some_and(|url| data_url_requires_javascript(&url, depth));
+    }
+    if !opens_document_url(tag, name, facts) {
+        return false;
+    }
+    // An animation's `values` is a list the browser splits on `;`, and the
+    // link takes each item in turn.
+    if facts.animates_href && name == "values" {
+        return value
+            .split(';')
+            .any(|item| data_url_requires_javascript(item, depth));
+    }
+    data_url_requires_javascript(value, depth)
+}
+
+/// Whether a `data:` URL loads a document with code the browser would run.
+///
+/// A `text/html` document is read like any other page. A type the browser
+/// shows as text, an image, media, or a download runs nothing. Every other
+/// type counts as running code without being read. That covers SVG, XHTML,
+/// and the other XML types, whose scripts the browser runs and which the
+/// HTML scanner would read wrongly (an XML document can declare entities
+/// that expand into a `<script>`, and XHTML builds elements inside
+/// `<title>`). It also covers types a browser reads as HTML on its own, such
+/// as `*/*` in Firefox, and spellings no browser was tested with.
+fn data_url_requires_javascript(value: &str, depth: usize) -> bool {
+    match decode_data_url_document(value) {
+        Some(DataUrlDocument::Html(document)) => {
+            html_document_requires_javascript(&document, depth)
+        }
+        Some(DataUrlDocument::Unread) => true,
+        None => false,
+    }
 }
 
 // Four nested documents is deeper than any real page goes, so a deeper one
@@ -914,27 +1065,24 @@ fn html_document_requires_javascript(html: &str, depth: usize) -> bool {
         if name == "script" && raw_script_is_executable(&tag) {
             return true;
         }
-        let animates_href = animation_sets_href(&name, &tag.attributes);
+        let facts = DocumentFacts::of(&name, &tag.attributes);
         for attr in &tag.attributes {
             let attr_name = ascii_lower(&attr.name);
             let value = decode_html_attribute(if attr.has_value { &attr.value } else { "" });
             if is_native_event_attribute(&attr_name)
-                || (is_url_value(&name, &attr_name, animates_href)
+                || (is_url_value(&name, &attr_name, facts.animates_href)
                     && is_javascript_url_value(&attr_name, &value))
             {
                 return true;
             }
-            if name == "iframe"
-                && attr_name == "srcdoc"
-                && html_document_requires_javascript(&value, depth + 1)
-            {
-                return true;
-            }
-            if matches!(
-                (name.as_ref(), attr_name.as_ref()),
-                ("iframe", "src") | ("object", "data") | ("embed", "src")
-            ) && decode_html_data_url(&value)
-                .is_some_and(|document| html_document_requires_javascript(&document, depth + 1))
+            if may_hold_document(&name, &attr_name, facts)
+                && attribute_document_requires_javascript(
+                    &name,
+                    &attr_name,
+                    &value,
+                    facts,
+                    depth + 1,
+                )
             {
                 return true;
             }
@@ -943,35 +1091,114 @@ fn html_document_requires_javascript(html: &str, depth: usize) -> bool {
     false
 }
 
-/// Decode a `data:text/html` URL to its document, or return `None` for any
-/// other URL.
+/// The document a `data:` URL loads in a frame, as far as the check needs.
+enum DataUrlDocument {
+    /// A `text/html` document, decoded.
+    Html(String),
+    /// A document the check does not read, which counts as running code.
+    Unread,
+}
+
+/// Whether a media type, already lowercased, is one the browser shows as
+/// text, an image, audio, video, a font, or a download, so a document of
+/// this type runs no script.
 ///
-/// The payload is percent-decoded, then base64-decoded when the header
-/// holds `;base64`. A payload that is not valid base64 decodes to
-/// `<script>`, so a document the check cannot read counts as running code.
-fn decode_html_data_url(value: &str) -> Option<String> {
+/// An empty type is `text/plain` in a `data:` URL. An image, audio, video,
+/// or font type counts unless its subtype ends in `+xml`, the mark of an
+/// XML document such as `image/svg+xml`. Chromium 151 and Firefox 153 ran no
+/// script from any of these with an HTML or SVG body.
+fn is_inert_media_type(media_type: &str) -> bool {
+    if matches!(
+        media_type,
+        "" | "text/plain"
+            | "text/css"
+            | "text/csv"
+            | "application/json"
+            | "application/pdf"
+            | "application/octet-stream"
+    ) {
+        return true;
+    }
+    media_type.split_once('/').is_some_and(|(kind, subtype)| {
+        matches!(kind, "image" | "audio" | "video" | "font")
+            && !subtype.is_empty()
+            && !subtype.ends_with("+xml")
+    })
+}
+
+/// Whether a `data:` URL header (after `data:`, lowercased) marks the
+/// payload as base64.
+///
+/// The Fetch standard's rule is a header that ends in `;`, any spaces, and
+/// `base64`, so `; base64` counts. A `;base64` anywhere else also counts,
+/// so a header the browser reads either way is decoded as base64; a raw
+/// HTML payload with a tag in it is never valid base64, so it then counts
+/// as running code.
+fn data_url_is_base64(header: &str) -> bool {
+    let trimmed = header.trim_matches(is_html_space);
+    let ends_in_base64 = trimmed
+        .strip_suffix("base64")
+        .is_some_and(|rest| rest.trim_end_matches(' ').ends_with(';'));
+    ends_in_base64 || header.contains(";base64")
+}
+
+/// Whether a decoded payload may be in an encoding that is not ASCII
+/// compatible, so reading it as UTF-8 could miss a tag the browser sees.
+///
+/// UTF-16 spells every ASCII character with a zero byte, and ISO-2022-JP
+/// switches modes with the escape byte. The browser follows a `charset`
+/// parameter, a byte order mark, or a `<meta charset>`, and the check reads
+/// none of them, so it looks for these two bytes instead; a UTF-16 payload
+/// without a zero byte holds no ASCII markup. Other encodings browsers
+/// support read every byte below 0x40 (`<`, `>`, `/`, `=`, quotes, spaces)
+/// as ASCII. Where one reads a letter after a non-ASCII byte as part of one
+/// character, the UTF-8 reading also sees a non-ASCII character there, so
+/// it cannot see a tag the browser does not.
+fn payload_may_hide_markup(body: &[u8]) -> bool {
+    body.iter().any(|&byte| byte == 0x00 || byte == 0x1b)
+}
+
+/// Read the document a `data:` URL loads, or return `None` for a URL that
+/// is not a `data:` URL or whose type runs no script.
+///
+/// The browser drops tabs and line breaks anywhere in a URL, so they are
+/// removed first. An HTML payload is percent-decoded, then base64-decoded
+/// when [`data_url_is_base64`] says so. A payload that is not valid base64,
+/// or that [`payload_may_hide_markup`], is [`DataUrlDocument::Unread`], so
+/// a document the check cannot read counts as running code.
+fn decode_data_url_document(value: &str) -> Option<DataUrlDocument> {
     let value = value.trim_start_matches(|c: char| c <= '\u{20}');
+    let value: Cow<str> = if value.contains(['\t', '\n', '\r']) {
+        Cow::Owned(value.replace(['\t', '\n', '\r'], ""))
+    } else {
+        Cow::Borrowed(value)
+    };
     let (header, payload) = value.split_once(',')?;
     let folded = ascii_lower(header);
-    let media_type = folded
-        .strip_prefix("data:")?
+    let header = folded.strip_prefix("data:")?;
+    let media_type = header
         .split(';')
         .next()
         .unwrap_or("")
         .trim_matches(is_html_space);
     if media_type != "text/html" {
-        return None;
+        return (!is_inert_media_type(media_type)).then_some(DataUrlDocument::Unread);
     }
     let bytes = percent_decode(payload.as_bytes());
-    let body = if folded.contains(";base64") {
+    let body = if data_url_is_base64(header) {
         match decode_strict_base64(&bytes) {
             Some(body) => body,
-            None => return Some("<script>".to_owned()),
+            None => return Some(DataUrlDocument::Unread),
         }
     } else {
         bytes
     };
-    Some(String::from_utf8_lossy(&body).into_owned())
+    if payload_may_hide_markup(&body) {
+        return Some(DataUrlDocument::Unread);
+    }
+    Some(DataUrlDocument::Html(
+        String::from_utf8_lossy(&body).into_owned(),
+    ))
 }
 
 /// Replace each `%` followed by two hex digits with the byte they name, and
@@ -1675,6 +1902,141 @@ mod tests {
     }
 
     #[test]
+    fn a_data_url_of_a_type_other_than_html_or_an_inert_one_counts_as_running_code() {
+        // The browser runs the scripts of an SVG, XHTML, or other XML
+        // document, and Firefox reads some unknown types as HTML. The check
+        // reads only HTML, so every such document is reported, even one
+        // with no script in it.
+        for html in [
+            "<iframe src=\"data:image/svg+xml,%3Csvg/%3E\"></iframe>",
+            "<object data=\"data:image/svg+xml,%3Csvg/%3E\"></object>",
+            "<embed src=\"data:image/svg+xml,%3Csvg/%3E\">",
+            "<frameset><frame src=\"data:image/svg+xml,%3Csvg/%3E\"></frameset>",
+            "<iframe src=\"data:application/xhtml+xml,x\"></iframe>",
+            "<iframe src=\"data:text/xml,x\"></iframe>",
+            "<iframe src=\"data:application/xml,x\"></iframe>",
+            "<iframe src=\"data:text/xsl,x\"></iframe>",
+            "<iframe src=\"data:application/rss+xml,x\"></iframe>",
+            "<iframe src=\"data:x/+xml,x\"></iframe>",
+            "<iframe src=\"data:audio/x+xml,x\"></iframe>",
+            "<iframe src=\"data:font/,x\"></iframe>",
+            "<iframe src=\"data:/svg+xml,x\"></iframe>",
+            "<iframe src=\"data:+xml,x\"></iframe>",
+            "<iframe src=\"data:*/*,x\"></iframe>",
+            "<iframe src=\"data:application/x-unknown-content-type,x\"></iframe>",
+            "<iframe src=\"data:foo,x\"></iframe>",
+            "<iframe src=\" DATA:Image/SVG+XML ;charset=utf-8,x\"></iframe>",
+            "<iframe src=\"data:\timage/svg+xml\x0c;x,x\"></iframe>",
+            // The browser drops tabs and line breaks anywhere in a URL.
+            "<iframe src=\"da&#9;ta:image/svg+xml,x\"></iframe>",
+            "<iframe src=\"data:image/svg+x&#10;ml,x\"></iframe>",
+            "<iframe src=\"data:image/svg+xml;base64,!\"></iframe>",
+            // The same URLs inside an `iframe srcdoc` document.
+            "<iframe srcdoc=\"&lt;iframe src='data:image/svg+xml,x'&gt;\"></iframe>",
+            "<iframe srcdoc=\"&lt;frame src='data:text/xml,x'&gt;\"></iframe>",
+        ] {
+            assert!(embedded_document_reported(html), "{html}");
+        }
+        // Text, images, media, fonts, and downloads run no script.
+        for html in [
+            "<iframe src=\"data:image/svg,x\"></iframe>",
+            "<iframe src=\"data:image/svg+xmlx,x\"></iframe>",
+            "<iframe src=\"data:IMAGE/PNG;x,%3Cscript%3Ex()%3C/script%3E\"></iframe>",
+            "<iframe src=\"data:text/plain,%3Csvg onload=x%3E\"></iframe>",
+            "<iframe src=\"data:,%3Cscript%3Ex()%3C/script%3E\"></iframe>",
+            "<object data=\"data:application/pdf,x\"></object>",
+            "<embed src=\"data:video/mp4,x\">",
+            "<embed src=\"data:audio/mpeg,%3Cscript%3Ex()%3C/script%3E\">",
+            "<iframe src=\"data:font/woff,%3Cscript%3Ex()%3C/script%3E\"></iframe>",
+            "<iframe src=\"data:application/json;charset=utf-8,%3Cscript%3E\"></iframe>",
+            // No comma, so the browser loads nothing.
+            "<iframe src=\"data:image/svg+xml\"></iframe>",
+            "<img src=\"data:image/svg+xml,%3Csvg onload=x%3E\">",
+        ] {
+            assert!(!embedded_document_reported(html), "{html}");
+        }
+    }
+
+    #[test]
+    fn a_link_form_or_refresh_that_opens_a_running_data_document_is_reported() {
+        // A link or form opens a `data:` document in a frame, and a meta
+        // refresh opens one in the page's own frame, so each counts like a
+        // frame's URL.
+        for html in [
+            "<a href=\"data:text/html,%3Cscript%3Ex()%3C/script%3E\">x</a>",
+            "<a target=f href=\"data:image/svg+xml,x\">x</a>",
+            "<map><area href=\"data:image/svg+xml,x\"></map>",
+            "<svg><a xlink:href=\"data:image/svg+xml,x\"></a></svg>",
+            "<svg><a href=\"data:text/xml,x\"></a></svg>",
+            "<form action=\"data:text/xml,x\"></form>",
+            "<button formaction=\"data:text/xml,x\">x</button>",
+            "<input type=submit formaction=\"data:text/xml,x\">",
+            // An SVG animation that sets a link's `href`.
+            "<svg><a><set attributeName=href to=\"data:image/svg+xml,x\"></a></svg>",
+            "<svg><a><animate attributeName=href values=\"#a;data:text/xml,x\"></a></svg>",
+            // A meta refresh, with the spellings the browser accepts.
+            "<meta http-equiv=\"refresh\" content=\"0;url=data:image/svg+xml,x\">",
+            "<meta http-equiv=\" Refresh \" content=\"0; URL='data:text/html,%3Cscript%3Ex()%3C/script%3E'\">",
+            "<meta http-equiv=refresh content=\"1,da&#9;ta:text/xml,x\">",
+            "<meta http-equiv=refresh content=\"0;url=DATA:text/xml,x\">",
+            "<meta http-equiv=refresh content=\" .5 ; url = &quot;data:text/xml,x\">",
+            "<meta http-equiv=refresh content=\"0;&#1;data:text/xml,x\">",
+            // Inside an embedded HTML document.
+            "<iframe srcdoc=\"&lt;meta http-equiv=refresh content='0;url=data:text/xml,x'&gt;\"></iframe>",
+            "<iframe srcdoc=\"&lt;a target=f href='data:text/xml,x'&gt;x&lt;/a&gt;\"></iframe>",
+        ] {
+            assert!(embedded_document_reported(html), "{html}");
+        }
+        for html in [
+            "<a href=\"data:image/png,x\">x</a>",
+            "<a href=\"data:text/html,%3Cp%3Ehi%3C/p%3E\">x</a>",
+            "<a href=\"/data:text/xml,x\">x</a>",
+            "<form action=\"/submit\"></form>",
+            // A stylesheet, an icon, or an SVG reference is not opened as a page.
+            "<link rel=stylesheet href=\"data:text/css,x\">",
+            "<link rel=icon href=\"data:image/svg+xml,x\">",
+            "<svg><use href=\"data:image/svg+xml,x\"></use></svg>",
+            "<div href=\"data:text/xml,x\"></div>",
+            // Not a refresh, or a refresh to a URL that runs nothing.
+            "<meta http-equiv=refresh content=\"0;url=/next\">",
+            "<meta http-equiv=refresh content=\"0;url=https://example.com/?next=data:text/xml,x\">",
+            "<meta http-equiv=refresh content=\"0;url=data:image/png,x\">",
+            "<meta name=refresh content=\"0;url=data:text/xml,x\">",
+            "<meta http-equiv=refreshx content=\"0;url=data:text/xml,x\">",
+            "<svg><a><set attributeName=fill to=\"data:text/xml,x\"></a></svg>",
+        ] {
+            assert!(!embedded_document_reported(html), "{html}");
+        }
+    }
+
+    #[test]
+    fn an_html_data_url_is_read_as_the_browser_reads_it() {
+        for html in [
+            // Tabs and line breaks are dropped, also inside the payload.
+            "<iframe src=\"data:text/ht&#9;ml,%3Cscript%3Ex()%3C/script%3E\"></iframe>",
+            "<iframe src=\"data:text/html,&lt;scr&#9;ipt&gt;x()&lt;/script&gt;\"></iframe>",
+            // `;` and spaces before `base64` still mark base64.
+            "<iframe src=\"data:text/html; base64,PHNjcmlwdD54PC9zY3JpcHQ+\"></iframe>",
+            "<iframe src=\"data:text/html;  BASE64 ,PHNjcmlwdD54PC9zY3JpcHQ+\"></iframe>",
+            "<iframe src=\"data:text/html;&#9;base64,PHNjcmlwdD54PC9zY3JpcHQ+\"></iframe>",
+            // An encoding that is not ASCII compatible, by charset or byte
+            // order mark, or an ISO-2022-JP escape inside a tag name.
+            "<iframe src=\"data:text/html;charset=utf-16le,%3C%00p%00%3E%00\"></iframe>",
+            "<iframe src=\"data:text/html,%FF%FE%3C%00p%00%3E%00\"></iframe>",
+            "<iframe src=\"data:text/html,%3Cscr%1B(Bipt%3Ex()%3C/script%3E\"></iframe>",
+        ] {
+            assert!(embedded_document_reported(html), "{html}");
+        }
+        for html in [
+            "<iframe src=\"data:text/html;charset=utf-16le,%3Cp%3Ehi%3C/p%3E\"></iframe>",
+            "<iframe src=\"data:text/html;base64,PHA+aGk8L3A+\"></iframe>",
+            "<iframe src=\"data:text/html; base64,PHA+aGk8L3A+\"></iframe>",
+        ] {
+            assert!(!embedded_document_reported(html), "{html}");
+        }
+    }
+
+    #[test]
     fn a_legacy_reference_followed_by_a_letter_stays_literal_in_a_document() {
         // The browser keeps `&lta` as typed, so the document is the text
         // `&lta` followed by a `<script>` element, and the check must report
@@ -1702,10 +2064,12 @@ mod tests {
                     .replace('"', "&quot;")
                     .replace('<', "&lt;")
             );
-            let requires = embedded_document_requires_javascript(
+            let requires = attribute_document_requires_javascript(
                 "iframe",
                 "srcdoc",
                 &decode_html_attribute(&document[16..document.len() - 11]),
+                DocumentFacts::default(),
+                0,
             );
             assert_eq!(requires, depth >= 5, "depth {depth}");
         }
