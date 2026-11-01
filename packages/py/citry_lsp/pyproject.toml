@@ -34,7 +34,7 @@ dependencies = [
     "packaging>=25.0",
     "pygls==2.1.1",
     "python-dotenv>=1.2.3,<2",
-    "ty==0.0.91",
+    "ty==0.0.94",
 ]
 
 [project.scripts]
