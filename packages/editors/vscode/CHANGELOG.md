@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-11-01
 
+- The extension now works with citry-lsp 0.3.x, the language server for
+  Citry 0.7.0 projects, as well as citry-lsp 0.2.x and 0.1.x.
 - In Restricted Mode, VS Code now keeps the extension off, including
   highlighting, until you trust the workspace, because the extension runs
   the project's Python interpreter and imports its app.

@@ -1,12 +1,10 @@
 # Changelog
 
-## Unreleased
+## [0.4.0] - 2026-11-01
 
 ### Added
 
 - Citry UI now supports Python 3.15.
-
-
 - A `CCommandPalette` command with a `shortcut` now exposes it to
   assistive technology as `aria-keyshortcuts`, for example `Control+,`
   for "Ctrl ,". A hint that is not one key combination, such as
@@ -37,11 +35,11 @@
   control needs. If you set your own `change_label` or translate the
   message, write the dates as `{start} – {end}`, as the trigger shows
   them.
-- Citry UI components work with Citry's new check that raises
-  `TypeError` for an input of the wrong type, and accept the same values
-  as before, such as `heading_level="2"`. Earlier Citry UI releases
-  reject some valid inputs under that check, so upgrade Citry UI and
-  Citry together.
+- **Breaking:** Citry UI now requires `citry` 0.7.0 or newer. Its
+  components accept the same values as before, such as
+  `heading_level="2"`, under Citry 0.7.0's check that raises `TypeError`
+  for an input of the wrong type. Citry UI 0.3.0 rejects some valid
+  inputs under that check, so upgrade both together.
 - `heading_level` on `CAccordion` and `CDisclosure` now accepts only
   `2` to `6` and the same numbers as text, so `"02"` and `2.0` raise
   `ValueError`.
