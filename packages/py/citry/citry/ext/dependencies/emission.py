@@ -26,7 +26,7 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, OWNED_ASSET_CROSSORIGIN, _OwnedResource
+from citry._owned_resource import JAVASCRIPT_CONTENT_TYPE, OWNED_ASSET_CROSSORIGIN, _OwnedResource
 from citry.assets import HasHtml
 from citry.citry_render import CitryRender, selected_render_ids
 from citry.ext.dependencies.routes import RUNTIME_PATH, asset_content_type, runtime_url, script_url

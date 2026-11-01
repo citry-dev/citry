@@ -14,7 +14,9 @@ from citry.util.routing import RouteResponse, sent_content_type
         pytest.param("é", "text/html", "text/html; charset=utf-8", id="html"),
         pytest.param("é", "TEXT/CSS", "TEXT/CSS; charset=utf-8", id="capitals"),
         pytest.param("é", "text/csv; charset=utf-8", "text/csv; charset=utf-8", id="charset_already_named"),
-        pytest.param("é", "text/plain;Charset=Latin-1", "text/plain;Charset=Latin-1", id="another_charset_is_left_alone"),
+        pytest.param(
+            "é", "text/plain;Charset=Latin-1", "text/plain;Charset=Latin-1", id="another_charset_is_left_alone"
+        ),
         pytest.param("{}", "application/json", "application/json", id="json_has_no_charset_parameter"),
         pytest.param(b"\xff", "text/plain", "text/plain", id="bytes_are_sent_as_given"),
         pytest.param("", "text/plain", "text/plain; charset=utf-8", id="empty_text"),

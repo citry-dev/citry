@@ -63,6 +63,7 @@ def _lacks_utf8_charset(content_type: str) -> bool:
         return False
     return header.get_content_charset() != "utf-8"
 
+
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 """
 The ``Cache-Control`` value for a file whose URL carries a hash of its content.
