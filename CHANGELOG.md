@@ -467,6 +467,10 @@
   right against its quotes. That line break was new text in the rendered
   HTML. Whitespace you wrote is still re-indented; to spread compact markup
   over lines, add a line break between the tags once.
+- Citry now sends `charset=utf-8` with every `text/*` response it builds
+  from a string, such as the plain-text and HTML body that a form post
+  without JavaScript gets back, so the browser does not have to guess the
+  encoding.
 - An oversized request to Citry's event endpoints no longer fills the
   server's memory: by default Citry stops reading a body past 1 MiB and
   rejects a form post with more than 1,000 fields, both with

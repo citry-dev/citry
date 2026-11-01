@@ -70,6 +70,7 @@ from citry.util.routing import (
     body_read_limit,
     flatten_routes,
     normalize_mount_prefix,
+    sent_content_type,
     sent_headers,
 )
 
@@ -179,7 +180,9 @@ def _make_view(route: URLRoute) -> Any:
         # urlpatterns() rejected async handlers up front, so the call returns
         # a concrete RouteResponse.
         response = cast("RouteResponse", handler(_build_request(request, body_read_limit(route)), **kwargs))
-        http_response = HttpResponse(content=response.body, content_type=response.content_type, status=response.status)
+        http_response = HttpResponse(
+            content=response.body, content_type=sent_content_type(response), status=response.status
+        )
         # Django's response object holds one value per header name, so a
         # repeated name (e.g. two Set-Cookie lines) cannot be represented.
         # Reject it loudly instead of silently keeping only the last value;

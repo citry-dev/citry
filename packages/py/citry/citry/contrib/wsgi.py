@@ -28,7 +28,15 @@ import inspect
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs
 
-from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, body_read_limit, match_route, sent_headers
+from citry.util.routing import (
+    RouteHeaders,
+    RouteRequest,
+    RouteResponse,
+    body_read_limit,
+    match_route,
+    sent_content_type,
+    sent_headers,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -127,7 +135,7 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
         def respond(response: RouteResponse) -> Iterable[bytes]:
             """Translate a ``RouteResponse`` into the WSGI response shape."""
             status_line = _STATUS_LINES.get(response.status, f"{response.status} Response")
-            start_response(status_line, [("Content-Type", response.content_type), *sent_headers(response)])
+            start_response(status_line, [("Content-Type", sent_content_type(response)), *sent_headers(response)])
             return [response.body]
 
         # When mounted, the host moves the prefix into SCRIPT_NAME; PATH_INFO

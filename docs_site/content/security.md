@@ -162,6 +162,17 @@ Outside Django, follow the cases Django's function rejects when you write
 your own check. Citry plans a built-in check
 ([#568](https://github.com/citry-dev/citry/issues/568)).
 
+## Check URL attributes { #check-url-attributes }
+
+A URL is something the browser acts on, so a value that request data puts in
+an `href`, `src` or `action` can run script when the visitor clicks: a
+`javascript:` URL does. Citry escapes a value for the place it lands, but it
+does not check the scheme of a URL you give to a plain HTML attribute, and
+plain Vue, Jinja and Django behave the same way. Check the scheme before you
+pass a URL from the request to an attribute, and allow only `http:`,
+`https:`, `mailto:`, `tel:` and relative URLs. The Citry UI components that
+take a link or an image URL refuse other schemes themselves.
+
 ## Protect against CSRF { #protect-event-posts-from-csrf }
 
 A cross-site request forgery (CSRF) is another site making the user's
