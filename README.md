@@ -17,6 +17,8 @@ and Python event handlers, so you can build an interactive interface without
 maintaining a separate frontend application. It is inspired by Vue and
 Livewire.
 
+**Our mission:** a safe, reliable, and intuitive frontend ecosystem for Python.
+
 Citry works with FastAPI, Django, Flask, Starlette, ASGI, and WSGI
 applications.
 

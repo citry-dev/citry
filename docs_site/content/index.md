@@ -265,6 +265,10 @@ Read about [caching](/performance/caching/),
 ## Built in public by people who care about Python and the web.
 
 <p class="landing-section__intro">
+Our mission: a safe, reliable, and intuitive frontend ecosystem for Python.
+</p>
+
+<p class="landing-section__intro">
 Citry is the successor to
 <a href="https://github.com/django-components/django-components" target="_blank" rel="noopener">django-components</a>
 (1.5k stars), distilling years of experience into an elegant and powerful framework.
