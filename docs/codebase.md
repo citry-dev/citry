@@ -1631,10 +1631,10 @@ read the root's pins for it, so `uv sync --frozen` there stops with
 Each runner's `pyproject.toml` therefore has its own `[tool.uv]` table with the
 same two settings, because a table of its own stops uv from inheriting the
 root's, and a generated block of pins for its backend.
-`uv lock --directory <runner>` copies the pins into the runner's `uv.lock`. The
-benchmark apps and error-benchmark baselines have a
-`[tool.uv]` table of their own and no build backend, so the setting does not
-reach them. The example projects have no `[tool.uv]` table, so they inherit
+`uv lock --directory <runner>` copies the pins into the runner's `uv.lock`.
+The benchmark apps and error-benchmark baselines have a `[tool.uv]` table of
+their own and no build backend, so the setting does not reach them. The
+example projects have no `[tool.uv]` table, so they inherit
 `require-build-hashes` but not the pins; they have no build backend, and
 `uv sync --frozen` only installs wheels for them. A command run from a project
 outside the repository, such as an example project copied to a temporary
@@ -1649,16 +1649,17 @@ the `BEGIN build constraints` and `END build constraints` comments in the root
 `pyproject.toml`. It does the same in each benchmark runner's `pyproject.toml`
 (`STANDALONE_PROJECT_PATTERNS` in `scripts/build_constraints.py`), resolving
 only that runner's backend and the extras in `BACKEND_EXTRA_REQUIREMENTS`. A new
-standalone project that builds with a backend belongs in that list. `uv lock`
-copies the pins into each `uv.lock`. The `build_backend_pins` validator fails
-when a project asks for a backend or a version range its table does not cover,
-or when a runner's `uv.lock` does not record its table, and its message names
-the commands that repair it.
+standalone project that builds with a backend needs its `pyproject.toml` path
+added to `STANDALONE_PROJECT_PATTERNS`. `uv lock` copies the pins into each
+`uv.lock`. The `build_backend_pins` validator fails when a project asks for a
+backend or a version range its table does not cover, or when a runner's
+`uv.lock` does not record its table, and its message names the command that
+repairs it.
 
 The release verifiers and the Citry UI rebuild in `py--tests.yml` pass
 `--no-config` when they rebuild a wheel from a fresh sdist, so they never read
-the root table. Those builds export the pins to a
-file (`python scripts/build_constraints.py export <file>`, or
+the root table. Those builds export the pins to a file
+(`python scripts/build_constraints.py export <file>`, or
 `build_constraints.export()` from Python) and pass
 `--build-constraints <file> --require-hashes` to `uv build`.
 
