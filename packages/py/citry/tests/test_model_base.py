@@ -10,6 +10,8 @@ cannot serve, and that the generated classes keep what Citry relies on.
 
 from __future__ import annotations
 
+import _py_abc
+import abc
 import functools
 import sys
 import types
@@ -396,6 +398,27 @@ def _counter(base: object) -> type[Component]:
                 state.count += data.by
 
     return Counter
+
+
+@pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["abc", "py_abc"])
+def test_an_abc_state_leaves_its_abc_caches_out_of_the_generated_model(meta: type) -> None:
+    # The generated model copies the authored class's members. The caches
+    # ABCMeta stores on the authored class are not members: copied, Pydantic
+    # would turn them into private attributes, and the model would fall back
+    # to `BaseModel`'s caches.
+    app = Citry(autodiscover=False, model_base=pydantic.BaseModel)
+
+    class Counter(Component):
+        citry = app
+        template = """
+          <p>{{ count }}</p>
+        """
+
+        class State(metaclass=meta):
+            count: int = 0
+
+    assert issubclass(Counter.State, pydantic.BaseModel)
+    assert not [name for name in Counter.State.__private_attributes__ if name.startswith("_abc")]
 
 
 @pytest.mark.parametrize("base", [PlainBase, pydantic.BaseModel])
