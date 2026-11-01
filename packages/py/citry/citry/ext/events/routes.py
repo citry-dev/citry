@@ -657,7 +657,7 @@ _URL_LEADING_STRIP = "".join(chr(code) for code in range(0x21))
 
 
 def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
-    """
+    r"""
     Resolve a redirect's URL the way the JavaScript runtime would.
 
     The runtime calls ``location.assign(url)``, so the browser resolves a
@@ -668,7 +668,7 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     the ``Referer`` header, the only place a plain form post names it.
 
     A URL that does not depend on the page (it has a scheme, or starts with
-    ``/`` or ``\\``, which browsers read like ``/``) passes through as is.
+    ``/`` or ``\``, which browsers read like ``/``) passes through as is.
     When the request has no Referer, or one from another host, the URL also
     passes through unchanged and the browser resolves it against the handler
     URL. That is right when someone opens a ``GET`` handler URL directly, but
