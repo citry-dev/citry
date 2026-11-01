@@ -116,6 +116,52 @@ framework's own request object.
 
 [Event routes](/events/routes/) covers the HTTP side of event calls.
 
+## Check redirect URLs { #check-redirect-urls }
+
+A handler that redirects to a URL from the request, such as a `next`
+parameter after a login, can send the visitor to another site if someone
+puts that site's address in the link. Check the URL before you return
+[`actions.Redirect`](/events/actions/#redirect-to-a-page), and redirect to
+a fixed page when the check fails.
+
+A prefix check is not enough. Browsers load both `//other.example/` and
+`/\other.example/` from `other.example`, and both start with `/`:
+
+```python
+# Not enough: "//other.example/" passes
+if data.next.startswith("/"):
+    return actions.Redirect(data.next)
+```
+
+Use a check that parses the URL the way a browser does. Under Django, use
+`url_has_allowed_host_and_scheme`. In this example the login page copies
+its `next` query parameter into a hidden `<input name="next">`, so the
+handler receives it as `data.next`:
+
+```python
+from django.utils.http import (
+    url_has_allowed_host_and_scheme,
+)
+
+
+class Events:
+    def login(self, data: LoginIn, request):
+        # log_in is your own code that checks the password
+        log_in(request, data)
+        host = request.native.get_host()
+        is_safe = url_has_allowed_host_and_scheme(
+            data.next,
+            allowed_hosts={host},
+            require_https=request.native.is_secure(),
+        )
+        target = data.next if is_safe else "/"
+        return actions.Redirect(target)
+```
+
+Outside Django, follow the cases Django's function rejects when you write
+your own check. Citry plans a built-in check
+([#568](https://github.com/citry-dev/citry/issues/568)).
+
 ## Protect against CSRF { #protect-event-posts-from-csrf }
 
 A cross-site request forgery (CSRF) is another site making the user's
