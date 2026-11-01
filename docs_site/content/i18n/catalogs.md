@@ -93,6 +93,10 @@ A translation file may leave messages out. Citry then uses a fallback
 language, as described below; it does not copy source text into every
 locale file.
 
+Treat catalog files like source code. Your team and your translators write
+them; never generate them from request data or from text a user saved.
+User values reach a message only as variables, which show as text.
+
 ## Order the packages
 
 List the packages in the engine settings, from lowest to highest

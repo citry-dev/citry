@@ -100,6 +100,12 @@ text = service.tr("my-app-account-greeting", name="Ada")
 
 All three return plain text. A template escapes it like any other value.
 
+Write messages the way you write templates: you and your translators
+author the `messages` block, the `messages_file`, and the catalog `.ftl`
+files. Never build message text from request data or from text a user
+saved. Pass a user's value as a variable instead, as `name=account.name`
+does above, and it shows as text.
+
 ## Declare variable types
 
 Write one `@param` comment per variable directly above the message:

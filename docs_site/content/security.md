@@ -376,9 +376,16 @@ not guaranteed to block every way out:
   allowed until you block it, as shown next.
 - **The blocked list covers known dangers.** It is a list of specific
   functions, not a guarantee.
+- **Time and memory are not limited.** As with Jinja's sandbox, an
+  expression can run as long and use as much memory as Python allows.
 
 Put only objects and functions in the render context that you are
 comfortable letting template authors use.
+
+The expression text itself must come from the template author, never
+from a request. Data from a request reaches a template only as values
+in the render context, which an expression reads. Do not build template
+source, or any part of an expression, from it.
 
 ### Block your functions { #marking-your-own-functions-unsafe }
 

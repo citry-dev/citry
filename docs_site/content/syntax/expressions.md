@@ -260,9 +260,14 @@ reach outside the template:
 | Unsafe functions such as `eval`, `exec`, and `open` | Call blocked |
 | `str.format()` and `str.format_map()` | Call blocked; use an f-string |
 
-A blocked operation raises [`SecurityError`][citry.SecurityError]. Read
-[Security](/security/) for the full sandbox rules and the settings that
-control it.
+A blocked operation raises [`SecurityError`][citry.SecurityError].
+
+The template author writes every expression. Data from a request only
+fills in the values an expression reads, such as `user.name`; never build
+template or expression text from it. The sandbox also does not limit how
+long an expression runs or how much memory it uses, the same as Jinja's
+sandbox. Read [Security](/security/#what-the-sandbox-does-not-protect)
+for the full sandbox rules and the settings that control it.
 
 ## Less common rules
 
