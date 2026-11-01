@@ -3,9 +3,10 @@ Browser e2e: a `css_data()` stylesheet keeps its rules on a page in each listed 
 
 Citry serves the stylesheet as UTF-8 bytes. A browser that is not told the
 charset decodes it with the encoding of the page that links it. On a page in
-GBK or Big5, the last byte of a non-ASCII character pairs with the next ASCII
-byte and can swallow the backslash of an escaped quote, so a value that the
-`css_data()` check accepts would end its string early and add a rule of its own.
+GBK or Big5, the browser reads the last byte of a non-ASCII character together
+with the next ASCII byte as one character, which can hide the backslash of an
+escaped quote. A value that the `css_data()` check accepts would then end its
+string early and add a rule of its own.
 The first test loads the real route into a page in each encoding and counts the
 rules. The second puts the same values inline in a page whose bytes are UTF-8
 but whose label names another encoding, so the browser reads the `<style>`
