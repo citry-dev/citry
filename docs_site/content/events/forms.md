@@ -131,8 +131,9 @@ or `null`. Its `fieldErrors` uses the field names you passed to `EventError`:
 <span v-text="$error('submit')?.fieldErrors?.email"></span>
 ```
 
-`fieldErrors` holds at most 20 fields. When there are more, the error's
-`message` ends with how many were left out.
+`fieldErrors` lists at most 20 fields, the first 20 in the order you
+passed them to `EventError`. When there are more, `message` ends with how
+many were left out.
 
 A later successful `submit` call clears the error. Errors from other
 handlers in the same component are separate, so two forms in one component

@@ -750,6 +750,14 @@ class TestContainerCoercion:
         assert result.fields == {"blob": "Expected an object, got list."}
 
 
+class TestFieldErrorOrder:
+    def test_list_indexes_sort_in_number_order(self):
+        # The error response keeps only the first messages, so the earliest
+        # rows must come first: index 2 before index 10.
+        result = validate_args(TagsList, {"tags": ["x"] * 12})
+        assert list(result.fields) == [f"tags.{index}" for index in range(12)]
+
+
 class TestUnhashableSetItems:
     # Wire arrays may nest arrays or objects; turning those into a set must be
     # a per-field error, never a TypeError out of validate_args.

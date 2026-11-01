@@ -1417,4 +1417,8 @@ class EventsDispatcher:
             candidate["sendSequence"] = send_sequence
         if validate_result(candidate) is not None:
             return None
-        return build_error_result(candidate["error"], send_sequence)
+        # A replacement from an extension gets the same short field list as
+        # every other error.
+        error = candidate["error"]
+        capped = build_field_error(error["status"], error["code"], error["message"], error.get("fieldErrors"))
+        return build_error_result(capped, send_sequence)

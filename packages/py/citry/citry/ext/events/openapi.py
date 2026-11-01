@@ -504,7 +504,10 @@ def _build_operation(
     else:
         responses["200"] = {"description": "The citry-events/1 result envelope."}
     responses["422"] = {
-        "description": "The args did not validate; per-field messages ride in results[0].error.fieldErrors.",
+        "description": (
+            "The args did not validate; per-field messages ride in results[0].error.fieldErrors,"
+            " which lists at most 20 fields; the message counts the rest."
+        ),
         "content": {"application/json": {"schema": {"$ref": _REF_PREFIX + "EventErrorEnvelope"}}},
     }
     operation["responses"] = responses

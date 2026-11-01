@@ -260,7 +260,7 @@ def validate_args(
     Returns:
         A [`ValidationResult`][citry.ext.events.schemas.ValidationResult]:
         either the schema instance, or the per-field messages sorted by
-        field path. A schema ``__post_init__`` (or Pydantic validator) that
+        field path, with list indexes in number order. A schema ``__post_init__`` (or Pydantic validator) that
         raises something other than a validation error propagates to the
         caller.
 
@@ -273,8 +273,22 @@ def validate_args(
         return ValidationResult(value=None, fields=errors)
     instance = _validate_object(schema_cls, args, "", errors, bind_strings=bind_strings)
     if instance is _INVALID:
-        return ValidationResult(value=None, fields=dict(sorted(errors.items())))
+        return ValidationResult(value=None, fields=dict(sorted(errors.items(), key=_field_path_order)))
     return ValidationResult(value=instance, fields={})
+
+
+def _field_path_order(item: tuple[str, str]) -> tuple[tuple[int, int, str], ...]:
+    """
+    Sort one ``(field path, message)`` pair by its path, with list indexes in number order.
+
+    The error response lists only the first few messages, so ``items.2``
+    must come before ``items.10`` for the earliest rows to be the ones kept.
+    """
+    # Each segment sorts as (0, number) when it is a list index and as
+    # (1, text) otherwise, so the two kinds are never compared directly.
+    return tuple(
+        (0, int(part), "") if part.isascii() and part.isdigit() else (1, 0, part) for part in item[0].split(".")
+    )
 
 
 ################################################

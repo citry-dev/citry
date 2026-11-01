@@ -1633,6 +1633,23 @@ class TestPipelineOrder:
         assert result["results"][0]["error"]["message"] == "Reported."
         assert result["results"][0]["error"]["fieldErrors"] == {"report": "saved"}
 
+    def test_on_event_error_replacement_gets_a_capped_field_list(self):
+        fields = {f"f{i:02d}": "saved" for i in range(MAX_FIELD_ERRORS + 2)}
+
+        class Reporter(Extension):
+            name = "reporter"
+
+            def on_event_error(self, ctx):
+                error = {"status": 500, "code": "handler_error", "message": "Reported.", "fieldErrors": fields}
+                return {"ok": False, "error": error}
+
+        c = _citry(extensions=[Reporter])
+        counter = _counter(c)
+        call = {"componentClassId": counter.class_id, "handlerName": "crash", "stateToken": _token(counter)}
+        error = _dispatch(c, call)["results"][0]["error"]
+        assert error["message"] == "Reported. 2 more field errors are not shown."
+        assert list(error["fieldErrors"]) == list(fields)[:MAX_FIELD_ERRORS]
+
     def test_error_hook_non_json_mapping_retains_the_generic_result(self):
         class MappingReporter(Extension):
             name = "mapping_reporter"
@@ -1902,6 +1919,19 @@ class TestPipelineOrder:
                 "fieldErrors": {"token": "Expired."},
             },
         }
+
+    def test_event_error_from_csrf_policy_gets_a_capped_field_list(self):
+        c = _citry()
+        counter = _counter(c)
+        fields = {f"f{i:02d}": "Expired." for i in range(MAX_FIELD_ERRORS + 1)}
+
+        def denied(handler):
+            raise EventError("No access.", fields=fields, status=403)
+
+        call = {"componentClassId": counter.class_id, "handlerName": "square", "args": {"value": 2}}
+        [item] = _dispatch(c, call, csrf_check=denied)["results"]
+        assert item["error"]["message"] == "No access. 1 more field error is not shown."
+        assert list(item["error"]["fieldErrors"]) == list(fields)[:MAX_FIELD_ERRORS]
 
 
 class TestInjection:

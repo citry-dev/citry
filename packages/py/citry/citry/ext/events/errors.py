@@ -67,7 +67,8 @@ class EventError(Exception):
         fields: Per-field error messages, keyed by data-schema field name
             (e.g. ``{"email": "Enter a valid email address."}``). Empty when
             the error is not about specific fields. The response lists the
-            first 20 of them, and its message says how many more there were.
+            first 20, and the error's ``message`` says how many more there
+            were.
         status: The HTTP status of the error (400 to 599). ``422`` (the
             default) is a validation failure; ``403``, ``404``, and ``409``
             cover forbidden, not found, and conflict.
@@ -180,8 +181,9 @@ def build_field_error(
 
     Every Events path that sends per-field messages builds its error here,
     so the same limit applies to schema validation, State updates, and
-    errors a handler raises. The first messages are kept in the order
-    given, and the message ends with the number left out.
+    errors a handler, guard, or hook raises. The first field messages are
+    kept in the order given, and the summary ends with how many were left
+    out.
 
     Args:
         status: The HTTP status of the error.

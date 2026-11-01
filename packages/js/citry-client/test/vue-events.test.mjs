@@ -1306,7 +1306,8 @@ test("collectFormArgs sends a field named __proto__ like any other field", () =>
       assert.equal(Object.getPrototypeOf(result), Object.prototype);
       assert.equal(result.q, "alpha");
       assert.equal(JSON.stringify(result), json);
-      // Nothing the form sent became a property of every object.
+      // A guard rather than the regression check: the shared prototype
+      // must stay as it was whatever the form sends.
       assert.equal({}.polluted, undefined);
       assert.deepEqual(Object.getOwnPropertyNames(Object.prototype), prototypeNames);
     }
