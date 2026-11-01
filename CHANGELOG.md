@@ -267,6 +267,18 @@
   - An Events binding whose event name starts with something other than a
     letter, or contains a character other than a letter, digit, `-`, `_`
     or `:`, such as `@c-1x` or `@c-a;b`. Rename the event.
+- **Breaking:** on a page with a CSP nonce, an HTML fragment whose
+  components use Vue or server events starts only when you serialize it
+  with the page's nonce, as in
+  `serialize(deps_strategy="fragment", csp_nonce=page_nonce)`. Otherwise
+  it does not start, and the browser console shows an error. This closes
+  a security hole. For a `Render` that a server event returns as HTML to
+  a client of your own, set `extensions_defaults["events"]["_csp_nonce"]`
+  to a function that returns the calling page's nonce
+  ([details](https://citry.dev/security/#html-fragments)).
+- **Breaking:** on an interactive page, Citry refuses a `data:` URL for a
+  component script, so the page's Vue app, or the fragment, does not start
+  ([details](https://citry.dev/advanced/dependency-files/#add-a-library-url)).
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old

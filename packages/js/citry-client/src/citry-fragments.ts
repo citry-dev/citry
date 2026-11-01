@@ -9,6 +9,7 @@ export function installFragmentManager(
     lifecycle?: { guard: () => void; nonce: string; signal: AbortSignal },
   ) => Promise<{ appId: string; app: { unmount(): void } }>,
   documentNonce = "",
+  carriesPageNonce: (block: HTMLScriptElement) => boolean = (block) => block.nonce === documentNonce,
 ): FragmentManager {
   const processed = new WeakMap<HTMLScriptElement, Promise<void>>();
   const reservedHosts = new Set<Element>();
@@ -109,7 +110,20 @@ export function installFragmentManager(
         const prior = processed.get(tag);
         if (prior) return prior;
         tag.dataset.citryProcessed = "";
-        const promise = load(raw, tag);
+        // A data block found in the page could come from injected markup, and the fragment's
+        // scripts load with the page's nonce. Under a nonce-based CSP the server stamps the
+        // page's nonce on the blocks it writes, and injected markup cannot set it, so a block
+        // without it is refused, as startDocument refuses a configuration block. When the
+        // runtime's own tag has no nonce there is nothing to compare, and every block starts.
+        const promise =
+          documentNonce && !carriesPageNonce(tag)
+            ? Promise.reject(
+                new Error(
+                  "[Citry] the Vue fragment's data block does not carry the page's CSP nonce." +
+                    " Serialize the fragment with csp_nonce set to the page's nonce.",
+                ),
+              )
+            : load(raw, tag);
         processed.set(tag, promise);
         return promise;
       }

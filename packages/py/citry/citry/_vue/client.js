@@ -900,6 +900,7 @@
         typeof asset.id !== "string" || typeof asset.url !== "string" ||
         asset.target !== ORDINARY_TARGET || asset.helperContract !== HELPER_CONTRACT)
       throw new Error("invalid prepared definition asset");
+    requireWebAssetUrl(asset.url);
     sriFromHex(asset.sha256);
     const directiveSignature = normalizeDirectiveSignature(asset.directiveSignature);
     const runtimeEventSites = normalizeRuntimeEventSites(asset.runtimeEventSites);
@@ -2601,6 +2602,26 @@
     normalizeAssetSource(asset.source, "script");
     return asset;
   }
+  // Scripts load only over http(s) or from a blob: URL. A data: URL would let a forged manifest
+  // supply the script's text inline, and the element would still get the page's nonce. Only
+  // script already running in the page can create a blob: URL, and the docs playground hands
+  // the runtime blob: URLs for the code it runs. Stylesheets keep data: URLs, which cannot run
+  // script.
+  const baseUriGetter = typeof Node === "function"
+    ? Object.getOwnPropertyDescriptor(Node.prototype, "baseURI")?.get : undefined;
+  function requireWebAssetUrl(url) {
+    // A named element such as <img name="baseURI"> replaces document.baseURI, so read the
+    // document's real base URL through the Node.prototype getter, which markup cannot replace.
+    const base = baseUriGetter ? baseUriGetter.call(document) : document.baseURI;
+    let resolved;
+    // The browser resolves the script's src against that same base URL, so a URL that does
+    // not resolve here, such as a path on an about:blank page, is one it cannot load at all.
+    try { resolved = new URL(url, base); }
+    catch { return; }
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:" && resolved.protocol !== "blob:")
+      throw new Error(`[Citry] refused the script URL ${JSON.stringify(url.slice(0, 80))}: ` +
+        "a component script must load from an http:, https:, or blob: URL.");
+  }
   function normalizeAssetSource(source, elementKind) {
     if (source.kind === "owned") {
       if (typeof source.url !== "string" || typeof source.sha256 !== "string" ||
@@ -2611,6 +2632,7 @@
       if (Object.keys(source).sort().join(",") !== "attrs,kind,url" || typeof source.url !== "string" || !plain(source.attrs, "prepared external asset attrs"))
         throw new Error("invalid prepared asset source");
     } else throw new Error("invalid prepared asset source");
+    if (elementKind === "script") requireWebAssetUrl(source.url);
     const attrs = source.attrs || {};
     const forbidden = elementKind === "script"
       ? new Set(["src", "nonce", "async", "defer", "nomodule"])
@@ -5270,7 +5292,27 @@
 
   // The CSP nonce that authorized this runtime's own script tag. Read it now, while
   // document.currentScript still points at that tag.
-  const documentNonce = document.currentScript?.nonce || document.currentScript?.getAttribute("nonce") || "";
+  const documentNonce = runtimeScriptNonce();
+  // Whether a data block found in the page carries this runtime's nonce. Injected markup
+  // cannot set the nonce, but an injected tag left open can take in the attributes of the
+  // genuine tag after it, its nonce included, so its attributes then contain "<script" or
+  // "<style". Browsers refuse to run such a script for the same reason, so it is refused here.
+  function carriesPageNonce(block) {
+    if (block.nonce !== documentNonce) return false;
+    return !block.getAttributeNames().some(name =>
+      /<(script|style)/i.test(name) || /<(script|style)/i.test(block.getAttribute(name) || ""));
+  }
+  function runtimeScriptNonce() {
+    // A named element in the page, such as <form name="currentScript">, replaces
+    // document.currentScript with itself, and its empty nonce would switch off every nonce
+    // check below. So call the getter from Document.prototype, which page markup cannot
+    // replace, and accept only a real script element.
+    const getter = typeof Document === "function"
+      ? Object.getOwnPropertyDescriptor(Document.prototype, "currentScript")?.get : undefined;
+    const script = getter ? getter.call(document) : null;
+    if (typeof HTMLScriptElement !== "function" || !(script instanceof HTMLScriptElement)) return "";
+    return script.nonce || script.getAttribute("nonce") || "";
+  }
 
   // Starts a server-rendered document app. The server sends the app's configuration as a
   // JSON data block (<script type="application/json" data-citry-vue-document="appId">),
@@ -5288,7 +5330,7 @@
       throw new Error(`[Citry] expected one configuration block for app ${appId}, found ${blocks.length}`);
     // Under a nonce-based CSP the server stamps the data block with the same nonce as this
     // runtime. A block without it did not come from the Citry render, so it is refused.
-    if (documentNonce && blocks[0].nonce !== documentNonce)
+    if (documentNonce && !carriesPageNonce(blocks[0]))
       throw new Error(`[Citry] the configuration block for app ${appId} does not carry the page's CSP nonce`);
     const configuration = JSON.parse(blocks[0].textContent);
     if (configuration?.manifest?.appId !== appId)
@@ -5307,5 +5349,6 @@
       app.hostElement instanceof Element && app.hostElement.contains(node)),
     startPrepared,
     documentNonce,
+    carriesPageNonce,
   );
 })(window);

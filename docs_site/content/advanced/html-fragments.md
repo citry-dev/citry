@@ -64,6 +64,11 @@ Insert the whole response in one step. Do not split it into separate swaps,
 because the fragment's HTML and the data block that describes its
 components must arrive together.
 
+When the page uses a Content Security Policy (CSP) nonce, put the nonce on
+the `<script src="/citry/citry.js">` tag and serialize the fragment with
+the same nonce. Otherwise the fragment does not start, and the browser
+console shows an error. See [Nonces in fragments](/security/#html-fragments).
+
 ## Insert into other pages
 
 When the page has not loaded Citry, the fragment brings a small script that

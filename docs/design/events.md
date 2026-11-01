@@ -1368,7 +1368,12 @@ against the handler's data class, unless the class declares the name, so a
 form may keep the host's hidden token input
 ([`security_csrf.md`](security_csrf.md) section 4.4). A single string, an
 empty name, or a value that is not a list, tuple, or set fails at engine
-construction; an empty sequence turns the removal off. Engine-wide registries
+construction; an empty sequence turns the removal off. The page nonce function
+(`_csp_nonce`) is engine-wide too, because a page's CSP nonce is one fact
+for every component on it: when a call's answer is an `html-fragment/1`
+Render, the dispatcher calls it with the call's `EventRequest` and
+serializes the fragment with the nonce it returns, so the page's runtime
+starts the fragment. Engine-wide registries
 and secrets are `CitrySettings` fields: `secret` (7.1),
 `event_result_resolvers` (result resolvers, 6.2), and
 `event_payload_codecs` (payload codecs, 6.2).

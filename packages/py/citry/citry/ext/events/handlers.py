@@ -39,9 +39,12 @@ INJECTABLE_PARAMS = ("data", "state", "context", "request", "event")
 # ``_max_body_bytes`` (the largest request body, design 3.5),
 # ``_max_form_fields`` (the most fields in one form post), and
 # ``_csrf_field_names`` (the host CSRF fields the server drops from an event
-# call's arguments, design 3.5 and security_csrf.md 4.4) are the engine-wide
+# call's arguments, design 3.5 and security_csrf.md 4.4) are engine-wide
 # names: they apply before any component's config is read, so they are
 # settings-only and a component declaring one fails at class definition.
+# ``_csp_nonce`` (a function that returns the CSP nonce of the page that sent
+# a call) is engine-wide too, because a page's nonce is one fact for every
+# component on it.
 CONFIG_NAMES = (
     "_guard",
     "_context",
@@ -53,11 +56,12 @@ CONFIG_NAMES = (
     "_max_body_bytes",
     "_max_form_fields",
     "_csrf_field_names",
+    "_csp_nonce",
 )
 
 # The engine-wide config names, which only ``extensions_defaults["events"]``
 # may set.
-ENGINE_CONFIG_NAMES = frozenset({"_max_body_bytes", "_max_form_fields", "_csrf_field_names"})
+ENGINE_CONFIG_NAMES = frozenset({"_max_body_bytes", "_max_form_fields", "_csrf_field_names", "_csp_nonce"})
 
 # The hidden field Django's ``{% csrf_token %}`` and its own forms write. A
 # page that keeps it inside a form sending a server event would otherwise
