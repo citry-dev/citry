@@ -321,8 +321,9 @@ def _copied_members(build: BuildInput) -> dict[str, Any]:
             continue
         # A copy: another thread may store a computed value on the class.
         for member_name, member in _static_class_namespace_copy(klass).items():
-            # An ABC's subclass caches belong to the class that holds them; the
-            # generated class gets its own if it is an ABC, and none otherwise.
+            # The caches ABCMeta keeps for `isinstance()` and `issubclass()`
+            # belong to the class that holds them; the generated class gets
+            # its own if it is an ABC, and none otherwise.
             if (
                 member_name in _CLASS_BOOKKEEPING_NAMES
                 or member_name in build.field_names

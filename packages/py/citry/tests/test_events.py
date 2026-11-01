@@ -534,10 +534,11 @@ class TestStateCapture:
             " _public, _model, _storage, _max_bytes, _max_age." in str(err.value)
         )
 
-    @pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["c_abc", "py_abc"])
+    @pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["abc", "py_abc"])
     def test_the_caches_an_abc_metaclass_writes_are_not_meta_typos(self, meta):
-        # Each ABCMeta writes its subclass caches into the class: CPython's
-        # `_abc_impl`, or PyPy's `_abc_registry` and friends from `_py_abc`.
+        # ABCMeta stores its `isinstance()` caches on the class: CPython's
+        # `_abc_impl`, or the `_abc_registry` group that PyPy's `abc.ABCMeta`
+        # and `_py_abc` both write.
         # Every Pydantic model is such a class, so neither set may read as a
         # misspelt meta name on any interpreter.
         app = _Citry()
@@ -551,17 +552,18 @@ class TestStateCapture:
 
         assert Comp.State(x=2).x == 2
 
-    def test_a_misspelt_meta_name_on_an_abc_state_still_fails(self):
+    @pytest.mark.parametrize("typo", ["_pubilc", "_abc_cahce"])
+    def test_a_misspelt_meta_name_on_an_abc_state_still_fails(self, typo):
+        # Only the exact names the metaclass writes are skipped, so a typo
+        # that merely looks like one of them still fails.
         app = _Citry()
 
-        with pytest.raises(ValueError, match="'_pubilc' is not a recognized State meta attribute"):
+        with pytest.raises(ValueError, match=f"'{typo}' is not a recognized State meta attribute"):
 
             class Comp(Component):
                 citry = app
 
-                class State(metaclass=_py_abc.ABCMeta):
-                    x: int = 0
-                    _pubilc = ("x",)
+                State = _py_abc.ABCMeta("State", (), {"__annotations__": {"x": int}, "x": 0, typo: ("x",)})
 
     def test_underscore_state_methods_are_helpers(self):
         app = _Citry()
@@ -1783,7 +1785,7 @@ class TestConfigFieldValidation:
             " Did you mean '_guard'?" in str(err.value)
         )
 
-    @pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["c_abc", "py_abc"])
+    @pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["abc", "py_abc"])
     def test_the_caches_an_abc_metaclass_writes_are_not_config_fields(self, meta):
         # An ABC config class carries its metaclass's subclass caches, which
         # the author never wrote, so they must not read as unknown settings.

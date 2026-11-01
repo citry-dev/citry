@@ -400,11 +400,12 @@ def _counter(base: object) -> type[Component]:
     return Counter
 
 
-@pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["c_abc", "py_abc"])
+@pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["abc", "py_abc"])
 def test_an_abc_state_leaves_its_abc_caches_out_of_the_generated_model(meta: type) -> None:
-    # The generated model copies the authored class's members. The authored
-    # class's ABC caches are not members: copied, Pydantic would turn them
-    # into private attributes and they would shadow the model's own caches.
+    # The generated model copies the authored class's members. The caches
+    # ABCMeta stores on the authored class are not members: copied, Pydantic
+    # would turn them into private attributes, and the model would fall back
+    # to `BaseModel`'s caches.
     app = Citry(autodiscover=False, model_base=pydantic.BaseModel)
 
     class Counter(Component):

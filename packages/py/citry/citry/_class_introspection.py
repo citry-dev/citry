@@ -77,11 +77,14 @@ def _names_abc_meta_writes(meta: type) -> frozenset[str]:
     return frozenset(name for name in vars(empty) if not (name.startswith("__") and name.endswith("__")))
 
 
-# Python ships two ABCMeta implementations, and each writes its subclass
-# caches into every class it builds: the C `_abc` (CPython's `abc.ABCMeta`)
-# writes `_abc_impl`, and the pure-Python `_py_abc` (PyPy's `abc.ABCMeta`)
-# writes `_abc_registry`, `_abc_cache`, and two more. Each set is read from an
-# empty class on the running interpreter rather than listed by hand.
+# ABCMeta stores, on every class it builds, the caches it keeps to answer
+# `isinstance()` and `issubclass()` quickly. The names differ by
+# implementation: CPython's `abc.ABCMeta` writes `_abc_impl`, while PyPy's
+# `abc.ABCMeta` writes `_abc_registry`, `_abc_cache`, `_abc_negative_cache`
+# and `_abc_negative_cache_version`, the same names as the stdlib's
+# pure-Python `_py_abc`. `_py_abc` is listed too, so a test on CPython can
+# build a class the way PyPy does. Each set is read from an empty class on the
+# running interpreter, so it matches whatever that interpreter writes.
 _ABC_BOOKKEEPING: tuple[tuple[type, frozenset[str]], ...] = tuple(
     (meta, _names_abc_meta_writes(meta)) for meta in dict.fromkeys((ABCMeta, _PyABCMeta))
 )
@@ -92,10 +95,13 @@ def _is_abc_bookkeeping(cls: type, name: str) -> bool:
     Return whether ``name`` on ``cls`` is a cache that an ABCMeta wrote, not an authored attribute.
 
     A check that rejects unknown underscore names on a class uses this to
-    leave the metaclass's own entries alone. Every Pydantic model is built by
-    an ABCMeta subclass, so this covers model classes too.
+    leave the metaclass's own entries alone. Every Pydantic model's metaclass
+    extends ABCMeta, so this covers model classes too.
     """
-    return any(name in names and isinstance(cls, meta) for meta, names in _ABC_BOOKKEEPING)
+    # `type(cls)` rather than `isinstance`, which could read `cls.__class__`
+    # through a metaclass hook; this module reads classes without running one.
+    metaclass = type(cls)
+    return any(name in names and issubclass(metaclass, meta) for meta, names in _ABC_BOOKKEEPING)
 
 
 def _static_class_mro(cls: type) -> tuple[type, ...]:

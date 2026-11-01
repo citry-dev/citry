@@ -1992,8 +1992,9 @@ class ExtensionManager:
         the nearest declaration's value wins (mirroring attribute lookup).
 
         Excluded, so only what the user wrote counts as a field: dunder names,
-        the subclass caches an ABC metaclass writes, the extension's ``Config`` base and everything above it, and the
-        classes ``_init_component_class`` itself synthesizes (recognized by the
+        the caches ABCMeta stores on a config class that is an ABC, the
+        extension's ``Config`` base and everything above it, and the classes
+        ``_init_component_class`` itself synthesizes (recognized by the
         ``_SYNTHESIZED_CONFIG_ATTR`` stamp), which subclassing a parent
         component's rebuilt config pulls into the MRO.
         """
@@ -2005,8 +2006,8 @@ class ExtensionManager:
             for name, value in _static_class_namespace_copy(klass).items():
                 if name.startswith("__") and name.endswith("__"):
                     continue
-                # A config class that is an ABC carries the metaclass's
-                # subclass caches, which the author never wrote.
+                # A config class that is an ABC carries the caches ABCMeta keeps
+                # for `isinstance()` and `issubclass()`, which the author never wrote.
                 if _is_abc_bookkeeping(klass, name):
                     continue
                 fields[name] = value

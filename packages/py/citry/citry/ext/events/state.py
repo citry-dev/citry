@@ -515,9 +515,10 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
             if _is_dunder(name) or not name.startswith("_"):
                 continue
             # Citry's generated schema carries private construction metadata,
-            # a render stores its input checks on the class, and ABCMeta (the
-            # metaclass of every Pydantic model) stores its subclass caches on
-            # it; only author-written underscore values belong to the State meta.
+            # a render stores its input checks on the class, and ABCMeta (which
+            # every Pydantic model's metaclass extends) stores the caches it
+            # keeps for `isinstance()` and `issubclass()` on it; only
+            # author-written underscore values belong to the State meta.
             if name in _SYNTHESIZED_STATE_NAMES or _is_abc_bookkeeping(klass, name):
                 continue
             if inspect.isfunction(value) or isinstance(value, _DEF_LIKE):
