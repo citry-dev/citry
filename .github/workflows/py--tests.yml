@@ -45,39 +45,9 @@ on:
     # PR's queued or running checks once it merges or closes; every job
     # skips on that event, so the cancelling run needs no runner.
     types: [opened, synchronize, reopened, closed]
-    paths:
-      - "packages/py/**"
-      - "packages/js/citry-client/**"
-      - "packages/protocol/**"
-      - "benchmarks/i18n.py"
-      - "benchmarks/native_build.py"
-      - "scripts/build_citry_core_pyodide_wheel.py"
-      - "scripts/build_constraints.py"
-      - "scripts/release_links.py"
-      - "scripts/select_citry_core_qualification.py"
-      - "scripts/sync_protocol_python.py"
-      - "scripts/verify_citry_core_distribution.py"
-      - "scripts/verify_citry_distribution.py"
-      - "scripts/verify_citry_lsp_distribution.py"
-      - "scripts/verify_citry_ui_distribution.py"
-      - "scripts/verify_pygments_citry_distribution.py"
-      - "scripts/verify_wheel_size.py"
-      - "crates/**"
-      - "third_party/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "rust-toolchain.toml"
-      - ".github/actions/install-rust/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "README.md" # the citry wheel's metadata includes the root README
-      - ".github/workflows/py--tests.yml"
-      - ".github/workflows/py--citry-ui--publish.yml"
-      - ".github/workflows/py--pygments-citry--publish.yml"
-      - ".gitmodules"
+    # Every pull request starts this workflow, and the `changes` job below
+    # decides which jobs run, so a required check here always reports. A
+    # workflow that never starts leaves a required check waiting forever.
   workflow_dispatch:
 
 # A newer run cancels an older one for the same pull request, or for the same
@@ -99,8 +69,116 @@ env:
   PIP_WHEEL: "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
 
 jobs:
+  # This job checks whether a pull request changes any file that the jobs
+  # below test. It compares the pull request's files with the
+  # `on.push.paths` list above, and test_ci_workflows.py fails if the two
+  # lists differ. It runs only on a pull request: the push trigger already
+  # filters a push by that list, and a manual run tests everything.
+  changes:
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    # Listing a pull request's files needs read access to pull requests.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      python: ${{ steps.match.outputs.python }}
+    steps:
+      - name: Match the changed files against the Python inputs
+        id: match
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # The same paths as `on.push.paths`. A path ending in `/**` matches
+          # everything below that folder; any other path matches one file.
+          PYTHON_INPUTS: |
+            packages/py/**
+            packages/js/citry-client/**
+            packages/protocol/**
+            benchmarks/i18n.py
+            benchmarks/native_build.py
+            scripts/build_citry_core_pyodide_wheel.py
+            scripts/build_constraints.py
+            scripts/release_links.py
+            scripts/select_citry_core_qualification.py
+            scripts/sync_protocol_python.py
+            scripts/verify_citry_core_distribution.py
+            scripts/verify_citry_distribution.py
+            scripts/verify_citry_lsp_distribution.py
+            scripts/verify_citry_ui_distribution.py
+            scripts/verify_pygments_citry_distribution.py
+            scripts/verify_wheel_size.py
+            crates/**
+            third_party/**
+            Cargo.toml
+            Cargo.lock
+            rust-toolchain.toml
+            .github/actions/install-rust/**
+            pyproject.toml
+            uv.lock
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            README.md
+            .github/workflows/py--tests.yml
+            .github/workflows/py--citry-ui--publish.yml
+            .github/workflows/py--pygments-citry--publish.yml
+            .gitmodules
+        run: |
+          set -euo pipefail
+          # gh returns raw JSON and jq reads it here, so the test in
+          # test_ci_workflows.py runs this exact parsing against a fake gh.
+          pull=$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER")
+          count=$(jq -r '.changed_files' <<< "$pull")
+          head=$(jq -r '.head.sha' <<< "$pull")
+          # A pull request that got a new commit after this run started runs
+          # everything, because the API would list the newer commit's files.
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "The pull request has a newer commit; running every job."
+            echo "python=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Each page is one JSON array; `jq -s 'add'` joins them.
+          pages=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files?per_page=100")
+          listed=$(jq -s 'add // [] | length' <<< "$pages")
+          # The API lists at most 3,000 of a pull request's files, and can
+          # briefly list fewer right after a push. A short list could hide a
+          # Python file, so it runs everything.
+          if [ "$listed" != "$count" ]; then
+            echo "The API listed $listed of $count files; running every job."
+            echo "python=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A renamed file counts under its old path too, so moving a file
+          # out of a Python folder still runs the Python jobs.
+          files=$(jq -rs 'add // [] | .[] | .filename, (.previous_filename // empty)' <<< "$pages")
+          python=false
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            while IFS= read -r pattern; do
+              [ -n "$pattern" ] || continue
+              case "$pattern" in
+                */\*\*) prefix="${pattern%\*\*}"; [[ "$file" == "$prefix"* ]] && python=true ;;
+                *) [[ "$file" == "$pattern" ]] && python=true ;;
+              esac
+            done <<< "$PYTHON_INPUTS"
+            # One match is enough to run every job.
+            if [ "$python" = true ]; then
+              break
+            fi
+          done <<< "$files"
+          echo "Python inputs changed: $python"
+          echo "python=$python" >> "$GITHUB_OUTPUT"
+
   i18n-release-qualification:
-    if: github.event.action != 'closed'
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
+    needs: changes
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -148,7 +226,12 @@ jobs:
           if-no-files-found: error
 
   test:
-    if: github.event.action != 'closed'
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
+    needs: changes
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ${{ matrix.os }}
     strategy:
       # A failure on one interpreter must not hide portability results from
@@ -228,7 +311,12 @@ jobs:
   # the same paths on all three engines. The `test` job above excludes `e2e`
   # explicitly and does not sync that dependency group.
   e2e:
-    if: github.event.action != 'closed'
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
+    needs: changes
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -341,7 +429,12 @@ jobs:
           if-no-files-found: error
 
   citry-ui-wheel-build:
-    if: github.event.action != 'closed'
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
+    needs: changes
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -425,6 +518,10 @@ jobs:
 
   citry-ui-wheel-install:
     needs: citry-ui-wheel-build
+    # GitHub's default condition skips a job when any job further up was
+    # skipped, and `changes` is skipped on every push and manual run, so this
+    # job checks only the wheel build it needs.
+    if: ${{ !cancelled() && needs.citry-ui-wheel-build.result == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -561,6 +658,10 @@ jobs:
 
   citry-ui-wheel-browser:
     needs: citry-ui-wheel-build
+    # GitHub's default condition skips a job when any job further up was
+    # skipped, and `changes` is skipped on every push and manual run, so this
+    # job checks only the wheel build it needs.
+    if: ${{ !cancelled() && needs.citry-ui-wheel-build.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
@@ -664,7 +765,12 @@ jobs:
   # pull requests. The scheduled cross-browser workflow retains the broader
   # all-e2e sweep.
   vue-conformance:
-    if: github.event.action != 'closed'
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot let a required check pass untested.
+    # The `closed` event still skips it.
+    needs: changes
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
