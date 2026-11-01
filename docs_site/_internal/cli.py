@@ -10,7 +10,8 @@ The ``citry-docs`` command line.
 - ``assemble``: assemble the multi-version deploy artifact (current version at
   the root, committed snapshots under ``/v/``).
 - ``versions-check``: validate the committed ``versions/`` tree (manifest,
-  aliases, build stamps, cross-version links, links to ``main``) without building.
+  aliases, build stamps, cross-version links, links to ``main``, shared
+  ``/static/`` files) without building.
 - ``build-all``: bootstrap / disaster-recovery rebuild of every version selected
   by ``docs_versions.yml`` (walks the git tags in throwaway worktrees).
 - ``build-tag``: build one release snapshot from its exact git tag in a
@@ -83,11 +84,19 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     vc_parser = sub.add_parser(
-        "versions-check", help="Validate the committed versions/ tree (manifest, aliases, stamps, links)."
+        "versions-check",
+        help="Validate the committed versions/ tree (manifest, aliases, stamps, links, /static/ files).",
     )
     vc_parser.add_argument("--strict", action="store_true", help="Also fail on warnings, not just errors.")
     vc_parser.add_argument(
         "--versions-dir", type=Path, default=None, help="Version tree to check (default: docs_site/versions)."
+    )
+    vc_parser.add_argument(
+        "--guard",
+        action="append",
+        default=None,
+        metavar="NAME",
+        help="Run only this version guard (its module name, e.g. snapshot_static_files); repeat for more.",
     )
 
     ba_parser = sub.add_parser(
@@ -134,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "assemble":
         return _run_assemble(args.output, build=not args.no_build)
     if args.command == "versions-check":
-        return _run_versions_check(strict=args.strict, versions_dir=args.versions_dir)
+        return _run_versions_check(strict=args.strict, versions_dir=args.versions_dir, only=args.guard)
     if args.command == "build-all":
         return _run_build_all(args.versions_dir, args.config, dry_run=args.dry_run)
     if args.command == "build-tag":
@@ -245,7 +254,7 @@ def _run_assemble(output: Path | None, *, build: bool) -> int:
     return 0
 
 
-def _run_versions_check(*, strict: bool, versions_dir: Path | None) -> int:
+def _run_versions_check(*, strict: bool, versions_dir: Path | None, only: list[str] | None = None) -> int:
     # Imported here so a plain `build` does not pull in lxml (a guard dependency).
     from docs_site._internal.config import config as default_config  # noqa: PLC0415
     from docs_site._internal.guards import (  # noqa: PLC0415
@@ -261,7 +270,17 @@ def _run_versions_check(*, strict: bool, versions_dir: Path | None) -> int:
         print(f"No version tree at {root} - nothing to check.")
         return 0
 
-    results, ok = run_guards(make_versions_context(root), strict=strict, guards=VERSION_GUARDS)
+    guards = VERSION_GUARDS
+    if only:
+        # Pull-request CI runs only the cheap guards; the release workflow runs
+        # all of them. A misspelt name must fail rather than check nothing.
+        by_name = {guard.__module__.rsplit(".", 1)[-1]: guard for guard in VERSION_GUARDS}
+        unknown = sorted(set(only) - set(by_name))
+        if unknown:
+            print(f"Unknown version guard(s): {', '.join(unknown)}. Known: {', '.join(sorted(by_name))}.")
+            return 2
+        guards = [by_name[name] for name in only]
+    results, ok = run_guards(make_versions_context(root), strict=strict, guards=guards)
     print(format_report(results))
     return 0 if ok else 1
 

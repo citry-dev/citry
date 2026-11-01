@@ -48,8 +48,10 @@ PYPROJECTS = [
 TESTS_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--tests.yml"
 
 _CLASSIFIER_RE = re.compile(r"Programming Language :: Python :: (\d+)\.(\d+)")
-_MATRIX_RE = re.compile(r"python-version:\s*\[([^\]]*)\]")
-_QUOTED_VERSION_RE = re.compile(r'"(\d+)\.(\d+)"')
+# The test job's matrix is one expression that picks a JSON cell list by
+# event; the list after `||` is the full set that pushes to main run.
+_FULL_MATRIX_RE = re.compile(r"\|\|\s*'(\[.*?\])'")
+_CELL_VERSION_RE = re.compile(r'"python-version":"(\d+)\.(\d+)"')
 
 
 def _fmt(versions: set[PyVersion]) -> str:
@@ -88,10 +90,10 @@ def declared_classifiers(pyproject: Path) -> set[PyVersion]:
 
 
 def matrix_versions(workflow: Path) -> set[PyVersion]:
-    match = _MATRIX_RE.search(workflow.read_text(encoding="utf-8"))
+    match = _FULL_MATRIX_RE.search(workflow.read_text(encoding="utf-8"))
     if not match:
         return set()
-    return {(int(a), int(b)) for a, b in _QUOTED_VERSION_RE.findall(match.group(1))}
+    return {(int(a), int(b)) for a, b in _CELL_VERSION_RE.findall(match.group(1))}
 
 
 def _diff_lines(label: str, declared: set[PyVersion], supported: set[PyVersion]) -> list[str]:
@@ -144,9 +146,10 @@ def cmd_generate() -> int:
     print("classifiers (both pyproject.toml files):")
     for version in versions:
         print(f'    "Programming Language :: Python :: {version}",')
-    matrix = ", ".join(f'"{version}"' for version in versions)
-    print("\n.github/workflows/py--tests.yml matrix:")
-    print(f"    python-version: [{matrix}]")
+    print("\n.github/workflows/py--tests.yml matrix (the `include` expression):")
+    print(f"    full set: every version on Windows, the newest and oldest on macOS: {', '.join(versions)}")
+    print(f"    pull requests: Windows on {floor} and {versions[-1]}, macOS on {versions[-1]}")
+    print("    test_ci_workflows.py pins both sets; update _SUPPORTED_PYTHONS there too.")
     return 0
 
 

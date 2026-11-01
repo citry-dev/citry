@@ -242,7 +242,17 @@ def _raise_type_error(
             )
         else:
             fix = ""
-        if role == "Kwargs" and isinstance(value, str):
+        if role == "Kwargs" and type(value) is str and not value and _wants_bool(matcher):
+            # A written empty attribute such as compact="" passes "", while a
+            # bare one passes True, which is what a bool input needs. This
+            # is the fix the reader most likely needs, so it replaces the
+            # general one.
+            tag = getattr(component_class, "name", None) or component_class.__name__
+            fix = (
+                f'In a template, {name}="" passes the text "", so write {name} without a value,'
+                f" as in <c-{tag} {name} />, to pass True."
+            )
+        elif role == "Kwargs" and isinstance(value, str):
             # A plain template attribute always passes text.
             fix += f' In a template, write c-{name}="..." to pass a Python value instead of text.'
     shown = _short_repr(value)
@@ -271,6 +281,15 @@ def _raise_type_error(
         msg += f" {fix.strip()}"
     msg += library_note
     raise TypeError(msg)
+
+
+def _wants_bool(matcher: _Matcher) -> bool:
+    """Whether an annotation takes ``True`` but not other numbers, so it means a ``bool`` input."""
+    # `accepted` grows as values pass, and a bool passes an int field, so
+    # test values rather than read the set: an int or float field accepts 2.
+    # accepts_now() records nothing, so the check leaves the cache as it was.
+    # Each probe is passed by keyword, the same way, so no bool reads as a flag.
+    return matcher.accepts_now(value=True) and not matcher.accepts_now(value=2) and not matcher.accepts_now(value=2.5)
 
 
 def _class_label(cls: type) -> str:

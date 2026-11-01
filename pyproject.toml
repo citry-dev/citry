@@ -475,6 +475,7 @@ pythonpath = ["."]
 markers = [
     "e2e: browser end-to-end test (needs Playwright and a browser binary)",
     "qualification: slow boundary proof kept in full integration and version-matrix runs",
+    "weekly: browser test too slow for every pull request; the weekly cross-browser job runs it",
 ]
 
 [tool.coverage.run]

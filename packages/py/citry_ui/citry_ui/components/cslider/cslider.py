@@ -688,7 +688,11 @@ _SLIDER_JS = r"""
         let unsigned = negative ? value.slice(1) : value;
         let [integer, fraction = ''] = unsigned.split('.');
         integer = integer.replace(/^0+(?=\d)/, '') || '0';
-        fraction = fraction.replace(/0+$/, '');
+        // Strip trailing zeros with a plain loop, so the time grows only in step with the length,
+        // even for a long run of zeros before the last digit.
+        let fractionEnd = fraction.length;
+        while (fractionEnd > 0 && fraction[fractionEnd - 1] === '0') fractionEnd -= 1;
+        fraction = fraction.slice(0, fractionEnd);
         let result = integer + (fraction ? `.${fraction}` : '');
         if (negative && result !== '0') result = `-${result}`;
         return result.replace('-', '').replace('.', '').length <= 128 ? result : undefined;

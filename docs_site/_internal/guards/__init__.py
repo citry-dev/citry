@@ -51,6 +51,7 @@ from docs_site._internal.guards import (
     rendered_markdown,
     single_h1,
     snapshot_main_links,
+    snapshot_static_files,
     snippet_path,
     stray_markup,
     ui_library_projection,
@@ -132,6 +133,7 @@ VERSION_GUARDS: list[Guard] = [
     versions_manifest.check,
     cross_version_link.check,
     snapshot_main_links.check,
+    snapshot_static_files.check,
 ]
 
 
@@ -170,8 +172,9 @@ def make_versions_context(versions_root: Path | None = None) -> GuardContext:
     """
     Assemble a ``GuardContext`` for the version guards (``VERSION_GUARDS``).
 
-    Only ``versions_dir`` is meaningful to those guards; the content and static
-    paths are filled from the site config to satisfy the dataclass and go unused.
+    Those guards read ``versions_dir``, plus ``nav_path``, ``base_path``, and
+    ``static_dir`` (the shared files every snapshot loads). The content paths
+    are filled from the site config to satisfy the dataclass and go unused.
     With no argument it points at the committed ``versions/`` tree.
     """
     root = versions_root if versions_root is not None else default_config.versions_dir

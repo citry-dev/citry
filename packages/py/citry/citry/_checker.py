@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import json
 import re
@@ -27,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message
 from citry._authored_expression import parse_authored_expression
+from citry._browser_expressions import _ascii_lower
 from citry._class_introspection import (
     _safe_class_import_path,
     _safe_class_text,
@@ -101,7 +103,14 @@ from citry._registry_lint import (
     unknown_inject_key_findings,
     unknown_url_findings,
 )
-from citry._source_lines import line_break_count, source_lines
+from citry._slot_props import (
+    SlotOutlet,
+    lint_unknown_slot_props,
+    scoped_fills,
+    slot_outlets,
+    unknown_slot_props_for,
+)
+from citry._source_lines import byte_offset_position, source_lines
 from citry._symbol_table import symtable
 from citry._template_data_source import (
     TemplateDataSourceShape,
@@ -1110,9 +1119,15 @@ def _check_template(
                 i18n_configured=i18n_configured,
             )
         )
+    unknown_slot_prop_findings = (
+        _unknown_slot_prop_findings(engine, template, component_templates or {}, parse_nested=nested_parser)
+        if engine is not None
+        else ()
+    )
     for finding in (
         *lint_unknown_vue_variables(browser_hosts, vue_lint_consumers),
         *lint_vue_python_variables(browser_hosts, vue_lint_consumers),
+        *unknown_slot_prop_findings,
     ):
         line, column = _byte_offset_coordinates(source.content, finding.start_index)
         end_line, end_column = _byte_offset_coordinates(source.content, finding.end_index)
@@ -2196,6 +2211,53 @@ def _emit_findings(
             ),
         )
     ]
+
+
+def _unknown_slot_prop_findings(
+    engine: Citry,
+    template: Template,
+    component_templates: Mapping[type[Component], str],
+    *,
+    parse_nested: Callable[[str], Template],
+) -> tuple[VueLintFinding, ...]:
+    """
+    Report ``v-slot`` keys that the receiving component's ``<c-slot>`` does not pass.
+
+    Each fill's component tag is looked up in the registry, and that
+    component's template is read for its ``<c-slot>`` tags. A tag that is not
+    registered, or whose template is unknown or does not parse, gets no
+    finding, because nothing proves which props its slots pass.
+    """
+    fills = scoped_fills(template, parse_nested=parse_nested)
+    if not fills:
+        return ()
+    receivers: dict[str, tuple[SlotOutlet, ...] | None] = {}
+    for fill in fills:
+        key = _ascii_lower(fill.tag)
+        if key in receivers:
+            continue
+        try:
+            receiver = engine.get(key.removeprefix("c-"))
+        except NotRegistered:
+            receivers[key] = None
+            continue
+        receivers[key] = _receiver_outlets(component_templates.get(receiver))
+    return lint_unknown_slot_props(fills, unknown_slot_props_for(receivers))
+
+
+@functools.lru_cache(maxsize=256)
+def _receiver_outlets(content: str | None) -> tuple[SlotOutlet, ...] | None:
+    """Return a receiving template's ``<c-slot>`` tags, kept for the process and keyed by the template text."""
+    if content is None:
+        return None
+    try:
+        parsed = parse_template(content)
+        # Template-valued attributes are parsed the same way, without the
+        # registry's tag rules. Those only add errors, such as for an unknown
+        # attribute or slot, and never change which `<c-slot>` tags are found.
+        return slot_outlets(parsed, parse_nested=parse_template)
+    except (SyntaxError, ValueError):
+        return None
 
 
 def _missing_component_key_findings(
@@ -4001,13 +4063,9 @@ def _byte_offset_coordinates(source: str, offset: int) -> tuple[int, int]:
     finding range whose text the checker holds goes through here, which keeps
     all rules on one numbering.
     """
-    prefix = source.encode("utf-8")[:offset].decode("utf-8")
     # Lines end where Python and editors end them (CR LF, CR, or LF), so a
     # Python file and the template inside it count lines the same way.
-    current = source_lines(prefix)[-1] if prefix else ""
-    if current.endswith(("\n", "\r")):
-        current = ""
-    return line_break_count(prefix), len(current.encode("utf-16-le")) // 2
+    return byte_offset_position(source, offset)
 
 
 def _byte_range_coordinates(source: str, start_index: int, end_index: int) -> tuple[int, int, int, int, int, int]:

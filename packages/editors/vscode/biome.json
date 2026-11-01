@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
 	"files": {
 		"includes": ["**", "!dist", "!out", "!.vscode-test"]
 	},
@@ -9,5 +9,10 @@
 	},
 	"linter": {
 		"enabled": true
+	},
+	"markdown": {
+		"formatter": {
+			"enabled": false
+		}
 	}
 }

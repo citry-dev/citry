@@ -1071,7 +1071,9 @@ primitives (`int`/`float` cross-coercion, `str` to `UUID | datetime |
 date | time | Decimal | Enum`, which parse from strings because a
 string is their canonical JSON encoding, `list` to `tuple`/`set`,
 nested annotated
-classes from objects, and `Literal[...]`, which accepts a value equal to
+classes from objects, `dict[K, V]` objects key by key and value by value
+(a key is always a JSON string, so it binds by the form-value rule: `"3"`
+fills `dict[int, ...]`), and `Literal[...]`, which accepts a value equal to
 one of its listed values after that value's own type rule, so a form
 post's `"2"` binds to `Literal[1, 2]` and `true` never matches `1`; any
 other value is the per-field 422 "Expected one of ..."); extra keys are a 422, missing required fields are
@@ -1837,7 +1839,16 @@ signature verifies. On the per-event route
 the HTTP status mirrors the call's status; the batch endpoint answers 200
 with per-call statuses inside (one batch can mix outcomes). `fieldErrors` is
 the per-field error map, surfaced client-side as
-`$error(handler).fieldErrors` (5.5).
+`$error(handler).fieldErrors` (5.5). Only the request decides how many
+fields it sends that the `data` class does not declare (or that State
+does not let the browser write), and how many items a list or dict field
+holds. So the server lists at most 20 messages for undeclared or
+unwritable fields, and at most 20 item messages in each list or dict field, keeping the earliest
+by field path with list indexes in number order. `message` then ends
+with how many more there were, for example "1,000 more field errors are
+not shown." Messages for other fields, and the fields of an
+`EventError`, are always listed in full. The error still has only the
+protocol's fixed keys.
 
 ### 4.4 How the state token reaches the client
 
@@ -4212,7 +4223,25 @@ resolver.
 `Accept: text/html` (or a classic form post without the `X-Citry-Events`
 header), the response is not an envelope: the primary render action's HTML
 is the body, a redirect becomes HTTP 303, and errors carry their HTTP
-status. Two things fall out, both intentional: a plain
+status. The 303's `Location` must take the visitor where the runtime's
+`location.assign()` would, so the server resolves a relative redirect URL
+against the posting page named by the `Referer` header and sends the
+absolute result. When the request has no `Referer` from the same host, the
+URL goes out unchanged, the browser resolves it against the handler URL,
+and the server logs a warning that names the fix (a path starting with
+`/`). It logs this once per handler and URL, and never for `GET`, because
+a `GET` handler URL opened directly is itself the page. Two cases resolve differently from the
+runtime and cannot be detected: a `Referrer-Policy` that sends only the
+origin (resolved against the site root) and a page with `<base href>`.
+The user docs ask those pages to use a path starting with `/`.
+After resolving, the server percent-encodes the URL, because Citry's
+adapters send header text as Latin-1 and a browser expects UTF-8 escapes.
+It encodes spaces and every character outside printable ASCII as UTF-8,
+host included, and leaves the rest of printable ASCII as written. A browser decodes the escapes in the host and
+converts it with its own rules, so the 303 and `location.assign()` land on
+the same URL.
+
+Two things follow from the HTML-shaped response, both intentional: a plain
 `<form method="post" c-action="submit_url">` (the URL provided by
 `template_data` from `self.events.url("submit")`) works with
 JavaScript disabled, and htmx or Turbo users can point `hx-post` at an
@@ -4417,7 +4446,11 @@ field, always.
   either way (7.1).
 - **`_model`**: the subset of public fields the client may write
   (through two-way bindings or `$state`); `stateUpdates` entries outside it
-  are rejected, and each accepted value must satisfy the field's type.
+  are rejected, and each accepted value must satisfy the field's type,
+  down to each list or tuple item, each dict value, and the listed
+  values of a `Literal[...]`, with the error at the item's path
+  (`tags.2`). Dict keys are not checked: a JSON object key is always a
+  string, and a dataclass State keeps it as one.
   Defaults to **the same fields as `_public`**: public means visible
   and writable, and `_model = (...)` exists only to clamp down (a
   visible-but-read-only display flag). Every `_model` field must be
@@ -4543,7 +4576,9 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
 - Abuse limits: request body cap (413, and the host adapters stop reading
   one byte past it, or one message past it under ASGI, so an oversized
   body is never held whole), form field
-  cap (413), `calls` length cap (16 in the schema), state verified before
+  cap (413), JSON nesting cap (400 past 200 levels of arrays and objects,
+  `MAX_JSON_DEPTH` in the protocol package), `calls` length cap (16 in the
+  schema), state verified before
   args are parsed, `on_event` as the rate-limit attachment point.
 
 ### 7.5 Rich components and slots

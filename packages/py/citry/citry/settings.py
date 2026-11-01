@@ -769,8 +769,9 @@ class CitrySettings:
             values, and a value signed by any entry still verifies, so
             already-issued values stay valid while a new key rolls out. A bare
             string is stored as a one-element list. ``None`` (the default)
-            means no secret is set. Django projects can reuse their existing
-            key by passing ``citry.contrib.django.secret()``.
+            means no secret is set. Django projects can reuse ``SECRET_KEY``
+            and any ``SECRET_KEY_FALLBACKS`` by passing
+            ``citry.contrib.django.secret()``.
         event_result_resolvers: Result resolvers for the Events extension.
             When an event handler returns a value, citry converts it into the
             actions sent back to the browser (the instructions the client

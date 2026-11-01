@@ -150,3 +150,36 @@ def test_wheel_is_dormant_until_explicitly_enabled(number_page) -> None:
     editor.dispatch_event("wheel", {"deltaY": -100})
     assert editor.input_value() == "1.75"
     assert errors == []
+
+
+def test_trailing_zeros_are_stripped_and_a_long_zero_run_is_rejected_quickly(number_page) -> None:
+    page, errors = number_page
+    editor = page.locator("#quantity")
+    transport = page.locator("#quantity-transport")
+
+    # Short input: trailing zeros of the fraction drop out of the committed value.
+    editor.fill("2.500")
+    editor.press("Enter")
+    assert transport.input_value() == "2.5"
+    assert editor.get_attribute("aria-invalid") != "true"
+
+    # A valid decimal whose fraction is a very long run of zeros before the last digit is the slow case
+    # for a regex anchored to the end, so this measures the whole input-and-commit path inside the page.
+    # Only a regex engine that backtracks, such as WebKit's, is slow on it. The value is far past the
+    # 128-digit limit, so it is rejected as invalid and the committed value stays as it was.
+    elapsed = page.evaluate(
+        """text => {
+          const input = document.querySelector('#quantity');
+          input.focus();
+          const start = performance.now();
+          input.value = text;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+          return performance.now() - start;
+        }""",
+        "1." + "0" * 100_000 + "1",
+    )
+    assert elapsed < 1000
+    assert editor.get_attribute("aria-invalid") == "true"
+    assert transport.input_value() == "2.5"
+    assert errors == []

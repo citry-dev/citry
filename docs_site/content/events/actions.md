@@ -264,13 +264,27 @@ The URL must use `http:` or `https:`, or have no scheme at all, as in
 `/projects/` or `?page=2`. An empty URL, a URL with a control character,
 or any other scheme raises `ValueError` when you create the action.
 
-A URL taken from the request, such as a `next` parameter, must be checked
-before you redirect to it, because it can send the visitor to another
-site. Checking that it starts with `/` is not enough: `//host` and
-`/\host` start with `/` too, and the browser reads both as another site.
-Accept the URL only when it starts with a single `/`, so that the second
-character is neither `/` nor `\`. Django's
-`url_has_allowed_host_and_scheme` does a fuller check.
+A relative URL, such as `"?page=2"` or `"next"`, is relative to the page
+the visitor is on, with or without JavaScript. Without JavaScript, the
+server reads that page's address from the `Referer` header, which browsers
+send by default. Use a path that starts with `/` instead when your page:
+
+- sets a `Referrer-Policy` that stops the browser sending the full address.
+  With no `Referer`, the visitor lands next to the handler's URL, usually on
+  a "not found" page, and for a form that posts, the server logs a warning.
+  With only the site's address, the URL resolves against the home page,
+  with no warning.
+- sets `<base href>`, which changes what the browser resolves against but
+  not what it sends.
+
+!!! warning "Check a URL that comes from the request"
+
+    A URL taken from the request, such as a `next` parameter, can point to
+    another site. Check it before you redirect to it. A prefix check such
+    as `url.startswith("/")` is not enough, because browsers treat
+    `//other.example` and `/\other.example` as addresses on another site.
+    Django's `url_has_allowed_host_and_scheme` does a full check; see
+    [Check redirect URLs](/security/#check-redirect-urls).
 
 If a redirect with another scheme reaches the browser another way, such
 as through browser code you wrote that calls `Citry.events.applyActions()`,

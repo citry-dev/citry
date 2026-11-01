@@ -518,11 +518,15 @@ fn visit_template(
                         .filter(|_| span.start == context.base + body_span.start)
                         .map_or(source_column, |layout| layout.column);
                     let suffix_width = same_line_suffix_width(context.root_source, span.end)?;
-                    let formatted = format_expression(
+                    // `None` keeps the expression's bytes exactly as written.
+                    let Some(formatted) = format_expression(
                         &expr.value.content,
                         PREFERRED_WIDTH.saturating_sub(column + 6 + suffix_width),
                         detect_newline(context.root_source),
-                    )?;
+                    )?
+                    else {
+                        continue;
+                    };
                     let canonical = format_template_expression(
                         &formatted,
                         column,
@@ -996,11 +1000,11 @@ fn collect_attribute_provider_edits(
             ) {
                 None
             } else {
-                Some(format_for_clause(
+                format_for_clause(
                     &inner_value.content,
                     available_width,
                     detect_newline(context.root_source),
-                )?)
+                )?
             }
         } else if tag_name == "c-fill" && key == "data" {
             attr.fill_data_pattern
@@ -1010,11 +1014,11 @@ fn collect_attribute_provider_edits(
             if expression_is_provider_suppressed(&inner_value.content) {
                 None
             } else {
-                Some(format_expression(
+                format_expression(
                     &inner_value.content,
                     available_width,
                     detect_newline(context.root_source),
-                )?)
+                )?
             }
         } else {
             None

@@ -20,7 +20,9 @@ Livewire.
 Citry works with FastAPI, Django, Flask, Starlette, ASGI, and WSGI
 applications.
 
-**Citry is in public beta.** It supports Python 3.11 through 3.15.
+Citry supports Python 3.11 through 3.15.
+
+**Our mission:** a safe, reliable, and intuitive frontend ecosystem for Python.
 
 [Read the docs](https://citry.dev/docs/) ·
 [Try the playground](https://citry.dev/playground/) ·

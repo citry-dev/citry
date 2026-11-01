@@ -28,7 +28,7 @@ import inspect
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs
 
-from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, body_read_limit, match_route
+from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, body_read_limit, match_route, sent_headers
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 __all__ = ["wsgi_app"]
 
-_STATUS_LINES = {200: "200 OK", 404: "404 Not Found", 405: "405 Method Not Allowed"}
+_STATUS_LINES = {200: "200 OK", 304: "304 Not Modified", 404: "404 Not Found", 405: "405 Method Not Allowed"}
 
 
 def _read_body(environ: dict[str, Any], limit: int | None) -> bytes:
@@ -127,7 +127,7 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
         def respond(response: RouteResponse) -> Iterable[bytes]:
             """Translate a ``RouteResponse`` into the WSGI response shape."""
             status_line = _STATUS_LINES.get(response.status, f"{response.status} Response")
-            start_response(status_line, [("Content-Type", response.content_type), *response.headers])
+            start_response(status_line, [("Content-Type", response.content_type), *sent_headers(response)])
             return [response.body]
 
         # When mounted, the host moves the prefix into SCRIPT_NAME; PATH_INFO

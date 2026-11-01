@@ -25,6 +25,11 @@
   source's `srcset`) accept only a relative URL or an `http:`,
   `https:`, `blob:`, or `data:image/` URL. To link to another scheme,
   such as an app's own scheme, write the `<a>` in your template.
+- Writing an empty value in a template for a text input, such as
+  `<c-CButtonGroup label="">` or `<c-CContextMenu aria_label="">`, raises
+  the component's own `ValueError` saying the text is empty, not a
+  `TypeError` about a `bool`, because Citry passes `""` for a written
+  empty value.
 - **Breaking:** in `CCommandPalette`, a command that closes the palette
   now calls `onAction` after the palette closes, and after `onOpenChange`
   and `onQueryChange`, so `onAction` can move focus anywhere on the page
@@ -65,6 +70,20 @@
   busy for minutes or longer during a render, and a client `srcset`
   prop with a long run of spaces or commas could freeze the browser
   tab.
+- `CTagsInput` no longer holds up the page for seconds when a typed or
+  pasted tag has a long run of spaces inside it, and `CNumberInput`,
+  `CSlider`, and `CImage` no longer slow down in Safari on a value with a
+  very long run of zeros or commas.
+- `CMenu` and `CAccordion` now accept a self-closed element such as
+  `<span/>` in an item's label or title, and write it as `<span></span>`,
+  as Citry does elsewhere. They used to reject it.
+- An open `CMenu`, `CContextMenu`, or `CSplitButton` menu that contains a
+  submenu no longer moves focus to its current item again and again, and an
+  idle `CSplitButton` or `CTimePicker` no longer rewrites its own markup
+  hundreds of times a second. Both loops cost CPU and battery on an idle
+  page.
+- When a server re-render updates an open `CMenu`, the focused item keeps
+  focus.
 - `CTooltip` now opens or closes when a re-render changes its server `open`
   input, as the other popups do. Disabling an open tooltip, from the server
   or with the client `disabled` prop, closes it and calls

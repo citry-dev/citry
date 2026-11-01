@@ -15,8 +15,11 @@
 //! create Python objects as they go, and CPython 3.14 and later check the
 //! stack pointer against the thread's own stack, so the work cannot run on
 //! a stack segment taken from the heap. Their stack use has to stay small
-//! on its own, and when Python has left only its last few KiB of stack, a
-//! call here can still overflow it.
+//! on its own: level A refuses a template nested past
+//! `citry_native_render::MAX_BODY_DEPTH` or `MAX_READ_DEPTH`, which bound
+//! how deep its code calls itself, and leaf JSON stops at its own depth.
+//! When Python has left only its last few KiB of stack, a call here can
+//! still overflow it.
 
 mod leaf_json;
 mod rows;

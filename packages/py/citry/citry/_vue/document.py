@@ -242,5 +242,7 @@ def _open_html(part: PreparedElementOpen) -> str:
 
     authored = list(format_prepared_element_attrs(part))
     attrs = "" if not authored else " " + " ".join(authored)
-    ending = "/>" if part.is_self_closing else ">"
+    # Only a void element keeps `/>`; another self-closed element is written
+    # open, because the compiler emits its end tag as a separate part.
+    ending = "/>" if part.is_void and part.is_self_closing else ">"
     return f"<{part.tag}{attrs}{ending}"

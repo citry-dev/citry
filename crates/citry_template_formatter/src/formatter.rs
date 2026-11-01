@@ -408,10 +408,10 @@ mod tests {
     #[test]
     fn leading_multiline_expression_uses_its_parent_tag_column() {
         let source = concat!(
-            "<main><section>{{build_payload(",
+            "<main>\n<section>{{build_payload(",
             "first_argument,second_argument,third_argument,fourth_argument,",
             "fifth_argument,sixth_argument,seventh_argument",
-            ")}}</section></main>",
+            ")}}</section>\n</main>",
         );
         let expected = concat!(
             "<main>\n",

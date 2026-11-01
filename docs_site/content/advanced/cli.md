@@ -359,8 +359,14 @@ changes. Both exit with status 1 when a file would change. They cannot be
 combined. A file that cannot be formatted makes the command exit with
 status 2. `citry format` rejects `--app` and `--static` with status 2.
 
-The formatter lays out the HTML structure conservatively and formats
-Python expressions, `c-for` clauses, and `c-fill data` patterns. Add
+The formatter lays out the HTML structure conservatively. It re-indents
+whitespace you wrote between block tags such as `<div>` and `<li>`, and
+never adds whitespace between tags where you wrote none, because even a line break
+between two tags is text in the page. To spread compact markup over lines,
+add a line break between the tags once and the formatter indents the rest.
+If your CSS shows that whitespace, for example with `white-space: pre`,
+wrap the markup in `{# fmt: off #}`. The formatter also formats Python
+expressions, `c-for` clauses, and `c-fill data` patterns. Add
 `--verbose` to see which formatters are active.
 
 ### Format JS and CSS

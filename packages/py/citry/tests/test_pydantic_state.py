@@ -174,6 +174,35 @@ def test_a_browser_write_of_the_wrong_type_is_a_per_field_422(kind: str) -> None
     assert set(error["fieldErrors"]) == {"count"}
 
 
+@pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
+@pytest.mark.parametrize("kind", KINDS)
+def test_browser_writes_to_names_outside_the_state_stop_at_twenty(kind: str, count: int, note: str) -> None:
+    counter = _counter(kind)
+    # Reverse order shows the listed names come from sorting, not from the wire order.
+    updates = {f"u{index:03d}": 1 for index in reversed(range(count))}
+
+    item = _dispatch(counter, "read", stateToken=_token(counter), stateUpdates=updates)
+
+    error = item["error"]
+    assert error["status"] == 422
+    assert error["code"] == "invalid_args"
+    assert error["message"] == "Some state updates were rejected; see the field messages." + note
+    assert list(error["fieldErrors"]) == [f"u{index:03d}" for index in range(20)]
+    assert all("_model" in message for message in error["fieldErrors"].values())
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_hundred_writes_to_names_outside_the_state_are_counted(kind: str) -> None:
+    counter = _counter(kind)
+    updates = {f"u{index:03d}": 1 for index in range(100)}
+
+    item = _dispatch(counter, "read", stateToken=_token(counter), stateUpdates=updates)
+
+    error = item["error"]
+    assert error["message"].endswith(" 80 more field errors are not shown.")
+    assert len(error["fieldErrors"]) == 20
+
+
 @pytest.mark.parametrize("kind", KINDS)
 def test_the_render_signs_a_state_token(kind: str) -> None:
     counter = _counter(kind)

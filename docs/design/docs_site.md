@@ -614,13 +614,37 @@ isolation. Search from an old version uses the current Pagefind index and may
 lead to current Docs, Community, or Blog pages. Old HTML also runs against the
 current root CSS, JavaScript, and Citry runtime, so those outputs require
 backward compatibility. Snapshots retain baked social metadata and do not get a
-per-version generated card set. Per-version search, version-pinned shared
-assets, and dynamic historical chrome remain deferred.
+per-version generated card set. Per-version search and dynamic historical
+chrome remain deferred.
+
+Snapshots load their static files from the root site's `/static/` folder,
+which is built from `docs_site/static/`; a snapshot carries no copy of them
+(decision for [#321](https://github.com/citry-dev/citry/issues/321)).
+Stylesheets and scripts stay shared on purpose, so a style or script fix
+reaches every old version. Only a file's contents may change: every file a
+snapshot loads, stylesheets and scripts included, must stay at its path while
+that version is committed under `docs_site/versions/`.
+
+The `snapshot_static_files` guard enforces this rule. `versions-check`
+fails when a `src`, `href`, or `srcset` attribute in a committed snapshot page
+points to a `/static/` file that is missing from `docs_site/static/`. The
+Docs check workflow runs this guard alone (`versions-check --strict --guard
+snapshot_static_files`) on every pull request that touches `docs_site/`; the
+docs release workflow runs every version guard. To change an image that old versions show, save the
+new image under a new file name and keep the old file: the guard fails while
+any committed version still loads the old name. The guard checks only that a file
+exists, so it cannot tell when a file was changed in place.
+
+The guard reads only real attributes, so a path shown in a code example does
+not count. A path that only a script, a Vue or Alpine expression, or a full
+`https://` URL names is not checked. If a demo points at a missing file on
+purpose, to show its error state, the path goes on the guard's allow list.
 
 Landed but still requiring first-release authorization review: the disaster-recovery
 `build-all` (rebuild every
-release tag via git worktrees), the three version-tree guards (`versions_manifest`,
-`cross_version_link`, `snapshot_main_links`) with a `versions-check` command, and the
+release tag via git worktrees), the four version-tree guards (`versions_manifest`,
+`cross_version_link`, `snapshot_main_links`, `snapshot_static_files`) with a
+`versions-check` command, and the
 `repo--docs-release.yml` workflow that on a `citry@X.Y.Z` tag builds that version
 from the exact tag commit in a detached worktree, stages and registers it under
 `versions/<v>/`, runs the guards, commits it from `main`, and then assembles the

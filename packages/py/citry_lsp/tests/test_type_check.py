@@ -21,6 +21,7 @@ import citry
 from citry._checker import CheckFinding, CheckReport
 from citry._json_wire import SECRET_NOT_SENT_REASON
 from citry.commands.check import _with_type_findings
+from citry_lsp import engine as engine_module
 from citry_lsp import project as project_module
 from citry_lsp.engine import (
     DocumentState,
@@ -28,6 +29,8 @@ from citry_lsp.engine import (
     TypeCheckProjection,
     browser_diagnostics,
     browser_projection,
+    completion_items,
+    hover,
     template_lint_diagnostics,
     type_check_projections,
 )
@@ -1835,3 +1838,492 @@ def test_a_locked_check_folder_is_retried_and_never_raises(monkeypatch, locked_a
         # Every attempt failed: the runner gives up quietly after its retries.
         assert len(calls) == typescript_module._CHECK_FOLDER_REMOVE_ATTEMPTS + 1
         real_rmtree(folder, ignore_errors=True)
+
+
+# --- Scoped slots: the Vue props a `<c-slot>` passes and a `<c-fill v-slot>` reads ---
+
+_SCOPED_APP = """from pathlib import Path
+from citry import Citry, Component, SlotInput
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Table(Component):
+    citry = engine
+    template_file = 'table.html'
+    def js_data(self, kwargs, slots):
+        return {'rows': [{'title': 'a', 'id': 1}], 'heading': 'h'}
+class CellData:
+    label: str
+class Grid(Component):
+    citry = engine
+    template_file = 'grid.html'
+    class Slots:
+        cell: SlotInput[CellData]
+    def js_data(self, kwargs, slots):
+        return {'cells': [1, 2]}
+class Dynamic(Component):
+    citry = engine
+    template_file = 'dynamic.html'
+class Page(Component):
+    citry = engine
+    template_file = 'page.html'
+    def js_data(self, kwargs, slots):
+        return {'other': 1}
+"""
+# `row` comes from a Vue `v-for` over a `js_data` list. `:title-text` is a
+# kebab-case name Vue passes as `titleText`, and its value is a member of `row`.
+_SCOPED_TABLE = (
+    '<div><template v-for="row in rows" :key="row.id">'
+    '<c-slot name="item" :row="row" :heading="heading" :title-text="row.title" />'
+    "</template></div>"
+)
+# `cell` has Python slot data (`data=`) next to its Vue prop `n`.
+_SCOPED_GRID = '<div><template v-for="n in cells" :key="n"><c-slot name="cell" label="x" :n="n" /></template></div>'
+# A `<c-slot>` named by `c-name` could serve any fill, so no key can be called unknown.
+_SCOPED_DYNAMIC = '<div><c-slot c-name="which" :row="1" /><c-slot name="item" :row="1" /></div>'
+_SCOPED_PAGE = """\
+<c-Table><c-fill name="item" v-slot="{ row, missing, titleText: t }">
+  <span v-text="row.title + t"></span>
+</c-fill></c-Table>
+<c-Table><c-fill name="item" v-slot="props"><span v-text="props.row"></span></c-fill></c-Table>
+<c-Grid><c-fill name="cell" v-slot="{ n, nope }"><b v-text="n"></b></c-fill></c-Grid>
+<c-Dynamic><c-fill name="item" v-slot="{ anything }"></c-fill></c-Dynamic>
+<c-Unregistered><c-fill name="item" v-slot="{ anything }"></c-fill></c-Unregistered>
+"""
+
+
+def _scoped_position(source: str, marker: str, offset: int = 0) -> types.Position:
+    index = source.index(marker) + offset
+    before = source[:index]
+    return types.Position(before.count("\n"), len(before.rsplit("\n", 1)[-1]))
+
+
+@pytest.fixture(scope="module")
+def scoped_slots(tmp_path_factory):
+    """A project whose `Page` template reads the Vue props of slots on `Table`, `Grid` and `Dynamic`."""
+    folder = tmp_path_factory.mktemp("scoped_slots")
+    files = {
+        "table.html": ("citry-html", _SCOPED_TABLE),
+        "grid.html": ("citry-html", _SCOPED_GRID),
+        "dynamic.html": ("citry-html", _SCOPED_DYNAMIC),
+        "page.html": ("citry-html", _SCOPED_PAGE),
+    }
+    project, documents = _documents(folder, files, app=_SCOPED_APP)
+    return folder, project, documents, documents[(folder / "page.html").as_uri()]
+
+
+def test_scoped_fill_names_are_typed_from_the_props_the_slot_passes(scoped_slots):
+    _folder, project, documents, page = scoped_slots
+
+    sources = [item.source for item in type_check_projections(page, project, documents)]
+    first = next(source for source in sources if "row.title + t" in source)
+    props = next(source for source in sources if "props.row" in source)
+    grid = next(source for source in sources if "\nn\n);" in source)
+
+    # `row` is the element type of the `js_data` list the slot loops over, and
+    # `titleText: t` types `t` from the member `row.title`.
+    assert "/** @type {{title: string, id: number}} */\nvar row;" in first
+    assert "/** @type {string} */\nvar t;" in first
+    # A key the slot never passes stays `any`, so the fill can still be written.
+    assert "/** @type {any} */\nvar missing;" in first
+    # `v-slot="props"` binds one object holding every prop the slot passes.
+    assert "/** @type {{row: {title: string, id: number}, heading: string, titleText: string}} */\nvar props;" in props
+    assert "/** @type {number} */\nvar n;" in grid
+
+
+def test_hover_on_a_scoped_fill_name_shows_its_type(scoped_slots):
+    _folder, project, documents, page = scoped_slots
+
+    def hover_text(marker: str, offset: int) -> str:
+        result = hover(page, _scoped_position(_SCOPED_PAGE, marker, offset), project, documents)
+        assert result is not None
+        assert isinstance(result.contents, types.MarkupContent)
+        return result.contents.value
+
+    assert hover_text('v-text="row.title', len('v-text="ro')) == (
+        "```javascript\n(variable) row: {title: string, id: number}\n```\n\nVue `v-slot` binding"
+    )
+    assert "(variable) t: string" in hover_text("row.title + t", len("row.title + "))
+    assert "(variable) n: number" in hover_text('v-text="n"', len('v-text="'))
+    assert "(variable) props: {row: {title: string, id: number}, heading: string, titleText: string}" in hover_text(
+        'v-text="props.row', len('v-text="pro')
+    )
+    # The name in the pattern itself shows the same type as its uses.
+    assert "(variable) t: string" in hover_text("titleText: t", len("titleText: "))
+
+
+def test_slot_hover_lists_the_vue_props_without_a_slots_class(scoped_slots):
+    _folder, project, documents, page = scoped_slots
+
+    result = hover(page, _scoped_position(_SCOPED_PAGE, 'name="item"', len('name="it')), project, documents)
+
+    # `Table` declares no `Slots` class, so the `<c-slot>` tags are the only source.
+    assert result is not None
+    assert isinstance(result.contents, types.MarkupContent)
+    assert result.contents.value == (
+        "### Slot `item`\n\n"
+        "**Vue props** (read with `v-slot`): "
+        "`row: {title: string, id: number}`, `heading: string`, `titleText: string`"
+    )
+
+
+def test_slot_hover_lists_the_vue_props_next_to_the_exposed_data(scoped_slots):
+    _folder, project, documents, page = scoped_slots
+
+    result = hover(page, _scoped_position(_SCOPED_PAGE, 'name="cell"', len('name="ce')), project, documents)
+
+    assert result is not None
+    assert isinstance(result.contents, types.MarkupContent)
+    lines = result.contents.value.split("\n")
+    assert lines[0] == "### Slot `cell`"
+    exposed = lines.index("**Exposed data:** `label`")
+    assert lines[exposed + 2] == "**Vue props** (read with `v-slot`): `n: number`"
+
+
+_OPTIONAL_PROP_APP = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Table(Component):
+    citry = engine
+    template_file = 'table.html'
+    def js_data(self, kwargs, slots):
+        return {'rows': [{'title': 'a'}]}
+class Page(Component):
+    citry = engine
+    template_file = 'page.html'
+"""
+# Two outlets serve `item`, and only the first passes `:extra`.
+_OPTIONAL_PROP_TABLE = (
+    '<div><template v-for="row in rows">'
+    '<c-slot name="item" :row="row" :extra="1" /></template>'
+    '<c-slot name="item" :row="2" /></div>'
+)
+_OPTIONAL_PROP_PAGE = (
+    '<c-Table><c-fill name="item" v-slot="props"><span v-text="props.extra"></span></c-fill></c-Table>'
+)
+
+
+def test_a_prop_only_some_outlets_pass_is_optional_in_the_hover_and_in_v_slot_props(tmp_path):
+    project, documents = _documents(
+        tmp_path,
+        {"table.html": ("citry-html", _OPTIONAL_PROP_TABLE), "page.html": ("citry-html", _OPTIONAL_PROP_PAGE)},
+        app=_OPTIONAL_PROP_APP,
+    )
+    page = documents[(tmp_path / "page.html").as_uri()]
+
+    result = hover(page, _scoped_position(_OPTIONAL_PROP_PAGE, 'name="item"', len('name="it')), project, documents)
+
+    # `row` is passed by both outlets, so only `extra` gets the `?`.
+    assert result is not None
+    assert isinstance(result.contents, types.MarkupContent)
+    assert result.contents.value == (
+        "### Slot `item`\n\n**Vue props** (read with `v-slot`): `row: unknown`, `extra?: number`"
+    )
+    # `v-slot="props"` binds an object whose `extra` field is optional, in
+    # both the hover and the generated TypeScript declaration.
+    props_hover = hover(
+        page, _scoped_position(_OPTIONAL_PROP_PAGE, 'v-text="props.extra', len('v-text="pro')), project, documents
+    )
+    assert props_hover is not None
+    assert isinstance(props_hover.contents, types.MarkupContent)
+    assert "(variable) props: {row: unknown, extra?: number}" in props_hover.contents.value
+    sources = [item.source for item in type_check_projections(page, project, documents)]
+    projection = next(source for source in sources if "props.extra" in source)
+    assert "/** @type {{row: any, extra?: number}} */\nvar props;" in projection
+
+
+def test_unknown_slot_props_are_warned_at_the_key(scoped_slots):
+    _folder, project, documents, page = scoped_slots
+
+    found = [
+        item for item in browser_diagnostics(page, project, documents) if item.code == "citry.vue.unknown-slot-prop"
+    ]
+
+    # `titleText` matches `:title-text`, so only the two names no `<c-slot>`
+    # passes are reported. The `Dynamic` fill (a `c-name` outlet might serve
+    # it) and the unregistered `c-Unregistered` fill get no warning.
+    assert [
+        (
+            item.severity,
+            item.source,
+            item.range,
+            _SCOPED_PAGE.splitlines()[item.range.start.line][item.range.start.character : item.range.end.character],
+        )
+        for item in found
+    ] == [
+        (
+            types.DiagnosticSeverity.Warning,
+            "citry",
+            types.Range(_scoped_position(_SCOPED_PAGE, "missing"), _scoped_position(_SCOPED_PAGE, "missing", 7)),
+            "missing",
+        ),
+        (
+            types.DiagnosticSeverity.Warning,
+            "citry",
+            types.Range(_scoped_position(_SCOPED_PAGE, "nope"), _scoped_position(_SCOPED_PAGE, "nope", 4)),
+            "nope",
+        ),
+    ]
+    assert found[0].message == (
+        "Slot 'item' on <c-Table> passes no Vue prop named 'missing', so it is undefined in this fill. "
+        "The slot passes: heading, row, titleText."
+    )
+
+
+def test_each_receiving_component_is_read_once_however_many_fills_target_it(scoped_slots, monkeypatch):
+    _folder, project, documents, page = scoped_slots
+    source = (
+        '<c-Table><c-fill name="item" v-slot="{ one }"></c-fill></c-Table>'
+        '<c-Table><c-fill name="item" v-slot="{ two }"></c-fill></c-Table>'
+        '<c-Table><c-fill name="item" v-slot="{ three }"></c-fill></c-Table>'
+        '<c-Grid><c-fill name="cell" v-slot="{ four }"></c-fill></c-Grid>'
+    )
+    document = DocumentState(page.uri, "citry-html", source, 2)
+    document.update(source, 2, project)
+    tags: list[str] = []
+    read_outlets = engine_module._receiver_slot_outlets
+
+    def counting(tag, *args):
+        tags.append(tag)
+        return read_outlets(tag, *args)
+
+    monkeypatch.setattr(engine_module, "_receiver_slot_outlets", counting)
+
+    found = [
+        item
+        for item in browser_diagnostics(document, project, {**documents, document.uri: document})
+        if item.code == "citry.vue.unknown-slot-prop"
+    ]
+
+    # One read per component tag, and every fill is still checked.
+    assert tags == ["c-Table", "c-Grid"]
+    assert [source[item.range.start.character : item.range.end.character] for item in found] == [
+        "one",
+        "two",
+        "three",
+        "four",
+    ]
+
+
+def test_a_projection_reads_a_receiver_only_for_an_expression_inside_its_fill(scoped_slots, monkeypatch):
+    _folder, project, documents, page = scoped_slots
+    source = (
+        '<p :title="1 + 1"></p>'
+        '<c-Table><c-fill name="item" v-slot="{ row }"><span :title="row"></span></c-fill></c-Table>'
+        '<c-Table><c-fill name="item" v-slot="{ row }"><span :title="row"></span></c-fill></c-Table>'
+    )
+    document = DocumentState(page.uri, "citry-html", source, 2)
+    document.update(source, 2, project)
+    documents = {**documents, document.uri: document}
+    slots: list[tuple[str, str]] = []
+    read_props = engine_module._receiver_slot_prop_types
+
+    def counting(tag, slot, *args):
+        slots.append((tag, slot))
+        return read_props(tag, slot, *args)
+
+    monkeypatch.setattr(engine_module, "_receiver_slot_prop_types", counting)
+
+    # Completing or hovering an expression outside every fill reads no
+    # receiving component, however many scoped fills the page has.
+    browser_projection(document, types.Position(0, source.index("1 + 1") + 1), project, documents)
+    assert slots == []
+
+    # Inside a fill, only that fill's component and slot are read, once.
+    inside = source.index(':title="row"') + len(':title="r')
+    browser_projection(document, types.Position(0, inside), project, documents)
+    assert slots == [("c-Table", "item")]
+
+
+_INLINE_SLOT_APP = '''from citry import Citry, Component
+
+engine = Citry(autodiscover=False)
+
+
+class Table(Component):
+    citry = engine
+    template = """
+        <ul>
+          <li v-for="row in rows">
+            <c-slot name="item" :row="row" />
+          </li>
+        </ul>
+    """
+
+    def js_data(self, kwargs, slots):
+        return {"rows": [1, 2]}
+
+
+class Page(Component):
+    citry = engine
+    template = """
+        <c-Table>
+          <c-fill name="item" v-slot="{ row, missing }">
+            <b v-text="row"></b>
+          </c-fill>
+        </c-Table>
+    """
+'''
+
+
+def test_unknown_slot_props_are_warned_in_an_inline_python_template(tmp_path):
+    project, documents = _documents(tmp_path, {}, app=_INLINE_SLOT_APP)
+    document = DocumentState((tmp_path / "app.py").as_uri(), "python", _INLINE_SLOT_APP, 1)
+    document.update(_INLINE_SLOT_APP, 1, project)
+
+    found = browser_diagnostics(document, project, {**documents, document.uri: document})
+
+    # Only the unknown key is reported, and its range is in the Python file.
+    (finding,) = found
+    assert finding.code == "citry.vue.unknown-slot-prop"
+    assert finding.message == (
+        "Slot 'item' on <c-Table> passes no Vue prop named 'missing', so it is undefined in this fill. "
+        "The slot passes: row."
+    )
+    lines = _INLINE_SLOT_APP.splitlines()
+    line = next(index for index, text in enumerate(lines) if "missing" in text)
+    assert finding.range == types.Range(
+        types.Position(line, lines[line].index("missing")), types.Position(line, lines[line].index("missing") + 7)
+    )
+
+
+def test_a_c_name_slot_in_the_receiving_template_turns_the_unknown_prop_warning_off(tmp_path):
+    app = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Dynamic(Component):
+    citry = engine
+    template_file = 'dynamic.html'
+class Static(Component):
+    citry = engine
+    template_file = 'static.html'
+class Page(Component):
+    citry = engine
+    template_file = 'page.html'
+"""
+    # Both templates have the same `item` slot, but `Dynamic` also has a
+    # `<c-slot c-name>` that could serve any fill, so nothing is certain there.
+    page = (
+        '<c-Dynamic><c-fill name="item" v-slot="{ anything }"></c-fill></c-Dynamic>'
+        '<c-Static><c-fill name="item" v-slot="{ anything }"></c-fill></c-Static>'
+    )
+    project, documents = _documents(
+        tmp_path,
+        {
+            "dynamic.html": ("citry-html", _SCOPED_DYNAMIC),
+            "static.html": ("citry-html", '<c-slot name="item" :row="1" />'),
+            "page.html": ("citry-html", page),
+        },
+        app=app,
+    )
+
+    findings = browser_diagnostics(documents[(tmp_path / "page.html").as_uri()], project, documents)
+
+    (found,) = [item for item in findings if item.code == "citry.vue.unknown-slot-prop"]
+    assert found.range.start.character == page.rindex("anything")
+    assert "<c-Static>" in found.message
+
+
+@pytest.mark.parametrize(
+    ("text", "labels"),
+    [
+        ("{ | }", ["heading", "row", "titleText"]),
+        ("{ row, | }", ["heading", "titleText"]),
+        ("{ ro| }", ["row"]),
+        # After `row:` the cursor names a new variable, which is the user's to choose.
+        ("{ row: | }", []),
+        ("{ row: r| }", []),
+        # A default value is an expression, not a prop name, and the parser
+        # accepts only a literal there. The page's own `js_data` name
+        # `other` is not offered either, though `o` is its prefix.
+        ("{ row = | }", []),
+        ("{ row = o| }", []),
+    ],
+)
+def test_completion_in_a_v_slot_pattern_offers_the_props_the_slot_passes(scoped_slots, text, labels):
+    _folder, project, documents, page = scoped_slots
+    before, after = text.split("|")
+    source = f'<c-Table><c-fill name="item" v-slot="{before}{after}">x</c-fill></c-Table>'
+    document = DocumentState(page.uri, "citry-html", source, 2)
+    document.update(source, 2, project)
+    cursor = types.Position(0, source.index('v-slot="') + len('v-slot="') + len(before))
+
+    items = completion_items(document, cursor, project, {**documents, document.uri: document})
+
+    # The page's own `js_data` name `other` is never offered inside the pattern.
+    assert sorted(item.label for item in items) == labels
+
+
+def test_a_scoped_fill_that_uses_only_passed_props_has_no_typescript_findings(scoped_slots):
+    _folder, project, documents, page = scoped_slots
+    source = (
+        '<c-Table><c-fill name="item" v-slot="{ row, titleText: t }">'
+        '<b v-text="row.title + t + row.id"></b></c-fill></c-Table>'
+    )
+    document = DocumentState(page.uri, "citry-html", source, 2)
+    document.update(source, 2, project)
+    citry = browser_diagnostics(document, project, {**documents, document.uri: document})
+
+    assert check_document_types(document, project, {**documents, document.uri: document}, _command(), citry) == ()
+
+
+def test_typescript_checks_a_scoped_fill_body_against_the_slot_prop_types(scoped_slots):
+    _folder, project, documents, page = scoped_slots
+    source = '<c-Table><c-fill name="item" v-slot="{ row }"><b v-text="row.nope"></b></c-fill></c-Table>'
+    document = DocumentState(page.uri, "citry-html", source, 2)
+    document.update(source, 2, project)
+
+    found = check_document_types(document, project, {**documents, document.uri: document}, _command(), ())
+
+    assert [(str(item.code), source[item.range.start.character : item.range.end.character]) for item in found] == [
+        ("citry.typescript.ts2339", "nope")
+    ]
+
+
+_PYTHON_LOOP_APP = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Table(Component):
+    citry = engine
+    template_file = 'table.html'
+    class Lint:
+        rule_unknown_vue_variable = 'ignore'
+    def js_data(self, kwargs, slots):
+        return {'rows': [1]}
+class Known(Component):
+    citry = engine
+    template_file = 'known.html'
+    def js_data(self, kwargs, slots):
+        return {'row': 1}
+"""
+
+
+def test_a_python_loop_variable_in_a_slot_prop_gets_the_slot_prop_message(tmp_path):
+    template = '<ul><li c-for="row in rows"><c-slot name="item" :row="row" /></li></ul>'
+    project, documents = _documents(
+        tmp_path,
+        {"table.html": ("citry-html", template), "known.html": ("citry-html", template)},
+        app=_PYTHON_LOOP_APP,
+    )
+
+    plain, known = (
+        [
+            item
+            for item in browser_diagnostics(documents[(tmp_path / name).as_uri()], project, documents)
+            if item.code == "citry.vue.python-variable"
+        ]
+        for name in ("table.html", "known.html")
+    )
+
+    # `c-row` on `<c-slot>` is Python slot data, so neither message offers it as the fix.
+    (plain_finding,) = plain
+    (known_finding,) = known
+    assert "c-row=" not in plain_finding.message
+    assert "c-row=" not in known_finding.message
+    assert plain_finding.message == (
+        "Vue reads 'row' from browser state, but 'row' is a Python variable here, and a Vue prop on <c-slot>, "
+        "such as :row, needs a browser value. Loop with Vue's v-for, or pass it as Python slot data with a c- "
+        "attribute and read it with data= in the fill."
+    )
+    assert "component's browser value 'row'" in known_finding.message
+    assert plain_finding.range == types.Range(
+        _scoped_position(template, 'row" />'), _scoped_position(template, 'row" />', 3)
+    )

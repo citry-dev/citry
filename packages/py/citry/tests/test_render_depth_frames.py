@@ -2,15 +2,22 @@
 Rendering a deeper template does not need more Python frames.
 
 The body renderer, fill collection and the Vue leaf program walk nested
-``<c-if>``, ``<c-for>`` and ``c-if=`` bodies, and the fallback bodies of
-``<c-slot>`` tags nobody fills, on their own stacks, and the generated
+``<c-if>``, ``<c-for>`` and ``c-if=`` bodies, the fallback bodies of
+``<c-slot>`` tags nobody fills, and template fills passed on from one
+component to the next, on their own stacks, and the generated
 leaf code stops at a fixed nesting depth. So the deepest Python call stack
 during a render stays the same however deeply control flow and fallbacks
 nest. Each case renders once to compile, then measures the second render
 with a profile hook that records the deepest stack. The peak at depth 128
 may be at most 20 frames above the peak at depth 32. A first render, which
 also compiles the component and walks its template several times, is
-measured the same way.
+measured the same way. A chain of 64 components that pass a fill on may
+use at most 20 frames more than a chain of 8.
+
+A ``simple='vue'`` component is the exception: Citry renders it only
+through Python code generated from its template, which uses one frame
+per level by design. Its test allows one frame for each level between
+depth 32 and the logic limit, plus the same 20.
 """
 
 from __future__ import annotations
@@ -21,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from citry import Citry, Component, Const, Extension
+from citry_core import _rust
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -31,6 +39,8 @@ if TYPE_CHECKING:
 SHALLOW = 32
 DEEP = 128
 ALLOWED_GROWTH = 20
+# The logic nesting limit, read from the parser so the two cannot disagree.
+LOGIC_LIMIT = _rust.template_parser._MAX_LOGIC_NESTING
 
 
 def _for_tags(depth: int) -> str:
@@ -132,7 +142,7 @@ def test_deeper_templates_render_in_the_same_python_stack(shape: str, render_pat
     assert deep - shallow <= ALLOWED_GROWTH, f"{shape}: {shallow} frames at depth {SHALLOW}, {deep} at {DEEP}"
 
 
-@pytest.mark.parametrize("depth", [15, 16, 20])
+@pytest.mark.parametrize("depth", [15, 16, 17, 20, LOGIC_LIMIT])
 def test_simple_vue_components_render_at_every_depth(depth: int, render_path: str) -> None:
     # A `simple='vue'` component renders without an instance, through the
     # generated evaluator only, so the generated code must exist at any depth.
@@ -154,6 +164,64 @@ def test_simple_vue_components_render_at_every_depth(depth: int, render_path: st
     html = Root().render().serialize(deps_strategy="ignore")
     assert html.count("<div") == depth
     assert ">7<" in html
+
+
+def _simple_vue_root(template: str) -> type[Component]:
+    """Build a root that renders one `simple='vue'` component with `template`."""
+    app = Citry()
+
+    class Leaf(Component):
+        citry = app
+        simple = "vue"
+
+    Leaf.template = template
+
+    class Root(Component):
+        citry = app
+        template = '<c-Leaf c-flag="flag" c-n="n" c-items="items" />'
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"flag": True, "n": "deepest", "items": [1]}
+
+    del Leaf
+    return Root
+
+
+def _alternating_if_and_for_tags(depth: int) -> str:
+    """Nest `depth` levels, alternating `<c-if>` and `<c-for>` tags."""
+    opens = [f'<c-for each="x{level} in items">' if level % 2 else '<c-if cond="flag">' for level in range(depth)]
+    closes = ["</c-for>" if level % 2 else "</c-if>" for level in reversed(range(depth))]
+    return "".join(opens) + "{{ n }}" + "".join(closes)
+
+
+# Templates for a `simple='vue'` component, which renders only through the
+# Python function Citry generates from its template.
+SIMPLE_VUE_SHAPES: dict[str, Callable[[int], str]] = {
+    "if_tags": SHAPES["leaf_if_tags"],
+    "for_tags": SHAPES["leaf_for_tags"],
+    "if_attributes": SHAPES["leaf_if_attributes"],
+    "alternating_if_and_for_tags": _alternating_if_and_for_tags,
+}
+
+
+@pytest.mark.parametrize("shape", SIMPLE_VUE_SHAPES)
+def test_simple_vue_templates_use_one_python_frame_per_level(shape: str, render_path: str) -> None:
+    # Citry generates one function per `<c-if>` branch and `<c-for>` body,
+    # each calling the next, so each level adds one frame by design.
+    # Running the deeper bodies as generators, which `citry._walk.run`
+    # steps through from a list, kept the stack flat but made these
+    # components up to 2.9 times slower (#299). On CPython 3.15 the peak
+    # grew by one frame per level, 224 frames from depth 32 to the limit
+    # on the Python path and 221 on the Rust path, and reached 267 at the
+    # limit, counting pytest's own frames. Two frames per level would fail.
+    build = SIMPLE_VUE_SHAPES[shape]
+    shallow = _peak_frames(_simple_vue_root(build(SHALLOW)))
+    deep_root = _simple_vue_root(build(LOGIC_LIMIT))
+    deep = _peak_frames(deep_root)
+    allowed = (LOGIC_LIMIT - SHALLOW) + ALLOWED_GROWTH
+    assert deep - shallow <= allowed, f"{shape}: {shallow} frames at depth {SHALLOW}, {deep} at {LOGIC_LIMIT}"
+    # The innermost level rendered, so the count covers the whole template.
+    assert "deepest" in deep_root().render().serialize(deps_strategy="ignore")
 
 
 @pytest.mark.parametrize("shape", SHAPES)
@@ -257,6 +325,54 @@ def test_first_renders_of_const_and_simple_vue_templates_use_the_same_python_sta
         peaks.append(_peak_frames(root, first_render=True, count_generated=not simple_vue))
     shallow, deep = peaks
     assert deep - shallow <= ALLOWED_GROWTH, f"{shape}: {shallow} frames at depth {SHALLOW}, {deep} at {DEEP}"
+
+
+# Chain lengths for the forwarded-fill test: each link is one more component
+# that passes the fill it received on to the next one's slot.
+SHORT_CHAIN = 8
+LONG_CHAIN = 64
+
+
+def _forwarding_chain(links: int) -> type[Component]:
+    """A root that fills the last of `links` components, each of which passes the fill on to the one before."""
+    app = Citry()
+
+    # As in the shapes above, the root starts with a component tag, so it
+    # renders through the body renderer, not a Vue leaf program.
+    class Row(Component):
+        citry = app
+        template = """
+            <li>r</li>
+        """
+
+    for index in range(links):
+        template = (
+            "<p><c-slot /></p>"
+            if index == 0
+            else f'<c-Link{index - 1}><c-fill name="default"><c-slot /></c-fill></c-Link{index - 1}>'
+        )
+        type(f"Link{index}", (Component,), {"citry": app, "template": template, "__module__": __name__})
+
+    class Root(Component):
+        citry = app
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"n": 1}
+
+    del Row
+    last = links - 1
+    Root.template = f'<c-Row /><c-Link{last}><c-fill name="default">{{{{ n }}}}</c-fill></c-Link{last}>'
+    return Root
+
+
+def test_longer_forwarded_chains_render_in_the_same_python_stack(render_path: str) -> None:
+    # The body renderer renders a passed template fill itself, so every
+    # link's `<c-slot />` adds a body to its stack instead of Python frames.
+    shallow = _peak_frames(_forwarding_chain(SHORT_CHAIN))
+    deep = _peak_frames(_forwarding_chain(LONG_CHAIN))
+    assert deep - shallow <= ALLOWED_GROWTH, (
+        f"{shallow} frames for a chain of {SHORT_CHAIN}, {deep} for a chain of {LONG_CHAIN}"
+    )
 
 
 class _SlotHook(Extension):

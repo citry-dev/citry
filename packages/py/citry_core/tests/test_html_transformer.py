@@ -247,6 +247,14 @@ def test_mark_html_nested_placeholder_gets_no_attributes():
     assert placeholders == [("c2", '<template c-render-id="c2"></template>', [])]
 
 
+def test_mark_html_reads_structure_the_way_the_browser_does():
+    # `<xmp>` holds text, and a self-closed `<div/>` stays open.
+    segments, _ = mark_html("<xmp></div></xmp><p>x</p>", ["data-cid-c1"], "c-render-id")
+    assert segments == ['<xmp data-cid-c1=""></div></xmp><p data-cid-c1="">x</p>']
+    segments, _ = mark_html("<div/><p>x</p>", ["data-cid-c1"], "c-render-id")
+    assert segments == ['<div data-cid-c1=""/><p>x</p>']
+
+
 def test_mark_html_no_attributes_no_placeholders():
     segments, placeholders = mark_html("hello", [], "c-render-id")
     assert segments == ["hello"]

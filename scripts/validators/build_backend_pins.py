@@ -1,12 +1,15 @@
 """
-Every build backend uv downloads for a workspace package is pinned with a hash.
+Every build backend uv downloads for a workspace package or benchmark runner is pinned with a hash.
 
 The root pyproject pins every build backend the workspace packages need to an
 exact version with sha256 hashes in `[tool.uv] build-constraint-dependencies`,
-and sets `require-build-hashes`. If a package starts asking for a backend the
-list does not pin, or for a version range the pin does not satisfy, uv fails
-when it builds that package. This check reports the problem first, without
-network access.
+and sets `require-build-hashes`. Each benchmark runner is its own uv workspace
+root, so uv ignores the root's pins there: the runner's own pyproject holds the
+same settings and the pins for its backend, and its `uv.lock` records them. If a
+project starts asking for a backend the list does not pin, for a version range
+the pin does not satisfy, or its lock stops recording the pins, uv fails when it
+builds that project. This check reports the problem first, without network
+access.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ except ImportError:  # validate.py runs with scripts/ itself on sys.path.
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREVIEW_FEATURE = "build-dependency-hashes"
-FIX = "run `python scripts/build_constraints.py update && uv lock`"
+FIX = "run `python scripts/build_constraints.py update`, then the `uv lock` commands it prints"
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 
 
@@ -40,7 +43,7 @@ def _pinned_version(requirement: Requirement) -> str | None:
 
 def _constraint_errors(entries: Any) -> tuple[list[str], dict[str, list[str]], set[str]]:
     """
-    Check each root entry's shape and return the pins that apply on every Python, by package name.
+    Check each entry's shape and return the pins that apply on every Python, by package name.
 
     The third value names the packages pinned only under an environment marker.
     """
@@ -77,9 +80,9 @@ def _constraint_errors(entries: Any) -> tuple[list[str], dict[str, list[str]], s
     return errors, pinned, marked
 
 
-def build_pin_errors(root: Path) -> list[str]:
-    """Return a problem for each build backend that is not pinned with a hash in `root`."""
-    pyproject = root / "pyproject.toml"
+def _pin_table_errors(root: Path, pyproject: Path, projects: list[Path]) -> list[str]:
+    """Return the problems in one pyproject's pin table, checked against the projects it must cover."""
+    label = pyproject.relative_to(root).as_posix()
     text = pyproject.read_text(encoding="utf-8")
     uv_settings = tomllib.loads(text).get("tool", {}).get("uv", {})
     errors: list[str] = []
@@ -89,13 +92,13 @@ def build_pin_errors(root: Path) -> list[str]:
     if uv_settings.get("require-build-hashes") is not True:
         errors.append(
             "[tool.uv] must set require-build-hashes = true, or uv installs an unlisted build dependency "
-            "without checking it; add the line to the root pyproject.toml"
+            f"without checking it; add the line to {label}"
         )
     # uv prints a preview warning on every command unless the feature is named.
     if PREVIEW_FEATURE not in uv_settings.get("preview-features", []):
         errors.append(
             f'[tool.uv] preview-features must include "{PREVIEW_FEATURE}", or uv prints a preview warning '
-            "on every command; add it to the root pyproject.toml"
+            f"on every command; add it to {label}"
         )
 
     entries = uv_settings.get("build-constraint-dependencies")
@@ -110,7 +113,7 @@ def build_pin_errors(root: Path) -> list[str]:
         # `update` needs the markers too, so the fix starts with restoring them.
         errors.append(
             f"{error}; restore the `{build_constraints.BEGIN_MARKER}` and `{build_constraints.END_MARKER}` "
-            f"lines, then {FIX}"
+            f"lines in {label}, then {FIX}"
         )
     else:
         table = [
@@ -124,11 +127,10 @@ def build_pin_errors(root: Path) -> list[str]:
                 f"builds would not export; delete it, then {FIX}"
             )
 
-    for package in sorted((root / "packages" / "py").glob("*/pyproject.toml")):
+    for project in projects:
         # Forward slashes on every OS, so messages match the repository's paths.
-        relative = package.relative_to(root).as_posix()
-        requires = tomllib.loads(package.read_text(encoding="utf-8")).get("build-system", {}).get("requires", [])
-        for raw in requires:
+        relative = project.relative_to(root).as_posix()
+        for raw in build_constraints.project_requirements(project):
             requirement = Requirement(raw)
             versions = pinned.get(canonicalize_name(requirement.name), [])
             if not versions and canonicalize_name(requirement.name) in marked:
@@ -142,6 +144,41 @@ def build_pin_errors(root: Path) -> list[str]:
                 errors.append(
                     f"{relative} builds with {raw!r}, but the build constraint pins {', '.join(versions)}; {FIX}"
                 )
+    # Entries that failed their shape check would only add noise to the lock comparison.
+    if not entry_errors:
+        errors.extend(_lock_errors(root, pyproject, entries))
+    return errors
+
+
+def _lock_errors(root: Path, pyproject: Path, entries: Any) -> list[str]:
+    """Return a problem when a standalone project's uv.lock does not record its pyproject's pins."""
+    lock = pyproject.with_name("uv.lock")
+    # The root lock is checked by `uv lock --check`; a project with no lock fails elsewhere, with its own message.
+    if pyproject.parent == root or not lock.is_file():
+        return []
+    recorded = tomllib.loads(lock.read_text(encoding="utf-8")).get("manifest", {}).get("build-constraints", [])
+    # `uv sync --frozen` takes the pins from the lock, not from the pyproject, so a lock
+    # that lags behind the table fails the build with the same "no trusted hash" error.
+    expected = set()
+    for entry in entries:
+        requirement = Requirement(entry["requirement"])
+        expected.add((canonicalize_name(requirement.name), str(requirement.specifier), frozenset(entry["hashes"])))
+    actual = {(entry.get("name"), entry.get("specifier"), frozenset(entry.get("hashes", []))) for entry in recorded}
+    if expected == actual:
+        return []
+    return [
+        f"{lock.relative_to(root).as_posix()} does not record the build constraints of "
+        f"{pyproject.relative_to(root).as_posix()}, so `uv sync --frozen` there rejects the build backend; "
+        f"run `uv lock --directory {pyproject.parent.relative_to(root).as_posix()}`"
+    ]
+
+
+def build_pin_errors(root: Path) -> list[str]:
+    """Return a problem for each build backend that is not pinned with a hash in `root`."""
+    errors = _pin_table_errors(root, root / "pyproject.toml", build_constraints.workspace_project_files(root))
+    for project in build_constraints.standalone_project_files(root):
+        # The project is its own uv workspace root, so its table and its lock are the ones uv reads.
+        errors.extend(_pin_table_errors(root, project, [project]))
     return errors
 
 

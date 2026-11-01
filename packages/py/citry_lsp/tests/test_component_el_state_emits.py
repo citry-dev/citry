@@ -8,8 +8,10 @@ import pytest
 from lsprotocol import types
 from test_component_instance_types import _position, _probe_message, _type_errors
 
+from citry_core.template_parser import parse_template
 from citry_lsp.engine import DocumentState, browser_diagnostics, browser_projection, hover
 from citry_lsp.project import load_project
+from citry_lsp.root_element import template_root_element_type
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -118,6 +120,33 @@ def test_el_is_typed_from_the_template_root(tmp_path, template, expected):
     # An initializer's `component` is the same instance.
     errors = _probed(tmp_path, projection.source, "component.count;", "__probe(component.$el);")
     assert _probe_message(expected) in errors, errors
+
+
+@pytest.mark.parametrize(
+    ("template", "expected"),
+    [
+        # Vue leaves `v-if`, `v-for` and `v-slot` under `v-pre` as written, so
+        # the root is always rendered once, with no comment placeholder.
+        ('<div v-pre v-if="ok"></div>', 'CitryTagElement<"div">'),
+        ('<template v-pre v-if="ok"><table></table></template>', "HTMLTemplateElement"),
+        ('<li v-pre v-for="x in xs"></li>', 'CitryTagElement<"li">'),
+        ('<template v-pre v-for="x in xs"><b></b></template>', "HTMLTemplateElement"),
+        ('<p v-pre v-slot="x"></p>', 'CitryTagElement<"p">'),
+        # A root with `v-pre` and nothing else is the element.
+        ("<section v-pre></section>", 'CitryTagElement<"section">'),
+        # Citry's own control flow is rendered on the server, so it still applies.
+        ('<p v-pre c-if="x"></p>', 'CitryTagElement<"p"> | Comment'),
+        ('<template v-pre c-if="x"><table></table></template>', "HTMLTemplateElement | Comment"),
+        ('<li v-pre c-for="x in xs"></li>', "Node"),
+        # The same roots without `v-pre` keep their types.
+        ('<div v-if="ok"></div>', 'CitryTagElement<"div"> | Comment'),
+        ('<template v-if="ok"><table></table></template>', 'CitryTagElement<"table"> | Comment'),
+        ('<li v-for="x in xs"></li>', "Node"),
+    ],
+)
+def test_el_ignores_vue_control_flow_on_a_v_pre_root(template, expected):
+    # This reads the parsed template directly, so it needs no TypeScript checker.
+    assert template_root_element_type(parse_template(template), lambda _tag: None) == expected
 
 
 def test_el_in_template_expressions_and_unknown_roots(tmp_path):

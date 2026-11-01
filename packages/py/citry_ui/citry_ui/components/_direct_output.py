@@ -52,7 +52,11 @@ def feed_typed_direct_output(
         parser.feed_text(part.html)
         return
     if isinstance(part, PreparedElementOpen):
-        suffix = "/" if part.is_self_closing else ""
+        # Feed the tag as the page writes it. A self-closed element that is
+        # not void, such as `<span/>`, is written as an open tag followed by
+        # the end tag the compiler emits, so a `/` here would read as an
+        # extra end tag.
+        suffix = "/" if part.is_void and part.is_self_closing else ""
         parser.feed_text(f"<{part.tag}{suffix}>")
         return
     if isinstance(part, PreparedDynamicElementOpen):

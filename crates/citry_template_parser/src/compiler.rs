@@ -60,7 +60,9 @@
 //! - Consecutive static text/HTML items are coalesced into a single string.
 //! - Component names are lowercased: `<c-Card>` -> `"""card"""`.
 //!   Kebab-case names are preserved: `<c-my-card>` -> `"""my-card"""`.
-//! - `key=""` normalizes to boolean `True` (at compile time, not parse time).
+//! - On an HTML element, `key=""` normalizes to boolean `True` (at compile
+//!   time, not parse time). On a component tag and on `<c-slot>` data,
+//!   `key=""` compiles to `""` and only a bare `key` is `True`.
 //! - Void elements render compact (`<br/>`); non-void self-closing expand
 //!   (`<div></div>`).
 //! - `<c-raw>` compiles its body to a single literal text part in ordinary
@@ -99,7 +101,7 @@ use std::vec::IntoIter;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::ast::{
-    ForeignSourcePart, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template,
+    ForeignSourcePart, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Shared, Template,
     TemplateElement, Text, Token,
 };
 use crate::constants::{
@@ -245,8 +247,9 @@ pub(crate) fn compile_template_body_with_mode(
         // Rust does not allow moving a field out of a type that has its own
         // `Drop`, as `Template` does, so the elements are taken out instead.
         let mut template = template;
-        let processed_elements =
-            wrap_nodes_with_control_flow_attrs(std::mem::take(&mut template.elements))?;
+        let processed_elements = wrap_nodes_with_control_flow_attrs(Shared::into_inner(
+            std::mem::take(&mut template.elements),
+        ))?;
 
         let mut body_items = Vec::new();
         let mut elements_iter = processed_elements.into_iter().peekable();
@@ -395,7 +398,9 @@ pub(crate) fn compile_template_body_with_mode(
                         C_RAW_TAG => {
                             if mode == CompileMode::Prepared {
                                 if let Node::WithBody { mut body, .. } = node {
-                                    for element in std::mem::take(&mut body.elements) {
+                                    for element in
+                                        Shared::into_inner(std::mem::take(&mut body.elements))
+                                    {
                                         match element {
                                             TemplateElement::Text(text) => {
                                                 body_items
@@ -414,7 +419,9 @@ pub(crate) fn compile_template_body_with_mode(
                                     }
                                 }
                             } else if let Node::WithBody { mut body, .. } = node {
-                                for element in std::mem::take(&mut body.elements) {
+                                for element in
+                                    Shared::into_inner(std::mem::take(&mut body.elements))
+                                {
                                     match element {
                                         TemplateElement::Text(text) => body_items.push(
                                             LangSpecArgument::UnsafeString(text.token.content),
@@ -690,7 +697,7 @@ fn compile_html_node(node: Node, mode: CompileMode) -> Result<Vec<LangSpecArgume
         let start_tag = node.start_tag();
         let attr_args: Vec<LangSpecArgument> = ordinary_attrs
             .iter()
-            .map(|attr| compile_html_attr(attr))
+            .map(|attr| compile_html_attr(attr, EmptyValue::Boolean))
             .collect::<Result<Vec<_>, _>>()?;
         // Used variables for the node are those of its attributes (the tag's
         // body is compiled separately below). Deduped in first-seen order.
@@ -729,7 +736,7 @@ fn compile_html_node(node: Node, mode: CompileMode) -> Result<Vec<LangSpecArgume
         // Note: HTML escaping of quotes in values will be handled at runtime
         for attr in ordinary_attrs {
             // Note: Use `HtmlAttr.value` so we format also quotes around the value.
-            // In HTML, `key=""` and `key=''` are boolean attributes (same as bare `key`),
+            // On an HTML element, `key=""` and `key=''` mean the same as bare `key`,
             // so we normalize empty values to boolean form.
             let has_nonempty_value = attr
                 .inner_value
@@ -836,7 +843,7 @@ fn compile_prepared_html_node(node: Node) -> Result<Vec<LangSpecArgument>, Compi
         .partition(|attr| attr.kind == HtmlAttrKind::Meta);
     let attr_args = ordinary_attrs
         .iter()
-        .map(|attr| compile_html_attr(attr))
+        .map(|attr| compile_html_attr(attr, EmptyValue::Boolean))
         .collect::<Result<Vec<_>, _>>()?;
     let attr_vars = ordinary_attrs
         .iter()
@@ -849,7 +856,7 @@ fn compile_prepared_html_node(node: Node) -> Result<Vec<LangSpecArgument>, Compi
         match attr.key.content.as_str() {
             META_ATTR_KEY => metadata.push(LangSpecArgument::Tuple(vec![
                 LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_KEY.to_string()),
-                build_attr_struct(EXPR_ATTR_NODE, attr),
+                build_attr_struct(EXPR_ATTR_NODE, attr, EmptyValue::Boolean),
             ])),
             META_ATTR_IGNORE => metadata.push(LangSpecArgument::Tuple(vec![
                 LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_MORPH.to_string()),
@@ -956,7 +963,7 @@ fn compile_meta_attr_on_element(
             }
             items.push(LangSpecArgument::Struct(LangSpecStruct {
                 name: ELEMENT_KEY_NODE.to_string(),
-                arguments: vec![build_attr_struct(EXPR_ATTR_NODE, attr)],
+                arguments: vec![build_attr_struct(EXPR_ATTR_NODE, attr, EmptyValue::Boolean)],
             }));
         }
         META_ATTR_IGNORE => {
@@ -1145,9 +1152,21 @@ fn compile_simple_node(
 
     // Compile all attributes as HtmlAttr calls:
     // `(HtmlAttr(...), HtmlAttr(...), ...)`
+    // `<c-slot>` data reaches the fill as written, so a written empty value
+    // stays a string, as on a component. The slot's own `name` and
+    // `required`, and every `<c-fill>` attribute (`name`, `data`,
+    // `fallback`, `v-slot`), configure the tag rather than pass data, so
+    // they keep `True`: `required=""` still makes the slot required.
     let mut attr_args = Vec::new();
     for attr in node.attrs() {
-        attr_args.push(compile_html_attr(attr)?);
+        let configures_tag = node_class_name != SLOT_NODE
+            || matches!(attr.key.content.as_str(), "name" | "required");
+        let empty = if configures_tag {
+            EmptyValue::Boolean
+        } else {
+            EmptyValue::String
+        };
+        attr_args.push(compile_html_attr(attr, empty)?);
     }
 
     // Get used variables from the node. The AST tracks one token per
@@ -1315,9 +1334,17 @@ fn compile_component_node(
 
     // Compile the ordinary attributes as HtmlAttr calls:
     // `(HtmlAttr(...), HtmlAttr(...), ...)`
+    // A component's attributes are its inputs, where a written empty value
+    // stays `""`. A dynamic `<c-element>` renders them onto an HTML element,
+    // where `True` is the empty value its attribute merging expects.
+    let empty = if metadata_locus == COMPONENT_METADATA_LOCUS_ELEMENT {
+        EmptyValue::Boolean
+    } else {
+        EmptyValue::String
+    };
     let mut attr_args = Vec::new();
     for attr in &ordinary_attrs {
-        attr_args.push(compile_html_attr(attr)?);
+        attr_args.push(compile_html_attr(attr, empty)?);
     }
 
     // Get used variables from the node, deduped while preserving first-seen
@@ -1397,7 +1424,7 @@ fn compile_component_node(
         if let Some(attr) = key_attr {
             metadata.push(LangSpecArgument::Tuple(vec![
                 LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_KEY.to_string()),
-                build_attr_struct(EXPR_ATTR_NODE, attr),
+                build_attr_struct(EXPR_ATTR_NODE, attr, EmptyValue::Boolean),
             ]));
         }
         if let Some(mode) = morph_mode {
@@ -1587,9 +1614,10 @@ fn compile_control_flow_node(
         };
 
         // Compile attributes as HtmlAttr calls
+        // `c-if cond=""` keeps the documented `True`.
         let mut attr_args = Vec::new();
         for attr in node.attrs() {
-            attr_args.push(compile_html_attr(attr)?);
+            attr_args.push(compile_html_attr(attr, EmptyValue::Boolean)?);
         }
 
         // Collect unique variable names from this branch (first-seen order)
@@ -1670,6 +1698,22 @@ fn compile_control_flow_node(
     }))
 }
 
+/// What a written empty value, such as `key=""`, compiles to.
+///
+/// On an HTML element `key` and `key=""` mean the same thing (an empty
+/// value), and the runtime treats `True` as that empty value. A component
+/// input is different: a bare `key` passes `True`, while a written value is
+/// always a string, so `key=""` passes `""`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EmptyValue {
+    /// `key=""` compiles to `True`, like a bare `key` (HTML elements,
+    /// dynamic `<c-element>`, `c-if cond=""`).
+    Boolean,
+    /// `key=""` compiles to `""`; only a bare `key` is `True` (component
+    /// inputs and `<c-slot>` data).
+    String,
+}
+
 /// Convert a Rust `HtmlAttr` into a LangSpecArgument.
 ///
 /// Returns different classes based on `HtmlAttrKind`:
@@ -1716,7 +1760,7 @@ fn compile_control_flow_node(
 /// Then, we know the output will never change, and we can replace `HtmlAttr` instance
 /// with its result as text. Thus, on subsequent renders, we won't have to re-evaluate the expression
 /// or template.
-fn compile_html_attr(attr: &HtmlAttr) -> Result<LangSpecArgument, CompileError> {
+fn compile_html_attr(attr: &HtmlAttr, empty: EmptyValue) -> Result<LangSpecArgument, CompileError> {
     if attr.kind == HtmlAttrKind::Static && !attr.foreign_parts.is_empty() {
         let inner_value = attr.inner_value.as_ref().ok_or_else(|| {
             CompileError::Generic(format!(
@@ -1763,7 +1807,7 @@ fn compile_html_attr(attr: &HtmlAttr) -> Result<LangSpecArgument, CompileError> 
             )));
         }
     };
-    Ok(build_attr_struct(class_name, attr))
+    Ok(build_attr_struct(class_name, attr, empty))
 }
 
 /// Lower one provider-owned source claim to a fail-closed runtime node.
@@ -1831,7 +1875,7 @@ fn compile_source_with_foreign(
 /// Build the `<Class>(source, (start, end), key, value, (vars,))` call for one
 /// attribute. Shared by `compile_html_attr` (which picks the class from the
 /// attribute kind) and the component `#c-key` emission (which pins the class).
-fn build_attr_struct(class_name: &str, attr: &HtmlAttr) -> LangSpecArgument {
+fn build_attr_struct(class_name: &str, attr: &HtmlAttr, empty: EmptyValue) -> LangSpecArgument {
     let start_pos = attr.token.start_index;
     let end_pos = attr.token.end_index;
 
@@ -1858,14 +1902,23 @@ fn build_attr_struct(class_name: &str, attr: &HtmlAttr) -> LangSpecArgument {
         });
         LangSpecArgument::UnsafeString(template.to_string())
     } else {
-        // In HTML, `key`, `key=""`, and `key=''` are all treated as boolean
-        // attributes, so static/expression empty values use `True`.
+        // A bare `key` is always `True`. A written empty value is `True` on
+        // an HTML element, where `key` and `key=""` mean the same, and `""`
+        // on a component input, where a written value is always a string.
+        // An expression is never written empty (the parser rejects `c-x=""`),
+        // so only a hand-built AST reaches the empty expression case, which
+        // keeps `True`.
         match &attr.inner_value {
             // Non-empty string, e.g. `key="value"`
             Some(inner_value) if !inner_value.content.is_empty() => {
                 LangSpecArgument::UnsafeString(inner_value.content.clone())
             }
-            // Empty or missing value, e.g. `key=""`, `key=''`, or `key`
+            // A written empty value, e.g. `key=""` or `key=''`, on a component
+            // or as `<c-slot>` data
+            Some(_) if empty == EmptyValue::String && attr.kind == HtmlAttrKind::Static => {
+                LangSpecArgument::UnsafeString(String::new())
+            }
+            // Otherwise empty or missing, e.g. `key=""` on an element, or `key`
             Some(_) | None => LangSpecArgument::Bool(true),
         }
     };
@@ -2286,7 +2339,7 @@ fn _remove_attr_and_wrap_in_control_flow(
     let lifted_used_variables = attr.used_variables.clone();
     match &mut node {
         Node::WithBody { used_variables, .. } | Node::SelfClosing { used_variables, .. } => {
-            used_variables.retain(|token| !lifted_used_variables.contains(token));
+            Shared::make_mut(used_variables).retain(|token| !lifted_used_variables.contains(token));
         }
     }
 
@@ -2382,12 +2435,12 @@ fn _wrap_node_in_control_flow(
             } => std::mem::take(introduced_variables),
         }
     } else {
-        Vec::new()
+        Shared::default()
     };
     // Get slots from the inner node's body if it exists (WithBody), otherwise empty vec
     let inner_slots = match &inner_node {
         Node::WithBody { body, .. } => body.slots.clone(),
-        Node::SelfClosing { .. } => vec![],
+        Node::SelfClosing { .. } => Shared::default(),
     };
 
     // The control flow attribute may contain comments, e.g. `<div c-if="1 # my comment">`.
@@ -2472,9 +2525,9 @@ fn _wrap_node_in_control_flow(
 
     // Create the body containing just the inner node
     let body = Template {
-        elements: vec![TemplateElement::Node(inner_node)],
-        comments: inner_comments.clone(),
-        used_variables: inner_used_vars,
+        elements: vec![TemplateElement::Node(inner_node)].into(),
+        comments: inner_comments.clone().into(),
+        used_variables: inner_used_vars.into(),
         slots: inner_slots,
     };
 
@@ -2493,9 +2546,9 @@ fn _wrap_node_in_control_flow(
         start_tag: cf_start_tag,
         end_tag: cf_end_tag,
         body,
-        used_variables: wrapper_used_vars,
+        used_variables: wrapper_used_vars.into(),
         introduced_variables: wrapper_introduced_vars,
-        comments,
+        comments: comments.into(),
         contains_fills: false,
     })
 }

@@ -35,6 +35,8 @@
   `data="..."`) works beside it
   ([details](https://citry.dev/vue/slots/#scoped-slots)). When the server
   knows the slot's values, it writes the fill's HTML with them.
+  `citry check` warns when `v-slot="{ ... }"` reads a name the slot does
+  not pass, which Vue would leave `undefined`.
 - Citry now supports Python 3.15.
 - You can now use `.outside`, `.window`, `.document`, `.debounce`, and
   `.throttle` on Vue listeners such as `@click` on HTML elements, as in
@@ -92,25 +94,26 @@
 - With your application loaded, `citry check` now reports more mistakes
   that fail only when the page runs
   ([details](https://citry.dev/ide/template-linting/)):
-  - a component that `<c-for>` repeats without `#c-key` on a page that uses
-    Vue (`rule_missing_component_key`);
-  - a component that assigns to its own prop, such as
-    `@click="open = false"` in its template or `this.open = false` in its
-    JavaScript (`rule_prop_assignment`), which the editor reports too;
-  - `@c-*` arguments the server would reject: an unknown key, a missing
-    required field, or a literal of the wrong type, such as
-    `save({amount: '1'})` for an `int` field
-    (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
-    `rule_incompatible_server_event_field`);
-  - a control in a form whose `@c-submit` sends the form's fields, when
-    the handler's data class does not declare its `name`, such as
-    `<input name="qeury">`, or no control is named after a required field
-    (`rule_unknown_form_field`, `rule_missing_form_field`);
-  - a `var(--name)` that misspells a `css_data()` key, such as
-    `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
+    - a component that `<c-for>` repeats without `#c-key` on a page that uses
+      Vue (`rule_missing_component_key`);
+    - a component that assigns to its own prop, such as
+      `@click="open = false"` in its template or `this.open = false` in its
+      JavaScript (`rule_prop_assignment`), which the editor reports too;
+    - `@c-*` arguments the server would reject: an unknown key, a missing
+      required field, or a literal of the wrong type, such as
+      `save({amount: '1'})` for an `int` field
+      (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
+      `rule_incompatible_server_event_field`);
+    - a control in a form whose `@c-submit` sends the form's fields, when
+      the handler's data class does not declare its `name`, such as
+      `<input name="qeury">`, or no control is named after a required field
+      (`rule_unknown_form_field`, `rule_missing_form_field`);
+    - a `var(--name)` that misspells a `css_data()` key, such as
+      `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
 
-  These are errors by default except the CSS check, so `citry check` may
-  now fail on an existing project.
+    These are errors by default except the CSS check, so `citry check` may
+    now fail on an existing project.
+
 - With your application loaded, `citry check` now warns about a link to a
   page or file your app does not serve, such as `<a href="/abuot">` or
   `<img src="/static/avtar.svg">`, and suggests the path you likely meant
@@ -187,6 +190,29 @@
 
 ### Changed
 
+- Citry now checks and converts each key and value of a `dict[K, V]`
+  field in an Events `data` class, as it already did for each item of a
+  list. A key such as `"3"` fills a `dict[int, ...]` field as the number
+  `3`, and a value typed as a dataclass arrives as an instance of it. If
+  a handler reads such a field as `data.scores["3"]` or
+  `data.points["a"]["x"]`, use the declared types instead:
+  `data.scores[3]` and `data.points["a"].x`. A Pydantic `data` class
+  already did this.
+- `$error(handler).fieldErrors` now lists at most 20 errors for fields
+  that the call's `data` class does not declare (or `State` fields it may
+  not write), and at most 20 item errors in each list or dict field.
+  `message` then ends with how many more there were, as in "1,000 more
+  field errors are not shown." Errors for other fields, and the fields of
+  an `EventError` you raise, are always listed in full.
+- Every response from a Citry route now has the standard
+  `X-Content-Type-Options: nosniff` header, so the browser uses the
+  route's `Content-Type` as given. If an extension route of yours serves
+  JavaScript or CSS, give it the right `content_type`.
+- `citry.contrib.django.secret()` now includes Django's
+  `SECRET_KEY_FALLBACKS`, so `Citry(secret=secret())` keeps accepting
+  values signed with an old key while you rotate `SECRET_KEY`. With
+  fallbacks set it returns a list of keys, so its return type is now
+  `str | list[str]`; without fallbacks it still returns the plain string.
 - When a component from a registered component library, such as Citry UI,
   gets an input of the wrong type, the `TypeError` now names the library
   and asks you to change the value you pass, instead of suggesting you
@@ -206,6 +232,24 @@
   too deep, and `citry check` reports it as `citry.parse.too-deep`; move
   the inner part into its own component. Plain elements nested more than
   512 deep used to render.
+- **Breaking:** a written empty value on a component tag, such as
+  `<c-Avatar alt="" />`, now passes `""` instead of `True`, so a `str`
+  input accepts it. To pass `True` to a `bool` input, write the bare
+  attribute, as in `<c-Grid compact />`; `compact=""` now fails with a
+  `TypeError` that says so. The same holds for data passed to a fill
+  (`<c-slot x="" />` gives the fill `""`), and `<c-cache enabled="">` and
+  `<c-i18n client="">` now raise too, with the same advice to write the
+  bare attribute. HTML elements are unchanged,
+  and so is the tag form `<c-if cond="">`. A component that forwards its
+  inputs to an element with `c-bind` now writes `alt=""` there instead
+  of a bare `alt`, which HTML reads the same way.
+
+    ```citry-html
+    <c-Avatar alt="" />      <!-- before: True; now "" -->
+    <c-Grid compact="" />    <!-- now "": a bool input rejects it -->
+    <c-Grid compact />       <!-- True, as before -->
+    ```
+
 - Output that an `on_render` hook passes to another component, as in
   `return Frame(body=result)`, or that an `on_component_rendered` hook
   passes on as `ctx.render`, no longer carries the component's own
@@ -289,21 +333,22 @@
   valid inputs under this check. A value that equals a `Literal` member,
   such as a `StrEnum` member or `Markup("sm")`, passes the check.
 
-  ```python
-  class Card(Component):
-      class Kwargs:
-          title: str
+    ```python
+    class Card(Component):
+        class Kwargs:
+            title: str
 
-  card = Card(title=123)
-  str(card)
-  # TypeError: Card.Kwargs.title expects str, got int (123). ...
-  ```
+    card = Card(title=123)
+    str(card)
+    # TypeError: Card.Kwargs.title expects str, got int (123). ...
+    ```
 
-  Citry checks only the outer type of each `Kwargs`, `TemplateData`,
-  `JsData`, `CssData`, and Events `State` field, so `list[str]` accepts
-  any list. A field's own default always passes, so `title: str = None`
-  keeps working, and Pydantic models keep their own rules
-  ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
+    Citry checks only the outer type of each `Kwargs`, `TemplateData`,
+    `JsData`, `CssData`, and Events `State` field, so `list[str]` accepts
+    any list. A field's own default always passes, so `title: str = None`
+    keeps working, and Pydantic models keep their own rules
+    ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
+
 - `citry check` now fails, and the editor shows an error, on an HTML
   attribute value the browser does not accept, such as
   `<button type="sumbit">`. Set `rule_invalid_attribute_value="warning"` in
@@ -377,6 +422,51 @@
   a quoted string early. Styles render the same, but script that reads the
   custom property with `getComputedStyle()` now gets the escape text instead
   of the character.
+- A form field named `__proto__` is now sent with the Events call like
+  any other field.
+- An Events `actions.Redirect` to a relative URL, such as `"?page=2"` or
+  `"next"`, now takes a visitor who posts a plain HTML form without
+  JavaScript to the same page as with JavaScript, not to a "not found"
+  page. The server resolves the URL against the page in the `Referer`
+  header, so on a page whose `Referrer-Policy` hides its address, use a path
+  that starts with `/` ([details](https://citry.dev/events/actions/#redirect-to-a-page)).
+- An Events `actions.Redirect` to a URL with non-ASCII characters, such as
+  `"/café"` or `"https://bücher.example/"`, now takes a visitor who posts a
+  plain HTML form without JavaScript to the same page as with JavaScript,
+  instead of the wrong page or a server error.
+- An Events request whose JSON nests arrays and objects more than 200
+  levels deep is now rejected with a 400 error that says so, instead of a
+  server error. The i18n messages route applies the same limit.
+- Citry now also checks inside the type of a browser write to an Events
+  `State` field: each item of a `list[int]` or `tuple`, each value of a
+  `dict[str, int]`, and the listed values of a `Literal[...]`. The error
+  names the item that failed, such as `tags.2`. A Pydantic `State` already
+  did this.
+- An Events `State` field or `data` field typed as a `TypedDict`, or as a
+  list of them, no longer causes a server error. Citry checks that the
+  value is an object; it does not check the keys inside it. A `data` field
+  typed as a `Protocol` without `@runtime_checkable` now gets an error
+  that names the field, instead of a server error.
+- Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
+  modifier (`@click.bogus`), or a built-in such as `<transition>` no
+  longer stops the template from loading. A `<slot>`, `<component>`,
+  `<teleport>`, or `<keep-alive>` there is written as a plain element, as
+  Vue writes it, instead of running as a slot, a dynamic component, or a
+  built-in. When `v-pre` sits on one of those tags and its contents hold
+  Citry values, rendering now fails with advice to put `v-pre` on an
+  element around it.
+- `citry check` and the editor now leave Vue syntax on or inside an
+  element with `v-pre` as written, as Vue does. A `v-if="a"` there no
+  longer reports that `a` is not available, and a `:dir="'rlt'"` there is
+  no longer reported as a wrong `dir` value. The editor no longer offers
+  Vue completion or hover help there. Both elements of a `v-if`/`v-else`
+  pair there are in the page, so a repeated `id` on them is now reported.
+- `citry format` and the editor's format command no longer add a line break
+  where two tags touch, such as between `<td>` cells or `<option>`s or just
+  inside a `<c-fill>`, or at the start or end of a template string written
+  right against its quotes. That line break was new text in the rendered
+  HTML. Whitespace you wrote is still re-indented; to spread compact markup
+  over lines, add a line break between the tags once.
 - An oversized request to Citry's event endpoints no longer fills the
   server's memory: by default Citry stops reading a body past 1 MiB and
   rejects a form post with more than 1,000 fields, both with
@@ -539,9 +629,12 @@
 - Rendering, serializing, or running `citry check` on a template nested
   up to 256 levels deep no longer raises `RecursionError`, even when your
   web framework already uses part of Python's stack. This includes
-  `<c-slot>` tags nested inside each other's fallback content. A slot
-  passed on through a long chain of components can still raise it,
-  because each component in the chain adds to the stack.
+  `<c-slot>` tags nested inside each other's fallback content.
+- Slot content that a long chain of components passes on with
+  `<c-fill><c-slot /></c-fill>` no longer raises `RecursionError`.
+  Content passed on through an expression, such as `{{ content }}` where
+  `template_data()` returns `slots["default"]`, can still raise it after
+  about 80 components.
 - In a component that uses Vue, a `Markup` value without tags, such as
   `Markup("a&#127;b")`, now keeps a character such as U+007F, or the
   Unicode noncharacter U+FDD0, that a numeric reference names, as the
@@ -723,17 +816,36 @@
   used to be rendered in the browser. A `<form>` attribute that may match
   the `name` or `id` of a control inside it now leaves the form's parent to
   the browser, or the whole page when the form is at the page root.
-
-- On PyPy, `import citry` no longer fails with `No module named
-  '_symtable'`. On PyPy, `citry check` and the editor check `js_data()`
-  values and template types less fully, and both print a note saying so.
 - In Safari, when a stylesheet linked in the served page fails to load,
   Citry now requests it again and reports an error if it still fails, as it
   does in other browsers. Before, the page mounted without its styles and no
   error appeared.
+- In a component that uses Vue, an `<input>`, `<select>`, `<option>`, or
+  `<textarea>` inside or carrying `v-pre` no longer gets a stray
+  `v-citry-vue-owned` attribute in the page. A `v-pre` element also no
+  longer fails to render when it holds a transparent component with
+  `#c-key`, such as `<c-provide>`, or when it holds Vue attributes such as
+  `:title` and sits in slot content that a component writes for another
+  component it does not enclose. At the root of a component with `css_data()`, a
+  `v-pre` element now renders, or raises an error that says what to move,
+  where it used to fail with an internal compiler error.
+- In a component that uses Vue, the server now writes `hidden`,
+  `disabled`, `readonly` and the other boolean attributes the way Vue's
+  server renderer does, so an element whose `hidden` is a string such as
+  `'false'` or `'until-found'`, or a number other than 0, is hidden (or
+  searchable) in the HTML the server sends instead of showing until Vue
+  starts.
 
 ### Performance
 
+- `citry check` is much faster on deeply nested templates: checking one
+  component nested to the limits took up to about a minute, and now takes
+  less than a second.
+- The editor responds much faster on large and deeply nested templates.
+  With a `<c-if>`/`<c-elif>` chain at each of 256 nesting levels, the work
+  it redoes on each edit takes about 24 ms instead of about 3.6 seconds.
+  On a template with 400 expressions in 200 sibling elements, it takes
+  about 7 ms instead of about 1 second.
 - With a shared cache such as Redis, a render no longer asks the cache
   about every component's JS and CSS and every served `Dependencies`
   file. Each process asks about each one at most once a minute, so if the
@@ -746,10 +858,18 @@
   report.
 - Pages that repeat a component many times render up to about 9% faster
   on the server.
+- The browser now caches component scripts and stylesheets between page
+  loads. A file whose URL holds a hash of its content is kept for a year,
+  and other component files are checked with the server and downloaded
+  again only after they change
+  ([details](https://citry.dev/advanced/web-frameworks/#how-browsers-cache-files)).
 - `serialize()` with `security_csp` or `security_javascript` set is much
   faster on large pages. On a page with 1,400 table rows,
   `serialize(security_csp="strict")` takes about 100 ms instead of about
   560 ms.
+- In browsers such as Safari, an i18n message given an exact decimal with
+  a long run of zeros before its last digit, such as 100,000 zeros, no
+  longer holds up the page for seconds.
 
 ## v0.6.0
 

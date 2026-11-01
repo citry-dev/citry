@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** `compile_template()` now compiles a written empty value,
+  such as `alt=""`, to `""` instead of `True` on a component tag and on
+  `<c-slot>` data. A bare attribute such as `compact` still compiles to
+  `True`. HTML elements, `<c-element>`, `<c-if cond="">`, and the
+  attributes that configure `<c-slot>` and `<c-fill>` (such as `name`,
+  `required`, and `fallback`) are unchanged.
+
+### Fixed
+
+- `parse_template()` no longer rejects Vue-only syntax inside `v-pre`, such
+  as `v-once`, `<transition>`, or `@click.bogus`, because Vue reads it as
+  plain HTML there. `<c-*>` tags inside `v-pre` keep their checks.
+- `parse_template()` now rejects `v-pre` written with an argument or
+  modifiers, such as `v-pre.x`, which Vue also reads as `v-pre`.
+- The Vue compiler now writes `<slot>`, `<component>`, `<teleport>`,
+  `<keep-alive>`, and `<transition>` inside `v-pre` as plain elements, as
+  Vue does, and reports `V_PRE_NEEDS_S2_LANE` for a `v-pre` template it
+  could compile only on its older code path, which does not follow that
+  rule.
+- A component's later root tags no longer lose the attribute that scopes
+  its CSS, and tags nested inside them no longer get it, when `Markup` or
+  a `<c-raw>` block holds a self-closed tag such as `<i/>` or `<div/>`,
+  the content of `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>` or
+  `<plaintext>`, or tags the browser closes on its own.
+  `html_transform.mark_html()` now follows more of the browser's rules for
+  where elements end.
+- Citry now writes the HTML of a child component placed inside a
+  `<textarea>` or another element whose content is text, where the page
+  used to get Citry's internal `<template c-render-id>` placeholder.
+- `template_formatter.format_template()` no longer adds a line break where
+  two tags touch, such as between `<td>` cells or `<option>`s. That line
+  break was new text in the rendered HTML. Whitespace in the template is
+  still re-indented.
+
 ### Added
 
 - `parse_template()` accepts a Vue slot prop such as `:row="row"` on
@@ -23,6 +59,12 @@
   lifecycle hooks, such as `@c-vnode-mounted` or `@c-vue:mounted`. Vue ran
   such a binding when the element mounted or updated, not on a browser
   event.
+- Rendering a `simple='vue'` component whose template nests many `c-for`
+  or `c-if` blocks no longer crashes the process on a thread with a small
+  stack, such as the 128 KiB stack a thread gets by default on Alpine Linux. A template
+  nested more than 62 `c-for` or `c-if` blocks deep, or one that reads a
+  path more than 63 subscripts deep, now renders through Citry's Python
+  path instead, with the same output, only more slowly.
 - `parse_template()` now rejects Alpine's `.minus`, `.underscore`, and
   `.spacebar` key modifiers on a Vue listener, with a hint, because Vue
   matches none of these names and the listener would never run.
@@ -32,6 +74,12 @@
 - `format_template()` now wraps a start tag's attributes when the text after
   the tag on the same line, such as `{{ label }}</span>`, would make that
   line longer than 100 columns. It used to measure only the tag.
+- `format_template()` no longer fails on a Python expression with a comment
+  after parentheses, such as `(a + b)  # sum`, or with a string that spans
+  lines. When Ruff would move a comment, or a string spans lines, the
+  formatter leaves that expression as you wrote it.
+- `format_template()` no longer fails with "formatter did not converge" on a
+  very deeply nested expression split across lines.
 - `format_template()` now formats a Python expression that is valid only
   inside parentheses, such as a `{{ ... }}` split across lines with its
   `else` parts on their own lines, or `{{ x for x in items }}`. It used to
@@ -50,6 +98,12 @@
   exactly the text the sandbox accepts, including its nesting limit.
 - `parse_template()` now accepts an `if` filter in a shorthand loop, such as
   `<li c-for="x in items if x">`, as it does on `<c-for each>`.
+
+### Performance
+
+- Reading a field of a parsed template, such as `Template.elements` or a
+  node's `body`, now copies only that node instead of everything below it,
+  so walking a deeply nested template from Python is much faster.
 
 ## v1.9.0
 

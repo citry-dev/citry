@@ -12,6 +12,7 @@ import {
   foldGutter,
   indentOnInput,
   syntaxHighlighting,
+  syntaxTree,
 } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { EditorState } from "@codemirror/state";
@@ -48,6 +49,12 @@ function mixedCitryRegion(node, input) {
     parser: embeddedParsers[asset.kind],
     overlay: [{ from: asset.from, to: asset.to }],
   };
+}
+
+// True when this update carries a different syntax tree than the one before,
+// which also happens when the editor's background parse finishes with no edit.
+export function parseCompleted(update) {
+  return syntaxTree(update.state) !== syntaxTree(update.startState);
 }
 
 export const citryPython = new LanguageSupport(
@@ -166,9 +173,12 @@ export function createCitryEditor({ parent, initialSource, onChange, onRun, ide 
           spellcheck: "false",
         }),
         EditorView.updateListener.of((update) => {
-          if (!update.docChanged) return;
+          // The background parse can finish after the last edit; refresh the
+          // template regions then too, or they stay stale until a keystroke.
+          const parsed = parseCompleted(update);
+          if (!update.docChanged && !parsed) return;
           ide?.update(update.state);
-          onChange();
+          if (update.docChanged) onChange();
         }),
         keymap.of([
           { key: "Mod-Enter", run: () => { onRun(); return true; } },

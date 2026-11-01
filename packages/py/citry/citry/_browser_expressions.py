@@ -868,6 +868,11 @@ def enclosing_vue_loops(template: Template, start_index: int, end_index: int) ->
     """
     elements: list[tuple[object, str, int]] = []
     run(_collect_enclosing_elements(template, start_index, end_index, elements))
+    # Vue reads no `v-for` at or inside an element with `v-pre`, so the loops
+    # stop at the first such element.
+    v_pre = next((depth for depth, (node, _tag, _start) in enumerate(elements) if _has_v_pre(node)), None)
+    if v_pre is not None:
+        elements = elements[:v_pre]
     tags = [tag for _node, tag, _start in elements]
     return tuple(
         EnclosingVueLoop(binding, tag, tag_start, _v_for_expression(node), tuple(tags[depth + 1 :]))
@@ -2107,12 +2112,19 @@ def _collect_browser_expressions(
     bindings: tuple[BrowserBinding, ...],
     ambient_names: tuple[str, ...],
     python_names: tuple[str, ...],
+    vue_skipped: bool = False,
 ) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
         node = element._0
-        introduced = _node_browser_bindings(node, base_index)
+        # Vue does not compile an element with `v-pre` or anything inside it,
+        # so Vue attributes there are plain attributes that read no names.
+        # Citry renders the template on the server first, so its own
+        # attributes are still checked here, although the render refuses most
+        # of them inside the element's contents.
+        inside_v_pre = vue_skipped or _has_v_pre(node)
+        introduced = () if inside_v_pre else _node_browser_bindings(node, base_index)
         # The parser records the Python names a `c-for` loop or `c-fill`
         # binding introduces. The body always sees them. The node's own
         # attributes see them only for the `c-for` shorthand, because
@@ -2133,7 +2145,7 @@ def _collect_browser_expressions(
         )
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
-            dynamic_slot_name = _dynamic_slot_name(attr.key.content)
+            dynamic_slot_name = None if inside_v_pre else _dynamic_slot_name(attr.key.content)
             if dynamic_slot_name is not None:
                 name_source, relative_start, relative_end = dynamic_slot_name
                 name_start = base_index + attr.key.start_index + len(attr.key.content[:relative_start].encode("utf-8"))
@@ -2172,6 +2184,7 @@ def _collect_browser_expressions(
                         # A nested template renders in the same Python scope
                         # as the attribute that holds it.
                         python_names=own_python,
+                        vue_skipped=inside_v_pre,
                     )
                 continue
             canonical_attribute = _ascii_lower(attr.key.content)
@@ -2200,6 +2213,8 @@ def _collect_browser_expressions(
                     host = "citry-i18n-values"
                 else:
                     host = "vue"
+            if inside_v_pre and host == "vue":
+                continue
             raw_boundary_expression = component_boundary and (
                 canonical_attribute == "v-on" or canonical_attribute.startswith(("@", "v-on:", ":", "v-bind:"))
             )
@@ -2232,7 +2247,13 @@ def _collect_browser_expressions(
                 bindings=(*bindings, *introduced),
                 ambient_names=descendant_ambient,
                 python_names=descendant_python,
+                vue_skipped=inside_v_pre,
             )
+
+
+def _has_v_pre(node: Any) -> bool:
+    """Return whether an element carries `v-pre`, which makes Vue leave it and everything inside it as written."""
+    return any(_ascii_lower(attr.key.content) == "v-pre" for attr in node.start_tag.attrs)
 
 
 def _i18n_descendant_ambient(node: object, ambient_names: tuple[str, ...]) -> tuple[str, ...]:
@@ -2334,12 +2355,17 @@ def _collect_browser_bindings(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
+    vue_skipped: bool = False,
 ) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
         node = element._0
-        found.extend(_node_browser_bindings(node, base_index))
+        # A `v-for` or `v-slot` under `v-pre` is a plain attribute that Vue
+        # never reads, so it declares nothing.
+        inside_v_pre = vue_skipped or _has_v_pre(node)
+        if not inside_v_pre:
+            found.extend(_node_browser_bindings(node, base_index))
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
             if inner is None or attr.kind != HtmlAttrKind.Template:
@@ -2354,6 +2380,7 @@ def _collect_browser_bindings(
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index + inner.start_index + nested_start,
+                vue_skipped=inside_v_pre,
             )
         body = getattr(node, "body", None)
         if body is not None:
@@ -2363,6 +2390,7 @@ def _collect_browser_bindings(
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index,
+                vue_skipped=inside_v_pre,
             )
 
 
@@ -2372,6 +2400,7 @@ def _collect_component_prop_sites(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
+    vue_skipped: bool = False,
 ) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -2379,8 +2408,13 @@ def _collect_component_prop_sites(
         node = element._0
         authored_tag = node.start_tag.name.content
         canonical_tag = _ascii_lower(authored_tag)
+        # Vue renders no component under `v-pre`, so no tag there passes props.
+        inside_v_pre = vue_skipped or _has_v_pre(node)
         component_boundary = (
-            canonical_tag.startswith("c-") and canonical_tag != "c-element" and canonical_tag not in RESERVED_TAG_NAMES
+            not inside_v_pre
+            and canonical_tag.startswith("c-")
+            and canonical_tag != "c-element"
+            and canonical_tag not in RESERVED_TAG_NAMES
         )
         contributions: list[BrowserComponentPropContribution] = []
         for attr in node.start_tag.attrs:
@@ -2396,6 +2430,7 @@ def _collect_component_prop_sites(
                             found,
                             parse_nested=parse_nested,
                             base_index=base_index + inner.start_index + nested_start,
+                            vue_skipped=inside_v_pre,
                         )
                 continue
             if not component_boundary:
@@ -2498,6 +2533,7 @@ def _collect_component_prop_sites(
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index,
+                vue_skipped=inside_v_pre,
             )
 
 

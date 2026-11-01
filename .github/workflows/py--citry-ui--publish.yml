@@ -105,9 +105,12 @@ jobs:
         run: uv build --package citry-ui --out-dir dist
       - name: Build selected workspace dependencies for candidate smoke tests
         if: inputs.workspace_dependencies != ''
+        env:
+          # The shell reads the dispatch input as data, not as script text.
+          WORKSPACE_DEPENDENCIES: ${{ inputs.workspace_dependencies }}
         shell: bash
         run: |
-          selected=",${{ inputs.workspace_dependencies }},"
+          selected=",$WORKSPACE_DEPENDENCIES,"
           mkdir -p candidate-dependencies
           if [[ "$selected" == *,citry-core,* ]]; then
             git submodule update --init --recursive

@@ -179,8 +179,12 @@ events inside the throttle wait, then debounces the rest.
 The template fails to load, with a message that names the problem, when a
 listener that uses one of these five modifiers:
 
-- sits on a component tag, `<template>`, `<slot>`, or `<component>` (put
-  it on an element inside instead);
+- sits on a component tag: a `c-` tag such as `<c-Card>`, or a tag that
+  starts with a capital letter, such as `<MyThing>`, which Vue reads as a
+  component. The same holds for `<template>`, `<slot>`, and `<component>`.
+  Put the listener on an element inside instead;
+- gives the event name in brackets, as in `@[name].outside`; write the event
+  name out, as in `@click.outside`;
 - combines two of `.outside`, `.window`, and `.document`;
 - combines `.outside` with `.self`, `.capture`, or `.once`;
 - combines `.passive` with `.prevent`;

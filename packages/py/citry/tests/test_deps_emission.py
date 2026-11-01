@@ -10,7 +10,7 @@ from citry import cache as citry_cache
 from citry._inline_assets import normalize_inline_asset
 from citry.cache import _store_unless_matched
 from citry.ext.dependencies import Script, Style
-from citry.ext.dependencies.routes import script_url
+from citry.ext.dependencies.routes import asset_content_type, script_url
 from citry.ext.dependencies.scripts import (
     component_script_hash,
     gen_asset_cache_key,
@@ -1359,3 +1359,21 @@ class TestCacheRoundTrips:
         # writes the file back without waiting for the recheck interval.
         str(Card())
         assert matched.route.handler(None, **matched.params).status == 200
+
+
+@pytest.mark.parametrize(
+    ("extension", "content_type"),
+    [
+        ("js", "text/javascript"),
+        ("mjs", "text/javascript"),
+        ("cjs", "text/javascript"),
+        ("JS", "text/javascript"),
+        ("css", "text/css"),
+        ("CSS", "text/css"),
+        ("txt", "application/octet-stream"),
+    ],
+)
+def test_served_local_files_get_an_exact_content_type(extension, content_type):
+    # Responses carry nosniff, so the browser runs a script only when its
+    # type says JavaScript.
+    assert asset_content_type(extension) == content_type

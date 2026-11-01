@@ -56,6 +56,7 @@ from citry.util.routing import (
     body_read_limit,
     call_maybe_sync,
     match_route,
+    sent_headers,
 )
 
 if TYPE_CHECKING:
@@ -80,7 +81,7 @@ _BODYLESS_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 async def _send_response(send: Send, response: RouteResponse) -> None:
     """Translate a ``RouteResponse`` into the two ASGI response messages."""
     headers = [(b"content-type", response.content_type.encode("latin-1"))]
-    headers += [(name.encode("latin-1"), value.encode("latin-1")) for name, value in response.headers]
+    headers += [(name.encode("latin-1"), value.encode("latin-1")) for name, value in sent_headers(response)]
     await send({"type": "http.response.start", "status": response.status, "headers": headers})
     await send({"type": "http.response.body", "body": response.body})
 

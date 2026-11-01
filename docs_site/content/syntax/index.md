@@ -97,12 +97,15 @@ itself:
 
 `<span />` renders as `<span></span>`.
 
-A value-less attribute on an HTML element stays a bare attribute. On a
-component tag, it passes the Python value `True`:
+An attribute with no value, such as `required`, is a bare attribute. On
+an HTML element it stays bare. On a component tag it passes the Python
+value `True`. A written value always passes a string, even an empty one,
+so `alt=""` passes `""`:
 
 ```citry-html
 <input required>
 <c-Button compact />
+<c-Avatar alt="" />
 ```
 
 Attribute values may use double quotes, single quotes, or no quotes. Quote
@@ -145,9 +148,27 @@ part into its own component's `template`, which starts counting again
 from zero. Markup you pass to a component between its tags, or in an
 attribute, still counts toward the template that writes it.
 
-When a component passes its slot content on to another component's slot,
-and that one passes it on again, each component in the chain uses some of
-Python's stack, so a long chain can raise `RecursionError`.
+A component can pass its slot content on to another component's slot by
+writing `<c-slot />` inside its `<c-fill>`, and that one can pass it on
+again. Such a chain can be long: Citry renders it in a fixed amount of
+Python's stack, up to
+[`max_component_depth`][citry.CitrySettings.max_component_depth]
+(2000 components by default). Content passed on through an expression
+instead, such as `{{ content }}` where `template_data()` returns
+`slots["default"]`, or through a Python slot function that calls the
+fill, uses about 11 levels of Python's stack for each component, so a
+chain of about 80 of those can raise `RecursionError`.
+
+Other components render any depth of `c-if` and `c-for` in a fixed
+amount of Python's stack. A
+[`simple = "vue"`](/performance/simple-components/#give-a-simple-component-its-own-vue-state)
+component uses one level of Python's stack for each level of `c-if` or
+`c-for` nesting in its template, written as a tag or as an attribute. A
+template with 256 such levels uses about 270 levels of Python's stack to
+render. Python's default recursion limit is 1,000, which leaves about
+700 for your web framework and the code around the render. If the whole
+stack goes past that limit, rendering raises `RecursionError`, so nest
+fewer `c-if` and `c-for` levels in that component.
 
 In a component that uses Vue, the server writes at most 400 levels of
 elements inside the component, which leaves room in Chrome for the page

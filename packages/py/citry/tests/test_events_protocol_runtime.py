@@ -126,6 +126,68 @@ def test_strict_json_parser_rejects_an_integer_a_browser_reads_as_infinity() -> 
         events.loads_strict_json('{"value":' + "9" * 400 + "}")
 
 
+_NESTING_MESSAGE = "JSON nests arrays and objects more than 200 levels deep."
+
+
+def _nested_arrays(depth: int) -> str:
+    return "[" * depth + "]" * depth
+
+
+def test_strict_json_parser_depth_bound_is_two_hundred_levels() -> None:
+    assert events.MAX_JSON_DEPTH == 200
+    # A top-level array is level 1, so 200 nested arrays are the deepest allowed.
+    assert events.loads_strict_json(_nested_arrays(200)) is not None
+    # Objects count like arrays.
+    assert events.loads_strict_json('{"a":' * 200 + "1" + "}" * 200) is not None
+    with pytest.raises(events.JsonNestingError) as raised:
+        events.loads_strict_json(_nested_arrays(201))
+    assert str(raised.value) == _NESTING_MESSAGE
+    with pytest.raises(events.JsonNestingError):
+        events.loads_strict_json('{"a":' * 201 + "1" + "}" * 201)
+
+
+@pytest.mark.parametrize(
+    "encode", [str, str.encode, lambda text: bytearray(text.encode())], ids=["str", "bytes", "bytearray"]
+)
+def test_strict_json_parser_depth_bound_applies_to_text_and_bytes(encode: Any) -> None:
+    assert events.loads_strict_json(encode(_nested_arrays(200))) is not None
+    with pytest.raises(events.JsonNestingError):
+        events.loads_strict_json(encode(_nested_arrays(201)))
+
+
+@pytest.mark.parametrize("text", [_nested_arrays(200_000), "[" * 200_000], ids=["balanced", "unclosed"])
+def test_strict_json_parser_answers_text_deeper_than_python_recursion_with_the_same_error(text: str) -> None:
+    # Python's parser gives up with RecursionError long before this depth;
+    # callers see the same JsonNestingError, a ValueError, at every depth.
+    with pytest.raises(events.JsonNestingError) as raised:
+        events.loads_strict_json(text)
+    assert isinstance(raised.value, ValueError)
+    assert str(raised.value) == _NESTING_MESSAGE
+
+
+def test_strict_json_parser_does_not_count_brackets_inside_strings_or_across_siblings() -> None:
+    # Only the structure counts: brackets in a string are text, and many
+    # shallow siblings are wide, not deep, even with far more than 200 brackets.
+    assert events.loads_strict_json(json.dumps("[" * 5000 + "{" * 5000)) == "[" * 5000 + "{" * 5000
+    assert len(events.loads_strict_json("[" + ",".join(["[1]"] * 5000) + "]")) == 5000
+    assert len(events.loads_strict_json("[" + ",".join(['{"a":[1]}'] * 5000) + "]")) == 5000
+
+
+def test_strict_json_parser_keeps_malformed_text_a_plain_value_error() -> None:
+    with pytest.raises(ValueError, match="Expecting value") as raised:
+        events.loads_strict_json("[" * 100 + "x")
+    assert not isinstance(raised.value, events.JsonNestingError)
+
+
+def test_query_capabilities_too_deep_to_parse_stay_the_raw_text() -> None:
+    # A GET carries capabilities as JSON text in the query string, which no
+    # body limit bounds; text deeper than Python's parser can read must stay
+    # the raw string, which envelope validation then answers with a 400.
+    deep = "[" * 200_000 + "]" * 200_000
+    fields = events.split_query_fields({events.CAPABILITIES_FIELD: deep}, state_declared=False)
+    assert fields.capabilities == deep
+
+
 def test_strict_json_validation_falls_back_for_values_deeper_than_python_recursion() -> None:
     value: list[Any] = []
     cursor = value

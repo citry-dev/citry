@@ -333,12 +333,19 @@ class _TemplateCssWalker:
         self.stylesheets: list[str] = []
         self.custom_properties: set[str] = set()
 
-    def walk(self, template: Template, *, base_index: int) -> Generator[Call, Any, None]:
+    def walk(self, template: Template, *, base_index: int, vue_skipped: bool = False) -> Generator[Call, Any, None]:
         for element in template.elements:
             if not isinstance(element, TemplateElement.Node):
                 continue
             node = element._0
             lower = _ascii_lower(node.start_tag.name.content)
+            # Under `v-pre`, `:style` is an attribute literally named `:style`
+            # that sets nothing, so only Citry's `c-style` still sets a
+            # custom property.
+            inside_v_pre = vue_skipped or any(
+                _ascii_lower(attr.key.content) == "v-pre" for attr in node.start_tag.attrs
+            )
+            style_bindings = {"c-style"} if inside_v_pre else _STYLE_BINDINGS
             for attr in node.start_tag.attrs:
                 inner = attr.inner_value
                 if inner is None:
@@ -349,10 +356,15 @@ class _TemplateCssWalker:
                     nested = _nested_template(inner.content, self.parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        yield Call(self.walk, parsed, base_index=base_index + inner.start_index + nested_start)
+                        yield Call(
+                            self.walk,
+                            parsed,
+                            base_index=base_index + inner.start_index + nested_start,
+                            vue_skipped=inside_v_pre,
+                        )
                     continue
                 key = _ascii_lower(attr.key.content)
-                if key in _STYLE_BINDINGS:
+                if key in style_bindings:
                     self.custom_properties.update(code_custom_properties(inner.content))
                     continue
                 # An attribute written in an extension's syntax may render as
@@ -379,7 +391,7 @@ class _TemplateCssWalker:
                     "".join(item._0.token.content for item in body.elements if isinstance(item, TemplateElement.Text))
                 )
                 continue
-            yield Call(self.walk, body, base_index=base_index)
+            yield Call(self.walk, body, base_index=base_index, vue_skipped=inside_v_pre)
 
     def _record_classes(self, written: str, value_start: int) -> None:
         # Citry renders `{{ }}` in a plain attribute as written, so the words

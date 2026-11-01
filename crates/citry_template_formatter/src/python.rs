@@ -68,18 +68,33 @@ pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.16.6+22f65a2ab5";
 /// `CLAUSE_PREFIX`) and must not be wrapped again, or its nesting count would
 /// pass the parser's limit.
 ///
-/// The parentheses add no node to the syntax tree. They are still tokens, so a
-/// comment at either end of the expression is anchored to them; the text
-/// before and after formatting is parsed the same way so those anchors match.
+/// The parentheses add no node to the syntax tree, and the comment check
+/// leaves parentheses out (see `is_anchor_token`), so wrapping does not change
+/// where a comment is judged to sit.
 pub(crate) fn wrap_authored_expression(source: &str) -> String {
     format!("(\n{source}\n)")
 }
 
+/// Format one authored expression, or return `None` to keep the author's text.
+///
+/// `None` means the formatter leaves the expression's bytes exactly as they
+/// are, without re-indenting them. That is the result when the formatter
+/// cannot show that its output keeps the expression's meaning and comments,
+/// or the author asked it not to format:
+///
+/// - the author wrote `# fmt: skip`;
+/// - a string spans lines, and re-indenting the expression would change the
+///   string;
+/// - Ruff's output would nest past the parser's depth limit;
+/// - Ruff moved a comment to another place in the expression.
+///
+/// Keeping the bytes exact means the next pass sees the same text, so the
+/// format settles.
 pub(crate) fn format_expression(
     source: &str,
     available_width: usize,
     newline: &str,
-) -> Result<String, FormatError> {
+) -> Result<Option<String>, FormatError> {
     with_enough_stack(|| format_expression_on_stack(source, available_width, newline))
 }
 
@@ -87,7 +102,7 @@ fn format_expression_on_stack(
     source: &str,
     available_width: usize,
     newline: &str,
-) -> Result<String, FormatError> {
+) -> Result<Option<String>, FormatError> {
     format_parsed_expression(source, available_width, newline, wrap_authored_expression)
 }
 
@@ -102,7 +117,7 @@ fn format_parsed_expression(
     available_width: usize,
     newline: &str,
     parse_text: fn(&str) -> String,
-) -> Result<String, FormatError> {
+) -> Result<Option<String>, FormatError> {
     let before_source = parse_text(source);
     let before = parse_expression(&before_source).map_err(|error| {
         FormatError::invariant(format!(
@@ -114,7 +129,13 @@ fn format_parsed_expression(
     // it alone, so return the region untouched rather than formatting it and
     // then failing a comparison.
     if has_provider_suppression(&before_source, before.tokens()) {
-        return Ok(source.to_string());
+        return Ok(None);
+    }
+    // A string that spans lines holds its line breaks and indentation as
+    // content. The caller re-indents every line of the expression to the
+    // template's column, which would change that content.
+    if has_multiline_string(&before_source, before.tokens()) {
+        return Ok(None);
     }
     let wrapped = format!("{EXPRESSION_WRAPPER}(({newline}{source}{newline})){newline}");
     // Ruff measures the wrapped text, so the budget is widened by the wrapper it
@@ -156,7 +177,7 @@ fn format_parsed_expression(
     // as it is.
     let after_source = parse_text(&formatted);
     if check_nesting(&after_source).is_err() {
-        return Ok(source.to_string());
+        return Ok(None);
     }
     let after = parse_expression(&after_source).map_err(|error| {
         FormatError::invariant(format!(
@@ -174,12 +195,20 @@ fn format_parsed_expression(
             "Python expression provider changed the expression syntax tree",
         ));
     }
-    if before_comments != comment_fingerprint(&after_source, after.tokens()) {
+    // A comment Ruff dropped, added or reworded is a provider failure. One it
+    // moved, joined with another, or spaced differently, for example from
+    // after a `c-for` target to the end of the clause, is not: the author
+    // chose where each comment goes, so the expression keeps its text.
+    let after_comments = comment_fingerprint(&after_source, after.tokens());
+    if comment_letters(&before_comments) != comment_letters(&after_comments) {
         return Err(FormatError::invariant(
             "Python expression provider changed Python comments",
         ));
     }
-    Ok(formatted)
+    if before_comments != after_comments {
+        return Ok(None);
+    }
+    Ok(Some(formatted))
 }
 
 pub(crate) fn expression_is_provider_suppressed(source: &str) -> bool {
@@ -194,11 +223,13 @@ pub(crate) fn for_clause_is_provider_suppressed(source: &str, newline: &str) -> 
         .is_ok_and(|parsed| has_provider_suppression(&wrapped, parsed.tokens()))
 }
 
+/// Format one `c-for` clause, or return `None` to keep the author's text, for
+/// the reasons `format_expression` gives.
 pub(crate) fn format_for_clause(
     source: &str,
     available_width: usize,
     newline: &str,
-) -> Result<String, FormatError> {
+) -> Result<Option<String>, FormatError> {
     with_enough_stack(|| format_for_clause_on_stack(source, available_width, newline))
 }
 
@@ -206,7 +237,7 @@ fn format_for_clause_on_stack(
     source: &str,
     available_width: usize,
     newline: &str,
-) -> Result<String, FormatError> {
+) -> Result<Option<String>, FormatError> {
     let before_source = format!("({CLAUSE_PREFIX}{source}{newline})");
     let before = parse_expression(&before_source).map_err(|error| {
         FormatError::invariant(format!(
@@ -215,14 +246,17 @@ fn format_for_clause_on_stack(
     })?;
     let before_comments = comment_fingerprint(&before_source, before.tokens());
     // The clause is already wrapped as a generator, so it is parsed as it is.
-    let formatted_generator =
-        format_parsed_expression(&before_source, available_width, newline, str::to_string)?;
+    let Some(formatted_generator) =
+        format_parsed_expression(&before_source, available_width, newline, str::to_string)?
+    else {
+        return Ok(None);
+    };
     let formatted = extract_for_clause(&formatted_generator)?;
     let after_source = format!("({CLAUSE_PREFIX}{formatted}\n)");
     // The template parser checks a clause wrapped exactly like this, so a
     // formatted clause past its depth limit keeps the author's text.
     if check_nesting(&after_source).is_err() {
-        return Ok(source.to_string());
+        return Ok(None);
     }
     let after = parse_expression(&after_source).map_err(|error| {
         FormatError::invariant(format!(
@@ -236,12 +270,16 @@ fn format_for_clause_on_stack(
             "Python expression provider changed the c-for syntax tree",
         ));
     }
-    if before_comments != comment_fingerprint(&after_source, after.tokens()) {
+    let after_comments = comment_fingerprint(&after_source, after.tokens());
+    if comment_letters(&before_comments) != comment_letters(&after_comments) {
         return Err(FormatError::invariant(
             "Python expression provider changed c-for comments",
         ));
     }
-    Ok(formatted)
+    if before_comments != after_comments {
+        return Ok(None);
+    }
+    Ok(Some(formatted))
 }
 
 fn extract_for_clause(formatted: &str) -> Result<String, FormatError> {
@@ -327,11 +365,19 @@ fn comment_fingerprint(source: &str, tokens: &Tokens) -> Vec<CommentFingerprint>
                 .iter()
                 .find(|token| is_anchor_token(token.kind()));
             let comment = &source[range.start().to_usize()..range.end().to_usize()];
-            let previous_same_line = previous.is_some_and(|token| {
-                let token_range = token.as_tuple().1;
-                !source[token_range.end().to_usize()..range.start().to_usize()]
-                    .contains(['\n', '\r'])
-            });
+            // Whether the comment ends a line of code is judged against the
+            // code just before it, a closing parenthesis included, so that
+            // `f(\n  a\n)  # c` and `f(a)  # c` agree. An opening parenthesis
+            // is left out, because it is often the wrapper's own.
+            let previous_same_line = tokens[..index]
+                .iter()
+                .rev()
+                .find(|token| is_anchor_token(token.kind()) || token.kind() == TokenKind::Rpar)
+                .is_some_and(|token| {
+                    let token_range = token.as_tuple().1;
+                    !source[token_range.end().to_usize()..range.start().to_usize()]
+                        .contains(['\n', '\r'])
+                });
             Some(CommentFingerprint {
                 payload: comment
                     .strip_prefix('#')
@@ -344,6 +390,30 @@ fn comment_fingerprint(source: &str, tokens: &Tokens) -> Vec<CommentFingerprint>
             })
         })
         .collect()
+}
+
+/// Everything the comments say, in order, without `#` signs or whitespace.
+///
+/// Ruff may join two comments into one, as when `(a  # one\n)  # two` becomes
+/// `a  # one  # two`, or space a comment differently. Neither changes what the
+/// comments say, so only a difference here is a provider failure.
+fn comment_letters(fingerprints: &[CommentFingerprint]) -> String {
+    fingerprints
+        .iter()
+        .flat_map(|fingerprint| fingerprint.payload.chars())
+        .filter(|character| *character != '#' && !character.is_whitespace())
+        .collect()
+}
+
+/// Whether a string or f-string in the expression spans more than one line.
+fn has_multiline_string(source: &str, tokens: &Tokens) -> bool {
+    tokens.iter().any(|token| {
+        let (kind, range) = token.as_tuple();
+        matches!(
+            kind,
+            TokenKind::String | TokenKind::FStringMiddle | TokenKind::TStringMiddle
+        ) && source[range.start().to_usize()..range.end().to_usize()].contains(['\n', '\r'])
+    })
 }
 
 fn has_provider_suppression(source: &str, tokens: &Tokens) -> bool {
@@ -361,10 +431,17 @@ fn line_ending(newline: &str) -> LineEnding {
     }
 }
 
+/// Whether a comment's position is judged against this token.
+///
+/// Parentheses do not count: Ruff removes parentheses it finds redundant, so
+/// `(a + b)  # c` becomes `a + b  # c` with the comment in the same place, and
+/// Citry adds its own parentheses when it wraps the expression to parse it.
 fn is_anchor_token(kind: TokenKind) -> bool {
     !matches!(
         kind,
-        TokenKind::Comment
+        TokenKind::Lpar
+            | TokenKind::Rpar
+            | TokenKind::Comment
             | TokenKind::Newline
             | TokenKind::NonLogicalNewline
             | TokenKind::Indent
@@ -383,7 +460,7 @@ fn token_fingerprint(source: &str, token: &ruff_python_ast::token::Token) -> Str
 
 #[cfg(test)]
 mod tests {
-    use super::{PYTHON_PROVIDER_IDENTITY, format_expression, format_for_clause};
+    use super::{PYTHON_PROVIDER_IDENTITY, format_expression, format_for_clause, parse_expression};
 
     #[test]
     fn provider_identity_matches_the_vendored_ruff_release() {
@@ -398,12 +475,12 @@ mod tests {
         // inside `(\n...\n)`, so the formatter must accept it too.
         let source = "first if a\nelse second if b\nelse third";
         assert_eq!(
-            format_expression(source, 100, "\n").unwrap(),
+            format_expression(source, 100, "\n").unwrap().unwrap(),
             "first if a else second if b else third"
         );
         // Too long for one line, so Ruff adds the parentheses itself.
         assert_eq!(
-            format_expression(source, 20, "\n").unwrap(),
+            format_expression(source, 20, "\n").unwrap().unwrap(),
             "(\n  first\n  if a\n  else second\n  if b\n  else third\n)"
         );
         // Other forms that are valid only inside parentheses.
@@ -412,7 +489,10 @@ mod tests {
             ("x  := 1", "(x := 1)"),
             ("*a,  b", "(*a, b)"),
         ] {
-            assert_eq!(format_expression(form, 100, "\n").unwrap(), formatted);
+            assert_eq!(
+                format_expression(form, 100, "\n").unwrap().unwrap(),
+                formatted
+            );
         }
         assert!(!super::expression_is_provider_suppressed(source));
         assert!(super::expression_is_provider_suppressed(
@@ -421,17 +501,48 @@ mod tests {
     }
 
     #[test]
+    fn comment_positions_ignore_parentheses_but_not_other_tokens() {
+        let fingerprint = |source: &str| {
+            let wrapped = super::wrap_authored_expression(source);
+            let parsed = parse_expression(&wrapped).unwrap();
+            super::comment_fingerprint(&wrapped, parsed.tokens())
+        };
+        // Ruff joins a call it can fit on one line; the comment still ends the
+        // line of code after the call.
+        assert_eq!(fingerprint("f(\n  a\n)  # c"), fingerprint("f(a)  # c"));
+        assert_eq!(fingerprint("(a + b)  # c"), fingerprint("a + b  # c"));
+        // A comment that moves across a comma is in a different place.
+        assert_ne!(fingerprint("f(a,  # c\n b)"), fingerprint("f(a  # c\n, b)"));
+        assert_eq!(
+            format_expression("f(\n  a,\n  b\n)  # why", 100, "\n").unwrap(),
+            Some("f(a, b)  # why".to_string())
+        );
+        // Ruff joins the two comments into one; what they say is unchanged,
+        // so the author's text is kept rather than the format failing.
+        assert_eq!(
+            format_expression("(a  # one\n)  # two", 100, "\n").unwrap(),
+            None
+        );
+    }
+
+    #[test]
     fn formats_and_validates_ordinary_expressions() {
         assert_eq!(
-            format_expression("foo( 1,bar= [1,2])", 100, "\n").unwrap(),
+            format_expression("foo( 1,bar= [1,2])", 100, "\n")
+                .unwrap()
+                .unwrap(),
             "foo(1, bar=[1, 2])"
         );
         assert_eq!(
-            format_expression("[first,  # keep the first item\nsecond]", 100, "\n").unwrap(),
+            format_expression("[first,  # keep the first item\nsecond]", 100, "\n")
+                .unwrap()
+                .unwrap(),
             "[\n  first,  # keep the first item\n  second,\n]",
         );
         assert_eq!(
-            format_expression("[first,  # keep\rsecond]", 100, "\r").unwrap(),
+            format_expression("[first,  # keep\rsecond]", 100, "\r")
+                .unwrap()
+                .unwrap(),
             "[\n  first,  # keep\n  second,\n]",
         );
     }
@@ -439,7 +550,9 @@ mod tests {
     #[test]
     fn formats_and_validates_for_clauses() {
         assert_eq!(
-            format_for_clause("item  in items if  item.visible", 100, "\n").unwrap(),
+            format_for_clause("item  in items if  item.visible", 100, "\n")
+                .unwrap()
+                .unwrap(),
             "item in items if item.visible",
         );
         assert_eq!(
@@ -448,19 +561,24 @@ mod tests {
                 100,
                 "\n"
             )
+            .unwrap()
             .unwrap(),
             "item in items\n  if (\n    item.visible  # keep visible items\n  )",
         );
         assert_eq!(
-            format_for_clause("item in items  #keep the items", 100, "\n").unwrap(),
+            format_for_clause("item in items  #keep the items", 100, "\n")
+                .unwrap()
+                .unwrap(),
             "item in items  # keep the items",
         );
         assert_eq!(
             format_expression("foo(  1)  # fmt: skip", 100, "\n").unwrap(),
-            "foo(  1)  # fmt: skip",
+            None,
         );
         assert_eq!(
-            format_expression("[first,  # keep\r\nsecond]", 100, "\r\n").unwrap(),
+            format_expression("[first,  # keep\r\nsecond]", 100, "\r\n")
+                .unwrap()
+                .unwrap(),
             "[\n  first,  # keep\n  second,\n]",
         );
     }
@@ -478,9 +596,9 @@ mod tests {
             "{'žluťoučký', 'kůň'}",
         ];
         for source in cases {
-            let formatted = format_expression(source, 80, "\n").unwrap();
+            let formatted = format_expression(source, 80, "\n").unwrap().unwrap();
             assert_eq!(
-                format_expression(&formatted, 80, "\n").unwrap(),
+                format_expression(&formatted, 80, "\n").unwrap().unwrap(),
                 formatted,
                 "{source}",
             );

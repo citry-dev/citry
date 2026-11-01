@@ -178,7 +178,12 @@ any other user input. See [Security](/security/#treat-state-as-client-input).
 | Browser-only UI state, such as whether a panel is open | Vue `data()` | Kept by the Vue component in the browser. |
 
 Each server render replaces the `js_data()` values, so do not use them for
-values that must survive a call. See
+values that must survive a call. The server cannot read Vue `data()`, so a
+panel hidden with `v-show` shows open until Vue starts. Moving the value from
+`data()` to `js_data()` makes the page load closed, but each server render
+then resets it, so a panel the user opened closes on the next re-render.
+[Before Vue starts](/vue/server-rendering/#what-a-hydrated-page-shows-before-vue-starts)
+covers the other bindings. See
 [Where each value goes](/vue/#where-each-value-goes) for how Python and
 browser code share a component.
 

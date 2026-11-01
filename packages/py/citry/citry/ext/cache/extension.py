@@ -323,6 +323,9 @@ class CacheExtension(Extension):
         _validate_version(version)
         if type(enabled) is not bool:
             msg = f"<c-cache> enabled must be an exact bool; got {enabled!r}."
+            if type(enabled) is str and not enabled:
+                # enabled="" passes the text "", while a bare attribute passes True.
+                msg += ' Write enabled without a value, as in <c-cache key="..." enabled>, to pass True.'
             raise ValueError(msg)
         if not enabled:
             return None

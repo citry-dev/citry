@@ -725,7 +725,8 @@ class Component(metaclass=ComponentMeta):
     """Inline template string (Citry template syntax).
 
     Mutually exclusive with ``template_file``. Read the loaded template with
-    ``get_template()``.
+    ``get_template()``. Only the component's author writes the template;
+    never build it from request data. Pass that data in as values instead.
     """
 
     template_file: ClassVar[str | None] = None
@@ -745,13 +746,16 @@ class Component(metaclass=ComponentMeta):
     ``I18n.messages_locale``. A registered message asset activates server
     source-mode translation for the complete engine catalog, even without
     engine i18n settings. Read the loaded source with ``get_messages()``.
+    Only the component's author writes the messages; never build them from
+    request data. Pass that data as message variables instead.
     """
 
     messages_file: ClassVar[str | None] = None
     """Path to source-locale Fluent messages, resolved like ``template_file``.
 
     This has the same source-mode and ``I18n.messages_locale`` contract as
-    ``messages``.
+    ``messages``. Like ``messages``, the file is written by the component's
+    author, never generated from request data.
     """
 
     js: ClassVar[str | None] = None

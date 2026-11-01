@@ -273,17 +273,32 @@ render, or an Events action), check its security before delivery, as follows:
    defeat each check in a real browser, with a harmless test value whose effect
    is easy to see. Its report names each route as safe, author-only by design,
    or a hole.
-5. **Keep a hole private until its fix ships.** When you find one, stop, tell
-   the maintainer in your report, and do not commit, push, or open anything
-   public that describes it. The maintainer opens a private advisory as
-   [`SECURITY.md`](SECURITY.md) describes, and the fix is built in that
-   advisory's private fork. Sweep for siblings there (Mechanism 3). The fix's
-   regression tests, docs note, and changelog entry stay in the private fix
-   and become public only when the advisory is published, which overrides the
-   usual rule to publish those with the change.
+5. **Handle a hole by where it lives.** What you do depends on whether any
+   released version has it:
+   - **Only in the change you are writing:** fix it in the same pull request
+     and list it in the review record under "Fixed during the review"
+     (step 7).
+   - **On `main` but in no release yet:** fix it publicly in a small pull
+     request. Describe it neutrally, as tightening the code, without a
+     walkthrough of how to exploit it.
+   - **In a released version:** stop, tell the maintainer in your report, and
+     do not commit, push, or open anything public that describes it. The
+     maintainer opens a private advisory as [`SECURITY.md`](SECURITY.md)
+     describes, and the fix is built in that advisory's private fork. Sweep
+     for siblings there (Mechanism 3). The fix's regression tests, docs note,
+     and changelog entry stay in the private fix and become public only when
+     the advisory is published, which overrides the usual rule to publish
+     those with the change.
+
+   When you can't tell whether a release has it, treat it as released.
 6. **Say in the docs when an input is author-only.** When a value is trusted
    because only the template author writes it, the page that documents the
    API must say so, so app authors know not to pass request data into it.
+7. **Record a pass that leaves no hole open.** After the change merges,
+   write a short record in [`docs/security/reviews/`](docs/security/reviews/README.md)
+   using the template in its README. A hole in a released version follows
+   step 5 and [`SECURITY.md`](SECURITY.md) instead, and gets a record only
+   after its fix is released and disclosed.
 
 ## Where new agent knowledge goes
 
@@ -330,7 +345,9 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   while preserving first-seen (source) order.
 - **HTML rendering rules.** Void elements stay compact (`<br/>`), non-void
   self-closing expand (`<div></div>`), and `key=""` normalizes to a boolean
-  attribute (`True`).
+  attribute (`True`) on an HTML element, a dynamic `<c-element>`, and
+  `<c-if>`; on a component tag and on `<c-slot>` data it compiles to `""`,
+  and only a bare `key` is `True`.
 - **Rust nightly toolchain** (edition 2024), pinned in
   [`rust-toolchain.toml`](rust-toolchain.toml).
 - **maturin module mapping.** The Python extension is built with
@@ -441,6 +458,26 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   hunting through test files. An executable example that needs automated
   validation must opt in to a general guard; do not hard-code its page in a
   test.
+- **Pass event and input values into workflow scripts through `env:`.** In
+  a GitHub Actions `run:` or `github-script` block, do not write
+  `${{ github.event.* }}`, `${{ github.head_ref }}` or `${{ inputs.* }}`
+  into the script (`github.event_name` is fine). GitHub pastes the value
+  into the script text before the step starts, so a branch name or pull
+  request title becomes part of the code. Pass the value through the
+  step's `env:` block and read it as `"$NAME"` in a shell script or
+  `process.env.NAME` in `github-script`. Do the same for step and job
+  outputs that carry such a value.
+- **A Dependabot-only job checks who opened the pull request.** Test
+  `github.event.pull_request.user.login == 'dependabot[bot]'`.
+  `github.actor` names the user who started the first run, not the
+  author, so add it only when the job also needs to know who started the
+  run, as `repo--dependabot-relock.yml` does to read Dependabot's secrets.
+- The
+  [`workflow_run_expressions`](scripts/validators/workflow_run_expressions.py)
+  validator fails the gate when a `run:` or `script:` block in a workflow
+  or composite action contains one of the three values above. It does not
+  follow a value through a step or job output, and nothing checks the
+  Dependabot rule, so both rest on review.
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.

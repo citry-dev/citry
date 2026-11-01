@@ -805,3 +805,89 @@ def test_bound_class_and_style_merge_with_static_and_python_values_on_hydration(
         ["two", "item", "none"],
         ["one", "item item--dragging", "list-item"],
     ]
+
+
+def test_v_pre_form_controls_hydrate_without_an_ownership_marker(
+    page: Any, browser: Any, serve_document: Any, monkeypatch: Any
+) -> None:
+    engine = Citry(autodiscover=False)
+
+    class Board(Component):
+        citry = engine
+        # Under `v-pre` Vue keeps `:value` and `:selected` as plain
+        # attributes. The input after it is a real binding.
+        template = """
+<main>
+  <div v-pre>
+    <input :value="y">
+    <select><option :selected="y">a</option></select>
+  </div>
+  <input
+    id="bound"
+    :value="name"
+  >
+</main>
+"""
+        js = """
+$component({data(){return {name: 'Ann'};}});
+"""
+
+    result = _compare_with_client_mount(
+        Board(),
+        page=page,
+        browser=browser,
+        serve_document=serve_document,
+        monkeypatch=monkeypatch,
+    )
+
+    # The marker is a Vue directive on the bound input, which leaves no
+    # attribute; under `v-pre` it would have stayed in the page as an attribute.
+    assert page.evaluate("document.querySelectorAll('[v-citry-vue-owned]').length") == 0
+    assert page.evaluate("document.querySelector('main > div > input').getAttribute(':value')") == "y"
+    assert page.evaluate("document.querySelector('#bound').value") == "Ann"
+    assert "v-citry-vue-owned" not in result["html"].split("<script", 1)[0]
+
+
+def test_v_pre_tags_stay_plain_elements_and_hydrate_like_a_client_mount(
+    page: Any, browser: Any, serve_document: Any, monkeypatch: Any
+) -> None:
+    engine = Citry(autodiscover=False)
+
+    class Board(Component):
+        citry = engine
+        # Vue leaves each of these tags as a plain element under `v-pre`,
+        # so neither side runs a slot, a dynamic component, or a built-in.
+        template = """
+<main>
+  <div v-pre>
+    <slot name="a">FALLBACK</slot>
+    <component is="x">c</component>
+    <teleport to="body">t</teleport>
+    <keep-alive>k</keep-alive>
+    <transition><p>p</p></transition>
+  </div>
+  <p id="bound" v-text="name"></p>
+</main>
+"""
+        js = """
+$component({data(){return {name: 'Ann'};}});
+"""
+
+    result = _compare_with_client_mount(
+        Board(),
+        page=page,
+        browser=browser,
+        serve_document=serve_document,
+        monkeypatch=monkeypatch,
+    )
+
+    # The tags are in the DOM as written, and nothing moved to the body.
+    for tag in ("slot", "component", "teleport", "keep-alive", "transition"):
+        assert page.evaluate(f"document.querySelectorAll('main > div > {tag}').length") == 1, tag
+    assert page.evaluate("document.querySelector('main > div > slot').textContent") == "FALLBACK"
+    assert page.evaluate("document.querySelector('main > div > component').hasAttribute('is')") is False
+    assert page.evaluate("document.querySelector('#bound').textContent") == "Ann"
+    # The server leaves only <keep-alive>, a custom element name, for the
+    # browser to build.
+    shells = re.findall(r'<[a-z-]+ data-allow-mismatch="children">', result["html"].split("<script", 1)[0])
+    assert shells == ['<div data-allow-mismatch="children">']

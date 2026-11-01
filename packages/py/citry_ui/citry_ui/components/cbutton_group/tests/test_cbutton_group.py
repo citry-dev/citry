@@ -79,8 +79,8 @@ def test_vertical_growing_group_reflects_layout():
     [
         (
             '<c-CButtonGroup label=""><c-CButton>One</c-CButton></c-CButtonGroup>',
-            TypeError,
-            r"CButtonGroup\.Kwargs\.label expects str",
+            ValueError,
+            "label must be nonempty",
         ),
         (
             '<c-CButtonGroup label="Map" orientation="diagonal"><c-CButton>One</c-CButton></c-CButtonGroup>',

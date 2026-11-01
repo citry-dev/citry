@@ -43,8 +43,8 @@ use pyo3::{PyTraverseError, PyTypeInfo, intern};
 
 use crate::panics::catch_panic;
 use citry_native_render::{
-    Attrs, Const, ExprSpec, Kinds, OpSpec, Plan, PlanSpec, ReadNode, ReadNodeSpec, RunIds,
-    SpreadLayout, Value, write_json_str,
+    Attrs, Const, DepthKind, ExprSpec, Kinds, MAX_BODY_DEPTH, MAX_READ_DEPTH, OpSpec, Plan,
+    PlanSpec, ReadNode, ReadNodeSpec, RunIds, SpreadLayout, Value, too_deep, write_json_str,
 };
 
 use super::leaf_json::{LeafJson, write_leaf_occurrence};
@@ -111,7 +111,30 @@ fn string_items(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
         .collect()
 }
 
-fn lower_expr(value: &Bound<'_, PyAny>) -> PyResult<ExprSpec> {
+/// Refuse Python's description once it nests past a limit. Reading the
+/// description calls itself once per level, like every later walk of the
+/// plan, so the limits of `Plan::new` are checked here first: a description
+/// nested past them would otherwise overflow a small stack before
+/// `Plan::new` saw it.
+#[inline]
+fn check_depth(depth: usize, limit: usize, kind: DepthKind) -> PyResult<()> {
+    if depth > limit {
+        return Err(depth_error(kind, limit));
+    }
+    Ok(())
+}
+
+/// Kept out of line, like `too_deep`, so a level's frame holds no space for
+/// building the error.
+#[cold]
+#[inline(never)]
+fn depth_error(kind: DepthKind, limit: usize) -> PyErr {
+    plan_error(too_deep(kind, limit).0)
+}
+
+/// Read one expression at `depth`, counted as `MAX_BODY_DEPTH` describes.
+fn lower_expr(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<ExprSpec> {
+    check_depth(depth, MAX_BODY_DEPTH, DepthKind::Bodies)?;
     let tuple = as_tuple(value)?;
     let tag: String = item(tuple, 0)?.extract()?;
     match tag.as_str() {
@@ -136,17 +159,27 @@ fn lower_expr(value: &Bound<'_, PyAny>) -> PyResult<ExprSpec> {
             keys: string_items(&item(tuple, 2)?)?,
         }),
         "i" => Ok(ExprSpec::If {
-            test: Box::new(lower_expr(&item(tuple, 1)?)?),
-            body: Box::new(lower_expr(&item(tuple, 2)?)?),
-            otherwise: Box::new(lower_expr(&item(tuple, 3)?)?),
+            test: Box::new(lower_expr(&item(tuple, 1)?, depth + 1)?),
+            body: Box::new(lower_expr(&item(tuple, 2)?, depth + 1)?),
+            otherwise: Box::new(lower_expr(&item(tuple, 3)?, depth + 1)?),
         }),
         other => Err(plan_error(format!("unknown expression {other:?}"))),
     }
 }
 
-/// Turn one scope into ops, collecting each spread's layout callback in the
-/// order the plan numbers spreads (source order, top level only).
-fn lower_ops(value: &Bound<'_, PyAny>, callbacks: &mut Vec<Py<PyAny>>) -> PyResult<Vec<OpSpec>> {
+/// Turn one scope at `depth` (the top level is 1) into ops, collecting each
+/// spread's layout callback in the order the plan numbers spreads (source
+/// order, top level only).
+///
+/// One function handles every op, so a release build can share stack slots
+/// between the cases. With each case in a function of its own, a release
+/// build reached about 30% fewer levels on a 128 KiB thread.
+fn lower_ops(
+    value: &Bound<'_, PyAny>,
+    callbacks: &mut Vec<Py<PyAny>>,
+    depth: usize,
+) -> PyResult<Vec<OpSpec>> {
+    check_depth(depth, MAX_BODY_DEPTH, DepthKind::Bodies)?;
     let mut ops = Vec::new();
     for op in as_tuple(value)?.iter() {
         let tuple = as_tuple(&op)?;
@@ -155,13 +188,16 @@ fn lower_ops(value: &Bound<'_, PyAny>, callbacks: &mut Vec<Py<PyAny>>) -> PyResu
         ops.push(match tag.as_str() {
             "text" => OpSpec::Text {
                 key,
-                expr: lower_expr(&item(tuple, 2)?)?,
+                expr: lower_expr(&item(tuple, 2)?, depth + 1)?,
             },
             "open" => {
                 let mut attributes = Vec::new();
                 for attribute in as_tuple(&item(tuple, 2)?)?.iter() {
                     let pair = as_tuple(&attribute)?;
-                    attributes.push((item(pair, 0)?.extract()?, lower_expr(&item(pair, 1)?)?));
+                    attributes.push((
+                        item(pair, 0)?.extract()?,
+                        lower_expr(&item(pair, 1)?, depth + 1)?,
+                    ));
                 }
                 OpSpec::Open { key, attributes }
             }
@@ -169,7 +205,7 @@ fn lower_ops(value: &Bound<'_, PyAny>, callbacks: &mut Vec<Py<PyAny>>) -> PyResu
                 callbacks.push(item(tuple, 3)?.unbind());
                 OpSpec::Spread {
                     key,
-                    expr: lower_expr(&item(tuple, 2)?)?,
+                    expr: lower_expr(&item(tuple, 2)?, depth + 1)?,
                 }
             }
             "if" => {
@@ -180,18 +216,18 @@ fn lower_ops(value: &Bound<'_, PyAny>, callbacks: &mut Vec<Py<PyAny>>) -> PyResu
                     let condition = if condition.is_none() {
                         None
                     } else {
-                        Some(lower_expr(&condition)?)
+                        Some(lower_expr(&condition, depth + 1)?)
                     };
-                    branches.push((condition, lower_ops(&item(pair, 1)?, callbacks)?));
+                    branches.push((condition, lower_ops(&item(pair, 1)?, callbacks, depth + 1)?));
                 }
                 OpSpec::If { key, branches }
             }
             "for" => OpSpec::For {
                 key,
                 target: item(tuple, 2)?.extract()?,
-                iterable: lower_expr(&item(tuple, 3)?)?,
-                body: lower_ops(&item(tuple, 4)?, callbacks)?,
-                empty: lower_ops(&item(tuple, 5)?, callbacks)?,
+                iterable: lower_expr(&item(tuple, 3)?, depth + 1)?,
+                body: lower_ops(&item(tuple, 4)?, callbacks, depth + 1)?,
+                empty: lower_ops(&item(tuple, 5)?, callbacks, depth + 1)?,
             },
             other => return Err(plan_error(format!("unknown operation {other:?}"))),
         });
@@ -199,27 +235,40 @@ fn lower_ops(value: &Bound<'_, PyAny>, callbacks: &mut Vec<Py<PyAny>>) -> PyResu
     Ok(ops)
 }
 
-fn lower_read_node(value: &Bound<'_, PyAny>) -> PyResult<ReadNodeSpec> {
+/// Read one read-set node at `depth` (a root is 1).
+fn lower_read_node(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<ReadNodeSpec> {
+    check_depth(depth, MAX_READ_DEPTH, DepthKind::ReadPaths)?;
     let tuple = as_tuple(value)?;
     let kind_names = string_items(&item(tuple, 0)?)?;
     let kinds = Kinds::from_names(kind_names.iter().map(String::as_str))
         .map_err(|error| plan_error(error.0))?;
     let mut children = Vec::new();
     for child in as_tuple(&item(tuple, 1)?)?.iter() {
-        let pair = as_tuple(&child)?;
-        children.push((item(pair, 0)?.extract()?, lower_read_node(&item(pair, 1)?)?));
+        children.push(lower_read_child(&child, depth)?);
     }
     let items = item(tuple, 2)?;
     let items = if items.is_none() {
         None
     } else {
-        Some(Box::new(lower_read_node(&items)?))
+        Some(Box::new(lower_read_node(&items, depth + 1)?))
     };
     Ok(ReadNodeSpec {
         kinds,
         children,
         items,
     })
+}
+
+/// Read one `(name, node)` child of a read-set node at `depth`. It is kept
+/// out of `lower_read_node`, whose frame each read level repeats: in a debug
+/// build that frame measured about 4.3 KiB with this code inlined into it
+/// and 3.5 KiB without.
+fn lower_read_child(child: &Bound<'_, PyAny>, depth: usize) -> PyResult<(String, ReadNodeSpec)> {
+    let pair = as_tuple(child)?;
+    Ok((
+        item(pair, 0)?.extract()?,
+        lower_read_node(&item(pair, 1)?, depth + 1)?,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -667,11 +716,14 @@ impl RowPlan {
         js_safe_integer: i64,
     ) -> PyResult<Self> {
         let mut callbacks = Vec::new();
-        let ops = lower_ops(ops, &mut callbacks)?;
+        let ops = lower_ops(ops, &mut callbacks, 1)?;
         let mut root_specs = Vec::new();
         for root in as_tuple(roots)?.iter() {
             let pair = as_tuple(&root)?;
-            root_specs.push((item(pair, 0)?.extract()?, lower_read_node(&item(pair, 1)?)?));
+            root_specs.push((
+                item(pair, 0)?.extract()?,
+                lower_read_node(&item(pair, 1)?, 1)?,
+            ));
         }
         let spec = PlanSpec {
             ops,

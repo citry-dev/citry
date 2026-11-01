@@ -521,6 +521,7 @@ const REQUIRED_FEATURES: &[&str] = &[
     "missing-final-newline",
     "multiline-attribute",
     "nested-template",
+    "no-gap-added",
     "python-host-framing",
     "python-host-crlf",
     "python-host-reverse-rewrite",

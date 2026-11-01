@@ -75,9 +75,10 @@ Citry escapes all text that comes from the message:
 my-app-safe-message = <unsafe> { $link } & text
 ```
 
-`<unsafe>` appears on the page as text. Only the content of the fill is
-rendered as HTML. A translation therefore cannot add an event handler, an
-unsafe URL, an attribute, or a component.
+`<unsafe>` appears on the page as text, and so does each value you pass
+in `c-values`. Only the content of the fill is rendered as HTML. A
+translation therefore cannot add an event handler, an unsafe URL, an
+attribute, or a component.
 
 ## Less common cases
 

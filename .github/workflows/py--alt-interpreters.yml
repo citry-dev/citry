@@ -51,10 +51,7 @@ jobs:
       # These interpreters cannot use the stable ABI, so it builds a wheel
       # for this exact interpreter, as the release workflow does.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

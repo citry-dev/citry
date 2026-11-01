@@ -1028,7 +1028,8 @@ class CMenu(LibraryComponent):
           if (element.getAttribute(name) !== value) element.setAttribute(name, value);
         };
         const classes = (element, ...names) => {
-          for (const name of names) element.classList.add(name);
+          // classList.add rewrites the class attribute even when the class is already there.
+          for (const name of names) if (!element.classList.contains(name)) element.classList.add(name);
         };
         const repair = () => {
           for (const [element, values, names] of [
@@ -1176,7 +1177,16 @@ class CMenu(LibraryComponent):
           // Server HTML may advertise an initially open Menu. Until the
           // settled declaration tree and activator are validated, expose no
           // interactive surface to assistive technology or pointer input.
-          surface.inert = true;
+          // An open menu handed over by a server render keeps its focused
+          // item: making it inert would blur that item.
+          const keepsFocusedOpenMenu = Boolean(surface.__citryUiMenuRuntime?.open)
+            && anchoredLayerRuntime.composedContains(
+              surface,
+              anchoredLayerRuntime.coordinatorFor(surface).deepActiveElement(),
+            );
+          if (!keepsFocusedOpenMenu) {
+            surface.inert = true;
+          }
           surface.removeAttribute("data-open");
           surface.removeAttribute("data-citry-menu-exiting");
           surface.removeAttribute("data-citry-menu-initialized");
@@ -1205,6 +1215,8 @@ class CMenu(LibraryComponent):
             .getPropertyValue("--_cui-menu-anchor")
             .trim();
           if (!anchorName.startsWith("--")) {
+            // No controller will drive the open menu, so make it inert.
+            surface.inert = true;
             throw new Error(`[citry-ui] ${componentName} could not resolve its CSS anchor name.`);
           }
           anchor.style.setProperty("anchor-name", anchorName);
@@ -1261,9 +1273,13 @@ class CMenu(LibraryComponent):
             // stepping out of a shadow root. If that box keeps a fixed size
             // while only an inline wrapper inside it hides the trigger, the
             // episode lasts until the trigger next opens.
+            // TypeScript types a shadow root's host as `Element`, so `box` is typed that wide.
+            /** @type {Element} */
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
-              const next = box.parentElement ?? box.getRootNode().host;
+              // Step out of a shadow root to its host; a document has no host.
+              const boxRoot = box.getRootNode();
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
               if (!next) {
                 break;
               }
@@ -1512,8 +1528,11 @@ class CMenu(LibraryComponent):
               (candidate) => candidate.root,
             );
             for (const candidate of registrations.values()) {
-              if (candidate.element) {
-                candidate.element.tabIndex = candidate === entry ? 0 : -1;
+              const tabIndex = candidate === entry ? 0 : -1;
+              // An unchanged write still reports a change, and the observer
+              // would reconcile and refocus the item in a loop.
+              if (candidate.element && candidate.element.tabIndex !== tabIndex) {
+                candidate.element.tabIndex = tabIndex;
               }
             }
           };
@@ -3092,7 +3111,9 @@ class CMenu(LibraryComponent):
               if (record.type !== "attributes") {
                 return true;
               }
-              const entry = registrations.get(record.target);
+              // A submenu's trigger, not its registered wrapper, takes the tabindex.
+              const entry = registrations.get(record.target)
+                ?? [...registrations.values()].find((candidate) => candidate.element === record.target);
               if (entry?.element === record.target) {
                 return !(
                   record.attributeName === "tabindex"
@@ -5369,7 +5390,8 @@ class CMenuSubmenu(LibraryComponent):
               side = "block-end";
             }
             latestGeometry = { trigger: triggerRect, surface: surfaceRect, side };
-            wrapper.dataset.citryMenuPhysicalSide = side;
+            // Runs every frame, so skip an unchanged write: observers would still see it.
+            if (wrapper.dataset.citryMenuPhysicalSide !== side) wrapper.dataset.citryMenuPhysicalSide = side;
           };
           const geometryRuntime = (() => {
             anchoredLayerRuntime.menuGeometry ??= new WeakMap();

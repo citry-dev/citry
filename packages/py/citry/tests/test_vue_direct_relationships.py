@@ -537,6 +537,8 @@ def _sibling_author_page(fill: str) -> Component:
         ('<c-if cond="note"><b :title="label">x</b></c-if>', ':title="label" on <b>'),
         ('<b :title="this.label">x</b>', ':title="this.label" on <b>'),
         ("<c-writer />", 'v-text="label" on <span>'),
+        # Vue still reads `ref` under `v-pre`.
+        ('<div v-pre><i ref="thing"></i></div>', 'ref="thing" on <i>'),
     ],
 )
 def test_fill_from_outside_the_receivers_tree_is_rejected_when_it_uses_vue_data(fill: str, binding: str) -> None:
@@ -564,6 +566,9 @@ def test_fill_from_outside_the_receivers_tree_is_rejected_when_it_uses_vue_data(
         '<button @click="$event.preventDefault()">+</button>',
         '<p v-if="Math.max(1, 2) > 1" v-else-if="false">x</p>',
         "<c-leaf :title=\"'fixed'\" />",
+        # Under `v-pre`, Vue keeps these as plain attributes that read no Vue data.
+        '<div v-pre><span v-text="label"></span><b :title="label" @click="count++">x</b></div>',
+        '<div v-pre :title="label"><span>x</span></div>',
     ],
 )
 def test_fill_from_outside_the_receivers_tree_is_copied_when_it_reads_no_vue_data(fill: str) -> None:

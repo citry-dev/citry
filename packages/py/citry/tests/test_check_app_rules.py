@@ -891,6 +891,123 @@ def test_form_fields_the_server_accepts_or_cannot_be_read_are_not_reported(tmp_p
     assert _findings(_counter_engine(form, data_class=QueryIn), tmp_path, *_FORM) == []
 
 
+@pytest.mark.parametrize(
+    ("form", "field"),
+    [
+        # Vue leaves `:disabled` under `v-pre` as an attribute literally named
+        # `:disabled`, so the control is sent.
+        ('<input name="extra" v-pre :disabled="busy">', "extra"),
+        ('<div v-pre><input name="extra" :disabled="busy"></div>', "extra"),
+        ('<fieldset v-pre :disabled="busy"><input name="extra"></fieldset>', "extra"),
+        ('<div v-pre><fieldset :disabled="busy"><input name="extra"></fieldset></div>', "extra"),
+        # So is a button with a Vue `@click.prevent`, which prevents nothing there.
+        ('<button v-pre name="extra" @click.prevent="addRow">+</button>', "extra"),
+        ('<div v-pre><button name="extra" v-on:click.prevent="addRow">+</button></div>', "extra"),
+        # A `v-bind` spread does not replace the name, and a bound `form` ties nothing.
+        ('<div v-pre><input name="extra" v-bind="attrs" :form="other"></div>', "extra"),
+    ],
+)
+def test_form_controls_at_or_inside_v_pre_are_sent_despite_vue_syntax(tmp_path, form, field):
+    page = f'<form @c-submit.prevent="save"><input name="q">{form}</form>'
+
+    findings = _findings(_counter_engine(page, data_class=QueryIn), tmp_path, *_FORM)
+
+    assert [(code, message.split("'")[1]) for code, _severity, message in findings] == [(_UNKNOWN_FORM, field)]
+
+
+@pytest.mark.parametrize(
+    "form",
+    [
+        '<form v-pre @c-submit.prevent="save"><input name="q"><input name="extra" :disabled="busy"></form>',
+        '<div v-pre><form @c-submit.prevent="save"><input name="q"><input name="extra" :disabled="busy"></form></div>',
+    ],
+)
+def test_a_form_at_or_inside_v_pre_reads_its_controls_without_vue_syntax(tmp_path, form):
+    findings = _findings(_counter_engine(form, data_class=QueryIn), tmp_path, *_FORM)
+
+    assert [(code, message.split("'")[1]) for code, _severity, message in findings] == [(_UNKNOWN_FORM, "extra")]
+
+
+@pytest.mark.parametrize(
+    "inside",
+    [
+        # A `v-for`, `v-bind`, or `v-slot` under `v-pre` repeats, spreads, or
+        # fills nothing, and a PascalCase tag is a plain element there.
+        '<div v-pre><input v-for="n in names" :name="n"></div>',
+        '<input v-pre v-for="n in names" name="n">',
+        '<div v-pre><input v-bind="attrs"></div>',
+        "<div v-pre><Field /></div>",
+        # A bound `name` is an attribute literally named `:name`; no control is hidden by it.
+        '<div v-pre><input :name="field"></div>',
+    ],
+)
+def test_the_missing_field_check_stays_on_when_v_pre_hides_nothing(tmp_path, inside):
+    page = f'<form @c-submit.prevent="save"><button>Go</button>{inside}</form>'
+
+    findings = _findings(_counter_engine(page, data_class=QueryIn), tmp_path, _MISSING_FORM)
+
+    assert [code for code, _severity, _message in findings] == [_MISSING_FORM]
+
+
+@pytest.mark.parametrize(
+    "form",
+    [
+        # Citry renders `c-for`, `c-bind`, and `c-name` under `v-pre`, so they
+        # can still repeat a control or give it another name.
+        '<form @c-submit.prevent="save"><div v-pre><input c-for="n in names"></div><button>Go</button></form>',
+        '<form @c-submit.prevent="save"><div v-pre><input c-bind="attrs"></div><button>Go</button></form>',
+        '<form @c-submit.prevent="save"><div v-pre><input c-name="field"></div><button>Go</button></form>',
+        # So does a Citry component tag.
+        '<form @c-submit.prevent="save"><div v-pre><c-SearchField /></div><button>Go</button></form>',
+        # A form id written plainly can tie a control elsewhere to the form.
+        '<form v-pre id="search" @c-submit.prevent="save"><button>Go</button></form>',
+    ],
+)
+def test_citry_syntax_at_or_inside_v_pre_still_hides_form_fields(tmp_path, form):
+    findings = _findings(_counter_engine(form, data_class=QueryIn), tmp_path, _MISSING_FORM)
+
+    assert findings == []
+
+
+def test_a_citry_click_listener_that_prevents_the_default_still_unsends_a_button_inside_v_pre(tmp_path):
+    # Citry's `@c-click.prevent` is rendered on the server, so the button
+    # never submits the form even where Vue's own listeners are plain text.
+    page = (
+        '<form @c-submit.prevent="save"><input name="q">'
+        '<div v-pre><button name="add" @c-click.prevent="go">+</button></div></form>'
+    )
+
+    assert _findings(_counter_engine(page, data_class=QueryIn), tmp_path, *_FORM) == []
+
+
+def test_a_bound_form_id_at_or_inside_v_pre_does_not_make_the_form_incomplete(tmp_path):
+    # `:id` under `v-pre` is not an `id`, so no control elsewhere can name this form.
+    for form in (
+        '<form v-pre :id="x" @c-submit.prevent="save"><button>Go</button></form>',
+        '<div v-pre><form :id="x" @c-submit.prevent="save"><button>Go</button></form></div>',
+    ):
+        findings = _findings(_counter_engine(form, data_class=QueryIn), tmp_path, _MISSING_FORM)
+
+        assert [code for code, _severity, _message in findings] == [_MISSING_FORM], form
+
+
+def test_vue_syntax_outside_v_pre_keeps_hiding_form_fields_after_a_v_pre_sibling(tmp_path):
+    # `v-pre` on one element must not leak to the controls after it.
+    for control in (
+        '<input name="extra" :disabled="busy">',
+        '<button name="extra" @click.prevent="addRow">+</button>',
+    ):
+        page = f'<form @c-submit.prevent="save"><input name="q"><div v-pre></div>{control}</form>'
+
+        assert _findings(_counter_engine(page, data_class=QueryIn), tmp_path, *_FORM) == [], control
+    page = (
+        '<form @c-submit.prevent="save"><button>Go</button><div v-pre></div>'
+        '<input v-for="n in names" :name="n"></form>'
+    )
+
+    assert _findings(_counter_engine(page, data_class=QueryIn), tmp_path, *_FORM) == []
+
+
 def test_the_csrf_field_names_setting_is_followed(tmp_path):
     form = '<form @c-submit.prevent="save"><input name="q"><input type="hidden" name="authenticity_token"></form>'
     engine = Citry(autodiscover=False, extensions_defaults={"events": {"_csrf_field_names": ["authenticity_token"]}})
@@ -1412,6 +1529,40 @@ def test_a_custom_property_nothing_sets_is_reported_when_the_rule_is_on(tmp_path
 )
 def test_custom_properties_something_sets_are_not_reported(tmp_path, css, keys, template, others):
     engine = _variable_engine(css, keys=keys, template=template, others=others)
+
+    assert _findings(engine, tmp_path, _UNDECLARED_VARIABLE) == []
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        # Vue leaves `:style` under `v-pre` as an attribute literally named
+        # `:style`, so nothing sets `--gap`.
+        "<h1 v-pre :style=\"{'--gap': size}\"></h1>",
+        "<div v-pre><h1 :style=\"{'--gap': size}\"></h1></div>",
+    ],
+)
+def test_a_style_binding_at_or_inside_v_pre_does_not_set_a_custom_property(tmp_path, template):
+    engine = _variable_engine("h1 { padding: var(--gap); }", template=template)
+
+    findings = _findings(engine, tmp_path, _UNDECLARED_VARIABLE)
+
+    assert [re.findall(r"--[\w-]+", message) for _code, _severity, message in findings] == [["--gap"]]
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        # Citry renders `c-style` on the server, so it still sets the property under `v-pre`.
+        "<h1 v-pre c-style=\"{'--gap': size}\"></h1>",
+        "<div v-pre><h1 c-style=\"{'--gap': size}\"></h1></div>",
+        '<div v-pre><h1 style="--gap: 1rem"></h1></div>',
+        # A `v-pre` sibling does not turn Vue off for the binding after it.
+        "<div v-pre></div><h1 :style=\"{'--gap': size}\"></h1>",
+    ],
+)
+def test_other_styles_still_set_a_custom_property_near_v_pre(tmp_path, template):
+    engine = _variable_engine("h1 { padding: var(--gap); }", template=template)
 
     assert _findings(engine, tmp_path, _UNDECLARED_VARIABLE) == []
 

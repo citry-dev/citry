@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -50,6 +51,55 @@ def test_shared_python_host_corpus() -> None:
         if raised.value.code == "citry.format.host-syntax":
             assert raised.value.range is not None, case["id"]
             assert isinstance(raised.value.diagnostic, SyntaxError), case["id"]
+
+
+def _loaded_template(source: str) -> str:
+    # Read the template the way Citry loads it, after removing the shared
+    # indentation, so the test sees the text a component renders.
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "template" for target in node.targets
+        ):
+            assert isinstance(node.value, ast.Constant)
+            assert isinstance(node.value.value, str)
+            return dedent(node.value.value)
+    msg = "no template assignment"
+    raise AssertionError(msg)
+
+
+@pytest.mark.parametrize(
+    "template_literal",
+    [
+        '"""<main> <section></section> </main>"""',
+        '"""\n    <main> <section></section> </main>"""',
+        '"""<main> <section></section> </main>\n    """',
+        '"""\n    <main> <section></section> </main>\n    """',
+        '"""\u00a0<main> <section></section> </main>\u00a0"""',
+    ],
+)
+def test_formatting_keeps_the_whitespace_at_a_template_edge(template_literal: str) -> None:
+    # A component renders the text at its template's edges, so formatting may
+    # re-indent whitespace there but never add any where there was none. A
+    # non-breaking space is text, not whitespace, in HTML.
+    source = _component_source(template_literal)
+
+    formatted = format_python_templates(source).source
+
+    before = _loaded_template(source)
+    after = _loaded_template(formatted)
+    assert after != before
+    assert (before[:1] in " \t\n\r\f") == (after[:1] in " \t\n\r\f")
+    assert (before[-1:] in " \t\n\r\f") == (after[-1:] in " \t\n\r\f")
+    assert before[:1] != "\u00a0" or after[:1] == "\u00a0"
+    assert format_python_templates(formatted).source == formatted
+
+
+def test_compact_markup_in_a_template_is_left_as_written() -> None:
+    # Two tags written with nothing between them render with nothing between
+    # them, so there is no whitespace for the formatter to re-indent.
+    source = _component_source('"""<table><tr><td>a</td><td>b</td></tr></table>"""')
+
+    assert format_python_templates(source).source == source
 
 
 def test_result_is_immutable_and_reports_changed_components() -> None:

@@ -33,3 +33,10 @@ Include, as far as you can:
 - Once the issue is confirmed we will work on a fix, coordinate a release, and
   keep you posted; we are happy to credit you in the release notes.
 - Please give us a reasonable window to ship a fix before any public disclosure.
+
+## Past security reviews
+
+Before some changes merge, a separate reviewer checks their security.
+[`docs/security/reviews/`](docs/security/reviews/) keeps a short public
+record of each such review: what was checked, how, and what was left
+untested.

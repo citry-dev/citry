@@ -68,13 +68,13 @@ from .capture import (
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
     is_ignored_element_open,
-    is_native_state_tag,
     is_v_pre_element_open,
     is_vue_directive_name,
     prepared_spread_index,
     template_location,
     vue_owned_native_marker,
     vue_owned_native_properties,
+    writes_vue_owned_marker,
 )
 from .compiler import (
     DefinitionCompileInput,
@@ -1572,6 +1572,11 @@ def assemble_typed_render(
             int
         )
         dynamic_site_index = 0
+        # How many `v-pre` elements that Vue reads as written (see
+        # `_v_pre_left_to_vue`) enclose the part being walked. A nested walk,
+        # such as a transparent component's body, runs between the element's
+        # opening and its close, so it reads the same count.
+        authored_v_pre_depth = 0
 
         active_projected_data_keys: list[set[str] | None] = []
         active_projected_data_containers: list[set[str] | None] = []
@@ -1744,7 +1749,7 @@ def assemble_typed_render(
             # allowed in it.
             caller_fallback: _CallerFallback | None = None,
         ) -> Generator[Call, Any, _DefinitionFragment]:
-            nonlocal dynamic_site_index, inline_depth, inline_frames
+            nonlocal dynamic_site_index, inline_depth, inline_frames, authored_v_pre_depth
             # Every walk records its component calls in the data of the
             # component whose template it builds, so the two owners differ
             # only if a walk was started with the wrong one.
@@ -1941,6 +1946,9 @@ def assemble_typed_render(
             # Parts before this index are a `#c-ignore` or `v-pre` element's
             # contents, already written as one block of HTML.
             ignored_contents_end = 0
+            # The indexes of the closes that end the `v-pre` elements this walk
+            # opened and left to Vue, innermost last.
+            v_pre_closes: list[int] = []
             for part_index, part in enumerate(parts):
                 if part_index in run_followers or part_index < ignored_contents_end:
                     continue
@@ -3099,13 +3107,37 @@ def assemble_typed_render(
                 if isinstance(part, PreparedElementOpen):
                     # Vue reads a `v-pre` element and its contents as written,
                     # so one that holds only authored markup is left to Vue.
-                    v_pre_open = is_v_pre_element_open(part) and not _v_pre_left_to_vue(parts, part_index)
+                    # A component's root element is not left to Vue when Citry adds
+                    # attributes to it (such as the one `css_data()` needs),
+                    # since Citry adds them with a Vue binding that Vue would
+                    # not read under `v-pre`.
+                    takes_root_markers = bool(project_root_markers and root_markers and dom_depth == 0)
+                    v_pre_left_to_vue = (
+                        is_v_pre_element_open(part)
+                        and not takes_root_markers
+                        and _v_pre_left_to_vue(parts, part_index)
+                    )
+                    v_pre_open = is_v_pre_element_open(part) and not v_pre_left_to_vue
+                    under_v_pre = v_pre_left_to_vue or authored_v_pre_depth > 0
                     if v_pre_open:
                         # The rest of this branch writes the element without
                         # `v-pre`; its contents follow as one HTML block.
-                        part = _without_v_pre(part)  # noqa: PLW2901
+                        # Blame the root attributes in the error only when they
+                        # are the only reason Citry compiles this element.
+                        part = _without_v_pre(  # noqa: PLW2901
+                            part,
+                            takes_root_markers=takes_root_markers and _v_pre_left_to_vue(parts, part_index),
+                        )
                     if browser_read_trackers:
-                        note_attribute_reads(data_owner_id, part.tag, part.attrs)
+                        # Under `v-pre` Vue still reads `ref`, but every other
+                        # attribute stays a plain attribute that reads no Vue data.
+                        note_attribute_reads(
+                            data_owner_id,
+                            part.tag,
+                            [attr for attr in part.attrs if attr.name.casefold() == "ref"]
+                            if under_v_pre
+                            else part.attrs,
+                        )
                         note_event_reads(data_owner_id, part.tag, part)
                         for browser_binding in part.browser_bindings:
                             if browser_binding.values_expression is not None and _vue_expression_reads_instance(
@@ -3294,7 +3326,14 @@ def assemble_typed_render(
                         browser_attrs,
                         browser_keys,
                         runtime_events_key,
+                        under_v_pre=under_v_pre,
                     )
+                    if v_pre_left_to_vue and not part.is_void:
+                        # The parts up to this element's close sit under
+                        # `v-pre`; the close branch further down lowers the
+                        # count again.
+                        v_pre_closes.append(_ignored_element_close_index(parts, part_index))
+                        authored_v_pre_depth += 1
                     if not part.is_void:
                         element_stack.append(part.tag.lower())
                         element_keys.append(
@@ -3426,7 +3465,7 @@ def assemble_typed_render(
                                 has_spread=part.has_spread,
                             )
                         )
-                        if is_native_state_tag(part.tag)
+                        if writes_vue_owned_marker(part.tag, under_v_pre=authored_v_pre_depth > 0)
                         else ""
                     )
                     if spread_index is None:
@@ -3503,6 +3542,9 @@ def assemble_typed_render(
                     continue
                 if isinstance(part, PreparedElementClose):
                     output.append(f"</{part.tag}>")
+                    if v_pre_closes and v_pre_closes[-1] == part_index:
+                        v_pre_closes.pop()
+                        authored_v_pre_depth -= 1
                     if len(element_stack) <= inherited_element_depth or element_stack.pop() != part.tag.lower():
                         raise UnsupportedPreparedView("prepared element stack changed during text capture")
                     element_keys.pop()
@@ -4466,7 +4508,7 @@ def _component_display_name(citry: Citry) -> Callable[[str], str]:
     return name
 
 
-def _without_v_pre(part: PreparedElementOpen) -> PreparedElementOpen:
+def _without_v_pre(part: PreparedElementOpen, *, takes_root_markers: bool = False) -> PreparedElementOpen:
     """
     Return the opening without its authored `v-pre`, refusing other Vue attributes on it.
 
@@ -4476,18 +4518,116 @@ def _without_v_pre(part: PreparedElementOpen) -> PreparedElementOpen:
     would leave unread under `v-pre`. Under `v-pre`, Vue would also write an
     authored attribute such as `:title` on the element as a plain attribute,
     which a compiled element cannot do, so that is refused.
+
+    ``takes_root_markers`` is True when Citry compiles the element only
+    because it is a component's root that Citry adds attributes to. The
+    error then names that reason.
+
+    Under `v-pre`, Vue also writes the element itself as a plain element, so
+    a `<slot>`, `<component>`, a Vue built-in, or a component name, which
+    Vue writes with capitals (SVG's camelCase elements excepted), stays a
+    plain element. Citry compiles this element as live
+    Vue, where those tags would run as a slot, a component, or a built-in,
+    so they are refused too.
     """
+    if _vue_types_tag(part.tag):
+        raise UnsupportedPreparedView(
+            f"{_directive_element_label(part, 'v-pre')} cannot be kept. Under 'v-pre', Vue writes <{part.tag}>"
+            " as a plain element, but this element holds Citry values, so Citry compiles it as live Vue, where"
+            f" <{part.tag}> would run as a slot, a component, or a built-in. Put 'v-pre' on an element around it."
+        )
     for attr in part.attrs:
         if attr.origin == "source" and is_vue_directive_name(attr.name) and attr.name.casefold() != "v-pre":
+            # At a component root, moving the attribute inward would put it on
+            # another element, so the advice is to wrap the root instead.
+            if takes_root_markers:
+                advice = (
+                    ", because it is the root element of its component and Citry adds attributes to it, such as"
+                    f" the one 'css_data()' needs. Wrap the 'v-pre' element in another element, or remove"
+                    f" '{attr.name}'."
+                )
+            else:
+                advice = ". Put it on an element inside the 'v-pre' element."
             raise UnsupportedPreparedView(
                 f"{_directive_element_label(part, 'v-pre')} also has the Vue attribute '{attr.name}'. Under"
-                " 'v-pre', Vue would write it as a plain attribute, but Citry compiles this element. Put it on"
-                " an element inside the 'v-pre' element."
+                f" 'v-pre', Vue would write it as a plain attribute, but Citry compiles this element{advice}"
             )
     return replace(
         part,
         attrs=tuple(attr for attr in part.attrs if not (attr.origin == "source" and attr.name.casefold() == "v-pre")),
     )
+
+
+# The tags Vue gives a meaning of its own: a slot outlet, a dynamic component,
+# and the built-in components, in both the spellings a template may use.
+_VUE_TYPED_TAGS = frozenset(
+    {
+        "slot",
+        "component",
+        "teleport",
+        "keep-alive",
+        "keepalive",
+        "transition",
+        "transition-group",
+        "transitiongroup",
+        "suspense",
+    }
+)
+
+
+# SVG's camelCase element names (Vue's `isSVGTag` list). Vue reads these as
+# native elements, so their capital letters do not make them components.
+_SVG_CAMEL_CASE_TAGS = frozenset(
+    {
+        "altGlyph",
+        "altGlyphDef",
+        "altGlyphItem",
+        "animateColor",
+        "animateMotion",
+        "animateTransform",
+        "clipPath",
+        "feBlend",
+        "feColorMatrix",
+        "feComponentTransfer",
+        "feComposite",
+        "feConvolveMatrix",
+        "feDiffuseLighting",
+        "feDisplacementMap",
+        "feDistantLight",
+        "feDropShadow",
+        "feFlood",
+        "feFuncA",
+        "feFuncB",
+        "feFuncG",
+        "feFuncR",
+        "feGaussianBlur",
+        "feImage",
+        "feMerge",
+        "feMergeNode",
+        "feMorphology",
+        "feOffset",
+        "fePointLight",
+        "feSpecularLighting",
+        "feSpotLight",
+        "feTile",
+        "feTurbulence",
+        "foreignObject",
+        "glyphRef",
+        "linearGradient",
+        "radialGradient",
+        "textPath",
+    }
+)
+
+
+def _vue_types_tag(tag: str) -> bool:
+    """Return whether Vue reads ``tag`` as more than a plain element when it compiles it outside `v-pre`."""
+    if tag.casefold() in _VUE_TYPED_TAGS:
+        return True
+    # A capital letter makes Vue resolve the tag as a component, except in
+    # SVG's camelCase element names; HTML tags and custom elements are
+    # lowercase.
+    return tag != tag.lower() and tag not in _SVG_CAMEL_CASE_TAGS
 
 
 def _v_pre_left_to_vue(parts: Sequence[RenderPart], open_index: int) -> bool:
@@ -4498,6 +4638,11 @@ def _v_pre_left_to_vue(parts: Sequence[RenderPart], open_index: int) -> bool:
     page without Citry, so Citry writes them unchanged with `v-pre` kept.
     Anything Citry produces (a value, a `c-` binding, `#c-key`, a Citry
     tag) needs Citry's own handling instead.
+
+    `citry check` makes this decision again from the template's nodes
+    (`_v_pre_left_to_vue` in `static_template.py`, whose module docstring
+    lists where the two differ), so a change here needs the same change
+    there; the parity tests in `test_vue_static_template.py` compare the two.
     """
     opening = cast("PreparedElementOpen", parts[open_index])
     if not _authored_element_only(opening):
@@ -4564,6 +4709,12 @@ def _authored_markup_only(parts: Sequence[RenderPart]) -> bool:
             # renders under no component class. A `<c-if>` or `<c-for>` body
             # renders under its component's class and takes Citry's path,
             # since the branch or the rows it picks are data.
+            prepared = part.frame.prepared_occurrence if part.frame.is_transparent_root else None
+            if prepared is not None and prepared.call is not None and prepared.call.explicit_key is not None:
+                # A `#c-key` wraps the body in a keyed Vue `<template>`, which
+                # Vue would not read under `v-pre`, so Citry writes the `v-pre`
+                # element's contents as one block of HTML.
+                return False
             if part.frame.is_transparent_root and part.frame.render_id is not None:
                 receivers.add(part.frame.render_id)
             pending.append(iter(part.parts))
@@ -4839,6 +4990,8 @@ def _append_element_open(
     browser_attrs: list[str] | None = None,
     browser_binding_keys: list[str] | None = None,
     runtime_events_key: str | None = None,
+    *,
+    under_v_pre: bool = False,
 ) -> None:
     start = output.byte_length
     attrs = list(part.authored_attrs)
@@ -4847,7 +5000,7 @@ def _append_element_open(
         vue_owned_native_marker(
             vue_owned_native_properties(part.tag, part.attrs, part.data_attrs, has_spread=part.has_spread)
         )
-        if is_native_state_tag(part.tag)
+        if writes_vue_owned_marker(part.tag, under_v_pre=under_v_pre)
         else ""
     )
     if native_marker:

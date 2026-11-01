@@ -646,10 +646,6 @@ mod tests {
             r#"<input @input.debounce.1s.throttle.2s="go();" />"#,
             r#"<input @input.throttle.debounce.1s="go();" />"#,
             r#"<div @keydown.escape.window.debounce.300ms.stop.prevent="go();"></div>"#,
-            // A dynamic event name takes the modifiers after the brackets.
-            r#"<div @[name].window="go();"></div>"#,
-            r#"<div @[name].outside.stop="go();"></div>"#,
-            r#"<div v-on:[name].debounce.1s="go();"></div>"#,
         ] {
             parse_template(input, None, None).unwrap_or_else(|error| {
                 panic!("expected {input} to parse, got: {error}");
@@ -701,6 +697,15 @@ mod tests {
             (
                 r#"<component @click.document="x = 1;"></component>"#,
                 "component",
+            ),
+            // `<c-element>` counts as the tag its static `is` names.
+            (
+                r#"<c-element is="component" @click.outside="x = 1;" />"#,
+                "c-element",
+            ),
+            (
+                r#"<c-element is="MyThing" @click.outside="x = 1;" />"#,
+                "c-element",
             ),
         ] {
             assert_parse_error(input, &format!("on <{tag}> (line 1, column"));
@@ -865,6 +870,34 @@ mod tests {
     }
 
     #[test]
+    fn citry_listener_modifiers_need_the_event_name_written_out() {
+        // A name in brackets comes from a value at run time, which would let
+        // data decide what a window or document listener hears.
+        let message = "gives the event name in brackets. Citry's listener modifiers need the event name written out, as in '@click.outside'.";
+        for input in [
+            r#"<div @[name].window="go();"></div>"#,
+            r#"<div @[name].outside.stop="go();"></div>"#,
+            r#"<div v-on:[name].debounce.1s="go();"></div>"#,
+        ] {
+            assert_parse_error(input, message);
+        }
+    }
+
+    #[test]
+    fn citry_listener_modifiers_are_rejected_on_capitalized_tags() {
+        // Vue reads a tag that starts with a capital letter as a component,
+        // `<Div>` included.
+        let message = "on a tag that starts with a capital letter, which Vue reads as a component";
+        for input in [
+            r#"<MyThing @click.outside="x = 1;"></MyThing>"#,
+            r#"<Card v-on:close.window="x = 1;" />"#,
+            r#"<Div @click.outside="x = 1;"></Div>"#,
+        ] {
+            assert_parse_error(input, message);
+        }
+    }
+
+    #[test]
     fn an_events_binding_on_a_vue_lifecycle_hook_is_rejected() {
         // Vue runs `onVnodeMounted` and the like as the element's lifecycle
         // hooks, so they are not events an Events binding can listen for.
@@ -907,6 +940,12 @@ mod tests {
                 "div",
             ),
             (r#"<div onCitryOn0="go();"></div>"#, "onCitryOn0", "div"),
+            // `.camel` makes Vue camelize the bound name.
+            (
+                r#"<div :on-citry-on-0.camel="go"></div>"#,
+                ":on-citry-on-0.camel",
+                "div",
+            ),
             // More digits, a Vue modifier, and a component tag.
             (r#"<div @citry-on-12="go();"></div>"#, "@citry-on-12", "div"),
             (
@@ -920,6 +959,18 @@ mod tests {
                 "div",
             ),
             (r#"<c-card @citry-on-0="go();" />"#, "@citry-on-0", "c-card"),
+            // An Events binding `@c-<event>` becomes a listener for `<event>`.
+            (
+                r#"<div @c-citry-on-0="save"></div>"#,
+                "@c-citry-on-0",
+                "div",
+            ),
+            (r#"<div @c-citryOn0="save"></div>"#, "@c-citryOn0", "div"),
+            (
+                r#"<div @c-citry-on-0.prevent="save"></div>"#,
+                "@c-citry-on-0.prevent",
+                "div",
+            ),
             (
                 r#"<c-element is="div" @citry-on-0="go();" />"#,
                 "@citry-on-0",
@@ -1163,5 +1214,104 @@ mod tests {
         ] {
             parse_template(input, None, None).unwrap();
         }
+    }
+
+    #[test]
+    fn vue_only_syntax_inside_v_pre_parses_as_written() {
+        // Vue reads an element with `v-pre`, and everything inside it, as
+        // plain HTML, so none of these reaches a Vue-only check.
+        for input in [
+            "<main><div v-pre><p v-once>a</p></div></main>",
+            "<div v-pre><transition><p>a</p></transition></div>",
+            r#"<div v-pre><button @click.bogus="x">a</button></div>"#,
+            // The element that carries `v-pre` is exempt too.
+            "<p v-pre v-once>a</p>",
+            r#"<div v-pre><p v-show:arg="x">a</p></div>"#,
+            r#"<div v-pre><p :title="a" c-title="b">x</p></div>"#,
+            r#"<div v-pre><p @citry-on-0="x">a</p></div>"#,
+            "<div v-pre><section><keep-alive>x</keep-alive></section></div>",
+            // `v-pre` reaches through a Citry component tag to its children.
+            "<div v-pre><c-child><p v-once>a</p></c-child></div>",
+        ] {
+            parse_template(input, None, None)
+                .unwrap_or_else(|error| panic!("{input} should parse: {error}"));
+        }
+    }
+
+    #[test]
+    fn the_same_vue_only_syntax_outside_v_pre_still_fails() {
+        for (input, message) in [
+            (
+                "<main><div><p v-once>a</p></div></main>",
+                "'v-once' on <p> (line 1, column 15): Citry does not support 'v-once' or 'v-memo'",
+            ),
+            (
+                "<div><transition><p>a</p></transition></div>",
+                "'<transition>' (line 1, column 7) is Vue's built-in 'Transition' component",
+            ),
+            (
+                r#"<div><button @click.bogus="x">a</button></div>"#,
+                "'@click.bogus' (line 1, column 14) uses '.bogus' on the 'click' event.",
+            ),
+            (
+                "<p v-once>a</p>",
+                "'v-once' on <p> (line 1, column 4)",
+            ),
+            (
+                r#"<div><p v-show:arg="x">a</p></div>"#,
+                "'v-show:arg' on <p> (line 1, column 9) takes no argument or modifiers. Write 'v-show=\"...\"'.",
+            ),
+            (
+                r#"<div><p :title="a" c-title="b">x</p></div>"#,
+                "':title' on <p> (line 1, column 9) sets the same attribute as 'c-title'.",
+            ),
+            (
+                r#"<div><p @citry-on-0="x">a</p></div>"#,
+                "'@citry-on-0' on <p> (line 1, column 9) uses a name Citry's compiler writes for itself.",
+            ),
+            (
+                "<div><section><keep-alive>x</keep-alive></section></div>",
+                "'<keep-alive>' (line 1, column 16) is Vue's built-in 'KeepAlive' component",
+            ),
+        ] {
+            assert_parse_error(input, message);
+        }
+    }
+
+    #[test]
+    fn component_tags_keep_their_vue_directive_checks_inside_v_pre() {
+        // A Citry tag still renders inside `v-pre`, so its checks stay on.
+        assert_parse_error(
+            "<div v-pre><c-child v-once /></div>",
+            "Vue directive 'v-once' is not supported on the component tag '<c-child>'.",
+        );
+        assert_parse_error(
+            r#"<div v-pre><c-child v-for="x in y" /></div>"#,
+            "Vue directive 'v-for' is not supported on the component tag '<c-child>'.",
+        );
+    }
+
+    #[test]
+    fn v_pre_with_an_argument_or_modifiers_is_rejected() {
+        // Vue reads these as `v-pre` too, while Citry recognizes only the
+        // plain name, so they are refused rather than read two ways.
+        assert_parse_error(
+            r#"<div v-pre.x>a</div>"#,
+            "'v-pre.x' on <div> (line 1, column 6) takes no argument or modifiers. Write 'v-pre'.",
+        );
+        assert_parse_error(
+            r#"<div v-pre:x>a</div>"#,
+            "'v-pre:x' on <div> (line 1, column 6) takes no argument or modifiers. Write 'v-pre'.",
+        );
+    }
+
+    #[test]
+    fn vue_slot_syntax_on_a_components_child_keeps_its_check_inside_v_pre() {
+        // The child is still the component's content, which Citry places in
+        // a slot, so the check that points at <c-fill> stays on.
+        assert_parse_error(
+            r#"<div v-pre><c-child><template #a>x</template></c-child></div>"#,
+            "Vue slot syntax '<template #a>' does not fill a slot of <c-child>; use '<c-fill name=\"a\">' instead.",
+        );
     }
 }
