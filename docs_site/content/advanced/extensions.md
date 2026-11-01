@@ -352,9 +352,15 @@ that type as given. For example, it refuses to run a script served as
 `text/plain`.
 
 A route accepts `GET` by default. Pass `methods=("POST",)` or another tuple
-to change it. With `methods=None`, every HTTP method reaches the handler,
-which must then return `405 Method Not Allowed` with an `Allow` header
-itself for methods it does not accept.
+to change it. Citry answers any other method with `405 Method Not Allowed`
+before the handler runs. A route that lists `GET` also accepts `HEAD`.
+
+The request path must match the route's path exactly. With Citry mounted
+at `/citry`, the route above answers `/citry/ext/health/status`, while
+`/citry//ext/health/status`, with a second `/`, gets `404 Not Found`. So a
+rule in your web framework that checks the path, such as middleware that
+requires a login for every path starting with `/citry/ext/health`, covers
+every request that reaches the handler.
 
 A plain `def` handler works with every framework integration. An
 `async def` handler passed as `handler` works only with the direct ASGI

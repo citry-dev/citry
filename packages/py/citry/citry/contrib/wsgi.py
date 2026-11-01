@@ -28,7 +28,18 @@ import inspect
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs
 
+<<<<<<< HEAD
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, body_read_limit, match_route, sent_headers
+=======
+from citry.util.routing import (
+    RouteHeaders,
+    RouteRequest,
+    RouteResponse,
+    body_read_limit,
+    match_path_below_mount,
+    route_allows_method,
+)
+>>>>>>> fix(routing): route only the exact path, admit HEAD only on routes that list GET
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -131,13 +142,14 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
             return [response.body]
 
         # When mounted, the host moves the prefix into SCRIPT_NAME; PATH_INFO
-        # is the remainder.
-        path = environ.get("PATH_INFO", "").lstrip("/")
-        matched = match_route(citry_instance.urls, path)
+        # is the remainder. The shared rule routes it the same way as the
+        # ASGI adapter, so a host rule sees the path Citry routes.
+        matched = match_path_below_mount(citry_instance.urls, environ.get("PATH_INFO", ""))
         if matched is None:
             return respond(RouteResponse(content="Not Found", status=404))
         method = environ.get("REQUEST_METHOD", "GET")
-        if method not in matched.route.methods and method != "HEAD":
+        # The shared rule keeps HEAD off POST-only routes, the same on every adapter.
+        if not route_allows_method(matched.route, method):
             return respond(RouteResponse(content="Method Not Allowed", status=405))
 
         handler = matched.route.handler

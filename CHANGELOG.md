@@ -359,6 +359,16 @@
 
 - A form field named `__proto__` is now sent with the Events call like
   any other field.
+- Citry's routes now answer `404` to a path with a second `/` after the
+  mount prefix, such as `/citry//ext/events/call`, with a line break at
+  the end, or without its leading `/`, and `405` to a `HEAD` request on a
+  route that does not accept `GET`, such as the Events call route. Before,
+  these got past a path or method rule in your web framework (on Django,
+  only the `HEAD` request did, and it also skipped the CSRF check). If a
+  client of yours builds Citry URLs by joining a base that ends in `/`
+  with a path that starts with `/`, it now gets `404`, as it already did
+  on Django
+  ([details](https://citry.dev/advanced/extensions/#serve-extension-routes)).
 - An Events `actions.Redirect` to a relative URL, such as `"?page=2"` or
   `"next"`, now takes a visitor who posts a plain HTML form without
   JavaScript to the same page as with JavaScript, not to a "not found"

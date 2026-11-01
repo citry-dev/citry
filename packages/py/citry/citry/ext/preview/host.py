@@ -14,7 +14,18 @@ from urllib.request import ProxyHandler, build_opener
 from typing_extensions import Self
 
 from citry.contrib.asgi import asgi_app
+<<<<<<< HEAD
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, call_maybe_sync, match_route, sent_headers
+=======
+from citry.util.routing import (
+    RouteHeaders,
+    RouteRequest,
+    RouteResponse,
+    call_maybe_sync,
+    match_route,
+    route_allows_method,
+)
+>>>>>>> fix(routing): route only the exact path, admit HEAD only on routes that list GET
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, MutableMapping
@@ -77,9 +88,9 @@ def preview_app(citry: Citry, routes: tuple[URLRoute, ...]) -> ASGIApp:
         if matched is None:
             await _respond(send, RouteResponse("Not Found", status=404), head=head)
             return
-        # Preview serves read-only pages, so only GET and HEAD pass; a route
-        # that does not list GET still answers 405 to it.
-        if method not in ("GET", "HEAD") or (method not in matched.route.methods and not head):
+        # Preview serves read-only pages, so only GET and HEAD pass, and only
+        # where the route allows them under the rule every adapter uses.
+        if method not in ("GET", "HEAD") or not route_allows_method(matched.route, method):
             await _respond(
                 send, RouteResponse("Method Not Allowed", status=405, headers=(("Allow", "GET, HEAD"),)), head=head
             )
