@@ -27,6 +27,7 @@ from types import FunctionType, new_class
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from citry._class_introspection import (
+    _is_abc_bookkeeping,
     _safe_class_text,
     _static_class_dict,
     _static_class_mro,
@@ -320,7 +321,13 @@ def _copied_members(build: BuildInput) -> dict[str, Any]:
             continue
         # A copy: another thread may store a computed value on the class.
         for member_name, member in _static_class_namespace_copy(klass).items():
-            if member_name in _CLASS_BOOKKEEPING_NAMES or member_name in build.field_names:
+            # An ABC's subclass caches belong to the class that holds them; the
+            # generated class gets its own if it is an ABC, and none otherwise.
+            if (
+                member_name in _CLASS_BOOKKEEPING_NAMES
+                or member_name in build.field_names
+                or _is_abc_bookkeeping(klass, member_name)
+            ):
                 continue
             calls_super = _calls_super(member)
             if calls_super is not None:

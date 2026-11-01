@@ -20,7 +20,7 @@ from typing import Any, cast, get_args
 from weakref import WeakKeyDictionary
 
 from citry._annotation_introspection import _own_annotations
-from citry._class_introspection import _safe_class_text, _static_class_namespace_copy
+from citry._class_introspection import _is_abc_bookkeeping, _safe_class_text, _static_class_namespace_copy
 from citry._input_types import _CHECKS_ATTR
 from citry._model_base import ModelBase, dataclass_options
 from citry._nested_declarations import (
@@ -54,8 +54,6 @@ _VALIDATES_BY_NAME = _pydantic_supports("model_validate_json", "by_name")
 _DUMP_EXCLUDES_COMPUTED = _pydantic_supports("model_dump", "exclude_computed_fields")
 
 
-# Names Python's ABC machinery writes on a model class itself.
-_MODEL_CLASS_NAMES = frozenset({"_abc_impl"})
 # The full State meta surface. Every other underscore attribute on a State
 # class is a class-definition error, which is what makes typos loud
 # (``_pubic = (...)`` fails instead of silently doing nothing).
@@ -517,9 +515,10 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
             if _is_dunder(name) or not name.startswith("_"):
                 continue
             # Citry's generated schema carries private construction metadata,
-            # and a render stores its input checks on the class; only
-            # author-written underscore values belong to the State meta.
-            if name in _SYNTHESIZED_STATE_NAMES or name in _MODEL_CLASS_NAMES:
+            # a render stores its input checks on the class, and ABCMeta (the
+            # metaclass of every Pydantic model) stores its subclass caches on
+            # it; only author-written underscore values belong to the State meta.
+            if name in _SYNTHESIZED_STATE_NAMES or _is_abc_bookkeeping(klass, name):
                 continue
             if inspect.isfunction(value) or isinstance(value, _DEF_LIKE):
                 continue  # a private helper method; State may carry methods

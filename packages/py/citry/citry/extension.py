@@ -39,7 +39,7 @@ from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 from weakref import ReferenceType, WeakSet, ref
 
-from citry._class_introspection import _static_class_namespace_copy
+from citry._class_introspection import _is_abc_bookkeeping, _static_class_namespace_copy
 from citry._nested_declarations import (
     NestedClassDeclaration,
     _compose_nested_declaration_class,
@@ -1992,7 +1992,7 @@ class ExtensionManager:
         the nearest declaration's value wins (mirroring attribute lookup).
 
         Excluded, so only what the user wrote counts as a field: dunder names,
-        the extension's ``Config`` base and everything above it, and the
+        the subclass caches an ABC metaclass writes, the extension's ``Config`` base and everything above it, and the
         classes ``_init_component_class`` itself synthesizes (recognized by the
         ``_SYNTHESIZED_CONFIG_ATTR`` stamp), which subclassing a parent
         component's rebuilt config pulls into the MRO.
@@ -2004,6 +2004,10 @@ class ExtensionManager:
                 continue
             for name, value in _static_class_namespace_copy(klass).items():
                 if name.startswith("__") and name.endswith("__"):
+                    continue
+                # A config class that is an ABC carries the metaclass's
+                # subclass caches, which the author never wrote.
+                if _is_abc_bookkeeping(klass, name):
                     continue
                 fields[name] = value
         return fields

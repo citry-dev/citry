@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from _py_abc import ABCMeta as _PyABCMeta
+from abc import ABCMeta
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -67,6 +69,33 @@ def _static_class_namespace_copy(cls: type) -> dict[str, object]:
         # dict mid-copy, with or without the GIL.
         return value.copy()
     return {}
+
+
+def _names_abc_meta_writes(meta: type) -> frozenset[str]:
+    """Return the non-dunder names ``meta`` writes into a class it builds with an empty body."""
+    empty = meta("_EmptyABC", (), {})
+    return frozenset(name for name in vars(empty) if not (name.startswith("__") and name.endswith("__")))
+
+
+# Python ships two ABCMeta implementations, and each writes its subclass
+# caches into every class it builds: the C `_abc` (CPython's `abc.ABCMeta`)
+# writes `_abc_impl`, and the pure-Python `_py_abc` (PyPy's `abc.ABCMeta`)
+# writes `_abc_registry`, `_abc_cache`, and two more. Each set is read from an
+# empty class on the running interpreter rather than listed by hand.
+_ABC_BOOKKEEPING: tuple[tuple[type, frozenset[str]], ...] = tuple(
+    (meta, _names_abc_meta_writes(meta)) for meta in dict.fromkeys((ABCMeta, _PyABCMeta))
+)
+
+
+def _is_abc_bookkeeping(cls: type, name: str) -> bool:
+    """
+    Return whether ``name`` on ``cls`` is a cache that an ABCMeta wrote, not an authored attribute.
+
+    A check that rejects unknown underscore names on a class uses this to
+    leave the metaclass's own entries alone. Every Pydantic model is built by
+    an ABCMeta subclass, so this covers model classes too.
+    """
+    return any(name in names and isinstance(cls, meta) for meta, names in _ABC_BOOKKEEPING)
 
 
 def _static_class_mro(cls: type) -> tuple[type, ...]:

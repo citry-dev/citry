@@ -5,6 +5,8 @@ class-definition errors, and the three-level config resolution
 (docs/design/events.md sections 3.1 to 3.6 and 7.2).
 """
 
+import _py_abc
+import abc
 import functools
 import gc
 import json
@@ -531,6 +533,35 @@ class TestStateCapture:
             " names on State are reserved for the meta:"
             " _public, _model, _storage, _max_bytes, _max_age." in str(err.value)
         )
+
+    @pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["c_abc", "py_abc"])
+    def test_the_caches_an_abc_metaclass_writes_are_not_meta_typos(self, meta):
+        # Each ABCMeta writes its subclass caches into the class: CPython's
+        # `_abc_impl`, or PyPy's `_abc_registry` and friends from `_py_abc`.
+        # Every Pydantic model is such a class, so neither set may read as a
+        # misspelt meta name on any interpreter.
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+
+            class State(metaclass=meta):
+                x: int = 0
+                _public = ("x",)
+
+        assert Comp.State(x=2).x == 2
+
+    def test_a_misspelt_meta_name_on_an_abc_state_still_fails(self):
+        app = _Citry()
+
+        with pytest.raises(ValueError, match="'_pubilc' is not a recognized State meta attribute"):
+
+            class Comp(Component):
+                citry = app
+
+                class State(metaclass=_py_abc.ABCMeta):
+                    x: int = 0
+                    _pubilc = ("x",)
 
     def test_underscore_state_methods_are_helpers(self):
         app = _Citry()
@@ -1751,6 +1782,23 @@ class TestConfigFieldValidation:
             " _csrf_field_names."
             " Did you mean '_guard'?" in str(err.value)
         )
+
+    @pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["c_abc", "py_abc"])
+    def test_the_caches_an_abc_metaclass_writes_are_not_config_fields(self, meta):
+        # An ABC config class carries its metaclass's subclass caches, which
+        # the author never wrote, so they must not read as unknown settings.
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+            template = """
+              <p>x</p>
+            """
+
+            class Events(metaclass=meta):
+                _debounce = 5
+
+        assert Comp.Events._debounce == 5
 
     def test_defaults_handler_rejected(self):
         # Event handlers live on each component's Events class; there is no
