@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 __all__ = ["wsgi_app"]
 
-_STATUS_LINES = {200: "200 OK", 404: "404 Not Found", 405: "405 Method Not Allowed"}
+_STATUS_LINES = {200: "200 OK", 304: "304 Not Modified", 404: "404 Not Found", 405: "405 Method Not Allowed"}
 
 
 def _read_body(environ: dict[str, Any], limit: int | None) -> bytes:

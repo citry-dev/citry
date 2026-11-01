@@ -793,6 +793,11 @@
   report.
 - Pages that repeat a component many times render up to about 9% faster
   on the server.
+- The browser now caches component scripts and stylesheets between page
+  loads. A file whose URL holds a hash of its content is kept for a year,
+  and other component files are checked with the server and downloaded
+  again only after they change
+  ([details](https://citry.dev/advanced/web-frameworks/#how-browsers-cache-files)).
 - `serialize()` with `security_csp` or `security_javascript` set is much
   faster on large pages. On a page with 1,400 table rows,
   `serialize(security_csp="strict")` takes about 100 ms instead of about

@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+from hashlib import sha256
+from typing import TYPE_CHECKING
 
 from citry.util.routing import RouteResponse
+
+if TYPE_CHECKING:
+    from citry.util.routing import RouteRequest
 
 PUBLIC_ASSET_CORS_HEADERS: tuple[tuple[str, str], ...] = (("Access-Control-Allow-Origin", "*"),)
 """
@@ -25,6 +31,25 @@ anonymous request for the same URL returns. A file built from one render's
 method must not return secrets. Routes that run events, read request data, or answer per user must not
 send it. The value does not depend on the request's ``Origin``, so the
 response needs no ``Vary`` header.
+"""
+
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+"""
+The ``Cache-Control`` value for a file whose URL carries a hash of its content.
+
+The URL changes whenever the content does, so the browser may keep the file
+for a year and use it without asking the server again.
+"""
+
+REVALIDATE_CACHE_CONTROL = "no-cache"
+"""
+The ``Cache-Control`` value for a file served at a URL that stays the same
+when its content changes, such as ``cache/<class_id>.js``.
+
+The browser may keep a copy, but it must ask the server before each use. It
+sends the copy's ``ETag`` back, and the server answers ``304 Not Modified``
+with no body while the content is unchanged, so an upgrade reaches the
+browser on its next page load and an unchanged file is not downloaded again.
 """
 
 OWNED_ASSET_CROSSORIGIN = "anonymous"
@@ -62,3 +87,50 @@ class _OwnedResource:
             content_type=self.content_type,
             headers=(*PUBLIC_ASSET_CORS_HEADERS, *self.headers),
         )
+
+    def immutable_response(self) -> RouteResponse:
+        """Build the response for a URL that carries a hash of this content."""
+        return RouteResponse(
+            content=self.content,
+            content_type=self.content_type,
+            headers=(*PUBLIC_ASSET_CORS_HEADERS, *self.headers, ("Cache-Control", IMMUTABLE_CACHE_CONTROL)),
+        )
+
+    def revalidated_response(self, request: RouteRequest | None) -> RouteResponse:
+        """
+        Build the response for a URL whose content can change, answering ``304`` for a current copy.
+
+        ``request`` is ``None`` when a caller runs the handler without an
+        adapter; the response is then always the full file.
+        """
+        etag = _etag(self.content)
+        # The 304 repeats the caching headers, so the browser keeps applying
+        # them to the copy it already holds.
+        headers = (
+            *PUBLIC_ASSET_CORS_HEADERS,
+            *self.headers,
+            ("Cache-Control", REVALIDATE_CACHE_CONTROL),
+            ("ETag", etag),
+        )
+        if request is not None and _etag_matches(request.headers.get("if-none-match", ""), etag):
+            return RouteResponse(content=b"", content_type=self.content_type, status=304, headers=headers)
+        return RouteResponse(content=self.content, content_type=self.content_type, headers=headers)
+
+
+@lru_cache(maxsize=64)
+def _etag(content: str | bytes) -> str:
+    """Return the tag for one file's content, kept so a file is not hashed again on each request."""
+    body = content.encode() if isinstance(content, str) else content
+    return f'"{sha256(body).hexdigest()[:32]}"'
+
+
+def _etag_matches(if_none_match: str, etag: str) -> bool:
+    """Return whether an ``If-None-Match`` header names ``etag``, using the weak comparison HTTP requires."""
+    for candidate in if_none_match.split(","):
+        tag = candidate.strip()
+        # `*` matches any current file. A proxy that compresses the body
+        # may mark the tag weak (`W/"..."`), which still names the same
+        # content for this comparison.
+        if tag == "*" or tag.removeprefix("W/") == etag:
+            return True
+    return False

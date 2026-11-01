@@ -22,6 +22,7 @@ Handlers are framework-neutral (they return ``RouteResponse``); the
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from citry._owned_resource import _OwnedResource
@@ -36,11 +37,10 @@ from citry.ext.dependencies.scripts import (
 from citry.util.routing import RouteResponse, URLRoute
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from citry.citry import Citry
     from citry.component import Component
     from citry.ext.dependencies.types import ScriptType
+    from citry.util.routing import RouteRequest
 
 _CONTENT_TYPES = {"js": "text/javascript", "css": "text/css"}
 # The script spellings a local file may use. The browser checks the type
@@ -52,6 +52,9 @@ def asset_content_type(extension: str) -> str:
     """Return the Content-Type for a served local file, from its extension in any case."""
     return _ASSET_CONTENT_TYPES.get(extension.lower(), "application/octet-stream")
 
+
+# A miss may succeed later, once a worker stores the file, so it is never kept.
+_NO_STORE = (("Cache-Control", "no-store"),)
 
 RUNTIME_PATH = "citry.js"
 """Route path of the client runtime (under the mounted prefix)."""
@@ -81,7 +84,7 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
     """The extension's route table, with handlers bound to one ``Citry`` instance."""
 
     def serve_cached_script(
-        request: Any,  # noqa: ARG001 - the adapter's request object; unused
+        request: RouteRequest | None,
         *,
         class_id: str,
         script_type: str,
@@ -89,13 +92,17 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
     ) -> RouteResponse:
         content_type = _CONTENT_TYPES.get(script_type)
         if content_type is None:
-            return RouteResponse(status=404)
+            return RouteResponse(status=404, headers=_NO_STORE)
 
         try:
             comp_cls = citry.get_component_by_class_id(class_id)
         except KeyError:
-            return RouteResponse(status=404)
+            return RouteResponse(status=404, headers=_NO_STORE)
 
+        # Only a class version's hash is a hash of the bytes served. A
+        # variables hash covers the `css_data()` values, while the stylesheet
+        # text around them comes from Citry's code and can change on upgrade.
+        content_addressed = False
         if vars_hash is None:
             # Class-level scripts repopulate the cache on a miss.
             script = get_component_script(script_type, comp_cls)  # type: ignore[arg-type]
@@ -104,38 +111,55 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
             # variables. Check the class-version namespace first; variables
             # retain their existing key scheme and fallback.
             script = get_cached_component_script(citry, class_id, script_type, vars_hash)  # type: ignore[arg-type]
+            content_addressed = script is not None
             if script is None:
                 current_hash = component_script_hash(script_type, comp_cls)  # type: ignore[arg-type]
                 if current_hash == vars_hash:
                     script = get_cached_component_script(citry, class_id, script_type, vars_hash)  # type: ignore[arg-type]
+                    content_addressed = script is not None
                 else:
                     script = get_script(script_type, comp_cls, vars_hash)  # type: ignore[arg-type]
         if script is None or script.content is None:
-            return RouteResponse(status=404)
-        return _OwnedResource(url="", content=script.content, content_type=content_type).response()
+            # A later request may find the file (another worker stores it),
+            # so neither the browser nor a CDN may keep this answer.
+            return RouteResponse(status=404, headers=_NO_STORE)
+        resource = _OwnedResource(url="", content=script.content, content_type=content_type)
+        if content_addressed:
+            # The bytes at this URL never change.
+            return resource.immutable_response()
+        # `cache/<class_id>.js` serves whatever the class holds now, and a
+        # variables stylesheet's text can change with Citry, so the browser
+        # must check either one is current before each use.
+        return resource.revalidated_response(request)
 
-    def serve_asset(request: Any, *, file_name: str) -> RouteResponse:  # noqa: ARG001 - unused, see above
+    def serve_asset(request: RouteRequest | None, *, file_name: str) -> RouteResponse:  # noqa: ARG001 - unused
         key = gen_asset_cache_key(file_name)
         content = citry.cache.get(key)
         if content is None:
             # This process's next render that links this file writes it again
             # instead of trusting its record that it is stored.
             _forget_stored_key(citry, key)
-            return RouteResponse(status=404)
+            return RouteResponse(status=404, headers=_NO_STORE)
         extension = file_name.rpartition(".")[2]
+        # The file name is the hash of its content (see `cache_asset`).
         return _OwnedResource(
             url="",
             content=content,
             content_type=asset_content_type(extension),
-        ).response()
+        ).immutable_response()
 
-    def serve_runtime(request: Any) -> RouteResponse:  # noqa: ARG001 - unused, see above
+    def serve_runtime(request: RouteRequest | None) -> RouteResponse:  # noqa: ARG001 - unused
         # Imported here, not at module load: emission imports this module's
         # sibling helpers, so a top-level import back into it would be
         # circular.
         from citry.ext.dependencies.emission import _runtime_resource  # noqa: PLC0415
 
-        return _runtime_resource(citry).response()
+        # `citry.js` keeps its URL across upgrades and is the same file as
+        # the Events runtime, so it keeps that route's `no-store`: a stored
+        # copy reused on back/forward navigation could pair a page with the
+        # wrong runtime and fail its integrity check.
+        resource = _runtime_resource(citry)
+        return replace(resource, headers=(*resource.headers, *_NO_STORE)).response()
 
     return [
         # Content-addressed Component.js/css and the variables stylesheet
