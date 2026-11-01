@@ -85,7 +85,7 @@ def test_metadata_requires_the_classifier_the_package_declares():
 
 
 def test_metadata_rejects_a_wheel_without_the_declared_status():
-    metadata = _release_metadata(["Development Status :: 3 - Alpha"])
+    metadata = _release_metadata(["Development Status :: 5 - Production/Stable"])
 
-    with pytest.raises(_MODULE.DistributionVerificationError, match="Production/Stable classifier"):
+    with pytest.raises(_MODULE.DistributionVerificationError, match="alpha classifier"):
         _MODULE._require_metadata(metadata, artifact=Path("citry_ui.whl"), version="0.1.0")
