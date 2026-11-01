@@ -160,6 +160,23 @@ class TypedMappingField:
     blob: Mapping[str, int]
 
 
+class IntKeyedDict:
+    blob: dict[int, str]
+
+
+class AnyValuedDict:
+    blob: dict[str, Any]
+
+
+class DictOfLists:
+    blob: dict[str, list[int]]
+
+
+class TypedDictAndInt:
+    scores: dict[str, int]
+    name: int
+
+
 class Address:
     city: str
     zip_code: str = ""
@@ -737,23 +754,67 @@ class TestContainerCoercion:
         result = validate_args(BareSet, {"tags": 5})
         assert result.fields == {"tags": "Expected a list, got int."}
 
-    def test_dict_field_accepts_object_as_is(self):
-        # Dicts are not in the coercion table: no per-key coercion happens,
-        # even when the annotation is parametrized.
-        result = validate_args(TypedDictField, {"blob": {"a": "not-coerced"}})
+    def test_dict_field_checks_each_value(self):
+        # A parametrized dict used to pass as it came; its values are now
+        # checked, and a bad one is named by its key.
+        result = validate_args(TypedDictField, {"blob": {"a": 1, "b": "not-an-int"}})
+        assert result.fields == {"blob.b": "Expected int, got str."}
+
+    def test_dict_field_accepts_a_valid_object(self):
+        result = validate_args(TypedDictField, {"blob": {"a": 1, "b": 2.0}})
         assert result.ok
-        assert result.value.blob == {"a": "not-coerced"}
+        assert result.value.blob == {"a": 1, "b": 2}
+        assert [type(item) for item in result.value.blob.values()] == [int, int]
 
     def test_dict_field_rejects_non_object(self):
         result = validate_args(TypedDictField, {"blob": 5})
         assert result.fields == {"blob": "Expected an object, got int."}
 
-    def test_mapping_field_accepts_an_object_without_coercing_values(self):
-        blob = MappingProxyType({"a": "not-coerced"})
+    def test_mapping_field_checks_each_value_and_returns_a_plain_dict(self):
+        # A read-only mapping is accepted, and its checked content comes back
+        # as a plain dict rather than the object that was passed in.
+        blob = MappingProxyType({"a": 1})
         result = validate_args(TypedMappingField, {"blob": blob})
 
         assert result.ok
+        assert type(result.value.blob) is dict
+        assert result.value.blob == {"a": 1}
+
+        bad = validate_args(TypedMappingField, {"blob": MappingProxyType({"a": "x"})})
+        assert bad.fields == {"blob.a": "Expected int, got str."}
+
+    def test_int_keyed_dict_binds_keys_by_the_string_rule(self):
+        # A JSON object key is always a string, so "3" has to fill an int key.
+        result = validate_args(IntKeyedDict, {"blob": {"3": "c", "10": "d"}})
+        assert result.ok
+        assert result.value.blob == {3: "c", 10: "d"}
+
+    def test_bad_dict_key_is_named_with_the_key_prefix(self):
+        result = validate_args(IntKeyedDict, {"blob": {"x": "c"}})
+        assert result.fields == {"blob.x": "Invalid key: Not a valid int: 'x'."}
+
+    def test_dict_with_any_values_passes_the_same_object_through(self):
+        # Nothing to coerce, so the caller's object is handed over as it is.
+        blob = {"a": 1, "b": [2]}
+        result = validate_args(AnyValuedDict, {"blob": blob})
+        assert result.ok
         assert result.value.blob is blob
+
+    def test_nested_dict_values_name_the_whole_path(self):
+        result = validate_args(DictOfLists, {"blob": {"a": [1, 2], "b": [3, "x"]}})
+        assert result.fields == {"blob.b.1": "Expected int, got str."}
+
+    @pytest.mark.parametrize(("count", "unlisted"), [(20, 0), (21, 1)])
+    def test_bad_dict_values_stop_at_twenty(self, count, unlisted):
+        # The same per-field limit the Pydantic path has, for a plain class.
+        values = {f"k{index:02d}": "x" for index in range(count)}
+        result = validate_args(TypedDictAndInt, {"scores": values, "name": "x"})
+        # A scalar field's message is always listed beside the dict's.
+        assert result.fields["name"] == "Expected int, got str."
+        assert [name for name in result.fields if name != "name"] == [
+            f"scores.k{index:02d}" for index in range(min(count, 20))
+        ]
+        assert result.unlisted_fields == unlisted
 
     def test_mapping_field_rejects_non_object(self):
         result = validate_args(TypedMappingField, {"blob": 5})

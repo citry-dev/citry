@@ -665,10 +665,9 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
     if origin in (list, tuple, set):
         return _coerce_container(value, annotation, origin, path, errors, bind_strings=bind_strings)
     if origin is dict or origin is Mapping:
-        # Object fields pass as-is; per-key coercion is not in the table.
         expected = dict if origin is dict else Mapping
         if isinstance(value, expected):
-            return value
+            return _coerce_mapping(value, annotation, path, errors, bind_strings=bind_strings)
         return _fail(errors, path, f"Expected an object, got {_value_type_name(value)}.")
     if origin is not None:
         return _fail(errors, path, f"Unsupported annotation for event data: {_type_name(annotation)}.")
@@ -941,6 +940,43 @@ def _coerce_container(
             return set(items)
         except TypeError:
             return _fail(errors, path, "Set items must be hashable.")
+    return items
+
+
+def _coerce_mapping(
+    value: Mapping[Any, Any], annotation: Any, path: str, errors: dict[str, str], *, bind_strings: bool
+) -> Any:
+    """Coerce a parametrized ``dict`` / ``Mapping`` field, key by key and value by value."""
+    args = get_args(annotation)
+    if len(args) != 2:
+        return value
+    key_annotation, value_annotation = args
+    # Keys arrive as JSON strings and values are not checked, so there is
+    # nothing to coerce and the object passes as it came.
+    if key_annotation in (str, Any, object) and value_annotation in (Any, object):
+        return value
+
+    if isinstance(errors, _FieldErrors):
+        errors.containers.add(path)
+    items: dict[Any, Any] = {}
+    ok = True
+    for key, item in value.items():
+        item_path = f"{path}.{key}"
+        # A JSON object key is always a string, as a form value is, so the
+        # key binds by the string-transport rule: "3" fills a `dict[int, ...]`.
+        key_errors: dict[str, str] = {}
+        coerced_key = _coerce(key, key_annotation, item_path, key_errors, bind_strings=True)
+        if coerced_key is _INVALID:
+            ok = False
+            _fail(errors, item_path, f"Invalid key: {next(iter(key_errors.values()), 'Invalid value.')}")
+            continue
+        coerced = _coerce(item, value_annotation, item_path, errors, bind_strings=bind_strings)
+        if coerced is _INVALID:
+            ok = False
+        else:
+            items[coerced_key] = coerced
+    if not ok:
+        return _INVALID
     return items
 
 

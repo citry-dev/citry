@@ -41,6 +41,10 @@ from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
 SIGNING_KEY = "test-secret-key"
 FIXED_NOW = 1_700_000_000.0
 
+# The exact 400 message for JSON nested beyond the 200-level limit.
+DEEP_MESSAGE = (
+    "The request body nests JSON arrays and objects more than 200 levels deep, the most the events endpoints read."
+)
 CSRF_FAILED_MESSAGE = "The call failed the CSRF check; reload the page and try again."
 UNENCODABLE_RESULT_MESSAGE = (
     "The handler returned a value strict JSON cannot encode (for example, a Decimal or a non-finite number such as "
@@ -231,6 +235,17 @@ class TestEnvelopeCodec:
         assert excinfo.value.status == 400
         assert "not valid JSON" in excinfo.value.message
 
+    @pytest.mark.parametrize("depth", [201, 200_000])
+    def test_too_deep_json_is_a_400_with_its_own_message(self, depth):
+        # Valid JSON nested beyond the limit would otherwise crash the parser
+        # (a 500) at the deepest sizes; it is answered like any bad body, with
+        # a message that says what to change.
+        body = ("[" * depth + "]" * depth).encode()
+        with pytest.raises(EventError) as excinfo:
+            EnvelopeCodec().decode(body, _request())
+        assert excinfo.value.status == 400
+        assert excinfo.value.message == DEEP_MESSAGE
+
 
 class TestFlatJsonCodec:
     def test_fields_become_args_and_reserved_fields_map(self):
@@ -290,6 +305,17 @@ class TestFlatJsonCodec:
         # notation included).
         envelope = FlatJsonCodec().decode(b'{"ratio": 2.5, "n": 1e3}', _request())
         assert envelope["calls"][0]["args"] == {"ratio": 2.5, "n": 1000.0}
+
+    @pytest.mark.parametrize("depth", [201, 200_000])
+    def test_too_deep_json_is_a_400_with_its_own_message(self, depth):
+        # Valid JSON nested beyond the limit would otherwise crash the parser
+        # (a 500) at the deepest sizes; it is answered like any bad body, with
+        # a message that says what to change.
+        body = ("[" * depth + "]" * depth).encode()
+        with pytest.raises(EventError) as excinfo:
+            FlatJsonCodec().decode(body, _request())
+        assert excinfo.value.status == 400
+        assert excinfo.value.message == DEEP_MESSAGE
 
 
 class TestFormCodec:

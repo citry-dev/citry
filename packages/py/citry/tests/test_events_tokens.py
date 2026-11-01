@@ -15,10 +15,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass, make_dataclass
+from dataclasses import dataclass, field, make_dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import pytest
 
@@ -73,6 +73,19 @@ class WidgetState:
     query: str = ""
     enabled: bool = False
     note: str | None = None
+
+
+@dataclass
+class ShapedState:
+    # Fields whose types have parts the browser's value is checked against.
+    choice: Literal["a", "b"] = "a"
+    one: Literal[1] = 1
+    tags: list[int] = field(default_factory=list)
+    grid: list[list[int]] = field(default_factory=list)
+    scores: dict[str, int] = field(default_factory=dict)
+    pair: tuple[int, str] = (0, "")
+    runs: tuple[int, ...] = ()
+    maybe_tags: list[int] | None = None
 
 
 @dataclass
@@ -899,6 +912,99 @@ class TestApplyUpdates:
         assert applied == ("exotic",)
         assert lenient.exotic == "anything"
 
+    @pytest.mark.parametrize(
+        ("name", "value", "message"),
+        [
+            ("choice", "c", "Expected one of 'a', 'b', got 'c'."),
+            # Python counts True == 1, but JSON keeps `true` and `1` apart.
+            ("one", True, "Expected one of 1, got true."),
+            ("pair", [1], "Expected a list of 2 items, got 1."),
+            ("pair", [1, "a", 2], "Expected a list of 2 items, got 3."),
+        ],
+    )
+    def test_a_bad_literal_or_tuple_length_names_the_field(self, name, value, message):
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(ShapedState(), {name: value}, model_fields=(name,))
+        assert exc_info.value.fields == {name: message}
+
+    @pytest.mark.parametrize(
+        ("name", "value", "path"),
+        [
+            ("tags", [1, "x", 3], "tags.1"),
+            ("grid", [[1, 2], [3, "x"]], "grid.1.1"),
+            ("scores", {"a": 1, "b": "x"}, "scores.b"),
+            ("pair", ["a", "a"], "pair.0"),
+            ("pair", [1, 2], "pair.1"),
+            ("runs", [1, 2, "x"], "runs.2"),
+            ("maybe_tags", [1, "x"], "maybe_tags.1"),
+        ],
+    )
+    def test_a_bad_item_is_named_by_its_path_and_nothing_is_written(self, name, value, path):
+        state = ShapedState()
+        # `choice` is valid, but the batch fails as a whole, so it is not written either.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {name: value, "choice": "b"}, model_fields=(name, "choice"))
+        message = "Expected str, got int." if path == "pair.1" else "Expected int, got str."
+        assert exc_info.value.fields == {path: message}
+        assert state == ShapedState()
+
+    def test_literal_accepts_a_listed_value(self):
+        state = ShapedState()
+        applied = apply_state_updates(state, {"choice": "b", "one": 1}, model_fields=("choice", "one"))
+        assert applied == ("choice", "one")
+        assert (state.choice, state.one) == ("b", 1)
+
+    def test_good_items_are_written(self):
+        state = ShapedState()
+        updates = {
+            "tags": [1, 2],
+            "grid": [[1], [2, 3]],
+            "scores": {"a": 1},
+            "pair": [4, "x"],
+            "maybe_tags": [5],
+        }
+        apply_state_updates(state, updates, model_fields=tuple(updates))
+        assert state.tags == [1, 2]
+        assert state.grid == [[1], [2, 3]]
+        assert state.scores == {"a": 1}
+        assert state.pair == [4, "x"]
+        assert state.maybe_tags == [5]
+
+    def test_an_optional_list_accepts_null_and_rejects_a_non_list(self):
+        state = ShapedState(maybe_tags=[1])
+        apply_state_updates(state, {"maybe_tags": None}, model_fields=("maybe_tags",))
+        assert state.maybe_tags is None
+        # A value that is no list at all is named at the field, not an item.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {"maybe_tags": 5}, model_fields=("maybe_tags",))
+        assert exc_info.value.fields == {"maybe_tags": "Expected list, got int."}
+
+    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
+    def test_bad_list_items_stop_at_twenty(self, count, note):
+        # The same per-field limit a Pydantic State has, so a crafted write
+        # cannot make the error response as long as the list it sent.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(ShapedState(), {"tags": ["x"] * count}, model_fields=("tags",))
+        assert list(exc_info.value.fields) == [f"tags.{index}" for index in range(min(count, 20))]
+        assert exc_info.value.message == "Some state updates were rejected; see the field messages." + note
+
+    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
+    def test_bad_dict_values_stop_at_twenty(self, count, note):
+        values = {f"k{index:02d}": "x" for index in range(count)}
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(ShapedState(), {"scores": values}, model_fields=("scores",))
+        assert list(exc_info.value.fields) == [f"scores.k{index:02d}" for index in range(min(count, 20))]
+        assert exc_info.value.message == "Some state updates were rejected; see the field messages." + note
+
+    def test_a_scalar_message_is_listed_beside_a_limited_list(self):
+        # The limit applies to a list's items only, so the wrong-typed
+        # `choice` message is kept next to the 20 listed `tags` items.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(ShapedState(), {"tags": ["x"] * 25, "choice": "z"}, model_fields=("tags", "choice"))
+        fields = exc_info.value.fields
+        assert list(fields) == ["choice"] + [f"tags.{index}" for index in range(20)]
+        assert exc_info.value.message.endswith(" 5 more field errors are not shown.")
+
 
 class TestServerStorage:
     def test_round_trip_mutate_remint(self):
@@ -1129,6 +1235,23 @@ class TestPydanticStateItemErrors:
             apply_state_updates(Board(), {"scores": values}, model_fields={"scores"})
         assert list(caught.value.fields) == [f"scores.k{index:02d}" for index in range(min(count, 20))]
         assert caught.value.message == "Some state updates were rejected; see the field messages." + note
+
+    def test_a_wrong_literal_choice_in_a_write_is_rejected(self):
+        # The dataclass State rejects a wrong choice too (see TestApplyUpdates),
+        # so both kinds of State answer a write outside the listed values.
+        pydantic = pytest.importorskip("pydantic")
+
+        class Board(pydantic.BaseModel):
+            choice: Literal["a", "b"] = "a"
+
+        board = Board()
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(board, {"choice": "c"}, model_fields={"choice"})
+        assert caught.value.fields == {"choice": "Input should be 'a' or 'b'"}
+        assert board.choice == "a"
+
+        apply_state_updates(board, {"choice": "b"}, model_fields={"choice"})
+        assert board.choice == "b"
 
     def test_bad_list_items_in_a_pydantic_v1_write_stop_at_twenty(self):
         v1 = pytest.importorskip("pydantic.v1")

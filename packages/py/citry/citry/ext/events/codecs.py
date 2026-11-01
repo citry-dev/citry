@@ -57,10 +57,12 @@ from citry._protocol.events import (
     CAPABILITIES_FIELD,
     FLAT_REQUEST_ID,
     FORM_REQUEST_ID,
+    MAX_JSON_DEPTH,
     PROTOCOL_FIELD,
     REQUEST_ID_FIELD,
     SEND_SEQUENCE_FIELD,
     STATE_TOKEN_FIELD,
+    JsonNestingError,
     build_partial_call_envelope,
     build_query_envelope,
     has_envelope_identity_fields,
@@ -139,6 +141,8 @@ class EnvelopeCodec:
         """Parse the JSON body; anything but a JSON object is malformed."""
         try:
             envelope = _parse_json(body)
+        except JsonNestingError as err:
+            raise EventError(_TOO_DEEP_MESSAGE, status=400) from err
         except ValueError as err:
             # ValueError covers malformed JSON, a non-UTF-8 body, and the
             # rejected non-standard literals alike.
@@ -170,6 +174,8 @@ class FlatJsonCodec:
         """Build the single-call envelope a flat JSON post means."""
         try:
             payload = _parse_json(body)
+        except JsonNestingError as err:
+            raise EventError(_TOO_DEEP_MESSAGE, status=400) from err
         except ValueError as err:
             # ValueError covers malformed JSON, a non-UTF-8 body, and the
             # rejected non-standard literals alike.
@@ -181,6 +187,14 @@ class FlatJsonCodec:
         args, call = split_flat_fields(payload)
         call["args"] = args
         return build_partial_call_envelope(FLAT_REQUEST_ID, call)
+
+
+# Valid JSON, but deeper than the protocol reads, so it gets its own message
+# rather than the malformed-body one.
+_TOO_DEEP_MESSAGE = (
+    f"The request body nests JSON arrays and objects more than {MAX_JSON_DEPTH} levels deep,"
+    " the most the events endpoints read."
+)
 
 
 def _parse_json(body: bytes) -> Any:
@@ -197,7 +211,9 @@ def _parse_json(body: bytes) -> Any:
     like any other malformed body: ``parse_constant`` fires exactly on
     those three literals, ``parse_float`` checks every parsed float, and
     raising in either surfaces as the ``ValueError`` the codecs already
-    answer with a 400.
+    answer with a 400. Text nested more than ``MAX_JSON_DEPTH`` levels
+    raises ``JsonNestingError``, a ``ValueError`` the codecs answer with
+    their own 400 message.
     """
     return loads_strict_json(body)
 

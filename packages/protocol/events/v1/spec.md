@@ -96,7 +96,9 @@ Only places that deliberately carry application data remain open:
 
 All wire values are standard JSON. `NaN`, infinities, executable expressions,
 revivable objects, and other language-specific values are not part of the
-protocol. Servers produce deterministic JSON apart from values that are
+protocol. A server reads a request body nested at most 200 levels deep,
+counting each array and object as one level, and answers a deeper one with
+a 400, as it answers a body that is not JSON. Servers produce deterministic JSON apart from values that are
 naturally minted per render, such as render IDs, state tokens, and HTML that
 contains them. Optional fields at their default value are omitted.
 

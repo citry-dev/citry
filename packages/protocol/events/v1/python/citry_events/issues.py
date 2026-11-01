@@ -193,8 +193,33 @@ def _strict_json_issue(value: Any, path: str) -> ValidationIssue:
     raise AssertionError("strict JSON diagnostic ran for a valid value")
 
 
+# The deepest nesting of arrays and objects a received JSON text may have.
+# Python's own parser and writer give up at a depth that depends on the
+# Python version and on how many frames the web framework already uses, so a
+# fixed bound below all of them gives every host the same answer. Pydantic
+# reads JSON to the same depth, so a value that passes here also fits a
+# Pydantic State.
+MAX_JSON_DEPTH = 200
+
+
+class JsonNestingError(ValueError):
+    """Raised when received JSON nests arrays and objects deeper than ``MAX_JSON_DEPTH``."""
+
+    def __init__(self) -> None:
+        super().__init__(f"JSON nests arrays and objects more than {MAX_JSON_DEPTH} levels deep.")
+
+
 def loads_strict_json(data: str | bytes | bytearray) -> Any:
-    """Parse standard JSON and reject non-finite decoded numbers."""
+    """
+    Parse standard JSON and reject non-finite decoded numbers.
+
+    Raises:
+        JsonNestingError: The text nests arrays and objects more than
+            ``MAX_JSON_DEPTH`` levels deep.
+        ValueError: The text is not valid JSON, or holds a number that is
+            not finite.
+
+    """
 
     def reject_constant(literal: str) -> Any:
         raise ValueError(f"non-standard JSON literal {literal}")
@@ -211,7 +236,38 @@ def loads_strict_json(data: str | bytes | bytearray) -> Any:
             raise ValueError(f"JSON integer out of browser range: {raw}")
         return value
 
-    return json.loads(data, parse_constant=reject_constant, parse_float=finite_float, parse_int=finite_int)
+    try:
+        value = json.loads(data, parse_constant=reject_constant, parse_float=finite_float, parse_int=finite_int)
+    except RecursionError as err:
+        # Python's parser counts nesting against a recursion limit, so text
+        # this deep stops it before the depth check below can run.
+        raise JsonNestingError from err
+    # Every level opens with a bracket or a brace, so text with fewer of
+    # them than the bound cannot exceed it, and most requests skip the walk.
+    if isinstance(data, str):
+        openers = data.count("[") + data.count("{")
+    else:
+        openers = data.count(b"[") + data.count(b"{")
+    if openers > MAX_JSON_DEPTH and _exceeds_depth(value, MAX_JSON_DEPTH):
+        raise JsonNestingError
+    return value
+
+
+def _exceeds_depth(value: Any, limit: int) -> bool:
+    """Whether a parsed JSON value nests arrays and objects more than ``limit`` levels, walked with a stack."""
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    while stack:
+        current, depth = stack.pop()
+        if isinstance(current, dict):
+            children: Any = current.values()
+        elif isinstance(current, list):
+            children = current
+        else:
+            continue
+        if depth > limit:
+            return True
+        stack.extend((child, depth + 1) for child in children if isinstance(child, (dict, list)))
+    return False
 
 
 def copy_json(value: Any) -> Any:

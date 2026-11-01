@@ -361,6 +361,18 @@
   `"/café"` or `"https://bücher.example/"`, now takes a visitor who posts a
   plain HTML form without JavaScript to the same page as with JavaScript,
   instead of the wrong page or a server error.
+- An Events request whose JSON nests arrays and objects more than 200
+  levels deep now gets a 400 response that says so, instead of a server
+  error. The same limit applies to the i18n messages route.
+- A browser write to an Events `State` field now checks what the field's
+  type contains: the choices of a `Literal[...]`, each item of a
+  `list[int]` or `tuple`, and each value of a `dict[str, int]`. A wrong
+  value is rejected with an error that names the item, such as
+  `tags.2`. A Pydantic `State` already made these checks.
+- An Events `data` field typed `dict[str, int]`, or any `dict[K, V]`, now
+  checks each key and value against its type, as a `list[int]` field
+  already checks its items. A key such as `"3"` fills a `dict[int, ...]`
+  field. A Pydantic `data` class already made these checks.
 - Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
   modifier (`@click.bogus`), or a built-in such as `<transition>` no
   longer stops the template from loading. A `<slot>`, `<component>`,

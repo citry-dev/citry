@@ -42,6 +42,8 @@ from .carriers import (
     split_query_fields,
 )
 from .issues import (
+    MAX_JSON_DEPTH,
+    JsonNestingError,
     ProtocolValueError,
     ValidationIssue,
     copy_json,
@@ -98,6 +100,7 @@ __all__ = [
     "ERROR_STATUS_BY_CODE",
     "FLAT_REQUEST_ID",
     "FORM_REQUEST_ID",
+    "MAX_JSON_DEPTH",
     "PROTOCOL",
     "PROTOCOL_FIELD",
     "QUERY_REQUEST_ID",
@@ -108,6 +111,7 @@ __all__ = [
     "SWAPS",
     "CallEnvelopeFailure",
     "CarrierFields",
+    "JsonNestingError",
     "ProtocolValueError",
     "ValidatedCallEnvelope",
     "ValidationIssue",

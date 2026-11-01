@@ -1071,7 +1071,9 @@ primitives (`int`/`float` cross-coercion, `str` to `UUID | datetime |
 date | time | Decimal | Enum`, which parse from strings because a
 string is their canonical JSON encoding, `list` to `tuple`/`set`,
 nested annotated
-classes from objects, and `Literal[...]`, which accepts a value equal to
+classes from objects, `dict[K, V]` objects key by key and value by value,
+where each key, a JSON string, binds like a form value (`"3"` fills
+`dict[int, ...]`), and `Literal[...]`, which accepts a value equal to
 one of its listed values after that value's own type rule, so a form
 post's `"2"` binds to `Literal[1, 2]` and `true` never matches `1`; any
 other value is the per-field 422 "Expected one of ..."); extra keys are a 422, missing required fields are
@@ -4439,7 +4441,10 @@ field, always.
   either way (7.1).
 - **`_model`**: the subset of public fields the client may write
   (through two-way bindings or `$state`); `stateUpdates` entries outside it
-  are rejected, and each accepted value must satisfy the field's type.
+  are rejected, and each accepted value must satisfy the field's type,
+  down to each list or tuple item, each dict value, and the listed
+  values of a `Literal[...]`, with the error at the item's path
+  (`tags.2`).
   Defaults to **the same fields as `_public`**: public means visible
   and writable, and `_model = (...)` exists only to clamp down (a
   visible-but-read-only display flag). Every `_model` field must be
@@ -4565,7 +4570,9 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
 - Abuse limits: request body cap (413, and the host adapters stop reading
   one byte past it, or one message past it under ASGI, so an oversized
   body is never held whole), form field
-  cap (413), `calls` length cap (16 in the schema), state verified before
+  cap (413), JSON nesting cap (400 past 200 levels of arrays and objects,
+  `MAX_JSON_DEPTH` in the protocol package), `calls` length cap (16 in the
+  schema), state verified before
   args are parsed, `on_event` as the rate-limit attachment point.
 
 ### 7.5 Rich components and slots
