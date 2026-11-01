@@ -382,6 +382,13 @@
   value is an object; it does not check the keys inside it. A `data` field
   typed as a `Protocol` without `@runtime_checkable` now gets an error
   that names the field, instead of a server error.
+- `citry ext run preview serve` and `preview render` now answer only
+  requests addressed to `http://localhost` or `http://127.0.0.1`, and
+  refuse calls and fetches sent from pages on other sites. Open the URL
+  the command prints; to reach it from another machine, forward the port
+  and open it as `localhost`. `render --base-url` needs such an address
+  too
+  ([details](https://citry.dev/advanced/previews/#browse-the-gallery)).
 - Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
   modifier (`@click.bogus`), or a built-in such as `<transition>` no
   longer stops the template from loading. A `<slot>`, `<component>`,

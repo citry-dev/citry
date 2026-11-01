@@ -504,6 +504,21 @@ changes. It neither imports nor launches Playwright, and
 does not open a browser automatically. `--port` defaults to 8001; accept integers
 from 0 through 65535, with 0 requesting an OS-assigned port. An occupied explicit
 port fails with a clear error. Binding is `127.0.0.1` in the first release.
+Before routing, the host checks every HTTP request and answers 403 with a plain
+text "Blocked request" body unless both hold:
+
+- There is exactly one `Host` header, and its name is `localhost`, `127.0.0.1`,
+  or `[::1]` (compared without regard to case). A missing or repeated `Host`, or
+  a port that is empty or not a number, is refused. `[::1]` is accepted for a
+  forwarded port that listens on IPv6; the server itself binds IPv4.
+- Every `Origin` header, when present, is `http://` followed by that same `Host`
+  value. `null`, an `https://` origin, an origin with a path, and an origin on
+  another name or port are refused. A request with no `Origin` passes.
+
+Only the name in `Host` is checked, not the port, so a forwarded port still
+works. A browser always sends the page's own name, which a page on another site
+cannot change. `render --base-url` against any other name now gets the 403; a
+reverse proxy works only when it sends `localhost` or `127.0.0.1` as `Host`.
 Capture-only flags (`--outdir`, `--overwrite`, `--base-url`, `--timeout`, and
 `--ready-selector`) are not accepted by `serve`.
 

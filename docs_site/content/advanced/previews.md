@@ -99,6 +99,14 @@ port 8001 by default; pass `--port 0` to pick any free port. Refresh the
 page to see changes to preview template files. Restart the command after
 changing Python code.
 
+The preview server is for local development. It listens on this machine
+only. It answers only when the browser's address is `http://localhost`
+or `http://127.0.0.1`, and only to pages at that same address. Any other
+request gets a "Blocked request" page (status 403). To open the gallery
+from another machine, forward the port, for example with
+`ssh -L 8001:127.0.0.1:8001 devbox`, then open
+`http://localhost:8001/citry/ext/preview/gallery` there.
+
 The gallery shows each example in its own frame (an iframe), sized to the
 example's viewport (the frame's width and height). Each frame is a separate
 page, so one example's styles and teleported content stay inside its
@@ -151,7 +159,9 @@ citry --app myproject.components:app ext run preview render \
 ```
 
 The command checks that the server has the variants you asked for, and
-leaves it running afterward.
+leaves it running afterward. The address must start with
+`http://localhost` or `http://127.0.0.1`, as the server answers no other
+name; forward the port first when the server runs on another machine.
 
 Each screenshot waits for the page, its fonts, and its images to load, and
 CSS animations are turned off. If the component loads data on its own

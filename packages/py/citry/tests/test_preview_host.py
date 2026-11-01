@@ -2,19 +2,22 @@
 
 import asyncio
 import errno
+import http.client
 import socket
 import threading
 from urllib.request import ProxyHandler, build_opener
 
 import pytest
 
-from citry import Citry
+from citry import Citry, Component
 from citry.contrib.asgi import asgi_app
 from citry.ext.preview.host import PreviewServer, preview_app
 from citry.util.routing import RouteResponse, URLRoute, flatten_routes
 
+# What a browser sends when it opens the URL the preview command prints.
+_LOCAL = ((b"Host", b"127.0.0.1:8001"),)
 
-def _messages(app, path, *, method="GET", query=b"", root_path=""):
+def _messages(app, path, *, method="GET", query=b"", root_path="", headers=_LOCAL):
     """Run one request through the ASGI app and return the messages it sent."""
     messages = []
 
@@ -32,7 +35,7 @@ def _messages(app, path, *, method="GET", query=b"", root_path=""):
                 "root_path": root_path,
                 "method": method,
                 "query_string": query,
-                "headers": [(b"X-Test", b"yes")],
+                "headers": [*headers, (b"X-Test", b"yes")],
             },
             receive,
             send,
@@ -217,3 +220,115 @@ def test_missing_server_dependency_is_actionable(monkeypatch):
     with pytest.raises(RuntimeError, match=r"citry\[ext-preview\]"), PreviewServer(engine, ()):
         pass
     assert engine.mounted_prefix is None
+
+
+# A page on another site whose name points at 127.0.0.1 sends its own name in Host
+# and Origin. The other cases are missing, repeated, or look-alike headers that the
+# same check must also refuse.
+_REFUSED = [
+    pytest.param(((b"Host", b"foreign.test:8001"),), id="foreign-host"),
+    pytest.param(
+        ((b"Host", b"foreign.test:8001"), (b"Origin", b"http://foreign.test:8001")),
+        id="foreign-host-and-origin",
+    ),
+    pytest.param((), id="no-host"),
+    pytest.param(((b"Host", b"localhost:8001"), (b"Host", b"evil.test:8001")), id="two-hosts"),
+    pytest.param(((b"Host", b"localhost.evil.test:8001"),), id="localhost-prefix"),
+    pytest.param(((b"Host", b"127.0.0.1.evil.test"),), id="ip-prefix"),
+    pytest.param(((b"Host", b"localhost:8001@evil.test"),), id="userinfo-like"),
+    pytest.param(((b"Host", b"localhost:"),), id="empty-port"),
+    pytest.param(((b"Host", b"localhost:8001"), (b"Origin", b"http://evil.test")), id="foreign-origin"),
+    pytest.param(((b"Host", b"localhost:8001"), (b"Origin", b"null")), id="null-origin"),
+    pytest.param(((b"Host", b"localhost:8001"), (b"Origin", b"https://localhost:8001")), id="https-origin"),
+    pytest.param(((b"Host", b"localhost:8001"), (b"Origin", b"http://localhost:8001/x")), id="origin-with-path"),
+    # A page on another local port is another site, even on a loopback name.
+    pytest.param(((b"Host", b"localhost:8001"), (b"Origin", b"http://localhost:3000")), id="other-port-origin"),
+    pytest.param(((b"Host", b"localhost:8001"), (b"Origin", b"http://127.0.0.1:8001")), id="other-name-origin"),
+    pytest.param(
+        ((b"Host", b"localhost:8001"), (b"Origin", b"http://localhost:8001"), (b"Origin", b"http://evil.test")),
+        id="second-origin",
+    ),
+]
+
+
+@pytest.mark.parametrize("headers", _REFUSED)
+@pytest.mark.parametrize("path", ["/citry/ext/preview/catalog", "/citry/citry.js", "/citry/ext/events/e/X/y", "/"])
+def test_foreign_host_or_origin_is_refused_before_routing(headers, path):
+    def handler(_request):
+        pytest.fail("a refused request reached the preview route")
+
+    app = preview_app(Citry(), (URLRoute("catalog", handler=handler),))
+    status, response_headers, body = _request(app, path, method="POST" if "events" in path else "GET", headers=headers)
+    assert status == 403
+    assert response_headers[b"cache-control"] == b"no-store"
+    assert body.startswith(b"Blocked request:")
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        ((b"Host", b"127.0.0.1:8001"),),
+        ((b"Host", b"localhost:8001"),),
+        ((b"Host", b"LocalHost:8001"),),
+        # A forwarded port (an SSH tunnel or an editor) keeps the loopback name.
+        ((b"Host", b"localhost:9123"),),
+        ((b"Host", b"[::1]:8001"),),
+        ((b"Host", b"[::1]"),),
+        ((b"Host", b"localhost"),),
+        ((b"Host", b"localhost:8001"), (b"Origin", b"http://localhost:8001")),
+        ((b"Host", b"127.0.0.1:8001"), (b"Origin", b"http://127.0.0.1:8001")),
+        ((b"Host", b"[::1]:8001"), (b"Origin", b"HTTP://[::1]:8001")),
+    ],
+)
+def test_loopback_host_and_origin_are_served(headers):
+    app = preview_app(Citry(), (URLRoute("catalog", handler=lambda _request: RouteResponse("catalog")),))
+    assert _request(app, "/citry/ext/preview/catalog", headers=headers)[::2] == (200, b"catalog")
+
+
+def test_head_refusal_has_no_body():
+    app = preview_app(Citry(), ())
+    assert _request(app, "/citry/citry.js", method="HEAD", headers=())[::2] == (403, b"")
+
+
+def test_live_server_refuses_foreign_host_events_call():
+    pytest.importorskip("uvicorn")
+    engine = Citry(secret="s" * 40)
+    calls = []
+
+    class Counter(Component):
+        citry = engine
+        template = """
+<p>counter</p>
+"""
+
+        class Events:
+            def bump(self):
+                calls.append(1)
+
+    with PreviewServer(engine, ()) as server:
+        port = server.port
+
+        def post(host, origin):
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            try:
+                # Send, over a real socket, the Host a browser sends for a page on
+                # another site whose name points at 127.0.0.1.
+                connection.putrequest("POST", f"/citry/ext/events/e/{Counter.class_id}/bump", skip_host=True)
+                connection.putheader("Host", host)
+                connection.putheader("Origin", origin)
+                connection.putheader("Sec-Fetch-Site", "same-origin")
+                connection.putheader("Content-Type", "application/x-www-form-urlencoded")
+                connection.putheader("Content-Length", "0")
+                connection.endheaders()
+                response = connection.getresponse()
+                response.read()
+                return response.status
+            finally:
+                connection.close()
+
+        foreign = f"foreign.test:{port}"
+        assert post(foreign, f"http://{foreign}") == 403
+        assert calls == []
+        local = f"127.0.0.1:{port}"
+        assert post(local, f"http://{local}") in (200, 204)
+        assert calls == [1]

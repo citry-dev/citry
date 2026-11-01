@@ -33,6 +33,50 @@ _PREVIEW = f"{_MOUNT}/ext/preview/"
 _HOST_LOCK = threading.Lock()
 _ACTIVE_ENGINES: set[Citry] = set()
 
+# A browser that opens the printed URL, or a port forwarded to it, names this
+# machine by one of these. A browser always sends the page's own name, which a
+# page on another site cannot change, even when that name points at 127.0.0.1.
+_LOOPBACK_NAMES = frozenset({"localhost", "127.0.0.1", "[::1]"})
+_BLOCKED = (
+    "Blocked request: the preview server answers only requests to http://localhost, "
+    "http://127.0.0.1, or http://[::1] that come from pages at the same address. "
+    "Open the URL the preview command printed; from another machine, forward the port "
+    "and open it as localhost."
+)
+
+
+def _is_loopback_authority(authority: str) -> bool:
+    """Return whether ``host[:port]`` names this machine by a loopback name."""
+    name, colon, port = authority.lower().rpartition(":")
+    # An IPv6 literal without a port ends in "]", so the last colon is inside it.
+    if not colon or authority.endswith("]"):
+        name, port = authority.lower(), ""
+    elif not port.isdigit():
+        return False
+    # Only the name is compared, so a forwarded port (an SSH tunnel or an editor's
+    # port forwarding) keeps working; the name is the part a page on another site cannot change.
+    return name in _LOOPBACK_NAMES
+
+
+def _is_local_request(scope: Scope) -> bool:
+    """Return whether ``Host`` names this machine and every ``Origin`` matches it."""
+    hosts: list[str] = []
+    origins: list[str] = []
+    for key, value in scope.get("headers", ()):
+        if key.lower() == b"host":
+            hosts.append(value.decode("latin-1"))
+        elif key.lower() == b"origin":
+            origins.append(value.decode("latin-1"))
+    # A missing or repeated Host leaves no single name to trust, so refuse it.
+    if len(hosts) != 1 or not _is_loopback_authority(hosts[0]):
+        return False
+    # Browsers send Origin on fetches and form posts. It must be this same address:
+    # a page on another site, a page on another local port, and the "null" origin
+    # that a sandboxed frame or a local file sends must not call the app's handlers.
+    # The server speaks plain HTTP, so an https origin is not one of its pages.
+    expected = "http://" + hosts[0].lower()
+    return all(origin.lower() == expected for origin in origins)
+
 
 async def _respond(send: Send, response: RouteResponse, *, head: bool = False) -> None:
     # Even errors must bypass caches: the command may serve edited examples next time.
@@ -47,7 +91,15 @@ async def _respond(send: Send, response: RouteResponse, *, head: bool = False) -
 
 
 def preview_app(citry: Citry, routes: tuple[URLRoute, ...]) -> ASGIApp:
-    """Build a root ASGI host with preview-relative routes mounted below ``/citry/ext/preview/``."""
+    """
+    Build a root ASGI host with preview-relative routes mounted below ``/citry/ext/preview/``.
+
+    Every HTTP request must name this machine in ``Host`` (``localhost``,
+    ``127.0.0.1``, or ``[::1]``, any port), and any ``Origin`` it sends must be
+    ``http://`` followed by that same ``Host`` value. Anything else gets a 403
+    before routing, so the app's own ``/citry`` routes, Events included, are
+    checked too.
+    """
     ordinary = asgi_app(citry)
     routes = tuple(routes)
 
@@ -65,6 +117,11 @@ def preview_app(citry: Citry, routes: tuple[URLRoute, ...]) -> ASGIApp:
         path = scope["path"]
         method = scope["method"]
         head = method == "HEAD"
+        # Check before routing, so no preview page or Events handler answers a
+        # request that a page on another site sends.
+        if not _is_local_request(scope):
+            await _respond(send, RouteResponse(_BLOCKED, status=403), head=head)
+            return
         if not path.startswith(_PREVIEW):
             if path == _MOUNT or path.startswith(_MOUNT + "/"):
                 # Copy the scope so the ordinary adapter sees a genuine mount without
