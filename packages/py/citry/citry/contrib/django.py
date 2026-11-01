@@ -64,7 +64,14 @@ from citry._django_startup import start_django
 from citry._path_checks import PathLookup, register_path_checker
 from citry._sub_path import normalize_sub_path
 from citry.contrib._path_lookup import files_beside, path_below
-from citry.util.routing import RouteHeaders, RouteRequest, body_read_limit, flatten_routes, normalize_mount_prefix
+from citry.util.routing import (
+    RouteHeaders,
+    RouteRequest,
+    body_read_limit,
+    flatten_routes,
+    normalize_mount_prefix,
+    sent_headers,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -163,7 +170,10 @@ def _make_view(route: URLRoute) -> Any:
 
     def view(request: Any, **kwargs: Any) -> Any:
         if request.method not in route.methods and request.method != "HEAD":
-            return HttpResponseNotAllowed(route.methods)
+            not_allowed = HttpResponseNotAllowed(route.methods)
+            # The same standard header every other Citry response carries.
+            not_allowed["X-Content-Type-Options"] = "nosniff"
+            return not_allowed
         handler = route.handler
         assert handler is not None  # noqa: S101 - flatten_routes only yields handler routes
         # urlpatterns() rejected async handlers up front, so the call returns
@@ -175,7 +185,7 @@ def _make_view(route: URLRoute) -> Any:
         # Reject it loudly instead of silently keeping only the last value;
         # the ASGI and WSGI adapters send every pair.
         seen_names: set[str] = set()
-        for name, value in response.headers:
+        for name, value in sent_headers(response):
             lowered = name.lower()
             if lowered in seen_names:
                 msg = (

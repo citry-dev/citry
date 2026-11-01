@@ -43,6 +43,15 @@ if TYPE_CHECKING:
     from citry.ext.dependencies.types import ScriptType
 
 _CONTENT_TYPES = {"js": "text/javascript", "css": "text/css"}
+# The script spellings a local file may use. The browser checks the type
+# (responses carry X-Content-Type-Options: nosniff), so each must be exact.
+_ASSET_CONTENT_TYPES = {"js": "text/javascript", "mjs": "text/javascript", "cjs": "text/javascript", "css": "text/css"}
+
+
+def asset_content_type(extension: str) -> str:
+    """Return the Content-Type for a served local file, from its extension in any case."""
+    return _ASSET_CONTENT_TYPES.get(extension.lower(), "application/octet-stream")
+
 
 RUNTIME_PATH = "citry.js"
 """Route path of the client runtime (under the mounted prefix)."""
@@ -117,7 +126,7 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
         return _OwnedResource(
             url="",
             content=content,
-            content_type=_CONTENT_TYPES.get(extension, "application/octet-stream"),
+            content_type=asset_content_type(extension),
         ).response()
 
     def serve_runtime(request: Any) -> RouteResponse:  # noqa: ARG001 - unused, see above

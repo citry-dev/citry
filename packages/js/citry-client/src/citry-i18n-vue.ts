@@ -556,7 +556,14 @@ interface PluginGlobal extends Window {
             if (prior !== undefined && prior !== encoded)
               throw new Error(`[Citry] i18n: revision batch ${key} conflicts across targets.`);
             metadata.set(key, encoded);
-            merged[key] = structuredClone(value);
+            // Define each key as an own key, so the copy does not depend
+            // on preparePayload having already rejected unusual keys.
+            Object.defineProperty(merged, key, {
+              configurable: true,
+              enumerable: true,
+              value: structuredClone(value),
+              writable: true,
+            });
           }
           for (const field of ["providers", "barriers", "requirements"] as const) {
             if (!Array.isArray(payload[field]))

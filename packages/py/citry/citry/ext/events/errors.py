@@ -16,7 +16,7 @@ messages as ``fieldErrors``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Any
 
 from citry._protocol.events import build_error
@@ -37,6 +37,18 @@ _STATUS_CODES = {
     422: "invalid_args",
 }
 _FALLBACK_CODE = "error"
+
+# A request alone decides how many fields it sends that the data class
+# does not declare (or State fields the browser may not write), and how
+# many items one list or dict field holds. Listing a message for each
+# could make the response many times the size of the request, so an error
+# lists at most this many of each kind. Messages about other fields, and
+# fields an author passes to EventError, are always listed.
+MAX_UNEXPECTED_FIELDS = 20
+MAX_ITEM_ERRORS = 20
+
+# Pydantic's error types for a key a model does not declare: v2, then v1.
+PYDANTIC_EXTRA_TYPES = frozenset({"extra_forbidden", "value_error.extra"})
 
 # What schema-validation failures say as the human summary; the real content
 # is the per-field map (design events.md 3.7).
@@ -119,6 +131,88 @@ class EventError(Exception):
         return _STATUS_CODES.get(self.status, _FALLBACK_CODE)
 
 
+def limit_unexpected_fields(fields: Mapping[str, str], unexpected: Collection[str]) -> tuple[dict[str, str], int]:
+    """
+    Keep the first ``MAX_UNEXPECTED_FIELDS`` unexpected-field messages and drop the rest.
+
+    Every other message is kept. "First" follows the order of ``fields``,
+    so a caller that sorts its messages keeps the same names on every call.
+
+    Args:
+        fields: The per-field messages.
+        unexpected: The names in ``fields`` that the request sent but the
+            schema or State does not declare.
+
+    Returns:
+        The kept messages, and how many unexpected-field messages were
+        dropped.
+
+    """
+    if len(unexpected) <= MAX_UNEXPECTED_FIELDS:
+        return dict(fields), 0
+    kept: dict[str, str] = {}
+    listed = 0
+    for name, message in fields.items():
+        if name in unexpected:
+            # Past the limit an unexpected name is only counted.
+            if listed >= MAX_UNEXPECTED_FIELDS:
+                continue
+            listed += 1
+        kept[name] = message
+    return kept, len(unexpected) - listed
+
+
+def limit_item_errors(fields: Mapping[str, str], containers: Collection[str]) -> tuple[dict[str, str], int]:
+    """
+    Keep at most ``MAX_ITEM_ERRORS`` messages inside each list or dict field, and drop the rest.
+
+    A message is inside a container when its path starts with the
+    container's path and a dot (``"tags.3"`` is inside ``"tags"``). In a
+    nested container, a message counts toward every container it is
+    inside. Messages outside every container are all kept, and "first"
+    follows the order of ``fields``.
+
+    Args:
+        fields: The per-field messages.
+        containers: The paths of the list and dict fields in the payload.
+
+    Returns:
+        The kept messages, and how many were dropped.
+
+    """
+    if not containers:
+        return dict(fields), 0
+    listed: dict[str, int] = {}
+    kept: dict[str, str] = {}
+    dropped = 0
+    for name, message in fields.items():
+        # Each prefix of the path that is a container is one the message
+        # sits inside; checking the prefixes keeps this one pass over the
+        # messages however many containers there are.
+        parts = name.split(".")
+        inside = [prefix for prefix in (".".join(parts[:end]) for end in range(1, len(parts))) if prefix in containers]
+        if any(listed.get(prefix, 0) >= MAX_ITEM_ERRORS for prefix in inside):
+            dropped += 1
+            continue
+        for prefix in inside:
+            listed[prefix] = listed.get(prefix, 0) + 1
+        kept[name] = message
+    return kept, dropped
+
+
+def unlisted_fields_note(count: int) -> str:
+    """
+    Return the sentence that ends an error message when field messages were left out.
+
+    Returns an empty string for a count of 0, so a caller can append it
+    unconditionally. The text starts with a space.
+    """
+    if count <= 0:
+        return ""
+    noun = "field error is" if count == 1 else "field errors are"
+    return f" {count:,} more {noun} not shown."
+
+
 def invalid_args_error(result: ValidationResult) -> EventError:
     """
     The ``EventError`` for a failed schema validation.
@@ -141,7 +235,8 @@ def invalid_args_error(result: ValidationResult) -> EventError:
     if result.ok:
         msg = "invalid_args_error() takes a failed ValidationResult; this one succeeded."
         raise ValueError(msg)
-    return EventError(_INVALID_ARGS_MESSAGE, fields=result.fields, status=422)
+    message = _INVALID_ARGS_MESSAGE + unlisted_fields_note(result.unlisted_fields)
+    return EventError(message, fields=result.fields, status=422)
 
 
 def wire_error(error: EventError) -> dict[str, Any]:
