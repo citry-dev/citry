@@ -130,20 +130,19 @@ Clients may also negotiate `citry/formatComponentAssets` and
 `citry/formatEmbedded` for one atomic template, JavaScript, and CSS formatting
 operation. Stale or malformed client responses produce no edit.
 
+## Running the server
+
+The `citry-lsp` command talks to your editor over standard input and output
+(stdio) and takes no options other than `--help`. Your editor starts it as a
+child process and talks to it through those streams; the server never
+listens on a network port.
+
 ## Compatibility
 
 The server advertises language-server version 0.2.0, component catalog v1, and
 client protocol v1. It accepts Citry 0.6.0 and newer without a version upper
 bound, and checks the catalog and client protocol contracts before returning
 registry-backed results.
-
-The console command accepts pygls development transports:
-
-```console
-citry-lsp --tcp --host 127.0.0.1 --port 2087
-```
-
-Use stdio for normal editor integration.
 
 For editor setup and troubleshooting, see the
 [Citry IDE guide](https://citry.dev/ide/vscode/). Report problems through the

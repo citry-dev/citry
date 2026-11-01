@@ -97,6 +97,10 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
+- **Breaking:** `citry-lsp` now runs over stdio only. The `--tcp`, `--ws`,
+  `--host`, and `--port` options are removed, and passing one exits with an
+  error. Editors that start `citry-lsp` with no options, including the
+  Citry VS Code extension and the PyCharm template, work as before.
 - **Breaking:** citry-lsp now requires Python 3.11 or newer. On Python
   3.10, pip keeps installing citry-lsp 0.2.0.
 - citry-lsp now requires Citry 0.7.0 or later, which provides the
