@@ -153,9 +153,9 @@ data reaches the fill only as the values of slot props, such as `row`.
     `http:` URLs and paths on your own site.
 
     Do not spread an object built from request data with
-    `v-bind="..."` either. Vue turns each of its keys into an attribute or an event
-    handler on the element, whatever the key is. Bind each value you
-    need under a name you write, such as `:title="row.title"`.
+    `v-bind="..."` either. Vue turns each of its keys into an attribute
+    or an event handler on the element, whatever the key is. Bind each
+    value you need under a name you write, such as `:title="row.title"`.
 
 `<c-slot>` also accepts `v-bind:row`. `v-slot` takes one object pattern,
 such as `{ row }`, or one name, such as `props`, which then holds every
