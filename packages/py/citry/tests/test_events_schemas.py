@@ -10,6 +10,7 @@ import io
 import subprocess
 import sys
 import textwrap
+import typing
 from collections.abc import Mapping
 from dataclasses import dataclass, is_dataclass
 from dataclasses import field as dataclass_field
@@ -18,10 +19,11 @@ from decimal import Decimal
 from enum import Enum, IntEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, Protocol, TypedDict, TypeVar
 from uuid import UUID
 
 import pytest
+import typing_extensions
 
 from citry.ext.events import schemas as schemas_module
 from citry.ext.events.files import UploadedFile
@@ -158,6 +160,94 @@ class TypedDictField:
 
 class TypedMappingField:
     blob: Mapping[str, int]
+
+
+class IntKeyedDict:
+    blob: dict[int, str]
+
+
+class AnyValuedDict:
+    blob: dict[str, Any]
+
+
+class Point(TypedDict):
+    x: int
+
+
+class Reader(Protocol):
+    # Not @runtime_checkable, so isinstance() refuses it.
+    def read(self) -> str: ...
+
+
+class PointList:
+    points: list[Point]
+
+
+class PointMap:
+    by_name: dict[str, Point]
+
+
+class PointField:
+    origin: Point
+
+
+class ReaderField:
+    reader: Reader
+
+
+class ReaderList:
+    readers: list[Reader]
+
+
+class Named(Protocol):
+    # Not @runtime_checkable, and it annotates an attribute, which makes
+    # the class look like an ordinary annotated schema class.
+    name: str
+
+
+class NamedField:
+    named: Named
+
+
+class NamedList:
+    named: list[Named]
+
+
+class ExtensionPoint(typing_extensions.TypedDict):
+    x: int
+
+
+class ExtensionPointField:
+    origin: ExtensionPoint
+
+
+class ExtensionPointList:
+    points: list[ExtensionPoint]
+
+
+class TypingListField:
+    items: typing.List  # noqa: UP006
+
+
+class TypingTupleField:
+    combo: typing.Tuple  # noqa: UP006
+
+
+class Box:
+    size: int
+
+
+class BoxUnion:
+    v: dict[int, Box] | list[Box]
+
+
+class DictOfLists:
+    blob: dict[str, list[int]]
+
+
+class TypedDictAndInt:
+    scores: dict[str, int]
+    name: int
 
 
 class Address:
@@ -737,23 +827,66 @@ class TestContainerCoercion:
         result = validate_args(BareSet, {"tags": 5})
         assert result.fields == {"tags": "Expected a list, got int."}
 
-    def test_dict_field_accepts_object_as_is(self):
-        # Dicts are not in the coercion table: no per-key coercion happens,
-        # even when the annotation is parametrized.
-        result = validate_args(TypedDictField, {"blob": {"a": "not-coerced"}})
+    def test_dict_field_checks_each_value(self):
+        # A parametrized dict's values are checked, and a bad one is named by its key.
+        result = validate_args(TypedDictField, {"blob": {"a": 1, "b": "not-an-int"}})
+        assert result.fields == {"blob.b": "Expected int, got str."}
+
+    def test_dict_field_accepts_a_valid_object(self):
+        result = validate_args(TypedDictField, {"blob": {"a": 1, "b": 2.0}})
         assert result.ok
-        assert result.value.blob == {"a": "not-coerced"}
+        assert result.value.blob == {"a": 1, "b": 2}
+        assert [type(item) for item in result.value.blob.values()] == [int, int]
 
     def test_dict_field_rejects_non_object(self):
         result = validate_args(TypedDictField, {"blob": 5})
         assert result.fields == {"blob": "Expected an object, got int."}
 
-    def test_mapping_field_accepts_an_object_without_coercing_values(self):
-        blob = MappingProxyType({"a": "not-coerced"})
+    def test_mapping_field_checks_each_value_and_returns_a_plain_dict(self):
+        # A read-only mapping is accepted, and its checked content comes back
+        # as a plain dict rather than the object that was passed in.
+        blob = MappingProxyType({"a": 1})
         result = validate_args(TypedMappingField, {"blob": blob})
 
         assert result.ok
+        assert type(result.value.blob) is dict
+        assert result.value.blob == {"a": 1}
+
+        bad = validate_args(TypedMappingField, {"blob": MappingProxyType({"a": "x"})})
+        assert bad.fields == {"blob.a": "Expected int, got str."}
+
+    def test_int_keyed_dict_binds_keys_by_the_string_rule(self):
+        # A JSON object key is always a string, so "3" has to fill an int key.
+        result = validate_args(IntKeyedDict, {"blob": {"3": "c", "10": "d"}})
+        assert result.ok
+        assert result.value.blob == {3: "c", 10: "d"}
+
+    def test_bad_dict_key_is_named_with_the_key_prefix(self):
+        result = validate_args(IntKeyedDict, {"blob": {"x": "c"}})
+        assert result.fields == {"blob.x": "Invalid key: Not a valid int: 'x'."}
+
+    def test_dict_with_any_values_passes_the_same_object_through(self):
+        # Nothing to coerce, so the caller's object is handed over as it is.
+        blob = {"a": 1, "b": [2]}
+        result = validate_args(AnyValuedDict, {"blob": blob})
+        assert result.ok
         assert result.value.blob is blob
+
+    def test_nested_dict_values_name_the_whole_path(self):
+        result = validate_args(DictOfLists, {"blob": {"a": [1, 2], "b": [3, "x"]}})
+        assert result.fields == {"blob.b.1": "Expected int, got str."}
+
+    @pytest.mark.parametrize(("count", "unlisted"), [(20, 0), (21, 1)])
+    def test_bad_dict_values_stop_at_twenty(self, count, unlisted):
+        # The same per-field limit the Pydantic path has, for a plain class.
+        values = {f"k{index:02d}": "x" for index in range(count)}
+        result = validate_args(TypedDictAndInt, {"scores": values, "name": "x"})
+        # A scalar field's message is always listed beside the dict's.
+        assert result.fields["name"] == "Expected int, got str."
+        assert [name for name in result.fields if name != "name"] == [
+            f"scores.k{index:02d}" for index in range(min(count, 20))
+        ]
+        assert result.unlisted_fields == unlisted
 
     def test_mapping_field_rejects_non_object(self):
         result = validate_args(TypedMappingField, {"blob": 5})
@@ -767,6 +900,89 @@ class TestContainerCoercion:
     def test_bare_dict_rejects_non_object(self):
         result = validate_args(BareDict, {"blob": [1]})
         assert result.fields == {"blob": "Expected an object, got list."}
+
+    def test_typed_dict_items_pass_as_they_came(self):
+        # isinstance() refuses a TypedDict, so an object passes unchanged.
+        points = [{"x": 1}, {"unrelated": "kept"}]
+        result = validate_args(PointList, {"points": points})
+        assert result.ok
+        assert result.value.points == points
+
+    def test_a_typed_dict_item_that_is_not_an_object_is_named_by_its_index(self):
+        result = validate_args(PointList, {"points": [{"x": 1}, 3]})
+        assert result.fields == {"points.1": "Expected an object, got int."}
+
+    def test_typed_dict_values_of_a_dict_pass_and_a_bad_one_is_named_by_its_key(self):
+        by_name = {"a": {"x": 1}}
+        result = validate_args(PointMap, {"by_name": by_name})
+        assert result.ok
+        assert result.value.by_name == by_name
+        bad = validate_args(PointMap, {"by_name": {"a": {"x": 1}, "b": "text"}})
+        assert bad.fields == {"by_name.b": "Expected an object, got str."}
+
+    @pytest.mark.parametrize(("value", "message"), [(3, "got int"), ([1], "got list"), ("x", "got str")])
+    def test_a_typed_dict_field_rejects_a_non_object(self, value, message):
+        result = validate_args(PointField, {"origin": value})
+        assert result.fields == {"origin": f"Expected an object, {message}."}
+
+    def test_a_typed_dict_field_accepts_an_object(self):
+        result = validate_args(PointField, {"origin": {"x": 1}})
+        assert result.ok
+        assert result.value.origin == {"x": 1}
+
+    def test_a_protocol_field_without_runtime_checkable_is_unsupported(self):
+        result = validate_args(ReaderField, {"reader": {"read": "x"}})
+        assert result.fields == {"reader": "Unsupported annotation for event data: Reader."}
+
+    def test_a_protocol_list_item_is_named_by_its_index(self):
+        result = validate_args(ReaderList, {"readers": [1]})
+        assert result.fields == {"readers.0": "Unsupported annotation for event data: Reader."}
+
+    def test_a_protocol_with_an_annotated_attribute_is_unsupported(self):
+        # The annotated attribute must not make it a schema class to build from the object.
+        result = validate_args(NamedField, {"named": {"name": "x"}})
+        assert result.fields == {"named": "Unsupported annotation for event data: Named."}
+
+    def test_a_protocol_with_an_annotated_attribute_in_a_list_is_named_by_its_index(self):
+        result = validate_args(NamedList, {"named": [{"name": "x"}]})
+        assert result.fields == {"named.0": "Unsupported annotation for event data: Named."}
+
+    def test_a_typing_extensions_typed_dict_field_accepts_an_object(self):
+        result = validate_args(ExtensionPointField, {"origin": {"x": 1}})
+        assert result.ok
+        assert result.value.origin == {"x": 1}
+
+    def test_a_typing_extensions_typed_dict_field_rejects_a_non_object(self):
+        result = validate_args(ExtensionPointField, {"origin": 5})
+        assert result.fields == {"origin": "Expected an object, got int."}
+
+    def test_a_list_of_typing_extensions_typed_dicts_names_the_bad_item(self):
+        result = validate_args(ExtensionPointList, {"points": [{"x": 1}, 3]})
+        assert result.fields == {"points.1": "Expected an object, got int."}
+        assert validate_args(ExtensionPointList, {"points": [{"x": 1}]}).ok
+
+    def test_a_bare_typing_list_accepts_any_items(self):
+        result = validate_args(TypingListField, {"items": [1, "a"]})
+        assert result.ok
+        assert result.value.items == [1, "a"]
+
+    def test_a_bare_typing_list_rejects_a_non_list(self):
+        result = validate_args(TypingListField, {"items": 5})
+        assert result.fields == {"items": "Expected a list, got int."}
+
+    def test_a_bare_typing_tuple_accepts_any_items(self):
+        # The builtin `tuple[()]` declares an empty tuple, but the bare typing alias does not.
+        result = validate_args(TypingTupleField, {"combo": [1, "a"]})
+        assert result.ok
+        assert result.value.combo == (1, "a")
+
+    def test_a_bare_typing_tuple_rejects_a_non_list(self):
+        result = validate_args(TypingTupleField, {"combo": 5})
+        assert result.fields == {"combo": "Expected a list, got int."}
+
+    def test_a_message_names_a_class_inside_a_generic_without_its_module(self):
+        result = validate_args(BoxUnion, {"v": "s"})
+        assert result.fields == {"v": "Expected dict[int, Box] or list[Box], got str."}
 
 
 class TestUnhashableSetItems:

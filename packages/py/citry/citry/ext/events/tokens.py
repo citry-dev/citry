@@ -50,10 +50,24 @@ import math
 import secrets as secrets_module
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from types import UnionType
-from typing import TYPE_CHECKING, Any, ForwardRef, Union, cast, get_args, get_origin, get_type_hints
+from enum import Enum
+from types import GenericAlias, UnionType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ForwardRef,
+    Literal,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 from weakref import WeakKeyDictionary
+
+import typing_extensions
 
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _static_class_namespace_copy
@@ -64,12 +78,17 @@ from citry.ext.events.errors import (
     limit_unexpected_fields,
     unlisted_fields_note,
 )
-from citry.ext.events.schemas import pydantic_container_paths
+from citry.ext.events.schemas import (
+    _field_path_order,
+    _literal_value_text,
+    generic_label,
+    pydantic_container_paths,
+)
 from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable, Mapping
+    from collections.abc import Collection, Iterable, Sequence
     from datetime import timedelta
 
     from citry.cache import CitryCache
@@ -737,22 +756,23 @@ def apply_state_updates(
     hints = _resolve_hints(type(state))
     errors: dict[str, str] = {}
     unwritable: set[str] = set()
+    # The paths of the list and dict values checked item by item, so the
+    # messages for their items are limited per field like the args ones.
+    containers: set[str] = set()
     to_apply: list[tuple[str, Any]] = []
-    # Sorted iteration keeps the per-field error order (and the applied list)
-    # deterministic regardless of the wire dict's key order.
+    # Sorted iteration keeps the applied list the same whatever order the
+    # browser sent the names in.
     for name in sorted(updates):
         value = updates[name]
         if name not in writable:
             errors[name] = _UNWRITABLE_MESSAGE
             unwritable.add(name)
             continue
-        hint = hints.get(name)
-        if not _value_matches(value, hint):
-            errors[name] = f"Expected {_type_label(hint)}, got {type(value).__name__}."
+        if not _check_value(value, hints.get(name), name, errors, containers):
             continue
         to_apply.append((name, value))
     if errors:
-        raise _rejected_updates(errors, unwritable)
+        raise _rejected_updates(errors, unwritable, containers)
     for name, value in to_apply:
         setattr(state, name, value)
     return tuple(name for name, _ in to_apply)
@@ -772,7 +792,11 @@ def _rejected_updates(
     messages are listed and the message counts the rest. Other messages
     about writable fields are all kept.
     """
-    fields, unexpected_dropped = limit_unexpected_fields(errors, unwritable)
+    # Sorted by path, with list indexes in number order, so the messages kept
+    # under the limits do not depend on the order the browser sent a dict's
+    # keys in, for a dataclass and a Pydantic State alike.
+    ordered = dict(sorted(errors.items(), key=_field_path_order))
+    fields, unexpected_dropped = limit_unexpected_fields(ordered, unwritable)
     fields, items_dropped = limit_item_errors(fields, containers)
     unlisted = unexpected_dropped + items_dropped
     message = "Some state updates were rejected; see the field messages." + unlisted_fields_note(unlisted)
@@ -913,40 +937,149 @@ def _resolve_annotation(annotation: Any, global_ns: dict[str, Any], local_ns: di
     return get_type_hints(_carrier, globalns=global_ns, localns=local_ns)["field"]
 
 
-def _value_matches(value: Any, hint: Any) -> bool:
-    """Whether a JSON value satisfies a field's declared type (a check, not a coercion)."""
+def _check_value(value: Any, hint: Any, path: str, errors: dict[str, str], containers: set[str]) -> bool:
+    """
+    Check a JSON value against a field's declared type, without converting it.
+
+    Records a message at the path of each part that does not fit (``tags.2``
+    for the third item of a list field), keeping the first message for a
+    path, and returns whether the whole value fits. A list, tuple, or dict
+    type is checked item by item, and a ``Literal`` against its listed values.
+    """
     # No usable hint: cannot type-check reliably, so accept and rely on the
     # handler to authorize what it does with the value (7.2).
-    if hint is None or isinstance(hint, str):
+    if hint is None or isinstance(hint, str) or hint is Any or hint is object:
         return True
     origin = get_origin(hint)
     if origin is Union or origin is UnionType:
-        return any(_value_matches(value, arm) for arm in get_args(hint))
+        arms = get_args(hint)
+        others = [arm for arm in arms if arm is not type(None)]
+        # An optional field checks a value against its one other type
+        # directly, so a wrong list item is named, not the whole list.
+        if value is not None and len(others) == 1 and len(others) < len(arms):
+            return _check_value(value, others[0], path, errors, containers)
+        if any(_check_value(value, arm, path, {}, set()) for arm in arms):
+            return True
+        return _fail(errors, path, hint, value)
+    if origin is Literal:
+        return _check_literal(value, hint, path, errors)
     if hint is type(None):
-        return value is None
+        return value is None or _fail(errors, path, hint, value)
     if hint is bool:
-        return type(value) is bool
+        return type(value) is bool or _fail(errors, path, hint, value)
     if hint is int:
         # bool is a subclass of int, but a JSON true is not an integer input.
-        return type(value) is int
+        return type(value) is int or _fail(errors, path, hint, value)
     if hint is float:
         # JSON does not distinguish 1 from 1.0, so an int is a valid float value.
-        return type(value) in (int, float)
+        return type(value) in (int, float) or _fail(errors, path, hint, value)
     if hint is str:
-        return isinstance(value, str)
+        return isinstance(value, str) or _fail(errors, path, hint, value)
     if hint is list or origin is list:
-        return isinstance(value, list)
-    if hint is dict or origin is dict:
-        return isinstance(value, dict)
+        if not isinstance(value, list):
+            return _fail(errors, path, hint, value)
+        item_hint = get_args(hint)[0] if get_args(hint) else Any
+        return _check_items(value, [item_hint] * len(value), path, errors, containers)
     if hint is tuple or origin is tuple:
         # JSON has no tuple: the browser sends a list for a tuple field.
-        return isinstance(value, (list, tuple))
-    # On Python 3.10 a parameterized generic such as ``set[str]`` also counts
-    # as a type, and isinstance() rejects it, so it is told apart by its origin.
+        if not isinstance(value, (list, tuple)):
+            return _fail(errors, path, hint, value)
+        args = get_args(hint)
+        # A bare tuple, or the bare typing alias, says nothing about its items.
+        # Only the builtin ``tuple[()]`` has no arguments and still declares
+        # an empty tuple.
+        if not args and not isinstance(hint, GenericAlias):
+            return True
+        # ``tuple[()]`` has no arguments either, but declares an empty tuple,
+        # so it falls through to the length check below.
+        if len(args) == 2 and args[1] is Ellipsis:
+            return _check_items(value, [args[0]] * len(value), path, errors, containers)
+        if len(value) != len(args):
+            errors.setdefault(path, f"Expected a list of {len(args)} items, got {len(value)}.")
+            return False
+        return _check_items(value, list(args), path, errors, containers)
+    if hint is dict or origin is dict or origin is Mapping:
+        if not isinstance(value, dict):
+            return _fail(errors, path, hint, value)
+        args = get_args(hint)
+        # Only the values are checked. A JSON object key is always a string,
+        # and the token stores a dataclass State as JSON, so its keys come
+        # back as strings whatever the key type says.
+        value_hint = args[1] if len(args) == 2 else Any
+        if value_hint is Any or value_hint is object:
+            return True
+        containers.add(path)
+        ok = True
+        for key, item in value.items():
+            ok = _check_value(item, value_hint, f"{path}.{key}", errors, containers) and ok
+        return ok
+    # A TypedDict is a plain dict at runtime and isinstance() refuses it, so
+    # the value is checked only as an object. typing_extensions also
+    # recognizes its own TypedDict, which Pydantic asks for on Python 3.11.
+    if typing_extensions.is_typeddict(hint):
+        return isinstance(value, dict) or _fail(errors, path, hint, value)
+    # A dataclass State holds plain JSON, so a str or int Enum member is
+    # stored, and written by the browser, as its value.
+    if isinstance(hint, type) and issubclass(hint, Enum):
+        if isinstance(value, hint) or any(_same_json_value(value, member.value) for member in hint):
+            return True
+        return _fail(errors, path, hint, value)
+    # A parametrized generic such as ``set[str]`` is told apart by its origin,
+    # since isinstance() rejects it.
     if isinstance(hint, type) and origin is None:
-        return isinstance(value, hint)
-    # A parameterized or exotic annotation we do not special-case: accept.
+        try:
+            return isinstance(value, hint) or _fail(errors, path, hint, value)
+        except TypeError:
+            # A class isinstance() cannot check, such as a Protocol without
+            # @runtime_checkable, has no usable hint: accept, as above.
+            return True
+    # A parametrized or exotic annotation we do not special-case: accept.
     return True
+
+
+def _value_matches(value: Any, hint: Any) -> bool:
+    """Whether a JSON value fits a field's declared type, the check ``_check_value`` makes, without messages."""
+    return _check_value(value, hint, "", {}, set())
+
+
+def _check_items(
+    items: Sequence[Any], hints: list[Any], path: str, errors: dict[str, str], containers: set[str]
+) -> bool:
+    """Check each item of a list value against its type, recording a message per item."""
+    if all(hint is Any or hint is object for hint in hints):
+        return True
+    containers.add(path)
+    ok = True
+    for index, (item, hint) in enumerate(zip(items, hints, strict=True)):
+        ok = _check_value(item, hint, f"{path}.{index}", errors, containers) and ok
+    return ok
+
+
+def _check_literal(value: Any, hint: Any, path: str, errors: dict[str, str]) -> bool:
+    """Check a value against a ``Literal[...]`` type: it must equal one listed value and have its type."""
+    members = get_args(hint)
+    for member in members:
+        # A dataclass State holds plain JSON, so a str or int Enum member is
+        # stored, and written by the browser, as its value.
+        expected = member.value if isinstance(member, Enum) else member
+        if _same_json_value(value, expected):
+            return True
+    listed = ", ".join(_literal_value_text(member.value if isinstance(member, Enum) else member) for member in members)
+    errors.setdefault(path, f"Expected one of {listed}, got {_literal_value_text(value)}.")
+    return False
+
+
+def _same_json_value(value: Any, expected: Any) -> bool:
+    """Whether a JSON value is ``expected``, with its type: JSON keeps `true` and `1` apart, though Python does not."""
+    # The browser writes 1.0 as 1, so an int still matches a float.
+    same_type = type(value) is type(expected) or (type(value) is int and type(expected) is float)
+    return same_type and value == expected
+
+
+def _fail(errors: dict[str, str], path: str, hint: Any, value: Any) -> bool:
+    """Record the type-mismatch message for ``path`` and report the value as not fitting."""
+    errors.setdefault(path, f"Expected {_type_label(hint)}, got {type(value).__name__}.")
+    return False
 
 
 def _type_label(hint: Any) -> str:
@@ -958,6 +1091,10 @@ def _type_label(hint: Any) -> str:
     origin = get_origin(hint)
     if origin is Union or origin is UnionType:
         return " or ".join(_type_label(arm) for arm in get_args(hint))
+    # A parametrized type is written out in full (``list[int]``), so two
+    # union arms of the same container stay apart in the message.
+    if origin is not None:
+        return generic_label(hint)
     name = getattr(hint, "__name__", None)
     return name if isinstance(name, str) else str(hint)
 

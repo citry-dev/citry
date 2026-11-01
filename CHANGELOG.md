@@ -190,6 +190,14 @@
 
 ### Changed
 
+- Citry now checks and converts each key and value of a `dict[K, V]`
+  field in an Events `data` class, as it already did for each item of a
+  list. A key such as `"3"` fills a `dict[int, ...]` field as the number
+  `3`, and a value typed as a dataclass arrives as an instance of it. If
+  a handler reads such a field as `data.scores["3"]` or
+  `data.points["a"]["x"]`, use the declared types instead:
+  `data.scores[3]` and `data.points["a"].x`. A Pydantic `data` class
+  already did this.
 - `$error(handler).fieldErrors` now lists at most 20 errors for fields
   that the call's `data` class does not declare (or `State` fields it may
   not write), and at most 20 item errors in each list or dict field.
@@ -361,6 +369,19 @@
   `"/café"` or `"https://bücher.example/"`, now takes a visitor who posts a
   plain HTML form without JavaScript to the same page as with JavaScript,
   instead of the wrong page or a server error.
+- An Events request whose JSON nests arrays and objects more than 200
+  levels deep is now rejected with a 400 error that says so, instead of a
+  server error. The i18n messages route applies the same limit.
+- Citry now also checks inside the type of a browser write to an Events
+  `State` field: each item of a `list[int]` or `tuple`, each value of a
+  `dict[str, int]`, and the listed values of a `Literal[...]`. The error
+  names the item that failed, such as `tags.2`. A Pydantic `State` already
+  did this.
+- An Events `State` field or `data` field typed as a `TypedDict`, or as a
+  list of them, no longer causes a server error. Citry checks that the
+  value is an object; it does not check the keys inside it. A `data` field
+  typed as a `Protocol` without `@runtime_checkable` now gets an error
+  that names the field, instead of a server error.
 - Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
   modifier (`@click.bogus`), or a built-in such as `<transition>` no
   longer stops the template from loading. A `<slot>`, `<component>`,

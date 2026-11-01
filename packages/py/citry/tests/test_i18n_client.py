@@ -477,3 +477,30 @@ def test_message_route_returns_an_exact_partition_and_rejects_stale_requests() -
     stale = matched.route.handler(request("stale"))
     assert stale.status == 400
     assert json.loads(stale.content)["error"]["code"] == "I18N_BROWSER_REQUEST_INVALID"
+
+
+@pytest.mark.parametrize("depth", [201, 30_000])
+def test_message_route_rejects_json_nested_beyond_the_depth_limit(depth: int) -> None:
+    app = _app()
+    matched = match_route(app.urls, "ext/i18n/messages")
+    assert matched is not None
+    # Raw text, because json.dumps would hit Python's own recursion limit
+    # first; 30,000 levels fit the route's 64 KiB body limit and stop
+    # Python's JSON parser with RecursionError.
+    body = ("[" * depth + "]" * depth).encode()
+    assert len(body) <= 64 * 1024
+
+    response = matched.route.handler(
+        RouteRequest(
+            method="POST",
+            body=body,
+            content_type="application/json",
+            headers=RouteHeaders((("Content-Type", "application/json"),)),
+        )
+    )
+
+    assert response.status == 400
+    assert json.loads(response.content)["error"] == {
+        "code": "I18N_BROWSER_REQUEST_INVALID",
+        "message": "i18n browser request nests JSON more than 200 levels deep",
+    }

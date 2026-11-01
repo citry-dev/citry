@@ -15,12 +15,15 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass, make_dataclass
+import typing
+from dataclasses import dataclass, field, make_dataclass
 from datetime import timedelta
+from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
 
 import pytest
+import typing_extensions
 
 from citry.cache import InMemoryCache
 from citry.ext.events import tokens
@@ -73,6 +76,69 @@ class WidgetState:
     query: str = ""
     enabled: bool = False
     note: str | None = None
+
+
+@dataclass
+class ShapedState:
+    # Fields whose types have parts the browser's value is checked against.
+    choice: Literal["a", "b"] = "a"
+    one: Literal[1] = 1
+    tags: list[int] = field(default_factory=list)
+    grid: list[list[int]] = field(default_factory=list)
+    scores: dict[str, int] = field(default_factory=dict)
+    pair: tuple[int, str] = (0, "")
+    runs: tuple[int, ...] = ()
+    maybe_tags: list[int] | None = None
+
+
+class Point(TypedDict):
+    x: int
+
+
+class Reader(Protocol):
+    # Not @runtime_checkable, so isinstance() refuses it.
+    def read(self) -> str: ...
+
+
+class Color(str, Enum):
+    RED = "red"
+    BLUE = "blue"
+
+
+class Shade(Enum):
+    # No str or int mix-in, so a member is not equal to its value.
+    DARK = "dark"
+
+
+class ExtensionPoint(typing_extensions.TypedDict):
+    x: int
+
+
+@dataclass
+class EnumShapeState:
+    # Field types a dataclass State stores as plain JSON.
+    extension_point: ExtensionPoint = field(default_factory=lambda: {"x": 0})
+    colors: list[Color] = field(default_factory=list)
+    color_map: dict[str, Color] = field(default_factory=dict)
+    shade: Shade = Shade.DARK
+    combo: typing.Tuple = ()  # noqa: UP006
+
+
+@dataclass
+class TypedShapeState:
+    # Field types whose check has a special case of its own.
+    points: list[Point] = field(default_factory=list)
+    origin: Point = field(default_factory=lambda: {"x": 0})
+    point_map: dict[str, Point] = field(default_factory=dict)
+    readers: list[Reader] = field(default_factory=list)
+    reader: Reader | None = None
+    ratio: Literal[1.0, 2.5] = 1.0
+    color: Literal[Color.RED, Color.BLUE] = Color.RED
+    nothing: tuple[()] = ()
+    anything: tuple = ()
+    either: list[int] | list[str] = field(default_factory=list)
+    numbers: list[int] = field(default_factory=list)
+    scores: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -899,6 +965,258 @@ class TestApplyUpdates:
         assert applied == ("exotic",)
         assert lenient.exotic == "anything"
 
+    @pytest.mark.parametrize(
+        ("name", "value", "message"),
+        [
+            ("choice", "c", "Expected one of 'a', 'b', got 'c'."),
+            # Python counts True == 1, but JSON keeps `true` and `1` apart.
+            ("one", True, "Expected one of 1, got true."),
+            ("pair", [1], "Expected a list of 2 items, got 1."),
+            ("pair", [1, "a", 2], "Expected a list of 2 items, got 3."),
+        ],
+    )
+    def test_a_bad_literal_or_tuple_length_names_the_field(self, name, value, message):
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(ShapedState(), {name: value}, model_fields=(name,))
+        assert exc_info.value.fields == {name: message}
+
+    @pytest.mark.parametrize(
+        ("name", "value", "path"),
+        [
+            ("tags", [1, "x", 3], "tags.1"),
+            ("grid", [[1, 2], [3, "x"]], "grid.1.1"),
+            ("scores", {"a": 1, "b": "x"}, "scores.b"),
+            ("pair", ["a", "a"], "pair.0"),
+            ("pair", [1, 2], "pair.1"),
+            ("runs", [1, 2, "x"], "runs.2"),
+            ("maybe_tags", [1, "x"], "maybe_tags.1"),
+        ],
+    )
+    def test_a_bad_item_is_named_by_its_path_and_nothing_is_written(self, name, value, path):
+        state = ShapedState()
+        # `choice` is valid, but the batch fails as a whole, so it is not written either.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {name: value, "choice": "b"}, model_fields=(name, "choice"))
+        message = "Expected str, got int." if path == "pair.1" else "Expected int, got str."
+        assert exc_info.value.fields == {path: message}
+        assert state == ShapedState()
+
+    def test_literal_accepts_a_listed_value(self):
+        state = ShapedState()
+        applied = apply_state_updates(state, {"choice": "b", "one": 1}, model_fields=("choice", "one"))
+        assert applied == ("choice", "one")
+        assert (state.choice, state.one) == ("b", 1)
+
+    def test_good_items_are_written(self):
+        state = ShapedState()
+        updates = {
+            "tags": [1, 2],
+            "grid": [[1], [2, 3]],
+            "scores": {"a": 1},
+            "pair": [4, "x"],
+            "maybe_tags": [5],
+        }
+        apply_state_updates(state, updates, model_fields=tuple(updates))
+        assert state.tags == [1, 2]
+        assert state.grid == [[1], [2, 3]]
+        assert state.scores == {"a": 1}
+        assert state.pair == [4, "x"]
+        assert state.maybe_tags == [5]
+
+    def test_an_optional_list_accepts_null_and_rejects_a_non_list(self):
+        state = ShapedState(maybe_tags=[1])
+        apply_state_updates(state, {"maybe_tags": None}, model_fields=("maybe_tags",))
+        assert state.maybe_tags is None
+        # A value that is no list at all is named at the field, not an item.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {"maybe_tags": 5}, model_fields=("maybe_tags",))
+        assert exc_info.value.fields == {"maybe_tags": "Expected list[int], got int."}
+
+    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
+    def test_bad_list_items_stop_at_twenty(self, count, note):
+        # The same per-field limit a Pydantic State has, so a long list of
+        # bad items does not make the error response as long as the list.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(ShapedState(), {"tags": ["x"] * count}, model_fields=("tags",))
+        assert list(exc_info.value.fields) == [f"tags.{index}" for index in range(min(count, 20))]
+        assert exc_info.value.message == "Some state updates were rejected; see the field messages." + note
+
+    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
+    def test_bad_dict_values_stop_at_twenty(self, count, note):
+        values = {f"k{index:02d}": "x" for index in range(count)}
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(ShapedState(), {"scores": values}, model_fields=("scores",))
+        assert list(exc_info.value.fields) == [f"scores.k{index:02d}" for index in range(min(count, 20))]
+        assert exc_info.value.message == "Some state updates were rejected; see the field messages." + note
+
+    def test_a_scalar_message_is_listed_beside_a_limited_list(self):
+        # The limit applies to a list's items only, so the wrong-typed
+        # `choice` message is kept next to the 20 listed `tags` items.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(ShapedState(), {"tags": ["x"] * 25, "choice": "z"}, model_fields=("tags", "choice"))
+        fields = exc_info.value.fields
+        assert list(fields) == ["choice"] + [f"tags.{index}" for index in range(20)]
+        assert exc_info.value.message.endswith(" 5 more field errors are not shown.")
+
+    def test_a_typed_dict_field_or_item_accepts_an_object_and_rejects_the_rest(self):
+        # isinstance() refuses a TypedDict, so it is checked as a JSON object.
+        state = TypedShapeState()
+        updates = {"points": [{"x": 1}, {"y": "not checked"}], "origin": {"x": 5}, "point_map": {"a": {"x": 1}}}
+        applied = apply_state_updates(state, updates, model_fields=tuple(updates))
+        assert applied == ("origin", "point_map", "points")
+        assert state.points == [{"x": 1}, {"y": "not checked"}]
+        assert state.origin == {"x": 5}
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(
+                state,
+                {"points": [{"x": 1}, 3], "origin": [1], "point_map": {"a": {"x": 1}, "b": "text"}},
+                model_fields=("points", "origin", "point_map"),
+            )
+        assert exc_info.value.fields == {
+            "origin": "Expected Point, got list.",
+            "point_map.b": "Expected Point, got str.",
+            "points.1": "Expected Point, got int.",
+        }
+        assert state.origin == {"x": 5}
+
+    def test_a_class_isinstance_cannot_check_is_accepted(self):
+        # A Protocol without @runtime_checkable has nothing to check a value
+        # against, so the handler authorizes what it does with the value.
+        state = TypedShapeState()
+        updates = {"readers": [1, "x", None], "reader": {"any": "thing"}}
+        applied = apply_state_updates(state, updates, model_fields=tuple(updates))
+        assert applied == ("reader", "readers")
+        assert state.readers == [1, "x", None]
+        assert state.reader == {"any": "thing"}
+
+    @pytest.mark.parametrize("value", [1, 2.5])
+    def test_a_float_literal_accepts_the_matching_number(self, value):
+        # The browser writes 1.0 as 1, so an int equal to a member matches.
+        state = TypedShapeState()
+        apply_state_updates(state, {"ratio": value}, model_fields=("ratio",))
+        assert state.ratio == value
+
+    @pytest.mark.parametrize("value", [True, 2, "1", 2.0, None])
+    def test_a_float_literal_rejects_other_values(self, value):
+        # `true` equals 1 in Python but is not a number in JSON, and 2.0 is not a listed member.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(TypedShapeState(), {"ratio": value}, model_fields=("ratio",))
+        assert list(exc_info.value.fields) == ["ratio"]
+        assert exc_info.value.fields["ratio"].startswith("Expected one of 1.0, 2.5, got ")
+
+    def test_an_enum_literal_matches_the_members_value(self):
+        # The token stores a str or int Enum member as its value, as JSON.
+        state = TypedShapeState()
+        apply_state_updates(state, {"color": "blue"}, model_fields=("color",))
+        assert state.color == "blue"
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {"color": "RED"}, model_fields=("color",))
+        assert exc_info.value.fields == {"color": "Expected one of 'red', 'blue', got 'RED'."}
+
+    def test_a_typing_extensions_typed_dict_field_accepts_an_object_and_rejects_the_rest(self):
+        state = EnumShapeState()
+        apply_state_updates(state, {"extension_point": {"x": 5}}, model_fields=("extension_point",))
+        assert state.extension_point == {"x": 5}
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {"extension_point": 5}, model_fields=("extension_point",))
+        assert exc_info.value.fields == {"extension_point": "Expected ExtensionPoint, got int."}
+
+    def test_enum_items_accept_the_members_plain_value(self):
+        # A dataclass State stores a str Enum member as "red", so the browser writes that.
+        state = EnumShapeState()
+        updates = {"colors": ["red", "blue"], "color_map": {"a": "red"}}
+        apply_state_updates(state, updates, model_fields=tuple(updates))
+        assert state.colors == ["red", "blue"]
+        assert state.color_map == {"a": "red"}
+
+    def test_enum_items_reject_a_value_no_member_holds(self):
+        updates = {"colors": ["red", "green"], "color_map": {"a": "green", "b": "red"}}
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(EnumShapeState(), updates, model_fields=tuple(updates))
+        assert exc_info.value.fields == {
+            "color_map.a": "Expected Color, got str.",
+            "colors.1": "Expected Color, got str.",
+        }
+
+    def test_an_enum_without_a_mix_in_accepts_a_members_plain_value_too(self):
+        state = EnumShapeState()
+        apply_state_updates(state, {"shade": "dark"}, model_fields=("shade",))
+        assert state.shade == "dark"
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {"shade": "light"}, model_fields=("shade",))
+        assert exc_info.value.fields == {"shade": "Expected Shade, got str."}
+
+    def test_a_bare_typing_tuple_accepts_any_list(self):
+        state = EnumShapeState()
+        apply_state_updates(state, {"combo": [1, 2]}, model_fields=("combo",))
+        assert state.combo == [1, 2]
+        # The rejection names the container, not the empty tuple type.
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {"combo": 5}, model_fields=("combo",))
+        assert exc_info.value.fields == {"combo": "Expected tuple, got int."}
+
+    def test_an_empty_tuple_type_requires_an_empty_list_and_a_bare_tuple_accepts_any_list(self):
+        state = TypedShapeState()
+        apply_state_updates(state, {"nothing": [], "anything": [1, "a", None]}, model_fields=("nothing", "anything"))
+        assert (state.nothing, state.anything) == ([], [1, "a", None])
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {"nothing": [1]}, model_fields=("nothing",))
+        assert exc_info.value.fields == {"nothing": "Expected a list of 0 items, got 1."}
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(state, {"nothing": 5, "anything": "x"}, model_fields=("nothing", "anything"))
+        assert exc_info.value.fields == {
+            "anything": "Expected tuple, got str.",
+            "nothing": "Expected tuple[()], got int.",
+        }
+
+    @pytest.mark.parametrize(
+        ("name", "value", "message"),
+        [
+            ("numbers", "x", "Expected list[int], got str."),
+            ("numbers", {"a": 1}, "Expected list[int], got dict."),
+            ("either", 5, "Expected list[int] or list[str], got int."),
+            ("either", [1, "a"], "Expected list[int] or list[str], got list."),
+            ("scores", [1], "Expected dict[str, int], got list."),
+            # A class inside a parametrized type is named without its module path.
+            ("points", 5, "Expected list[Point], got int."),
+            ("point_map", 5, "Expected dict[str, Point], got int."),
+        ],
+    )
+    def test_a_rejection_names_the_whole_declared_type(self, name, value, message):
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(TypedShapeState(), {name: value}, model_fields=(name,))
+        assert exc_info.value.fields == {name: message}
+
+    def test_a_union_of_containers_accepts_either_arm(self):
+        state = TypedShapeState()
+        apply_state_updates(state, {"either": ["a", "b"]}, model_fields=("either",))
+        assert state.either == ["a", "b"]
+        apply_state_updates(state, {"either": [1, 2]}, model_fields=("either",))
+        assert state.either == [1, 2]
+
+    def test_rejected_messages_are_listed_in_path_order_whatever_the_key_order(self):
+        # Digit segments sort in number order and text after them, so a dict
+        # sent in reverse lists `9` before `10` before `a`.
+        values = {"a": "x", "10": "x", "9": "x", "2": "x"}
+        for ordered in (values, dict(reversed(values.items()))):
+            with pytest.raises(StateUpdateError) as exc_info:
+                apply_state_updates(TypedShapeState(), {"scores": ordered}, model_fields=("scores",))
+            assert list(exc_info.value.fields) == ["scores.2", "scores.9", "scores.10", "scores.a"]
+
+    def test_the_twenty_kept_messages_do_not_depend_on_the_key_order(self):
+        # Without the sort, the 20 kept would be the last 20 sent.
+        values = {str(index): "x" for index in reversed(range(25))}
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(TypedShapeState(), {"scores": values}, model_fields=("scores",))
+        assert list(exc_info.value.fields) == [f"scores.{index}" for index in range(20)]
+        assert exc_info.value.message.endswith(" 5 more field errors are not shown.")
+
+    def test_messages_of_different_fields_are_listed_in_path_order(self):
+        updates = {"scores": {"b": "x", "a": "x"}, "numbers": ["x", 1, "x"], "color": "green"}
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(TypedShapeState(), updates, model_fields=tuple(updates))
+        assert list(exc_info.value.fields) == ["color", "numbers.0", "numbers.2", "scores.a", "scores.b"]
+
 
 class TestServerStorage:
     def test_round_trip_mutate_remint(self):
@@ -1129,6 +1447,37 @@ class TestPydanticStateItemErrors:
             apply_state_updates(Board(), {"scores": values}, model_fields={"scores"})
         assert list(caught.value.fields) == [f"scores.k{index:02d}" for index in range(min(count, 20))]
         assert caught.value.message == "Some state updates were rejected; see the field messages." + note
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_the_twenty_kept_dict_messages_do_not_depend_on_the_key_order(self, reverse):
+        pydantic = pytest.importorskip("pydantic")
+
+        class Board(pydantic.BaseModel):
+            scores: dict[str, int] = {}
+
+        keys = [str(index) for index in range(25)]
+        values = {key: "x" for key in (reversed(keys) if reverse else keys)}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), {"scores": values}, model_fields={"scores"})
+        assert list(caught.value.fields) == [f"scores.{index}" for index in range(20)]
+        assert caught.value.message.endswith(" 5 more field errors are not shown.")
+
+    def test_a_wrong_literal_choice_in_a_write_is_rejected(self):
+        # The dataclass State rejects a wrong choice too (see TestApplyUpdates),
+        # so both kinds of State answer a write outside the listed values.
+        pydantic = pytest.importorskip("pydantic")
+
+        class Board(pydantic.BaseModel):
+            choice: Literal["a", "b"] = "a"
+
+        board = Board()
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(board, {"choice": "c"}, model_fields={"choice"})
+        assert caught.value.fields == {"choice": "Input should be 'a' or 'b'"}
+        assert board.choice == "a"
+
+        apply_state_updates(board, {"choice": "b"}, model_fields={"choice"})
+        assert board.choice == "b"
 
     def test_bad_list_items_in_a_pydantic_v1_write_stop_at_twenty(self):
         v1 = pytest.importorskip("pydantic.v1")

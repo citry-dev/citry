@@ -119,6 +119,16 @@ def _fixture_component(c: Citry) -> type[Component]:
     return HostParity
 
 
+# A depth that stops Python's own JSON parser with RecursionError, to prove no
+# host turns it into a server error.
+DEEP_BODY_LEVELS = 200_000
+DEEP_QUERY_LEVELS = 10_000
+DEEP_BODY_MESSAGE = (
+    "The request body nests JSON arrays and objects more than 200 levels deep;"
+    " the events endpoints read at most 200 levels."
+)
+
+
 def _token(component: type[Component], *, text: str = "") -> str:
     return mint_state_token(
         component.State(text=text),
@@ -187,6 +197,13 @@ class _MountedHost:
                 headers=RUNTIME_HEADERS,
             )
         return self.client.post(url, content=json.dumps(envelope), headers=headers)
+
+    def post_raw_body(self, url: str, body: bytes, content_type: str) -> _Response:
+        # The body goes out exactly as given: json.dumps would hit Python's
+        # own recursion limit on a deeply nested value before it was sent.
+        if self.name == "django":
+            return self.client.post(url, data=body, content_type=content_type, headers=RUNTIME_HEADERS)
+        return self.client.post(url, content=body, headers={"Content-Type": content_type, **RUNTIME_HEADERS})
 
     def get(self, event_name: str, query: dict[str, str]) -> _Response:
         if self.name == "django":
@@ -413,6 +430,57 @@ def _invalid_utf8_compatibility_form(host: _MountedHost) -> _Snapshot:
     return snapshot
 
 
+def _too_deep_json_body(host: _MountedHost) -> tuple[_Snapshot, ...]:
+    body = ("[" * DEEP_BODY_LEVELS + "]" * DEEP_BODY_LEVELS).encode()
+    snapshots = tuple(
+        _json_snapshot(host.post_raw_body(url, body, content_type))
+        for url, content_type in (
+            (host.event_url("add"), ENVELOPE_CONTENT_TYPE),
+            (host.event_url("add"), "application/json"),
+            ("/citry/ext/events/call", ENVELOPE_CONTENT_TYPE),
+        )
+    )
+    error = {"status": 400, "code": "protocol_mismatch", "message": DEEP_BODY_MESSAGE}
+    expected_body = {"protocol": "citry-events/1", "requestId": None, "results": [{"ok": False, "error": error}]}
+    # The per-event routes answer the 400 itself, while the batch route keeps
+    # its rule of always answering 200 with each call's result inside.
+    assert [(snapshot.status, snapshot.body) for snapshot in snapshots] == [
+        (400, expected_body),
+        (400, expected_body),
+        (200, expected_body),
+    ]
+    return snapshots
+
+
+def _too_deep_capabilities_query(host: _MountedHost) -> _Snapshot:
+    # The same limit applies to the JSON a GET carries in its query string.
+    # The HTTP test client refuses a query over 65,536 characters (each
+    # bracket takes three once encoded), so this uses the deepest value that
+    # fits, which still exceeds Python's own recursion limit.
+    value = "[" * DEEP_QUERY_LEVELS + "]" * DEEP_QUERY_LEVELS
+    snapshot = _json_snapshot(host.get("echo", {"text": "hello", "_citry_capabilities": value}))
+    # The value is read like any other unusable capabilities value: a 400.
+    assert snapshot.status == 400
+    assert snapshot.body == {
+        "protocol": "citry-events/1",
+        "requestId": "query",
+        "results": [
+            {
+                "ok": False,
+                "error": {
+                    "status": 400,
+                    "code": "protocol_mismatch",
+                    "message": (
+                        "The envelope's 'capabilities' must contain only 'swaps', 'actions', and 'renderers'; "
+                        "each value must be a duplicate-free array of known v1 names."
+                    ),
+                },
+            }
+        ],
+    }
+    return snapshot
+
+
 def _handler_owned_http_methods(host: _MountedHost) -> tuple[_Snapshot, _Snapshot, _Snapshot, _Snapshot]:
     csrf_rejected = host.request_json("PUT", "replace", {"text": "must-not-run"}, runtime=False)
     assert csrf_rejected.status_code == 403
@@ -474,6 +542,8 @@ SCENARIOS: tuple[Any, ...] = (
     pytest.param(_mixed_batch, id="mixed-batch-always-200"),
     pytest.param(_compatibility_form, id="compatibility-form"),
     pytest.param(_invalid_utf8_compatibility_form, id="invalid-utf8-compatibility-form"),
+    pytest.param(_too_deep_json_body, id="too-deep-json-body"),
+    pytest.param(_too_deep_capabilities_query, id="too-deep-capabilities-query"),
     pytest.param(_handler_owned_http_methods, id="handler-owned-http-methods"),
     pytest.param(_nosniff_on_every_kind_of_response, id="nosniff-on-every-kind-of-response"),
 )
@@ -578,6 +648,24 @@ def test_wsgi_sends_nosniff_with_every_kind_of_events_response() -> None:
         assert by_name.count(("x-content-type-options", "nosniff")) == 1
         assert [value for name, value in by_name if name == "x-content-type-options"] == ["nosniff"]
         assert dict(by_name)["content-type"].startswith(expected_type)
+
+
+def test_wsgi_answers_a_too_deep_json_body_with_a_400() -> None:
+    citry = Citry(secret=SIGNING_KEY)
+    citry.set_mounted_prefix("/citry")
+    component = _fixture_component(citry)
+    body = ("[" * DEEP_BODY_LEVELS + "]" * DEEP_BODY_LEVELS).encode()
+
+    status, _headers, payload = _wsgi_call(
+        citry, "POST", f"/ext/events/e/{component.class_id}/add", body=body, content_type=ENVELOPE_CONTENT_TYPE
+    )
+
+    assert status.startswith("400")
+    assert json.loads(payload)["results"][0]["error"] == {
+        "status": 400,
+        "code": "protocol_mismatch",
+        "message": DEEP_BODY_MESSAGE,
+    }
 
 
 def test_mounted_fastapi_route_delegates_methods_for_a_later_registered_handler() -> None:
