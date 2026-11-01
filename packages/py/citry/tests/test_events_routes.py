@@ -12,12 +12,14 @@ come from packages/protocol/events/v1/tests/.
 import asyncio
 import json
 from decimal import Decimal
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import pytest
 
 from citry import Citry, Component
 from citry._vue import events as vue_events
+from citry.contrib.asgi import asgi_app
+from citry.contrib.wsgi import wsgi_app
 from citry.ext.events import actions, event
 from citry.ext.events import routes as events_routes
 from citry.ext.events.codecs import (
@@ -31,7 +33,7 @@ from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
 from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
-from citry.ext.events.routes import _join_like_a_browser, get_event_url
+from citry.ext.events.routes import _encode_location, _join_like_a_browser, get_event_url
 from citry.ext.events.schemas import StringArgs
 from citry.ext.events.tokens import mint_state_token
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
@@ -661,6 +663,7 @@ class TestEventUrls:
 fastapi = pytest.importorskip("fastapi", reason="the events route tests need fastapi + httpx2")
 pytest.importorskip("httpx2", reason="Starlette's TestClient needs httpx2")
 
+import httpx2  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 RUNTIME_HEADERS = {"X-Citry-Events": "1"}
@@ -695,6 +698,49 @@ def _mounted(c):
     app = fastapi.FastAPI()
     mount(app, c)
     return TestClient(app)
+
+
+def _landing_asgi(c):
+    """Citry under /citry; every other path answers 200 with the path it received."""
+    citry_app = asgi_app(c)
+
+    async def app(scope, receive, send):
+        # Citry's app also answers the lifespan messages the test client sends.
+        if scope["type"] != "http" or scope["path"].startswith("/citry/"):
+            await citry_app({**scope, "root_path": "/citry"}, receive, send)
+            return
+        # Echo the bytes the client put on the wire, so the test sees the encoding.
+        landed = scope["raw_path"] + (b"?" + scope["query_string"] if scope["query_string"] else b"")
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"text/plain")]})
+        await send({"type": "http.response.body", "body": landed})
+
+    return app
+
+
+def _landing_wsgi(c):
+    """The WSGI twin of ``_landing_asgi``: the host moves /citry into SCRIPT_NAME."""
+    citry_app = wsgi_app(c)
+
+    def app(environ, start_response):
+        path = environ["PATH_INFO"]
+        if path.startswith("/citry/"):
+            inner = {**environ, "SCRIPT_NAME": "/citry", "PATH_INFO": path[len("/citry") :]}
+            return citry_app(inner, start_response)
+        # httpx2's WSGI transport decodes the request path as UTF-8 into
+        # PATH_INFO, so encode it back to show what the client sent.
+        landed = quote(path.encode("utf-8"), safe="/%")
+        if environ.get("QUERY_STRING"):
+            landed += "?" + environ["QUERY_STRING"]
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [landed.encode("ascii")]
+
+    return app
+
+
+def _landing_client(c, adapter):
+    if adapter == "asgi":
+        return TestClient(_landing_asgi(c))
+    return httpx2.Client(transport=httpx2.WSGITransport(app=_landing_wsgi(c)), base_url="http://testserver")
 
 
 def _event_url(comp_cls, name):
@@ -1592,6 +1638,75 @@ class TestCompatMode:
         )
         assert str(response.url) == "http://testserver/shop/next"
         assert response.history[0].status_code == 303
+
+    @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
+    @pytest.mark.parametrize(
+        ("target", "location", "landed"),
+        [
+            # A non-ASCII path, query, and fragment become UTF-8 escapes, as
+            # location.assign() would send them. The fragment never reaches
+            # the server.
+            ("/café?q=ü#ß", "/caf%C3%A9?q=%C3%BC#%C3%9F", "/caf%C3%A9?q=%C3%BC"),
+            # A relative URL is resolved against the Referer, then encoded.
+            ("é/ñ?x=ü", "http://testserver/shop/%C3%A9/%C3%B1?x=%C3%BC", "/shop/%C3%A9/%C3%B1?x=%C3%BC"),
+            # The host becomes its IDNA form; the test client sends every
+            # host to the same app, so the request still lands.
+            ("https://bücher.de/ä?x=é#ö", "https://xn--bcher-kva.de/%C3%A4?x=%C3%A9#%C3%B6", "/%C3%A4?x=%C3%A9"),
+            # Escapes and reserved characters already in the URL stay as written.
+            ("/already%C3%A9?a=b&c=%20", "/already%C3%A9?a=b&c=%20", "/already%C3%A9?a=b&c=%20"),
+        ],
+    )
+    def test_non_ascii_redirect_is_percent_encoded_and_followed(self, adapter, target, location, landed):
+        c = _citry()
+        jumper = _jumper(c)
+        with _landing_client(c, adapter) as client:
+            response = client.post(
+                _event_url(jumper, "go"),
+                data={"to": target},
+                headers={"Referer": "http://testserver/shop/list"},
+                follow_redirects=False,
+            )
+            assert response.status_code == 303
+            assert response.headers["location"] == location
+            followed = client.post(
+                _event_url(jumper, "go"),
+                data={"to": target},
+                headers={"Referer": "http://testserver/shop/list"},
+                follow_redirects=True,
+            )
+        assert followed.status_code == 200
+        assert followed.text == landed
+
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            # Checked in Chromium and Firefox: new URL() of the encoded form
+            # equals new URL() of the original, on a page at /shop/list.
+            ("//bücher.de/x", "//xn--bcher-kva.de/x"),
+            ("https://user:pä@例え.jp:8080/p", "https://user:p%C3%A4@xn--r8jz45g.jp:8080/p"),
+            ("https://[::1]:80/é", "https://[::1]:80/%C3%A9"),
+            # IDNA 2003 maps "ß" to "ss" but browsers keep it, so the host is
+            # percent-encoded and the browser converts it itself.
+            ("https://faß.de/", "https://fa%C3%9F.de/"),
+            # A host the IDNA codec rejects is left for the browser the same way.
+            ("https://a..b.ü/", "https://a..b.%C3%BC/"),
+            # IDNA 2003 maps full-width U+FF0F and U+FF20 to "/" and "@", which
+            # would move the host; browsers reject these URLs instead.
+            ("https://evil.example\uff0f.good.test/", "https://evil.example%EF%BC%8F.good.test/"),
+            ("https://a\uff20evil.example/", "https://a%EF%BC%A0evil.example/"),
+            # Browsers do not convert the host of other schemes.
+            ("foo://hö/st", "foo://h%C3%B6/st"),
+            ("mailto:jü@x.de", "mailto:j%C3%BC@x.de"),
+            # Browsers drop outer spaces and newlines and encode inner spaces.
+            (" /a b\n", "/a%20b"),
+            # A lone surrogate becomes U+FFFD, as it does in a browser.
+            ("/x\ud800", "/x%EF%BF%BD"),
+            # A printable ASCII URL is returned as written.
+            ("/a/%zz?b=c#d", "/a/%zz?b=c#d"),
+        ],
+    )
+    def test_location_encoding_matches_browsers(self, url, expected):
+        assert _encode_location(url) == expected
 
     def test_acknowledged_call_is_a_204(self):
         c = _citry()

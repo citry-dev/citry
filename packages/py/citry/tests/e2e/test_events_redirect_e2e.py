@@ -24,6 +24,9 @@ _TARGETS = {
     "sibling": "next",
     "parent": "../x",
     "absolute": "/abs",
+    # Non-ASCII URLs go out percent-encoded in the 303 Location header.
+    "unicode-path": "/café/ñ?q=ü#ß",
+    "unicode-relative": "é?q=ü",
 }
 
 
@@ -55,6 +58,8 @@ def _redirect_page() -> tuple[Citry, str]:
                 <option value="sibling">sibling</option>
                 <option value="parent">parent</option>
                 <option value="absolute">absolute</option>
+                <option value="unicode-path">unicode-path</option>
+                <option value="unicode-relative">unicode-relative</option>
               </select>
               <button type="submit">Go with JavaScript</button>
             </form>
@@ -68,6 +73,8 @@ def _redirect_page() -> tuple[Citry, str]:
                 <option value="sibling">sibling</option>
                 <option value="parent">parent</option>
                 <option value="absolute">absolute</option>
+                <option value="unicode-path">unicode-path</option>
+                <option value="unicode-relative">unicode-relative</option>
               </select>
               <button type="submit">Go without JavaScript</button>
             </form>
@@ -93,6 +100,8 @@ def _redirect_page() -> tuple[Citry, str]:
         ("sibling", "/shop/next"),
         ("parent", "/x"),
         ("absolute", "/abs"),
+        ("unicode-path", "/caf%C3%A9/%C3%B1?q=%C3%BC#%C3%9F"),
+        ("unicode-relative", "/shop/%C3%A9?q=%C3%BC"),
     ],
 )
 def test_relative_redirect_lands_on_the_same_page_without_javascript(

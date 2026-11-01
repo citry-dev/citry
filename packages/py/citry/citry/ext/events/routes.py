@@ -41,10 +41,12 @@ error naming ``EventsDispatcher.dispatch_async`` and the deployment fix.
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from citry._owned_resource import PUBLIC_ASSET_CORS_HEADERS, _OwnedResource
 from citry._protocol.events import (
@@ -639,7 +641,9 @@ def _compat_response(envelope: Mapping[str, Any], request: RouteRequest) -> Rout
     actions = first.get("actions") or []
     redirect = next((action for action in actions if action.get("action") == "redirect"), None)
     if redirect is not None:
-        location = _resolve_redirect_url(redirect["url"], request)
+        # Resolve first, then encode: the resolver works on the URL as the
+        # handler wrote it, and the header must carry only ASCII.
+        location = _encode_location(_resolve_redirect_url(redirect["url"], request))
         return RouteResponse(status=303, headers=(("Location", location),))
     render = next((action for action in actions if action.get("action") == "render"), None)
     if render is not None:
@@ -733,10 +737,9 @@ def _join_like_a_browser(base: SplitResult, reference: str) -> str:
 
     ``urllib.parse.urljoin`` follows RFC 3986 and drops empty path segments,
     so it turns a page at ``//a/b`` into ``/a/b``; a browser keeps them. This
-    follows the WHATWG URL rules for ``http`` and ``https`` instead, so for
-    an ASCII URL the 303 lands where ``location.assign()`` would. It does not
-    percent-encode, so a non-ASCII URL goes out however the web framework's
-    adapter encodes the ``Location`` header.
+    follows the WHATWG URL rules for ``http`` and ``https`` instead, so the
+    303 lands where ``location.assign()`` would. It keeps the characters as
+    written; ``_encode_location`` percent-encodes the result afterwards.
     """
     # Browsers drop tabs and newlines anywhere in a URL before parsing it.
     reference = reference.translate({9: None, 10: None, 13: None}).rstrip(_URL_LEADING_STRIP)
@@ -770,6 +773,110 @@ def _join_like_a_browser(base: SplitResult, reference: str) -> str:
             segments.append(segment)
     resolved_query = f"{question_mark}{query}"
     return f"{origin}/{'/'.join(segments)}{resolved_query}{tail}"
+
+
+# Every printable ASCII character except space. These pass into the header
+# as written: a browser reads reserved characters and "%XX" escapes in a
+# Location exactly as it reads them in location.assign().
+_LOCATION_SAFE = "".join(chr(code) for code in range(0x21, 0x7F))
+
+# A lone surrogate cannot be encoded as UTF-8. Browsers turn one into U+FFFD
+# when a string becomes a URL, so the server does the same.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+# Schemes whose host browsers convert with IDNA. Any other scheme's host is
+# opaque to them, and they percent-encode its non-ASCII characters.
+_SPECIAL_SCHEMES = frozenset({"http", "https", "ws", "wss", "ftp", "file"})
+
+# A scheme (RFC 3986), then an authority after "//". A special scheme also
+# accepts backslashes there, which the pattern allows and the code checks.
+_URL_WITH_AUTHORITY = re.compile(
+    r"^(?:(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*):)?(?P<slashes>[/\\]{2})(?P<rest>.*)$",
+    re.DOTALL,
+)
+
+# The four characters that IDNA 2003 (Python's "idna" codec) maps away but the
+# UTS 46 rules browsers use keep, so the two would name different hosts.
+_IDNA_DEVIATIONS = frozenset("\u00df\u03c2\u200c\u200d")
+
+# Characters the URL standard forbids in a host. IDNA 2003 maps full-width
+# forms such as U+FF0F onto some of them, so "evil.example\uff0f.good" would
+# become "evil.example/.good": a URL that points somewhere else, where a
+# browser rejects the original.
+_FORBIDDEN_HOST_CHARS = frozenset(chr(code) for code in range(0x21)) | frozenset("#%/:<>?@[\\]^|\x7f")
+
+
+def _encode_location(url: str) -> str:
+    """
+    Turn a redirect URL into the ASCII form a ``Location`` header needs.
+
+    HTTP headers carry bytes, and ASGI servers send them as Latin-1, so a
+    URL such as ``"/caf\u00e9"`` must go out as ``"/caf%C3%A9"``, the form
+    a browser gives it when ``location.assign()`` navigates to it. The path,
+    query, and fragment become UTF-8 ``%XX`` escapes, a host on an
+    ``http``/``https`` URL becomes its IDNA (``xn--``) form, and printable
+    ASCII, including reserved characters and existing escapes, stays as is.
+    """
+    # Most URLs are already printable ASCII, and browsers read those as written.
+    if all("!" <= char <= "~" for char in url):
+        return url
+    # Do what browsers do before they parse: drop C0 controls and spaces at
+    # both ends, tabs and newlines anywhere, and replace lone surrogates.
+    url = url.strip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
+    url = _LONE_SURROGATE.sub("\ufffd", url)
+
+    matched = _URL_WITH_AUTHORITY.match(url)
+    scheme = (matched.group("scheme") or "").lower() if matched else ""
+    # Only "//" starts an authority on other schemes; "\\" does on special ones.
+    if matched is None or (scheme not in _SPECIAL_SCHEMES and scheme and matched.group("slashes") != "//"):
+        return quote(url, safe=_LOCATION_SAFE)
+
+    rest = matched.group("rest")
+    # The authority ends at the first character that starts the path,
+    # query, or fragment; a backslash counts on special schemes only.
+    is_special = not scheme or scheme in _SPECIAL_SCHEMES
+    end = re.search(r"[/\\?#]" if is_special else r"[/?#]", rest)
+    authority, tail = (rest[: end.start()], rest[end.start() :]) if end else (rest, "")
+    userinfo, at_sign, host_port = authority.rpartition("@")
+    host, colon, port = host_port, "", ""
+    # A port follows the last colon, unless that colon sits inside an IPv6
+    # literal such as "[::1]".
+    if ":" in host_port and not host_port.endswith("]"):
+        host, colon, port = host_port.rpartition(":")
+    if is_special:
+        host = _host_to_ascii(host)
+    head = url[: matched.start("rest")]
+    authority = f"{userinfo}{at_sign}{host}{colon}{port}"
+    return quote(f"{head}{authority}{tail}", safe=_LOCATION_SAFE)
+
+
+def _host_to_ascii(host: str) -> str:
+    """
+    Convert a non-ASCII host to its IDNA form when that matches browsers.
+
+    Browsers convert hosts with the UTS 46 rules, and Python's ``idna``
+    codec implements IDNA 2003 on Unicode 3.2. The two agree except on four
+    characters and on characters newer than Unicode 3.2. For those, for a
+    host the codec rejects, and for one it maps onto a character that cannot
+    appear in a host, the host stays as written and the caller
+    percent-encodes it: a browser decodes the escapes and applies its own
+    rules, so it still lands where ``location.assign()`` would.
+    """
+    if host.isascii():
+        return host
+    if any(char in _IDNA_DEVIATIONS for char in host):
+        return host
+    if any(unicodedata.ucd_3_2_0.category(char) == "Cn" for char in host):
+        return host
+    try:
+        converted = host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return host
+    # Keep the IDNA form only when it is still one host, so the conversion
+    # can never move the URL's host, port, path, or query.
+    if any(char in _FORBIDDEN_HOST_CHARS for char in converted):
+        return host
+    return converted
 
 
 def _with_no_store(response: RouteResponse) -> RouteResponse:
