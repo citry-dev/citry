@@ -80,6 +80,29 @@ pub fn call(func: Expr, args: Vec<Expr>, keywords: Vec<Keyword>, range: TextRang
     })
 }
 
+/// Every plain name the generated code reads: the helper functions it calls
+/// (`interceptor_call`) and the two arguments, `context` and `source`, it passes to each
+/// of them. The Python runtime (`citry_core/safe_eval/eval.py`) defines the same names,
+/// the helpers in its evaluation namespace and `context` as the lambda's parameter.
+///
+/// A lambda parameter or comprehension variable with one of these names would replace the
+/// helper (or the real `context` mapping) for the code inside it, so the transformer
+/// refuses them. A helper added to `interceptor_call` must be added here too; the test
+/// `test_generated_names_list_matches_what_the_transformer_writes` fails when one is missing.
+pub const GENERATED_NAMES: [&str; 11] = [
+    "variable",
+    "attribute",
+    "subscript",
+    "call",
+    "assign",
+    "slice",
+    "interpolation",
+    "template",
+    "format",
+    "source",
+    "context",
+];
+
 /// Helper to create a call to an interceptor function (e.g. `variable()`, `call()`, etc)
 pub fn interceptor_call(
     func_name: &str,

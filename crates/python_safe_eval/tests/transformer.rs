@@ -2891,4 +2891,261 @@ mod tests {
             ),
         ]);
     }
+
+    // === NAMES THE GENERATED CODE USES FOR ITS OWN HELPERS ===
+    //
+    // The generated code calls `variable(context, source, ...)`, `attribute(...)` and the
+    // other helpers by their plain names. A lambda parameter or a comprehension variable
+    // with one of those names would replace the helper for the code inside it. Every
+    // check the helper makes would then be skipped, or run by a function the template
+    // author wrote, with the real `context` mapping as its first argument.
+
+    use python_safe_eval::transformer::GENERATED_NAMES;
+
+    fn _transform_error(input: &str) -> String {
+        match transform_expression_string(input) {
+            Ok(result) => panic!(
+                "Expected transformation to fail, but it succeeded.\nInput: {}\nGenerated code: {}",
+                input,
+                generate_python_code(&result.expression)
+            ),
+            Err(error) => error,
+        }
+    }
+
+    fn _assert_name_refused(input: &str, name: &str, what: &str) {
+        let error = _transform_error(input);
+        assert!(
+            error.starts_with("SyntaxError: ")
+                && error.contains(&format!("'{}'", name))
+                && error.contains(what),
+            "Unexpected error for input {}: {}",
+            input,
+            error
+        );
+    }
+
+    #[test]
+    fn test_generated_names_list_matches_what_the_transformer_writes() {
+        // One expression that makes the transformer write every helper. The list the
+        // refusal uses must hold each name the generated code calls, plus the two
+        // arguments (`context`, `source`) it passes to every helper. A new helper that
+        // is not added to the list would be open to shadowing.
+        let result = transform_expression_string(
+            "[(w := a.b[1:2](c)) for a in d if f'{a!r:{w}}'] or t'{x}'",
+        )
+        .unwrap();
+        let code = generate_python_code(&result.expression);
+        let mut written: Vec<String> = Vec::new();
+        let helper_call = regex::Regex::new(r"\b([A-Za-z_]+)\(context, source, ").unwrap();
+        for captures in helper_call.captures_iter(&code) {
+            let name = captures[1].to_string();
+            if !written.contains(&name) {
+                written.push(name);
+            }
+        }
+        for name in [
+            "variable",
+            "attribute",
+            "subscript",
+            "call",
+            "slice",
+            "assign",
+            "format",
+            "template",
+            "interpolation",
+        ] {
+            assert!(
+                written.iter().any(|w| w == name),
+                "helper {name} not exercised: {code}"
+            );
+        }
+        for name in &written {
+            assert!(
+                GENERATED_NAMES.contains(&name.as_str()),
+                "{name} is missing from GENERATED_NAMES"
+            );
+        }
+        for name in ["context", "source"] {
+            assert!(GENERATED_NAMES.contains(&name));
+        }
+        assert_eq!(GENERATED_NAMES.len(), 11);
+    }
+
+    #[test]
+    fn test_helper_names_refused_as_lambda_parameters() {
+        for name in GENERATED_NAMES {
+            for input in [
+                format!("lambda {name}: 1"),
+                format!("lambda a, {name}: 1"),
+                format!("lambda a, /, {name}: 1"),
+                format!("lambda {name}, /, b: 1"),
+                format!("lambda a, *, {name}: 1"),
+                format!("lambda a, *, {name}=1: 1"),
+                format!("lambda {name}=1: 1"),
+                format!("lambda *{name}: 1"),
+                format!("lambda **{name}: 1"),
+                format!("lambda a, *b, **{name}: 1"),
+                format!("lambda: (lambda {name}: 1)"),
+            ] {
+                _assert_name_refused(&input, name, "lambda parameter");
+            }
+        }
+    }
+
+    #[test]
+    fn test_the_context_leak_through_a_shadowed_helper_is_refused() {
+        // The two expressions below leak the real context mapping on a version without
+        // the refusal. The first replaces `variable`, the second `context`.
+        _assert_name_refused(
+            "(lambda variable: x)(lambda ctx, *a: ctx)",
+            "variable",
+            "lambda parameter",
+        );
+        _assert_name_refused(
+            "(lambda context: (planted := 1))(target)",
+            "context",
+            "lambda parameter",
+        );
+    }
+
+    #[test]
+    fn test_helper_names_refused_as_comprehension_variables() {
+        for name in GENERATED_NAMES {
+            for input in [
+                format!("[1 for {name} in items]"),
+                format!("{{1 for {name} in items}}"),
+                format!("{{1: 2 for {name} in items}}"),
+                format!("(1 for {name} in items)"),
+                format!("[1 for a, {name} in items]"),
+                format!("[1 for ({name}, a) in items]"),
+                format!("[1 for a in items for {name} in a]"),
+                format!("[[1 for {name} in a] for a in items]"),
+                format!("[1 for a in items if (lambda: [1 for {name} in a])()]"),
+            ] {
+                _assert_name_refused(&input, name, "comprehension variable");
+            }
+        }
+    }
+
+    #[test]
+    fn test_the_context_leak_through_a_comprehension_variable_is_refused() {
+        // The first iterable is evaluated outside the comprehension, so `[context]` reads
+        // the generated lambda's real `context` while `context` is also the loop name.
+        _assert_name_refused(
+            "[c for c in [context] for context in [0]]",
+            "context",
+            "comprehension variable",
+        );
+        _assert_name_refused(
+            "[h for h in [call] for call in [0]]",
+            "call",
+            "comprehension variable",
+        );
+    }
+
+    #[test]
+    fn test_helper_names_spelled_with_other_unicode_forms_are_refused() {
+        // Python reads identifiers in NFKC form, so the full-width spelling is the same
+        // name once the generated code is compiled.
+        _assert_name_refused(
+            "lambda \u{ff41}\u{ff54}\u{ff54}\u{ff52}\u{ff49}\u{ff42}\u{ff55}\u{ff54}\u{ff45}: 1",
+            "attribute",
+            "lambda parameter",
+        );
+        _assert_name_refused(
+            "[1 for \u{ff56}\u{ff41}\u{ff52}\u{ff49}\u{ff41}\u{ff42}\u{ff4c}\u{ff45} in items]",
+            "variable",
+            "comprehension variable",
+        );
+    }
+
+    #[test]
+    fn test_names_close_to_helper_names_are_allowed() {
+        for input in [
+            "lambda variables: variables",
+            "lambda sources, formats: sources",
+            "lambda _context, _source: _context",
+            "lambda Source, Context: Source",
+            "lambda callable: callable",
+            "lambda call_: call_",
+            "[x for contexts in items for x in contexts]",
+            "[template_name for template_name in items]",
+            "(lambda a, *rest, **options: a)",
+        ] {
+            let result = transform_expression_string(input);
+            assert!(result.is_ok(), "{input} was refused: {:?}", result.err());
+        }
+    }
+
+    #[test]
+    fn test_helper_names_stay_readable_as_context_variables() {
+        // A name the template reads from the context, not a name it introduces, is
+        // transformed into a lookup, so it cannot reach the helper of the same name.
+        _test_transformation(
+            "context + source + call",
+            "variable(context, source, (0, 7), 'context') + variable(context, source, (10, 16), 'source') + variable(context, source, (19, 23), 'call')",
+            vec![
+                ("context", 0, 7, (1, 1)),
+                ("source", 10, 16, (1, 11)),
+                ("call", 19, 23, (1, 20)),
+            ],
+            vec![],
+        );
+    }
+
+    #[test]
+    fn test_helper_names_as_walrus_targets_do_not_shadow_a_helper() {
+        // A walrus target is written to the context by `assign(...)`, never bound as a
+        // Python name, so it cannot replace a helper. These stay allowed.
+        _test_transformation(
+            "(variable := 1)",
+            "assign(context, source, (1, 14), 'variable', 1)",
+            vec![],
+            vec![("variable", 1, 9, (1, 2))],
+        );
+        for name in GENERATED_NAMES {
+            let input = format!("({name} := 1)");
+            let result = transform_expression_string(&input).unwrap();
+            let code = generate_python_code(&result.expression);
+            assert!(
+                code.starts_with("assign(context, source, "),
+                "{input} generated {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_unsupported_comprehension_targets_give_an_error() {
+        // These targets are valid Python but the sandbox does not support them. An
+        // attribute or subscript target would assign into the object, so they must
+        // stay refused. They used to stop the Rust code with a panic instead of an error.
+        for input in [
+            "[1 for a.b in items]",
+            "[1 for a[0] in items]",
+            "[1 for [a, b] in items]",
+            "[1 for *a, b in items]",
+            "[1 for (a, (b.c, d)) in items]",
+        ] {
+            let error = _transform_error(input);
+            assert!(
+                error.starts_with("SyntaxError: ") && error.contains("comprehension"),
+                "Unexpected error for input {}: {}",
+                input,
+                error
+            );
+        }
+    }
+
+    #[test]
+    fn test_supported_comprehension_targets_still_work() {
+        for input in [
+            "[a for a in items]",
+            "[a + b for a, b in items]",
+            "[a + b + c for (a, (b, c)) in items]",
+            "{a: b for a, b in items}",
+        ] {
+            assert!(transform_expression_string(input).is_ok(), "{input}");
+        }
+    }
 }

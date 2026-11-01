@@ -258,6 +258,7 @@ use crate::utils::literal_source::{
     escape_format_braces, has_surrogate_escape, interpolated_text_as_plain_body,
     plain_literal_text, source_text,
 };
+pub use crate::utils::python_ast::GENERATED_NAMES;
 use crate::utils::python_ast::{
     attribute, call, get_expr_range, interceptor_call, none_literal, string_literal,
 };
@@ -951,28 +952,52 @@ impl SandboxTransformer {
         self.propagate_from_child(&child_transformer);
     }
 
-    /// Extract variable names from a target expression (for comprehensions)
-    fn extract_target_variables(target: &Expr) -> HashSet<String> {
-        let mut vars = HashSet::new();
+    /// Refuse a name that a lambda or comprehension introduces when the generated code
+    /// already uses that name for its own helpers or arguments (see `GENERATED_NAMES`).
+    ///
+    /// The generated code calls its helpers by plain name. Inside a lambda or a
+    /// comprehension that introduces `attribute`, the call `attribute(context, ...)` that
+    /// guards `obj.name` would call the template's own value instead, and a helper that
+    /// receives the real `context` mapping hands it to that value. Returns true when the
+    /// name was refused, so the caller can stop visiting the scope.
+    ///
+    /// Ruff reads identifiers in NFKC form, as Python does, so the full-width spelling of
+    /// a helper name arrives here already as the plain name.
+    fn refuse_generated_name(&self, name: &str, what: &str) -> bool {
+        if !GENERATED_NAMES.contains(&name) {
+            return false;
+        }
+        self.set_error(format!(
+            "SyntaxError: '{}' is a name the sandbox uses for its own checks, so it cannot be a {}. Use a different name.",
+            name, what
+        ));
+        true
+    }
+
+    /// Collect the variable names a comprehension target introduces, in source order.
+    /// Returns an error message for a target the sandbox does not support.
+    fn extract_target_variables(target: &Expr, names: &mut Vec<String>) -> Result<(), String> {
         match target {
             // E.g. `x` in `[x+1 for x in range(10)]`
             Expr::Name(name) => {
-                vars.insert(name.id.as_str().to_string());
+                names.push(name.id.as_str().to_string());
+                Ok(())
             }
             // E.g. `(x, y)` in `[x+1 for x, y in range(10)]`
             Expr::Tuple(tuple) => {
                 for elt in &tuple.elts {
-                    vars.extend(Self::extract_target_variables(elt));
+                    Self::extract_target_variables(elt, names)?;
                 }
+                Ok(())
             }
-            _ => {
-                panic!(
-                    "Validation Error: Unsupported target type in comprehension: {:?}",
-                    target
-                );
-            }
+            // Python also allows `[a, b]`, `*rest`, `obj.attr` and `obj[0]` here. The last
+            // two assign into an object, so every such target is refused with an error
+            // instead of stopping the whole process with a panic.
+            _ => Err(
+                "SyntaxError: a comprehension variable must be a name or a tuple of names"
+                    .to_string(),
+            ),
         }
-        vars
     }
 
     /// Helper function to handle comprehension logic common to ListComp, SetComp, DictComp, and Generator
@@ -997,10 +1022,20 @@ impl SandboxTransformer {
         }
 
         // Extract all comprehension variables from all generators
-        let mut comprehension_vars = HashSet::new();
+        let mut names = Vec::new();
         for generator in generators.iter() {
-            comprehension_vars.extend(Self::extract_target_variables(&generator.target));
+            if let Err(error) = Self::extract_target_variables(&generator.target, &mut names) {
+                self.set_error(error);
+                return;
+            }
         }
+        // Check in source order so the same expression always reports the same name.
+        for name in &names {
+            if self.refuse_generated_name(name, "comprehension variable") {
+                return;
+            }
+        }
+        let comprehension_vars: HashSet<String> = names.into_iter().collect();
 
         // IMPORTANT: Visit generators FIRST (including if conditions where walrus might occur)
         // This way, any walrus assignments in the if conditions will be tracked and propagated
@@ -1789,25 +1824,33 @@ impl Transformer for SandboxTransformer {
                     }
                 }
 
-                // Now extract lambda parameter names into lambda variables
-                let mut lambda_vars = HashSet::new();
+                // Now extract lambda parameter names into lambda variables, in source order
+                let mut parameter_names: Vec<String> = Vec::new();
                 if let Some(parameters) = &lambda.parameters {
                     for param in &parameters.posonlyargs {
-                        lambda_vars.insert(param.name().to_string());
+                        parameter_names.push(param.name().to_string());
                     }
                     for param in &parameters.args {
-                        lambda_vars.insert(param.name().to_string());
-                    }
-                    for param in &parameters.kwonlyargs {
-                        lambda_vars.insert(param.name().to_string());
+                        parameter_names.push(param.name().to_string());
                     }
                     if let Some(vararg) = &parameters.vararg {
-                        lambda_vars.insert(vararg.name().to_string());
+                        parameter_names.push(vararg.name().to_string());
+                    }
+                    for param in &parameters.kwonlyargs {
+                        parameter_names.push(param.name().to_string());
                     }
                     if let Some(kwarg) = &parameters.kwarg {
-                        lambda_vars.insert(kwarg.name().to_string());
+                        parameter_names.push(kwarg.name().to_string());
                     }
                 }
+                // A parameter named like a generated helper would replace that helper for
+                // the whole body (see `refuse_generated_name`), so stop before the body.
+                for name in &parameter_names {
+                    if self.refuse_generated_name(name, "lambda parameter") {
+                        return;
+                    }
+                }
+                let lambda_vars: HashSet<String> = parameter_names.into_iter().collect();
 
                 // Transform the lambda body with the parameter names as lambda variables
                 // This ensures lambda parameters are not transformed to variable("param", context) calls
