@@ -210,7 +210,8 @@ and call requests retain a separately repaired query for walrus and lambda
 safety checks, including structural `cond` and `each` hosts.
 
 Completion filters members that Citry cannot execute: private names, dunder
-names, `str.format`, `str.format_map`, type-object `mro`, generator and coroutine
+names, the `format` and `format_map` methods of strings (`Markup` included) and the
+methods of `string.Formatter`, type-object `mro`, generator and coroutine
 frame/code fields, and every member on receiver-proven code, frame, and
 traceback objects. Receiver-sensitive filters require `ty` type evidence plus
 exact pinned-typeshed definition ownership, so same-named user classes remain

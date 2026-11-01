@@ -11,8 +11,27 @@
   attributes that configure `<c-slot>` and `<c-fill>` (such as `name`,
   `required`, and `fallback`) are unchanged.
 
+- **Breaking:** the expression sandbox now raises `SyntaxError` for a lambda
+  parameter or comprehension variable named `variable`, `attribute`,
+  `subscript`, `call`, `assign`, `slice`, `interpolation`, `template`,
+  `format`, `source`, or `context`, because the name would replace one of
+  the sandbox's own checks inside that scope. Rename the variable, and
+  that includes the variable of a `<c-for>` loop. Reading a context
+  variable with one of these names still works, and so does assigning one
+  with `:=`.
+
 ### Fixed
 
+- The expression sandbox now refuses `format` and `format_map` on string
+  subclasses such as `markupsafe.Markup`, on `collections.UserString`, and
+  on any other string type, as it already did for `str`. It also refuses
+  the methods of a `string.Formatter`, building an `operator.attrgetter`
+  or `operator.methodcaller` inside an expression, and a
+  `functools.partial` of any call it refuses. Use an f-string instead of
+  `format`.
+- A comprehension variable that is an attribute, an item, a list, or a
+  starred name, such as `[x for a.b in items]`, now raises `SyntaxError`
+  instead of stopping the process with a Rust panic.
 - `parse_template()` no longer rejects Vue-only syntax inside `v-pre`, such
   as `v-once`, `<transition>`, or `@click.bogus`, because Vue reads it as
   plain HTML there. `<c-*>` tags inside `v-pre` keep their checks.

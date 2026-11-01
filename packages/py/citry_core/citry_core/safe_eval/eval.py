@@ -11,6 +11,7 @@ from citry_core.safe_eval.sandbox import (
     is_safe_attribute,
     is_safe_callable,
     is_safe_variable,
+    unsafe_attribute_hint,
 )
 
 
@@ -393,7 +394,12 @@ def attribute(
 ) -> Any:
     """Access an attribute of an object, e.g. `obj.attr`"""
     if not is_safe_attribute(obj, attr_name):
-        raise SecurityError(f"attribute '{attr_name}' on object '{type(obj)}' is unsafe")
+        error_msg = f"attribute '{attr_name}' on object '{type(obj)}' is unsafe"
+        # Name the replacement for the formatting methods, as a refused call does.
+        hint = unsafe_attribute_hint(attr_name)
+        if hint:
+            error_msg += f". {hint}"
+        raise SecurityError(error_msg)
     return getattr(obj, attr_name)
 
 

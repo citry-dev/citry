@@ -146,6 +146,7 @@ class TyAnalyzer:
             "mro",
             "format",
             "format_map",
+            *_FORMATTER_MEMBERS,
             "gi_code",
             "gi_frame",
             "cr_code",
@@ -785,6 +786,19 @@ def _installed_ty_executable() -> Path:
     return scripts / f"ty{suffix}"
 
 
+# The public methods of `string.Formatter`; the sandbox refuses each one.
+_FORMATTER_MEMBERS = (
+    "format",
+    "vformat",
+    "get_field",
+    "get_value",
+    "parse",
+    "convert_field",
+    "format_field",
+    "check_unused_args",
+)
+
+
 def _safe_completion_item(
     label: str,
     detail: str | None = None,
@@ -807,7 +821,12 @@ def _safe_completion_item(
         return False
     unsafe_by_receiver = {
         "type": {"mro"},
+        # The sandbox refuses the format methods of every string type and the methods of
+        # string.Formatter, because their format text reads attribute paths.
         "str": {"format", "format_map"},
+        "UserString": {"format", "format_map"},
+        "Markup": {"format", "format_map"},
+        "Formatter": set(_FORMATTER_MEMBERS),
         "GeneratorType": {"gi_code", "gi_frame"},
         "CoroutineType": {"cr_code", "cr_frame"},
         "AsyncGeneratorType": {"ag_code", "ag_frame"},

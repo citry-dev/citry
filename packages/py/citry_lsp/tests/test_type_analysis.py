@@ -309,6 +309,29 @@ async def test_internal_type_inside_a_container_does_not_hide_container_members(
     assert "append" in {item.label for item in items}
 
 
+@pytest.mark.parametrize(
+    ("owner", "label"),
+    [
+        ("str", "format"),
+        ("str", "format_map"),
+        ("UserString", "format"),
+        ("UserString", "format_map"),
+        ("Markup", "format"),
+        ("Markup", "format_map"),
+        ("Formatter", "format"),
+        ("Formatter", "vformat"),
+        ("Formatter", "get_field"),
+        ("Formatter", "parse"),
+    ],
+)
+def test_completion_withholds_the_formatting_methods_the_sandbox_refuses(owner: str, label: str) -> None:
+    assert not _safe_completion_item(label, member_owner=owner)
+    # The same label on an unrelated class stays available.
+    assert _safe_completion_item(label, member_owner="Custom")
+    # Other members of the same classes stay available.
+    assert _safe_completion_item("upper", member_owner=owner)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("class_name", "member", "partial"),

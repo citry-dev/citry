@@ -291,14 +291,19 @@ Here's a list of all unsafe scenarios that will trigger `SecurityError`:
 - **Unsafe methods**:
   - Functions decorated with `@unsafe`
   - Django methods marked with `alters_data = True`
-  - `str.format` and `str.format_map` (use f-strings instead)
+  - `format` and `format_map` of any string type (`str`, its subclasses such as `markupsafe.Markup`, and `collections.UserString`), every method of a `string.Formatter`, and building an `operator.attrgetter` or `operator.methodcaller` (use f-strings instead)
 - **Internal attributes**: Prevents access to frame, code, and other internal Python object attributes
+- **Names the sandbox uses itself**: A lambda parameter or comprehension variable named `variable`, `attribute`, `subscript`, `call`, `assign`, `slice`, `interpolation`, `template`, `format`, `source`, or `context` is a `SyntaxError`, because it would replace one of the sandbox's own checks.
 
 ## Security and safety considerations
 
-While `safe_eval()` prevents the execution of unsafe code and goes further than Jinja2 or Django's template engine in terms of security (blocking unsafe builtins, private attributes, etc.).
+`safe_eval()` checks every variable, attribute, item, and call that the expression text writes. It refuses unsafe builtins, private attributes, and the string formatting methods that follow attribute paths.
 
-However, it CANNOT protect against all forms of misuse.
+It is a second layer of protection, not a promise that a template from a stranger is safe to run, and it CANNOT protect against all forms of misuse:
+
+- **It does not limit the objects you pass in.** An expression can read every attribute and call every method of a context object whose name does not start with `_`. A secret in a public attribute is readable, and a public method that deletes data can be called.
+- **It checks only what the expression text writes.** A function you pass in that calls other functions or looks up names from text (`map`, `functools.reduce`, the `key=` argument of `sorted`, a `getattr`-style helper, `inspect`, `importlib`) does so without these checks.
+- **Item keys that start with `_` are not hidden.** `data["_key"]` is refused, but `data.get("_key")` and `"%(_key)s" % data` read the same item.
 
 ### Denial of service (DoS) attacks
 
