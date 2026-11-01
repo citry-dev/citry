@@ -346,10 +346,9 @@
   header, so on a page whose `Referrer-Policy` hides its address, use a path
   that starts with `/` ([details](https://citry.dev/events/actions/#redirect-to-a-page)).
 - An Events `actions.Redirect` to a URL with non-ASCII characters, such as
-  `"/café"` or `"https://bücher.example/"`, now works for a visitor who
-  posts a plain HTML form without JavaScript. Before, the visitor landed on
-  the wrong page or got a server error; now they land on the same page as
-  with JavaScript.
+  `"/café"` or `"https://bücher.example/"`, now takes a visitor who posts a
+  plain HTML form without JavaScript to the same page as with JavaScript,
+  instead of the wrong page or a server error.
 - Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
   modifier (`@click.bogus`), or a built-in such as `<transition>` no
   longer stops the template from loading. A `<slot>`, `<component>`,

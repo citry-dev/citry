@@ -718,7 +718,7 @@ def _landing_asgi(c):
 
 
 def _landing_wsgi(c):
-    """The WSGI twin of ``_landing_asgi``: the host moves /citry into SCRIPT_NAME."""
+    """The WSGI twin of ``_landing_asgi``; it moves /citry into SCRIPT_NAME, as a WSGI server would."""
     citry_app = wsgi_app(c)
 
     def app(environ, start_response):
@@ -1649,9 +1649,6 @@ class TestCompatMode:
             ("/café?q=ü#ß", "/caf%C3%A9?q=%C3%BC#%C3%9F", "/caf%C3%A9?q=%C3%BC"),
             # A relative URL is resolved against the Referer, then encoded.
             ("é/ñ?x=ü", "http://testserver/shop/%C3%A9/%C3%B1?x=%C3%BC", "/shop/%C3%A9/%C3%B1?x=%C3%BC"),
-            # The host becomes its IDNA form; the test client sends every
-            # host to the same app, so the request still lands.
-            ("https://bücher.de/ä?x=é#ö", "https://xn--bcher-kva.de/%C3%A4?x=%C3%A9#%C3%B6", "/%C3%A4?x=%C3%A9"),
             # Escapes and reserved characters already in the URL stay as written.
             ("/already%C3%A9?a=b&c=%20", "/already%C3%A9?a=b&c=%20", "/already%C3%A9?a=b&c=%20"),
         ],
@@ -1677,24 +1674,59 @@ class TestCompatMode:
         assert followed.status_code == 200
         assert followed.text == landed
 
+    @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
+    @pytest.mark.parametrize(
+        ("target", "location"),
+        [
+            # A browser decodes the escapes in the host and converts it itself.
+            ("https://bücher.de/ä?x=é#ö", "https://b%C3%BCcher.de/%C3%A4?x=%C3%A9#%C3%B6"),
+            # Full-width "/" and "@" stay escaped, so they never become
+            # delimiters; browsers reject these URLs, as location.assign() does.
+            ("https://evil.example\uff0f.good.test/", "https://evil.example%EF%BC%8F.good.test/"),
+            ("https://a\uff20evil.example/", "https://a%EF%BC%A0evil.example/"),
+        ],
+    )
+    def test_non_ascii_host_is_percent_encoded(self, adapter, target, location):
+        c = _citry()
+        jumper = _jumper(c)
+        with _landing_client(c, adapter) as client:
+            response = client.post(
+                _event_url(jumper, "go"),
+                data={"to": target},
+                headers={"Referer": "http://testserver/shop/list"},
+                follow_redirects=False,
+            )
+        assert response.status_code == 303
+        assert response.headers["location"] == location
+
+    def test_unparsable_referer_counts_as_no_referer(self):
+        # urlsplit raises on a host such as "[::1"; the client sent it, so
+        # the redirect passes through instead of failing with a 500.
+        c = _citry()
+        jumper = _jumper(c)
+        response = _mounted(c).post(
+            _event_url(jumper, "go"),
+            data={"to": "next"},
+            headers={"Referer": "http://[::1/shop/list"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "next"
+
     @pytest.mark.parametrize(
         ("url", "expected"),
         [
             # Checked in Chromium and Firefox: new URL() of the encoded form
             # equals new URL() of the original, on a page at /shop/list.
-            ("//bücher.de/x", "//xn--bcher-kva.de/x"),
-            ("https://user:pä@例え.jp:8080/p", "https://user:p%C3%A4@xn--r8jz45g.jp:8080/p"),
+            ("//bücher.de/x", "//b%C3%BCcher.de/x"),
+            ("https://user:pä@例え.jp:8080/p", "https://user:p%C3%A4@%E4%BE%8B%E3%81%88.jp:8080/p"),
             ("https://[::1]:80/é", "https://[::1]:80/%C3%A9"),
-            # IDNA 2003 maps "ß" to "ss" but browsers keep it, so the host is
-            # percent-encoded and the browser converts it itself.
             ("https://faß.de/", "https://fa%C3%9F.de/"),
-            # A host the IDNA codec rejects is left for the browser the same way.
-            ("https://a..b.ü/", "https://a..b.%C3%BC/"),
-            # IDNA 2003 maps full-width U+FF0F and U+FF20 to "/" and "@", which
-            # would move the host; browsers reject these URLs instead.
-            ("https://evil.example\uff0f.good.test/", "https://evil.example%EF%BC%8F.good.test/"),
-            ("https://a\uff20evil.example/", "https://a%EF%BC%A0evil.example/"),
-            # Browsers do not convert the host of other schemes.
+            # Characters whose host conversion changed after Unicode 3.2, or
+            # that convert to a dot or a digit; the browser decides for each.
+            ("https://bank\u2488com/", "https://bank%E2%92%88com/"),
+            ("https://x\u3164y.com/", "https://x%E3%85%A4y.com/"),
+            ("https://\u2132.com/", "https://%E2%84%B2.com/"),
             ("foo://hö/st", "foo://h%C3%B6/st"),
             ("mailto:jü@x.de", "mailto:j%C3%BC@x.de"),
             # Browsers drop outer spaces and newlines and encode inner spaces.
