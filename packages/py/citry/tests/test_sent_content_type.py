@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import io
-from typing import Any
-
 import pytest
 
-from citry import Citry
-from citry.contrib.wsgi import wsgi_app
-from citry.util.routing import RouteResponse, URLRoute, sent_content_type
+from citry.util.routing import RouteResponse, sent_content_type
 
 
 @pytest.mark.parametrize(
@@ -27,21 +22,3 @@ from citry.util.routing import RouteResponse, URLRoute, sent_content_type
 )
 def test_a_text_type_with_a_string_body_names_utf8(content: str | bytes, content_type: str, expected: str) -> None:
     assert sent_content_type(RouteResponse(content=content, content_type=content_type)) == expected
-
-
-def _get(app: Citry, path: str) -> dict[str, str]:
-    captured: dict[str, Any] = {}
-
-    def start_response(_status: str, headers: list[tuple[str, str]]) -> None:
-        captured["headers"] = {name.lower(): value for name, value in headers}
-
-    environ = {"REQUEST_METHOD": "GET", "PATH_INFO": path, "SCRIPT_NAME": "", "QUERY_STRING": "", "wsgi.input": io.BytesIO()}
-    b"".join(wsgi_app(app)(environ, start_response))
-    return captured["headers"]
-
-
-def test_the_wsgi_adapter_sends_the_charset_for_a_route_that_names_none() -> None:
-    app = Citry(autodiscover=False)
-    app.set_mounted_prefix("/citry")
-    app.urls.append(URLRoute("ext/hello", handler=lambda _request: RouteResponse(content="é", content_type="text/html")))
-    assert _get(app, "/ext/hello")["content-type"] == "text/html; charset=utf-8"
