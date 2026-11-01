@@ -9,10 +9,24 @@ with a comment saying what changed and why.
 
 # ruff: noqa: ANN
 
+import random
+import re
+import time
+
 import pytest
 
-from citry import Const, Markup, format_attrs, merge_attrs, normalize_class, normalize_style, parse_string_style
-from citry.attrs import validate_html_attr_name
+from citry import (
+    Citry,
+    Component,
+    Const,
+    Markup,
+    format_attrs,
+    merge_attrs,
+    normalize_class,
+    normalize_style,
+    parse_string_style,
+)
+from citry.attrs import _split_style_declarations, validate_html_attr_name
 from citry.nodes import ElementKeyNode
 
 
@@ -368,6 +382,83 @@ class TestParseStringStyle:
 
     def test_incomplete_style(self):
         assert parse_string_style("color: red; background-color") == {"color": "red"}
+
+
+class TestStyleDeclarationSplit:
+    r"""
+    The style splitter walks the text once and splits as Vue's regex does.
+
+    Vue's ``parseStringStyle`` splits on ``;(?![^(]*\))``. Running that regex
+    takes time growing with the square of the length, and a style can come
+    from data, so Citry applies the same rule in one pass.
+    """
+
+    _VUE_SPLIT = re.compile(r";(?![^(]*\))", re.DOTALL)
+
+    def test_it_splits_exactly_as_the_regex_on_random_text(self):
+        rng = random.Random(1234)  # noqa: S311 - test data, not secrets
+        alphabet = ";():a \n\\\"'/*"
+        for _ in range(20_000):
+            text = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 40)))
+            assert _split_style_declarations(text) == self._VUE_SPLIT.split(text), text
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            ";",
+            "a;b",
+            "url(a;b)",
+            # The regex only looks for the next parenthesis, so a `;` before
+            # a nested `(` splits even inside an outer `url(`.
+            "url(a;(b))",
+            "a;b)",
+            "(;",
+            "x:url(data:image/png;base64,abc);y:1",
+        ],
+    )
+    def test_edge_cases_match_the_regex(self, text):
+        assert _split_style_declarations(text) == self._VUE_SPLIT.split(text)
+
+    def test_a_long_style_from_data_parses_quickly(self):
+        started = time.perf_counter()
+        assert parse_string_style(";" * 100_000 + "color: red") == {"color": "red"}
+        assert parse_string_style("(" + ";" * 100_000 + ")") == {}
+        assert time.perf_counter() - started < 0.5
+
+    def test_a_long_style_from_data_renders_quickly_on_the_static_and_vue_paths(self):
+        app = Citry(secret="s" * 40)
+
+        class Plain(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": kwargs["attrs"]}
+
+            template = """
+                <div style="color: red" c-bind="attrs">p</div>
+            """
+
+        class Interactive(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": kwargs["attrs"]}
+
+            template = """
+                <div style="color: red" c-bind="attrs">v</div>
+            """
+
+            js = """
+                $component({})
+            """
+
+        style = ";" * 100_000 + "width: 1px"
+        for component in (Plain, Interactive):
+            started = time.perf_counter()
+            html = str(component(attrs={"style": style}))
+            assert time.perf_counter() - started < 1
+            assert "width: 1px" in html
 
 
 class TestConstMarkedValues:

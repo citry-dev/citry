@@ -22,7 +22,8 @@ from citry.contrib.asgi import _read_body, asgi_app
 from citry.contrib.wsgi import wsgi_app
 from citry.ext.events import ViewEvents
 from citry.ext.i18n.routes import _MAX_REQUEST_BYTES, i18n_routes
-from citry.util.routing import URLRoute, body_read_limit, flatten_routes
+from citry.extension import Extension
+from citry.util.routing import RouteResponse, URLRoute, body_read_limit, flatten_routes
 
 _SECRET = "s" * 40
 _CAP = 256
@@ -403,3 +404,121 @@ def test_a_route_limit_that_returns_a_bad_value_fails(value, error):
 def test_the_i18n_messages_route_has_a_body_cap():
     routes = {route.name: route for route in i18n_routes(Citry(secret=_SECRET))}
     assert body_read_limit(routes["citry_i18n_messages"]) == _MAX_REQUEST_BYTES + 1
+
+
+class TestBodylessMethods:
+    """
+    A GET, HEAD or OPTIONS request carries no body a route uses, so no adapter reads one.
+
+    The asset routes set no body limit, so this rule is what keeps a WSGI
+    host from reading whatever ``Content-Length`` claims.
+    """
+
+    _SIZE = 10_000_000
+
+    def _wsgi_environ(self, method, stream, path):
+        return {
+            "REQUEST_METHOD": method,
+            "PATH_INFO": path,
+            "SCRIPT_NAME": "",
+            "SERVER_NAME": "testserver",
+            "SERVER_PORT": "80",
+            "wsgi.url_scheme": "http",
+            "CONTENT_LENGTH": str(self._SIZE),
+            "wsgi.input": stream,
+            "wsgi.errors": io.StringIO(),
+        }
+
+    def test_the_asset_routes_set_no_body_limit(self):
+        # The rule matters because these routes would otherwise read the
+        # whole body: none of them sets a limit.
+        limits = {route.name: body_read_limit(route) for _path, route in flatten_routes(_engine().urls)}
+        assert limits["citry_client_runtime"] is None
+        assert limits["citry_cached_script"] is None
+
+    @pytest.mark.parametrize("method", ["GET", "HEAD"])
+    def test_wsgi_reads_no_body_on_an_asset_route(self, method):
+        stream = _CountingStream(self._SIZE)
+        statuses = []
+        environ = self._wsgi_environ(method, stream, "/citry.js")
+        b"".join(wsgi_app(_engine())(environ, lambda status, _headers: statuses.append(status)))
+        assert statuses == ["200 OK"]
+        assert stream.read_bytes == 0
+
+    def test_wsgi_reads_no_body_for_options_on_a_route_that_takes_one(self):
+        # A route that lists OPTIONS and reads its body gets an empty one.
+        seen = []
+
+        def handler(request):
+            seen.append(request.body)
+            return RouteResponse(content="ok")
+
+        class Probe(Extension):
+            name = "probe"
+            urls = [URLRoute("status", handler=handler, methods=("OPTIONS",))]
+
+        engine = Citry(extensions=[Probe])
+        stream = _CountingStream(self._SIZE)
+        statuses = []
+        environ = self._wsgi_environ("OPTIONS", stream, "/ext/probe/status")
+        b"".join(wsgi_app(engine)(environ, lambda status, _headers: statuses.append(status)))
+        assert statuses == ["200 OK"]
+        assert seen == [b""]
+        assert stream.read_bytes == 0
+
+    def test_flask_mount_reads_no_body_on_an_asset_route(self):
+        from citry.contrib.flask import mount
+
+        class Host:
+            def wsgi_app(self, environ, start_response):  # pragma: no cover - Citry answers first
+                start_response("404 Not Found", [])
+                return [b""]
+
+        host = Host()
+        mount(host, _engine())
+        stream = _CountingStream(self._SIZE)
+        statuses = []
+        environ = self._wsgi_environ("GET", stream, "/citry/citry.js")
+        b"".join(host.wsgi_app(environ, lambda status, _headers: statuses.append(status)))
+        assert statuses == ["200 OK"]
+        assert stream.read_bytes == 0
+
+    def test_asgi_never_asks_for_the_body_of_a_get(self):
+        received = []
+
+        async def receive():  # pragma: no cover - the adapter must not call it
+            received.append(True)
+            return {"type": "http.request", "body": b"x" * 100, "more_body": False}
+
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/citry.js",
+            "root_path": "",
+            "query_string": b"",
+            "headers": [(b"content-length", str(self._SIZE).encode())],
+        }
+        asyncio.run(asgi_app(_engine())(scope, receive, send))
+        assert sent[0]["status"] == 200
+        assert received == []
+
+    def test_django_reads_no_body_on_an_asset_route(self):
+        django = pytest.importorskip("django")
+        from django.conf import settings
+
+        if not settings.configured:
+            settings.configure(ALLOWED_HOSTS=["*"])
+            django.setup()
+        from django.core.handlers.wsgi import WSGIRequest
+
+        from citry.contrib.django import _build_request
+
+        stream = _CountingStream(self._SIZE)
+        environ = self._wsgi_environ("GET", stream, "/citry/citry.js")
+        assert _build_request(WSGIRequest(environ), None).body == b""
+        assert stream.read_bytes == 0

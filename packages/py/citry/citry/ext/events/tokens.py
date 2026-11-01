@@ -29,12 +29,13 @@ way (it only stores and echoes the string):
   It needs a shared cache backend across workers, the same constraint the
   fragments feature already documents: one worker mints the key, another may
   serve the next call and must find the entry. Expiry rides the cache's own
-  time-to-live, set from ``_max_age`` at mint.
+  time-to-live, set from ``_max_age`` at mint, or 24 hours when it is unset.
 
 The per-call order the dispatcher (a later work package) drives is: verify the
 token, rebuild the State from ``verified.state_kwargs`` (``restore_state``), apply ``stateUpdates`` to
-the writable (``_model``) fields, run the handler, then mint a fresh token from
-the possibly-mutated State for the response. This module provides the first,
+the writable (``_model``) fields, refuse the call when those writes grow
+server-stored State past ``_max_bytes``, run the handler, then mint a fresh
+token from the possibly-mutated State for a caller that can receive it. This module provides the first,
 third, and last of those steps. Design: ``docs/design/events.md`` sections 7.1
 and 7.2.
 """
@@ -52,6 +53,7 @@ import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from enum import Enum
 from types import GenericAlias, UnionType
 from typing import (
@@ -71,7 +73,9 @@ import typing_extensions
 
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _static_class_namespace_copy
+from citry._protocol.events import MAX_JSON_DEPTH, JsonNestingError, check_json_depth
 from citry._vue.json_data import _secret_key_path
+from citry.cache import STATE_KEY_PREFIX, InMemoryCache
 from citry.ext.events.errors import (
     PYDANTIC_EXTRA_TYPES,
     limit_item_errors,
@@ -89,7 +93,6 @@ from citry.util.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Sequence
-    from datetime import timedelta
 
     from citry.cache import CitryCache
 
@@ -114,7 +117,7 @@ _SERVER_PREFIX = "ces1"
 # Citry's other ``citry:``-prefixed keys. Prefixing the key read back from a
 # token also means a forged token can only name another State entry, never a
 # render, script, or user key in a shared cache.
-_STATE_CACHE_PREFIX = "citry:state:"
+_STATE_CACHE_PREFIX = STATE_KEY_PREFIX
 
 _PROTOCOL_VERSION = 1
 
@@ -133,6 +136,19 @@ _NO_SIGNING_KEY_MSG = (
     " Django projects can reuse their existing key with"
     " Citry(secret=citry.contrib.django.secret())."
 )
+
+
+# How long a server-stored State entry lives when ``_max_age`` is unset. Every
+# render and every State change writes a new entry, and nothing else removes
+# the old ones, so an entry without a lifetime would stay in the cache for good.
+_SERVER_STATE_DEFAULT_TTL = timedelta(hours=24)
+
+
+# The ids of in-memory caches with no State budget that already warned about
+# holding server-stored State, so each warns once rather than on every write.
+# Ids, not the caches themselves, so a subclass that cannot be hashed works;
+# a reused id at worst skips one warning.
+_WARNED_UNBOUNDED_CACHES: set[int] = set()
 
 
 def _now() -> float:
@@ -256,7 +272,7 @@ def mint_state_token(
     class_id: str,
     secret: str | list[str] | None,
     max_age: timedelta | None,
-    max_bytes: int,
+    max_bytes: int | None,
     storage: str = "signed",
     cache: CitryCache | None = None,
     component_name: str | None = None,
@@ -279,13 +295,15 @@ def mint_state_token(
             configured) raises
             [`SigningSecretError`][citry.ext.events.tokens.SigningSecretError]
             for signed storage.
-        max_age: Optional token lifetime; ``None`` never expires. In signed
-            storage it becomes the payload's expiry field; in server storage it
-            becomes the cache entry's time-to-live.
+        max_age: Optional token lifetime. In signed storage it becomes the
+            payload's expiry field, and ``None`` never expires. In server
+            storage it becomes the cache entry's time-to-live, and ``None``
+            gives the entry a 24-hour lifetime.
         max_bytes: The mint-time size canary for signed storage: State whose
             serialized form exceeds it raises, with guidance to keep an id and
-            reload the rest. Not applied in server storage, whose whole purpose
-            is State too large to round-trip.
+            reload the rest. Not applied here in server storage, whose whole
+            purpose is State too large to round-trip; the dispatcher checks it
+            against browser writes instead (see ``server_state_growth_error``).
         storage: ``"signed"`` (default) or ``"server"``.
         cache: The cache backend for server storage; required when
             ``storage="server"``.
@@ -333,7 +351,7 @@ def _prepare_state_token_values(
     class_id: str,
     secret: str | list[str] | None,
     max_age: timedelta | None,
-    max_bytes: int,
+    max_bytes: int | None,
     storage: str,
 ) -> PreparedStateToken:
     """Validate plain State values and prepare a token without cache mutation."""
@@ -342,13 +360,27 @@ def _prepare_state_token_values(
         raise ValueError(msg)
     _validate_state_values(state_dict, class_id)
     payload = _build_payload(class_id, state_dict, max_age)
+    payload_json = _canonical_json(payload)
+    # Verification refuses a payload nested past the limit before parsing
+    # it, so a token made from deeper State could never be used. Refusing it
+    # here names the component, instead of a later call asking for a reload
+    # that cannot help.
+    try:
+        check_json_depth(payload_json)
+    except JsonNestingError as err:
+        msg = (
+            f"Component {class_id}: State nests lists and dicts too deeply to store; a State token holds"
+            f" at most {MAX_JSON_DEPTH} levels of JSON, two of them its own. Flatten the State, or keep an"
+            f" id in State and load the nested data in the handler."
+        )
+        raise ValueError(msg) from err
     if storage == "server":
         key = secrets_module.token_urlsafe(32)
-        ttl = max_age.total_seconds() if max_age is not None else None
+        ttl = (max_age if max_age is not None else _SERVER_STATE_DEFAULT_TTL).total_seconds()
         return PreparedStateToken(
             token=f"{_SERVER_PREFIX}.{key}",
             cache_key=_state_cache_key(key),
-            cache_value=_canonical_json(payload),
+            cache_value=payload_json,
             ttl=ttl,
         )
     _enforce_max_bytes(class_id, state_dict, max_bytes)
@@ -367,6 +399,25 @@ def _commit_prepared_state_token(prepared: PreparedStateToken, cache: CitryCache
         )
         raise ValueError(msg)
     cache.set(prepared.cache_key, cast("str", prepared.cache_value), ttl=prepared.ttl)
+    _warn_unbounded_state_cache(cache)
+
+
+def _warn_unbounded_state_cache(cache: CitryCache) -> None:
+    """Warn once when server-stored State goes into an in-memory cache whose State budget is off."""
+    # The caller instance a call names comes from the client, so a client can
+    # make Citry store entries as fast as it sends calls; only the State
+    # budget keeps that from filling the worker's memory.
+    if not isinstance(cache, InMemoryCache) or cache._state_max_bytes is not None:
+        return
+    if id(cache) in _WARNED_UNBOUNDED_CACHES:
+        return
+    _WARNED_UNBOUNDED_CACHES.add(id(cache))
+    logger.warning(
+        "Server-stored State (_storage = 'server') is kept in an InMemoryCache with state_max_bytes=None."
+        " Each render and each State change adds an entry that lasts until it expires (24 hours unless"
+        " _max_age is set), so the process memory grows with traffic. Keep the default budget, set"
+        " InMemoryCache(state_max_bytes=...), or use a shared backend with a size limit."
+    )
 
 
 def _validate_state_values(state_dict: dict[str, Any], class_id: str) -> None:
@@ -469,9 +520,13 @@ def _build_payload(class_id: str, state_dict: dict[str, Any], max_age: timedelta
     return {"v": _PROTOCOL_VERSION, "c": class_id, "s": state_dict, "t": minted_at, "x": expiry}
 
 
-def _enforce_max_bytes(class_id: str, state_dict: dict[str, Any], max_bytes: int) -> None:
+def _enforce_max_bytes(class_id: str, state_dict: dict[str, Any], max_bytes: int | None) -> None:
     """Reject signed State whose serialized size trips the design-smell canary."""
-    size = len(_canonical_json(state_dict).encode("utf-8"))
+    # None means no cap. State settings allow it only for server storage,
+    # which never reaches here; a direct caller passing None opts out.
+    if max_bytes is None:
+        return
+    size = _state_dict_bytes(state_dict)
     if size > max_bytes:
         msg = (
             f"Component {class_id}: the serialized State is {size} bytes, over the _max_bytes cap of"
@@ -480,6 +535,45 @@ def _enforce_max_bytes(class_id: str, state_dict: dict[str, Any], max_bytes: int
             f" raise _max_bytes if the size is genuinely needed."
         )
         raise ValueError(msg)
+
+
+def _state_dict_bytes(state_dict: dict[str, Any]) -> int:
+    """The size of the State's stored JSON form, in bytes."""
+    return len(_canonical_json(state_dict).encode("utf-8"))
+
+
+def server_state_bytes(state: Any, class_id: str) -> int | None:
+    """
+    Measure State the way server storage will store it, or ``None`` when it cannot be stored.
+
+    A State that cannot be written as JSON fails later, when Citry stores it,
+    with the error that names the field, so the size check skips it.
+    """
+    try:
+        return _state_dict_bytes(_state_dict(state, class_id))
+    except (TypeError, ValueError):
+        return None
+
+
+def server_state_growth_error(
+    *, before: int | None, after: int | None, max_bytes: int | None, component_name: str
+) -> str | None:
+    """
+    Return why the browser's writes made server-stored State too large, or ``None`` when they did not.
+
+    Every State change stores a new cache entry, so the cap bounds what one
+    call's browser writes can add to the cache. Only growth past the cap is refused: State
+    the server itself made large keeps working when the browser changes it
+    without making it larger.
+    """
+    if max_bytes is None or after is None or after <= max_bytes:
+        return None
+    if before is not None and after <= before:
+        return None
+    return (
+        f"The state updates would make the State of component {component_name!r} {after} bytes,"
+        f" over its _max_bytes cap of {max_bytes}."
+    )
 
 
 def _sign(payload: dict[str, Any], signing_secret: str) -> str:
@@ -619,17 +713,21 @@ def _verify_signed(token: str, secrets: list[str]) -> dict[str, Any]:
 def _decode_payload(payload_bytes: bytes) -> dict[str, Any]:
     """Parse and shape-check a signed token's payload JSON."""
     try:
+        # The depth is checked on the text first: in a thread with a small
+        # stack, CPython 3.12 and 3.13 can crash on deep text instead of
+        # raising RecursionError. The token can arrive in a GET query.
+        check_json_depth(payload_bytes)
         payload = json.loads(
             payload_bytes,
             object_pairs_hook=_unique_json_object,
             parse_constant=_reject_json_constant,
         )
     except (json.JSONDecodeError, UnicodeDecodeError, RecursionError, ValueError) as err:
-        # Payload bytes that are not UTF-8 raise UnicodeDecodeError, and JSON
-        # nested too deep to parse raises RecursionError. Both are just as
-        # malformed as bad JSON, and no minted token can produce either (mint
-        # writes UTF-8 and would hit the same recursion limit first), so both
-        # map to the 403 here instead of escaping verify as a crash.
+        # Bytes that are not JSON text in any encoding the parser detects
+        # raise UnicodeDecodeError, and text nested more than MAX_JSON_DEPTH
+        # levels raises JsonNestingError. Mint refuses State that deep, so
+        # both are malformed and map to the 403 here instead of escaping
+        # verify as a crash.
         raise InvalidStateError(_MALFORMED_MSG) from err
     if not _valid_payload_shape(payload):
         raise InvalidStateError(_MALFORMED_MSG)
@@ -701,6 +799,9 @@ def _load_server_payload(key: str, cache: CitryCache | None) -> dict[str, Any]:
         )
         raise StaleStateError(msg)
     try:
+        # Citry wrote this entry, but a shared cache is only as trusted as
+        # everything else that can write to it, so it gets the same check.
+        check_json_depth(raw)
         payload = json.loads(
             raw,
             object_pairs_hook=_unique_json_object,

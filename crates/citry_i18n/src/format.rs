@@ -2270,9 +2270,26 @@ fn parse_decimal(value: &str) -> Result<Decimal, Failure> {
     value.parse().map_err(|error| {
         Failure::new(
             "I18N_FORMAT_NUMBER_VALUE",
-            format!("invalid exact decimal {value:?}: {error}"),
+            format!(
+                "invalid exact decimal {}: {error}",
+                short_value_preview(value)
+            ),
         )
     })
+}
+
+/// Longest part of a refused value that an error message repeats.
+const VALUE_PREVIEW_CHARS: usize = 40;
+
+/// Quote the start of a refused value and give its full length.
+fn short_value_preview(value: &str) -> String {
+    // A refused number can be tens of thousands of digits long, and the
+    // caller usually logs this message, so repeat only the start of it.
+    let mut chars = value.char_indices();
+    match chars.nth(VALUE_PREVIEW_CHARS) {
+        None => format!("{value:?}"),
+        Some((end, _)) => format!("{:?}... ({} bytes)", &value[..end], value.len()),
+    }
 }
 
 fn decimal_parse_spec(locale: Locale, profile: &str) -> Result<DecimalParseSpec, Failure> {
@@ -2747,6 +2764,25 @@ mod tests {
 
     fn parsed(value: &str) -> serde_json::Value {
         serde_json::from_str(value).expect("parse result JSON")
+    }
+
+    #[test]
+    fn refused_decimal_message_repeats_only_the_start_of_the_value() {
+        let formats = registry();
+        let long = format!("1{}", "0".repeat(40_000));
+        let error = formats
+            .number("en-US", "measurement", &long)
+            .expect_err("a value above 10^32767 is refused");
+        assert_eq!(error.code(), "I18N_FORMAT_NUMBER_VALUE");
+        let message = error.to_string();
+        assert!(message.len() < 200, "{message}");
+        assert!(message.contains("(40001 bytes)"), "{message}");
+
+        let short = formats
+            .number("en-US", "measurement", "1.2.3")
+            .expect_err("not a number")
+            .to_string();
+        assert!(short.contains("\"1.2.3\""), "{short}");
     }
 
     #[test]

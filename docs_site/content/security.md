@@ -70,6 +70,21 @@ still sent as plain values, so list the fields the browser needs in
 them. Server storage does not replace the permission check either: still
 authorize every use of the restored values.
 
+Server storage adds a cache entry at every render and after every call
+that changes State, and keeps each one until it expires: after
+`State._max_age`, or after 24 hours when you do not set it. With several
+server processes, use a shared backend and set its memory limit and
+eviction policy. A browser write that would make the stored
+State larger than `State._max_bytes` (64 KiB by default) gets a 422
+before the handler runs. The limit covers only browser writes, so when a
+handler copies request data into State, limit its size yourself. The
+default `InMemoryCache` counts such State against a 64 MiB budget and
+drops the entry used longest ago when it is full; see
+[Server-stored State](/performance/cache-backends/#server-stored-state).
+One client that sends many calls can push other visitors' State out, and
+those visitors then see a reload prompt, so rate-limit the Events routes
+if that matters for your app.
+
 ## Authorize every event
 
 Every public method in `class Events` can be called by anyone who can reach
@@ -311,6 +326,12 @@ request that is too large and rejects it before it parses it:
 One request also carries at most 16 event calls, and more fail the same
 way. You cannot change that limit.
 
+Citry also refuses request JSON that nests arrays and objects more than
+200 levels deep, before parsing it: an Events body gets a 400 error, a
+State token gets the 403 for a malformed token, and an i18n request gets
+a 400. Citry also refuses to make a State token from State nested that
+deep. You cannot change this limit.
+
 Citry stops reading a body once it passes `_max_body_bytes`, even when the
 request's `Content-Length` is wrong or missing. A request over either
 limit fails with the error code `payload_too_large`: an event call made
@@ -345,6 +366,10 @@ read the body before Citry sees it:
   temporary file), so also set a limit in your server or proxy.
 - **Chunked bodies on WSGI.** On a WSGI server that does not mark where a
   chunked body ends, Citry reads such a body as empty.
+
+Citry never reads the body of a GET, HEAD or OPTIONS request, on any
+host. A server that buffers bodies (see above) may still read one, so
+keep a limit in the server or proxy.
 
 Citry does not accept file uploads by default. If you add your own code
 that turns the request into

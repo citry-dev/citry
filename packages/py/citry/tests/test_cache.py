@@ -105,6 +105,132 @@ class TestInMemoryCache:
         assert cache.get("expired") is None
         assert cache.get("new") == "3"
 
+    def test_an_unbounded_store_removes_expired_entries_nobody_reads(self, monkeypatch):
+        # Server-stored State writes a fresh key per render and never reads
+        # the old ones again, so expiry cannot wait for a read.
+        now = [100.0]
+        monkeypatch.setattr("citry.cache.time.monotonic", lambda: now[0])
+        cache = InMemoryCache()
+        for index in range(1000):
+            cache.set(f"k{index}", "v", ttl=1)
+        cache.set("forever", "v")
+        now[0] = 102.0
+        cache.set("trigger", "v", ttl=1)
+        assert set(cache._data) == {"forever", "trigger"}
+
+    def test_a_rewritten_key_keeps_its_newer_deadline(self, monkeypatch):
+        now = [100.0]
+        monkeypatch.setattr("citry.cache.time.monotonic", lambda: now[0])
+        cache = InMemoryCache()
+        cache.set("k", "old", ttl=1)
+        cache.set("k", "new", ttl=10)
+        now[0] = 105.0
+        cache.set("trigger", "v")
+        assert cache.get("k") == "new"
+        cache.set("k", "kept")
+        now[0] = 120.0
+        cache.set("trigger", "v")
+        # The key's last write had no TTL, so no earlier deadline removes it.
+        assert cache.get("k") == "kept"
+
+    def test_rewriting_one_key_does_not_grow_the_deadline_list(self, monkeypatch):
+        now = [100.0]
+        monkeypatch.setattr("citry.cache.time.monotonic", lambda: now[0])
+        cache = InMemoryCache()
+        for _ in range(10_000):
+            cache.set("k", "v", ttl=3600)
+        assert len(cache._deadlines) < 100
+
+    def test_clear_also_forgets_deadlines(self):
+        cache = InMemoryCache()
+        cache.set("k", "v", ttl=60)
+        cache.clear()
+        assert cache._deadlines == []
+
+    def test_state_entries_stay_within_their_byte_budget(self):
+        cache = InMemoryCache(state_max_bytes=10_000)
+        for index in range(100):
+            cache.set(f"citry:state:k{index}", "x" * 500)
+        assert cache._state_bytes <= 10_000
+        # The newest entries are the ones kept.
+        assert cache.get("citry:state:k99") == "x" * 500
+        assert cache.get("citry:state:k0") is None
+
+    def test_a_state_entry_read_recently_is_kept_longer(self):
+        cache = InMemoryCache(state_max_bytes=3 * InMemoryCache._entry_bytes("citry:state:k0", "x" * 100))
+        for index in range(3):
+            cache.set(f"citry:state:k{index}", "x" * 100)
+        cache.get("citry:state:k0")
+        cache.set("citry:state:k3", "x" * 100)
+        assert cache.get("citry:state:k0") is not None
+        assert cache.get("citry:state:k1") is None
+
+    def test_state_entries_never_push_out_other_entries(self):
+        # A flood of State writes must not drop the assets open pages load.
+        cache = InMemoryCache(max_entries=2, state_max_bytes=5_000)
+        cache.set("citry:asset:a", "a")
+        cache.set("citry:asset:b", "b")
+        for index in range(1000):
+            cache.set(f"citry:state:k{index}", "x" * 200)
+        assert cache.get("citry:asset:a") == "a"
+        assert cache.get("citry:asset:b") == "b"
+
+    def test_state_entries_do_not_count_toward_max_entries(self):
+        cache = InMemoryCache(max_entries=1)
+        cache.set("citry:state:k", "s")
+        cache.set("other", "o")
+        assert cache.get("citry:state:k") == "s"
+        assert cache.get("other") == "o"
+
+    def test_a_state_entry_larger_than_the_budget_is_not_stored(self, caplog):
+        cache = InMemoryCache(state_max_bytes=1_000)
+        cache.set("citry:state:other", "kept")
+        cache.set("citry:state:k", "small")
+        with caplog.at_level("WARNING", logger="citry"):
+            cache.set("citry:state:k", "x" * 2_000)
+        # The old value is gone too, so a call with that token answers stale.
+        assert cache.get("citry:state:k") is None
+        # Refusing it must not first empty the store to make room.
+        assert cache.get("citry:state:other") == "kept"
+        assert any("larger than its whole state_max_bytes" in record.message for record in caplog.records)
+
+    def test_non_ascii_state_counts_the_memory_it_really_takes(self):
+        # One character above U+FFFF makes CPython store the whole string at
+        # four bytes per character, so counting characters would undercount.
+        ascii_size = InMemoryCache._entry_bytes("citry:state:k", "x" * 10_000)
+        wide_size = InMemoryCache._entry_bytes("citry:state:k", "x" * 9_999 + "\U0001f600")
+        assert wide_size > 3 * ascii_size - 1_000
+
+    def test_the_state_byte_count_follows_rewrites_deletes_and_expiry(self, monkeypatch):
+        now = [100.0]
+        monkeypatch.setattr("citry.cache.time.monotonic", lambda: now[0])
+        cache = InMemoryCache()
+        cache.set("citry:state:a", "x" * 100)
+        cache.set("citry:state:a", "x" * 50)
+        cache.set("citry:state:b", "x" * 10, ttl=1)
+        cache.set("citry:state:c", "x" * 10)
+        cache.delete("citry:state:c")
+        now[0] = 102.0
+        cache.set("trigger", "v")
+        assert set(cache._state) == {"citry:state:a"}
+        assert cache._state_bytes == InMemoryCache._entry_bytes("citry:state:a", "x" * 50)
+        cache.clear()
+        assert cache._state_bytes == 0
+
+    def test_the_default_state_budget_is_64_mib(self):
+        assert InMemoryCache()._state_max_bytes == 64 * 1024 * 1024
+
+    def test_no_state_budget_keeps_every_state_entry(self):
+        cache = InMemoryCache(state_max_bytes=None)
+        for index in range(1000):
+            cache.set(f"citry:state:k{index}", "x" * 1000)
+        assert len(cache._state) == 1000
+
+    def test_state_max_bytes_must_be_positive(self):
+        for value in (0, -1, True, 1.5, "1"):
+            with pytest.raises(ValueError, match="state_max_bytes"):
+                InMemoryCache(state_max_bytes=value)
+
     def test_max_entries_must_be_positive(self):
         for value in (0, -1, True, 1.5):
             with pytest.raises(ValueError, match="max_entries"):

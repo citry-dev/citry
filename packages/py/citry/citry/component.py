@@ -870,8 +870,11 @@ class Component(metaclass=ComponentMeta):
     is readable and writable in the browser. Use ``_public`` to choose which
     fields the browser may read and ``_model`` to choose which public fields
     it may change. ``_storage`` is ``"signed"`` by default and may be set to
-    ``"server"``. ``_max_bytes`` defaults to 8192 bytes, and ``_max_age``
-    accepts a ``datetime.timedelta`` or ``None`` for no expiry.
+    ``"server"``. ``_max_bytes`` defaults to 8192 bytes, or 65536 with
+    server storage, where it caps how large browser writes may make the
+    stored State and ``None`` turns that check off. ``_max_age`` accepts a
+    ``datetime.timedelta`` or ``None``; with ``None``, signed State never
+    expires and server-stored State expires after 24 hours.
 
     Citry starts State from same-named keyword arguments and field defaults.
     Define ``state_data(self, kwargs, slots)`` when the values need to be

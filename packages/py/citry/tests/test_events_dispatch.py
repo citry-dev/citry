@@ -18,6 +18,7 @@ import importlib.util
 import json
 import logging
 import re
+import tracemalloc
 from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +26,7 @@ from typing import Literal
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, InMemoryCache
 from citry._protocol import events
 from citry.ext.events import actions, event
 from citry.ext.events import dispatcher as dispatcher_module
@@ -717,6 +718,313 @@ class TestUpdates:
         assert error["status"] == 422
         assert error["code"] == "invalid_args"
         assert "declares no State class" in error["message"]
+
+
+class TestServerStoredState:
+    """
+    Server storage writes a cache entry each time it makes a token.
+
+    These tests check that Citry writes one only for a caller that receives
+    the token, that browser writes cannot make the entry larger than the
+    cap, and that every entry expires.
+    """
+
+    def _entries(self, c):
+        return dict(c.cache._state)
+
+    def _stored(self, c, **state_settings):
+        state_cls = type(
+            "NotesState",
+            (),
+            {"__annotations__": {"note": str, "count": int}, "note": "", "count": 0, "_storage": "server"}
+            | state_settings,
+        )
+        ran = []
+
+        class Notes(Component):
+            citry = c
+            State = state_cls
+            template = "<div>n</div>"
+
+            class Events:
+                def bump(self, state):
+                    ran.append(True)
+                    state.count += 1
+
+                def read(self, state):
+                    ran.append(True)
+                    return {"count": state.count}
+
+        Notes.ran = ran
+        return Notes
+
+    def _server_token(self, c, comp, **values):
+        return mint_state_token(
+            comp.State(**values),
+            class_id=comp.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=None,
+            storage="server",
+            cache=c.cache,
+        )
+
+    def test_a_call_without_a_caller_instance_writes_no_entry(self):
+        # A flat JSON call or a plain form post carries no caller instance,
+        # so nothing would ever receive or read a new token.
+        c = _citry()
+        notes = self._stored(c)
+        token = self._server_token(c, notes)
+        before = self._entries(c)
+        call = {"componentClassId": notes.class_id, "handlerName": "bump", "stateToken": token}
+        [item] = _dispatch(c, call)["results"]
+        assert item["ok"] is True
+        assert notes.ran == [True]
+        assert self._entries(c) == before
+
+    def test_a_caller_that_takes_no_state_action_writes_no_entry(self):
+        c = _citry()
+        notes = self._stored(c)
+        token = self._server_token(c, notes)
+        before = self._entries(c)
+        call = {"componentClassId": notes.class_id, "handlerName": "bump", "callerRenderId": "n1", "stateToken": token}
+        [item] = _dispatch(c, call, envelope_extra={"capabilities": {"actions": ["data"]}})["results"]
+        assert item["ok"] is True
+        assert self._entries(c) == before
+
+    def test_a_live_caller_still_gets_a_new_token(self):
+        c = _citry()
+        notes = self._stored(c)
+        token = self._server_token(c, notes)
+        call = {"componentClassId": notes.class_id, "handlerName": "bump", "callerRenderId": "n1", "stateToken": token}
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        assert state_action["stateToken"].startswith("ces1.")
+        assert len(self._entries(c)) == 2
+
+    def test_a_browser_write_over_the_cap_is_refused_before_the_handler(self):
+        c = _citry()
+        notes = self._stored(c, _max_bytes=1000)
+        token = self._server_token(c, notes)
+        before = self._entries(c)
+        call = {
+            "componentClassId": notes.class_id,
+            "handlerName": "read",
+            "callerRenderId": "n1",
+            "stateToken": token,
+            "stateUpdates": {"note": "x" * 2000},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["status"] == 422
+        assert item["error"]["code"] == "invalid_args"
+        assert "over its _max_bytes cap of 1000" in item["error"]["message"]
+        assert notes.ran == []
+        assert self._entries(c) == before
+
+    def test_a_browser_write_within_the_cap_runs_the_handler(self):
+        c = _citry()
+        notes = self._stored(c, _max_bytes=1000)
+        call = {
+            "componentClassId": notes.class_id,
+            "handlerName": "read",
+            "callerRenderId": "n1",
+            "stateToken": self._server_token(c, notes),
+            "stateUpdates": {"note": "x" * 500},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["ok"] is True
+        assert notes.ran == [True]
+
+    def test_the_default_cap_for_server_storage_is_64_kib(self):
+        c = _citry()
+        notes = self._stored(c)
+        assert c.extensions.get_extension("events").resolve(notes).state_meta.max_bytes == 65536
+        call = {
+            "componentClassId": notes.class_id,
+            "handlerName": "read",
+            "callerRenderId": "n1",
+            "stateToken": self._server_token(c, notes),
+            "stateUpdates": {"note": "x" * 70_000},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["code"] == "invalid_args"
+        assert notes.ran == []
+
+    def test_state_the_server_made_large_still_takes_a_write_that_does_not_grow_it(self):
+        # The cap limits what the browser adds; State the app itself built
+        # above it keeps working.
+        c = _citry()
+        notes = self._stored(c, _max_bytes=1000)
+        call = {
+            "componentClassId": notes.class_id,
+            "handlerName": "read",
+            "callerRenderId": "n1",
+            "stateToken": self._server_token(c, notes, note="y" * 5000),
+            "stateUpdates": {"note": "z" * 5000},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["ok"] is True
+
+    def test_none_turns_the_server_cap_off(self):
+        c = _citry()
+        notes = self._stored(c, _max_bytes=None)
+        call = {
+            "componentClassId": notes.class_id,
+            "handlerName": "read",
+            "callerRenderId": "n1",
+            "stateToken": self._server_token(c, notes),
+            "stateUpdates": {"note": "x" * 100_000},
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["ok"] is True
+
+    def test_signed_state_cannot_turn_its_cap_off(self):
+        c = _citry()
+        with pytest.raises(ValueError, match=r'only _storage = "server" allows'):
+
+            class Signed(Component):
+                citry = c
+                template = "<div>s</div>"
+
+                class State:
+                    count: int = 0
+                    _max_bytes = None
+
+    def test_an_in_memory_cache_without_a_state_budget_warns_once(self, caplog):
+        # The caller instance comes from the client, so only the State
+        # budget bounds how much server-stored State the store holds.
+        c = _citry(cache=InMemoryCache(state_max_bytes=None))
+        notes = self._stored(c)
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            str(notes())
+            str(notes())
+        warnings = [record for record in caplog.records if "state_max_bytes=None" in record.message]
+        assert len(warnings) == 1
+
+    def test_the_warning_works_for_a_cache_subclass_that_cannot_be_hashed(self, caplog):
+        class Unhashable(InMemoryCache):
+            def __eq__(self, other):
+                return self is other
+
+        c = _citry(cache=Unhashable(state_max_bytes=None))
+        notes = self._stored(c)
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            str(notes())
+        assert any("state_max_bytes=None" in record.message for record in caplog.records)
+
+    def test_the_default_in_memory_cache_does_not_warn(self, caplog):
+        c = _citry()
+        notes = self._stored(c)
+        with caplog.at_level(logging.WARNING, logger="citry"):
+            str(notes())
+        assert not [record for record in caplog.records if "state_max_bytes" in record.message]
+
+    def test_signed_state_over_its_cap_on_a_call_without_a_caller_answers_ok(self):
+        # No token is made for a caller that cannot receive one, so the
+        # signed size check, which runs when a token is made, does not run.
+        c = _citry()
+
+        class Big(Component):
+            citry = c
+            template = "<div>b</div>"
+
+            class State:
+                note: str = ""
+                _max_bytes = 100
+
+            class Events:
+                def fill(self, state):
+                    state.note = "x" * 1000
+                    return {"done": True}
+
+        call = {"componentClassId": Big.class_id, "handlerName": "fill", "stateToken": _token(Big)}
+        [item] = _dispatch(c, call)["results"]
+        assert item["ok"] is True
+        assert item["actions"] == [{"action": "data", "value": {"done": True}}]
+
+    def test_replayed_calls_naming_made_up_callers_stay_within_the_state_budget(self):
+        # A client can name any caller instance and replay one token whose
+        # State is already near the cap; each changed call then stores a new
+        # full-size entry. The State budget must hold, and the assets an open
+        # page loads must stay.
+        budget = 512 * 1024
+        c = _citry(cache=InMemoryCache(state_max_bytes=budget))
+        c.cache.set("citry:asset:page.js", "js")
+        notes = self._stored(c)
+        grow = {
+            "componentClassId": notes.class_id,
+            "handlerName": "read",
+            "callerRenderId": "n1",
+            "stateToken": self._server_token(c, notes),
+            "stateUpdates": {"note": "x" * 60_000},
+        }
+        [state_action, _data] = _dispatch(c, grow)["results"][0]["actions"]
+        big_token = state_action["stateToken"]
+        tracemalloc.start()
+        for batch in range(20):
+            calls = [
+                {
+                    "componentClassId": notes.class_id,
+                    "handlerName": "bump",
+                    "callerRenderId": f"x{batch}-{index}",
+                    "stateToken": big_token,
+                }
+                for index in range(16)
+            ]
+            results = _dispatch(c, *calls)["results"]
+            # Until its entry is dropped, the replayed token keeps working.
+            assert all(item["ok"] or item["error"]["code"] == "stale_state" for item in results)
+        # The responses carry the public State too; only the store is measured.
+        del results, calls
+        held, _peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        # 320 calls would have stored about 19 MB; the store is full but
+        # holds no more than its budget.
+        assert len(c.cache._state) >= 5
+        assert c.cache._state_bytes <= budget
+        assert held < 2 * budget
+        assert c.cache.get("citry:asset:page.js") == "js"
+
+    def test_ordinary_calls_keep_working_under_the_state_budget(self):
+        # A visitor who uses each new token gets a fresh entry every call;
+        # a budget that holds a few entries is enough for that.
+        c = _citry(cache=InMemoryCache(state_max_bytes=4096))
+        notes = self._stored(c)
+        token = self._server_token(c, notes)
+        for expected in range(1, 51):
+            call = {
+                "componentClassId": notes.class_id,
+                "handlerName": "bump",
+                "callerRenderId": "n1",
+                "stateToken": token,
+            }
+            [state_action] = _dispatch(c, call)["results"][0]["actions"]
+            token = state_action["stateToken"]
+            assert state_action["publicState"]["count"] == expected
+
+    def test_a_dropped_state_entry_answers_stale_state(self):
+        c = _citry(cache=InMemoryCache(state_max_bytes=2048))
+        notes = self._stored(c)
+        first = self._server_token(c, notes)
+        for _ in range(20):
+            self._server_token(c, notes)
+        call = {"componentClassId": notes.class_id, "handlerName": "bump", "callerRenderId": "n1", "stateToken": first}
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["code"] == "stale_state"
+        assert item["error"]["status"] == 409
+
+    def test_rendered_entries_expire_and_leave_the_default_cache(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr("citry.cache.time.monotonic", lambda: now[0])
+        c = _citry()
+        notes = self._stored(c)
+        for _ in range(100):
+            str(notes())
+        entries = self._entries(c)
+        assert len(entries) == 100
+        assert all(c.cache._state[key][1] == 1000.0 + 24 * 3600 for key in entries)
+        now[0] += 24 * 3600 + 1
+        c.cache.set("unrelated", "v")
+        assert self._entries(c) == {}
 
 
 class TestErrors:

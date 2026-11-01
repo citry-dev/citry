@@ -1265,7 +1265,9 @@ class TestServerStorage:
         (ttl,) = set(cache.ttls.values())
         assert ttl == 7200.0
 
-    def test_no_max_age_no_ttl(self):
+    def test_no_max_age_gives_a_24_hour_ttl(self):
+        # Each render and State change writes a new entry, so an entry with
+        # no lifetime would stay in the cache for good.
         cache = RecordingCache()
         mint_state_token(
             CounterState(count=1),
@@ -1277,7 +1279,7 @@ class TestServerStorage:
             cache=cache,
         )
         (ttl,) = set(cache.ttls.values())
-        assert ttl is None
+        assert ttl == 24 * 3600.0
 
     def test_max_age_expiry_through_the_cache(self, monkeypatch):
         import citry.cache as cache_mod

@@ -28,7 +28,15 @@ import inspect
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs
 
-from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, body_read_limit, match_route, sent_headers
+from citry.util.routing import (
+    BODYLESS_METHODS,
+    RouteHeaders,
+    RouteRequest,
+    RouteResponse,
+    body_read_limit,
+    match_route,
+    sent_headers,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -94,7 +102,9 @@ def _build_request(environ: dict[str, Any], method: str, body_limit: int | None)
         header_items.append(("Content-Length", environ["CONTENT_LENGTH"]))
     headers = RouteHeaders(header_items)
 
-    body = _read_body(environ, body_limit)
+    # A route has no use for the body of a GET, HEAD or OPTIONS request, and
+    # a route with no limit would otherwise read it whole, however large.
+    body = b"" if method in BODYLESS_METHODS else _read_body(environ, body_limit)
 
     query = {
         key: tuple(values) for key, values in parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True).items()

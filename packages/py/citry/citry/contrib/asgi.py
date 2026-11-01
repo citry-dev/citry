@@ -50,6 +50,7 @@ from urllib.parse import parse_qs
 
 from citry.reload import watch
 from citry.util.routing import (
+    BODYLESS_METHODS,
     RouteHeaders,
     RouteRequest,
     RouteResponse,
@@ -73,9 +74,6 @@ if TYPE_CHECKING:
     Send = Callable[[MutableMapping[str, Any]], Awaitable[None]]
 
 __all__ = ["asgi_app", "reload_lifespan"]
-
-# Methods whose requests carry no body, so `receive` is never drained for them.
-_BODYLESS_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 async def _send_response(send: Send, response: RouteResponse) -> None:
@@ -180,7 +178,7 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
             await _send_response(send, RouteResponse(content="Method Not Allowed", status=405))
             return
 
-        if method in _BODYLESS_METHODS:
+        if method in BODYLESS_METHODS:
             body = b""
         else:
             drained = await _read_body(receive, body_read_limit(matched.route))

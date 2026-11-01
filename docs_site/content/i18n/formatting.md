@@ -142,6 +142,15 @@ Each kind accepts a specific Python value:
 Floats are rejected with `TypeError`, because they cannot hold every
 decimal amount exactly. Convert amounts to `Decimal` first.
 
+The formatters and `tr()` accept a `Decimal` with at most 32,768 digits
+before the decimal point and 32,768 after it, counting every zero of the
+written-out number. `percent` allows two fewer before the point, because
+it multiplies by 100. A larger value raises `ValueError` before any
+digits are written. Check numbers that come from a request:
+`Decimal("1e999999999")` is 11 characters long, but written out it is a
+billion digits. Even in range, a value can write tens of thousands of
+digits, so limit the size of a submitted `Decimal` in your own checks.
+
 ## Use ratios for percent
 
 A percent profile takes the ratio, not the number of percent:

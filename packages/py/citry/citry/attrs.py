@@ -364,9 +364,6 @@ _whitespace_re = re.compile(r"\s+")
 # comments, as Vue's `parseStringStyle` does, so comment-like text inside a
 # quoted value stays.
 _style_comment_re = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|\\.|/\*.*?\*/", re.DOTALL)
-# Splits CSS declarations on `;`, but not inside parentheses,
-# so `url(data:image/png;base64,...)` stays in one piece.
-_style_delimiter_re = re.compile(r";(?![^(]*\))", re.DOTALL)
 # Splits one CSS declaration into name and value on the first `:`.
 _style_property_re = re.compile(r":(.+)", re.DOTALL)
 
@@ -512,6 +509,35 @@ def _collect_style(value: StyleValue, res: dict[str, Any]) -> None:
         raise TypeError(msg)
 
 
+def _split_style_declarations(css_text: str) -> list[str]:
+    r"""
+    Split CSS text on each `;` that is not followed by a `)` before the next `(`.
+
+    This is the rule of Vue's ``parseStringStyle`` regex ``;(?![^(]*\))``, so
+    ``url(data:image/png;base64,...)`` stays in one piece and the server and
+    the browser split a style the same way. The regex looks ahead to the
+    end of the text from every `;`, which takes time growing with the square
+    of the length; this walks the text once from the end instead, remembering
+    the nearest parenthesis after the current position.
+    """
+    cut_after: list[int] = []
+    next_paren = ""
+    for index in range(len(css_text) - 1, -1, -1):
+        char = css_text[index]
+        if char in "()":
+            next_paren = char
+        elif char == ";" and next_paren != ")":
+            cut_after.append(index)
+    pieces: list[str] = []
+    start = 0
+    # The cut positions were found from the end, so they come out in reverse.
+    for index in reversed(cut_after):
+        pieces.append(css_text[start:index])
+        start = index + 1
+    pieces.append(css_text[start:])
+    return pieces
+
+
 def parse_string_style(css_text: str) -> dict[str, Any]:
     """
     Parse an inline CSS string into a property dict.
@@ -533,7 +559,7 @@ def parse_string_style(css_text: str) -> dict[str, Any]:
     css_text = _style_comment_re.sub(lambda match: "" if match.group().startswith("/*") else match.group(), css_text)
 
     res: dict[str, Any] = {}
-    for declaration in _style_delimiter_re.split(css_text):
+    for declaration in _split_style_declarations(css_text):
         if not declaration:
             continue
         parts = _style_property_re.split(declaration)

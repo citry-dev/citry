@@ -28,12 +28,16 @@ adapted in a few lines.
 
 from __future__ import annotations
 
+import heapq
 import math
+import sys
 import time
 from collections import OrderedDict
 from threading import Lock
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 from weakref import WeakKeyDictionary
+
+from citry.util.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -84,12 +88,42 @@ class CitryCache(Protocol):
         ...  # pragma: no cover - protocol
 
 
+# Keys that hold server-stored Events State (``State._storage = "server"``).
+# The Events extension writes them; ``InMemoryCache`` keeps them in a store of
+# their own with its own byte budget.
+STATE_KEY_PREFIX = "citry:state:"
+# The default byte budget for those entries in one ``InMemoryCache``. One
+# entry from a browser write is at most 64 KiB of ASCII text (the default
+# server ``State._max_bytes``), so 64 MiB keeps hundreds of the largest
+# entries, and about 100,000 of the few-hundred-byte entries a page view
+# usually writes. That is small next to a typical worker's memory, yet
+# enough that ordinary traffic rarely drops a visitor's State before it
+# expires.
+DEFAULT_STATE_MAX_BYTES = 64 * 1024 * 1024
+# What one stored entry costs beyond its two strings, whose own size
+# `sys.getsizeof` gives: the stored tuple and expiry, the dictionary slot,
+# and its pair in the deadline list. Counting it makes many tiny entries
+# count toward the budget too.
+_STATE_ENTRY_OVERHEAD_BYTES = 256
+
+
 class InMemoryCache:
     """
     The default cache backend: a thread-safe store inside the current process.
 
-    Unbounded by default. Pass ``max_entries`` to cap the size; when full,
-    the entry that was read or written longest ago is dropped to make room.
+    Unbounded by default for ordinary entries. Pass ``max_entries`` to cap
+    them; when full, the entry that was read or written longest ago is
+    dropped to make room. An entry written with a ``ttl`` is removed once it
+    expires, at the next write, even when nothing reads its key again.
+
+    Server-stored Events State (keys that start with ``citry:state:``) is
+    kept apart, under its own budget of ``state_max_bytes`` (64 MiB by
+    default), and does not count toward ``max_entries``. When the budget is
+    full, the State entry read or written longest ago is dropped, so many
+    State writes cannot push out page assets. A dropped entry makes that
+    visitor's next call answer ``stale_state``, and the page offers a
+    reload. An entry larger than the whole budget is not stored, and Citry
+    logs a warning. ``state_max_bytes=None`` removes the budget.
 
     Single-process only: each instance is its own store. With several worker
     processes, a page rendered by one worker can link a generated Vue bundle
@@ -97,55 +131,141 @@ class InMemoryCache:
     404, so use a shared backend such as
     [`RedisCache`][citry.contrib.caches.RedisCache] or
     [`DjangoCache`][citry.contrib.django.DjangoCache] instead.
+
+    Raises:
+        ValueError: When ``max_entries`` or ``state_max_bytes`` is not a
+            positive ``int`` or ``None``.
+
     """
 
-    def __init__(self, max_entries: int | None = None) -> None:
+    def __init__(
+        self,
+        max_entries: int | None = None,
+        *,
+        state_max_bytes: int | None = DEFAULT_STATE_MAX_BYTES,
+    ) -> None:
         if max_entries is not None and (type(max_entries) is not int or max_entries <= 0):
             msg = f"max_entries must be a positive int or None, got {max_entries!r}"
             raise ValueError(msg)
+        if state_max_bytes is not None and (type(state_max_bytes) is not int or state_max_bytes <= 0):
+            msg = f"state_max_bytes must be a positive int or None, got {state_max_bytes!r}"
+            raise ValueError(msg)
         self._max_entries = max_entries
+        self._state_max_bytes = state_max_bytes
         self._lock = Lock()
         # key -> (value, expiry deadline in time.monotonic() terms, or None).
         # Insertion order doubles as recency order: reads and writes move the
         # entry to the end, so the front is always the stalest entry.
         self._data: OrderedDict[str, tuple[str, float | None]] = OrderedDict()
+        # The same shape for State keys. A separate store means dropping
+        # State to fit its budget never touches the entries in `_data`.
+        self._state: OrderedDict[str, tuple[str, float | None]] = OrderedDict()
+        self._state_bytes = 0
+        # (deadline, key) for every entry written with a TTL, soonest first.
+        # Many keys (server-held State among them) are written once and never
+        # read again, so expiry cannot wait for a read; each write removes the
+        # entries whose deadline has passed. A rewritten key leaves its old
+        # pair behind, which the purge skips because the deadline differs.
+        self._deadlines: list[tuple[float, str]] = []
+
+    @staticmethod
+    def _entry_bytes(key: str, value: str) -> int:
+        """Estimate what one State entry holds in memory, for its budget."""
+        # `getsizeof` counts the bytes CPython really uses for each string:
+        # one character above U+00FF makes the whole string take two or four
+        # bytes per character, which `len` would not show.
+        return sys.getsizeof(key) + sys.getsizeof(value) + _STATE_ENTRY_OVERHEAD_BYTES
+
+    def _store(self, key: str) -> OrderedDict[str, tuple[str, float | None]]:
+        """Return the store that holds ``key``: the State store or the ordinary one."""
+        return self._state if key.startswith(STATE_KEY_PREFIX) else self._data
+
+    def _remove(self, key: str) -> None:
+        """Remove ``key`` from its store, keeping the State byte count right; caller holds ``_lock``."""
+        store = self._store(key)
+        entry = store.pop(key, None)
+        if entry is not None and store is self._state:
+            self._state_bytes -= self._entry_bytes(key, entry[0])
 
     def get(self, key: str) -> str | None:
         with self._lock:
-            entry = self._data.get(key)
+            store = self._store(key)
+            entry = store.get(key)
             if entry is None:
                 return None
             value, expires_at = entry
             if expires_at is not None and time.monotonic() >= expires_at:
-                del self._data[key]
+                self._remove(key)
                 return None
-            self._data.move_to_end(key)
+            store.move_to_end(key)
             return value
 
     def set(self, key: str, value: str, ttl: float | None = None) -> None:
         normalized_ttl = _normalize_ttl(ttl)
         with self._lock:
+            # A rewrite replaces the old value, so its bytes leave the count first.
+            self._remove(key)
             if normalized_ttl == 0:
-                self._data.pop(key, None)
                 return
             now = time.monotonic()
             expires_at = now + normalized_ttl if normalized_ttl is not None else None
-            self._data[key] = (value, expires_at)
-            self._data.move_to_end(key)
+            store = self._store(key)
+            if store is self._state:
+                size = self._entry_bytes(key, value)
+                # An entry larger than the whole budget could only be kept by
+                # emptying the store and still not fit, so it is not stored;
+                # the call that would use it answers stale_state instead.
+                if self._state_max_bytes is not None and size > self._state_max_bytes:
+                    self._purge_expired(now)
+                    # Every reload makes the same entry again and fails the
+                    # same way, so the app author needs to hear about it.
+                    logger.warning(
+                        f"InMemoryCache did not store a server State entry of about {size} bytes, which is"
+                        f" larger than its whole state_max_bytes budget of {self._state_max_bytes}. Calls with"
+                        f" that token answer stale_state until you raise state_max_bytes or make the State smaller."
+                    )
+                    return
+                self._state_bytes += size
+            store[key] = (value, expires_at)
+            if expires_at is not None:
+                heapq.heappush(self._deadlines, (expires_at, key))
+            self._purge_expired(now)
             if self._max_entries is not None:
-                self._purge_expired(now)
                 while len(self._data) > self._max_entries:
                     self._data.popitem(last=False)
+            if self._state_max_bytes is not None:
+                # Whatever caller ids a client invents, State stays within its
+                # budget: the entry used longest ago goes first.
+                while self._state_bytes > self._state_max_bytes:
+                    oldest = next(iter(self._state))
+                    self._remove(oldest)
 
     def _purge_expired(self, now: float) -> None:
         """Remove expired entries while the caller holds ``_lock``."""
-        expired = [key for key, (_, deadline) in self._data.items() if deadline is not None and now >= deadline]
-        for key in expired:
-            del self._data[key]
+        deadlines = self._deadlines
+        while deadlines and deadlines[0][0] <= now:
+            deadline, key = heapq.heappop(deadlines)
+            entry = self._store(key).get(key)
+            # Only the pair pushed by the key's latest write matches its stored
+            # deadline; an older pair must not remove a newer value.
+            if entry is not None and entry[1] == deadline:
+                self._remove(key)
+        # Rewriting one key many times leaves one stale pair per write until
+        # its deadline passes. Rebuilding from the live entries keeps the list
+        # no larger than about twice the store.
+        live = len(self._data) + len(self._state)
+        if len(deadlines) > 2 * live + 64:
+            self._deadlines = [
+                (entry[1], key)
+                for store in (self._data, self._state)
+                for key, entry in store.items()
+                if entry[1] is not None
+            ]
+            heapq.heapify(self._deadlines)
 
     def delete(self, key: str) -> None:
         with self._lock:
-            self._data.pop(key, None)
+            self._remove(key)
 
     def has(self, key: str) -> bool:
         return self.get(key) is not None
@@ -154,6 +274,9 @@ class InMemoryCache:
         """Drop all entries. Called by ``Citry.clear()``."""
         with self._lock:
             self._data.clear()
+            self._state.clear()
+            self._state_bytes = 0
+            self._deadlines.clear()
 
 
 # Entries that pages link (compiled Vue code, component JS and CSS, served
