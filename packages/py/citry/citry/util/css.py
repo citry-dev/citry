@@ -64,6 +64,7 @@ def _serialize_css_string(value: str) -> str:
 
 
 _CSS_WHITESPACE = "\n\r\t\f "
+_CSS_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 
 def _consume_css_escape(value: str, index: int) -> int:
@@ -75,7 +76,19 @@ def _consume_css_escape(value: str, index: int) -> int:
     """
     if index + 1 >= len(value) or value[index + 1] in "\n\r\f":
         raise ValueError(f"CSS value has a backslash that does not start a valid escape at offset {index}.")
-    return index + 2
+    index += 1
+    if value[index] not in _CSS_HEX_DIGITS:
+        return index + 1
+    # A hex escape is up to six hex digits plus one whitespace, which the
+    # browser reads as part of the escape; CRLF counts as one newline.
+    end = index
+    while end < len(value) and end - index < 6 and value[end] in _CSS_HEX_DIGITS:
+        end += 1
+    if value.startswith("\r\n", end):
+        return end + 2
+    if end < len(value) and value[end] in _CSS_WHITESPACE:
+        return end + 1
+    return end
 
 
 def validate_css_var_value(value: str) -> None:
@@ -87,8 +100,9 @@ def validate_css_var_value(value: str) -> None:
     rule, or end the ``<style>`` element the browser builds it into. It
     rejects a malformed string or ``url()`` token (the browser's bad-string
     and bad-url cases), a comment, an unbalanced bracket, a brace, a ``<`` or
-    backslash outside a string or ``url()``, ``</style`` or ``<!--`` anywhere,
-    and a top-level ``;`` or ``!``. It is not a full property-type validator.
+    backslash outside a string or ``url()``, a null or surrogate character,
+    ``</style``, or ``<!--`` anywhere, and a top-level ``;`` or ``!``. It is
+    not a full property-type validator.
     """
     # The HTML parser ends a <style> element only at `</style`, in any letter
     # case, and `<!--` can start a comment state, so both are refused in every
@@ -204,8 +218,9 @@ def _scan_css_string(value: str, start: int) -> int:
             raise ValueError(f"CSS string contains an unescaped newline at offset {index}.")
         if char == "\\":
             if index + 1 < length and value[index + 1] in "\n\r\f":
-                # A backslash-newline is a line continuation inside a string.
-                index += 2
+                # A backslash-newline is a line continuation inside a string;
+                # CRLF counts as one newline.
+                index += 3 if value.startswith("\r\n", index + 1) else 2
                 continue
             index = _consume_css_escape(value, index)
             continue
@@ -214,7 +229,7 @@ def _scan_css_string(value: str, start: int) -> int:
 
 
 def _is_quoted_url(value: str, start: int) -> bool:
-    """Whether ``url(`` at ``start`` is immediately followed (after spaces) by a quote."""
+    """Whether ``url(`` at ``start`` is followed by a quote, after any whitespace."""
     index = start + 4
     while index < len(value) and value[index] in _CSS_WHITESPACE:
         index += 1
@@ -225,6 +240,9 @@ def _scan_css_url(value: str, start: int) -> int:
     """Return the index after an unquoted ``url(...)``, or reject a bad-url token."""
     index = start + 4
     length = len(value)
+    # The browser skips whitespace before the address starts.
+    while index < length and value[index] in _CSS_WHITESPACE:
+        index += 1
     while index < length:
         char = value[index]
         if char == ")":
@@ -235,9 +253,11 @@ def _scan_css_url(value: str, start: int) -> int:
         # the value up to the next `)`.
         code = ord(char)
         if char in "\"'(" or code <= 0x08 or code in {0x0B, 0x7F} or 0x0E <= code <= 0x1F:
+            # A quote inside the URL still needs a backslash after the URL is quoted.
+            advice = " A quote inside a quoted URL needs a backslash before it." if char in "\"'" else ""
             msg = (
                 f"CSS url() contains {char!r} at offset {index}, which the browser cannot read in an unquoted URL. "
-                'Quote the URL, as in url("...").'
+                f'Quote the URL, as in url("...").{advice}'
             )
             raise ValueError(msg)
         if char in _CSS_WHITESPACE:

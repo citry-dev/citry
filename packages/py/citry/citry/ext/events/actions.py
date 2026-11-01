@@ -307,7 +307,7 @@ class Dispatch(Action):
 
 
 # The schemes a Redirect may navigate to. A Redirect accepts only these and
-# relative URLs. The browser runtime repeats this check (`_vue/client.js`,
+# URLs with no scheme. The browser runtime repeats this check (`_vue/client.js`,
 # `redirectScheme`) for actions that reach it by another route.
 REDIRECT_SCHEMES = frozenset({"http", "https"})
 _C0_CONTROL_OR_SPACE = "".join(chr(code) for code in range(0x21))
@@ -318,15 +318,16 @@ _SCHEME_CHARS = _SCHEME_START_CHARS | frozenset("0123456789+-.")
 
 def redirect_url_scheme(url: str) -> str | None:
     """
-    Return the lowercase scheme a browser reads from ``url``, or ``None`` for a relative URL.
+    Return the lowercase scheme a browser reads from ``url``, or ``None`` when it has no scheme.
 
     It follows the WHATWG URL parser's first steps, which decide how a
     browser reads the URL given to `location.assign()`: leading and trailing
-    C0 controls and spaces are stripped, and tab, CR, and LF are removed
+    control characters and spaces (U+0000 to U+0020) are stripped, and
+    tab, CR, and LF are removed
     anywhere, so whitespace inside or around the scheme does not change which
     scheme the browser reads. A scheme is an ASCII letter followed by
     letters, digits, ``+``, ``-``, or ``.`` up to the first ``:``; anything
-    else is a relative URL.
+    else means the URL has no scheme.
     """
     text = url.strip(_C0_CONTROL_OR_SPACE).translate(_ASCII_TAB_OR_NEWLINE)
     colon = text.find(":")
@@ -340,7 +341,7 @@ def redirect_url_scheme(url: str) -> str | None:
 
 @dataclass(frozen=True)
 class Redirect(Action):
-    """
+    r"""
     Navigate the page to a URL.
 
     A redirect is an ordinary action, not an HTTP 30x: it applies in list
@@ -349,15 +350,22 @@ class Redirect(Action):
     (say a farewell toast) must be seen first:
     ``actions.Redirect(url, delay=5, wait=False)``.
 
+    The action checks the scheme only, not where the URL leads. A URL such
+    as ``//other.example`` or ``/\other.example`` has no scheme, yet the
+    browser sends the visitor to another site. When the URL comes from the
+    request, such as a ``next`` parameter, check it before you pass it in.
+    Checking that it starts with ``/`` is not enough.
+
     Attributes:
         url: The URL to navigate to: an ``http:`` or ``https:`` URL, or a
-            relative one such as ``/orders/7`` or ``?page=2``.
+            URL with no scheme such as ``/orders/7`` or ``?page=2``.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
 
     Raises:
-        ValueError: If ``url`` is empty, contains a control character, or
-            has a scheme other than ``http:`` or ``https:``.
+        ValueError: If ``url`` is not a string, is empty, contains a
+            control character, or has a scheme other than ``http:`` or
+            ``https:``.
 
     """
 
@@ -375,8 +383,8 @@ class Redirect(Action):
         scheme = redirect_url_scheme(self.url)
         if scheme is not None and scheme not in REDIRECT_SCHEMES:
             msg = (
-                f"actions.Redirect: url uses the {scheme!r} scheme; a redirect accepts only http:, "
-                "https:, and relative URLs. Pass a full http(s) URL or a path such as '/orders/7'."
+                f"actions.Redirect: url uses the {scheme!r} scheme, but a redirect accepts only http: and "
+                "https: URLs and URLs with no scheme, such as '/orders/7'."
             )
             raise ValueError(msg)
         super().__post_init__()

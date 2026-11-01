@@ -126,6 +126,30 @@ def test_c_element_refuses_special_tags(tag: str, spelling: Any, path: str) -> N
 
 
 @pytest.mark.parametrize("path", RENDER_PATHS)
+@pytest.mark.parametrize(
+    "template",
+    [
+        pytest.param('<c-element c-is="tag" />', id="c-is"),
+        pytest.param('<c-element c-is="tag" c-bind="attrs" />', id="c-is-and-c-bind"),
+        pytest.param('<c-element is="TAG_NAME" c-bind="attrs" />', id="fixed-is-and-c-bind"),
+    ],
+)
+@pytest.mark.parametrize("tag", ["base", "embed", "link", "meta"])
+def test_c_element_refuses_special_void_tags_written_without_a_body(tag: str, template: str, path: str) -> None:
+    """
+    `<c-element>` refuses a void tag when the template gives it no body.
+
+    A void tag such as `<meta>` renders with no closing tag, so the form with
+    no body is the one that reaches the page, and it needs its own check.
+    """
+    # Only the fixed `is` form writes the tag in the template; the others read it from `tag`.
+    source = template.replace("TAG_NAME", tag)
+
+    with pytest.raises(ValueError, match="cannot render a <"):
+        _render_page(source, {"tag": tag, "attrs": {}}, path=path)
+
+
+@pytest.mark.parametrize("path", RENDER_PATHS)
 @pytest.mark.parametrize("tag", ["div", "my-widget", "clipPath"])
 def test_c_element_still_renders_ordinary_tags(tag: str, path: str) -> None:
     """A plain tag, a custom element name, and a camel-case SVG name are not refused."""

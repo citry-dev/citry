@@ -177,14 +177,16 @@ browser handles in a special way, in any letter case. It raises
 `ValueError` for `script`, `style`, `base`, `meta`, `link`, `iframe`,
 `frame`, `frameset`, `object`, `embed`, `applet`, `plaintext`, `xmp`,
 `noembed`, `noframes`, `noscript`, `title`, `textarea`, and `template`.
-The browser runs or loads some of them, reads the contents of others as raw
-text, and lets some change how it reads the rest of the page. A Python call
-that passes one of these tags raises too.
+Some of them make the browser run or load something, some make it read
+their contents as raw text, and some change how it reads the rest of the
+page. Calling the built-in `element` component from Python with one of
+these tags raises too.
 
 Citry escapes an element's body as HTML text, which does not fit these
 tags. When you need one, write it directly in the template, for example in
-a `c-if` branch. A plain `<c-element is="script">` with no `c-bind` makes an
-ordinary element, so Citry does not refuse it.
+a `c-if` branch. A `<c-element>` with a fixed `is` and no `c-bind` renders
+like the same tag written in the template, so this check does not apply to
+it.
 
 ### Letter case of `is`
 

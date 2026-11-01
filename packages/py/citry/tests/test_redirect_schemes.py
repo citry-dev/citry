@@ -1,4 +1,4 @@
-"""`actions.Redirect` accepts only http(s) and relative URLs."""
+"""`actions.Redirect` accepts only http(s) URLs and URLs with no scheme."""
 
 from __future__ import annotations
 
@@ -32,8 +32,17 @@ def test_redirect_refuses_non_http_schemes(url: str) -> None:
     "url",
     ["/orders/7", "orders/7", "?page=2", "#top", "//example.com/x", "https://example.com/", "HTTP://example.com/"],
 )
-def test_redirect_accepts_http_and_relative_urls(url: str) -> None:
+def test_redirect_accepts_http_urls_and_urls_with_no_scheme(url: str) -> None:
+    # The action checks the scheme only. `//example.com/x` has no scheme, so it
+    # passes, although a browser sends the visitor to another site.
     assert actions.Redirect(url).url == url
+
+
+def test_redirect_error_names_what_a_redirect_accepts() -> None:
+    with pytest.raises(
+        ValueError, match=r"'ftp' scheme, but a redirect accepts only http: and https: URLs and URLs with no scheme"
+    ):
+        actions.Redirect("ftp://example.com/file")
 
 
 @pytest.mark.parametrize(
@@ -41,8 +50,8 @@ def test_redirect_accepts_http_and_relative_urls(url: str) -> None:
     ["/a\r\nx", "/a\x7fb", "/a\x00b", "/a\x1fb", "https://example.com/\nx"],
     ids=["crlf_in_a_path", "delete_character", "null_character", "unit_separator", "newline_in_an_http_url"],
 )
-def test_redirect_refuses_a_control_character_in_a_relative_url(url: str) -> None:
-    # Each URL has a relative or http(s) shape, so only the control-character
+def test_redirect_refuses_a_control_character_in_an_http_or_schemeless_url(url: str) -> None:
+    # Each URL has no scheme or an http(s) scheme, so only the control-character
     # rule can refuse it. A control character must not reach a Location header.
     with pytest.raises(ValueError, match="control character"):
         actions.Redirect(url)

@@ -148,11 +148,11 @@ page's HTML, and Citry uses that as it is.
 
 ### Keep hook output safe
 
-Hooks that return a template, script, stylesheet, or the page's HTML,
-such as `on_template_loaded`, `on_js_loaded`, `on_css_loaded`, and
-`on_serialize`, return text that Citry compiles or puts into the page.
-Build those results from your extension's own text, never from request
-data.
+Some hooks, such as `on_template_loaded`, `on_js_loaded`,
+`on_css_loaded`, and `on_serialize`, return a template, script,
+stylesheet, or the page's HTML. Citry compiles or inserts that text
+without checking it, so build it from your extension's own text, never
+from request data.
 
 An `on_attrs_resolved` hook may change attribute values, but it may not
 add an inline event handler such as `onclick`, or `innerHTML`,

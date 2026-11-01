@@ -26,9 +26,7 @@ event:
 | `@c-submit.prevent="submit"` | Collect the form's named controls and call `submit` instead of submitting the page. |
 
 An event name must start with a letter and use only letters, digits, `-`,
-`_` and `:`. Vue lifecycle hooks such as `vnode-mounted` run when an element
-mounts, not on a browser event, so binding one raises an error that names the
-binding.
+`_` and `:`.
 
 Modifiers after the event name control which events send a call, and when:
 
@@ -241,6 +239,14 @@ also stops when the element is removed, and starts over when a re-render
 replaces it.
 
 ## Fix binding problems
+
+### Bind only browser events
+
+`@c-vnode-mounted` and `@c-vue:mounted` name Vue lifecycle hooks, which
+run when an element is added, updated, or removed, not when the visitor
+does something. Binding one raises an error that names the binding, on
+the component's first render. Bind a browser event such as `@c-click`
+instead.
 
 ### `.debounce` on components
 

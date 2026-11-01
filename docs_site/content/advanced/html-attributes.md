@@ -217,20 +217,22 @@ for the component-boundary rules, and
 [Attributes](/syntax/attributes/) for static, dynamic, and spread
 values in templates.
 
-## Write template handlers
+## Write handlers in the template
 
-`c-bind` refuses a name that starts with `on`, in any letter case, such
-as `onclick`, and the names `innerHTML`, `outerHTML`, and `srcdoc`. The
+`c-bind` refuses a name that starts with `on`, such as `onclick`, and the
+names `innerHTML`, `outerHTML`, and `srcdoc`, in any letter case. The
 browser reads those values as code or markup. It raises `ValueError`, and
 so does an `on_attrs_resolved` hook that adds such a name.
 
 Write the handler in the template instead: `@click` on a Vue page,
-`@c-click` to call a handler of your component, or `onclick="..."`. On a
-plain element, an attribute you write in the template keeps working
-because you chose its name. That includes `c-onclick="handler"`, which
-sets the attribute to the value of `handler`. Its value still runs as
-JavaScript, so choose that value in your own code. A hook may change the
-value of a handler the template wrote, but it cannot add one.
+`@c-click` to call a handler of your component, or `onclick="..."`. A
+handler you write in the template is allowed, because you chose its name.
+`c-onclick="handler"` sets the attribute to the value of `handler`, and
+that value runs as JavaScript, so choose it in your own code.
+
+In a component with `js`, `c-onclick` raises `TypeError` when the
+component renders, so use `@click` there. A hook may change the value of
+a handler the template wrote, but it cannot add one.
 
 A `<c-element>` with `c-is` or `c-bind` is the exception. It cannot tell a
 name you wrote from one passed in as data, so it refuses both. See
@@ -241,8 +243,8 @@ name you wrote from one passed in as data, so it refuses both. See
     Citry escapes every attribute value, but it does not check what the
     value means. Some attributes hold code or a page the browser loads,
     such as `href`, `src`, `srcdoc`, and inline handlers. When such a
-    value comes from request data, choose it in your own code or check it
-    before you use it.
+    value comes from request data, such as a query parameter or a form
+    field, choose it in your own code or check it before you use it.
 
 ## Less common cases
 

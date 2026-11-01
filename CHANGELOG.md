@@ -221,46 +221,48 @@
   `requires-python = ">=3.10"`, raise it to `">=3.11"` before upgrading,
   or uv and other lockfile tools cannot pick this release.
 
-- **Breaking:** Citry now checks more of what a page can run or load.
-  Each of these raises an error, a `ValueError` unless the item says
-  otherwise:
+- **Breaking:** Citry now checks more of the values it sends to the
+  browser. Each of these raises an error, a `ValueError` unless the item
+  says otherwise:
   - `actions.Redirect(url)` with a scheme other than `http:` or `https:`.
-    Relative URLs such as `/projects/` still work. Use a full `https:` URL
-    or a path instead. A URL containing a control character, such as a
-    line break, also raises.
+    A URL with no scheme, such as `/projects/`, still works. Use a full
+    `https:` URL or such a URL instead. A URL containing a control
+    character, such as a line break, also raises.
   - A `c-bind` mapping key, or a name an `on_attrs_resolved` hook adds,
     that starts with `on`, such as `onclick`, or that is `innerHTML`,
-    `outerHTML`, or `srcdoc`. Write such an attribute in the template
-    instead: `@click` on a Vue page, `@c-click` to call a handler of your
-    component, or `onclick="..."`. A hook can still change the value of a
-    handler the template wrote, but it cannot add one.
-  - An attribute name from data that contains whitespace, a control
-    character, a quote, a byte-order mark, a lone surrogate, or a Unicode
-    noncharacter. Rename the key.
-  - `<c-element>` with `c-is` or `c-bind` that names a tag such as
-    `script`, `style`, `iframe`, or `textarea`, whose contents the browser
-    reads as raw text or code. Write such an element directly in the
-    template.
-  - An attribute that starts with `on`, or is `innerHTML`, `outerHTML`, or
-    `srcdoc`, passed to `<c-element>` through `c-bind`,
-    `<c-component c-is>`, or Python code. A `<c-element>` with `c-is` or
-    `c-bind` also refuses one written in the template, because it cannot
-    tell a name you wrote from one passed in as data; write the handler as
-    a Vue `@event` in a component with `js`, or on a plain element in a
-    `c-if` branch.
-  - A `css_data()` value with a comment, a `;` or `!` outside brackets, a
-    brace, `<`, or backslash outside a string or `url()`, an unbalanced
-    bracket, a malformed string or `url()`, a null or surrogate character,
-    or `</style` or `<!--` anywhere. Text with spaces that does not start
-    with a function is quoted for you, so only a null or surrogate
-    character, `</style`, or `<!--` fails there. `rgb()`, `calc()`, and
-    `url()` values, SVG data URLs included, still work.
+    `outerHTML`, or `srcdoc`. The same holds for such a name passed to
+    `<c-element>` through `c-bind`, `<c-component c-is>`, or Python code.
+    Write the attribute in the template instead: `@click` on a Vue page,
+    `@c-click` to call a handler of your component, or `onclick="..."`. A
+    hook can still change the value of a handler the template wrote, but
+    it cannot add one. A `<c-element>` with `c-is` or `c-bind` also
+    refuses a handler written in the template, because it cannot tell a
+    name you wrote from one passed in as data. There, use a Vue `@event`
+    in a component with `js`, or write a plain element in a `c-if`
+    branch.
+  - An attribute name that your code supplies, such as a `c-bind` key,
+    and that contains whitespace, a control character, a quote, a
+    byte-order mark, a lone surrogate, or a Unicode noncharacter. Rename
+    the key.
+  - A tag such as `script`, `style`, `iframe`, or `textarea`, whose
+    contents the browser reads as raw text or code, passed to a
+    `<c-element>` that has `c-is` or `c-bind`, or to the built-in
+    `element` component in a Python call. Write such an element directly
+    in the template.
+  - A `css_data()` value that has a comment, a brace, `<`, or a backslash
+    outside a string or `url()`; a `;` or `!` outside brackets; an
+    unbalanced bracket; or a malformed string or `url()`. A null or
+    surrogate character, `</style`, or `<!--` raises anywhere. Text with
+    whitespace that does not start with a function is quoted for you, so
+    only a null or surrogate character, `</style`, or `<!--` fails there.
+    `rgb()`, `calc()`, and `url()` values, SVG data URLs included, still
+    work.
   - An Events binding on one of Vue's lifecycle hooks, such as
     `@c-vnode-mounted` or `@c-vue:mounted`, whether the template writes it
     (a `SyntaxError` when the template loads) or a `c-bind` mapping key
     supplies it (a `ValueError` when the page renders). Vue ran such a
-    binding when the element or component mounted or updated, not on a
-    browser event. Bind the handler to a browser event, such as
+    binding when the element or component mounted, updated, or unmounted,
+    not on a browser event. Bind the handler to a browser event, such as
     `@c-click`.
   - An Events binding whose event name starts with something other than a
     letter, or contains a character other than a letter, digit, `-`, `_`

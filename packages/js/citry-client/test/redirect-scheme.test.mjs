@@ -91,7 +91,7 @@ const FOLLOWED = {
 };
 
 for (const [name, url] of Object.entries(FOLLOWED)) {
-  test(`a redirect to http(s) or a relative URL is followed unchanged: ${name}`, async () => {
+  test(`a redirect to http(s) or a URL with no scheme is followed unchanged: ${name}`, async () => {
     await redirect(url);
     assert.deepEqual(assigned, [url]);
     assert.deepEqual(errors, []);

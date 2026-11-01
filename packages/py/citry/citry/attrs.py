@@ -234,9 +234,10 @@ def is_script_capable_attr_name(name: object) -> bool:
 
 
 SCRIPT_CAPABLE_ATTR_FIX = (
-    "Write the attribute in the template instead, such as @click on a Vue page or an Events binding such as @c-click."
+    "Remove the key from the mapping. To attach a handler, write it in your template instead, "
+    "such as @click (Vue) or @c-click (Events)."
 )
-"""The fix the error names for a plain element, where the template can write the attribute itself."""
+"""The fix the error names when a mapping sets the attribute: drop the key and write the handler in a template."""
 
 C_ELEMENT_HANDLER_FIX = (
     "<c-element> cannot tell a name written in the template from one passed in as data, so it refuses both. "

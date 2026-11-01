@@ -193,7 +193,7 @@ which leaves the property empty. Any other value, such as a `bool` or a
 be a string that is valid as the name of a custom property, without the
 leading `--`.
 
-A string value with a space is sent as one quoted CSS string, unless it
+A string value with whitespace is sent as one quoted CSS string, unless it
 starts with a CSS function such as `calc(...)` or `rgba(...)`, so it
 cannot hold a font list or a keyword such as `!important`. Any other
 string is used as written, and Citry raises `ValueError` when it has:

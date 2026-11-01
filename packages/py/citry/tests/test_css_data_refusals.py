@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import random
-import re
 import string
 from typing import TYPE_CHECKING
 
@@ -314,13 +313,17 @@ def _read_string(reader: _Reader, ending: str) -> None:
             # A backslash and a newline continue the string on the next line.
             reader.take()
             continue
-        # An escape is up to six hex digits and one trailing whitespace, or any one character.
-        digits = 0
-        while digits < 6 and reader.peek() != "" and reader.peek() in _HEX_DIGITS:
-            reader.take()
-            digits += 1
-        if digits == 0 or reader.at_whitespace():
-            reader.take()
+        _read_escape(reader)
+
+
+def _read_escape(reader: _Reader) -> None:
+    """Read what follows a backslash: up to six hex digits and one whitespace that ends them, or any one character."""
+    digits = 0
+    while digits < 6 and reader.peek() != "" and reader.peek() in _HEX_DIGITS:
+        reader.take()
+        digits += 1
+    if digits == 0 or reader.at_whitespace():
+        reader.take()
 
 
 def _read_url(reader: _Reader) -> None:
@@ -343,7 +346,7 @@ def _read_url(reader: _Reader) -> None:
         elif char == "\\":
             if reader.peek() in {"", "\n"}:
                 raise _Refused("backslash that starts no escape")
-            reader.take()
+            _read_escape(reader)
 
 
 def _read_name(reader: _Reader) -> str:
@@ -472,9 +475,9 @@ def _reference_accepts(text: str) -> bool:
 # numbers and units, and `x` for names that run into `url(`. A null, a lone
 # surrogate, a control character, DEL and a non-ASCII letter cover the
 # characters each rule treats on its own, and `s`, `t`, `y`, `e` let short
-# strings spell `</style` by chance. A carriage return and a form feed are left
-# out: the known differences below involve them.
-_ALPHABET = [*"urlx7()[]{}\"'\\/*<!-; \n#@:,.\x00\ud800\x01\x7f\u00e9stye"]
+# strings spell `</style` by chance. A tab, a carriage return and a form feed
+# are the other whitespace characters; `a` and `4` spell a hex escape.
+_ALPHABET = [*"urlx7()[]{}\"'\\/*<!-; \n\t\r\f\x0b#@:,.\x00\ud800\x01\x7f\u00e9styea4"]
 # Whole pieces drawn alongside single characters, so that short strings
 # often contain a `url(` token or a string that closes.
 _PIECES = [
@@ -486,6 +489,9 @@ _PIECES = [
     "#url(",
     "@url(",
     "\\\n",
+    "\\\r\n",
+    "\\41 ",
+    "\\41\r\n",
     "</",
     "/*",
     '"a"',
@@ -493,18 +499,6 @@ _PIECES = [
     "</style",
     "</STYLE",
 ]
-
-# The shapes behind the known differences listed after the comparison: a hex
-# escape that swallows the newline after it, and whitespace before the address
-# in an unquoted url().
-_STRICTER_SHAPES = re.compile(r"\\[0-9a-fA-F]{1,6}\n|url\([ \t\n]", re.IGNORECASE)
-
-
-def _is_known_difference(value: str, expected: bool) -> bool:
-    """Whether the scanner and reference differ on `value` only for a difference this file records."""
-    # One direction is recorded: the reference accepts and the scanner refuses
-    # (the scanner is stricter).
-    return expected and _STRICTER_SHAPES.search(value) is not None
 
 
 def _random_value(rng: random.Random) -> str:
@@ -519,10 +513,7 @@ def test_css_data_tokenizer_matches_reference() -> None:
     for _ in range(20_000):
         value = _random_value(rng)
         expected = _reference_accepts(value)
-        if _implementation_accepts(value) != expected:
-            # Only the differences recorded below may disagree; any other one fails.
-            assert _is_known_difference(value, expected), repr(value)
-            continue
+        assert _implementation_accepts(value) == expected, repr(value)
         accepted += expected
         refused += not expected
 
@@ -532,33 +523,52 @@ def test_css_data_tokenizer_matches_reference() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Where the scanner is stricter than the CSS Syntax text. Each value below is
-# one that CSS Syntax accepts and the scanner refuses. That is safe, because a
-# value the scanner refuses never reaches the page, but it is a difference. The
-# first test checks that the reference reads each value the way CSS Syntax
-# does, so a wrong reference fails loudly. The second is an expected failure
-# that states what the scanner would have to do; when the scanner is changed
-# to accept a value, that case turns into an error that says to delete it. The
-# random comparison above waives these shapes (see `_is_known_difference`),
-# because some seeds reach them.
+# Escapes and whitespace, where a scanner that differs from the browser by one
+# character would see a quote or `)` that the browser does not. Each
+# value has the outcome CSS Syntax gives it. The first test checks that the
+# reference reads each value that way, so a wrong reference fails loudly; the
+# second checks the scanner against the same outcome.
 # ---------------------------------------------------------------------------
 
-_STRICTER_THAN_CSS_SYNTAX = [
-    pytest.param('"\\7\n"', id="hex_escape_swallows_the_newline_after_it"),
-    pytest.param('"\\\r\n"', id="carriage_return_and_newline_continue_a_string"),
-    pytest.param("url( a)", id="whitespace_before_the_address_in_an_unquoted_url"),
+_ESCAPES_AND_WHITESPACE = [
+    # A hex escape takes the one whitespace after it, so a newline there does
+    # not end the string.
+    pytest.param('"\\7\n"', True, id="hex_escape_swallows_the_newline_after_it"),
+    pytest.param('"\\\r\n"', True, id="carriage_return_and_newline_continue_a_string"),
+    pytest.param('"\\41\r\n"', True, id="hex_escape_swallows_carriage_return_and_newline"),
+    pytest.param('"\\41\f"', True, id="hex_escape_swallows_a_form_feed"),
+    # A non-hex escape takes one character only, so a newline after it ends the string.
+    pytest.param('"\\g\n"', False, id="non_hex_escape_leaves_the_newline_after_it"),
+    pytest.param('"\\41  \n"', False, id="hex_escape_swallows_one_whitespace_only"),
+    # Whitespace before the address is skipped, and whitespace after it is allowed.
+    pytest.param("url( a)", True, id="whitespace_before_the_address_in_an_unquoted_url"),
+    pytest.param("url(\t\n/a.png \n)", True, id="whitespace_on_both_sides_of_an_unquoted_url"),
+    pytest.param("url( )", True, id="only_whitespace_in_an_unquoted_url"),
+    pytest.param("url( a b)", False, id="whitespace_in_the_middle_of_an_unquoted_url"),
+    # In an unquoted url(), a hex escape takes the one whitespace after it.
+    pytest.param("url(a\\41 b)", True, id="hex_escape_swallows_a_space_in_an_unquoted_url"),
+    pytest.param("url(a\\41\r\nb)", True, id="hex_escape_swallows_carriage_return_and_newline_in_a_url"),
+    pytest.param("url(a\\000041 b)", True, id="six_digit_hex_escape_in_an_unquoted_url"),
+    pytest.param("url(a\\0000411 b)", False, id="seventh_digit_is_not_part_of_the_escape"),
+    pytest.param("url(a\\41  b)", False, id="hex_escape_swallows_one_space_only_in_an_unquoted_url"),
+    pytest.param("url(a\\g b)", False, id="non_hex_escape_leaves_the_space_in_an_unquoted_url"),
+    # Only CSS whitespace ends an escape: a vertical tab or unit separator after
+    # the digits stays in the URL, where it is not allowed.
+    pytest.param("url(a\\41\x0bb)", False, id="hex_escape_does_not_swallow_a_vertical_tab"),
+    pytest.param("url(a\\41\x1fb)", False, id="hex_escape_does_not_swallow_a_unit_separator"),
+    pytest.param("url(a\\\nb)", False, id="backslash_and_newline_in_an_unquoted_url"),
+    pytest.param("url(a\\\r\nb)", False, id="backslash_and_carriage_return_newline_in_an_unquoted_url"),
 ]
 
 
-@pytest.mark.parametrize("value", _STRICTER_THAN_CSS_SYNTAX)
-def test_css_reference_reads_the_stricter_cases_as_css_syntax_does(value: str) -> None:
-    assert _reference_accepts(value) is True
+@pytest.mark.parametrize(("value", "accepted"), _ESCAPES_AND_WHITESPACE)
+def test_css_reference_reads_escapes_and_whitespace_as_css_syntax_does(value: str, accepted: bool) -> None:
+    assert _reference_accepts(value) is accepted
 
 
-@pytest.mark.xfail(strict=True, reason="the scanner is stricter than CSS Syntax Level 3 on this value")
-@pytest.mark.parametrize("value", _STRICTER_THAN_CSS_SYNTAX)
-def test_css_scanner_accepts_what_css_syntax_accepts_on_known_differences(value: str) -> None:
-    assert _implementation_accepts(value) is True
+@pytest.mark.parametrize(("value", "accepted"), _ESCAPES_AND_WHITESPACE)
+def test_css_data_reads_escapes_and_whitespace_as_css_syntax_does(value: str, accepted: bool) -> None:
+    assert _implementation_accepts(value) is accepted
 
 
 # A null character or lone surrogate is refused in every token, including the

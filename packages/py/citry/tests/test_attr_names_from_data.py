@@ -58,6 +58,13 @@ def test_spread_keys_may_not_name_code_reading_attributes(shape: str, key: str) 
         _render_spread(shape, key)
 
 
+def test_spread_key_error_says_how_to_fix_it() -> None:
+    # The mapping may belong to a component's `attrs` input, so the message tells the
+    # author to remove the key rather than to rewrite a template they may not own.
+    with pytest.raises(ValueError, match="Remove the key from the mapping"):
+        _render_spread("plain", "onclick")
+
+
 @pytest.mark.parametrize("shape", ["plain", "vue"])
 @pytest.mark.parametrize("key", ["title", "data-x", "aria-label"])
 def test_spread_keys_that_read_no_code_still_render(shape: str, key: str) -> None:
