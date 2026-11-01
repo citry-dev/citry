@@ -133,7 +133,10 @@ class RouteResponse:
         content_type: The `Content-Type` header value to send.
         status: The HTTP status code.
         headers: Extra response headers, as `(name, value)` pairs; adapters
-            send them in addition to `Content-Type`. A name may repeat (e.g.
+            send them in addition to `Content-Type`. Adapters also send
+            `X-Content-Type-Options: nosniff` unless this sets that header,
+            so the browser uses `content_type` as given; set it to the
+            body's real type. A name may repeat (e.g.
             two `Set-Cookie` lines): the ASGI and WSGI adapters send every
             pair, while the Django adapter raises `ValueError` on a repeated
             name, because Django's response object holds one value per header
@@ -241,6 +244,24 @@ class URLRoute:
 # with these names exactly, so a lowercase name would never match and the
 # route would answer 405 to every request; only uppercase tokens are accepted.
 _ROUTE_METHOD_RE = re.compile(r"[!#$%&'*+.^_`|~0-9A-Z-]+")
+
+
+# The standard header that tells the browser to use the declared
+# Content-Type and never guess another one from the body.
+_NOSNIFF_HEADER = ("X-Content-Type-Options", "nosniff")
+
+
+def sent_headers(response: RouteResponse) -> tuple[tuple[str, str], ...]:
+    """
+    Return the headers an adapter sends besides `Content-Type`.
+
+    Every adapter calls this, so each Citry response carries the same
+    standard headers: the response's own, plus
+    `X-Content-Type-Options: nosniff` unless the response sets it itself.
+    """
+    if any(name.lower() == "x-content-type-options" for name, _ in response.headers):
+        return response.headers
+    return (*response.headers, _NOSNIFF_HEADER)
 
 
 def body_read_limit(route: URLRoute) -> int | None:

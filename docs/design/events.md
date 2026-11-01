@@ -1832,7 +1832,16 @@ signature verifies. On the per-event route
 the HTTP status mirrors the call's status; the batch endpoint answers 200
 with per-call statuses inside (one batch can mix outcomes). `fieldErrors` is
 the per-field error map, surfaced client-side as
-`$error(handler).fieldErrors` (5.5).
+`$error(handler).fieldErrors` (5.5). Only the request decides how many
+fields it sends that the `data` class does not declare (or that State
+does not let the browser write), and how many items a list or dict field
+holds. So the server lists at most 20 messages for undeclared or
+unwritable fields, and at most 20 item messages in each list or dict field, keeping the earliest
+by field path with list indexes in number order. `message` then ends
+with how many more there were, for example "1,000 more field errors are
+not shown." Messages for other fields, and the fields of an
+`EventError`, are always listed in full. The error still has only the
+protocol's fixed keys.
 
 ### 4.4 How the state token reaches the client
 
@@ -4218,6 +4227,12 @@ a `GET` handler URL opened directly is itself the page. Two cases resolve differ
 runtime and cannot be detected: a `Referrer-Policy` that sends only the
 origin (resolved against the site root) and a page with `<base href>`.
 The user docs ask those pages to use a path starting with `/`.
+After resolving, the server percent-encodes the URL, because Citry's
+adapters send header text as Latin-1 and a browser expects UTF-8 escapes.
+It encodes spaces and every character outside printable ASCII as UTF-8,
+host included, and leaves the rest of printable ASCII as written. A browser decodes the escapes in the host and
+converts it with its own rules, so the 303 and `location.assign()` land on
+the same URL.
 
 Two things follow from the HTML-shaped response, both intentional: a plain
 `<form method="post" c-action="submit_url">` (the URL provided by
