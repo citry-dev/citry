@@ -26,8 +26,9 @@ event:
 | `@c-submit.prevent="submit"` | Collect the form's named controls and call `submit` instead of submitting the page. |
 
 An event name must start with a letter and use only letters, digits, `-`,
-`_` and `:`. Vue's lifecycle hooks, such as `vnode-mounted`, are not events,
-so Citry refuses them.
+`_` and `:`. Vue lifecycle hooks such as `vnode-mounted` run when an element
+mounts, not on a browser event, so binding one raises an error that names the
+binding.
 
 Modifiers after the event name control which events send a call, and when:
 

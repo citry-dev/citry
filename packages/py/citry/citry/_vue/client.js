@@ -19,18 +19,24 @@
     return;
   }
 
-  // A redirect navigates the whole page, and a `javascript:` or `data:` URL would run in it, so
-  // only http(s) and relative URLs are followed. The server refuses other schemes when it builds
-  // the action (`actions.Redirect`); this repeats the check for a result the page did not get
-  // from that code. The scheme is read as the URL parser reads it: leading and trailing C0
-  // controls and spaces are stripped and tab, CR, and LF are removed anywhere first.
+  // A redirect navigates the whole page, so only http(s) and relative URLs are followed. The
+  // server checks this when it builds the action (`actions.Redirect`); this repeats the check for
+  // actions that reach the browser another way, such as `Citry.events.applyActions()`. The scheme
+  // is read as the URL parser reads it: leading and trailing C0 controls and spaces are stripped
+  // and tab, CR, and LF are removed anywhere first.
   const redirectScheme = url => {
     const text = url.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, "");
     const match = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(text);
     return match ? match[1].toLowerCase() : null;
   };
   const navigateToRedirect = url => {
-    const scheme = typeof url === "string" ? redirectScheme(url) : "";
+    // A non-string has no text to read a scheme from, so it gets its own message instead of
+    // being reported as a URL with an empty scheme.
+    if (typeof url !== "string") {
+      console.error("[Citry] refused a redirect because its URL is not a string.");
+      return;
+    }
+    const scheme = redirectScheme(url);
     if (scheme !== null && scheme !== "http" && scheme !== "https") {
       console.error("[Citry] refused a redirect to a URL with the " + JSON.stringify(scheme) +
         " scheme; a redirect follows only http:, https:, and relative URLs.");

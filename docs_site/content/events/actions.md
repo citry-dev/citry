@@ -261,12 +261,15 @@ When a plain HTML form posts to the handler's URL, the same action becomes a
 real HTTP redirect. See [Event routes](/events/routes/).
 
 The URL must use `http:` or `https:`, or be relative, such as
-`/projects/` or `?page=2`. Any other scheme raises `ValueError` when you
-create the action. If such a redirect reaches the browser another way,
-such as through `Citry.events.applyActions()`, the browser logs an error
-and stays on the page. A URL taken from the request, such as a `next`
-parameter, can still point to another site. Check it against your own
-paths before you redirect to it.
+`/projects/` or `?page=2`. An empty URL, a URL with a control character,
+or any other scheme raises `ValueError` when you create the action.
+
+A URL taken from the request, such as a `next` parameter, can still point
+to another site. Check it against your own paths before you redirect to it.
+
+If a redirect with another scheme reaches the browser another way, such
+as through browser code you wrote that calls `Citry.events.applyActions()`,
+the browser logs an error and stays on the page.
 
 ## `PushUrl`, `ReplaceUrl` { #change-the-url }
 

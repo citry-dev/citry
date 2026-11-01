@@ -38,7 +38,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from citry.attrs import format_attrs, merge_attrs, reject_script_capable_attr_name, validate_html_attr_name
+from citry.attrs import (
+    C_ELEMENT_HANDLER_FIX,
+    format_attrs,
+    merge_attrs,
+    reject_script_capable_attr_name,
+    validate_html_attr_name,
+)
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender
 from citry.client_directives import (
@@ -49,7 +55,7 @@ from citry.client_directives import (
 from citry.component import Component
 from citry.component_registry import _VALID_NAME_RE, NotRegistered
 from citry.constness import _ConstMapping, _restore_const_identities, const_value
-from citry.util.html import UNSAFE_DYNAMIC_ELEMENT_TAGS, Markup
+from citry.util.html import _REFUSED_DYNAMIC_ELEMENT_TAGS, Markup
 from citry_core.template_parser import HTML_VOID_ELEMENTS
 
 if TYPE_CHECKING:
@@ -325,13 +331,14 @@ def _validate_tag_name(tag: Any) -> None:
             f"Must start with a letter and contain only letters, digits, hyphens, underscores, or dots."
         )
         raise ValueError(msg)
-    # The HTML tokenizer folds ASCII letters in a tag name; `lower()` folds at
-    # least those, and a name it folds further is only refused, never let through.
-    if tag.lower() in UNSAFE_DYNAMIC_ELEMENT_TAGS:
+    # The browser ignores ASCII letter case in tag names, so compare the lowercased
+    # name. `str.lower()` also lowercases other letters, which can only refuse more names.
+    if tag.lower() in _REFUSED_DYNAMIC_ELEMENT_TAGS:
         msg = (
-            f"<c-element> cannot render a <{tag}> element: the browser runs, loads, or reads the contents of "
-            "that tag in a way escaping cannot protect. Choose the tag from a fixed list in your code, and "
-            "write a <script>, <style>, or similar element directly in the template."
+            f"<c-element> cannot render a <{tag}> element, because the browser handles that element in a "
+            "special way: it runs or loads it, reads its contents as raw text rather than as escaped HTML, or "
+            "changes how it reads the rest of the page. "
+            f"Write the <{tag}> element directly in the template, for example in a c-if branch."
         )
         raise ValueError(msg)
 
@@ -369,7 +376,7 @@ def _resolve_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any])
     for key in contributions:
         name = validate_html_attr_name(key, where="<c-element>")
         _reject_reserved_events_attr(name, tag_name=tag)
-        reject_script_capable_attr_name(name, tag_name=tag, where="<c-element>")
+        reject_script_capable_attr_name(name, tag_name=tag, where="<c-element>", fix=C_ELEMENT_HANDLER_FIX)
     for value in contributions.values():
         # A nested-template attribute value resolves to a CitryRender, whose
         # parts may hold not-yet-rendered child components, so it cannot be

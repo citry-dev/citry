@@ -306,11 +306,9 @@ class Dispatch(Action):
         super().__post_init__()
 
 
-# The schemes a Redirect may navigate to. Any other scheme, such as
-# `javascript:` or `data:`, would run in the page instead of loading one, so
-# a Redirect accepts only these and relative URLs, as Django's
-# `HttpResponseRedirect` does. The browser runtime repeats this check
-# (`_vue/client.js`, `redirectScheme`) so a crafted result is refused there too.
+# The schemes a Redirect may navigate to. A Redirect accepts only these and
+# relative URLs. The browser runtime repeats this check (`_vue/client.js`,
+# `redirectScheme`) for actions that reach it by another route.
 REDIRECT_SCHEMES = frozenset({"http", "https"})
 _C0_CONTROL_OR_SPACE = "".join(chr(code) for code in range(0x21))
 _ASCII_TAB_OR_NEWLINE = str.maketrans("", "", "\t\n\r")
@@ -319,15 +317,16 @@ _SCHEME_CHARS = _SCHEME_START_CHARS | frozenset("0123456789+-.")
 
 
 def redirect_url_scheme(url: str) -> str | None:
-    r"""
+    """
     Return the lowercase scheme a browser reads from ``url``, or ``None`` for a relative URL.
 
-    It follows the WHATWG URL parser's first steps, which is what decides
-    what `location.assign()` runs: leading and trailing C0 controls and
-    spaces are stripped, and tab, CR, and LF are removed anywhere, so
-    ``" java\\tscript:"`` still reads as ``javascript``. A scheme is an
-    ASCII letter followed by letters, digits, ``+``, ``-``, or ``.`` up to
-    the first ``:``; anything else is a relative URL.
+    It follows the WHATWG URL parser's first steps, which decide how a
+    browser reads the URL given to `location.assign()`: leading and trailing
+    C0 controls and spaces are stripped, and tab, CR, and LF are removed
+    anywhere, so whitespace inside or around the scheme does not change which
+    scheme the browser reads. A scheme is an ASCII letter followed by
+    letters, digits, ``+``, ``-``, or ``.`` up to the first ``:``; anything
+    else is a relative URL.
     """
     text = url.strip(_C0_CONTROL_OR_SPACE).translate(_ASCII_TAB_OR_NEWLINE)
     colon = text.find(":")
@@ -352,14 +351,13 @@ class Redirect(Action):
 
     Attributes:
         url: The URL to navigate to: an ``http:`` or ``https:`` URL, or a
-            relative one such as ``/orders/7`` or ``//example.com/``.
+            relative one such as ``/orders/7`` or ``?page=2``.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
 
     Raises:
-        ValueError: If ``url`` is empty or has any other scheme, such as
-            ``javascript:``. A URL taken from the request, such as a ``next``
-            parameter, can then never run code in the page.
+        ValueError: If ``url`` is empty, contains a control character, or
+            has a scheme other than ``http:`` or ``https:``.
 
     """
 
@@ -378,7 +376,7 @@ class Redirect(Action):
         if scheme is not None and scheme not in REDIRECT_SCHEMES:
             msg = (
                 f"actions.Redirect: url uses the {scheme!r} scheme; a redirect accepts only http:, "
-                "https:, and relative URLs."
+                "https:, and relative URLs. Pass a full http(s) URL or a path such as '/orders/7'."
             )
             raise ValueError(msg)
         super().__post_init__()

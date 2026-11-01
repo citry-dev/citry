@@ -108,7 +108,9 @@ class Heading(Component):
 Attributes follow the same rules as on a tag you write by hand: `class` and
 `style` values are combined into one string, a `False` or `None` value leaves the attribute out,
 and values are escaped unless they provide trusted HTML through
-`__html__()`.
+`__html__()`. The one difference is an inline event handler, which a
+`<c-element>` with `c-is` or `c-bind` refuses (see
+[`<c-element>` limits](#c-element-limits)).
 
 If the tag never changes, write it directly. `<h2>` is clearer than
 `<c-element is="h2">`.
@@ -165,18 +167,24 @@ A tag name starts with a letter, followed by letters, digits, hyphens,
 underscores, or dots. Custom elements such as `my-widget` and SVG names
 such as `clipPath` work. Any other value raises `ValueError`.
 
-`<c-element>` also raises `ValueError`, in any letter case, for a tag the
-browser handles in a special way: it runs or loads the element, reads its
-contents as raw text, or changes how it reads the rest of the page. These
-are `script`, `style`, `base`, `meta`, `link`, `iframe`, `frame`,
-`frameset`, `object`, `embed`, `applet`, `plaintext`, `xmp`, `noembed`,
-`noframes`, `noscript`, `title`, `textarea`, and `template`. Citry
-escapes an element's body as HTML text, which does not fit these tags.
-When you need one, write it directly in the template, for example in a
-`c-if` branch.
-
 Void elements are recognized in any letter case, so `BR` renders compact
 `<BR/>` and rejects a body, just like `br`.
+
+### Refused tags
+
+A `<c-element>` that has `c-is` or `c-bind` will not render a tag the
+browser handles in a special way, in any letter case. It raises
+`ValueError` for `script`, `style`, `base`, `meta`, `link`, `iframe`,
+`frame`, `frameset`, `object`, `embed`, `applet`, `plaintext`, `xmp`,
+`noembed`, `noframes`, `noscript`, `title`, `textarea`, and `template`.
+The browser runs or loads some of them, reads the contents of others as raw
+text, and lets some change how it reads the rest of the page. A Python call
+that passes one of these tags raises too.
+
+Citry escapes an element's body as HTML text, which does not fit these
+tags. When you need one, write it directly in the template, for example in
+a `c-if` branch. A plain `<c-element is="script">` with no `c-bind` makes an
+ordinary element, so Citry does not refuse it.
 
 ### Letter case of `is`
 
@@ -191,6 +199,13 @@ lowercase.
 ### `<c-element>` limits
 
 - A void element such as `br` or `img` cannot have a body.
+- A `<c-element>` that has `c-is` or `c-bind` refuses an inline event
+  handler: an attribute that starts with `on`, or `innerHTML`,
+  `outerHTML`, or `srcdoc`. It refuses one you wrote in the template as
+  well as one passed in as data, because it cannot tell them apart. Use a
+  Vue `@click` in a component with `js`, or write a plain tag in a `c-if`
+  branch. A plain `<c-element is="div" onclick="...">` with no `c-bind`
+  makes an ordinary element, so it works.
 - It accepts only the default slot. A named `<c-fill>` written in the
   template raises `SyntaxError`. A fill whose name is computed at render
   time, such as `<c-fill c-name="...">`, raises `ValueError`.

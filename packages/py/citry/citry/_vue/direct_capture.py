@@ -39,7 +39,7 @@ from citry.component_registry import BUILTIN_COMPONENT_NAMES
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
 from citry.serialize import _REPEATED_RENDER_MESSAGE
 from citry.util.html import (
-    UNSAFE_DYNAMIC_ELEMENT_TAGS,
+    _REFUSED_DYNAMIC_ELEMENT_TAGS,
     Markup,
     decode_attribute_entities,
     decode_character_references,
@@ -3330,7 +3330,7 @@ def assemble_typed_render(
                         )
                     # `<c-element>` refuses these tags before this point; the same
                     # list guards any other producer of a dynamic element.
-                    if part.tag.lower() in UNSAFE_DYNAMIC_ELEMENT_TAGS:
+                    if part.tag.lower() in _REFUSED_DYNAMIC_ELEMENT_TAGS:
                         raise UnsupportedPreparedView(f"a dynamic <{part.tag}> element is unsupported in prepared Vue")
                     source_targets = {
                         _html_attr_identity(target): attr.name

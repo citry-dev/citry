@@ -92,8 +92,8 @@ def on_render(self):
 !!! warning "Citry does not escape `Markup`"
 
     Citry inserts the `Markup` you return from `on_render()` as HTML,
-    without escaping. Never build it from user input. Return user input as
-    a plain `str`, or put it in a template or a component input, where
+    without escaping. Never build it from request data. Return request data
+    as a plain `str`, or put it in a template or a component input, where
     Citry escapes it.
 
 The hook can read `self.kwargs`, `self.slots`, `self.parent`, and

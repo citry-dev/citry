@@ -217,18 +217,26 @@ for the component-boundary rules, and
 [Attributes](/syntax/attributes/) for static, dynamic, and spread
 values in templates.
 
-## Write handlers in the template
+## Write template handlers
 
 `c-bind` refuses a name that starts with `on`, in any letter case, such
 as `onclick`, and the names `innerHTML`, `outerHTML`, and `srcdoc`. The
 browser reads those values as code or markup. It raises `ValueError`, and
-so does an `on_attrs_resolved` hook that adds such a name. Write the
-attribute in the template instead, such as `onclick="..."`, `@click` on a
-Vue page, or `@c-click`. An attribute you write in the template, including
-`c-onclick="handler"`, keeps working because you chose its name. Its value
-still runs as JavaScript, so choose that value in your own code.
+so does an `on_attrs_resolved` hook that adds such a name.
 
-!!! warning "Choose values the browser runs"
+Write the handler in the template instead: `@click` on a Vue page,
+`@c-click` to call a handler of your component, or `onclick="..."`. On a
+plain element, an attribute you write in the template keeps working
+because you chose its name. That includes `c-onclick="handler"`, which
+sets the attribute to the value of `handler`. Its value still runs as
+JavaScript, so choose that value in your own code. A hook may change the
+value of a handler the template wrote, but it cannot add one.
+
+A `<c-element>` with `c-is` or `c-bind` is the exception. It cannot tell a
+name you wrote from one passed in as data, so it refuses both. See
+[`<c-element>` limits](/advanced/dynamic-components/#c-element-limits).
+
+!!! warning "Request data can run as code"
 
     Citry escapes every attribute value, but it does not check what the
     value means. Some attributes hold code or a page the browser loads,
@@ -243,8 +251,8 @@ still runs as JavaScript, so choose that value in your own code.
 An attribute name must be a string. Any other key raises `TypeError`. A
 name that is empty, or contains whitespace, a control character, a quote,
 `=`, `/`, `>`, `<`, a byte-order mark, a lone surrogate, a Unicode
-noncharacter, or `{#`, raises `ValueError`. `c-bind` checks names the same way when it adds
-a mapping to an element.
+noncharacter, or `{#`, raises `ValueError`. `c-bind` checks names the
+same way when it adds a mapping to an element.
 
 ### Escape `Markup` values
 

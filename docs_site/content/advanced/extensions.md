@@ -141,20 +141,24 @@ def on_component_rendered(self, ctx):
     return None
 ```
 
-Never pass user input to the `Markup()` constructor. Return it as a plain
+Never pass request data to the `Markup()` constructor. Return it as a plain
 `str`, which Citry escapes, or build the HTML with
 [`Markup.format()`](/syntax/expressions/#insert-html-you-trust). `on_serialize()` is different: it returns the whole
 page's HTML, and Citry uses that as it is.
 
+### Keep hook output safe
+
 Hooks that return a template, script, stylesheet, or the page's HTML,
 such as `on_template_loaded`, `on_js_loaded`, `on_css_loaded`, and
-`on_serialize`, give Citry code that the server or the browser runs.
+`on_serialize`, return text that Citry compiles or puts into the page.
 Build those results from your extension's own text, never from request
-data. An `on_attrs_resolved` hook may change attribute values, but it may
-not add an inline event handler such as `onclick`, or `innerHTML`,
+data.
+
+An `on_attrs_resolved` hook may change attribute values, but it may not
+add an inline event handler such as `onclick`, or `innerHTML`,
 `outerHTML`, or `srcdoc`; Citry raises `ValueError` if it does. A hook
-may change the value of a handler the template already has, so never
-put request data into a handler's value.
+may change the value of a handler the template already has, so never put
+request data into that handler's value.
 
 ### Handle a failed render
 

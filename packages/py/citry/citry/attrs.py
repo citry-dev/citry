@@ -56,11 +56,11 @@ StyleValue: TypeAlias = "str | StyleDict | Sequence[StyleValue]"
 """A ``style`` attribute value: inline CSS string, ``StyleDict``, or a list of those."""
 
 _ASCII_LOWER_TRANSLATION = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
-# One character the HTML spec does not allow in an attribute name: a control
-# character (C0, DEL, C1), whitespace, a quote, `>`, `/`, `=`, `<`, the BOM,
-# a lone surrogate, or a noncharacter. The browser's tokenizer splits or
-# drops a name at several of these (a form feed ends a name, for example),
-# so a name that passed a prefix check could arrive as a different name.
+# The HTML spec forbids control characters (C0, DEL, C1), whitespace, quotes,
+# `>`, `/`, `=` and noncharacters in an attribute name. Citry also refuses `<`,
+# the byte-order mark and lone surrogates. The browser splits a name at
+# whitespace (a form feed included), `/`, `=` and `>`, so a name with one of
+# those would arrive as a different name, or as several.
 _INVALID_HTML_ATTR_NAME_CHAR = re.compile(
     r"[\x00-\x20\x7f-\x9f\"'/<=>\ufeff\ud800-\udfff\ufdd0-\ufdef"
     + "".join(rf"\U{plane:04x}fffe\U{plane:04x}ffff" for plane in range(17))
@@ -233,21 +233,43 @@ def is_script_capable_attr_name(name: object) -> bool:
     return folded.startswith("on") or folded in _MARKUP_PROPERTY_ATTR_NAMES
 
 
-def reject_script_capable_attr_name(name: object, *, tag_name: str, where: str) -> None:
+SCRIPT_CAPABLE_ATTR_FIX = (
+    "Write the attribute in the template instead, such as @click on a Vue page or an Events binding such as @c-click."
+)
+"""The fix the error names for a plain element, where the template can write the attribute itself."""
+
+C_ELEMENT_HANDLER_FIX = (
+    "<c-element> cannot tell a name written in the template from one passed in as data, so it refuses both. "
+    "Use a Vue @click in a component with js, or write a plain tag in a c-if branch."
+)
+"""The fix for a `<c-element>` with `c-is` or `c-bind`, which refuses a template-written handler too."""
+
+
+def reject_script_capable_attr_name(
+    name: object, *, tag_name: str, where: str, fix: str = SCRIPT_CAPABLE_ATTR_FIX
+) -> None:
     """
     Raise `ValueError` when render-time data sets an attribute the browser reads as code.
 
     That is an inline event handler such as `onclick`, or `innerHTML`,
     `outerHTML`, or `srcdoc`. Such a name from data, such as a `c-bind`
-    mapping key or one an `on_attrs_resolved` hook adds, is refused. A name
-    the author wrote in the template, including a `c-on*` or `c-srcdoc`
-    attribute, never reaches this check.
+    mapping key or one an `on_attrs_resolved` hook adds, is refused. On a
+    plain element, a name the author wrote in the template, including a
+    `c-on*` or `c-srcdoc` attribute, never reaches this check. A
+    `<c-element>` with `c-is` or `c-bind` cannot tell a name written in the
+    template from one passed in as data, so it checks them all.
+
+    Args:
+        name: The attribute name to check.
+        tag_name: The tag the attribute would be set on, for the message.
+        where: What set the attribute (a `c-bind` mapping, a hook), for the message.
+        fix: The sentence that tells the author what to do instead.
+
     """
     if is_script_capable_attr_name(name):
         msg = (
             f"{where} sets {name!r} on <{tag_name}>. An attribute name from data may not start with 'on' or be "
-            "innerHTML, outerHTML, or srcdoc, because the browser reads that value as code or markup. Write the "
-            "attribute in the template instead, such as @click on a Vue page or an Events binding such as @c-click."
+            f"innerHTML, outerHTML, or srcdoc, because the browser reads that value as code or markup. {fix}"
         )
         raise ValueError(msg)
 
@@ -381,8 +403,9 @@ def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str
     if not is_valid:
         msg = (
             f"{where} contains invalid HTML attribute name {name!r}. Attribute names must be non-empty and "
-            "cannot contain whitespace or other control characters, quotes, '=', '/', '>', '<', a byte-order "
-            "mark, a Unicode noncharacter, or the template-comment opener '{#'."
+            "cannot contain whitespace, control characters, quotes, '=', '/', '>', '<', a byte-order mark, "
+            "a lone surrogate, a Unicode noncharacter, or the template-comment opener '{#'. Rename the "
+            "attribute, or remove it from the mapping that sets it."
         )
         raise ValueError(msg)
     return name

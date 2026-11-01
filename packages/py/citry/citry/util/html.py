@@ -372,7 +372,6 @@ def script_json(value: object, *, sort_keys: bool = False, ensure_ascii: bool = 
 
 
 __all__ = [
-    "UNSAFE_DYNAMIC_ELEMENT_TAGS",
     "Markup",
     "decode_attribute_entities",
     "escape",
@@ -385,10 +384,11 @@ __all__ = [
 # Tags whose contents or attributes the browser does not treat as ordinary
 # page text and markup: it runs or loads them (script, iframe, object), reads
 # them as raw text (style, textarea, title, xmp), or changes how the rest of
-# the page is read (base, meta, plaintext). A tag name chosen at render time
-# could otherwise turn an escaped body into code, so `<c-element c-is>` refuses them
-# on every render path, compared in any letter case.
-UNSAFE_DYNAMIC_ELEMENT_TAGS: frozenset[str] = frozenset(
+# the page is read (base, meta, plaintext). Citry escapes an element's body as
+# HTML text, which is not right for these tags, so a `<c-element>` with `c-is`
+# or `c-bind` refuses them, compared in any letter case, however the page is
+# rendered.
+_REFUSED_DYNAMIC_ELEMENT_TAGS: frozenset[str] = frozenset(
     {
         "applet",
         "base",

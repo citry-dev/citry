@@ -198,13 +198,14 @@ starts with a CSS function such as `calc(...)` or `rgba(...)`, so it
 cannot hold a font list or a keyword such as `!important`. Any other
 string is used as written, and Citry raises `ValueError` when it has:
 
-- a `;`, `!`, brace, comment, `<`, or backslash outside a string or
-  `url()`;
+- a `;` or `!` that is not inside brackets such as `calc(...)`;
+- a brace, a comment, or a `<` or backslash outside a string or `url()`;
 - an unbalanced bracket;
 - a malformed string or `url()`.
 
-A value containing `</style` or `<!--` always raises. `rgb(...)`,
-`calc(...)`, and `url(...)` values work, including SVG data URLs.
+A value containing a null or surrogate character, `</style`, or `<!--`
+always raises. `rgb(...)`, `calc(...)`, and `url(...)` values work,
+including SVG data URLs.
 
 To use data in a stylesheet, pass it through `css_data()`, not through
 `{{ }}` inside a `<style>` element you write in the template. The same

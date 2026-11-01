@@ -221,8 +221,9 @@
   `requires-python = ">=3.10"`, raise it to `">=3.11"` before upgrading,
   or uv and other lockfile tools cannot pick this release.
 
-- **Breaking:** Citry now checks more values that your code passes while
-  a page renders. Each of these raises `ValueError`:
+- **Breaking:** Citry now checks more of what a page can run or load.
+  Each of these raises an error, a `ValueError` unless the item says
+  otherwise:
   - `actions.Redirect(url)` with a scheme other than `http:` or `https:`.
     Relative URLs such as `/projects/` still work. Use a full `https:` URL
     or a path instead. A URL containing a control character, such as a
@@ -230,29 +231,37 @@
   - A `c-bind` mapping key, or a name an `on_attrs_resolved` hook adds,
     that starts with `on`, such as `onclick`, or that is `innerHTML`,
     `outerHTML`, or `srcdoc`. Write such an attribute in the template
-    instead, such as `onclick="..."`, `@click`, or `@c-click`.
+    instead: `@click` on a Vue page, `@c-click` to call a handler of your
+    component, or `onclick="..."`. A hook can still change the value of a
+    handler the template wrote, but it cannot add one.
   - An attribute name from data that contains whitespace, a control
-    character, a quote, a byte-order mark, or a Unicode noncharacter.
-    Rename the key.
-  - `<c-element>` with `is` or `c-is` naming a tag such as `script`,
-    `style`, `iframe`, or `textarea`, whose contents the browser reads as
-    raw text or code. Write such an element directly in the template.
-  - An attribute passed to `<c-element>`, from a template, `c-bind`,
-    `<c-component c-is>`, or Python code, that starts with `on` or is
-    `innerHTML`, `outerHTML`, or `srcdoc`. An event handler on `<c-element>`,
-    including one written in the template, now raises; write it as a Vue
-    `@event` in a component with `js`, or on a plain element in a `c-if`
-    branch.
-  - A `css_data()` value without spaces that has a comment, a brace, a
-    top-level `;` or `!`, a `<` or backslash outside a string or `url()`,
-    or a malformed string or `url()`, and any value containing `</style`
-    or `<!--`. `rgb()`, `calc()`, and `url()` values, SVG data URLs
-    included, still work.
+    character, a quote, a byte-order mark, a lone surrogate, or a Unicode
+    noncharacter. Rename the key.
+  - `<c-element>` with `c-is` or `c-bind` that names a tag such as
+    `script`, `style`, `iframe`, or `textarea`, whose contents the browser
+    reads as raw text or code. Write such an element directly in the
+    template.
+  - An attribute that starts with `on`, or is `innerHTML`, `outerHTML`, or
+    `srcdoc`, passed to `<c-element>` through `c-bind`,
+    `<c-component c-is>`, or Python code. A `<c-element>` with `c-is` or
+    `c-bind` also refuses one written in the template, because it cannot
+    tell a name you wrote from one passed in as data; write the handler as
+    a Vue `@event` in a component with `js`, or on a plain element in a
+    `c-if` branch.
+  - A `css_data()` value with a comment, a `;` or `!` outside brackets, a
+    brace, `<`, or backslash outside a string or `url()`, an unbalanced
+    bracket, a malformed string or `url()`, a null or surrogate character,
+    or `</style` or `<!--` anywhere. Text with spaces that does not start
+    with a function is quoted for you, so only a null or surrogate
+    character, `</style`, or `<!--` fails there. `rgb()`, `calc()`, and
+    `url()` values, SVG data URLs included, still work.
   - An Events binding on one of Vue's lifecycle hooks, such as
     `@c-vnode-mounted` or `@c-vue:mounted`, whether the template writes it
-    or a `c-bind` mapping key supplies it. Vue ran such a binding when the
-    element or component mounted or updated, not on a browser event. Bind
-    the handler to a browser event, such as `@c-click`.
+    (a `SyntaxError` when the template loads) or a `c-bind` mapping key
+    supplies it (a `ValueError` when the page renders). Vue ran such a
+    binding when the element or component mounted or updated, not on a
+    browser event. Bind the handler to a browser event, such as
+    `@c-click`.
   - An Events binding whose event name starts with something other than a
     letter, or contains a character other than a letter, digit, `-`, `_`
     or `:`, such as `@c-1x` or `@c-a;b`. Rename the event.

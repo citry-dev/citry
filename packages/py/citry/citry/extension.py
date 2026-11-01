@@ -1427,7 +1427,13 @@ def _reject_script_capable_from_attrs_hook(
     written = {str.lower(key) for key in before if isinstance(key, str)}
     for key in after:
         if is_script_capable_attr_name(key) and str.lower(key) not in written:
-            reject_script_capable_attr_name(key, tag_name=tag_name, where="an on_attrs_resolved hook")
+            reject_script_capable_attr_name(
+                key,
+                tag_name=tag_name,
+                where="an on_attrs_resolved hook",
+                fix="A hook may change the value of an attribute the template wrote, "
+                "but it may not add or rename one.",
+            )
 
 
 class ExtensionManager:

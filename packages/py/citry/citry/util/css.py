@@ -17,6 +17,7 @@ SECRET_IN_CSS_DATA_ADVICE = (
 # A CSS function call: a name followed by an opening parenthesis,
 # e.g. `calc(100% - 20px)`, `var(--color)`, `rgba(255, 0, 0, 0.5)`.
 _CSS_FUNC_RE = re.compile(r"^[a-zA-Z0-9_-]+\(")
+_CSS_NULL_OR_SURROGATE_RE = re.compile(r"[\x00\ud800-\udfff]")
 # `{` and `}` are rejected outright below, so only `(` and `[` group here.
 _CSS_BLOCK_PAIRS = {"(": ")", "[": "]"}
 _CSS_BLOCK_CLOSERS = frozenset(_CSS_BLOCK_PAIRS.values())
@@ -69,9 +70,8 @@ def _consume_css_escape(value: str, index: int) -> int:
     r"""
     Return the index after a CSS escape that starts at the backslash ``index``.
 
-    A backslash followed by a newline is not a valid escape; the caller
-    rejects that. A backslash at the very end of the input is a parse error
-    the browser would replace with U+FFFD, so the caller rejects it too.
+    Raise ``ValueError`` for a backslash followed by a newline, which is not a
+    valid escape, or for a backslash at the very end of the input.
     """
     if index + 1 >= len(value) or value[index + 1] in "\n\r\f":
         raise ValueError(f"CSS value has a backslash that does not start a valid escape at offset {index}.")
@@ -86,9 +86,9 @@ def validate_css_var_value(value: str) -> None:
     custom-property value cannot close the generated declaration, start a new
     rule, or end the ``<style>`` element the browser builds it into. It
     rejects a malformed string or ``url()`` token (the browser's bad-string
-    and bad-url cases), a comment, an unbalanced bracket, any ``<`` (so
-    ``</style`` and ``<!--`` cannot appear), and a top-level ``;``, ``{``,
-    ``}`` or ``!``. It is not a full property-type validator.
+    and bad-url cases), a comment, an unbalanced bracket, a brace, a ``<`` or
+    backslash outside a string or ``url()``, ``</style`` or ``<!--`` anywhere,
+    and a top-level ``;`` or ``!``. It is not a full property-type validator.
     """
     # The HTML parser ends a <style> element only at `</style`, in any letter
     # case, and `<!--` can start a comment state, so both are refused in every
@@ -100,26 +100,27 @@ def validate_css_var_value(value: str) -> None:
         if offset != -1:
             raise ValueError(f"CSS value contains {marker!r} at offset {offset}.")
 
+    # A null character or lone surrogate is refused everywhere, strings and
+    # url() included, so check the whole value once before scanning it.
+    unreadable = _CSS_NULL_OR_SURROGATE_RE.search(value)
+    if unreadable is not None:
+        kind = "a null character" if unreadable.group() == "\0" else "a Unicode surrogate"
+        raise ValueError(f"CSS value contains {kind} at offset {unreadable.start()}.")
+
     blocks: list[tuple[str, int]] = []
     index = 0
     length = len(value)
 
     while index < length:
         char = value[index]
-        codepoint = ord(char)
 
-        if char == "\0":
-            raise ValueError(f"CSS value contains a null character at offset {index}.")
-        if 0xD800 <= codepoint <= 0xDFFF:
-            raise ValueError(f"CSS value contains a Unicode surrogate at offset {index}.")
-
-        # A comment could hide a declaration break from a reader, and the
-        # browser strips it, so neither path should rely on it.
+        # The browser drops a comment before it reads the value, so a value
+        # with one would not mean what it appears to say.
         if char == "/" and index + 1 < length and value[index + 1] == "*":
             raise ValueError(f"CSS value contains a comment at offset {index}.")
 
-        # `<` never begins a CSS token, so it only appears here as the start
-        # of `</style` or `<!--`, both of which end or corrupt the element.
+        # A value never needs `<` outside a string or url(), so refuse it
+        # here rather than judge what follows it.
         if char == "<":
             raise ValueError(f"CSS value contains '<' at offset {index}.")
 
@@ -127,9 +128,8 @@ def validate_css_var_value(value: str) -> None:
             index = _scan_css_string(value, index)
             continue
 
-        # An escape outside a string can spell a name such as `url` that the
-        # browser decodes and this check would not recognise, and a
-        # `css_data()` value never needs one there, so it is refused.
+        # A `css_data()` value never needs a backslash outside a string, and
+        # refusing it keeps every name in the value readable as written.
         if char == "\\":
             raise ValueError(f"CSS value contains a backslash outside a string at offset {index}.")
 
@@ -176,9 +176,9 @@ def validate_css_var_value(value: str) -> None:
             index += 1
             continue
 
-        # `;`, `{`, `}` and `!` at the top level each end the one declaration
-        # this value belongs to or begin another, so none may appear outside
-        # a bracketed group such as `calc(...)`.
+        # `;` and `!` at the top level end this declaration or change its
+        # priority, so neither may appear outside a bracketed group such as
+        # `calc(...)`.
         if char in ";!" and not blocks:
             raise ValueError(f"CSS value contains a top-level {char!r} at offset {index}.")
 
@@ -200,10 +200,8 @@ def _scan_css_string(value: str, start: int) -> int:
             return index + 1
         if char in "\n\r\f":
             # A newline inside a string is the browser's bad-string token; it
-            # ends the string early and lets the rest restart the parser.
+            # ends the string early, so the rest would be read as more CSS.
             raise ValueError(f"CSS string contains an unescaped newline at offset {index}.")
-        if char == "\0":
-            raise ValueError(f"CSS value contains a null character at offset {index}.")
         if char == "\\":
             if index + 1 < length and value[index + 1] in "\n\r\f":
                 # A backslash-newline is a line continuation inside a string.
@@ -231,16 +229,27 @@ def _scan_css_url(value: str, start: int) -> int:
         char = value[index]
         if char == ")":
             return index + 1
-        # A quote, `(`, whitespace in the middle, or a non-printable makes the
-        # browser's bad-url token, which swallows text up to the next `)` and
-        # can carry a declaration break out of the URL.
-        if char in "\"'(" or char == "\0" or ord(char) <= 0x08 or ord(char) == 0x0B or 0x0E <= ord(char) <= 0x1F:
-            raise ValueError(f"CSS url() contains {char!r} at offset {index}, which the browser reads as a bad url.")
+        # A quote, `(`, whitespace in the middle, or a non-printable (DEL, or
+        # a control character other than tab, newline, form feed and carriage
+        # return) makes the browser's bad-url token, which drops the rest of
+        # the value up to the next `)`.
+        code = ord(char)
+        if char in "\"'(" or code <= 0x08 or code in {0x0B, 0x7F} or 0x0E <= code <= 0x1F:
+            msg = (
+                f"CSS url() contains {char!r} at offset {index}, which the browser cannot read in an unquoted URL. "
+                'Quote the URL, as in url("...").'
+            )
+            raise ValueError(msg)
         if char in _CSS_WHITESPACE:
+            whitespace_start = index
             while index < length and value[index] in _CSS_WHITESPACE:
                 index += 1
             if index >= length or value[index] != ")":
-                raise ValueError(f"CSS url() has whitespace before its end at offset {index}.")
+                msg = (
+                    f"CSS url() has whitespace inside it at offset {whitespace_start}. "
+                    'Quote the URL, as in url("...").'
+                )
+                raise ValueError(msg)
             return index + 1
         if char == "\\":
             index = _consume_css_escape(value, index)
