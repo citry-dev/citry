@@ -10,6 +10,7 @@ import io
 import subprocess
 import sys
 import textwrap
+import typing
 from collections.abc import Mapping
 from dataclasses import dataclass, is_dataclass
 from dataclasses import field as dataclass_field
@@ -22,6 +23,7 @@ from typing import Any, Literal, Protocol, TypedDict, TypeVar
 from uuid import UUID
 
 import pytest
+import typing_extensions
 
 from citry.ext.events import schemas as schemas_module
 from citry.ext.events.files import UploadedFile
@@ -195,6 +197,48 @@ class ReaderField:
 
 class ReaderList:
     readers: list[Reader]
+
+
+class Named(Protocol):
+    # Not @runtime_checkable, and it annotates an attribute, which makes
+    # the class look like an ordinary annotated schema class.
+    name: str
+
+
+class NamedField:
+    named: Named
+
+
+class NamedList:
+    named: list[Named]
+
+
+class ExtensionPoint(typing_extensions.TypedDict):
+    x: int
+
+
+class ExtensionPointField:
+    origin: ExtensionPoint
+
+
+class ExtensionPointList:
+    points: list[ExtensionPoint]
+
+
+class TypingListField:
+    items: typing.List  # noqa: UP006
+
+
+class TypingTupleField:
+    combo: typing.Tuple  # noqa: UP006
+
+
+class Box:
+    size: int
+
+
+class BoxUnion:
+    v: dict[int, Box] | list[Box]
 
 
 class DictOfLists:
@@ -893,6 +937,52 @@ class TestContainerCoercion:
     def test_a_protocol_list_item_is_named_by_its_index(self):
         result = validate_args(ReaderList, {"readers": [1]})
         assert result.fields == {"readers.0": "Unsupported annotation for event data: Reader."}
+
+    def test_a_protocol_with_an_annotated_attribute_is_unsupported(self):
+        # The annotated attribute must not make it a schema class to build from the object.
+        result = validate_args(NamedField, {"named": {"name": "x"}})
+        assert result.fields == {"named": "Unsupported annotation for event data: Named."}
+
+    def test_a_protocol_with_an_annotated_attribute_in_a_list_is_named_by_its_index(self):
+        result = validate_args(NamedList, {"named": [{"name": "x"}]})
+        assert result.fields == {"named.0": "Unsupported annotation for event data: Named."}
+
+    def test_a_typing_extensions_typed_dict_field_accepts_an_object(self):
+        result = validate_args(ExtensionPointField, {"origin": {"x": 1}})
+        assert result.ok
+        assert result.value.origin == {"x": 1}
+
+    def test_a_typing_extensions_typed_dict_field_rejects_a_non_object(self):
+        result = validate_args(ExtensionPointField, {"origin": 5})
+        assert result.fields == {"origin": "Expected an object, got int."}
+
+    def test_a_list_of_typing_extensions_typed_dicts_names_the_bad_item(self):
+        result = validate_args(ExtensionPointList, {"points": [{"x": 1}, 3]})
+        assert result.fields == {"points.1": "Expected an object, got int."}
+        assert validate_args(ExtensionPointList, {"points": [{"x": 1}]}).ok
+
+    def test_a_bare_typing_list_accepts_any_items(self):
+        result = validate_args(TypingListField, {"items": [1, "a"]})
+        assert result.ok
+        assert result.value.items == [1, "a"]
+
+    def test_a_bare_typing_list_rejects_a_non_list(self):
+        result = validate_args(TypingListField, {"items": 5})
+        assert result.fields == {"items": "Expected a list, got int."}
+
+    def test_a_bare_typing_tuple_accepts_any_items(self):
+        # The builtin `tuple[()]` declares an empty tuple, but the bare typing alias does not.
+        result = validate_args(TypingTupleField, {"combo": [1, "a"]})
+        assert result.ok
+        assert result.value.combo == (1, "a")
+
+    def test_a_bare_typing_tuple_rejects_a_non_list(self):
+        result = validate_args(TypingTupleField, {"combo": 5})
+        assert result.fields == {"combo": "Expected a list, got int."}
+
+    def test_a_message_names_a_class_inside_a_generic_without_its_module(self):
+        result = validate_args(BoxUnion, {"v": "s"})
+        assert result.fields == {"v": "Expected dict[int, Box] or list[Box], got str."}
 
 
 class TestUnhashableSetItems:

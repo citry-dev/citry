@@ -4444,8 +4444,8 @@ field, always.
   are rejected, and each accepted value must satisfy the field's type,
   down to each list or tuple item, each dict value, and the listed
   values of a `Literal[...]`, with the error at the item's path
-  (`tags.2`). Dict keys are not checked, because the token stores them
-  as JSON strings.
+  (`tags.2`). Dict keys are not checked: a JSON object key is always a
+  string, and a dataclass State keeps it as one.
   Defaults to **the same fields as `_public`**: public means visible
   and writable, and `_model = (...)` exists only to clamp down (a
   visible-but-read-only display flag). Every `_model` field must be

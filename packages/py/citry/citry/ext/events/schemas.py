@@ -51,7 +51,7 @@ from dataclasses import MISSING, dataclass, fields
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from enum import Enum
-from types import UnionType
+from types import GenericAlias, UnionType
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -62,9 +62,10 @@ from typing import (
     get_args,
     get_origin,
     get_type_hints,
-    is_typeddict,
 )
 from uuid import UUID
+
+import typing_extensions
 
 from citry._nested_declarations import _is_plain_field_family, convert_plain_declaration
 from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, limit_item_errors, limit_unexpected_fields
@@ -673,6 +674,11 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
         return _coerce_union(value, annotation, path, errors, bind_strings=bind_strings)
     if origin is Literal:
         return _coerce_literal(value, annotation, path, errors, bind_strings=bind_strings)
+    # A bare typing alias (``typing.List``, ``typing.Tuple``) says nothing
+    # about its items, so it is checked as the plain container. Only the
+    # builtin ``tuple[()]`` has no arguments and still declares a shape.
+    if origin in (list, tuple, set) and not get_args(annotation) and not isinstance(annotation, GenericAlias):
+        return _coerce(value, origin, path, errors, bind_strings=bind_strings)
     if origin in (list, tuple, set):
         return _coerce_container(value, annotation, origin, path, errors, bind_strings=bind_strings)
     if origin is dict or origin is Mapping:
@@ -828,13 +834,22 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
             return value
         return _fail(errors, path, _FILE_MESSAGE)
 
-    # isinstance() refuses a TypedDict, which is a JSON object at runtime,
-    # so an object passes as it came. It is told apart before the annotated
-    # classes below, which it would otherwise count as.
-    if is_typeddict(annotation):
+    # A TypedDict is a plain dict at runtime and isinstance() refuses it, so
+    # an object passes as it came, with its keys unchecked. This runs before
+    # the annotated-class branch below, which would also match a TypedDict.
+    # typing_extensions also recognizes its own TypedDict, which Pydantic
+    # asks for on Python 3.11.
+    if typing_extensions.is_typeddict(annotation):
         if isinstance(value, Mapping):
             return value
         return _fail(errors, path, f"Expected an object, got {_value_type_name(value)}.")
+
+    # Citry cannot check a browser value against a Protocol without
+    # @runtime_checkable, which isinstance() refuses, so the field is
+    # reported as unsupported. This runs before the annotated-class branch,
+    # which would also match a Protocol that annotates attributes.
+    if _is_unchecked_protocol(annotation):
+        return _fail(errors, path, f"Unsupported annotation for event data: {_type_name(annotation)}.")
 
     # A nested annotated class validates recursively from an object.
     if _is_schema_class(annotation):
@@ -849,8 +864,9 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
     try:
         matches = isinstance(value, annotation)
     except TypeError:
-        # A class isinstance() cannot check, such as a Protocol without
-        # @runtime_checkable, cannot validate anything the browser sends.
+        # Citry cannot check a browser value against a class whose
+        # isinstance() raises (an unusual metaclass), so the field is
+        # reported as unsupported.
         return _fail(errors, path, f"Unsupported annotation for event data: {_type_name(annotation)}.")
     if matches:
         return value
@@ -976,8 +992,8 @@ def _coerce_mapping(
     if len(args) != 2:
         return value
     key_annotation, value_annotation = args
-    # A `str` key and an `Any` value need no conversion, so the object
-    # passes as it came.
+    # A `str`, `Any`, or `object` key with an `Any` or `object` value needs
+    # no conversion, so the object passes as it came.
     if key_annotation in (str, Any, object) and value_annotation in (Any, object):
         return value
 
@@ -1032,8 +1048,40 @@ def _type_name(annotation: Any) -> str:
     if annotation is type(None):
         return "null"
     if get_origin(annotation) is not None:
-        return str(annotation).replace("typing.", "")
+        return generic_label(annotation)
     return getattr(annotation, "__name__", str(annotation))
+
+
+def generic_label(hint: Any) -> str:
+    """Write a parametrized type by its short names (``dict[str, Point]``), without module paths."""
+    origin = get_origin(hint)
+    if origin is Union or origin is UnionType:
+        return " | ".join(generic_label(arm) for arm in get_args(hint))
+    if origin is None:
+        if hint is type(None):
+            return "None"
+        if hint is Ellipsis:
+            return "..."
+        name = getattr(hint, "__name__", None)
+        return name if isinstance(name, str) else str(hint).replace("typing.", "")
+    args = get_args(hint)
+    if origin is Literal:
+        inner = ", ".join(repr(arg.value if isinstance(arg, Enum) else arg) for arg in args)
+        return f"Literal[{inner}]"
+    # Annotated metadata and other special forms read best as Python writes them.
+    if not isinstance(origin, type):
+        return str(hint).replace("typing.", "")
+    # A bare typing alias (``typing.Tuple``) reads as its container, while
+    # the builtin ``tuple[()]`` has no arguments but keeps its brackets.
+    if not args and not isinstance(hint, GenericAlias):
+        return origin.__name__
+    inner = ", ".join(generic_label(arg) for arg in args) if args else "()"
+    return f"{origin.__name__}[{inner}]"
+
+
+def _is_unchecked_protocol(annotation: Any) -> bool:
+    """Whether ``annotation`` is a Protocol without @runtime_checkable, which isinstance() refuses."""
+    return bool(getattr(annotation, "_is_protocol", False)) and not getattr(annotation, "_is_runtime_protocol", False)
 
 
 def _short_repr(value: str) -> str:

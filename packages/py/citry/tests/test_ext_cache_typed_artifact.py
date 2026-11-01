@@ -5,6 +5,7 @@ import json
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import field, replace
+from enum import Enum
 from typing import Literal
 
 import pytest
@@ -1385,6 +1386,47 @@ def test_cache_hit_rebuilds_state_only_when_its_token_value_no_longer_fits(tags,
     # A fitting token replays, so State is built once; one that no longer
     # fits cannot be replayed, so the second render builds State again.
     assert builds == builds_expected
+
+
+class StateColor(str, Enum):
+    # Module level, so the string annotation in a State resolves it.
+    RED = "red"
+    BLUE = "blue"
+
+
+def test_cache_hit_replays_a_token_that_stores_a_str_enum_list_as_plain_values() -> None:
+    app = Citry(secret="cache-state-test-secret")  # noqa: S106
+    builds = 0
+
+    class Card(Component):
+        citry = app
+
+        class Cache:
+            enabled = True
+
+        class State:
+            colors: list[StateColor] = field(default_factory=lambda: [StateColor.RED, StateColor.BLUE])
+
+            def __post_init__(self):
+                nonlocal builds
+                builds += 1
+
+        class Events:
+            def update(self, state):
+                return None
+
+        template = """
+        <button @c-click="update">go</button>
+        """
+
+    first = render_prepared_direct(Card())
+    entry = next(iter(first.context.extra[EVENTS_EXTRA_KEY]))
+    render_prepared_direct(Card())
+
+    # The token holds "red" and "blue", which fit `list[StateColor]`, so the
+    # second render replays the cached entry instead of building State again.
+    assert json.loads(entry.public_state_json) == {"colors": ["red", "blue"]}
+    assert builds == 1
 
 
 def test_inner_cache_hit_can_be_exported_by_an_outer_cache_miss() -> None:

@@ -196,7 +196,7 @@ def _strict_json_issue(value: Any, path: str) -> ValidationIssue:
 # The deepest nesting of arrays and objects a received JSON text may have.
 # Python's own parser and writer stop at a depth that depends on the Python
 # version and on how many frames the web framework already uses. A fixed
-# bound well below that gives hosts the same answer. Pydantic's JSON reader
+# bound well below that makes every host answer the same body the same way. Pydantic's JSON reader
 # stops just above this depth, so a State value that passes here also
 # restores in a Pydantic State.
 MAX_JSON_DEPTH = 200

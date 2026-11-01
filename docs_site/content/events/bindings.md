@@ -144,7 +144,8 @@ Citry checks inside the type too. It rejects a `list[int]` value with a
 string in it, checks each value of a `dict[str, int]`, and accepts only
 `"draft"` or `"sent"` for a `Literal["draft", "sent"]` field. The error
 names the item that failed, such as `tags.2` for the third item of a
-`tags` list.
+`tags` list. A `TypedDict` value is checked only as an object; Citry does
+not check the keys inside it.
 
 An empty or half-typed number input has no number, so it sends its text. A
 field declared `int` rejects that. Accept both and convert in the handler:
