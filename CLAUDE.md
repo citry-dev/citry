@@ -458,16 +458,26 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   hunting through test files. An executable example that needs automated
   validation must opt in to a general guard; do not hard-code its page in a
   test.
-- **A workflow script reads outside values from its environment.** In a
-  GitHub Actions `run:` or `github-script` block, do not write
+- **Pass event and input values into workflow scripts through `env:`.** In
+  a GitHub Actions `run:` or `github-script` block, do not write
   `${{ github.event.* }}`, `${{ github.head_ref }}` or `${{ inputs.* }}`
-  into the script text. GitHub pastes the value in before the shell runs,
-  so a branch name or PR title becomes part of the command. Pass the value
-  through the step's `env:` block and read it as `"$NAME"`. To limit a job
-  to Dependabot, check the pull request's author
-  (`github.event.pull_request.user.login`), not only `github.actor`, which
-  names whoever triggered the run. The `workflow_run_expressions` validator
-  fails the gate on the first rule.
+  into the script (`github.event_name` is fine). GitHub pastes the value
+  into the script text before the step starts, so a branch name or pull
+  request title becomes part of the code. Pass the value through the
+  step's `env:` block and read it as `"$NAME"` in a shell script or
+  `process.env.NAME` in `github-script`. Do the same for step and job
+  outputs that carry such a value.
+- **A Dependabot-only job checks who opened the pull request.** Test
+  `github.event.pull_request.user.login == 'dependabot[bot]'`.
+  `github.actor` names the user who started the first run, not the
+  author, so add it only when the job also needs to know who started the
+  run, as `repo--dependabot-relock.yml` does to read Dependabot's secrets.
+- The
+  [`workflow_run_expressions`](scripts/validators/workflow_run_expressions.py)
+  validator fails the gate when a `run:` or `script:` block in a workflow
+  or composite action contains one of the three values above. It does not
+  follow a value through a step or job output, and nothing checks the
+  Dependabot rule, so both rest on review.
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.
