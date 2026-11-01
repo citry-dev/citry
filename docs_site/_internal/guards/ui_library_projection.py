@@ -173,7 +173,7 @@ _PREVIEW_REQUIRED_FRAGMENTS: dict[str, dict[str, tuple[tuple[str, str], ...]]] =
             ('cross_origin="anonymous"', "include credential-free native CORS mode"),
             ('referrer_policy="no-referrer"', "include native referrer policy"),
             ("Browser CSP remains authoritative", "teach CSP-owned failure"),
-            ("data, blob, raster, and SVG", "state supported URL trust categories"),
+            ("data image, blob, raster, and SVG", "state supported URL trust categories"),
         ),
         "image-lifecycle": (
             ('@c-click="retain"', "include signed server lifecycle controls"),
