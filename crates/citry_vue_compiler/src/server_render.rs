@@ -1488,11 +1488,14 @@ fn strict_equal(left: &Val<'_>, right: &Val<'_>) -> Option<bool> {
 }
 
 // ---------------------------------------------------------------------------
-// Attributes: what Vue's first client render leaves on each element
+// Attributes: what each element holds once Vue has hydrated the page
 // ---------------------------------------------------------------------------
 
-/// Vue's `isSpecialBooleanAttr`: attributes Vue writes as `""` or removes.
-const SPECIAL_BOOLEAN_ATTRIBUTES: [&str; 8] = [
+/// Vue's `isBooleanAttr`: the names Vue's server renderer writes with no
+/// value when the value is truthy or `""`, and leaves out otherwise. Vue
+/// keeps that attribute on a key it does not patch while hydrating (a
+/// `v-bind` spread), and its dev hydration check compares the page with it.
+const BOOLEAN_ATTRIBUTES: [&str; 26] = [
     "itemscope",
     "allowfullscreen",
     "formnovalidate",
@@ -1501,6 +1504,24 @@ const SPECIAL_BOOLEAN_ATTRIBUTES: [&str; 8] = [
     "novalidate",
     "playsinline",
     "readonly",
+    "async",
+    "autofocus",
+    "autoplay",
+    "controls",
+    "default",
+    "defer",
+    "disabled",
+    "inert",
+    "loop",
+    "open",
+    "required",
+    "reversed",
+    "scoped",
+    "seamless",
+    "checked",
+    "muted",
+    "multiple",
+    "selected",
 ];
 
 /// What Vue's first client render leaves in the attribute for one element
@@ -1570,17 +1591,59 @@ fn dom_answer(context: AttributeContext<'_>, key: &str) -> DomAnswer {
     }
 }
 
-/// The attribute value Vue's `setAttribute` path writes for a value, or
-/// `None` when Vue removes the attribute.
-fn attribute_text(value: &Val<'_>, boolean: bool) -> Result<Option<String>, &'static str> {
-    if boolean {
-        // Vue's `includeBooleanAttr`: truthy values and "" keep it.
-        let present = match value {
-            Val::Str(text) if text.is_empty() => true,
-            other => other.truthy().ok_or("browser-value")?,
-        };
-        return Ok(present.then(String::new));
+/// The attribute Vue's server renderer writes for one lowercase name on an
+/// HTML element (`ssrRenderDynamicAttr`), or `None` when it leaves the
+/// attribute out.
+fn server_attribute(key: &str, value: &Val<'_>) -> Result<Option<String>, &'static str> {
+    if key == "hidden" {
+        hidden_attribute(value)
+    } else if BOOLEAN_ATTRIBUTES.contains(&key) {
+        boolean_attribute(value)
+    } else {
+        attribute_text(value)
     }
+}
+
+/// What Vue writes for a name in [`BOOLEAN_ATTRIBUTES`]: `""` for a truthy
+/// value or `""`, nothing for any other value.
+///
+/// An object or array is truthy, so it keeps the attribute. That is what
+/// Vue's compiled server render (`ssrIncludeBooleanAttr`), its hydration
+/// check and a client render all do; only the server renderer's `v-bind`
+/// object path leaves it out.
+fn boolean_attribute(value: &Val<'_>) -> Result<Option<String>, &'static str> {
+    match value {
+        // Vue's `includeBooleanAttr` keeps the attribute for any string:
+        // `""` by its own rule, any other text because it is truthy.
+        Val::Str(_) => Ok(Some(String::new())),
+        // JavaScript truthiness: false, 0, -0, NaN, null and undefined
+        // leave it out.
+        other => Ok(other.truthy().ok_or("browser-value")?.then(String::new)),
+    }
+}
+
+/// What Vue's server renderer writes for `hidden`: text as written, so
+/// `"until-found"` keeps its meaning, and a boolean or number as for the
+/// names in [`BOOLEAN_ATTRIBUTES`].
+///
+/// An object or array leaves it out: Vue's compiled server render sends
+/// `hidden` through `ssrRenderDynamicAttr`, which writes only a string,
+/// number or boolean, and its hydration check then expects no attribute.
+///
+/// Vue's hydration check reads any text other than `"until-found"` as
+/// plain `hidden`, so `"false"` and `"0"` hide the element as they do after
+/// a client render.
+fn hidden_attribute(value: &Val<'_>) -> Result<Option<String>, &'static str> {
+    match value {
+        Val::Str(text) => Ok(Some(text.to_string())),
+        Val::Data(_) | Val::Array(_) | Val::Object(_) | Val::Ctx => Ok(None),
+        other => boolean_attribute(other),
+    }
+}
+
+/// The attribute value Vue writes as text for a value, or `None` when Vue
+/// leaves the attribute out.
+fn attribute_text(value: &Val<'_>) -> Result<Option<String>, &'static str> {
     match value {
         Val::Undefined | Val::Null => Ok(None),
         Val::Str(text) => Ok(Some(text.to_string())),
@@ -2018,8 +2081,15 @@ fn js_data_order(map: &serde_json::Map<String, Json>) -> Vec<(&str, &Json)> {
     indexes
 }
 
-/// The attribute one prop leaves on the element after Vue's first client
-/// render (`None`: no attribute), following `patchProp` in `runtime-dom`.
+/// The attribute one prop leaves on the element once Vue has hydrated the
+/// page (`None`: no attribute).
+///
+/// Most names follow `patchProp` in `runtime-dom`, which decides what the
+/// element would hold after a client render. A boolean attribute and
+/// `hidden` follow Vue's server renderer instead (see
+/// [`server_attribute`]): for a key Vue does not patch while hydrating,
+/// the page keeps that renderer's attribute, which for these names differs
+/// from a client render's.
 fn client_attribute(
     context: AttributeContext<'_>,
     key: &str,
@@ -2075,8 +2145,8 @@ fn client_attribute(
         // also as attributes (runtime-dom #6007), so the attribute remains.
         // `output.value` sets the element's text, which hydration does not
         // re-apply, so it falls to the unsupported arm below.
-        ("input" | "button" | "option" | "data", "value") => attribute_text(value, false),
-        ("input", "checked") | ("option", "selected") => attribute_text(value, true),
+        ("input" | "button" | "option" | "data", "value") => attribute_text(value),
+        ("input", "checked") | ("option", "selected") => boolean_attribute(value),
         // Properties whose attribute does not follow them.
         (_, "value" | "checked" | "selected" | "muted" | "indeterminate" | "text") => {
             Err("unsupported-attribute")
@@ -2085,35 +2155,28 @@ fn client_attribute(
         (_, "spellcheck" | "draggable" | "translate" | "autocorrect" | "form")
         | ("input", "list")
         | ("textarea", "type")
-        | ("img" | "video" | "canvas" | "source", "width" | "height") => {
-            attribute_text(value, false)
-        }
+        | ("img" | "video" | "canvas" | "source", "width" | "height") => attribute_text(value),
         // Every arm below reaches Vue's `key in el` check, and a customized
         // built-in element's class (`<button is="x-b">`) can define any
         // property, so the server cannot tell what the browser leaves.
         _ if context.has_is => Err("unsupported-attribute"),
-        // `el.hidden = value` accepts more than booleans; only the values
-        // whose attribute is certain are written.
-        (_, "hidden") => match value {
-            Val::Undefined | Val::Null | Val::Bool(false) => Ok(None),
-            Val::Bool(true) => Ok(Some(String::new())),
-            Val::Str(text) if text.is_empty() => Ok(Some(String::new())),
-            _ => Err("unsupported-attribute"),
-        },
-        _ if key.contains(['-', ':', '_']) => {
-            attribute_text(value, SPECIAL_BOOLEAN_ATTRIBUTES.contains(&key))
-        }
+        // `el.hidden` accepts more than booleans and browsers convert some
+        // values differently, so the server writes what Vue's server
+        // renderer writes, which Vue's hydration check compares against.
+        (_, "hidden") => hidden_attribute(value),
+        _ if key.contains(['-', ':', '_']) => attribute_text(value),
         _ => match dom_answer(context, key) {
             // An attribute Vue sets with `setAttribute`, or a mirrored string
             // property, which ends as `String(value)` with null or undefined
-            // removing it: the same as `setAttribute`. A name in Vue's
-            // `isSpecialBooleanAttr` list is written as `""` or removed.
-            DomAnswer::WritesText => {
-                attribute_text(value, SPECIAL_BOOLEAN_ATTRIBUTES.contains(&key))
-            }
+            // removing it. A client render leaves a name in Vue's boolean
+            // list on an element without that property as text
+            // (`disabled="false"` on a `div`), but the server writes what
+            // Vue's server renderer writes, which Vue's hydration check
+            // compares against.
+            DomAnswer::WritesText => server_attribute(key, value),
             // `el[key] = value` coerces with JavaScript truthiness, and ""
             // counts as true (Vue's `includeBooleanAttr`).
-            DomAnswer::ReflectBoolean => attribute_text(value, true),
+            DomAnswer::ReflectBoolean => boolean_attribute(value),
             DomAnswer::Unknown => Err("unsupported-attribute"),
         },
     }
@@ -4134,6 +4197,12 @@ fn is_static_attribute_name(name: &str) -> bool {
 fn static_attribute(context: AttributeContext<'_>, key: &str, value: &Val<'_>) -> Option<String> {
     match client_attribute(context, key, value) {
         Ok(text) => text,
+        // A boolean attribute the hydration writer declines (`disabled` on
+        // an element with an `is` prop) shows what Vue's server renderer
+        // writes, so `0` leaves it out rather than showing `disabled="0"`.
+        Err(_) if key == "hidden" || BOOLEAN_ATTRIBUTES.contains(&key) => {
+            server_attribute(key, value).ok().flatten()
+        }
         // A name Vue sets through a path the hydration writer does not
         // model still shows its plain value here.
         Err(_) => match value {
@@ -5156,6 +5225,129 @@ mod tests {
                 written(tag, key),
                 Err("unsupported-attribute"),
                 "{tag} {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn boolean_attributes_are_written_as_vues_server_renderer_writes_them() {
+        // Each row is Vue 3.5.44's `renderToString` output for the value
+        // from a compiled `:name` binding, observed per tag and name:
+        // `hidden`, then a boolean name. `None` is an attribute Vue leaves
+        // out. The last column is `compact`, a boolean property outside
+        // Vue's list, which keeps a client render's answer.
+        let text = |value: &str| Val::Str(value.to_owned().into());
+        let some = |value: &str| Ok(Some(value.to_owned()));
+        let (empty_array, empty_object) = (json!([]), json!({}));
+        type Written = Result<Option<String>, &'static str>;
+        let rows: [(Val<'_>, Written, Written, Written); 19] = [
+            (Val::Bool(true), some(""), some(""), some("")),
+            (Val::Bool(false), Ok(None), Ok(None), Ok(None)),
+            (Val::Null, Ok(None), Ok(None), Ok(None)),
+            (Val::Undefined, Ok(None), Ok(None), Ok(None)),
+            (text(""), some(""), some(""), some("")),
+            (text("foo"), some("foo"), some(""), some("")),
+            (text("false"), some("false"), some(""), some("")),
+            (text("0"), some("0"), some(""), some("")),
+            (text("until-found"), some("until-found"), some(""), some("")),
+            (text("UNTIL-FOUND"), some("UNTIL-FOUND"), some(""), some("")),
+            (text("a&\"b"), some("a&\"b"), some(""), some("")),
+            (Val::Num(0.0), Ok(None), Ok(None), Ok(None)),
+            (Val::Num(-0.0), Ok(None), Ok(None), Ok(None)),
+            (Val::Num(1.0), some(""), some(""), some("")),
+            (Val::Num(-1.0), some(""), some(""), some("")),
+            (Val::Num(0.5), some(""), some(""), some("")),
+            (Val::Num(f64::NAN), Ok(None), Ok(None), Ok(None)),
+            (Val::Data(&empty_array), Ok(None), some(""), some("")),
+            (Val::Data(&empty_object), Ok(None), some(""), some("")),
+        ];
+        // A boolean name is written the same way whether or not the
+        // element has the matching property (`disabled` on a `div`).
+        let boolean_names = [
+            ("input", "disabled"),
+            ("div", "disabled"),
+            ("input", "checked"),
+            ("option", "selected"),
+            ("input", "readonly"),
+            ("form", "novalidate"),
+            ("details", "open"),
+            ("div", "open"),
+            ("div", "inert"),
+        ];
+        for (value, hidden, boolean, compact) in &rows {
+            let written = |tag, key| client_attribute(AttributeContext::plain(tag), key, value);
+            assert_eq!(written("p", "hidden"), *hidden, "hidden {value:?}");
+            for (tag, key) in boolean_names {
+                assert_eq!(written(tag, key), *boolean, "{tag} {key} {value:?}");
+            }
+            assert_eq!(written("ol", "compact"), *compact, "compact {value:?}");
+        }
+        // The page writes the attribute whether the value reaches the
+        // element directly or through a scoped slot's props, escaped.
+        for (value, written) in [
+            (json!("foo"), r#" hidden="foo""#),
+            (json!("false"), r#" hidden="false""#),
+            (json!("until-found"), r#" hidden="until-found""#),
+            (json!("a&\"b"), r#" hidden="a&amp;&quot;b""#),
+            (json!(1), r#" hidden="""#),
+            (json!(0), ""),
+            (json!([]), ""),
+        ] {
+            let direct = root(
+                r#"<main><p :hidden="$citryPrepared.h">x</p></main>"#,
+                json!({"h": value}),
+            );
+            assert_eq!(
+                html(&direct),
+                format!("<main><p{written}>x</p></main>"),
+                "{value}"
+            );
+            let slotted = render(
+                &[
+                    (
+                        "Root",
+                        r#"<main><citry-list :citry-id="$citryPrepared.list"><template #default="{ h }"><p :hidden="h">x</p></template></citry-list></main>"#,
+                        json!({"list": "occ-List"}),
+                        json!({}),
+                    ),
+                    (
+                        "List",
+                        r#"<section><slot :h="$citryPrepared.h"></slot></section>"#,
+                        json!({"h": value}),
+                        json!({}),
+                    ),
+                ],
+                0,
+            );
+            assert_eq!(
+                html(&slotted),
+                format!("<main><section><!--[--><p{written}>x</p><!--]--></section></main>"),
+                "{value}"
+            );
+        }
+        // Inside a shell, the HTML shown until Vue builds the contents
+        // writes what Vue's server renderer writes, so `0` leaves the
+        // element visible and `false` leaves an input enabled.
+        for (value, hidden, disabled) in [
+            (json!(0), "", ""),
+            (json!(false), "", ""),
+            (json!("foo"), r#" hidden="foo""#, r#" disabled="""#),
+            (
+                json!("until-found"),
+                r#" hidden="until-found""#,
+                r#" disabled="""#,
+            ),
+        ] {
+            let shell = root(
+                r#"<main><div><p :hidden="$citryPrepared.h">x</p><input :disabled="$citryPrepared.h"><s v-if="browserOnly">y</s></div></main>"#,
+                json!({"h": value}),
+            );
+            assert_eq!(
+                html(&shell),
+                format!(
+                    r#"<main><div data-allow-mismatch="children"><p{hidden}>x</p><input{disabled}><s>y</s></div></main>"#
+                ),
+                "{value}"
             );
         }
     }
