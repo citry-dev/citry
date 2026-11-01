@@ -846,14 +846,14 @@ class TestApplyUpdates:
         error = exc_info.value
         assert error.status == 422
         assert error.message == (
-            "Some state updates were rejected; see the field messages. 5 more unexpected fields are not shown."
+            "Some state updates were rejected; see the field messages. 5 more field errors are not shown."
         )
         assert list(error.fields) == [f"u{index:03d}" for index in range(20)]
         assert all("_model" in message for message in error.fields.values())
 
     @pytest.mark.parametrize(
         ("count", "note"),
-        [(20, ""), (21, " 1 more unexpected field is not shown.")],
+        [(20, ""), (21, " 1 more field error is not shown.")],
     )
     def test_the_limit_starts_after_twenty_names_outside_model(self, count, note):
         updates = {f"u{index:03d}": 1 for index in range(count)}
@@ -872,7 +872,7 @@ class TestApplyUpdates:
         assert list(fields) == [f"a{index:03d}" for index in range(20)] + ["count", "query"]
         assert "Expected int" in fields["count"]
         assert "Expected str" in fields["query"]
-        assert exc_info.value.message.endswith(" 5 more unexpected fields are not shown.")
+        assert exc_info.value.message.endswith(" 5 more field errors are not shown.")
         assert state.count == 0
 
     def test_many_wrong_typed_model_fields_are_never_limited(self):
@@ -1101,4 +1101,45 @@ class TestPydanticStateExtraKeys:
         assert len(extra) == 20
         # The declared field's message is always listed.
         assert "count" in error.fields
-        assert error.message.endswith(" 5 more unexpected fields are not shown.")
+        assert error.message.endswith(" 5 more field errors are not shown.")
+
+
+class TestPydanticStateItemErrors:
+    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
+    def test_bad_list_items_in_a_write_stop_at_twenty(self, count, note):
+        pydantic = pytest.importorskip("pydantic")
+
+        class Board(pydantic.BaseModel):
+            tags: list[int] = []
+
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), {"tags": ["x"] * count}, model_fields={"tags"})
+        assert list(caught.value.fields) == [f"tags.{index}" for index in range(min(count, 20))]
+        assert caught.value.message == "Some state updates were rejected; see the field messages." + note
+
+    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
+    def test_bad_dict_values_in_a_write_stop_at_twenty(self, count, note):
+        pydantic = pytest.importorskip("pydantic")
+
+        class Board(pydantic.BaseModel):
+            scores: dict[str, int] = {}
+
+        values = {f"k{index:02d}": "x" for index in range(count)}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), {"scores": values}, model_fields={"scores"})
+        assert list(caught.value.fields) == [f"scores.k{index:02d}" for index in range(min(count, 20))]
+        assert caught.value.message == "Some state updates were rejected; see the field messages." + note
+
+    def test_bad_list_items_in_a_pydantic_v1_write_stop_at_twenty(self):
+        v1 = pytest.importorskip("pydantic.v1")
+
+        class Board(v1.BaseModel):
+            tags: list[int] = []
+            scores: dict[str, int] = {}
+
+        updates = {"tags": ["x"] * 21, "scores": {f"k{index:02d}": "x" for index in range(21)}}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), updates, model_fields={"tags", "scores"})
+        assert len([name for name in caught.value.fields if name.startswith("tags.")]) == 20
+        assert len([name for name in caught.value.fields if name.startswith("scores.")]) == 20
+        assert caught.value.message.endswith(" 2 more field errors are not shown.")

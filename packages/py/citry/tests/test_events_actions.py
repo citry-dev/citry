@@ -24,6 +24,7 @@ from citry.ext.events.errors import (
     MAX_UNEXPECTED_FIELDS,
     EventError,
     invalid_args_error,
+    limit_item_errors,
     limit_unexpected_fields,
     unlisted_fields_note,
     wire_error,
@@ -861,7 +862,7 @@ class TestEventError:
         error = wire_error(invalid_args_error(result))
         # The declared field's message stays, the unknown keys stop at the
         # limit, and the summary says how many were not shown.
-        assert error["message"] == "Invalid event arguments. 5 more unexpected fields are not shown."
+        assert error["message"] == "Invalid event arguments. 5 more field errors are not shown."
         assert error["fieldErrors"]["product_id"] == "Expected int, got str."
         assert len(error["fieldErrors"]) == 21
 
@@ -949,19 +950,16 @@ class TestUnexpectedFieldLimit:
         [
             (0, ""),
             (-1, ""),
-            (1, " 1 more unexpected field is not shown."),
-            (2, " 2 more unexpected fields are not shown."),
-            (1_000, " 1,000 more unexpected fields are not shown."),
+            (1, " 1 more field error is not shown."),
+            (2, " 2 more field errors are not shown."),
+            (1_000, " 1,000 more field errors are not shown."),
         ],
     )
     def test_the_note_counts_what_was_left_out(self, count, note):
         assert unlisted_fields_note(count) == note
 
     def test_the_note_starts_with_a_space_so_it_appends_to_a_message(self):
-        assert (
-            "Did not validate." + unlisted_fields_note(3)
-            == "Did not validate. 3 more unexpected fields are not shown."
-        )
+        assert "Did not validate." + unlisted_fields_note(3) == "Did not validate. 3 more field errors are not shown."
 
 
 class TestDebugTracking:
@@ -1043,3 +1041,23 @@ class TestDebugTracking:
             actions.Dispatch("unowned")
         warn_unreturned_actions(None, [], "save")
         assert _citry_records(caplog) == []
+
+
+class TestItemErrorLimit:
+    def test_messages_outside_every_container_are_kept(self):
+        fields = {f"tags.{index}": "Bad." for index in range(25)} | {"name": "Bad."}
+        kept, dropped = limit_item_errors(fields, {"tags"})
+        assert list(kept) == [*(f"tags.{index}" for index in range(20)), "name"]
+        assert dropped == 5
+
+    def test_a_nested_container_counts_toward_the_outer_one(self):
+        # Two inner lists of 15 messages: each inner list is under its own
+        # limit, but together they pass the outer list's limit.
+        fields = {f"rows.{row}.{col}": "Bad." for row in range(2) for col in range(15)}
+        kept, dropped = limit_item_errors(fields, {"rows", "rows.0", "rows.1"})
+        assert len(kept) == 20
+        assert dropped == 10
+
+    def test_no_containers_keeps_everything(self):
+        fields = {f"f{index}": "Bad." for index in range(30)}
+        assert limit_item_errors(fields, set()) == (fields, 0)

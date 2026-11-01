@@ -58,7 +58,13 @@ from weakref import WeakKeyDictionary
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _static_class_namespace_copy
 from citry._vue.json_data import _secret_key_path
-from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, limit_unexpected_fields, unlisted_fields_note
+from citry.ext.events.errors import (
+    PYDANTIC_EXTRA_TYPES,
+    limit_item_errors,
+    limit_unexpected_fields,
+    unlisted_fields_note,
+)
+from citry.ext.events.schemas import pydantic_container_paths
 from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
 from citry.util.logger import logger
 
@@ -755,15 +761,20 @@ def apply_state_updates(
 _UNWRITABLE_MESSAGE = "This field cannot be written from the client (it is not in the State _model set)."
 
 
-def _rejected_updates(errors: dict[str, str], unwritable: Collection[str]) -> StateUpdateError:
+def _rejected_updates(
+    errors: dict[str, str], unwritable: Collection[str], containers: Collection[str] = ()
+) -> StateUpdateError:
     """
     Build the error for a rejected batch of browser writes.
 
-    The browser decides how many names outside ``_model`` it sends, so
-    only the first few of those are listed and the message counts the rest.
-    Messages about writable fields are all kept.
+    The browser decides how many names outside ``_model`` it sends, and how
+    many items a list or dict field holds, so only the first few of those
+    messages are listed and the message counts the rest. Other messages
+    about writable fields are all kept.
     """
-    fields, unlisted = limit_unexpected_fields(errors, unwritable)
+    fields, unexpected_dropped = limit_unexpected_fields(errors, unwritable)
+    fields, items_dropped = limit_item_errors(fields, containers)
+    unlisted = unexpected_dropped + items_dropped
     message = "Some state updates were rejected; see the field messages." + unlisted_fields_note(unlisted)
     return StateUpdateError(message, fields=fields)
 
@@ -805,7 +816,8 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
             errors.setdefault(name, str(item.get("msg", "Invalid value.")))
         if not errors:
             errors["_state"] = str(error)
-        raise _rejected_updates(errors, extra) from error
+        locations = [item.get("loc", ()) for item in (found() if callable(found) else ()) if isinstance(item, dict)]
+        raise _rejected_updates(errors, extra, pydantic_container_paths(type(state), locations)) from error
     except Exception as error:
         # A validator that fails with another exception is the author's bug,
         # but it must not take down the whole envelope.

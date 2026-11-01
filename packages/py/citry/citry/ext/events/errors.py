@@ -38,13 +38,14 @@ _STATUS_CODES = {
 }
 _FALLBACK_CODE = "error"
 
-# The most "unexpected field" messages one error lists. Those are the
-# fields a request sends that the data class does not declare, or State
-# fields the browser may not write, so a request alone decides how many
-# there are; listing every one could make
-# the response many times the size of the request. Messages about declared
-# fields, and fields an author passes to EventError, are always listed.
+# The most messages one error lists for each kind of field whose count the
+# request alone decides: fields the data class does not declare, or State
+# fields the browser may not write, and the items inside one list or dict
+# field. Listing every one could make the response many times the size of
+# the request. Messages about other declared fields, and fields an author
+# passes to EventError, are always listed.
 MAX_UNEXPECTED_FIELDS = 20
+MAX_ITEM_ERRORS = 20
 
 # Pydantic's error types for a key a model does not declare: v2, then v1.
 PYDANTIC_EXTRA_TYPES = frozenset({"extra_forbidden", "value_error.extra"})
@@ -161,16 +162,54 @@ def limit_unexpected_fields(fields: Mapping[str, str], unexpected: Collection[st
     return kept, len(unexpected) - listed
 
 
+def limit_item_errors(fields: Mapping[str, str], containers: Collection[str]) -> tuple[dict[str, str], int]:
+    """
+    Keep at most ``MAX_ITEM_ERRORS`` messages inside each list or dict field, and drop the rest.
+
+    A message is inside a container when its path starts with the
+    container's path and a dot (``"tags.3"`` is inside ``"tags"``). In a
+    nested container, a message counts toward every container it is
+    inside. Messages outside every container are all kept, and "first"
+    follows the order of ``fields``.
+
+    Args:
+        fields: The per-field messages.
+        containers: The paths of the list and dict fields in the payload.
+
+    Returns:
+        The kept messages, and how many were dropped.
+
+    """
+    if not containers:
+        return dict(fields), 0
+    listed: dict[str, int] = {}
+    kept: dict[str, str] = {}
+    dropped = 0
+    for name, message in fields.items():
+        # Each prefix of the path that is a container is one the message
+        # sits inside; checking the prefixes keeps this one pass over the
+        # messages however many containers there are.
+        parts = name.split(".")
+        inside = [prefix for prefix in (".".join(parts[:end]) for end in range(1, len(parts))) if prefix in containers]
+        if any(listed.get(prefix, 0) >= MAX_ITEM_ERRORS for prefix in inside):
+            dropped += 1
+            continue
+        for prefix in inside:
+            listed[prefix] = listed.get(prefix, 0) + 1
+        kept[name] = message
+    return kept, dropped
+
+
 def unlisted_fields_note(count: int) -> str:
     """
-    Return the sentence that ends an error message when unexpected fields were left out.
+    Return the sentence that ends an error message when field messages were left out.
 
     Returns an empty string for a count of 0, so a caller can append it
     unconditionally. The text starts with a space.
     """
     if count <= 0:
         return ""
-    noun = "unexpected field is" if count == 1 else "unexpected fields are"
+    noun = "field error is" if count == 1 else "field errors are"
     return f" {count:,} more {noun} not shown."
 
 

@@ -36,7 +36,8 @@ _DATA_200_DESCRIPTION = (
 _RESPONSE_422 = {
     "description": (
         "The args did not validate; per-field messages ride in results[0].error.fieldErrors."
-        " At most 20 fields the schema does not declare are listed, and the message counts the rest."
+        " It lists at most 20 fields the schema does not declare and at most 20 items per list or dict"
+        " field; the message counts the rest."
     ),
     "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EventErrorEnvelope"}}},
 }

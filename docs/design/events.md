@@ -1832,12 +1832,14 @@ signature verifies. On the per-event route
 the HTTP status mirrors the call's status; the batch endpoint answers 200
 with per-call statuses inside (one batch can mix outcomes). `fieldErrors` is
 the per-field error map, surfaced client-side as
-`$error(handler).fieldErrors` (5.5). The server lists at most 20
-messages for fields the request sends but the `data` class does not
-declare, or that State does not let the browser write, because only the
-request decides how many of those there are. `message` then ends with
-how many more there were, for example "1,000 more unexpected fields
-are not shown." Messages for declared fields, and the fields of an
+`$error(handler).fieldErrors` (5.5). Only the request decides how many
+fields it sends that the `data` class does not declare (or that State
+does not let the browser write), and how many items a list or dict field
+holds. So the server lists at most 20 messages of the first kind, and at
+most 20 item messages in each list or dict field, keeping the earliest
+by field path with list indexes in number order. `message` then ends
+with how many more there were, for example "1,000 more field errors are
+not shown." Messages for other fields, and the fields of an
 `EventError`, are always listed in full. The error still has only the
 protocol's fixed keys.
 

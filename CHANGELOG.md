@@ -190,11 +190,12 @@
 
 ### Changed
 
-- When an Events call sends fields that its `data` class does not
-  declare, or `State` fields it may not write,
-  `$error(handler).fieldErrors` lists at most 20 of them, and `message` ends with how many more there were, as in "1,000
-  more unexpected fields are not shown." Errors for declared fields, and
-  the fields of an `EventError` you raise, are always listed in full.
+- `$error(handler).fieldErrors` now lists at most 20 errors for fields
+  that the call's `data` class does not declare (or `State` fields it may
+  not write), and at most 20 item errors in each list or dict field.
+  `message` then ends with how many more there were, as in "1,000 more
+  field errors are not shown." Errors for other fields, and the fields of
+  an `EventError` you raise, are always listed in full.
 - Every response from a Citry route now has the standard
   `X-Content-Type-Options: nosniff` header, so the browser uses the
   route's `Content-Type` as given. If an extension route of yours serves

@@ -1437,8 +1437,7 @@ class TestCompatMode:
         assert response.headers["content-type"].startswith("text/plain")
         summary, *lines = response.text.split("\n")
         assert summary == (
-            "The args for event 'save' on component 'Greeter' did not validate."
-            " 5 more unexpected fields are not shown."
+            "The args for event 'save' on component 'Greeter' did not validate. 5 more field errors are not shown."
         )
         assert lines == [f"u{index:03d}: Unexpected field: not declared on the schema." for index in range(20)]
 

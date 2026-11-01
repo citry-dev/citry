@@ -863,8 +863,8 @@ class TestErrors:
         ("count", "note"),
         [
             (20, ""),
-            (21, " 1 more unexpected field is not shown."),
-            (100, " 80 more unexpected fields are not shown."),
+            (21, " 1 more field error is not shown."),
+            (100, " 80 more field errors are not shown."),
         ],
     )
     @pytest.mark.parametrize("path", ["data_class", "no_data_class", "state_updates"])
@@ -915,8 +915,7 @@ class TestErrors:
         error = _dispatch(c, call)["results"][0]["error"]
 
         assert error["message"] == (
-            "The args for event 'rename' on component 'Counter' did not validate."
-            " 5 more unexpected fields are not shown."
+            "The args for event 'rename' on component 'Counter' did not validate. 5 more field errors are not shown."
         )
         assert error["fieldErrors"]["name"] == "Expected str, got int."
         assert len(error["fieldErrors"]) == 21
@@ -935,7 +934,7 @@ class TestErrors:
         error = _dispatch(c, call)["results"][0]["error"]
 
         assert error["message"] == (
-            "Some state updates were rejected; see the field messages. 5 more unexpected fields are not shown."
+            "Some state updates were rejected; see the field messages. 5 more field errors are not shown."
         )
         assert error["fieldErrors"]["count"] == "Expected int, got str."
         assert [name for name in error["fieldErrors"] if name != "count"] == [f"u{index:03d}" for index in range(20)]

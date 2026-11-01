@@ -174,7 +174,7 @@ def test_a_browser_write_of_the_wrong_type_is_a_per_field_422(kind: str) -> None
     assert set(error["fieldErrors"]) == {"count"}
 
 
-@pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more unexpected field is not shown.")])
+@pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
 @pytest.mark.parametrize("kind", KINDS)
 def test_browser_writes_to_names_outside_the_state_stop_at_twenty(kind: str, count: int, note: str) -> None:
     counter = _counter(kind)
@@ -199,7 +199,7 @@ def test_a_hundred_writes_to_names_outside_the_state_are_counted(kind: str) -> N
     item = _dispatch(counter, "read", stateToken=_token(counter), stateUpdates=updates)
 
     error = item["error"]
-    assert error["message"].endswith(" 80 more unexpected fields are not shown.")
+    assert error["message"].endswith(" 80 more field errors are not shown.")
     assert len(error["fieldErrors"]) == 20
 
 
