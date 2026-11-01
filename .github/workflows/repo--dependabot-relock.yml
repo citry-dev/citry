@@ -39,7 +39,15 @@ permissions:
 jobs:
   relock:
     # Only Dependabot PRs; a human who bumps a dep re-locks in their own commit.
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    # This follows GitHub's guidance for Dependabot workflows: Dependabot must
+    # have opened the PR (`user.login`), from a branch in this repository. The
+    # `actor` check also skips runs that someone other than Dependabot started
+    # (a push or a reopen), because those runs cannot read the Dependabot
+    # secrets the push needs.
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]'
+      && github.actor == 'dependabot[bot]'
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       # Mint a short-lived token from the org GitHub App, if it is configured.
@@ -87,18 +95,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          # Every value the script uses comes in through the environment, so
+          # the shell reads it as data rather than as part of the script.
+          CAN_PUSH: ${{ steps.auth.outputs.can_push }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           if git diff --quiet -- uv.lock; then
             echo "uv.lock already in sync; nothing to do."
             exit 0
           fi
 
-          if [ "${{ steps.auth.outputs.can_push }}" = "true" ]; then
+          if [ "$CAN_PUSH" = "true" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add uv.lock
             git commit -m "chore: sync uv.lock for the dependabot update"
-            git push origin "HEAD:${{ github.head_ref }}"
+            git push origin "HEAD:$HEAD_REF"
             echo "Pushed refreshed uv.lock; the Check gate will re-run."
             exit 0
           fi
