@@ -14,7 +14,7 @@ use html5gum::emitters::callback::{Callback, CallbackEmitter, CallbackEvent};
 use html5gum::{Emitter, Error, ForwardingEmitter, Span, State};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 
-use crate::html_limits::{run_tokenizer, TooManyAttributes};
+use crate::tokenizer::run_tokenizer;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputAttribute {
@@ -810,13 +810,7 @@ impl<S: ScannerSink> ForwardingEmitter for ScannerEmitter<'_, S> {
     }
 }
 
-/// Read `input` the way the browser's parser does and return the facts of
-/// each start tag.
-///
-/// Returns [`TooManyAttributes`], without reading anything, when a tag in
-/// `input` holds more attributes in a row than
-/// [`MAX_ATTRIBUTE_RUN`](crate::MAX_ATTRIBUTE_RUN); see `html_limits`.
-pub fn scan_output_html(input: &str) -> Result<Vec<OutputTag>, TooManyAttributes> {
+pub fn scan_output_html(input: &str) -> Vec<OutputTag> {
     let dom = RcDom::default();
     let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
     let mut facts = Vec::new();
@@ -835,8 +829,8 @@ pub fn scan_output_html(input: &str) -> Result<Vec<OutputTag>, TooManyAttributes
             lexical_text: None,
         }),
     };
-    run_tokenizer(input, emitter)?;
-    Ok(facts)
+    run_tokenizer(input, emitter);
+    facts
 }
 
 /// Scan `input` like [`scan_output_html`], but hand each start tag to
@@ -845,13 +839,10 @@ pub fn scan_output_html(input: &str) -> Result<Vec<OutputTag>, TooManyAttributes
 /// The result holds only the `script` and `style` tags, in document order,
 /// with their element ends filled in. The observer receives each of those
 /// tags with its index in the result, and every other tag with `None`.
-///
-/// Refuses the input like [`scan_output_html`] does, before the observer
-/// sees anything.
 pub(crate) fn scan_output_html_with(
     input: &str,
     observer: &mut StartTagObserver<'_>,
-) -> Result<Vec<OutputTag>, TooManyAttributes> {
+) -> Vec<OutputTag> {
     let mut builder = TreeBuilder::new(TrackingSink::default(), ParseOpts::default().tree_builder);
     let mut facts = Vec::new();
     let emitter = ScannerEmitter {
@@ -869,16 +860,12 @@ pub(crate) fn scan_output_html_with(
             lexical_text: None,
         }),
     };
-    run_tokenizer(input, emitter)?;
-    Ok(facts)
+    run_tokenizer(input, emitter);
+    facts
 }
 
 /// Parse a `div` fragment while retaining decoded source text in lexical
 /// element occurrences. The DOM and source facts come from one tokenizer pass.
-///
-/// Returns `None` when the fragment cannot be read as one, including when a
-/// tag holds more attributes in a row than
-/// [`MAX_ATTRIBUTE_RUN`](crate::MAX_ATTRIBUTE_RUN).
 pub(crate) fn parse_div_fragment_with_lexical_text(
     input: &str,
 ) -> Option<(RcDom, Vec<LexicalTextRun>)> {
@@ -907,8 +894,7 @@ pub(crate) fn parse_div_fragment_with_lexical_text(
             lexical_text: Some(&mut tracker),
         }),
     };
-    // The page cannot be compared with what was expected when it cannot be read.
-    run_tokenizer(input, emitter).ok()?;
+    run_tokenizer(input, emitter);
     if !tracker.valid || tracker.frames.len() != 1 {
         return None;
     }
@@ -929,9 +915,7 @@ pub(crate) fn parse_div_fragment_with_lexical_text(
 /// validator also checks for that state change. Self-closed SVG and MathML
 /// elements are allowed. Other browser recovery behavior is not promised by
 /// this validator. When it refuses a tokenizer error, the message names the
-/// first one by its name in the HTML standard. It also refuses, without
-/// reading, a fragment with a tag that holds more attributes in a row than
-/// [`MAX_ATTRIBUTE_RUN`](crate::MAX_ATTRIBUTE_RUN); see `html_limits`.
+/// first one by its name in the HTML standard.
 pub fn validate_html_fragment_boundary(input: &str) -> Result<(), String> {
     let dom = RcDom::default();
     let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
@@ -952,9 +936,7 @@ pub fn validate_html_fragment_boundary(input: &str) -> Result<(), String> {
             lexical_text: None,
         }),
     };
-    if run_tokenizer(input, emitter).is_err() {
-        return Err(format!("opaque {TooManyAttributes}"));
-    }
+    run_tokenizer(input, emitter);
     if let Some(name) = boundary.parse_error {
         Err(format!("opaque HTML has the HTML parse error {name}"))
     } else if boundary.invalid || !boundary.stack.is_empty() {
@@ -1140,13 +1122,13 @@ mod tests {
 
     #[test]
     fn tree_builder_feedback_distinguishes_html_and_svg_title() {
-        let html = scan_output_html("<title><script>x</script></title>").unwrap();
+        let html = scan_output_html("<title><script>x</script></title>");
         assert_eq!(
             html.iter().map(|tag| tag.name.as_str()).collect::<Vec<_>>(),
             ["title"]
         );
 
-        let svg = scan_output_html("<svg><title><script>x</script></title></svg>").unwrap();
+        let svg = scan_output_html("<svg><title><script>x</script></title></svg>");
         assert_eq!(
             svg.iter().map(|tag| tag.name.as_str()).collect::<Vec<_>>(),
             ["svg", "title", "script"]
@@ -1156,7 +1138,7 @@ mod tests {
     #[test]
     fn spans_slice_exact_utf8_source_bytes() {
         let source = "<p title='žluťoučký' onclick=go()>x</p>";
-        let tag = &scan_output_html(source).unwrap()[0];
+        let tag = &scan_output_html(source)[0];
         assert_eq!(
             &source.as_bytes()[tag.start..tag.end],
             b"<p title='\xc5\xbelu\xc5\xa5ou\xc4\x8dk\xc3\xbd' onclick=go()>"
@@ -1191,7 +1173,6 @@ mod tests {
         for (source, expected) in cases {
             assert_eq!(
                 scan_output_html(source)
-                    .unwrap()
                     .iter()
                     .map(|tag| tag.name.as_str())
                     .collect::<Vec<_>>(),
@@ -1203,7 +1184,7 @@ mod tests {
     #[test]
     fn duplicate_attributes_keep_every_authored_source_range() {
         let source = "<button onclick='first()' onclick=second()>x</button>";
-        let tag = &scan_output_html(source).unwrap()[0];
+        let tag = &scan_output_html(source)[0];
         assert_eq!(tag.attributes.len(), 2);
         assert_eq!(tag.attributes[0].value, "first()");
         assert_eq!(tag.attributes[1].value, "second()");
@@ -1218,7 +1199,7 @@ mod tests {
     #[test]
     fn facts_keep_raw_entities_null_name_span_and_unclosed_raw_extent() {
         let source = "<a\0b href='java&#x73;cript:x'><script>open";
-        let tags = scan_output_html(source).unwrap();
+        let tags = scan_output_html(source);
         assert_eq!(
             &source.as_bytes()[tags[0].name_start..tags[0].name_end],
             b"a\0b"
@@ -1231,7 +1212,7 @@ mod tests {
     #[test]
     fn vertical_tab_does_not_become_html_attribute_whitespace() {
         let source = "<a href=\x0b'javascript:x'>";
-        let attr = &scan_output_html(source).unwrap()[0].attributes[0];
+        let attr = &scan_output_html(source)[0].attributes[0];
         assert_eq!(
             &source.as_bytes()[attr.value_start..attr.value_end],
             b"\x0b'javascript:x'"

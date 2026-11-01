@@ -41,29 +41,31 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   (html5gum with html5ever's tree builder choosing the tokenizer state) and
   returns each start tag's facts; `scan_output_html_with` hands them to a
   callback instead of keeping them.
-- `src/html_limits.rs` - the one function every html5gum run goes through
-  (`run_tokenizer`). It refuses an input with a tag that holds more than
-  `MAX_ATTRIBUTE_RUN` attributes in a row written `name="value"`, and
-  keeps the run on enough stack for an input at the limit.
+- `src/tokenizer.rs` - the one function every html5gum run goes through
+  (`run_tokenizer`). It keeps the run on enough stack, whatever thread
+  calls it.
 - `src/static_html.rs` - checks that a finished piece of HTML (a `<c-raw>`
   block, or the HTML the server writes inside a shell) keeps its own
   `<template>` parse where the page puts it, and counts the top-level nodes
   Vue's static vnode needs to adopt it.
 - `tests/marker.rs`, `tests/transformer.rs` - the tests.
-- `tests/attribute_limits.rs` - runs each entry point on a small stack in a
-  child process, because a stack overflow cannot be caught.
+- `tests/attribute_runs.rs` - runs each entry point on a tag with 100,000
+  attributes on a 128 KiB and an 8 MiB stack, in a child process, because a stack overflow
+  cannot be caught.
 
 ## Gotchas
 
-- **Start html5gum only through `run_tokenizer`.** html5gum 0.8.4 nests
-  several calls for each `name="value"` attribute in a row and has no
-  depth limit, so one tag with about 20,000 of them overflows the stack and
-  aborts the process. A stack guard around our own code does not help,
-  because the calls are inside html5gum. `run_tokenizer` refuses the input
-  first, and every function that scans HTML returns that refusal
-  (`TooManyAttributes`) as an error, `None`, or `false`, never by reading
-  on. A new entry point calls `run_tokenizer` and decides what a refusal
-  means for it; a refusal must never read as "nothing found".
+- **html5gum is a patched copy.** The workspace builds
+  `third_party/rust/html5gum` (0.8.4 with one line changed; its
+  `README.citry.md` says which and why). Upstream 0.8.4 nests a few calls
+  for each `name="value"` attribute in a row, so one tag with about 50,000
+  of them overflows the 8 MiB main-thread stack in a release build (about
+  3,000 on a 512 KiB thread) and aborts the process. A stack guard around
+  our own code cannot stop that, because the calls are inside html5gum.
+  When you upgrade html5gum, carry the change over unless upstream has
+  fixed it; `tests/attribute_runs.rs` fails if it is lost.
+- **Start html5gum only through `run_tokenizer`** (test helpers aside), so
+  every run gets the same stack reserve.
 
 ## Who depends on it
 

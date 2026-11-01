@@ -39,7 +39,10 @@ PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry_core"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry_core"
 PYODIDE_CONFIG: Final = PACKAGE_ROOT / "pyodide-build.json"
 SMOKE_SCRIPT: Final = REPO_ROOT / "scripts" / "smoke_citry_core.py"
-VENDORED_VIZE_CRATES: Final = {
+# The patched third-party crates under third_party/rust, with the version
+# each copy declares. An sdist must carry every file of each one.
+PATCHED_CRATES: Final = {
+    "html5gum": "0.8.4+citry.1",
     "vize_atelier_core": "0.420.0+citry.7",
     "vize_s1_to_s2": "0.420.0+citry.7",
 }
@@ -113,11 +116,11 @@ def hex_sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def vendored_vize_inventory() -> dict[str, str]:
-    """Return the complete patched Vize source inventory required in an sdist."""
+def patched_crate_inventory() -> dict[str, str]:
+    """Return the complete patched third-party source inventory required in an sdist."""
     return {
         path.relative_to(REPO_ROOT).as_posix(): hex_sha256_file(path)
-        for crate in VENDORED_VIZE_CRATES
+        for crate in PATCHED_CRATES
         for path in sorted((REPO_ROOT / "third_party" / "rust" / crate).rglob("*"))
         if path.is_file()
     }
@@ -413,8 +416,8 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         "crates/python_safe_eval/src/parse.rs",
         "third_party/rust/ruff/crates/ruff_python_parser/Cargo.toml",
     }
-    expected_vize_source = vendored_vize_inventory()
-    required.update(expected_vize_source)
+    expected_patched_source = patched_crate_inventory()
+    required.update(expected_patched_source)
     missing = sorted(required - relative.keys())
     if missing:
         raise DistributionVerificationError(f"{path.name} is missing required source files: {', '.join(missing)}")
@@ -423,13 +426,13 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         raise DistributionVerificationError(f"{path.name} does not contain the checked MIT license")
     if relative["LICENSE-vize"] != LICENSE_FILES["LICENSE-vize"].read_bytes():
         raise DistributionVerificationError(f"{path.name} does not contain the checked Vize license")
-    actual_vize_source = {
+    actual_patched_source = {
         name: hex_sha256(payload)
         for name, payload in relative.items()
-        if any(name.startswith(f"third_party/rust/{crate}/") for crate in VENDORED_VIZE_CRATES)
+        if any(name.startswith(f"third_party/rust/{crate}/") for crate in PATCHED_CRATES)
     }
-    if actual_vize_source != expected_vize_source:
-        raise DistributionVerificationError(f"{path.name} patched Vize source differs from the checkout")
+    if actual_patched_source != expected_patched_source:
+        raise DistributionVerificationError(f"{path.name} patched third-party source differs from the checkout")
     expected_source = source_inventory()
     actual_source = {
         name: hex_sha256(payload)
@@ -477,7 +480,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.96 minimum")
     workspace_dependencies = workspace.get("workspace", {}).get("dependencies", {})
     patches = workspace.get("patch", {}).get("crates-io", {})
-    for crate, vendored_version in VENDORED_VIZE_CRATES.items():
+    for crate, patched_version in PATCHED_CRATES.items():
         crate_path = f"third_party/rust/{crate}"
         if workspace_dependencies.get(crate, {}).get("path") != crate_path:
             raise DistributionVerificationError(f"{path.name} does not package {crate} as a path dependency")
@@ -485,7 +488,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
             raise DistributionVerificationError(f"{path.name} does not resolve the reviewed {crate} patch")
         manifest = _loads_toml(relative[f"{crate_path}/Cargo.toml"].decode("utf-8"))
         package = manifest.get("package", {})
-        if package.get("name") != crate or package.get("version") != vendored_version:
+        if package.get("name") != crate or package.get("version") != patched_version:
             raise DistributionVerificationError(f"{path.name} contains the wrong patched {crate} manifest")
     for crate in required:
         if not crate.startswith("crates/") or not crate.endswith("/Cargo.toml"):

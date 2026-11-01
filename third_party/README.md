@@ -50,6 +50,20 @@ them into `citry_core`. They have no separate publication or deployment. The
 local copies are updated intentionally and should be removed when the fixes
 ship in a compatible released Vize version and the Citry regression tests pass.
 
+### Patched html5gum
+
+Citry keeps a local, patched copy of html5gum 0.8.4 under
+`rust/html5gum/`, taken from the crates.io archive
+`html5gum-0.8.4.crate` (SHA-256
+`428502d3ec1742c35e015871aef742bc4722a9acfcb616b8ff79b519922e1c36`) and
+identified as `0.8.4+citry.1`. It changes one line, so that a tag with a
+very long run of `name="value"` attributes cannot overflow the stack. The
+root `Cargo.toml` uses it as a path dependency, with a `[patch.crates-io]`
+entry for any registry crate that depends on it, and keeps it out of the
+workspace members. It is MIT-licensed; what changed and why is in its
+[`README.citry.md`](rust/html5gum/README.citry.md). Remove the copy once a
+released html5gum makes the same fix and the Citry regression tests pass.
+
 ## Adding a new submodule
 
 See the [Common Development Tasks](../docs/codebase.md#adding-a-git-submodule) documentation for instructions on adding new git submodules.

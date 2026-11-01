@@ -23,7 +23,6 @@ use std::collections::HashSet;
 
 use html5ever::data::NAMED_ENTITIES;
 
-use crate::html_limits::TooManyAttributes;
 use crate::output_scanner::{scan_output_html, scan_output_html_with, OutputTag, TagContext};
 
 /// Which of the two checks of one page runs.
@@ -157,16 +156,9 @@ pub struct OutputPolicyReport {
 /// Run the rules the options select over `html`.
 ///
 /// The scan follows the browser's parser state, so text inside
-/// `<title>` or a comment is not read as tags. Malformed HTML is read the
-/// way a browser recovers from it. The only page it refuses is one with a
-/// tag that holds more attributes in a row than
-/// [`MAX_ATTRIBUTE_RUN`](crate::MAX_ATTRIBUTE_RUN): it returns
-/// [`TooManyAttributes`] and reports nothing, so the caller treats the page
-/// as one it could not check.
-pub fn check_output_html(
-    html: &str,
-    options: &OutputPolicyOptions<'_>,
-) -> Result<OutputPolicyReport, TooManyAttributes> {
+/// `<title>` or a comment is not read as tags. It never fails: malformed
+/// HTML is read the way a browser recovers from it.
+pub fn check_output_html(html: &str, options: &OutputPolicyOptions<'_>) -> OutputPolicyReport {
     let marker = options.omit_handler_marker.map(str::to_lowercase);
     let mut state = CheckState {
         options,
@@ -179,7 +171,7 @@ pub fn check_output_html(
     };
     let raw_facts = scan_output_html_with(html, &mut |tag, raw_index, context| {
         state.visit(tag, raw_index, context)
-    })?;
+    });
     // A raw element's end tag arrives after its start tag was reported, so
     // the element's end is filled in once the whole page has been read.
     for (event_index, fact_index) in std::mem::take(&mut state.pending_raw) {
@@ -189,10 +181,10 @@ pub fn check_output_html(
         }
     }
     let cleaned_html = remove_spans(html, std::mem::take(&mut state.marker_spans));
-    Ok(OutputPolicyReport {
+    OutputPolicyReport {
         events: state.events,
         cleaned_html,
-    })
+    }
 }
 
 struct CheckState<'a, 'o> {
@@ -845,12 +837,7 @@ fn html_document_requires_javascript(html: &str, depth: usize) -> bool {
     if depth >= MAX_EMBEDDED_DEPTH {
         return true;
     }
-    // A document the scan refuses cannot be shown to hold no script, so it
-    // counts as running code, the same as one nested too deep.
-    let Ok(tags) = scan_output_html(html) else {
-        return true;
-    };
-    for tag in tags {
+    for tag in scan_output_html(html) {
         let name = ascii_lower(&tag.name);
         if name == "script" && raw_script_is_executable(&tag) {
             return true;
@@ -1178,7 +1165,6 @@ mod tests {
                 omit_handler_marker,
             },
         )
-        .expect("the test pages are far below the attribute limit")
     }
 
     fn finding(

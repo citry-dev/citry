@@ -173,8 +173,13 @@ def test_wheel_verifier_requires_exact_upstream_license_attribution(tmp_path: Pa
         verify_wheel(wheel, version="1.7.0")
 
 
-def test_vendored_vize_inventory_closes_source_and_attribution() -> None:
-    inventory = distribution_verifier.vendored_vize_inventory()
+def test_patched_crate_inventory_closes_source_and_attribution() -> None:
+    inventory = distribution_verifier.patched_crate_inventory()
+
+    assert "third_party/rust/html5gum/Cargo.toml" in inventory
+    assert "third_party/rust/html5gum/LICENSE" in inventory
+    assert "third_party/rust/html5gum/README.citry.md" in inventory
+    assert "third_party/rust/html5gum/src/machine.rs" in inventory
 
     assert "third_party/rust/vize_atelier_core/Cargo.toml" in inventory
     assert "third_party/rust/vize_atelier_core/LICENSE" in inventory
@@ -185,7 +190,13 @@ def test_vendored_vize_inventory_closes_source_and_attribution() -> None:
     assert "third_party/rust/vize_s1_to_s2/README.citry.md" in inventory
     assert "third_party/rust/vize_s1_to_s2/src/emit/directive.rs" in inventory
     assert all(
-        name.startswith(("third_party/rust/vize_atelier_core/", "third_party/rust/vize_s1_to_s2/"))
+        name.startswith(
+            (
+                "third_party/rust/html5gum/",
+                "third_party/rust/vize_atelier_core/",
+                "third_party/rust/vize_s1_to_s2/",
+            )
+        )
         for name in inventory
     )
 
@@ -202,6 +213,8 @@ def test_pyproject_declares_attribution_and_tracks_patch_build_inputs() -> None:
     assert "../../../third_party/rust/vize_atelier_core/Cargo.toml" in cache_files
     assert "../../../third_party/rust/vize_s1_to_s2/**/*.rs" in cache_files
     assert "../../../third_party/rust/vize_s1_to_s2/Cargo.toml" in cache_files
+    assert "../../../third_party/rust/html5gum/**/*.rs" in cache_files
+    assert "../../../third_party/rust/html5gum/Cargo.toml" in cache_files
 
 
 def test_wheel_verifier_rejects_a_recorded_installer_script(tmp_path: Path) -> None:

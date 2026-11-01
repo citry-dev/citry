@@ -1,13 +1,17 @@
-//! A tag with a very long run of attributes is refused instead of aborting
-//! the process.
+//! A tag with a very long run of attributes is read on any stack.
 //!
-//! html5gum nests several calls for each `name="value"` attribute in a row, so
-//! one tag with about 20,000 of them overflowed the stack and killed the
-//! whole process (about 3,000 on a 512 KiB thread). A stack overflow cannot
-//! be caught, so each case runs in a child process: this test binary starts
-//! itself again with `--exact child` and an environment variable that names
-//! the case, and the parent checks that the child exited normally and
-//! printed the expected outcome.
+//! Upstream html5gum 0.8.4 nests a few calls for each `name="value"`
+//! attribute in a row, so one tag with about 50,000 of them overflowed the
+//! 8 MiB main-thread stack in a release build and killed the whole process
+//! (about 3,000 on a 512 KiB thread, and far fewer in a debug build). The
+//! patched copy in `third_party/rust/html5gum` returns to its main loop
+//! after each attribute. These tests fail with a crash if that patch is
+//! lost, for example when html5gum is upgraded.
+//!
+//! A stack overflow cannot be caught, so each case runs in a child process:
+//! this test binary starts itself again with `--exact child` and an
+//! environment variable that names the case, and the parent checks that the
+//! child exited normally and printed the expected outcome.
 
 use std::collections::HashSet;
 use std::process::Command;
@@ -22,34 +26,55 @@ use citry_html_transform::output_scanner::{scan_output_html, validate_html_fragm
 use citry_html_transform::static_html::{
     static_html_in_context, static_html_node_count, StaticHtmlUse,
 };
-use citry_html_transform::MAX_ATTRIBUTE_RUN;
 
-const CASE: &str = "CITRY_ATTRIBUTE_LIMIT_CASE";
-const SHAPE: &str = "CITRY_ATTRIBUTE_LIMIT_SHAPE";
-const COUNT: &str = "CITRY_ATTRIBUTE_LIMIT_COUNT";
-const STACK_KIB: &str = "CITRY_ATTRIBUTE_LIMIT_STACK_KIB";
+const CASE: &str = "CITRY_ATTRIBUTE_RUN_CASE";
+const SHAPE: &str = "CITRY_ATTRIBUTE_RUN_SHAPE";
+const COUNT: &str = "CITRY_ATTRIBUTE_RUN_COUNT";
+const STACK_KIB: &str = "CITRY_ATTRIBUTE_RUN_STACK_KIB";
+
+/// Twice what upstream html5gum read on an 8 MiB stack in a release build.
+const MANY: usize = 100_000;
+
+/// The smallest default thread stack Python code meets (musl Linux), and
+/// the usual main-thread stack, which runs the work without a new segment.
+const STACKS_KIB: [usize; 2] = [128, 8 * 1024];
 
 /// One tag with `count` attributes written the way `shape` names.
-fn tag(shape: &str, count: usize) -> String {
+///
+/// The `stray_*` shapes put a `="` before the tag (as text, in a comment,
+/// in a single-quoted value, or in a script) and end every value with `=`.
+/// An independent review used them to show that a count of the attributes
+/// made before the tokenizer runs can be thrown off; here they show the
+/// tokenizer itself reads them on any stack.
+fn page(shape: &str, count: usize) -> String {
+    let value = if shape.starts_with("stray_") {
+        "x="
+    } else {
+        "v"
+    };
     let attributes: String = (0..count)
         .map(|i| match shape {
-            "double" => format!(" a{i}=\"v\""),
             "single" => format!(" a{i}='v'"),
             "unquoted" => format!(" a{i}=v"),
             "bare" => format!(" a{i}"),
-            _ => panic!("unknown shape {shape}"),
+            _ => format!(" a{i}=\"{value}\""),
         })
         .collect();
-    format!("<p{attributes}>x</p>")
+    let (before, open) = match shape {
+        "double" | "single" | "unquoted" | "bare" => ("", "<p"),
+        "stray_text" => ("=\"", "<p"),
+        "stray_comment" => ("<!-- =\" -->", "<p"),
+        "stray_single_quoted" => ("", "<p t='=\"'"),
+        "stray_script" => ("<script>var s = '=\"';</script>", "<p"),
+        _ => panic!("unknown shape {shape}"),
+    };
+    format!("{before}{open}{attributes}>x</p>")
 }
 
-/// What one entry point did with `html`, as one word.
+/// What one entry point did with `html`, as one word or a short phrase.
 fn outcome(case: &str, html: &str) -> String {
     match case {
-        "scan" => match scan_output_html(html) {
-            Ok(tags) => format!("read {}", tags.len()),
-            Err(_) => "refused".to_owned(),
-        },
+        "scan" => format!("read {}", scan_output_html(html).len()),
         "check" => {
             let trusted = HashSet::new();
             let options = OutputPolicyOptions {
@@ -60,10 +85,7 @@ fn outcome(case: &str, html: &str) -> String {
                 trusted_tag_starts: &trusted,
                 omit_handler_marker: None,
             };
-            match check_output_html(html, &options) {
-                Ok(_) => "read".to_owned(),
-                Err(_) => "refused".to_owned(),
-            }
+            format!("{} events", check_output_html(html, &options).events.len())
         }
         "srcdoc" => {
             // The attribute value is one small attribute for the page's own
@@ -79,8 +101,7 @@ fn outcome(case: &str, html: &str) -> String {
                 trusted_tag_starts: &trusted,
                 omit_handler_marker: None,
             };
-            let report =
-                check_output_html(&page, &options).expect("the page itself has one attribute");
+            let report = check_output_html(&page, &options);
             let embedded = report.events.iter().any(|event| {
                 matches!(event, PolicyEvent::Finding(finding)
                     if finding.rule == Rule::JsEmbeddedDocument)
@@ -101,14 +122,13 @@ fn outcome(case: &str, html: &str) -> String {
                     tag: "p".to_owned(),
                 },
             ];
-            // The attributes differ from the expected ones, so a page the
-            // scan reads is a mismatch too; what matters is that it returns.
+            // The attributes differ from the expected ones, so the answer
+            // is a mismatch; what matters is that it returns.
             browser_fragment_matches_nodes(html, "div", &events).to_string()
         }
         "static_body" => {
             // The text `<body` makes the check read the block's tags. It is
-            // in a single-quoted value, so the block has no document tag
-            // and the attributes after it are the only run.
+            // in a single-quoted value, so the block has no document tag.
             let block = html.replacen("<p", "<p t='<body'", 1);
             match static_html_in_context(&["div"], &block, StaticHtmlUse::Replaced) {
                 Some(_) => "accepted".to_owned(),
@@ -132,7 +152,7 @@ fn child() {
     ) else {
         return;
     };
-    let html = tag(&shape, count.parse().unwrap());
+    let html = page(&shape, count.parse().unwrap());
     let result = std::thread::Builder::new()
         .stack_size(stack_kib.parse::<usize>().unwrap() * 1024)
         .spawn(move || outcome(&case, &html))
@@ -167,77 +187,59 @@ fn run(case: &str, shape: &str, count: usize, stack_kib: usize) -> String {
     })
 }
 
-const ENTRY_POINTS: [&str; 5] = ["scan", "check", "validate", "nodes", "static_body"];
-
 #[test]
-fn a_tag_with_20000_attributes_is_refused_on_every_entry_point() {
-    for stack_kib in [128, 512, 8 * 1024] {
-        for case in ENTRY_POINTS {
-            let result = run(case, "double", 20_000, stack_kib);
-            let refused = match case {
-                "nodes" => result == "false",
-                "static_body" => result == "rejected",
-                _ => result.starts_with("refused"),
-            };
-            assert!(refused, "{case} on {stack_kib} KiB: {result}");
+fn every_entry_point_reads_a_tag_with_many_attributes() {
+    // The answers are the ones a tag with three attributes gets, so each
+    // entry point read the whole tag rather than giving up on it.
+    // `static_body` also parses the block with html5ever, whose time grows
+    // with the square of the attribute count, so it gets a smaller tag that
+    // still overflowed upstream html5gum on the segment `run_tokenizer`
+    // moves to. `count` parses only with html5ever, so the control is
+    // enough for it.
+    for stack_kib in STACKS_KIB {
+        for (case, expected, count) in [
+            ("scan", "read 1", MANY),
+            ("check", "0 events", MANY),
+            ("validate", "accepted", MANY),
+            ("nodes", "false", MANY),
+            ("srcdoc", "inert", MANY),
+            ("static_body", "accepted", 20_000),
+            ("count", "1", 3),
+        ] {
+            assert_eq!(run(case, "double", 3, stack_kib), expected, "{case}, 3");
+            assert_eq!(
+                run(case, "double", count, stack_kib),
+                expected,
+                "{case} with {count} on {stack_kib} KiB"
+            );
         }
     }
 }
 
 #[test]
-fn a_document_in_an_attribute_with_20000_attributes_counts_as_running_code() {
-    // A short document is inert, so the answer below comes from the limit.
-    assert_eq!(run("srcdoc", "double", 10, 512), "inert");
-    for stack_kib in [128, 512] {
-        let result = run("srcdoc", "double", 20_000, stack_kib);
-        assert_eq!(result, "running code", "{stack_kib} KiB");
-    }
-}
-
-#[test]
-fn a_run_at_the_limit_is_read_even_on_a_small_stack() {
-    // In a debug build the nested calls need about 6 MiB for this many
-    // attributes, so this also shows the tokenizer moves to a larger stack
-    // when the thread has too little.
-    for stack_kib in [128, 512] {
-        for case in ["scan", "check", "validate"] {
-            let result = run(case, "double", MAX_ATTRIBUTE_RUN, stack_kib);
-            assert!(!result.starts_with("refused"), "{case}: {result}");
+fn a_stray_quote_before_the_tag_changes_nothing() {
+    for stack_kib in STACKS_KIB {
+        for shape in [
+            "stray_text",
+            "stray_comment",
+            "stray_single_quoted",
+            "stray_script",
+        ] {
+            let scan = run("scan", shape, MANY, stack_kib);
+            let tags = if shape == "stray_script" { 2 } else { 1 };
+            assert_eq!(scan, format!("read {tags}"), "{shape} on {stack_kib} KiB");
+            let validate = run("validate", shape, MANY, stack_kib);
+            assert_eq!(validate, "accepted", "{shape} on {stack_kib} KiB");
         }
-        let result = run("nodes", "double", MAX_ATTRIBUTE_RUN, stack_kib);
-        assert_eq!(result, "false", "the attributes differ from the expected");
-        let result = run("static_body", "double", MAX_ATTRIBUTE_RUN, stack_kib);
-        assert_eq!(result, "accepted", "{stack_kib} KiB");
     }
 }
 
 #[test]
-fn one_attribute_over_the_limit_is_refused() {
-    let result = run("scan", "double", MAX_ATTRIBUTE_RUN + 1, 512);
-    assert_eq!(result, "refused");
-    let result = run("validate", "double", MAX_ATTRIBUTE_RUN + 1, 512);
-    assert!(
-        result.starts_with("refused: opaque HTML has a tag with more than"),
-        "{result}"
-    );
-}
-
-#[test]
-fn attributes_that_do_not_nest_are_read_without_a_limit() {
-    // None of these keep html5gum inside one call, so a very long tag is
-    // read as it always was, even on a thread with a small stack.
+fn attributes_written_other_ways_are_read_too() {
     for shape in ["single", "unquoted", "bare"] {
         for case in ["scan", "validate"] {
-            let result = run(case, shape, 100_000, 128);
+            let result = run(case, shape, MANY, 128);
             assert!(!result.starts_with("refused"), "{case} {shape}: {result}");
         }
     }
-}
-
-#[test]
-fn the_html5ever_parse_of_a_long_tag_does_not_nest() {
-    // `static_html_node_count` parses with html5ever's own tokenizer, which
-    // reads attributes in a loop.
-    let result = run("count", "double", 20_000, 128);
-    assert_eq!(result, "1");
 }

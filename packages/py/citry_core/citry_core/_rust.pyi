@@ -239,15 +239,7 @@ class html_transform:
         `text` event carries attributes.
         """
     @staticmethod
-    def validate_html_fragment_boundary(html: str) -> None:
-        """
-        Check that `html` is one strict, self-contained HTML fragment.
-
-        Raises `ValueError` when it is not. The message starts with
-        `opaque HTML has the HTML parse error ` and the standard's name for
-        the error, or with `opaque HTML has a tag with more than` when a tag
-        holds more than 1,024 attributes in a row written as `name="value"`.
-        """
+    def validate_html_fragment_boundary(html: str) -> None: ...
     @staticmethod
     def static_html_node_count(html: str) -> int:
         """
@@ -259,13 +251,7 @@ class html_transform:
         block's nodes when the server already wrote them into the page.
         """
     @staticmethod
-    def scan_output_html(html: str) -> list[dict[str, object]]:
-        """
-        Return the facts of each start tag in `html`.
-
-        Raises `ValueError` when a tag holds more than 1,024 attributes in a
-        row written as `name="value"`.
-        """
+    def scan_output_html(html: str) -> list[dict[str, object]]: ...
     @staticmethod
     def _check_output_html(
         html: str,
@@ -293,9 +279,7 @@ class html_transform:
 
         Raises `ValueError` for an unknown `javascript` mode, and when the
         check fails inside Rust (the message starts with
-        `citry output check failed:`). A page with a tag that holds more than
-        1,024 attributes in a row written as `name="value"` fails this way
-        too, without being read.
+        `citry output check failed:`).
         """
     @staticmethod
     def _script_type_is_executable(value: str) -> bool:

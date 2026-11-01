@@ -13,14 +13,12 @@
 
 ### Fixed
 
-- `html_transform.scan_output_html()` and
-  `html_transform.validate_html_fragment_boundary()` now raise
-  `ValueError` for HTML with a tag that has more than 1,024 attributes in a
-  row, each written as `name="value"`, and
-  `html_transform.browser_fragment_matches_nodes()` returns `False` for it.
-  Before, a tag with tens of thousands of attributes could end the whole
-  Python process. Tags with attributes written any other way, and every
-  ordinary page, are read as before.
+- `html_transform.scan_output_html()`,
+  `validate_html_fragment_boundary()`,
+  `browser_fragment_matches_nodes()`, and
+  `browser_fragment_matches_elements()` no longer end the Python process
+  for HTML with a tag that has thousands of attributes. They read such a
+  tag like any other.
 - `parse_template()` no longer rejects Vue-only syntax inside `v-pre`, such
   as `v-once`, `<transition>`, or `@click.bogus`, because Vue reads it as
   plain HTML there. `<c-*>` tags inside `v-pre` keep their checks.
