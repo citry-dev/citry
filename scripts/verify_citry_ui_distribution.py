@@ -117,8 +117,8 @@ def _require_metadata(metadata: Message, *, artifact: Path, version: str) -> Non
         raise DistributionVerificationError(f"{artifact.name} has unexpected runtime dependencies")
     if metadata.get_all("Provides-Extra", []):
         raise DistributionVerificationError(f"{artifact.name} has unexpected optional extras")
-    if "Development Status :: 3 - Alpha" not in metadata.get_all("Classifier", []):
-        raise DistributionVerificationError(f"{artifact.name} is missing the alpha classifier")
+    if "Development Status :: 5 - Production/Stable" not in metadata.get_all("Classifier", []):
+        raise DistributionVerificationError(f"{artifact.name} is missing the Production/Stable classifier")
 
 
 def archive_inventory(path: Path) -> dict[str, str]:

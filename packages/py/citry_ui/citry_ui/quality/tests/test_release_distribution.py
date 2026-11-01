@@ -2,9 +2,11 @@ import importlib.util
 import io
 import sys
 import tarfile
+from email.message import Message
 from pathlib import Path
 
 import pytest
+import tomllib
 
 _SCRIPT = Path(__file__).parents[6] / "scripts" / "verify_citry_ui_distribution.py"
 _SPEC = importlib.util.spec_from_file_location("verify_citry_ui_distribution", _SCRIPT)
@@ -59,3 +61,31 @@ def test_sdist_rebuild_gets_the_hashed_build_pins(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_MODULE, "_run", fake_run)
     assert _MODULE._build_sdist_wheel(tmp_path / "citry_ui.tar.gz", output, cwd=tmp_path) == output / "rebuilt.whl"
+
+
+def _release_metadata(classifiers):
+    metadata = Message()
+    metadata["Name"] = "citry-ui"
+    metadata["Version"] = "0.1.0"
+    metadata["Requires-Python"] = ">=3.11, <4.0"
+    for requirement in sorted(_MODULE.EXPECTED_REQUIRES_DIST):
+        metadata["Requires-Dist"] = requirement
+    for classifier in classifiers:
+        metadata["Classifier"] = classifier
+    return metadata
+
+
+def test_metadata_requires_the_classifier_the_package_declares():
+    # The verifier pins the development status, so a pyproject edit that leaves it behind would
+    # fail the publish only after the wheel is built.
+    pyproject = Path(__file__).parents[3] / "pyproject.toml"
+    declared = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["classifiers"]
+
+    _MODULE._require_metadata(_release_metadata(declared), artifact=Path("citry_ui.whl"), version="0.1.0")
+
+
+def test_metadata_rejects_a_wheel_without_the_declared_status():
+    metadata = _release_metadata(["Development Status :: 3 - Alpha"])
+
+    with pytest.raises(_MODULE.DistributionVerificationError, match="Production/Stable classifier"):
+        _MODULE._require_metadata(metadata, artifact=Path("citry_ui.whl"), version="0.1.0")

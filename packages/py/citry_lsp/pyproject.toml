@@ -14,7 +14,7 @@ readme = "README.md"
 keywords = ["citry", "language server", "lsp", "templates", "html"]
 authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Plugins",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
