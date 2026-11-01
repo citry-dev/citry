@@ -245,7 +245,9 @@ class TestFragmentStrategy:
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
         html = str(page().render().serialize(deps_strategy="fragment"))
         assert 's.src = "/citry/citry.js"' in html
-        assert "document.currentScript.remove()" in html
+        # The loader removes its own tag, read through Document.prototype so a named element
+        # in the page cannot stand in for it.
+        assert 'var current = member("currentScript");\nif (current) current.remove();' in html
 
     def test_fragment_inlines_local_file_entries_as_descriptors(self, tmp_path):
         (tmp_path / "helper.js").write_text("var H = 1;")

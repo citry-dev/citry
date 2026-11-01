@@ -798,15 +798,23 @@ def _preloader_script(
     nonce_line = ""
     if script_security is not None and script_security.csp_nonce is not None:
         nonce_line = f"  s.nonce = {json.dumps(script_security.csp_nonce)};\n"
+    # Page markup can take over names this script reads: `<div id="Citry">` is found as
+    # `window.Citry`, and `<form name="createElement">` hides `document.createElement`. So the
+    # script reads `Citry` only as an own property of `window` (an element's id never is one)
+    # and calls the document's members from `Document.prototype`, which markup cannot change.
     content = (
-        "if (!globalThis.Citry || !globalThis.Citry.fragments) {\n"
-        '  var s = document.createElement("script");\n'
+        "var own = Object.prototype.hasOwnProperty, d = Document.prototype;\n"
+        "var member = function (name) { return Object.getOwnPropertyDescriptor(d, name).get.call(document); };\n"
+        'var citry = own.call(window, "Citry") ? window.Citry : undefined;\n'
+        "if (!citry || !citry.fragments) {\n"
+        '  var s = d.createElement.call(document, "script");\n'
         f"  s.src = {url_literal};\n"
         f"{integrity_line}"
         f"{nonce_line}"
-        "  document.head.appendChild(s);\n"
+        '  member("head").appendChild(s);\n'
         "}\n"
-        "if (document.currentScript) document.currentScript.remove();"
+        'var current = member("currentScript");\n'
+        "if (current) current.remove();"
     )
     return Script(kind="core", content=content, wrap=True)
 

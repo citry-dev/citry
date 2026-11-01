@@ -1,3 +1,7 @@
+// Page markup can hide the document's members behind a named element, so they are read
+// through `pageDocument`; `observe()` still gets the real document, which it needs as a node.
+import { pageDocument } from "./page-dom";
+
 type VueMount = { protocol: "citry-vue-fragment/1"; appId: string; host: string; prepared: unknown };
 type FragmentManifest = { vue?: VueMount };
 export type FragmentManager = { load(manifest: unknown, tag?: HTMLScriptElement): Promise<void> };
@@ -60,8 +64,8 @@ export function installFragmentManager(
       (vue.prepared as { manifest?: { appId?: unknown } }).manifest?.appId !== vue.appId
     )
       throw new TypeError("[Citry] fragment manifest has no valid bound Vue mount descriptor.");
-    const hosts = document.querySelectorAll(vue.host);
-    if (hosts.length !== 1 || !document.body.contains(hosts[0]))
+    const hosts = pageDocument.querySelectorAll(vue.host);
+    if (hosts.length !== 1 || !pageDocument.body.contains(hosts[0]))
       throw new TypeError("[Citry] Vue fragment host must resolve once inside the document body.");
     const host = hosts[0];
     const initialParent = host.parentNode;
@@ -70,13 +74,13 @@ export function installFragmentManager(
     if ((tag && isManagedDescendant(tag)) || isManagedDescendant(host))
       throw new TypeError("[Citry] a Vue fragment cannot be inserted inside a managed Vue host.");
     const guard = (): void => {
-      const current = document.querySelectorAll(vue.host);
+      const current = pageDocument.querySelectorAll(vue.host);
       if (
         current.length !== 1 ||
         current[0] !== host ||
-        !document.body.contains(host) ||
+        !pageDocument.body.contains(host) ||
         host.parentNode !== initialParent ||
-        (tag !== undefined && (!document.body.contains(tag) || tag.parentNode !== initialTagParent)) ||
+        (tag !== undefined && (!pageDocument.body.contains(tag) || tag.parentNode !== initialTagParent)) ||
         isManagedDescendant(host, vue.appId)
       )
         throw new TypeError("[Citry] Vue fragment host changed while mounting.");
@@ -171,7 +175,7 @@ export function installFragmentManager(
       });
     }
   }).observe(document, { childList: true, subtree: true });
-  document
+  pageDocument
     .querySelectorAll<HTMLScriptElement>('script[type="application/json"][data-citry-vue-fragment]')
     .forEach(process);
   return manager;

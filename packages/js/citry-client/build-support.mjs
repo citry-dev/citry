@@ -74,6 +74,9 @@ export const citryVueBuildOptions = function (overrides = {}) {
       __VUE_PROD_DEVTOOLS__: "false",
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "false",
     },
+    // Vue keeps a reference to `document` and calls its methods; page markup can hide those
+    // methods behind a named element, so Vue reads the document through Citry's wrapper.
+    inject: [fileURLToPath(new URL("src/vue-document.ts", import.meta.url))],
     minifyIdentifiers: true,
     minifySyntax: true,
   };
@@ -160,18 +163,22 @@ export const buildCitryVueRuntime = async function () {
   // compare against a value the shipped code no longer carries.
   if (!minifiedClient.includes(`HELPER_CONTRACT="${helperContract}"`))
     throw new Error("minifying the Citry Vue client changed its helper contract declaration");
+  // Each global is checked as an own property of `window`: an element whose `id` is
+  // `__citryRuntime` or `CitryVueEvents` is found by a plain read but is never an own property,
+  // so it cannot make the runtime think it is already loaded (see src/page-dom.ts).
   return (
     "/* Citry interactive runtime. GENERATED FILE, do not edit: Vue runtime, prepared coordinator, then Events bridge. */\n" +
-    `(function (global) {\nif (!global.__citryRuntime) {\n` +
+    `(function (global) {\nconst ownGlobal = name => Object.prototype.hasOwnProperty.call(global, name) ? global[name] : undefined;\n` +
+    `if (!ownGlobal("__citryRuntime")) {\n` +
     vue +
     "\nglobal.Vue = Vue;\n" +
     fragments +
     "\nglobal.CitryVueFragments = CitryVueFragments;\n" +
     minifiedClient +
-    `\n} else {\n  if (global.__citryRuntime.compilerRuntime?.helperContract !== "${helperContract}") ` +
+    `\n} else {\n  if (ownGlobal("__citryRuntime").compilerRuntime?.helperContract !== "${helperContract}") ` +
     `throw new Error("an incompatible Citry Vue runtime is already loaded");\n` +
-    `  if (!global.Vue) throw new Error("the existing Citry Vue runtime has no Vue namespace");\n}\n` +
-    `if (!global.CitryVueEvents) {\n${events}\nglobal.CitryVueEvents = CitryVueEvents;\n}\n` +
+    `  if (!ownGlobal("Vue")) throw new Error("the existing Citry Vue runtime has no Vue namespace");\n}\n` +
+    `if (!ownGlobal("CitryVueEvents")) {\n${events}\nglobal.CitryVueEvents = CitryVueEvents;\n}\n` +
     "\n})(globalThis);\n"
   );
 };

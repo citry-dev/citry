@@ -713,7 +713,11 @@ class NativeCompiler:
             runtime_events_json = json.dumps(discovered_runtime_events, separators=(",", ":"))
             javascript = (
                 f"(function(Vue){{\n{preamble}\n{code}\n"
-                "window.__citryRuntimeDefinitions=window.__citryRuntimeDefinitions||{};\n"
+                # An element with id="__citryRuntimeDefinitions" is found by a plain read of
+                # `window`, but it is never an own property, so the table is created unless a
+                # Citry script already defined it.
+                'Object.prototype.hasOwnProperty.call(window,"__citryRuntimeDefinitions")'
+                "||(window.__citryRuntimeDefinitions={});\n"
                 f"window.__citryRuntimeDefinitions[{js_id}]={{render:render,target:{json.dumps(ORDINARY_TARGET)},"
                 f"helperContract:{json.dumps(HELPER_CONTRACT)},directiveSignature:{signature_json},"
                 f"replacementSites:{replacement_json},localCallRuns:{call_runs_json},"

@@ -17,6 +17,9 @@ import {
   type JsonValue,
 } from "@citry/protocol-events-v1";
 export { collectFormArgs } from "./citry-events-shared";
+// Page markup can hide `document.cookie` or `document.createElement` behind a named element,
+// so the bridge reads the document's members through `pageDocument`.
+import { pageDocument } from "./page-dom";
 
 /** Validate and copy a public action list before a caller can apply any item. */
 export const assertValidActionList = (actions: unknown): EventAction[] => assertProtocolActionList(actions);
@@ -273,8 +276,8 @@ const configuredEventRoutes = (url: string, endpoint: string, eventBaseUrl: stri
 };
 
 const readCookie = (name: string): string => {
-  if (typeof document === "undefined" || typeof document.cookie !== "string") return "";
-  const item = document.cookie
+  if (typeof document === "undefined" || typeof pageDocument.cookie !== "string") return "";
+  const item = pageDocument.cookie
     .split(";")
     .map((value) => value.trim())
     .find((value) => value.startsWith(`${name}=`));
@@ -333,12 +336,12 @@ const attachmentFilename = (value: string): string => {
 
 const saveAttachment = (blob: Blob, filename: string): void => {
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
+  const anchor = pageDocument.createElement("a");
   try {
     anchor.href = url;
     anchor.download = filename;
     anchor.style.display = "none";
-    document.body.append(anchor);
+    pageDocument.body.append(anchor);
     anchor.click();
   } finally {
     anchor.remove();
