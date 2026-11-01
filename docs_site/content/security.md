@@ -667,6 +667,14 @@ and styles to `Component.js`, `Component.css`, or structured
   or an inline style, and you did not pass `csp_nonce`;
 - `TypeError` when a dependency is not a structured `Script` or `Style`.
 
+Both output checks (`security_csp` and `security_javascript`) refuse to
+read a page that has a tag with more than 1,024 attributes in a row, each
+written as `name="value"`. No ordinary page has one. Citry reports such a
+page as one it could not read: the `"warn"` modes warn and still return
+the page, and the other modes raise `ValueError`. You cannot change this
+limit. If a page spreads a dict onto an element with `c-bind`, limit how
+many keys the dict can hold when its keys come from request data.
+
 You can pass `security_csp` to `serialize()` to override the mode for one
 render. Any other value raises `ValueError`, both in `Citry(...)` and in
 `serialize()`.

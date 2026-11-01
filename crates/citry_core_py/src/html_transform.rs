@@ -125,15 +125,26 @@ pub fn static_html_node_count(html: &str) -> usize {
     with_enough_stack_where_measurable(|| static_html_node_count_rust(html))
 }
 
+/// Check that `html` is one strict, self-contained HTML fragment.
+///
+/// Raises `ValueError` when it is not. The message starts with
+/// `opaque HTML has the HTML parse error ` and the standard's name for the
+/// error, or with `opaque HTML has a tag with more than` when a tag holds
+/// more than 1,024 attributes in a row written as `name="value"`.
 #[pyfunction]
 pub fn validate_html_fragment_boundary(html: &str) -> PyResult<()> {
     with_enough_stack_where_measurable(|| validate_html_fragment_boundary_rust(html))
         .map_err(PyValueError::new_err)
 }
 
+/// Return the facts of each start tag in `html`.
+///
+/// Raises `ValueError` when a tag holds more than 1,024 attributes in a row
+/// written as `name="value"`.
 #[pyfunction]
 pub fn scan_output_html(py: Python, html: &str) -> PyResult<Py<PyAny>> {
     let output = with_enough_stack_where_measurable(|| scan_output_html_rust(html))
+        .map_err(|error| PyValueError::new_err(error.to_string()))?
         .into_iter()
         .map(|tag| {
             let item = PyDict::new(py);
@@ -354,7 +365,9 @@ fn javascript_mode(value: Option<&str>) -> PyResult<Option<JavascriptMode>> {
 /// Offsets are UTF-8 byte offsets.
 ///
 /// Raises `ValueError` for an unknown `javascript` mode, and
-/// `ValueError("citry output check failed: ...")` if the check panics.
+/// `ValueError("citry output check failed: ...")` if the check panics or
+/// the page has a tag with more than 1,024 attributes in a row written as
+/// `name="value"`, which it does not read.
 /// A string with a lone surrogate raises `UnicodeEncodeError`.
 #[pyfunction(name = "_check_output_html")]
 #[pyo3(signature = (html, *, pre_extension, csp, javascript, marker_prefix, trusted_tag_starts, omit_handler_marker))]
@@ -386,6 +399,7 @@ pub fn check_output_html(
     let report = catch_panic(|| {
         with_enough_stack_where_measurable(|| check_output_html_rust(html, &options))
     })
+    .and_then(|read| read.map_err(|error| error.to_string()))
     .map_err(|detail| PyValueError::new_err(format!("citry output check failed: {detail}")))?;
     let events = PyList::empty(py);
     for event in report.events {

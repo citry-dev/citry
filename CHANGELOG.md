@@ -367,6 +367,15 @@
 
 ### Fixes
 
+- A page with an element that has more than 1,024 attributes in a row,
+  each written as `name="value"`, no longer ends the process when the
+  output checks (`security_csp`, `security_javascript`), `Markup` or
+  `<c-raw>` HTML, or hydration read it. The output checks report such a
+  page as one they could not read (`"warn"` modes warn and return the page,
+  the other modes raise `ValueError`), `Markup` and `<c-raw>` HTML with
+  such a tag raises `ValueError`, and a hydrating component leaves out the
+  server-written HTML it could not check. Ordinary pages are unchanged
+  ([details](https://citry.dev/security/#choose-a-csp-compatibility-mode)).
 - The i18n number formatters and `tr()` raise `ValueError` for a
   `Decimal` with more than 32,768 digits before or after the decimal point,
   before writing any digits.

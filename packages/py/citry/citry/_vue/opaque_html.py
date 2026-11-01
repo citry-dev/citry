@@ -12,6 +12,9 @@ from citry_core.html_transform import mark_html, static_html_node_count, validat
 # rather than the shape of the tags (`validate_html_fragment_boundary`). Keep
 # in step with the message in `output_scanner.rs`.
 _PARSE_ERROR_PREFIX = "opaque HTML has the HTML parse error "
+# How the same check starts its message when a tag has more attributes in a
+# row than Citry reads. Keep in step with `html_limits.rs`.
+_TOO_MANY_ATTRIBUTES_PREFIX = "opaque HTML has a tag with more than "
 # The parse errors a '<' that does not start a tag causes.
 _STRAY_LESS_THAN_ERRORS = frozenset(
     {"invalid-first-character-of-tag-name", "eof-before-tag-name", "missing-end-tag-name"}
@@ -31,6 +34,15 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
         validate_html_fragment_boundary(html)
     except ValueError as error:
         preview = html if len(html) <= 80 else f"{html[:77]}..."
+        # A tag with a very long run of attributes is refused before it is
+        # read, and the message from Rust says how many are allowed.
+        if str(error).startswith(_TOO_MANY_ATTRIBUTES_PREFIX):
+            msg = (
+                f"{origin} is not accepted. {str(error).removeprefix('opaque ')}."
+                " Inside an interactive component, Vue inserts this HTML as one block, and Citry reads it"
+                " first to check it. Spread the attributes over several elements."
+            )
+            raise ValueError(msg) from error
         # The check names a parse error it refuses by its name in the HTML
         # standard, so the message can say what to fix in the text itself;
         # the tag rules cover the shape of the tags.

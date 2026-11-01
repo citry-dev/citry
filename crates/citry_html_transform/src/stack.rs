@@ -27,3 +27,14 @@ const NEW_SEGMENT: usize = 1024 * 1024;
 pub(crate) fn with_enough_stack<T>(work: impl FnOnce() -> T) -> T {
     stacker::maybe_grow(RED_ZONE, NEW_SEGMENT, work)
 }
+
+/// Run `work` with at least `reserve` bytes of stack available, on a new
+/// segment of `reserve` plus `NEW_SEGMENT` bytes when the thread has less.
+///
+/// The tokenizer's nested calls (see `html_limits`) need more than
+/// `RED_ZONE` at the longest run of attributes it accepts, so it asks for
+/// its own, larger reserve. The same rule applies: the work must not call
+/// into Python.
+pub(crate) fn with_stack_reserve<T>(reserve: usize, work: impl FnOnce() -> T) -> T {
+    stacker::maybe_grow(reserve, reserve + NEW_SEGMENT, work)
+}

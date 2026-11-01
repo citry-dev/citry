@@ -152,9 +152,12 @@ pub fn static_html_in_context(
     if DOCUMENT_TAGS
         .iter()
         .any(|tag| lowered.contains(&format!("<{tag}")))
-        && scan_output_html(html)
-            .iter()
-            .any(|tag| DOCUMENT_TAGS.contains(&tag.name.to_ascii_lowercase().as_str()))
+        // A block the scan refuses cannot be shown to hold no document tag,
+        // so it is rejected like one that does.
+        && scan_output_html(html).map_or(true, |tags| {
+            tags.iter()
+                .any(|tag| DOCUMENT_TAGS.contains(&tag.name.to_ascii_lowercase().as_str()))
+        })
     {
         return None;
     }
