@@ -265,7 +265,7 @@ Read about [caching](/performance/caching/),
 ## Built in public by people who care about Python and the web.
 
 <p class="landing-section__intro">
-Our mission: a safe, reliable, and intuitive frontend ecosystem for Python.
+<strong>Our mission:</strong> a safe, reliable, and intuitive frontend ecosystem for Python.
 </p>
 
 <p class="landing-section__intro">

@@ -619,7 +619,6 @@ class DocPage(Component):
               <a class="djc-logo" c-href="home_path">
                 <c-citry-mark css_class="djc-logo__mark" />
                 <span class="djc-logo__wordmark">Citry</span>
-                <span class="djc-badge">Beta</span>
               </a>
               <nav class="djc-header__nav" aria-label="Primary navigation">
                 <a

@@ -1010,8 +1010,8 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* Release stage, next to the wordmark so it is on every page rather than
-   only where someone thought to write it. */
+/* The badge that archived docs versions (docs_site/versions) show next to
+   the wordmark. They load this shared file, so the rule stays. */
 .djc-badge {
   padding: 0.1em 0.45em;
   color: var(--c-accent);
