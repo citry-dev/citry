@@ -1394,3 +1394,45 @@ class TestPydanticItemErrorLimit:
         result = validate_args(HasInner, {"inner": {"values": ["x"] * 25}})
         assert list(result.fields) == [f"inner.values.{index}" for index in range(20)]
         assert result.unlisted_fields == 5
+
+    def test_a_list_or_dict_inside_a_union_is_limited(self):
+        class Shapes(pydantic.BaseModel):
+            items: list[int] | str
+            scores: dict[str, int] | int
+
+        result = validate_args(Shapes, {"items": ["x"] * 25, "scores": {f"k{index:02d}": "x" for index in range(25)}})
+        # Pydantic also reports the other union member once; that message stays.
+        assert len([name for name in result.fields if name.startswith("items.list")]) == 20
+        assert len([name for name in result.fields if name.startswith("scores.dict")]) == 20
+        assert result.unlisted_fields == 10
+
+    def test_an_aliased_list_or_dict_is_limited(self):
+        class Aliased(pydantic.BaseModel):
+            tags: list[int] = pydantic.Field(default=[], alias="tagList")
+            scores: dict[str, int] = pydantic.Field(default={}, alias="scoreMap")
+
+        result = validate_args(
+            Aliased, {"tagList": ["x"] * 21, "scoreMap": {f"k{index:02d}": "x" for index in range(21)}}
+        )
+        assert len([name for name in result.fields if name.startswith("tagList.")]) == 20
+        assert len([name for name in result.fields if name.startswith("scoreMap.")]) == 20
+        assert result.unlisted_fields == 2
+
+    def test_a_very_long_digit_key_in_a_dict_is_an_ordinary_error(self):
+        class Scores(pydantic.BaseModel):
+            scores: dict[str, int]
+
+        # Sorting must not turn the key into a number: Python refuses a
+        # number this long.
+        result = validate_args(Scores, {"scores": {"1" * 5000: "x"}})
+        assert list(result.fields) == ["scores." + "1" * 5000]
+
+
+def test_a_very_long_digit_key_is_an_ordinary_unexpected_field():
+    result = validate_args(TagsList, {"tags": [], "1" * 5000: 1})
+    assert list(result.fields) == ["1" * 5000]
+
+
+def test_digit_segments_sort_in_number_order_with_leading_zeros_apart():
+    result = validate_args(TagsList, {"tags": [], "10": 1, "9": 1, "09": 1, "x": 1})
+    assert list(result.fields) == ["09", "9", "10", "x"]

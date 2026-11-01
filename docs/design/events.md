@@ -1835,8 +1835,8 @@ the per-field error map, surfaced client-side as
 `$error(handler).fieldErrors` (5.5). Only the request decides how many
 fields it sends that the `data` class does not declare (or that State
 does not let the browser write), and how many items a list or dict field
-holds. So the server lists at most 20 messages of the first kind, and at
-most 20 item messages in each list or dict field, keeping the earliest
+holds. So the server lists at most 20 messages for undeclared or
+unwritable fields, and at most 20 item messages in each list or dict field, keeping the earliest
 by field path with list indexes in number order. `message` then ends
 with how many more there were, for example "1,000 more field errors are
 not shown." Messages for other fields, and the fields of an

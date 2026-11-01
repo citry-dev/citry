@@ -847,8 +847,9 @@ class EventsDispatcher:
             validation = validate_args(handler.data_schema, args)
             if not validation.ok:
                 message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
-                # Validation listed only the first undeclared keys; the
-                # message counts the rest.
+                # Validation listed only the first undeclared keys and the
+                # first item errors of each list or dict; the message
+                # counts the rest.
                 message += unlisted_fields_note(validation.unlisted_fields)
                 return build_error_result(build_error(422, "invalid_args", message, validation.fields), send_sequence)
             data_value = validation.value

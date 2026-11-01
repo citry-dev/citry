@@ -38,12 +38,12 @@ _STATUS_CODES = {
 }
 _FALLBACK_CODE = "error"
 
-# The most messages one error lists for each kind of field whose count the
-# request alone decides: fields the data class does not declare, or State
-# fields the browser may not write, and the items inside one list or dict
-# field. Listing every one could make the response many times the size of
-# the request. Messages about other declared fields, and fields an author
-# passes to EventError, are always listed.
+# A request alone decides how many fields it sends that the data class
+# does not declare (or State fields the browser may not write), and how
+# many items one list or dict field holds. Listing a message for each
+# could make the response many times the size of the request, so an error
+# lists at most this many of each kind. Messages about other fields, and
+# fields an author passes to EventError, are always listed.
 MAX_UNEXPECTED_FIELDS = 20
 MAX_ITEM_ERRORS = 20
 

@@ -506,8 +506,8 @@ def _build_operation(
     responses["422"] = {
         "description": (
             "The args did not validate; per-field messages ride in results[0].error.fieldErrors."
-            " It lists at most 20 fields the schema does not declare and at most 20 items per list or dict"
-            " field; the message counts the rest."
+            " fieldErrors lists at most 20 fields the schema does not declare and at most 20 items per list"
+            " or dict field; the message counts the rest."
         ),
         "content": {"application/json": {"schema": {"$ref": _REF_PREFIX + "EventErrorEnvelope"}}},
     }

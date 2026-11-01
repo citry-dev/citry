@@ -269,9 +269,9 @@ def validate_args(
     Returns:
         A [`ValidationResult`][citry.ext.events.schemas.ValidationResult]:
         either the schema instance, or the per-field messages sorted by
-        field path, with list indexes in number order. A schema ``__post_init__`` (or Pydantic validator) that
-        raises something other than a validation error propagates to the
-        caller.
+        field path, with list indexes in number order. A schema
+        ``__post_init__`` (or Pydantic validator) that raises something
+        other than a validation error propagates to the caller.
 
     """
     if bind_strings is None:
@@ -296,18 +296,25 @@ def validate_args(
 ################################################
 
 
-def _field_path_order(item: tuple[str, str]) -> tuple[tuple[int, int, str], ...]:
+def _field_path_order(item: tuple[str, str]) -> tuple[tuple[int, int, str, str], ...]:
     """
     Sort one ``(field path, message)`` pair by its path, with list indexes in number order.
 
-    Only the first item messages of a list are listed, so ``tags.2`` must
+    Only the first 20 item messages of a list are kept, so ``tags.2`` must
     come before ``tags.10`` for the earliest items to be the ones kept.
     """
-    # Each segment sorts as (0, number) when it is all digits and as
-    # (1, text) otherwise, so the two kinds are never compared directly.
-    return tuple(
-        (0, int(part), "") if part.isascii() and part.isdigit() else (1, 0, part) for part in item[0].split(".")
-    )
+    # An all-digit segment sorts by its length without leading zeros, then
+    # by its digits, which is number order without converting it: a key
+    # the request sends can be thousands of digits long. Text segments sort
+    # after numbers, so the two kinds are never compared directly.
+    order: list[tuple[int, int, str, str]] = []
+    for part in item[0].split("."):
+        if part.isascii() and part.isdigit():
+            digits = part.lstrip("0")
+            order.append((0, len(digits), digits, part))
+        else:
+            order.append((1, 0, part, part))
+    return tuple(order)
 
 
 class _FieldErrors(dict[str, str]):
@@ -510,10 +517,11 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], prefix: str
     try:
         return validate(dict(mapping))
     except pydantic.ValidationError as err:
+        entries = err.errors()
         if isinstance(errors, _FieldErrors):
-            for container in pydantic_container_paths(schema_cls, (entry["loc"] for entry in err.errors())):
+            for container in pydantic_container_paths(schema_cls, (entry["loc"] for entry in entries)):
                 errors.containers.add(prefix + container)
-        for entry in err.errors():
+        for entry in entries:
             location = ".".join(str(part) for part in entry["loc"])
             key = prefix + location if location else prefix.rstrip(".")
             if entry.get("type") in PYDANTIC_EXTRA_TYPES:
@@ -534,38 +542,61 @@ def pydantic_container_paths(model_cls: type, locations: Iterable[Sequence[Any]]
     """
     Return the dotted paths of the list and dict fields that Pydantic error locations pass through.
 
-    Pydantic reports a list item as ``("tags", 3)`` and a dict value as
-    ``("scores", "alice")``, so the location alone cannot tell a dict key
-    from a field name. Walking the model's annotations along the location
-    tells them apart. A part the walk cannot follow (an alias, a union of
-    several shapes) ends the walk for that location.
+    Pydantic reports a list item as ``("tags", 3)``, so a whole-number part
+    always means the parts before it are a list. A dict value is
+    ``("scores", "alice")``, where the location alone cannot tell a dict key
+    from a field name, so those are found by walking the model's
+    annotations along the location. The walk follows field names and
+    aliases, ``Optional`` and ``Annotated``, and the member tag Pydantic
+    adds for a union with exactly one dict member; anything else ends it.
     """
     containers: set[str] = set()
+    # Many locations share one shape (rows.0.x, rows.1.x, ...), so the walk
+    # runs once per shape, with list indexes replaced by a marker.
+    walked: dict[tuple[Any, ...], tuple[int, ...]] = {}
     for location in locations:
-        annotation: Any = model_cls
-        for depth, part in enumerate(location):
-            annotation = _single_shape(annotation)
-            origin = get_origin(annotation)
-            if isinstance(annotation, type) and (_is_pydantic_model(annotation) or _is_pydantic_v1_model(annotation)):
-                annotation = _pydantic_field_annotation(annotation, part)
-            elif origin in (list, tuple, set, frozenset) or origin is Sequence:
-                containers.add(".".join(str(item) for item in location[:depth]))
-                args = get_args(annotation)
-                if origin is tuple and args and args[-1] is not Ellipsis:
-                    # A fixed-shape tuple has one annotation per position.
-                    annotation = args[part] if isinstance(part, int) and part < len(args) else None
-                else:
-                    annotation = args[0] if args else None
-            elif origin is dict or origin is Mapping:
-                containers.add(".".join(str(item) for item in location[:depth]))
-                args = get_args(annotation)
-                annotation = args[1] if len(args) == 2 else None
-            else:
-                break
-            if annotation is None:
-                break
+        shape = tuple(_INDEX if isinstance(part, int) else part for part in location)
+        depths = walked.get(shape)
+        if depths is None:
+            depths = walked[shape] = _container_depths(model_cls, shape)
+        for depth in depths:
+            containers.add(".".join(str(part) for part in location[:depth]))
     containers.discard("")
     return containers
+
+
+# Stands in for a list index in a location shape.
+_INDEX = object()
+
+
+def _container_depths(model_cls: type, shape: tuple[Any, ...]) -> tuple[int, ...]:
+    """Return how many leading parts of ``shape`` name each list or dict it passes through."""
+    depths = {depth for depth, part in enumerate(shape) if part is _INDEX}
+    annotation: Any = model_cls
+    for depth, part in enumerate(shape):
+        annotation = _single_shape(annotation)
+        origin = get_origin(annotation)
+        if isinstance(annotation, type) and (_is_pydantic_model(annotation) or _is_pydantic_v1_model(annotation)):
+            annotation = _pydantic_field_annotation(annotation, part)
+        elif origin in (list, tuple, set, frozenset) or origin is Sequence:
+            args = get_args(annotation)
+            # Only a homogeneous container holds as many items as the request sends.
+            annotation = args[0] if args and (origin is not tuple or args[-1] is Ellipsis) else None
+        elif origin is dict or origin is Mapping:
+            depths.add(depth)
+            args = get_args(annotation)
+            annotation = args[1] if len(args) == 2 else None
+        elif origin in (Union, UnionType) and isinstance(part, str):
+            # Pydantic names the union member it tried; a single dict member
+            # is the only one this walk can identify from that tag alone.
+            dicts = [arg for arg in get_args(annotation) if get_origin(_single_shape(arg)) in (dict, Mapping)]
+            annotation = dicts[0] if len(dicts) == 1 else None
+            continue
+        else:
+            break
+        if annotation is None:
+            break
+    return tuple(sorted(depths))
 
 
 def _single_shape(annotation: Any) -> Any:
@@ -580,13 +611,17 @@ def _single_shape(annotation: Any) -> Any:
 
 
 def _pydantic_field_annotation(model_cls: type, name: Any) -> Any:
-    """Return the annotation of one Pydantic v2 or v1 field, or ``None`` when ``name`` is not a field."""
+    """Return the annotation of the Pydantic v2 or v1 field that ``name`` or its alias names, or ``None``."""
     fields = getattr(model_cls, "model_fields", None)
     if isinstance(fields, Mapping):
-        field = fields.get(name)
+        # An error location uses the key the payload sent, which may be an alias.
+        field = fields.get(name) or next(
+            (info for info in fields.values() if name in _pydantic_input_names(info)), None
+        )
         return None if field is None else field.annotation
     # Pydantic v1 keeps the full annotation, list[int] for example, as outer_type_.
-    field = getattr(model_cls, "__fields__", {}).get(name)
+    v1_fields = getattr(model_cls, "__fields__", {})
+    field = v1_fields.get(name) or next((info for info in v1_fields.values() if info.alias == name), None)
     return None if field is None else field.outer_type_
 
 
