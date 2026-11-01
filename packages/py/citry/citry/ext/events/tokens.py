@@ -58,11 +58,18 @@ from weakref import WeakKeyDictionary
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _static_class_namespace_copy
 from citry._vue.json_data import _secret_key_path
+from citry.ext.events.errors import (
+    PYDANTIC_EXTRA_TYPES,
+    limit_item_errors,
+    limit_unexpected_fields,
+    unlisted_fields_note,
+)
+from citry.ext.events.schemas import pydantic_container_paths
 from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Collection, Iterable, Mapping
     from datetime import timedelta
 
     from citry.cache import CitryCache
@@ -729,13 +736,15 @@ def apply_state_updates(
         return _apply_model_state_updates(state, updates, writable)
     hints = _resolve_hints(type(state))
     errors: dict[str, str] = {}
+    unwritable: set[str] = set()
     to_apply: list[tuple[str, Any]] = []
     # Sorted iteration keeps the per-field error order (and the applied list)
     # deterministic regardless of the wire dict's key order.
     for name in sorted(updates):
         value = updates[name]
         if name not in writable:
-            errors[name] = "This field cannot be written from the client (it is not in the State _model set)."
+            errors[name] = _UNWRITABLE_MESSAGE
+            unwritable.add(name)
             continue
         hint = hints.get(name)
         if not _value_matches(value, hint):
@@ -743,10 +752,31 @@ def apply_state_updates(
             continue
         to_apply.append((name, value))
     if errors:
-        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors)
+        raise _rejected_updates(errors, unwritable)
     for name, value in to_apply:
         setattr(state, name, value)
     return tuple(name for name, _ in to_apply)
+
+
+_UNWRITABLE_MESSAGE = "This field cannot be written from the client (it is not in the State _model set)."
+
+
+def _rejected_updates(
+    errors: dict[str, str], unwritable: Collection[str], containers: Collection[str] = ()
+) -> StateUpdateError:
+    """
+    Build the error for a rejected batch of browser writes.
+
+    The browser decides how many names outside ``_model`` it sends, and how
+    many items a list or dict field holds, so only the first few of those
+    messages are listed and the message counts the rest. Other messages
+    about writable fields are all kept.
+    """
+    fields, unexpected_dropped = limit_unexpected_fields(errors, unwritable)
+    fields, items_dropped = limit_item_errors(fields, containers)
+    unlisted = unexpected_dropped + items_dropped
+    message = "Some state updates were rejected; see the field messages." + unlisted_fields_note(unlisted)
+    return StateUpdateError(message, fields=fields)
 
 
 def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable: frozenset[str]) -> tuple[str, ...]:
@@ -763,13 +793,9 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
             message for each field it names.
 
     """
-    errors = {
-        name: "This field cannot be written from the client (it is not in the State _model set)."
-        for name in sorted(updates)
-        if name not in writable
-    }
+    errors = {name: _UNWRITABLE_MESSAGE for name in sorted(updates) if name not in writable}
     if errors:
-        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors)
+        raise _rejected_updates(errors, errors.keys())
     # The writes are JSON, as the token is, so they are merged into the
     # token's form and read back the same way a restore reads them.
     merged = {**state_wire_values(state), **updates}
@@ -777,15 +803,21 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
         checked = restore_state(type(state), merged)
     except ValueError as error:
         found = getattr(error, "errors", None)
+        # A nested model that forbids extra keys reports one error per key
+        # the browser sent, so those are limited like names outside _model.
+        extra: set[str] = set()
         for item in found() if callable(found) else ():
             location = item.get("loc", ()) if isinstance(item, dict) else ()
             # A field name never starts with an underscore, so a model-level
             # error cannot share its key with a field.
             name = ".".join(str(part) for part in location) or "_state"
+            if name not in errors and item.get("type") in PYDANTIC_EXTRA_TYPES:
+                extra.add(name)
             errors.setdefault(name, str(item.get("msg", "Invalid value.")))
         if not errors:
             errors["_state"] = str(error)
-        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors) from error
+        locations = [item.get("loc", ()) for item in (found() if callable(found) else ()) if isinstance(item, dict)]
+        raise _rejected_updates(errors, extra, pydantic_container_paths(type(state), locations)) from error
     except Exception as error:
         # A validator that fails with another exception is the author's bug,
         # but it must not take down the whole envelope.

@@ -190,6 +190,16 @@
 
 ### Changed
 
+- `$error(handler).fieldErrors` now lists at most 20 errors for fields
+  that the call's `data` class does not declare (or `State` fields it may
+  not write), and at most 20 item errors in each list or dict field.
+  `message` then ends with how many more there were, as in "1,000 more
+  field errors are not shown." Errors for other fields, and the fields of
+  an `EventError` you raise, are always listed in full.
+- Every response from a Citry route now has the standard
+  `X-Content-Type-Options: nosniff` header, so the browser uses the
+  route's `Content-Type` as given. If an extension route of yours serves
+  JavaScript or CSS, give it the right `content_type`.
 - `citry.contrib.django.secret()` now includes Django's
   `SECRET_KEY_FALLBACKS`, so `Citry(secret=secret())` keeps accepting
   values signed with an old key while you rotate `SECRET_KEY`. With
@@ -339,12 +349,18 @@
 
 ### Fixes
 
+- A form field named `__proto__` is now sent with the Events call like
+  any other field.
 - An Events `actions.Redirect` to a relative URL, such as `"?page=2"` or
   `"next"`, now takes a visitor who posts a plain HTML form without
   JavaScript to the same page as with JavaScript, not to a "not found"
   page. The server resolves the URL against the page in the `Referer`
   header, so on a page whose `Referrer-Policy` hides its address, use a path
   that starts with `/` ([details](https://citry.dev/events/actions/#redirect-to-a-page)).
+- An Events `actions.Redirect` to a URL with non-ASCII characters, such as
+  `"/café"` or `"https://bücher.example/"`, now takes a visitor who posts a
+  plain HTML form without JavaScript to the same page as with JavaScript,
+  instead of the wrong page or a server error.
 - Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
   modifier (`@click.bogus`), or a built-in such as `<transition>` no
   longer stops the template from loading. A `<slot>`, `<component>`,

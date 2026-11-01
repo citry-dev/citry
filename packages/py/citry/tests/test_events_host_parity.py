@@ -4,11 +4,13 @@ Cross-host acceptance tests for the Events HTTP contract (WP18).
 The same representative calls run through mounted Django and FastAPI hosts.
 Each scenario first locks its protocol and HTTP outcome, then the final
 assertion compares normalized responses so host-adapter drift cannot hide
-behind two separate suites.
+behind two separate suites. The WSGI adapter has no partner in that
+comparison, so it gets its own test of the same response headers.
 """
 
 from __future__ import annotations
 
+import io
 import json
 import re
 import sys
@@ -41,6 +43,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from citry import Citry, Component  # noqa: E402
 from citry.contrib.django import urlpatterns as django_urlpatterns  # noqa: E402
 from citry.contrib.fastapi import mount as mount_fastapi  # noqa: E402
+from citry.contrib.wsgi import wsgi_app  # noqa: E402
 from citry.ext.events import event  # noqa: E402
 from citry.ext.events.tokens import mint_state_token  # noqa: E402
 
@@ -150,6 +153,9 @@ class _MountedHost:
 
     def event_url(self, event_name: str) -> str:
         return f"/citry/ext/events/e/{self.component.class_id}/{event_name}"
+
+    def get_path(self, path: str) -> _Response:
+        return self.client.get(path)
 
     def post_envelope(self, event_name: str, call: dict[str, Any]) -> _Response:
         envelope = {"protocol": "citry-events/1", "requestId": "parity", "calls": [{"args": {}, **call}]}
@@ -428,6 +434,36 @@ def _handler_owned_http_methods(host: _MountedHost) -> tuple[_Snapshot, _Snapsho
     )
 
 
+def _header_values(response: _Response, name: str) -> list[str]:
+    """Every value the response sends for ``name``, so a repeated header shows up as two."""
+    headers = response.headers
+    if hasattr(headers, "get_list"):
+        return list(headers.get_list(name))
+    return [headers[name]] if name in headers else []
+
+
+def _nosniff_on_every_kind_of_response(host: _MountedHost) -> tuple[tuple[int, str, list[str]], ...]:
+    """Check that the browser is told to trust each response's Content-Type, whatever the response is."""
+    responses = (
+        # The no-JavaScript answer to a form post is a plain-text error.
+        host.post_form("quiet", {"x": "1"}),
+        host.post_raw_form("save", b"text=ok&broken=\xff"),
+        # An Events result envelope, and the scripts the browser loads.
+        host.get("echo", {"text": "hello"}),
+        host.get_path("/citry/ext/events/runtime.js"),
+        host.get_path("/citry/citry.js"),
+    )
+    kinds = ("text/plain", "text/plain", "application/json", "text/javascript", "text/javascript")
+    snapshot = []
+    for response, kind in zip(responses, kinds, strict=True):
+        content_type = response.headers["content-type"].split(";", 1)[0]
+        assert content_type == kind
+        assert _header_values(response, "x-content-type-options") == ["nosniff"]
+        snapshot.append((response.status_code, content_type, _header_values(response, "x-content-type-options")))
+    assert [item[0] for item in snapshot] == [403, 400, 200, 200, 200]
+    return tuple(snapshot)
+
+
 _Scenario = Callable[[_MountedHost], Any]
 
 SCENARIOS: tuple[Any, ...] = (
@@ -439,6 +475,7 @@ SCENARIOS: tuple[Any, ...] = (
     pytest.param(_compatibility_form, id="compatibility-form"),
     pytest.param(_invalid_utf8_compatibility_form, id="invalid-utf8-compatibility-form"),
     pytest.param(_handler_owned_http_methods, id="handler-owned-http-methods"),
+    pytest.param(_nosniff_on_every_kind_of_response, id="nosniff-on-every-kind-of-response"),
 )
 
 
@@ -494,6 +531,53 @@ def test_django_and_fastapi_have_the_same_events_http_contract(scenario: _Scenar
             snapshots[host.name] = scenario(host)
 
     assert snapshots["django"] == snapshots["fastapi"]
+
+
+def _wsgi_call(
+    citry: Citry, method: str, path: str, *, body: bytes = b"", content_type: str = "", query: str = ""
+) -> tuple[str, list[tuple[str, str]], bytes]:
+    """Run one request through the WSGI adapter, returning the status line, the headers, and the body."""
+    environ: dict[str, Any] = {
+        "REQUEST_METHOD": method,
+        "PATH_INFO": path,
+        "SCRIPT_NAME": "",
+        "QUERY_STRING": query,
+        "CONTENT_LENGTH": str(len(body)),
+        "wsgi.input": io.BytesIO(body),
+    }
+    if content_type:
+        environ["CONTENT_TYPE"] = content_type
+    sent: dict[str, Any] = {}
+
+    def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+        sent["status"] = status
+        sent["headers"] = headers
+
+    payload = b"".join(wsgi_app(citry)(environ, start_response))
+    return sent["status"], sent["headers"], payload
+
+
+def test_wsgi_sends_nosniff_with_every_kind_of_events_response() -> None:
+    citry = Citry(secret=SIGNING_KEY)
+    citry.set_mounted_prefix("/citry")
+    component = _fixture_component(citry)
+    event_path = f"/ext/events/e/{component.class_id}"
+    form = "application/x-www-form-urlencoded"
+
+    responses = (
+        # The no-JavaScript plain-text error, from a form post that has no State token.
+        (_wsgi_call(citry, "POST", f"{event_path}/quiet", body=b"x=1", content_type=form), "403", "text/plain"),
+        (_wsgi_call(citry, "GET", f"{event_path}/echo", query="text=hello"), "200", "application/json"),
+        (_wsgi_call(citry, "GET", "/ext/events/runtime.js"), "200", "text/javascript"),
+        (_wsgi_call(citry, "GET", "/citry.js"), "200", "text/javascript"),
+    )
+
+    for (status, headers, _body), expected_status, expected_type in responses:
+        assert status.startswith(expected_status)
+        by_name = [(name.lower(), value) for name, value in headers]
+        assert by_name.count(("x-content-type-options", "nosniff")) == 1
+        assert [value for name, value in by_name if name == "x-content-type-options"] == ["nosniff"]
+        assert dict(by_name)["content-type"].startswith(expected_type)
 
 
 def test_mounted_fastapi_route_delegates_methods_for_a_later_registered_handler() -> None:

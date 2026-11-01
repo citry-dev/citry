@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from citry._owned_resource import OWNED_ASSET_CROSSORIGIN, _OwnedResource
 from citry.assets import HasHtml
 from citry.citry_render import CitryRender, selected_render_ids
-from citry.ext.dependencies.routes import RUNTIME_PATH, runtime_url, script_url
+from citry.ext.dependencies.routes import RUNTIME_PATH, asset_content_type, runtime_url, script_url
 from citry.ext.dependencies.scripts import (
     cache_asset,
     cache_component_css,
@@ -1151,13 +1151,10 @@ def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> _OwnedReso
     # The file is named by its content's hash, so the content in hand is
     # what the asset endpoint serves under that name.
     file_name = cache_asset(citry, content, extension)
-    content_type = (
-        "text/javascript" if extension == "js" else "text/css" if extension == "css" else "application/octet-stream"
-    )
     return _OwnedResource(
         url=citry.build_url(f"asset/{file_name}"),
         content=content,
-        content_type=content_type,
+        content_type=asset_content_type(extension),
     )
 
 

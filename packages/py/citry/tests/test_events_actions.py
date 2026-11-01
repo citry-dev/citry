@@ -20,7 +20,15 @@ from citry import Citry, Component
 from citry._vue.events import default_events_producer
 from citry.citry_render import CitryRender
 from citry.ext.events import actions
-from citry.ext.events.errors import EventError, invalid_args_error, wire_error
+from citry.ext.events.errors import (
+    MAX_UNEXPECTED_FIELDS,
+    EventError,
+    invalid_args_error,
+    limit_item_errors,
+    limit_unexpected_fields,
+    unlisted_fields_note,
+    wire_error,
+)
 from citry.ext.events.renderers import VuePreparedRenderEncoder
 from citry.ext.events.results import (
     RenderEncodingContext,
@@ -844,6 +852,115 @@ class TestEventError:
         with pytest.raises(ValueError, match="this one succeeded"):
             invalid_args_error(result)
 
+    def test_invalid_args_error_counts_the_unexpected_fields_it_left_out(self):
+        class CartIn:
+            product_id: int
+
+        unknown = {f"u{index:03d}": 1 for index in range(25)}
+        result = validate_args(CartIn, {"product_id": "nope", **unknown})
+        assert result.unlisted_fields == 5
+        error = wire_error(invalid_args_error(result))
+        # The declared field's message stays, the unknown keys stop at the
+        # limit, and the summary says how many were not shown.
+        assert error["message"] == "Invalid event arguments. 5 more field errors are not shown."
+        assert error["fieldErrors"]["product_id"] == "Expected int, got str."
+        assert len(error["fieldErrors"]) == 21
+
+    def test_wire_error_lists_every_field_of_an_event_error(self):
+        # Fields an author passes to EventError are not limited: the author,
+        # not the request, decides how many there are.
+        fields = {f"f{index:02d}": f"Message {index}." for index in range(25)}
+        error = wire_error(EventError("Fix these.", fields=fields))
+        assert error["message"] == "Fix these."
+        assert error["fieldErrors"] == fields
+
+
+class TestUnexpectedFieldLimit:
+    MESSAGE = "Unexpected field: not declared on the schema."
+
+    def _unexpected(self, count):
+        return {f"u{index:03d}": self.MESSAGE for index in range(count)}
+
+    def test_the_limit_is_twenty(self):
+        assert MAX_UNEXPECTED_FIELDS == 20
+
+    def test_nothing_is_dropped_at_the_limit(self):
+        fields = self._unexpected(MAX_UNEXPECTED_FIELDS)
+        kept, dropped = limit_unexpected_fields(fields, fields.keys())
+        assert kept == fields
+        assert dropped == 0
+
+    def test_one_past_the_limit_drops_the_last_one(self):
+        fields = self._unexpected(MAX_UNEXPECTED_FIELDS + 1)
+        kept, dropped = limit_unexpected_fields(fields, fields.keys())
+        assert list(kept) == list(fields)[:MAX_UNEXPECTED_FIELDS]
+        assert dropped == 1
+
+    def test_a_large_count_keeps_the_first_twenty_in_the_given_order(self):
+        fields = self._unexpected(1_000)
+        kept, dropped = limit_unexpected_fields(fields, fields.keys())
+        assert list(kept) == [f"u{index:03d}" for index in range(MAX_UNEXPECTED_FIELDS)]
+        assert dropped == 1_000 - MAX_UNEXPECTED_FIELDS
+
+    def test_declared_field_messages_are_all_kept_in_place(self):
+        # Declared and unexpected messages alternate, 25 of each, so the cut
+        # falls in the middle of the declared ones' positions.
+        fields = {}
+        for index in range(25):
+            fields[f"d{index:02d}"] = "Expected int, got str."
+            fields[f"u{index:02d}"] = self.MESSAGE
+        unexpected = {name for name in fields if name.startswith("u")}
+
+        kept, dropped = limit_unexpected_fields(fields, unexpected)
+
+        expected = [name for name in fields if name.startswith("d") or int(name[1:]) < MAX_UNEXPECTED_FIELDS]
+        assert list(kept) == expected
+        assert dropped == 5
+        assert sum(name.startswith("d") for name in kept) == 25
+        # Every kept message is the original one, not a placeholder.
+        assert all(fields[name] == message for name, message in kept.items())
+
+    def test_only_declared_fields_are_never_dropped(self):
+        fields = {f"d{index:03d}": "Expected int, got str." for index in range(100)}
+        kept, dropped = limit_unexpected_fields(fields, ())
+        assert kept == fields
+        assert dropped == 0
+
+    def test_which_names_are_kept_follows_the_fields_not_the_unexpected_collection(self):
+        # A set has no order; the kept names must still be the first ones in
+        # ``fields``, so the same request gets the same answer every time.
+        fields = self._unexpected(MAX_UNEXPECTED_FIELDS + 3)
+        unexpected = set(fields)
+        kept, dropped = limit_unexpected_fields(fields, unexpected)
+        assert list(kept) == list(fields)[:MAX_UNEXPECTED_FIELDS]
+        assert dropped == 3
+
+    def test_the_input_mapping_is_not_changed_and_the_result_is_a_copy(self):
+        fields = self._unexpected(MAX_UNEXPECTED_FIELDS + 1)
+        snapshot = dict(fields)
+        limit_unexpected_fields(fields, fields.keys())
+        assert fields == snapshot
+        within = self._unexpected(2)
+        copied, _ = limit_unexpected_fields(within, within.keys())
+        assert copied == within
+        assert copied is not within
+
+    @pytest.mark.parametrize(
+        ("count", "note"),
+        [
+            (0, ""),
+            (-1, ""),
+            (1, " 1 more field error is not shown."),
+            (2, " 2 more field errors are not shown."),
+            (1_000, " 1,000 more field errors are not shown."),
+        ],
+    )
+    def test_the_note_counts_what_was_left_out(self, count, note):
+        assert unlisted_fields_note(count) == note
+
+    def test_the_note_starts_with_a_space_so_it_appends_to_a_message(self):
+        assert "Did not validate." + unlisted_fields_note(3) == "Did not validate. 3 more field errors are not shown."
+
 
 class TestDebugTracking:
     def test_an_unreturned_action_warns_naming_the_handler(self, caplog):
@@ -924,3 +1041,23 @@ class TestDebugTracking:
             actions.Dispatch("unowned")
         warn_unreturned_actions(None, [], "save")
         assert _citry_records(caplog) == []
+
+
+class TestItemErrorLimit:
+    def test_messages_outside_every_container_are_kept(self):
+        fields = {f"tags.{index}": "Bad." for index in range(25)} | {"name": "Bad."}
+        kept, dropped = limit_item_errors(fields, {"tags"})
+        assert list(kept) == [*(f"tags.{index}" for index in range(20)), "name"]
+        assert dropped == 5
+
+    def test_a_nested_container_counts_toward_the_outer_one(self):
+        # Two inner lists of 15 messages: each inner list is under its own
+        # limit, but together they pass the outer list's limit.
+        fields = {f"rows.{row}.{col}": "Bad." for row in range(2) for col in range(15)}
+        kept, dropped = limit_item_errors(fields, {"rows", "rows.0", "rows.1"})
+        assert len(kept) == 20
+        assert dropped == 10
+
+    def test_no_containers_keeps_everything(self):
+        fields = {f"f{index}": "Bad." for index in range(30)}
+        assert limit_item_errors(fields, set()) == (fields, 0)

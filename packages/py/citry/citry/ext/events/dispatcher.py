@@ -66,7 +66,7 @@ from citry._protocol.events import (
 # of a broken user policy.
 from citry.ext.events.actions import Render, _download_content_disposition
 from citry.ext.events.csrf import _MSG_CSRF_FAILED, csrf_field_names
-from citry.ext.events.errors import EventError, wire_error
+from citry.ext.events.errors import EventError, limit_unexpected_fields, unlisted_fields_note, wire_error
 from citry.ext.events.handlers import event_options
 from citry.ext.events.results import (
     HTML_RENDER_ENCODER,
@@ -847,6 +847,10 @@ class EventsDispatcher:
             validation = validate_args(handler.data_schema, args)
             if not validation.ok:
                 message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
+                # Validation listed only the first undeclared keys and the
+                # first item errors of each list or dict; the message
+                # counts the rest.
+                message += unlisted_fields_note(validation.unlisted_fields)
                 return build_error_result(build_error(422, "invalid_args", message, validation.fields), send_sequence)
             data_value = validation.value
         elif args:
@@ -854,6 +858,10 @@ class EventsDispatcher:
             # a 422 here exactly as they are on a schema (design 3.3).
             message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
             extra = dict.fromkeys(sorted(str(key) for key in args), "Unexpected field: not declared on the schema.")
+            # Every key here is undeclared, so the request decides how many
+            # there are: list the first few and count the rest.
+            extra, unlisted = limit_unexpected_fields(extra, extra.keys())
+            message += unlisted_fields_note(unlisted)
             return build_error_result(build_error(422, "invalid_args", message, extra), send_sequence)
 
         # The per-call events instance: the woven config class (the
