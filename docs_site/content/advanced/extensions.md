@@ -345,7 +345,8 @@ The handler receives a [`RouteRequest`][citry.RouteRequest] and returns a
 [`RouteResponse`][citry.RouteResponse]. `{name}` segments in the path reach
 the handler as keyword arguments.
 
-Set `content_type` to the type of the body you return. Citry sends every
+Set `content_type` to the type of the body you return; the default is
+`text/plain`. Citry sends every
 route response with `X-Content-Type-Options: nosniff`, so the browser uses
 that type as given. For example, it refuses to run a script served as
 `text/plain`.

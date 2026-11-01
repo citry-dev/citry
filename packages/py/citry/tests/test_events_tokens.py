@@ -1076,3 +1076,29 @@ class TestResignFlow:
             "count": 9,
             "label": "a",
         }
+
+
+class TestPydanticStateExtraKeys:
+    def test_extra_keys_in_a_nested_model_are_limited(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        class Inner(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(extra="forbid")
+            label: str = ""
+
+        class Board(pydantic.BaseModel):
+            inner: Inner = Inner()
+            count: int = 0
+
+        # One write to a writable field carries many keys the nested model
+        # does not declare, plus a wrong-typed declared field.
+        updates = {"inner": {f"x{index:02d}": 1 for index in range(25)}, "count": "many"}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), updates, model_fields={"inner", "count"})
+
+        error = caught.value
+        extra = [name for name in error.fields if name.startswith("inner.x")]
+        assert len(extra) == 20
+        # The declared field's message is always listed.
+        assert "count" in error.fields
+        assert error.message.endswith(" 5 more unexpected fields are not shown.")

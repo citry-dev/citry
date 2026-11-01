@@ -39,11 +39,15 @@ _STATUS_CODES = {
 _FALLBACK_CODE = "error"
 
 # The most "unexpected field" messages one error lists. Those are the
-# fields a request names but the schema or State does not declare, so a
-# request alone decides how many there are; listing every one could make
+# fields a request sends that the data class does not declare, or State
+# fields the browser may not write, so a request alone decides how many
+# there are; listing every one could make
 # the response many times the size of the request. Messages about declared
 # fields, and fields an author passes to EventError, are always listed.
 MAX_UNEXPECTED_FIELDS = 20
+
+# Pydantic's error types for a key a model does not declare: v2, then v1.
+PYDANTIC_EXTRA_TYPES = frozenset({"extra_forbidden", "value_error.extra"})
 
 # What schema-validation failures say as the human summary; the real content
 # is the per-field map (design events.md 3.7).
@@ -159,7 +163,7 @@ def limit_unexpected_fields(fields: Mapping[str, str], unexpected: Collection[st
 
 def unlisted_fields_note(count: int) -> str:
     """
-    The sentence an error message ends with when unexpected fields were left out.
+    Return the sentence that ends an error message when unexpected fields were left out.
 
     Returns an empty string for a count of 0, so a caller can append it
     unconditionally. The text starts with a space.

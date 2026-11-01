@@ -55,7 +55,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get
 from uuid import UUID
 
 from citry._nested_declarations import _is_plain_field_family, convert_plain_declaration
-from citry.ext.events.errors import limit_unexpected_fields
+from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, limit_unexpected_fields
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.state import convert_state_class
@@ -79,8 +79,6 @@ _INVALID: Any = object()
 
 _REQUIRED_MESSAGE = "This field is required."
 _EXTRA_MESSAGE = "Unexpected field: not declared on the schema."
-# Pydantic's error types for a key the model does not declare: v2, then v1.
-_PYDANTIC_EXTRA_TYPES = frozenset({"extra_forbidden", "value_error.extra"})
 # File parts only exist once the multipart payload codec produces them; any
 # plain wire value on a file-typed field is a validation error until then.
 _FILE_MESSAGE = "Expected an uploaded file: file fields arrive as multipart form data, not as JSON values."
@@ -494,7 +492,7 @@ def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], prefix: str
         for entry in err.errors():
             location = ".".join(str(part) for part in entry["loc"])
             key = prefix + location if location else prefix.rstrip(".")
-            if entry.get("type") in _PYDANTIC_EXTRA_TYPES:
+            if entry.get("type") in PYDANTIC_EXTRA_TYPES:
                 _record_unexpected(errors, key, str(entry["msg"]))
             else:
                 errors.setdefault(key, str(entry["msg"]))

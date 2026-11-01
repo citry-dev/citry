@@ -58,7 +58,7 @@ from weakref import WeakKeyDictionary
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _static_class_namespace_copy
 from citry._vue.json_data import _secret_key_path
-from citry.ext.events.errors import limit_unexpected_fields, unlisted_fields_note
+from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, limit_unexpected_fields, unlisted_fields_note
 from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
 from citry.util.logger import logger
 
@@ -792,15 +792,20 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
         checked = restore_state(type(state), merged)
     except ValueError as error:
         found = getattr(error, "errors", None)
+        # A nested model that forbids extra keys reports one error per key
+        # the browser sent, so those are limited like names outside _model.
+        extra: set[str] = set()
         for item in found() if callable(found) else ():
             location = item.get("loc", ()) if isinstance(item, dict) else ()
             # A field name never starts with an underscore, so a model-level
             # error cannot share its key with a field.
             name = ".".join(str(part) for part in location) or "_state"
+            if name not in errors and item.get("type") in PYDANTIC_EXTRA_TYPES:
+                extra.add(name)
             errors.setdefault(name, str(item.get("msg", "Invalid value.")))
         if not errors:
             errors["_state"] = str(error)
-        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors) from error
+        raise _rejected_updates(errors, extra) from error
     except Exception as error:
         # A validator that fails with another exception is the author's bug,
         # but it must not take down the whole envelope.
