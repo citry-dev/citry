@@ -17,6 +17,7 @@ from citry.util.routing import RouteResponse, URLRoute, flatten_routes
 # What a browser sends when it opens the URL the preview command prints.
 _LOCAL = ((b"Host", b"127.0.0.1:8001"),)
 
+
 def _messages(app, path, *, method="GET", query=b"", root_path="", headers=_LOCAL):
     """Run one request through the ASGI app and return the messages it sent."""
     messages = []
