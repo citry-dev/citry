@@ -4,7 +4,8 @@ import gc
 import json
 import weakref
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import field, replace
+from typing import Literal
 
 import pytest
 
@@ -66,8 +67,9 @@ from citry.ext.cache.replay import (
     _source_fingerprint,
     _UnsupportedTypedCachePart,
 )
+from citry.ext.events.cache import stage_events_cache
 from citry.ext.events.emission import EXTRA_KEY as EVENTS_EXTRA_KEY
-from citry.extension import RenderCacheWrite, StagedRenderCacheContribution
+from citry.extension import OnRenderCacheStageContext, RenderCacheWrite, StagedRenderCacheContribution
 
 
 def _artifact(*parts: object) -> CachedRenderArtifact:
@@ -1274,6 +1276,115 @@ def test_missing_server_state_rejects_replay_before_context_contribution() -> No
     assert len(second_entries) == 1
     assert second_entries[0].state_token != first_entry.state_token
     assert app.cache.has(_state_cache_key(second_entries[0].state_token))
+
+
+def _signed_state_card(app: Citry, tags: list[object]) -> type[Component]:
+    """A cached component whose State holds ``tags`` (a dataclass State does not check its defaults)."""
+
+    class Card(Component):
+        citry = app
+
+        class Cache:
+            enabled = True
+
+        class State:
+            choice: Literal["a", "b"] = "b"
+            tags: list[int] = field(default_factory=lambda: list(tags))
+
+        class Events:
+            def update(self, state):
+                return None
+
+        template = """
+        <button @c-click="update">go</button>
+        """
+
+    return Card
+
+
+def _stage_signed_state(app: Citry, entry) -> StagedRenderCacheContribution:
+    """Stage the Events payload that a cached render of this entry would archive, as a replay does."""
+    extension = app.extensions.get_extension("events")
+    payload = {
+        "instances": [
+            {
+                "class_id": entry.component_class_id,
+                "instance": 0,
+                "state": {
+                    "storage": "signed",
+                    "token": entry.state_token,
+                    "values": json.loads(entry.public_state_json),
+                },
+            }
+        ]
+    }
+    return stage_events_cache(
+        extension,
+        OnRenderCacheStageContext(
+            citry=app,
+            payload=payload,
+            instance_ids=("c1abcdef",),
+            instance_class_ids=(entry.component_class_id,),
+            parent_ids=(),
+            provided_render_ids={},
+        ),
+    )
+
+
+def test_replay_accepts_a_token_whose_values_fit_the_current_state_types() -> None:
+    app = Citry(secret="cache-state-test-secret")  # noqa: S106
+    card = _signed_state_card(app, [1, 2])
+    entry = next(iter(render_prepared_direct(card()).context.extra[EVENTS_EXTRA_KEY]))
+
+    staged = _stage_signed_state(app, entry)
+
+    assert staged.frame_markers == ((0, ('data-cid="c1abcdef"',)),)
+
+
+def test_replay_rejects_a_token_with_a_value_that_no_longer_fits_its_type() -> None:
+    app = Citry(secret="cache-state-test-secret")  # noqa: S106
+    # The list holds a string, as if the field was `list[str]` when the artifact was stored.
+    card = _signed_state_card(app, [1, "x"])
+    entry = next(iter(render_prepared_direct(card()).context.extra[EVENTS_EXTRA_KEY]))
+
+    with pytest.raises(CacheArtifactError) as raised:
+        _stage_signed_state(app, entry)
+
+    assert str(raised.value) == "events.instances[0].state.token field 'tags' does not match its current type."
+
+
+@pytest.mark.parametrize(("tags", "builds_expected"), [([1, 2], 1), ([1, "x"], 2)])
+def test_cache_hit_rebuilds_state_only_when_its_token_value_no_longer_fits(tags, builds_expected) -> None:
+    app = Citry(secret="cache-state-test-secret")  # noqa: S106
+    builds = 0
+
+    class Card(Component):
+        citry = app
+
+        class Cache:
+            enabled = True
+
+        class State:
+            tags: list[int] = field(default_factory=lambda: list(tags))
+
+            def __post_init__(self):
+                nonlocal builds
+                builds += 1
+
+        class Events:
+            def update(self, state):
+                return None
+
+        template = """
+        <button @c-click="update">go</button>
+        """
+
+    render_prepared_direct(Card())
+    render_prepared_direct(Card())
+
+    # A fitting token replays, so State is built once; one that no longer
+    # fits cannot be replayed, so the second render builds State again.
+    assert builds == builds_expected
 
 
 def test_inner_cache_hit_can_be_exported_by_an_outer_cache_miss() -> None:

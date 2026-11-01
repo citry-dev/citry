@@ -1071,9 +1071,9 @@ primitives (`int`/`float` cross-coercion, `str` to `UUID | datetime |
 date | time | Decimal | Enum`, which parse from strings because a
 string is their canonical JSON encoding, `list` to `tuple`/`set`,
 nested annotated
-classes from objects, `dict[K, V]` objects key by key and value by value,
-where each key, a JSON string, binds like a form value (`"3"` fills
-`dict[int, ...]`), and `Literal[...]`, which accepts a value equal to
+classes from objects, `dict[K, V]` objects key by key and value by value
+(a key is always a JSON string, so it binds by the form-value rule: `"3"`
+fills `dict[int, ...]`), and `Literal[...]`, which accepts a value equal to
 one of its listed values after that value's own type rule, so a form
 post's `"2"` binds to `Literal[1, 2]` and `true` never matches `1`; any
 other value is the per-field 422 "Expected one of ..."); extra keys are a 422, missing required fields are
@@ -4444,7 +4444,8 @@ field, always.
   are rejected, and each accepted value must satisfy the field's type,
   down to each list or tuple item, each dict value, and the listed
   values of a `Literal[...]`, with the error at the item's path
-  (`tags.2`).
+  (`tags.2`). Dict keys are not checked, because the token stores them
+  as JSON strings.
   Defaults to **the same fields as `_public`**: public means visible
   and writable, and `_model = (...)` exists only to clamp down (a
   visible-but-read-only display flag). Every `_model` field must be

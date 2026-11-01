@@ -18,7 +18,7 @@ from decimal import Decimal
 from enum import Enum, IntEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, Protocol, TypedDict, TypeVar
 from uuid import UUID
 
 import pytest
@@ -166,6 +166,35 @@ class IntKeyedDict:
 
 class AnyValuedDict:
     blob: dict[str, Any]
+
+
+class Point(TypedDict):
+    x: int
+
+
+class Reader(Protocol):
+    # Not @runtime_checkable, so isinstance() refuses it.
+    def read(self) -> str: ...
+
+
+class PointList:
+    points: list[Point]
+
+
+class PointMap:
+    by_name: dict[str, Point]
+
+
+class PointField:
+    origin: Point
+
+
+class ReaderField:
+    reader: Reader
+
+
+class ReaderList:
+    readers: list[Reader]
 
 
 class DictOfLists:
@@ -755,8 +784,7 @@ class TestContainerCoercion:
         assert result.fields == {"tags": "Expected a list, got int."}
 
     def test_dict_field_checks_each_value(self):
-        # A parametrized dict used to pass as it came; its values are now
-        # checked, and a bad one is named by its key.
+        # A parametrized dict's values are checked, and a bad one is named by its key.
         result = validate_args(TypedDictField, {"blob": {"a": 1, "b": "not-an-int"}})
         assert result.fields == {"blob.b": "Expected int, got str."}
 
@@ -828,6 +856,43 @@ class TestContainerCoercion:
     def test_bare_dict_rejects_non_object(self):
         result = validate_args(BareDict, {"blob": [1]})
         assert result.fields == {"blob": "Expected an object, got list."}
+
+    def test_typed_dict_items_pass_as_they_came(self):
+        # isinstance() refuses a TypedDict, so an object passes unchanged.
+        points = [{"x": 1}, {"unrelated": "kept"}]
+        result = validate_args(PointList, {"points": points})
+        assert result.ok
+        assert result.value.points == points
+
+    def test_a_typed_dict_item_that_is_not_an_object_is_named_by_its_index(self):
+        result = validate_args(PointList, {"points": [{"x": 1}, 3]})
+        assert result.fields == {"points.1": "Expected an object, got int."}
+
+    def test_typed_dict_values_of_a_dict_pass_and_a_bad_one_is_named_by_its_key(self):
+        by_name = {"a": {"x": 1}}
+        result = validate_args(PointMap, {"by_name": by_name})
+        assert result.ok
+        assert result.value.by_name == by_name
+        bad = validate_args(PointMap, {"by_name": {"a": {"x": 1}, "b": "text"}})
+        assert bad.fields == {"by_name.b": "Expected an object, got str."}
+
+    @pytest.mark.parametrize(("value", "message"), [(3, "got int"), ([1], "got list"), ("x", "got str")])
+    def test_a_typed_dict_field_rejects_a_non_object(self, value, message):
+        result = validate_args(PointField, {"origin": value})
+        assert result.fields == {"origin": f"Expected an object, {message}."}
+
+    def test_a_typed_dict_field_accepts_an_object(self):
+        result = validate_args(PointField, {"origin": {"x": 1}})
+        assert result.ok
+        assert result.value.origin == {"x": 1}
+
+    def test_a_protocol_field_without_runtime_checkable_is_unsupported(self):
+        result = validate_args(ReaderField, {"reader": {"read": "x"}})
+        assert result.fields == {"reader": "Unsupported annotation for event data: Reader."}
+
+    def test_a_protocol_list_item_is_named_by_its_index(self):
+        result = validate_args(ReaderList, {"readers": [1]})
+        assert result.fields == {"readers.0": "Unsupported annotation for event data: Reader."}
 
 
 class TestUnhashableSetItems:

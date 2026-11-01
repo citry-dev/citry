@@ -52,7 +52,18 @@ from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import UnionType
-from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Union, get_args, get_origin, get_type_hints
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Literal,
+    NamedTuple,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+    is_typeddict,
+)
 from uuid import UUID
 
 from citry._nested_declarations import _is_plain_field_family, convert_plain_declaration
@@ -817,6 +828,14 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
             return value
         return _fail(errors, path, _FILE_MESSAGE)
 
+    # isinstance() refuses a TypedDict, which is a JSON object at runtime,
+    # so an object passes as it came. It is told apart before the annotated
+    # classes below, which it would otherwise count as.
+    if is_typeddict(annotation):
+        if isinstance(value, Mapping):
+            return value
+        return _fail(errors, path, f"Expected an object, got {_value_type_name(value)}.")
+
     # A nested annotated class validates recursively from an object.
     if _is_schema_class(annotation):
         if isinstance(value, annotation):
@@ -827,7 +846,13 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
 
     # Any other class: accept an instance (values constructed server-side),
     # coerce nothing.
-    if isinstance(value, annotation):
+    try:
+        matches = isinstance(value, annotation)
+    except TypeError:
+        # A class isinstance() cannot check, such as a Protocol without
+        # @runtime_checkable, cannot validate anything the browser sends.
+        return _fail(errors, path, f"Unsupported annotation for event data: {_type_name(annotation)}.")
+    if matches:
         return value
     return _fail(errors, path, _mismatch(_type_name(annotation), value))
 
@@ -951,8 +976,8 @@ def _coerce_mapping(
     if len(args) != 2:
         return value
     key_annotation, value_annotation = args
-    # Keys arrive as JSON strings and values are not checked, so there is
-    # nothing to coerce and the object passes as it came.
+    # A `str` key and an `Any` value need no conversion, so the object
+    # passes as it came.
     if key_annotation in (str, Any, object) and value_annotation in (Any, object):
         return value
 

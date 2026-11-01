@@ -69,8 +69,8 @@ def _decode_request(request: RouteRequest) -> dict[str, object]:
     if request.content_type.split(";", 1)[0].strip().lower() != _JSON_TYPE:
         raise ValueError("i18n browser requests require Content-Type application/json")
     try:
-        # The Events parser, so this route reads JSON with the same rules:
-        # standard JSON only, nested at most MAX_JSON_DEPTH levels.
+        # Read the body with the Events parser so this route applies the
+        # same rules: standard JSON only, nested at most MAX_JSON_DEPTH levels.
         value = loads_strict_json(request.body)
     except JsonNestingError as error:
         raise ValueError(f"i18n browser request nests JSON more than {MAX_JSON_DEPTH} levels deep") from error

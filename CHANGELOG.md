@@ -190,6 +190,13 @@
 
 ### Changed
 
+- Citry now checks and converts each key and value of a `dict[K, V]`
+  field in an Events `data` class, as it already did for each item of a
+  list. Keys arrive as JSON strings, so `{"3": ...}` fills a
+  `dict[int, ...]` field with the key `3`, and a value typed as a nested
+  class arrives as an instance of it. If a handler reads such a field
+  with string keys, as in `data.scores["3"]`, read it with the declared
+  key type instead. A Pydantic `data` class already did this.
 - `$error(handler).fieldErrors` now lists at most 20 errors for fields
   that the call's `data` class does not declare (or `State` fields it may
   not write), and at most 20 item errors in each list or dict field.
@@ -362,17 +369,16 @@
   plain HTML form without JavaScript to the same page as with JavaScript,
   instead of the wrong page or a server error.
 - An Events request whose JSON nests arrays and objects more than 200
-  levels deep now gets a 400 response that says so, instead of a server
-  error. The same limit applies to the i18n messages route.
-- A browser write to an Events `State` field now checks what the field's
-  type contains: the choices of a `Literal[...]`, each item of a
-  `list[int]` or `tuple`, and each value of a `dict[str, int]`. A wrong
-  value is rejected with an error that names the item, such as
-  `tags.2`. A Pydantic `State` already made these checks.
-- An Events `data` field typed `dict[str, int]`, or any `dict[K, V]`, now
-  checks each key and value against its type, as a `list[int]` field
-  already checks its items. A key such as `"3"` fills a `dict[int, ...]`
-  field. A Pydantic `data` class already made these checks.
+  levels deep is now rejected with a 400 error that says so, instead of a
+  server error. The i18n messages route applies the same limit.
+- Citry now checks a browser write to an Events `State` field against the
+  whole type: each item of a `list[int]` or `tuple`, each value of a
+  `dict[str, int]`, and the listed values of a `Literal[...]`. The error
+  names the item that failed, such as `tags.2`. A Pydantic `State` already
+  did this.
+- A browser write to an Events `State` field typed as a `TypedDict`, or a
+  call whose `data` field is a list of `TypedDict` items, no longer fails
+  with a server error.
 - Inside `v-pre`, Vue syntax such as `v-once`, an unknown listener
   modifier (`@click.bogus`), or a built-in such as `<transition>` no
   longer stops the template from loading. A `<slot>`, `<component>`,

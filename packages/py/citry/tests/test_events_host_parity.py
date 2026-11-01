@@ -124,7 +124,8 @@ def _fixture_component(c: Citry) -> type[Component]:
 DEEP_BODY_LEVELS = 200_000
 DEEP_QUERY_LEVELS = 10_000
 DEEP_BODY_MESSAGE = (
-    "The request body nests JSON arrays and objects more than 200 levels deep, the most the events endpoints read."
+    "The request body nests JSON arrays and objects more than 200 levels deep;"
+    " the events endpoints read at most 200 levels."
 )
 
 
@@ -458,8 +459,7 @@ def _too_deep_capabilities_query(host: _MountedHost) -> _Snapshot:
     # fits, which still exceeds Python's own recursion limit.
     value = "[" * DEEP_QUERY_LEVELS + "]" * DEEP_QUERY_LEVELS
     snapshot = _json_snapshot(host.get("echo", {"text": "hello", "_citry_capabilities": value}))
-    # The value is read like any other unusable capabilities value (a 400),
-    # where the parser's RecursionError used to surface as a 500.
+    # The value is read like any other unusable capabilities value: a 400.
     assert snapshot.status == 400
     assert snapshot.body == {
         "protocol": "citry-events/1",

@@ -194,11 +194,11 @@ def _strict_json_issue(value: Any, path: str) -> ValidationIssue:
 
 
 # The deepest nesting of arrays and objects a received JSON text may have.
-# Python's own parser and writer give up at a depth that depends on the
-# Python version and on how many frames the web framework already uses, so a
-# fixed bound below all of them gives every host the same answer. Pydantic
-# reads JSON to the same depth, so a value that passes here also fits a
-# Pydantic State.
+# Python's own parser and writer stop at a depth that depends on the Python
+# version and on how many frames the web framework already uses. A fixed
+# bound well below that gives hosts the same answer. Pydantic's JSON reader
+# stops just above this depth, so a State value that passes here also
+# restores in a Pydantic State.
 MAX_JSON_DEPTH = 200
 
 
@@ -242,8 +242,8 @@ def loads_strict_json(data: str | bytes | bytearray) -> Any:
         # Python's parser counts nesting against a recursion limit, so text
         # this deep stops it before the depth check below can run.
         raise JsonNestingError from err
-    # Every level opens with a bracket or a brace, so text with fewer of
-    # them than the bound cannot exceed it, and most requests skip the walk.
+    # Every level opens with a bracket or a brace, so text with at most
+    # MAX_JSON_DEPTH of them cannot be deeper, and most requests skip the walk.
     if isinstance(data, str):
         openers = data.count("[") + data.count("{")
     else:

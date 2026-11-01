@@ -189,11 +189,11 @@ class FlatJsonCodec:
         return build_partial_call_envelope(FLAT_REQUEST_ID, call)
 
 
-# Valid JSON, but deeper than the protocol reads, so it gets its own message
-# rather than the malformed-body one.
+# JSON nested deeper than the protocol reads gets its own message, so the
+# client learns what to change.
 _TOO_DEEP_MESSAGE = (
-    f"The request body nests JSON arrays and objects more than {MAX_JSON_DEPTH} levels deep,"
-    " the most the events endpoints read."
+    f"The request body nests JSON arrays and objects more than {MAX_JSON_DEPTH} levels deep;"
+    f" the events endpoints read at most {MAX_JSON_DEPTH} levels."
 )
 
 

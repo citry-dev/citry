@@ -43,7 +43,8 @@ FIXED_NOW = 1_700_000_000.0
 
 # The exact 400 message for JSON nested beyond the 200-level limit.
 DEEP_MESSAGE = (
-    "The request body nests JSON arrays and objects more than 200 levels deep, the most the events endpoints read."
+    "The request body nests JSON arrays and objects more than 200 levels deep;"
+    " the events endpoints read at most 200 levels."
 )
 CSRF_FAILED_MESSAGE = "The call failed the CSRF check; reload the page and try again."
 UNENCODABLE_RESULT_MESSAGE = (
