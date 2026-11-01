@@ -28,7 +28,11 @@ POLL_SECONDS: Final = 10
 # While runs are still going, repeat their states this often, so a long wait
 # keeps adding lines to the Actions log.
 PROGRESS_SECONDS: Final = 5 * 60
-QUALIFICATION_TIMEOUT_SECONDS: Final = 60 * 60
+# How often the waiter reads a running run's jobs to catch a failed one early.
+JOB_CHECK_SECONDS: Final = 60
+# On 2026-10-28 some citry-core qualification jobs waited about 40 minutes for
+# a runner, and the run took 65 minutes. Two hours leaves room for a slower day.
+QUALIFICATION_TIMEOUT_SECONDS: Final = 2 * 60 * 60
 PUBLICATION_TIMEOUT_SECONDS: Final = 20 * 60
 FULL_SHA: Final = re.compile(r"[0-9a-f]{40}")
 
@@ -471,6 +475,9 @@ def _wait_for_runs(
     started = time.monotonic()
     deadline = started + timeout_seconds
     next_progress = started + PROGRESS_SECONDS
+    # Reading jobs costs one API call per run, so the waiter reads each run's
+    # jobs every `JOB_CHECK_SECONDS`, not on every poll.
+    next_job_check = dict.fromkeys(pending, started + JOB_CHECK_SECONDS)
     completed: dict[str, dict[str, Any]] = {}
     # The run id and state last logged for each package, so only a change
     # prints a line.
@@ -494,7 +501,19 @@ def _wait_for_runs(
                 link = f": {run.get('html_url', 'unknown run URL')}" if is_new_run else ""
                 _log(f"{title}: {state}{link}")
                 states[package] = (run.get("id"), state)
-            if run is None or run.get("status") != "completed":
+            if run is None:
+                continue
+            if run.get("status") != "completed":
+                # A run reports its failure only after its slowest job ends,
+                # so stop at the first failed job and name it.
+                if time.monotonic() >= next_job_check[package]:
+                    next_job_check[package] = time.monotonic() + JOB_CHECK_SECONDS
+                    jobs = _failed_jobs(client, run)
+                    if jobs:
+                        raise ReleaseError(
+                            f"{title} failed in jobs {', '.join(jobs)} while its other jobs were still running: "
+                            f"{run.get('html_url', 'unknown run URL')}"
+                        )
                 continue
             if run.get("conclusion") != "success":
                 jobs = _failed_jobs(client, run)
