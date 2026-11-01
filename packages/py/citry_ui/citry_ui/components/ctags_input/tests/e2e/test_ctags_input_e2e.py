@@ -761,3 +761,30 @@ def test_same_baseline_lifecycle_handoff_preserves_state_focus_selection_and_com
     assert _values(page, "uncontrolled") == ["alpha", "beta", "gamma", "compose"]
     assert page.locator("#uncontrolled").input_value() == "tail"
     assert errors == []
+
+
+def test_enter_trims_edge_whitespace_and_keeps_a_long_inner_space_run_quickly(page) -> None:
+    errors = _load(page)
+    editor = page.locator("#uncontrolled")
+
+    # Short input: whitespace at both edges is trimmed off the new tag.
+    editor.fill(" \t gamma \t ")
+    editor.press("Enter")
+    assert _values(page, "uncontrolled") == ["alpha", "beta", "gamma"]
+
+    # A very long run of spaces between two letters is the slow case for a trim regex anchored to the
+    # end, so this measures the Enter key press inside the page. The inner spaces are not edge
+    # whitespace, so the tag keeps them.
+    inner = "a" + " " * 100_000 + "b"
+    editor.fill(inner)
+    elapsed = page.evaluate(
+        """() => {
+          const input = document.querySelector('#uncontrolled');
+          const start = performance.now();
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+          return performance.now() - start;
+        }"""
+    )
+    assert elapsed < 1000
+    assert _values(page, "uncontrolled") == ["alpha", "beta", "gamma", inner]
+    assert errors == []
