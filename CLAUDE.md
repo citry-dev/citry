@@ -458,6 +458,16 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   hunting through test files. An executable example that needs automated
   validation must opt in to a general guard; do not hard-code its page in a
   test.
+- **A workflow script reads outside values from its environment.** In a
+  GitHub Actions `run:` or `github-script` block, do not write
+  `${{ github.event.* }}`, `${{ github.head_ref }}` or `${{ inputs.* }}`
+  into the script text. GitHub pastes the value in before the shell runs,
+  so a branch name or PR title becomes part of the command. Pass the value
+  through the step's `env:` block and read it as `"$NAME"`. To limit a job
+  to Dependabot, check the pull request's author
+  (`github.event.pull_request.user.login`), not only `github.actor`, which
+  names whoever triggered the run. The `workflow_run_expressions` validator
+  fails the gate on the first rule.
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.
