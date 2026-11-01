@@ -74,7 +74,8 @@ def _static_class_namespace_copy(cls: type) -> dict[str, object]:
 def _names_abc_meta_writes(meta: type) -> frozenset[str]:
     """Return the non-dunder names ``meta`` writes into a class it builds with an empty body."""
     empty = meta("_EmptyABC", (), {})
-    return frozenset(name for name in vars(empty) if not (name.startswith("__") and name.endswith("__")))
+    namespace = _static_class_namespace_copy(empty)
+    return frozenset(name for name in namespace if not (name.startswith("__") and name.endswith("__")))
 
 
 # ABCMeta stores, on every class it builds, the caches it keeps to answer
