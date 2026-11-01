@@ -262,12 +262,16 @@ reach outside the template:
 
 A blocked operation raises [`SecurityError`][citry.SecurityError].
 
-The template author writes every expression. Data from a request only
-fills in the values an expression reads, such as `user.name`; never build
-template or expression text from it. The sandbox also does not limit how
-long an expression runs or how much memory it uses, the same as Jinja's
-sandbox. Read [Security](/security/#what-the-sandbox-does-not-protect)
-for the full sandbox rules and the settings that control it.
+Only the template author writes expressions. Data from a request, or
+text a site visitor saved, reaches a template only as a value, such as
+the `user` in `user.name`. Never build template or expression text from
+that data.
+
+The sandbox does not limit how long an expression runs or how much
+memory it uses.
+
+Read [Security](/security/#sandbox-python-template-expressions) for the
+full sandbox rules and the settings that control them.
 
 ## Less common rules
 

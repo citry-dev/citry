@@ -70,6 +70,11 @@ refuses a package that has no `_compiled` files. See
 
 ## Add translations
 
+Treat catalog files like source code: your team and your translators
+write them. Never generate them from request data or from text a site
+visitor saved; pass a visitor's values as variables, as
+[Add messages](/i18n/messages/#add-messages) shows.
+
 Write each message's `@param` comments only in the source locale:
 
 ```fluent
@@ -92,10 +97,6 @@ Citry checks this before it builds the catalog.
 A translation file may leave messages out. Citry then uses a fallback
 language, as described below; it does not copy source text into every
 locale file.
-
-Treat catalog files like source code. Your team and your translators write
-them; never generate them from request data or from text a user saved.
-User values reach a message only as variables, which show as text.
 
 ## Order the packages
 

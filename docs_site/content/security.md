@@ -310,6 +310,11 @@ runs it in a sandbox that blocks the known ways an expression could reach
 dangerous parts of Python. The sandbox is on by default and modeled on
 Jinja's sandbox.
 
+Only the template author writes expressions. Never build a template, or
+any part of an expression, from request data or from text a site
+visitor saved. Pass that data to the template as values in the render
+context, where an expression can read them.
+
 ### What is blocked { #what-the-sandbox-blocks }
 
 - **Names starting with `_`.** An attribute such as `obj.__class__` or
@@ -376,16 +381,12 @@ not guaranteed to block every way out:
   allowed until you block it, as shown next.
 - **The blocked list covers known dangers.** It is a list of specific
   functions, not a guarantee.
-- **Time and memory are not limited.** As with Jinja's sandbox, an
-  expression can run as long and use as much memory as Python allows.
+- **Time and memory are not limited.** An expression can run as long
+  and use as much memory as the server process allows. To cap them, set
+  limits on the worker process that renders pages.
 
 Put only objects and functions in the render context that you are
 comfortable letting template authors use.
-
-The expression text itself must come from the template author, never
-from a request. Data from a request reaches a template only as values
-in the render context, which an expression reads. Do not build template
-source, or any part of an expression, from it.
 
 ### Block your functions { #marking-your-own-functions-unsafe }
 

@@ -139,17 +139,18 @@ Inside the fill, `row` comes from the slot, and `prefix` from the outer
 component, as in any fill. When the list changes in the browser, the fill
 follows it.
 
-The `:` expression on `<c-slot>` and the `v-slot` pattern on `<c-fill>`
-are browser code, so only the template author writes them. Data reaches
-the fill as values of the slot props, such as `row`.
+The `:` binding on `<c-slot>` and the `v-slot` value on `<c-fill>` are
+part of the template, so only the template author writes them. Request
+data reaches the fill only as the values of slot props, such as `row`.
 
-!!! warning "Vue does not check URLs or HTML"
+!!! warning "Vue does not clean HTML or URLs"
 
-    Inside a fill, do not pass a slot prop that holds request data to
-    `v-html`, `:href`, or `:src`. Vue does not clean the HTML or check
-    the URL, so text a user wrote could run as script on the page. Show
-    user text with `v-text`, and check a URL on the server before you
-    pass it.
+    Do not bind request data, or text a site visitor saved, with
+    `v-html` or with a URL binding such as `:href` or `:src`, in a fill
+    or anywhere else. Vue inserts the HTML as it is and does not check a
+    URL's scheme, so that text could run as script on the page. Show
+    visitor text with `v-text`. On the server, allow only `https:` or
+    `http:` URLs and paths on your own site.
 
 `<c-slot>` also accepts `v-bind:row`. `v-slot` takes one object pattern,
 such as `{ row }`, or one name, such as `props`, which then holds every
