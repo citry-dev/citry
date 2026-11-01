@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- In Restricted Mode, VS Code now keeps the extension off, including
+  highlighting, until you trust the workspace, because the extension runs
+  the project's Python interpreter and imports its app.
+- A file in your project with the same name as a module in Python's
+  standard library, such as `json.py`, no longer breaks the language
+  server. The server now starts in Python's isolated mode (`-I`), so it
+  ignores the project folder, `PYTHONPATH`, and the user site-packages
+  folder. Your app is still imported with your `PYTHONPATH`.
+
 ## 0.2.0 - 2026-10-19
 
 - The extension now works with citry-lsp 0.2.x, the language server for

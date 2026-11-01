@@ -2617,10 +2617,13 @@ unavailable editor/Node API or emit syntax the oldest supported host cannot
 run.
 
 This is a desktop and remote **workspace** extension. It starts
-`python -m citry_lsp` in each file-backed workspace and therefore has no
+`python -I -m citry_lsp` in each file-backed workspace and therefore has no
 `browser` entry point and does not claim VS Code for the Web support. The one
 universal VSIX contains no native binary; compatible desktop forks can use
 `citry.python` when they do not expose Microsoft's Python extension API.
+The manifest sets `capabilities.untrustedWorkspaces.supported` to `false`:
+the extension runs the workspace's Python interpreter and imports its app,
+so VS Code keeps it off in Restricted Mode.
 
 The Marketplace listing takes its public links from `package.json`: the
 extension-specific guide is the homepage, the repository link names this

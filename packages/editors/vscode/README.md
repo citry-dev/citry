@@ -255,7 +255,9 @@ Status** and check these first:
 
 - `citry-lsp` is installed in the selected project environment.
 - `citry.python`, when set, points to an executable that can run
-  `python -m citry_lsp`.
+  `python -I -m citry_lsp`. (`-I` ignores `PYTHONPATH`, the user
+  site-packages folder, and the current folder, so install `citry-lsp`
+  into that interpreter's own environment.)
 - `citry.app`, when set, imports successfully from the workspace.
 - `citry.envFile`, when set, exists and supplies any variables required before
   importing `citry.app`.
@@ -282,6 +284,11 @@ Citry requires desktop VS Code 1.101 or newer. It also supports remote
 workspaces and compatible desktop forks where the workspace extension host can
 start the selected Python executable. This release is not a VS Code for the Web
 extension because `citry-lsp` runs as a local or remote workspace process.
+
+The extension runs the project's Python interpreter and imports its Citry
+app, so VS Code turns it off in
+[Restricted Mode](https://code.visualstudio.com/docs/editing/workspaces/workspace-trust),
+including highlighting, until you trust the workspace.
 
 TextMate coloring is best effort while deeply nested syntax is unfinished, and
 parser diagnostics stop after the first syntax error. Python analysis remains

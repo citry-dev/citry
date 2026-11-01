@@ -436,7 +436,13 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 	}
 	const serverOptions: ServerOptions = {
 		command: python,
-		args: ["-m", "citry_lsp"],
+		// -I makes Python ignore the cwd (the workspace folder), PYTHON*
+		// variables such as PYTHONPATH, and the user site folder, so a stray
+		// `json.py` in the project cannot replace a module the server loads.
+		// It matches the -I in probeLanguageServer. The separate process the
+		// server starts to import `citry.app` runs without -I, so it still
+		// sees the project.
+		args: ["-I", "-m", "citry_lsp"],
 		options: { cwd: folder.uri.fsPath },
 	};
 	const documentSelector: LanguageClientOptions["documentSelector"] = [
