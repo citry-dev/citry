@@ -147,10 +147,11 @@ def _asset_paths(app: Citry) -> list[str]:
         "/ext/i18n/runtime.js",
         script_url(Widget, "js").removeprefix("/citry"),
         script_url(Widget, "css").removeprefix("/citry"),
-        f"/cache/{Widget.class_id}.{record.css_vars_hash}.css",
         f"/cache/{Widget.class_id}.js",
         definition.removeprefix("/citry"),
         stylesheet.removeprefix("/citry"),
+        # The stylesheet built from css_data() has a hashed URL of its own.
+        f"/cache/{Widget.class_id}.{record.css_vars_hash}.css",
     ]
 
 
@@ -445,6 +446,8 @@ def test_every_public_asset_route_sends_a_cache_policy(adapter: str) -> None:
         paths[5]: "no-cache",
         paths[6]: IMMUTABLE_CACHE_CONTROL,
         paths[7]: IMMUTABLE_CACHE_CONTROL,
+        # A variables stylesheet's text can change with Citry, so the browser checks it before each use.
+        paths[8]: "no-cache",
     }
     assert set(expected) == set(paths)
     for path, cache_control in expected.items():
@@ -474,7 +477,7 @@ def test_a_current_copy_of_a_changing_url_gets_304(adapter: str) -> None:
 
 
 def test_revalidated_response_compares_tags_the_way_http_requires() -> None:
-    resource = _OwnedResource(url="/x.js", content="x", content_type="text/javascript")
+    resource = _OwnedResource(url="/x.js", content="x", content_type="text/javascript; charset=utf-8")
     full = resource.revalidated_response(None)
     assert full.status == 200
     assert full.content == "x"
@@ -496,7 +499,7 @@ def test_revalidated_response_compares_tags_the_way_http_requires() -> None:
     request = RouteRequest(headers=RouteHeaders([("If-None-Match", etag)]))
     assert resource.revalidated_response(request).body == b""
     # The tag follows the content.
-    changed = _OwnedResource(url="/x.js", content="y", content_type="text/javascript")
+    changed = _OwnedResource(url="/x.js", content="y", content_type="text/javascript; charset=utf-8")
     assert dict(changed.revalidated_response(None).headers)["ETag"] != etag
 
 
