@@ -112,8 +112,8 @@ impl EmbeddedFormatRequest {
         self.byte_range.clone()
     }
 
-    /// Return the absolute content indentation the plan's formatted source
-    /// gives this body.
+    /// Return the number of spaces the plan's formatted source puts before
+    /// each line of this body.
     ///
     /// Composing can still move it: when an earlier body on the start tag's
     /// line is put on lines of its own, the tag moves with the text after that
@@ -520,12 +520,19 @@ pub fn finish_embedded_format(
     let source = plan.formatted_source.as_str();
     let mut candidate = String::with_capacity(source.len());
     let mut cursor = 0;
+    // Each composed body's source end, with how many bytes the candidate has
+    // gained or lost by then. A tag finds its candidate offset from the last
+    // body that ended before it, which skips a body nested inside its own
+    // attributes.
+    let mut growth = Vec::<(usize, isize)>::new();
     for (request, text) in replacements {
         let range = &request.byte_range;
         candidate.push_str(&source[cursor..range.start]);
-        let base_indent = composed_base_indent(request, source, &candidate)?;
+        let base_indent = composed_base_indent(request, source, &candidate, &growth)?;
         candidate.push_str(&compose_body(text, base_indent, &request.newline));
         cursor = range.end;
+        let gained = candidate.len().cast_signed() - range.end.cast_signed();
+        growth.push((range.end, gained));
     }
     candidate.push_str(&source[cursor..]);
     let verified = formatter::format(&candidate).map_err(|error| {
@@ -1006,27 +1013,38 @@ fn starts_with_lexical_sentinel(source: &str, language: EmbeddedLanguage) -> boo
     }
 }
 
-/// The body indent for `request` once the bodies composed before it have landed.
+/// Return the body indent for `request` after the bodies before it are composed.
 ///
-/// `candidate` holds the composed text up to the body's start. The tag's own
-/// layout column is kept, and only the distance the earlier bodies moved the
-/// tag along its line is added, so a body with nothing composed before it on
-/// that line keeps the indent the plan gave it.
+/// `candidate` holds the composed text up to the body's start, and `growth`
+/// lists each composed body's source end with the bytes the candidate had
+/// gained by then. The plan's indent is kept and shifted by however far the
+/// earlier bodies moved the start tag along its line (usually left), so a body
+/// with nothing composed before it on that line keeps the indent the plan gave
+/// it.
 fn composed_base_indent(
     request: &EmbeddedFormatRequest,
     source: &str,
     candidate: &str,
+    growth: &[(usize, isize)],
 ) -> Result<usize, FormatError> {
-    let range = &request.byte_range;
-    // The start tag ends where the body begins, so its bytes are the last ones
-    // copied into the candidate unchanged.
-    let tag_length = range.start - request.tag_start;
-    let candidate_tag_start = candidate.len().checked_sub(tag_length).ok_or_else(|| {
-        provider_error(format!(
-            "embedded start tag for {:?} overlaps an earlier region",
-            request.id
-        ))
-    })?;
+    // Bodies that end before the tag shift its offset. A body inside the tag's
+    // own attributes ends after the `<`, so it changes the tag's length but
+    // does not move the `<`.
+    let gained = growth
+        .iter()
+        .rev()
+        .find(|(end, _)| *end <= request.tag_start)
+        .map_or(0, |(_, gained)| *gained);
+    let candidate_tag_start = request
+        .tag_start
+        .checked_add_signed(gained)
+        .filter(|offset| *offset <= candidate.len())
+        .ok_or_else(|| {
+            provider_error(format!(
+                "embedded start tag for {:?} is outside the composed text",
+                request.id
+            ))
+        })?;
     let planned = source_column(source, request.tag_start)?;
     let composed = source_column(candidate, candidate_tag_start)?;
     Ok((request.base_indent + composed).saturating_sub(planned))

@@ -532,7 +532,7 @@ fn script_type_classification_follows_html_javascript_values() {
 }
 
 /// Format one pass with a fake provider that returns each body in a fixed,
-/// already formatted shape, so a second pass sends the providers the same text.
+/// already formatted shape, so both passes get the same provider output.
 fn format_once_with_fixed_bodies(source: &str) -> String {
     let plan = prepare_embedded_format(source).unwrap();
     let results = plan
@@ -574,5 +574,21 @@ fn a_body_after_another_body_on_its_line_is_indented_from_the_composed_text() {
             "                 }\n",
             "               </style></main>",
         )
+    );
+}
+
+#[test]
+fn a_body_nested_in_its_own_start_tag_does_not_move_the_tag() {
+    // The style body inside the script's template attribute is composed
+    // first and grows, but it sits after the script's `<`, so the script
+    // body keeps the indent the plan gave it.
+    let source = "<script c-x=\"<>\n<style>.a{color:red}</style>\n</>\">a=1;</script>";
+    let first = format_once_with_fixed_bodies(source);
+    let second = format_once_with_fixed_bodies(&first);
+
+    assert_eq!(second, first);
+    assert!(
+        first.ends_with(">\n  const inline = 1;\n</script>"),
+        "{first}"
     );
 }

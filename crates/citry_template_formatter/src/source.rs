@@ -138,8 +138,9 @@ pub(crate) struct EmbeddedBodyModel {
     pub(crate) span: Span,
     pub(crate) language: Option<EmbeddedLanguage>,
     pub(crate) kind: EmbeddedRegionKind,
-    /// Where the start tag's `<` sits in the source, so composing a pass can
-    /// measure how far text placed earlier on that line moved the tag.
+    /// Byte offset of the start tag's `<` in the source. `finish_embedded_format`
+    /// uses it to measure how far bodies composed earlier on the line moved
+    /// the tag.
     pub(crate) tag_start: usize,
     pub(crate) tag_column: usize,
     pub(crate) has_interpolation: bool,
