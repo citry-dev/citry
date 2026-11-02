@@ -2671,15 +2671,20 @@ public-registry verification.
 Registry setup happens outside the repository. Complete it before promotion;
 candidate qualification does not talk to either registry.
 
-Neither registry receives a stored token. Each one trusts a single GitHub
+The workflow stores no registry token. Each registry trusts a single GitHub
 Actions identity: the repository `citry-dev/citry`, the workflow file
 `vscode--citry--publish.yml`, and the GitHub environment `vscode-marketplaces`.
 The promotion job has `id-token: write`, so it can ask GitHub for a short-lived
-sign-in token (an OIDC token) that names those three things. Each registry
-client sends that token to its registry and gets back a publishing credential
-that expires within minutes. The job checks that it can request a sign-in token
-before it uploads anything. Neither route reuses the PyPI trusted-publisher
-configuration.
+sign-in token (an OpenID Connect, or OIDC, token) that names those three
+things. Each registry client sends that token to its registry and gets back a
+publishing credential that expires within minutes. The job checks that it can
+request a sign-in token before it installs the clients. Each registry needs its
+own setup; the PyPI trusted publisher does not cover them.
+
+Both registry forms mark the environment field as optional. Fill it in anyway.
+Without it, any job in this workflow file can publish, including the
+qualification job, which also has `id-token: write` for its attestation and
+runs no environment rule.
 
 #### Visual Studio Marketplace identity and trusted publishing
 
@@ -2688,9 +2693,10 @@ configuration.
    publisher ID `citry-dev` (display name `Citry.dev`) and ensure that account
    is an Owner or Contributor. The immutable ID must match `package.json`.
 2. Open the `citry-dev` publisher, select **Trusted Publishing**, expand
-   **Create**, and enter repository owner `citry-dev`, repository `citry`,
-   workflow `vscode--citry--publish.yml`, and environment
-   `vscode-marketplaces`. Select **Create**.
+   **Create**, and enter a policy name such as `vscode-citry release`,
+   repository owner `citry-dev`, repository `citry`, workflow
+   `vscode--citry--publish.yml`, and environment `vscode-marketplaces`. Select
+   **Create**.
 
 The workflow runs `vsce publish --oidc`, which `@vscode/vsce` has had since
 4.0.0; the lockfile pins 4.1.0. The Marketplace credential it receives lasts 15
@@ -2708,10 +2714,12 @@ for the policy fields.
    Agreement** (not the separate Contributor Agreement).
 2. Follow the
    [Open VSX publishing guide](https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions)
-   to create the `citry-dev` namespace. Open VSX accepts a trusted publisher
-   only for an extension that already has a published version, so a brand-new
-   extension's first version goes up with an access token from **Settings ->
-   Access Tokens**.
+   to create the `citry-dev` namespace. Creating it makes you a contributor;
+   claim ownership as that guide describes before step 3. Open VSX accepts a
+   trusted publisher only for an extension that already has a published
+   version, so the first version of a brand-new extension must be published by
+   hand (`ovsx publish -p <token>`) outside this workflow. `citry-dev.citry`
+   already has published versions.
 3. As an owner of the `citry-dev` namespace (a contributor cannot do this),
    open [**Settings -> Trusted Publishers**](https://open-vsx.org/user-settings/trusted-publishers),
    select the namespace, choose GitHub Actions, and enter owner `citry-dev`,
@@ -2730,10 +2738,10 @@ the [Open VSX trusted publishing guide](https://github.com/eclipse-openvsx/openv
 
 In the repository's [GitHub environment settings](https://github.com/citry-dev/citry/settings/environments),
 give `vscode-marketplaces` **Selected branches and tags**, allow the `main`
-branch, and retain any desired reviewer gate. Open VSX has no branch field in
-its trusted publisher, so this environment rule is what limits publishing to
-`main`. Promotion is a controlled workflow dispatch whose release checkout is
-separately pinned to the candidate commit.
+branch, and keep any required reviewers you want. Neither registry's policy
+names a branch, so this environment rule, together with the environment field
+in both registrations, is what limits publishing to `main`. A maintainer starts
+promotion by hand, and the job checks out the exact candidate commit.
 
 Both registry clients use `--skip-duplicate` only to recover from a partial
 two-registry publish. A rerun of the same candidate still selects and verifies
