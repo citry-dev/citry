@@ -367,7 +367,7 @@ def test_runtime_contract_covers_state_geometry_cleanup_and_reasoned_callbacks()
         "requestAnimationFrame",
         "intersectArea",
         "dialog.show()",
-        "host.ownerDocument.addEventListener('keydown', onKeyDown, true)",
+        "builtIn(host.ownerDocument).addEventListener('keydown', onKeyDown, true)",
         "host.removeEventListener('click', onClick)",
     ):
         assert token in source

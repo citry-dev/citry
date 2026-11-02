@@ -1,3 +1,5 @@
+// Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
 $component({
   props: {value: {}, required: {}, disabled: {}, onValueChange: {}},
   onServerRender: ({component}) => {
@@ -135,7 +137,7 @@ $component({
     };
     const syncTransport = () => {
       const inputs = data.name ? current.map(value => {
-        const input = document.createElement('input');
+        const input = builtIn(document).createElement('input');
         input.type = 'hidden';
         input.name = data.name;
         input.value = value;
@@ -380,7 +382,7 @@ $component({
         }
       }
     }, 0);
-    form?.addEventListener('reset', onReset);
+    if (form) builtIn(form).addEventListener('reset', onReset);
     const fieldset = native.closest('fieldset');
     const fieldsetObserver = fieldset ? new MutationObserver(() => {
       disabled = data.disabled || fieldset.disabled;
@@ -462,7 +464,7 @@ $component({
       clearTimeout(typeahead.timer);
       bindingDisposers.forEach(binding => binding.dispose());
       fieldsetObserver?.disconnect();
-      form?.removeEventListener('reset', onReset);
+      if (form) builtIn(form).removeEventListener('reset', onReset);
       native.removeEventListener('invalid', onInvalid);
       control.removeEventListener('click', onControlClick);
       availableList.removeEventListener('keydown', onAvailableKeydown);

@@ -435,7 +435,11 @@ def test_split_button_incremental_assets_stay_within_the_frozen_budget():
     incremental = asset_report()["families"]["split-button"]["incremental"]
 
     assert incremental["baseline_components"] == ["CButton", "CMenu"]
-    assert incremental["javascript"]["gzip"] < 3 * 1024
+    # 3.25 KiB from 3 KiB: the split button's submit registry reads the
+    # document's and root node's members through the core runtime's built-in
+    # member helper, so a named element in the page cannot stand in for them. That added about 160 gzip
+    # bytes when about 120 were left.
+    assert incremental["javascript"]["gzip"] < int(3.25 * 1024)
     assert incremental["css"]["gzip"] < 2 * 1024
 
 
@@ -512,7 +516,11 @@ def test_context_menu_assets_stay_within_the_family_budgets():
     # 161 KiB from 160 KiB: CMenu's shared menu runtime skips writes whose
     # value is already in place, so an idle open menu stops refocusing its
     # item in a loop. That adds about 1 KiB raw after shorter comments.
-    assert family["javascript"]["raw"] < 161 * 1024
+    # 163 KiB from 161 KiB: CMenu, CSplitButton and CContextMenu read the
+    # document's members through the core runtime's built-in member helper, so
+    # a named element in the page cannot stand in for them. That added about
+    # 1.2 KiB raw when about 0.2 KiB was left.
+    assert family["javascript"]["raw"] < 163 * 1024
     # 35 KiB from 34 KiB: CMenu now scrolls only its own list to show the
     # focused item, and scrolls the page only after a key press (#383),
     # which added about 880 gzip bytes that shorter comments could not

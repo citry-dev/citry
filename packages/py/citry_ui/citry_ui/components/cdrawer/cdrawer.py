@@ -254,6 +254,10 @@ class CDrawer(LibraryComponent):
       globalThis[modalRuntimeKey] = modalRuntime;
       modalRuntime.drawerControllers ??= new WeakMap();
       const drawerHandoffKey = Symbol.for("citry-ui:drawer-handoff");
+      // Page markup can hide a document's or a form's members behind named elements. The core
+      // runtime's helper reads the built-in ones; Citry before 0.7.0 have no helper, so the
+      // fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
 
       $component({
         props: {
@@ -329,14 +333,14 @@ class CDrawer(LibraryComponent):
           };
 
           const deepActiveElement = () => {
-            let active = drawer.ownerDocument.activeElement;
+            let active = builtIn(drawer.ownerDocument).activeElement;
             while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
             return active;
           };
           const composedParent = (node) => {
             if (node?.parentNode) return node.parentNode;
             const root = node?.getRootNode?.();
-            return root instanceof ShadowRoot ? root.host : null;
+            return root instanceof ShadowRoot ? builtIn(root).host : null;
           };
           const composedContains = (ancestor, node) => {
             for (let current = node; current; current = composedParent(current)) {
@@ -348,7 +352,7 @@ class CDrawer(LibraryComponent):
             const roots = [drawer.ownerDocument];
             for (let index = 0; index < roots.length; index += 1) {
               const root = roots[index];
-              for (const element of root.querySelectorAll("*")) {
+              for (const element of builtIn(root).querySelectorAll("*")) {
                 if (element.shadowRoot) roots.push(element.shadowRoot);
               }
             }
@@ -371,7 +375,7 @@ class CDrawer(LibraryComponent):
                 if (node.hasAttribute("popover") && !node.matches(":popover-open")) return false;
               }
             }
-            const modals = openRoots().flatMap((root) => [...root.querySelectorAll("dialog:modal")]);
+            const modals = openRoots().flatMap((root) => [...builtIn(root).querySelectorAll("dialog:modal")]);
             return modals.every((modal) => modal === drawer || composedContains(modal, host));
           };
           const isFocusable = (element) => element instanceof HTMLElement
@@ -477,10 +481,10 @@ class CDrawer(LibraryComponent):
           const lockScroll = () => {
             if (modalRuntime.dialogs.includes(drawer)) return;
             if (modalRuntime.dialogs.length === 0) {
-              const root = drawer.ownerDocument.documentElement;
+              const root = builtIn(drawer.ownerDocument).documentElement;
               modalRuntime.overflow = root.style.overflow;
               modalRuntime.paddingInlineEnd = root.style.paddingInlineEnd;
-              const view = drawer.ownerDocument.defaultView;
+              const view = builtIn(drawer.ownerDocument).defaultView;
               const scrollbarWidth = Math.max(0, view.innerWidth - root.clientWidth);
               const currentPadding = Number.parseFloat(view.getComputedStyle(root).paddingInlineEnd) || 0;
               root.style.overflow = "hidden";
@@ -493,7 +497,7 @@ class CDrawer(LibraryComponent):
             if (index === -1) return;
             modalRuntime.dialogs.splice(index, 1);
             if (modalRuntime.dialogs.length === 0) {
-              const root = drawer.ownerDocument.documentElement;
+              const root = builtIn(drawer.ownerDocument).documentElement;
               root.style.overflow = modalRuntime.overflow;
               root.style.paddingInlineEnd = modalRuntime.paddingInlineEnd;
             }
@@ -564,7 +568,7 @@ class CDrawer(LibraryComponent):
             const restore = () => {
               if ((!immediate && disposed) || token !== generation) return;
               const active = deepActiveElement();
-              const browserNeedsTarget = active === drawer.ownerDocument.body
+              const browserNeedsTarget = active === builtIn(drawer.ownerDocument).body
                 || active === drawer
                 || composedContains(drawer, active);
               if (
@@ -678,14 +682,17 @@ class CDrawer(LibraryComponent):
           const rememberNativeDialogSubmission = (target) => {
             if (controlled || target.closest?.("[data-citry-drawer-close]")) return;
             const submitter = target.closest?.("button,input");
-            if (!(submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement)
-              || submitter.form?.closest("dialog") !== drawer) return;
+            if (!(submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement)) return;
+            // A field named, for example, `closest` hides the form's own method, so read the
+            // form's members through builtIn.
+            const submitterForm = submitter.form;
+            if (!submitterForm || builtIn(submitterForm).closest("dialog") !== drawer) return;
             const isSubmit = submitter instanceof HTMLButtonElement
               ? submitter.type === "submit"
               : submitter.type === "submit" || submitter.type === "image";
             const method = submitter.hasAttribute("formmethod")
               ? submitter.getAttribute("formmethod")
-              : submitter.form.getAttribute("method") ?? "get";
+              : builtIn(submitterForm).getAttribute("method") ?? "get";
             if (isSubmit && method.toLowerCase() === "dialog") pendingNativeUserClose = true;
           };
           const onPointerDown = (event) => {
@@ -704,11 +711,11 @@ class CDrawer(LibraryComponent):
           const onSubmit = (event) => {
             const form = event.target;
             if (event.defaultPrevented || !(form instanceof HTMLFormElement)
-              || form.closest("dialog") !== drawer) return;
+              || builtIn(form).closest("dialog") !== drawer) return;
             const submitter = event.submitter;
             const overridden = (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement)
               && submitter.hasAttribute("formmethod");
-            if ((overridden ? submitter.formMethod : form.method).toLowerCase() !== "dialog") return;
+            if ((overridden ? submitter.formMethod : builtIn(form).method).toLowerCase() !== "dialog") return;
             if (!controlled) {
               pendingNativeUserClose = true;
               return;

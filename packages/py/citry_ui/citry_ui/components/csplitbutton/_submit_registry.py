@@ -6,6 +6,10 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_KEY = "citry-ui:split-button-submit-runtime"
 _SPLIT_BUTTON_SUBMIT_RUNTIME_GENERATION = 1
 
 _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
+      // Page markup can hide a document's members behind named elements, so read
+      // them through the core runtime's helper; Citry before 0.7.0 have no
+      // helper, so the fallback reads the members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
       (() => {
         const runtimeKey = Symbol.for("citry-ui:split-button-submit-runtime");
         const generation = 1;
@@ -49,7 +53,7 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
         const retainDocumentObserver = () => {
           if (documentObserver) return;
           documentObserver = new MutationObserver(refreshShadowManagers);
-          documentObserver.observe(document.documentElement, {subtree: true, childList: true});
+          documentObserver.observe(builtIn(document).documentElement, {subtree: true, childList: true});
         };
         const releaseDocumentObserver = () => {
           if (shadowManagers.size > 0 || !documentObserver) return;
@@ -60,8 +64,8 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
           if (manager.entries.size > 0) {
             return;
           }
-          root.removeEventListener("submit", manager.onSubmit, true);
-          root.removeEventListener("invalid", manager.onInvalid, true);
+          builtIn(root).removeEventListener("submit", manager.onSubmit, true);
+          builtIn(root).removeEventListener("invalid", manager.onInvalid, true);
           manager.observer.disconnect();
           if (root instanceof ShadowRoot) {
             shadowManagers.delete(manager);
@@ -111,8 +115,8 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
             });
           });
           observer.observe(root, { subtree: true, childList: true });
-          root.addEventListener("submit", onSubmit, true);
-          root.addEventListener("invalid", onInvalid, true);
+          builtIn(root).addEventListener("submit", onSubmit, true);
+          builtIn(root).addEventListener("invalid", onInvalid, true);
           manager = { entries, observer, onInvalid, onSubmit };
           if (root instanceof ShadowRoot) {
             shadowManagers.add(manager);

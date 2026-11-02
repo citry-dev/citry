@@ -1,3 +1,7 @@
+// Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
+const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
 $component({
   props: {
     open: {}, active: {}, dismissible: {}, closeOnEscape: {}, closeOnOutside: {},
@@ -118,7 +122,7 @@ $component({
       .filter(element => element.closest('[data-citry-tour-host]') === host);
     const panelTarget = index => {
       const id = panels[index]?.dataset.targetId;
-      return id ? host.ownerDocument.getElementById(id) : null;
+      return id ? builtIn(host.ownerDocument).getElementById(id) : null;
     };
     const targetExists = index => !panels[index]?.dataset.targetId || panelTarget(index)?.isConnected;
     const resolveIndex = (requested, direction = 1) => {
@@ -154,7 +158,7 @@ $component({
       if (!listening) return;
       listening = false;
       globalThis.removeEventListener('resize', queueGeometry);
-      host.ownerDocument.removeEventListener('scroll', queueGeometry, true);
+      builtIn(host.ownerDocument).removeEventListener('scroll', queueGeometry, true);
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
       resizeObserver = null;
@@ -168,7 +172,7 @@ $component({
       const number = Number.parseFloat(raw);
       if (!Number.isFinite(number)) return fallback;
       if (raw.endsWith('rem')) {
-        return number * Number.parseFloat(getComputedStyle(host.ownerDocument.documentElement).fontSize);
+        return number * Number.parseFloat(getComputedStyle(builtIn(host.ownerDocument).documentElement).fontSize);
       }
       if (raw.endsWith('em')) return number * Number.parseFloat(getComputedStyle(host).fontSize);
       if (raw.endsWith('dvi') || raw.endsWith('vw')) return number * innerWidth / 100;
@@ -273,7 +277,7 @@ $component({
       if (!appliedOpen) return;
       listening = true;
       globalThis.addEventListener('resize', queueGeometry);
-      host.ownerDocument.addEventListener('scroll', queueGeometry, true);
+      builtIn(host.ownerDocument).addEventListener('scroll', queueGeometry, true);
       target = panelTarget(active);
       if (target && 'ResizeObserver' in globalThis) {
         resizeObserver = new ResizeObserver(queueGeometry);
@@ -286,7 +290,7 @@ $component({
           else requestActive(next, 'missing-target', target);
         }
       });
-      mutationObserver.observe(host.ownerDocument.documentElement, {subtree: true, childList: true});
+      mutationObserver.observe(builtIn(host.ownerDocument).documentElement, {subtree: true, childList: true});
       queueGeometry();
     };
 
@@ -331,7 +335,7 @@ $component({
     let ancestorListening = false;
     let ancestorRoots = [];
     const composedContains = (ancestor, node) => {
-      for (let current = node; current; current = current.getRootNode().host ?? null) {
+      for (let current = node; current; current = shadowHost(current.getRootNode())) {
         if (ancestor.contains(current)) return true;
       }
       return false;
@@ -352,12 +356,12 @@ $component({
       ancestorListening = listen;
       if (listen) {
         ancestorRoots = [];
-        for (let node = host.getRootNode(); node; node = node.host?.getRootNode() ?? null) ancestorRoots.push(node);
+        for (let node = host.getRootNode(); node; node = shadowHost(node)?.getRootNode() ?? null) ancestorRoots.push(node);
       }
       for (const node of ancestorRoots) {
         for (const type of ['close', 'toggle']) {
-          if (listen) node.addEventListener(type, onAncestorClose, true);
-          else node.removeEventListener(type, onAncestorClose, true);
+          if (listen) builtIn(node).addEventListener(type, onAncestorClose, true);
+          else builtIn(node).removeEventListener(type, onAncestorClose, true);
         }
       }
     };
@@ -464,8 +468,8 @@ $component({
     // server's. Mark the current panel on every run so exactly one is shown.
     markPanel(active);
     host.addEventListener('click', onClick);
-    host.ownerDocument.addEventListener('keydown', onKeyDown, true);
-    host.ownerDocument.addEventListener('pointerdown', onPointerDown, true);
+    builtIn(host.ownerDocument).addEventListener('keydown', onKeyDown, true);
+    builtIn(host.ownerDocument).addEventListener('pointerdown', onPointerDown, true);
     dialog.addEventListener('close', onNativeClose);
     effect(() => {
       configuration = {
@@ -557,8 +561,8 @@ $component({
       handoff.active = active;
       handoff.serverActive = data.active;
       host.removeEventListener('click', onClick);
-      host.ownerDocument.removeEventListener('keydown', onKeyDown, true);
-      host.ownerDocument.removeEventListener('pointerdown', onPointerDown, true);
+      builtIn(host.ownerDocument).removeEventListener('keydown', onKeyDown, true);
+      builtIn(host.ownerDocument).removeEventListener('pointerdown', onPointerDown, true);
       dialog.removeEventListener('close', onNativeClose);
       listenForAncestorClose(false);
       stopGeometry();

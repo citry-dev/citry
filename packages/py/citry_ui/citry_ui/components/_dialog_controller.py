@@ -6,6 +6,10 @@ DIALOG_CONTROLLER_RUNTIME_KEY = "citry-ui:dialog-controller-runtime"
 DIALOG_CONTROLLER_RUNTIME_GENERATION = 1
 
 DIALOG_CONTROLLER_RUNTIME_JS = r"""
+  // Page markup can hide a document's or a form's members behind named elements,
+  // so read them through the core runtime's helper; Citry before 0.7.0 have no
+  // helper, so the fallback reads the members directly.
+  const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
   (() => {
     const key = Symbol.for("citry-ui:dialog-controller-runtime");
     const installed = globalThis[key];
@@ -26,7 +30,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
     const scopeManagers = new WeakMap();
 
     const deepActive = (documentOwner) => {
-      let active = documentOwner.activeElement;
+      let active = builtIn(documentOwner).activeElement;
       while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
       return active;
     };
@@ -69,14 +73,14 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           state.overflow = shared.overflow;
           state.paddingInlineEnd = shared.paddingInlineEnd;
         } else {
-          const root = documentOwner.documentElement;
+          const root = builtIn(documentOwner).documentElement;
           state.overflow = root.style.overflow;
           state.paddingInlineEnd = root.style.paddingInlineEnd;
           if (shared) {
             shared.overflow = state.overflow;
             shared.paddingInlineEnd = state.paddingInlineEnd;
           }
-          const view = documentOwner.defaultView;
+          const view = builtIn(documentOwner).defaultView;
           const scrollbarWidth = Math.max(0, (view?.innerWidth ?? root.clientWidth) - root.clientWidth);
           const currentPadding = Number.parseFloat(view?.getComputedStyle(root).paddingInlineEnd) || 0;
           root.style.overflow = "hidden";
@@ -96,7 +100,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         // A drawer still holding the page restores the styles when it releases,
         // so leave the page locked for it.
         if (otherLockHolders(dialog).length > 0) return;
-        const root = documentOwner.documentElement;
+        const root = builtIn(documentOwner).documentElement;
         root.style.overflow = state.overflow;
         root.style.paddingInlineEnd = state.paddingInlineEnd;
       }
@@ -139,7 +143,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         const observer = new MutationObserver(() => {
           for (const candidate of [...owners]) candidate.validate();
         });
-        observer.observe(scope instanceof Document ? scope.documentElement : scope, {
+        observer.observe(scope instanceof Document ? builtIn(scope).documentElement : scope, {
           subtree: true,
           childList: true,
         });
@@ -283,8 +287,8 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           if (!active || generation !== focusGeneration || appliedOpen) return;
           const current = deepActive(documentOwner);
           const browserNeedsHelp = current === null
-            || current === documentOwner.body
-            || current === documentOwner.documentElement
+            || current === builtIn(documentOwner).body
+            || current === builtIn(documentOwner).documentElement
             || current === dialog
             || dialog.contains(current)
             || current === browserFocus;
@@ -397,11 +401,11 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         if (!interceptDialogSubmit?.()) return;
         const form = event.target;
         if (event.defaultPrevented || !(form instanceof HTMLFormElement)) return;
-        if (form.closest("dialog") !== dialog) return;
+        if (builtIn(form).closest("dialog") !== dialog) return;
         const submitter = event.submitter;
         const override = (submitter instanceof HTMLButtonElement
           || submitter instanceof HTMLInputElement) && submitter.hasAttribute("formmethod");
-        const method = override ? submitter.formMethod : form.method;
+        const method = override ? submitter.formMethod : builtIn(form).method;
         if (method.toLowerCase() !== "dialog") return;
         event.preventDefault();
         const returnValue = submitter instanceof HTMLButtonElement
@@ -529,8 +533,8 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
               // opened the dialog, if that element is still in the page.
               const current = deepActive(documentOwner);
               const focusLost = current === null
-                || current === documentOwner.body
-                || current === documentOwner.documentElement
+                || current === builtIn(documentOwner).body
+                || current === builtIn(documentOwner).documentElement
                 || current === dialog
                 || dialog.contains(current)
                 || !current.isConnected;

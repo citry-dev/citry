@@ -907,6 +907,10 @@ class CMenu(LibraryComponent):
     _runtime_source = (
         ANCHORED_LAYER_RUNTIME_JS
         + r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
       const hideNativePopover = (element) => {
         if (!element?.matches?.(":popover-open")) return;
         try {
@@ -1279,7 +1283,7 @@ class CMenu(LibraryComponent):
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
               // Step out of a shadow root to its host; a document has no host.
               const boxRoot = box.getRootNode();
-              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? builtIn(boxRoot).host : null);
               if (!next) {
                 break;
               }
@@ -1568,7 +1572,7 @@ class CMenu(LibraryComponent):
           // item still off screen (this window only, not a parent page).
           const revealOnPage = (element) => {
             const rect = element.getBoundingClientRect();
-            const view = element.ownerDocument.defaultView;
+            const view = builtIn(element.ownerDocument).defaultView;
             if (rect.top < 0 || rect.left < 0 || rect.bottom > view.innerHeight || rect.right > view.innerWidth) {
               element.scrollIntoView({ block: "nearest", inline: "nearest" });
             }
@@ -1673,7 +1677,7 @@ class CMenu(LibraryComponent):
               return node.parentNode;
             }
             const root = node?.getRootNode?.();
-            return root instanceof ShadowRoot ? root.host : null;
+            return root instanceof ShadowRoot ? builtIn(root).host : null;
           };
           const inheritedLanguage = (element) => {
             let current = element;
@@ -1683,7 +1687,7 @@ class CMenu(LibraryComponent):
               }
               current = composedParent(current);
             }
-            return surface.ownerDocument.documentElement.lang || undefined;
+            return builtIn(surface.ownerDocument).documentElement.lang || undefined;
           };
           const normalizeText = (value, element) => {
             const collapsed = String(value ?? "")
@@ -1815,7 +1819,7 @@ class CMenu(LibraryComponent):
             // modal Dialog. Walk the composed ancestors so both a Dialog
             // outside the Menu's shadow and one inside it are eligible.
             const modal = nearestContainingModal(surface) ?? nearestContainingModal(trigger);
-            const target = modal ?? surface.ownerDocument.body;
+            const target = modal ?? builtIn(surface.ownerDocument).body;
             const hadTabIndex = target.hasAttribute("tabindex");
             if (!hadTabIndex) {
               target.tabIndex = -1;
@@ -1855,7 +1859,7 @@ class CMenu(LibraryComponent):
             const activeElement = layerCoordinator.deepActiveElement();
             if (
               !isInsideTree(activeElement)
-              && activeElement !== surface.ownerDocument.body
+              && activeElement !== builtIn(surface.ownerDocument).body
               && activeElement !== trigger
             ) {
               return;
@@ -2071,7 +2075,7 @@ class CMenu(LibraryComponent):
                     && logicalOpen
                     && controlled
                     && repairEntry?.element?.isConnected
-                    && [trigger, surface.ownerDocument.body].includes(
+                    && [trigger, builtIn(surface.ownerDocument).body].includes(
                       layerCoordinator.deepActiveElement(),
                     )
                   ) {
@@ -5239,6 +5243,10 @@ class CMenuSubmenu(LibraryComponent):
       const anchoredLayerRuntime = globalThis[
         Symbol.for("citry-ui:anchored-layer-runtime")
       ];
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
 
       $component({
         props: {
@@ -5353,7 +5361,7 @@ class CMenuSubmenu(LibraryComponent):
           };
           const choosePlacement = () => {
             const rect = trigger.getBoundingClientRect();
-            const viewport = surface.ownerDocument.defaultView?.visualViewport;
+            const viewport = builtIn(surface.ownerDocument).defaultView?.visualViewport;
             const left = viewport?.offsetLeft ?? 0;
             const top = viewport?.offsetTop ?? 0;
             const right = left + (viewport?.width ?? innerWidth);
@@ -5542,7 +5550,7 @@ class CMenuSubmenu(LibraryComponent):
                 cancelIntent();
                 context.closeSubmenu(entry, { restore: false });
               };
-              targetRoot.addEventListener("pointermove", onMove, true);
+              builtIn(targetRoot).addEventListener("pointermove", onMove, true);
               const timeout = setTimeout(() => {
                 cancelIntent();
                 if (!surface.matches(":hover")) {
@@ -5551,7 +5559,7 @@ class CMenuSubmenu(LibraryComponent):
               }, 300);
               intentCleanup = () => {
                 clearTimeout(timeout);
-                targetRoot.removeEventListener("pointermove", onMove, true);
+                builtIn(targetRoot).removeEventListener("pointermove", onMove, true);
               };
             },
             refresh() {

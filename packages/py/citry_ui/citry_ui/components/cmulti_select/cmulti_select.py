@@ -771,6 +771,10 @@ class CMultiSelect(LibraryComponent):
         Symbol.for("citry-ui:anchored-layer-runtime")
       ];
 
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for('citry:built-in-members')] ?? (target => target);
       const multiSelectHandoffKey = Symbol.for('citry-ui:multi-select-handoff');
       $component({
         props: {
@@ -841,7 +845,7 @@ class CMultiSelect(LibraryComponent):
           // however that happens, which a ResizeObserver notices; it watches
           // only while an episode lasts.
           let shownWatch=null;
-          const startBlockedEpisode=()=>{invalidEpisodes.add('blocked-open');if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(trigger.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;invalidEpisodes.delete('blocked-open');});let box=/** @type {Element} */(trigger);while(/^(inline|contents)/.test(getComputedStyle(box).display)){const boxRoot=box.getRootNode();const next=box.parentElement??(boxRoot instanceof ShadowRoot?boxRoot.host:null);if(!next)break;box=next;}shownWatch.observe(box);};
+          const startBlockedEpisode=()=>{invalidEpisodes.add('blocked-open');if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(trigger.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;invalidEpisodes.delete('blocked-open');});let box=/** @type {Element} */(trigger);while(/^(inline|contents)/.test(getComputedStyle(box).display)){const boxRoot=box.getRootNode();const next=box.parentElement??(boxRoot instanceof ShadowRoot?builtIn(boxRoot).host:null);if(!next)break;box=next;}shownWatch.observe(box);};
           let logicalOpen=false, highlightedValue=prior?.highlightedValue??null;
           let controlledValue=false, controlledOpen=false, clientValue, clientOpen;
           let onValueChange=null,onOpenChange=null,nativeInvalid=false,active=true,generation=0;
@@ -855,7 +859,7 @@ class CMultiSelect(LibraryComponent):
           const eligible=()=>!effectiveDisabled()&&!configuration.readonly&&enabledOptions().length>0;
           const syncValue=()=>{
             const selected=new Set(current);root.toggleAttribute('data-empty',!current.length);
-            if(!current.length){const placeholder=root.ownerDocument.createElement('span');placeholder.dataset.citryUiPart='placeholder';placeholder.textContent=data.placeholder;valuesSurface.replaceChildren(placeholder);}
+            if(!current.length){const placeholder=builtIn(root.ownerDocument).createElement('span');placeholder.dataset.citryUiPart='placeholder';placeholder.textContent=data.placeholder;valuesSurface.replaceChildren(placeholder);}
             else formRuntime.renderTokens(valuesSurface,current,{className:'cui-multi-select__chip',part:'chip',
               label:value=>data.options.find(option=>option.value===value)?.label??value});
             options().forEach(option=>{const chosen=selected.has(option.dataset.value);option.setAttribute('aria-selected',chosen?'true':'false');option.toggleAttribute('data-selected',chosen);});
@@ -891,7 +895,7 @@ class CMultiSelect(LibraryComponent):
           const nativeCommit=()=>formRuntime.commit(nativeSelect);
           const requestValue=(next,option,selected,source,event)=>{if(same(next,current))return false;const previous=[...current],detail={value:[...next],previousValue:previous,option,selected,controlled:controlledValue,source,sourceEvent:event};if(!controlledValue){current=[...next];committed=[...next];syncValue();}onValueChange?.([...next],detail);if(!controlledValue)nativeCommit();return true;};
           const toggleOption=(option,event,source)=>{if(!(option instanceof HTMLElement)||option.hasAttribute('data-disabled'))return;const selected=current.includes(option.dataset.value);const wanted=new Set(current);if(selected)wanted.delete(option.dataset.value);else wanted.add(option.dataset.value);const next=options().filter(item=>wanted.has(item.dataset.value)).map(item=>item.dataset.value);selectionTransaction=true;const transaction=generation;requestValue(next,option,!selected,source,event);selectionTransaction=false;if(pendingForced){const notice=pendingForced;pendingForced=null;notifyOpen(false,notice.reason,notice.source,true);return;}if(!active||transaction!==generation||!root.isConnected)return;if(configuration.closeOnSelect)requestOpen(false,'selection',option);};
-          const localeLower=value=>{const lang=root.closest('[lang]')?.getAttribute('lang')??root.ownerDocument.documentElement.lang??'';try{return lang?value.toLocaleLowerCase(lang):value.toLocaleLowerCase();}catch{return value.toLowerCase();}};
+          const localeLower=value=>{const lang=root.closest('[lang]')?.getAttribute('lang')??builtIn(root.ownerDocument).documentElement.lang??'';try{return lang?value.toLocaleLowerCase(lang):value.toLocaleLowerCase();}catch{return value.toLowerCase();}};
           const typeahead=event=>{const altGraph=event.getModifierState?.('AltGraph')??false;if(event.isComposing||event.ctrlKey||event.metaKey||(event.altKey&&!altGraph)||event.key.length!==1)return false;const key=localeLower(event.key);typeBuffer=typeBuffer.length===1&&typeBuffer===key?key:typeBuffer+key;if(typeTimer!==null)clearTimeout(typeTimer);typeTimer=setTimeout(()=>{typeBuffer='';typeTimer=null;},500);const enabled=enabledOptions(),index=enabled.findIndex(option=>option.dataset.value===highlightedValue),ordered=[...enabled.slice(index+1),...enabled.slice(0,index+1)],match=ordered.find(option=>localeLower(option.querySelector('[data-citry-ui-part="option-label"]')?.textContent?.trim().replace(/\s+/g,' ')??'').startsWith(typeBuffer));if(!match)return false;highlightedValue=match.dataset.value;sync();match.scrollIntoView({block:'nearest'});return true;};
           const move=direction=>{const enabled=enabledOptions();if(!enabled.length)return;const index=enabled.findIndex(option=>option.dataset.value===highlightedValue),edge=direction>0?enabled[0]:enabled.at(-1),next=index<0?edge:enabled[index+direction]??(configuration.loop?edge:enabled[index]);highlightedValue=next?.dataset.value??null;sync();next?.scrollIntoView({block:'nearest'});};
           const onClick=event=>{const path=event.composedPath();if(path.includes(trigger)){if(eligible())requestOpen(!logicalOpen,'trigger',trigger,true);return;}const option=path.find(node=>node instanceof HTMLElement&&node.getAttribute('role')==='option'&&node.closest('[role="listbox"]')===listbox);if(option)toggleOption(option,event,'pointer');};

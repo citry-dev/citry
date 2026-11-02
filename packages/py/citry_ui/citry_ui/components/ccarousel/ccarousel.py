@@ -352,6 +352,10 @@ class CCarousel(LibraryComponent):
     """
 
     js = """
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           index: {},
@@ -501,7 +505,7 @@ class CCarousel(LibraryComponent):
           const syncIndicators = () => {
             indicators.replaceChildren();
             slides.forEach((slide, index) => {
-              const button = document.createElement("button");
+              const button = builtIn(document).createElement("button");
               button.type = "button";
               button.dataset.citryUiPart = "indicator";
               button.dataset.index = String(index);

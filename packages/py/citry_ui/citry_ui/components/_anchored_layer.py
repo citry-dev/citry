@@ -3,6 +3,10 @@
 from citry.ext.dependencies import Script
 
 _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
+      // Page markup can hide a document's members behind elements with a name, so
+      // read them through the core runtime's helper; Citry before 0.7.0 have no
+      // helper, so the fallback reads the members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
       const anchoredLayerRuntime = (() => {
         const runtimeKey = Symbol.for("citry-ui:anchored-layer-runtime");
         const compatibilityKey = Symbol.for(
@@ -138,7 +142,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
                 continue;
               }
               visited.add(root);
-              for (const element of root.querySelectorAll?.("*") ?? []) {
+              for (const element of builtIn(root).querySelectorAll?.("*") ?? []) {
                 if (isOpenShadowRoot(element.shadowRoot)) {
                   discoveredRoots.add(element.shadowRoot);
                   pending.push(element.shadowRoot);
@@ -162,7 +166,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             const dialogs = [];
             for (const root of knownRoots()) {
               try {
-                dialogs.push(...root.querySelectorAll("dialog:modal"));
+                dialogs.push(...builtIn(root).querySelectorAll("dialog:modal"));
               } catch {
                 // Current supported browsers implement :modal. Treat an
                 // unavailable selector as no eligible modal rather than
@@ -172,7 +176,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             return [...new Set(dialogs)];
           };
           const deepActiveElement = () => {
-            let active = ownerDocument.activeElement;
+            let active = builtIn(ownerDocument).activeElement;
             while (active?.shadowRoot?.activeElement) {
               active = active.shadowRoot.activeElement;
             }
@@ -573,11 +577,11 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
               }
               reconcileModal(event);
             };
-            root.addEventListener("pointerdown", pointerdown, true);
-            root.addEventListener("focusin", focusin, true);
-            root.addEventListener("keydown", keydown, true);
-            root.addEventListener("beforetoggle", beforetoggle, true);
-            root.addEventListener("toggle", toggle, true);
+            builtIn(root).addEventListener("pointerdown", pointerdown, true);
+            builtIn(root).addEventListener("focusin", focusin, true);
+            builtIn(root).addEventListener("keydown", keydown, true);
+            builtIn(root).addEventListener("beforetoggle", beforetoggle, true);
+            builtIn(root).addEventListener("toggle", toggle, true);
             const observer = new MutationObserver((records) => {
               for (const record of records) {
                 if (record.type === "childList") {
@@ -614,11 +618,11 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             stats.activeListenerSets += 1;
           };
           const detachScope = (root, record) => {
-            root.removeEventListener("pointerdown", record.pointerdown, true);
-            root.removeEventListener("focusin", record.focusin, true);
-            root.removeEventListener("keydown", record.keydown, true);
-            root.removeEventListener("beforetoggle", record.beforetoggle, true);
-            root.removeEventListener("toggle", record.toggle, true);
+            builtIn(root).removeEventListener("pointerdown", record.pointerdown, true);
+            builtIn(root).removeEventListener("focusin", record.focusin, true);
+            builtIn(root).removeEventListener("keydown", record.keydown, true);
+            builtIn(root).removeEventListener("beforetoggle", record.beforetoggle, true);
+            builtIn(root).removeEventListener("toggle", record.toggle, true);
             record.observer.disconnect();
             scopes.delete(root);
             stats.activeListenerSets -= 1;

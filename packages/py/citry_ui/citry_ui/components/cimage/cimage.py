@@ -670,6 +670,10 @@ class CImage(LibraryComponent):
     """
 
     js = """
+      // Page markup can hide a document's members behind named elements, so read
+      // them through the core runtime's helper; Citry before 0.7.0 have no
+      // helper, so the fallback reads the members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
       const imageReady = "data-citry-image-initialized";
       const imageOwner = Symbol.for("citry-ui:image-owner");
       const imageScopes = globalThis[Symbol.for("citry-ui:image-mutation-scopes")] ??= new WeakMap();
@@ -715,7 +719,7 @@ class CImage(LibraryComponent):
                     node === candidate || node.contains?.(candidate)))) registration.notify();
               }
             });
-            observer.observe(scope instanceof Document ? scope.documentElement : scope, {
+            observer.observe(scope instanceof Document ? builtIn(scope).documentElement : scope, {
               subtree: true, childList: true, attributes: true,
             });
             manager = { entries, observer };

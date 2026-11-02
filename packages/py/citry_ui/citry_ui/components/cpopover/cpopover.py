@@ -327,6 +327,10 @@ class CPopover(LibraryComponent):
       const anchoredLayerRuntime = globalThis[
         Symbol.for("citry-ui:anchored-layer-runtime")
       ];
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
 
       const handoffKey = Symbol.for("citry-ui:popover-handoff");
 
@@ -419,7 +423,7 @@ class CPopover(LibraryComponent):
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
               // Step out of a shadow root to its host; a document has no host.
               const boxRoot = box.getRootNode();
-              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? builtIn(boxRoot).host : null);
               if (!next) {
                 break;
               }

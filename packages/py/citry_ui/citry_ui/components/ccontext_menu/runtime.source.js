@@ -1,9 +1,18 @@
 
+      // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
+      const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
       const menuKey = Symbol.for("citry-ui:menu-root-runtime"),
         menuRuntime = globalThis[menuKey],
+        // The script's own element carries the CSP nonce; a named element on the
+        // document can hide `currentScript`, so it is read through the helper.
+        currentScript = globalThis.document
+          ? builtIn(globalThis.document).currentScript
+          : undefined,
         contextMenuRuntimeNonce =
-          globalThis.document?.currentScript?.nonce ||
-          globalThis.document?.currentScript?.getAttribute("nonce") ||
+          currentScript?.nonce ||
+          currentScript?.getAttribute("nonce") ||
           null,
         shadowPointStyleText = `:where([data-citry-context-menu-point]){position:fixed;inset:auto;width:1px;height:1px;margin:0;padding:0;border:0;background:transparent;overflow:visible;pointer-events:none}`;
       if (
@@ -64,7 +73,7 @@
                     ) && record.notify(records);
                 });
               (observer.observe(
-                scope instanceof Document ? scope.documentElement : scope,
+                scope instanceof Document ? builtIn(scope).documentElement : scope,
                 { subtree: !0, childList: !0, attributes: !0, attributeOldValue: !0 },
               ),
                 (manager = { entries, observer }),
@@ -202,7 +211,7 @@
             tt = new Set();
           let z = i.getRootNode();
           const P = i.ownerDocument,
-            q = P.defaultView,
+            q = builtIn(P).defaultView,
             Zt = () => {
               const e = (e, t) =>
                 e instanceof Element
@@ -331,7 +340,7 @@
                 : (V("size", e, "; using the server fallback"), n.size);
             },
             U = () => {
-              let e = P.activeElement;
+              let e = builtIn(P).activeElement;
               for (; e?.shadowRoot?.activeElement; ) e = e.shadowRoot.activeElement;
               return e;
             },
@@ -355,7 +364,7 @@
             },
             J = (e, t) => {
               try {
-                const n = i.getRootNode().querySelectorAll(`#${CSS.escape(e)}`);
+                const n = builtIn(i.getRootNode()).querySelectorAll(`#${CSS.escape(e)}`);
                 return 1 === n.length && n[0] === t;
               } catch {
                 return !1;
@@ -375,7 +384,7 @@
             ensureShadowStyles = (force = !1) => {
               const e = i.getRootNode();
               if (!At() || !(e instanceof ShadowRoot)) return;
-              const t = P.querySelector("style[nonce], script[nonce]"),
+              const t = builtIn(P).querySelector("style[nonce], script[nonce]"),
                 n = contextMenuRuntimeNonce || t?.nonce || t?.getAttribute("nonce") || null,
                 o = shadowStyleRoots.get(e),
                 r = new Set([
@@ -397,7 +406,7 @@
                 return void shadowStyleRoots.set(e, s);
               }
               for (const t of r) t.getRootNode() === e && t.remove();
-              const l = P.createElement("style");
+              const l = builtIn(P).createElement("style");
               (n && l.setAttribute("nonce", n),
                 l.setAttribute("data-citry-context-menu-runtime", ""),
                 (l.textContent = shadowPointStyleText),
@@ -533,7 +542,7 @@
                 )
               )
                 return !1;
-              for (let n = e; n; n = n.parentElement ?? n.getRootNode()?.host)
+              for (let n = e; n; n = n.parentElement ?? shadowHost(n.getRootNode()))
                 if (n.hasAttribute?.("hidden") || n.hasAttribute?.("inert"))
                   return !1;
               return !0;
@@ -562,7 +571,7 @@
               for (
                 let e = r.parentElement;
                 e;
-                e = e.parentElement ?? e.getRootNode()?.host
+                e = e.parentElement ?? shadowHost(e.getRootNode())
               ) {
                 const t = getComputedStyle(e),
                   n = e.getBoundingClientRect(),
@@ -580,7 +589,7 @@
               if (m <= f || h <= v) return null;
               const y = [],
                 x = r.getRootNode(),
-                w = x.elementsFromPoint?.bind(x) ?? P.elementsFromPoint.bind(P),
+                w = builtIn(x).elementsFromPoint?.bind(x) ?? builtIn(P).elementsFromPoint.bind(P),
                 A =
                   "none" === getComputedStyle(r).pointerEvents
                     ? {
@@ -1028,13 +1037,13 @@
               }
             },
             he = () => {
-              const e = P.getSelection();
+              const e = builtIn(P).getSelection();
               if (!e) return !1;
               if (z instanceof ShadowRoot) {
                 if ("function" == typeof e.getComposedRanges)
                   try {
                     return e.getComposedRanges({ shadowRoots: [z] }).some((e) => {
-                      const t = P.createRange();
+                      const t = builtIn(P).createRange();
                       return (
                         t.setStart(e.startContainer, e.startOffset),
                         t.setEnd(e.endContainer, e.endOffset),
@@ -1404,7 +1413,7 @@
               null === y && (y = requestAnimationFrame(Te));
             },
             ze = () => {
-              P.hidden && je();
+              builtIn(P).hidden && je();
             },
             Ue = () => {
               (Le(), v.isOpen() && Me());
@@ -1424,13 +1433,13 @@
             if (e !== it) {
               it = e;
               const t = e ? "addEventListener" : "removeEventListener";
-              (P[t]("pointermove", Ce, !0),
-                P[t]("pointerup", Se, !0),
-                P[t]("pointercancel", Se, !0),
-                P[t]("contextmenu", Re, !0),
+              (builtIn(P)[t]("pointermove", Ce, !0),
+                builtIn(P)[t]("pointerup", Se, !0),
+                builtIn(P)[t]("pointercancel", Se, !0),
+                builtIn(P)[t]("contextmenu", Re, !0),
                 q[t]("blur", je),
-                P[t]("visibilitychange", ze),
-                P[t]("selectionchange", Gt));
+                builtIn(P)[t]("visibilitychange", ze),
+                builtIn(P)[t]("selectionchange", Gt));
             }
             if (t !== at) {
               ((at = t),
@@ -1443,14 +1452,14 @@
             }
             (St &&
               (!n || St !== z) &&
-              (St.removeEventListener("scroll", Ue, !0), (St = null)),
-              n && !St && ((St = z), St.addEventListener("scroll", Ue, !0)));
+              (builtIn(St).removeEventListener("scroll", Ue, !0), (St = null)),
+              n && !St && ((St = z), builtIn(St).addEventListener("scroll", Ue, !0)));
             const a = [];
             if (n)
               for (
                 let e = s.parentElement;
                 e;
-                e = e.parentElement ?? e.getRootNode()?.host
+                e = e.parentElement ?? shadowHost(e.getRootNode())
               )
                 e !== i && a.push(e);
             (a.length !== Xt.length || a.some((e, t) => e !== Xt[t])) &&
@@ -1464,7 +1473,7 @@
             }
             if (r !== pt)
               ((pt = r),
-                P[r ? "addEventListener" : "removeEventListener"](
+                builtIn(P)[r ? "addEventListener" : "removeEventListener"](
                   "pointerdown",
                   Jt,
                   !0,
@@ -1657,23 +1666,23 @@
                 i.removeEventListener("contextmenu", Re, !0),
                 i.removeEventListener("keydown", Ae, !0),
                 i.removeEventListener("pointerdown", ke, !0),
-                P.removeEventListener("pointermove", Ce, !0),
-                P.removeEventListener("pointerup", Se, !0),
-                P.removeEventListener("pointercancel", Se, !0),
-                P.removeEventListener("contextmenu", Re, !0),
-                P.removeEventListener("pointerdown", Jt, !0),
+                builtIn(P).removeEventListener("pointermove", Ce, !0),
+                builtIn(P).removeEventListener("pointerup", Se, !0),
+                builtIn(P).removeEventListener("pointercancel", Se, !0),
+                builtIn(P).removeEventListener("contextmenu", Re, !0),
+                builtIn(P).removeEventListener("pointerdown", Jt, !0),
                 i.removeEventListener("click", Ie, !0),
                 i.removeEventListener("focusin", Ne, !0),
                 q.removeEventListener("scroll", Ue, !0),
-                St?.removeEventListener("scroll", Ue, !0),
+                St && builtIn(St).removeEventListener("scroll", Ue, !0),
                 Xt.forEach((e) => e.removeEventListener("scroll", Ue, !0)),
                 (Xt = []),
                 q.removeEventListener("resize", Me),
                 q.removeEventListener("blur", je),
                 q.visualViewport?.removeEventListener("scroll", Ue),
                 q.visualViewport?.removeEventListener("resize", Me),
-                P.removeEventListener("visibilitychange", ze),
-                P.removeEventListener("selectionchange", Gt),
+                builtIn(P).removeEventListener("visibilitychange", ze),
+                builtIn(P).removeEventListener("selectionchange", Gt),
                 l.removeEventListener("toggle", Ye),
                 l.removeEventListener("beforetoggle", Be));
               for (const e of T) clearTimeout(e);

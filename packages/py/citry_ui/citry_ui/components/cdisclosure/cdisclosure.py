@@ -748,6 +748,10 @@ class CDisclosure(LibraryComponent):
       const anchoredLayerRuntime = globalThis[
         Symbol.for("citry-ui:anchored-layer-runtime")
       ];
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
 
       $component({
         props: {
@@ -1115,10 +1119,10 @@ class CDisclosure(LibraryComponent):
               return node.parentNode;
             }
             if (node instanceof ShadowRoot) {
-              return node.host;
+              return builtIn(node).host;
             }
             const nodeRoot = node?.getRootNode?.();
-            return nodeRoot instanceof ShadowRoot ? nodeRoot.host : null;
+            return nodeRoot instanceof ShadowRoot ? builtIn(nodeRoot).host : null;
           };
           const containingModal = (start) => {
             let current = start;
@@ -1151,7 +1155,7 @@ class CDisclosure(LibraryComponent):
             if (!anchoredLayerRuntime.composedContains(anatomy.panel, focused)) {
               return;
             }
-            const target = containingModal(root) ?? root.ownerDocument.body;
+            const target = containingModal(root) ?? builtIn(root.ownerDocument).body;
             const prior = target.getAttribute("tabindex");
             if (!target.hasAttribute("tabindex")) {
               target.setAttribute("tabindex", "-1");

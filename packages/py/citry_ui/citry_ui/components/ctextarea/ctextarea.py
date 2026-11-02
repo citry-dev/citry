@@ -359,6 +359,10 @@ class CTextarea(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           value: {},
@@ -621,7 +625,7 @@ class CTextarea(LibraryComponent):
           textarea.addEventListener("change", onChange);
           textarea.addEventListener("compositionstart", onCompositionStart);
           textarea.addEventListener("compositionend", onCompositionEnd);
-          nativeForm?.addEventListener("reset", onReset);
+          if (nativeForm) builtIn(nativeForm).addEventListener("reset", onReset);
           Citry.vue.watchEffect(() => {
             applyState();
             clearNativeInvalidWhenValid();
@@ -637,7 +641,7 @@ class CTextarea(LibraryComponent):
             textarea.removeEventListener("change", onChange);
             textarea.removeEventListener("compositionstart", onCompositionStart);
             textarea.removeEventListener("compositionend", onCompositionEnd);
-            nativeForm?.removeEventListener("reset", onReset);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("reset", onReset);
             if (reconcileTimer !== null) {
               clearTimeout(reconcileTimer);
             }

@@ -1,3 +1,7 @@
+// Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
+const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
 const anchoredLayerRuntimeCompatible = globalThis[
   Symbol.for("citry-ui:anchored-layer-runtime-compatible")
 ] === true;
@@ -118,7 +122,7 @@ $component({
       // until the trigger next opens.
       let box = trigger;
       while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
-        const next = box.parentElement ?? box.getRootNode().host;
+        const next = box.parentElement ?? shadowHost(box.getRootNode());
         if (!next) break;
         box = next;
       }
@@ -442,7 +446,7 @@ $component({
     };
     const localeLower = (value) => {
       const lang = root.closest('[lang]')?.getAttribute('lang')
-        ?? root.ownerDocument.documentElement.lang
+        ?? builtIn(root.ownerDocument).documentElement.lang
         ?? '';
       try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
       catch { return value.toLowerCase(); }
@@ -690,7 +694,7 @@ $component({
     popup.addEventListener('toggle', onToggle);
     nativeSelect.addEventListener('invalid', onInvalid);
     nativeSelect.addEventListener('focus', onProxyFocus);
-    nativeForm?.addEventListener('reset', onReset);
+    nativeForm && builtIn(nativeForm).addEventListener('reset', onReset);
 
     const fieldsetObservers = [];
     for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
@@ -759,7 +763,7 @@ $component({
       popup.removeEventListener('toggle', onToggle);
       nativeSelect.removeEventListener('invalid', onInvalid);
       nativeSelect.removeEventListener('focus', onProxyFocus);
-      nativeForm?.removeEventListener('reset', onReset);
+      nativeForm && builtIn(nativeForm).removeEventListener('reset', onReset);
       coordinator.unregister(layer, {reason:'ancestor', source:root, cascade:true});
       field?.setNativeInvalid(false);
       root.removeAttribute('data-citry-select-initialized');

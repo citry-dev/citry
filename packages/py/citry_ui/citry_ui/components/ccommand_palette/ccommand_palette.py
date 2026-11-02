@@ -1163,6 +1163,10 @@ class CCommandPalette(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or a form's members behind named
+      // elements, so read them through the core runtime's helper; older Citry
+      // versions have no helper, so the fallback reads the members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
       const readyAttribute = "data-citry-command-palette-initialized";
       const ownerKey = Symbol.for("citry-ui:command-palette-owner");
       const handoffKey = Symbol.for("citry-ui:command-palette-handoff");
@@ -1209,7 +1213,7 @@ class CCommandPalette(LibraryComponent):
                     node === candidate || node.contains?.(candidate)))) registration.notify();
               }
             });
-            observer.observe(scope instanceof Document ? scope.documentElement : scope, {
+            observer.observe(scope instanceof Document ? builtIn(scope).documentElement : scope, {
               subtree: true,
               childList: true,
               attributes: true,
@@ -1610,7 +1614,7 @@ class CCommandPalette(LibraryComponent):
           const removeFormGuard = () => {
             if (!formGuard) return;
             clearTimeout(formGuard.timer);
-            formGuard.form.removeEventListener("submit", formGuard.listener, true);
+            builtIn(formGuard.form).removeEventListener("submit", formGuard.listener, true);
             formGuard = null;
           };
           const armFormGuard = () => {
@@ -1625,7 +1629,7 @@ class CCommandPalette(LibraryComponent):
                 && dialogRuntime.deepActive(input.ownerDocument) === input
               ) event.preventDefault();
             };
-            form.addEventListener("submit", listener, true);
+            builtIn(form).addEventListener("submit", listener, true);
             const timer = setTimeout(removeFormGuard, 0);
             formGuard = { form, listener, timer };
           };
@@ -2260,7 +2264,7 @@ class CCommandPalette(LibraryComponent):
                 delete host[handoffKey];
               });
               handoffObserver.observe(
-                handoffRoot instanceof Document ? handoffRoot.documentElement : handoffRoot,
+                handoffRoot instanceof Document ? builtIn(handoffRoot).documentElement : handoffRoot,
                 {childList: true, subtree: true},
               );
               host[handoffKey] = record;

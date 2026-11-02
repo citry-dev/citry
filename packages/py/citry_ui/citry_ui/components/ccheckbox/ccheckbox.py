@@ -429,6 +429,10 @@ class CCheckbox(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           checked: {},
@@ -763,7 +767,7 @@ class CCheckbox(LibraryComponent):
           input.addEventListener("invalid", onInvalid);
           input.addEventListener("input", onInput);
           input.addEventListener("change", onChange);
-          nativeForm?.addEventListener("reset", onReset);
+          if (nativeForm) builtIn(nativeForm).addEventListener("reset", onReset);
           Citry.vue.watchEffect(() => {
             applyState();
             applyLatestControlled();
@@ -781,7 +785,7 @@ class CCheckbox(LibraryComponent):
             input.removeEventListener("invalid", onInvalid);
             input.removeEventListener("input", onInput);
             input.removeEventListener("change", onChange);
-            nativeForm?.removeEventListener("reset", onReset);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("reset", onReset);
             if (reconcileTimer !== null) {
               clearTimeout(reconcileTimer);
             }

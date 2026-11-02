@@ -312,6 +312,10 @@ class CButton(LibraryComponent):
     """
 
     _runtime_source = """
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       const guardButtonActivation = (root, configuration, event) => {
         const isLink = root.localName === "a";
         if (
@@ -524,7 +528,7 @@ class CButton(LibraryComponent):
           const nativeForm = isLink ? null : root.form;
 
           root.addEventListener("click", blockUnavailableActivation, true);
-          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          if (nativeForm) builtIn(nativeForm).addEventListener("submit", blockLoadingSubmitter, true);
           Citry.vue.watchEffect(() => {
             const localDisabled = resolver.boolean("disabled");
             applyConfiguration({
@@ -541,7 +545,7 @@ class CButton(LibraryComponent):
 
           return () => {
             root.removeEventListener("click", blockUnavailableActivation, true);
-            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("submit", blockLoadingSubmitter, true);
             root.removeAttribute("data-citry-button-initialized");
           };
         },

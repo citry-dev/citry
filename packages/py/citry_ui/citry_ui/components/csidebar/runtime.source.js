@@ -1,3 +1,5 @@
+// Page markup can hide a document's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
 $component({
   props: {
     collapsed: {default: undefined}, collapsible: {default: undefined}, side: {default: undefined},
@@ -60,7 +62,7 @@ $component({
       beginTransition(collapsed, resolved);
       collapsed = resolved;
       const offcanvasHidden = collapsed && configuration.collapsible === "offcanvas";
-      if (offcanvasHidden && panel.contains(root.ownerDocument.activeElement)) {
+      if (offcanvasHidden && panel.contains(builtIn(root.ownerDocument).activeElement)) {
         toggle.focus({preventScroll: true});
       }
       if (collapsed) root.setAttribute("data-collapsed", "");

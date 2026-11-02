@@ -533,6 +533,10 @@ class CNativeSelect(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           value: {},
@@ -895,7 +899,7 @@ class CNativeSelect(LibraryComponent):
           select.addEventListener("invalid", onInvalid);
           select.addEventListener("input", onInput);
           select.addEventListener("change", onChange);
-          nativeForm?.addEventListener("reset", onReset);
+          if (nativeForm) builtIn(nativeForm).addEventListener("reset", onReset);
           Citry.vue.watchEffect(() => {
             applyState();
             clearNativeInvalidWhenValid();
@@ -910,7 +914,7 @@ class CNativeSelect(LibraryComponent):
             select.removeEventListener("invalid", onInvalid);
             select.removeEventListener("input", onInput);
             select.removeEventListener("change", onChange);
-            nativeForm?.removeEventListener("reset", onReset);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("reset", onReset);
             unregisterCapabilities?.();
             if (reconcileTimer !== null) {
               clearTimeout(reconcileTimer);

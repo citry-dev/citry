@@ -402,6 +402,10 @@ class CRadioGroup(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           value: {},
@@ -666,7 +670,7 @@ class CRadioGroup(LibraryComponent):
           root.addEventListener("input", onInput);
           root.addEventListener("change", onChange);
           root.addEventListener("invalid", onInvalid, true);
-          nativeForm?.addEventListener("reset", onReset);
+          if (nativeForm) builtIn(nativeForm).addEventListener("reset", onReset);
           Citry.vue.watchEffect(() => {
             applyState();
             if (!activationPending) {
@@ -681,7 +685,7 @@ class CRadioGroup(LibraryComponent):
             root.removeEventListener("input", onInput);
             root.removeEventListener("change", onChange);
             root.removeEventListener("invalid", onInvalid, true);
-            nativeForm?.removeEventListener("reset", onReset);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("reset", onReset);
             unregisterCapabilities?.();
             if (reconcileTimer !== null) {
               clearTimeout(reconcileTimer);

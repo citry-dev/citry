@@ -145,6 +145,10 @@ class CToolbar(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {orientation: {}, loop: {}, variant: {}, size: {}},
         onServerRender: ({component}) => {
@@ -261,7 +265,7 @@ class CToolbar(LibraryComponent):
           };
           const reconcileStructure = () => {
             reconciliationTask = null;
-            const active = root.ownerDocument.activeElement;
+            const active = builtIn(root.ownerDocument).activeElement;
             const priorControls = controls;
             const priorCurrent = current;
             const priorIndex = Math.max(0, priorControls.indexOf(current));
@@ -284,7 +288,7 @@ class CToolbar(LibraryComponent):
             invalidEpisodes.delete("structure");
             structureValid = true;
             if (!controls.includes(current)) current = controls[Math.min(priorIndex, controls.length - 1)];
-            const nativeDisabledFocusFallback = active === root.ownerDocument.body
+            const nativeDisabledFocusFallback = active === builtIn(root.ownerDocument).body
               && priorControls.includes(priorCurrent)
               && unavailable(priorCurrent);
             syncTabStops(

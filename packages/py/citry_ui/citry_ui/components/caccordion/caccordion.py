@@ -612,6 +612,10 @@ class CAccordion(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           value: {},
@@ -946,7 +950,7 @@ class CAccordion(LibraryComponent):
             const normalized = normalizeCurrent(currentValue, itemValues);
             currentValue = normalized;
             const open = new Set(normalized);
-            const previouslyFocused = document.activeElement;
+            const previouslyFocused = builtIn(document).activeElement;
             let disabledFocusedValue = null;
             for (const item of items) {
               const localDisabled = configuration.disabled || item.ownDisabled;
@@ -964,7 +968,7 @@ class CAccordion(LibraryComponent):
             for (const item of items) {
               const expanded = open.has(item.value);
               const wasExpanded = item.trigger.getAttribute("aria-expanded") === "true";
-              if (!expanded && wasExpanded && item.panel.contains(document.activeElement)) {
+              if (!expanded && wasExpanded && item.panel.contains(builtIn(document).activeElement)) {
                 item.trigger.focus({ preventScroll: true });
               }
               item.root.dataset.state = expanded ? "open" : "closed";
@@ -1111,8 +1115,8 @@ class CAccordion(LibraryComponent):
                 : null;
               applyState({ items });
               if (fallbackFocus && (
-                document.activeElement === document.body
-                || document.activeElement === document.documentElement
+                builtIn(document).activeElement === builtIn(document).body
+                || builtIn(document).activeElement === builtIn(document).documentElement
               )) {
                 fallbackFocus.trigger.focus({ preventScroll: true });
               }

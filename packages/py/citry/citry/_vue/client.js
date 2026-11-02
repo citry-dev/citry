@@ -76,6 +76,22 @@
   };
   // Read again on every access, because test harnesses swap the document after this script loads.
   const pageDocument = documentMembers(() => document);
+  // A stand-in for any DOM object (a document, a form, a shadow root) whose members are the
+  // browser's built-in ones, one per object so a caller can keep and compare it. Component scripts
+  // such as Citry UI's reach it through `Symbol.for("citry:built-in-members")` (set at the end of
+  // this script); a symbol key, because page markup can only create string-named properties.
+  const builtInMembersByTarget = new WeakMap();
+  const builtInMembers = target => {
+    // A missing node (`input.form` outside a form) stays as it is, so `?.` still skips it and any
+    // other read fails as it would without the helper.
+    if ((typeof target !== "object" && typeof target !== "function") || target === null) return target;
+    let members = builtInMembersByTarget.get(target);
+    if (members === undefined) {
+      members = documentMembers(() => target);
+      builtInMembersByTarget.set(target, members);
+    }
+    return members;
+  };
 
   const V = ownGlobal("Vue");
   if (!V) throw new Error("Vue runtime must load before Citry's private Vue client");
@@ -5417,6 +5433,7 @@
     startPrepared(configuration).catch(error => queueMicrotask(() => { throw error; }));
   }
 
+  Object.defineProperty(global, Symbol.for("citry:built-in-members"), {value: builtInMembers});
   global.__citryRuntime = {configure, registerDefinition, registerTypeOptions, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, startDocument, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps, _dispatchLifecycleEvent: dispatchLifecycleEvent};
   const fragmentSupport = ownGlobal("CitryVueFragments");
   if (!fragmentSupport?.installFragmentManager)

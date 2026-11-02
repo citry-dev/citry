@@ -490,6 +490,11 @@ class CListbox(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+
       $component({
         props: {
           value: {}, mandatory: {}, disabled: {}, loop: {}, variant: {}, size: {}, onValueChange: {},
@@ -561,19 +566,21 @@ class CListbox(LibraryComponent):
             return fallback;
           };
           const deepActiveElement = (documentRoot) => {
-            let active = documentRoot.activeElement;
+            let active = builtIn(documentRoot).activeElement;
             while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
             return active;
           };
           const composedContains = (ancestor, node) => {
             for (let currentNode = node; currentNode;) {
               if (currentNode === ancestor) return true;
-              currentNode = currentNode.parentNode ?? currentNode.getRootNode?.().host ?? null;
+              // Only a shadow root has a host; a named element can make a document answer `host`.
+              const rootNode = currentNode.getRootNode?.();
+              currentNode = currentNode.parentNode ?? (rootNode instanceof ShadowRoot ? builtIn(rootNode).host : null);
             }
             return false;
           };
           const focusBody = () => {
-            const body = root.ownerDocument.body;
+            const body = builtIn(root.ownerDocument).body;
             if (!(body instanceof HTMLElement)) return;
             const hadTabIndex = body.hasAttribute('tabindex');
             if (!hadTabIndex) body.tabIndex = -1;
@@ -803,8 +810,8 @@ class CListbox(LibraryComponent):
             const focusBefore = deepActiveElement(root.ownerDocument);
             const focusRoot = root.getRootNode();
             const focusWasOwned = composedContains(surface, focusBefore);
-            const focusWasLost = focusBefore === root.ownerDocument.body
-              || (focusRoot instanceof ShadowRoot && focusBefore === focusRoot.host);
+            const focusWasLost = focusBefore === builtIn(root.ownerDocument).body
+              || (focusRoot instanceof ShadowRoot && focusBefore === builtIn(focusRoot).host);
             const priorActive = activeValue;
             const disabled = rootDisabled();
             if (!wasDisabled && disabled) {
@@ -881,7 +888,7 @@ class CListbox(LibraryComponent):
           };
           const localeLower = (value) => {
             const lang = root.closest('[lang]')?.getAttribute('lang')
-              ?? root.ownerDocument.documentElement.lang
+              ?? builtIn(root.ownerDocument).documentElement.lang
               ?? '';
             try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
             catch { return value.toLowerCase(); }

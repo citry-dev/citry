@@ -1,3 +1,5 @@
+// Page markup can hide a document's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
 $component({
   props: {
     value: {}, visibleDate: {}, min: {}, max: {}, unavailableDates: {},
@@ -311,10 +313,10 @@ $component({
       for (let index = 0; index < 7; index += 1) {
         const weekday = ((firstDay - 1 + index) % 7) + 1;
         const sample = addDays(monday, weekday - 1);
-        const cell = document.createElement('th');
+        const cell = builtIn(document).createElement('th');
         cell.scope = 'col';
         cell.setAttribute('data-citry-ui-part', 'weekday');
-        const abbreviation = document.createElement('abbr');
+        const abbreviation = builtIn(document).createElement('abbr');
         abbreviation.textContent = formatDate(sample, PROFILE.weekday);
         abbreviation.title = formatDate(sample, PROFILE.weekdayLong);
         cell.append(abbreviation);
@@ -327,11 +329,11 @@ $component({
       const count = configuration.fixedWeeks ? 42 : naturalCount;
       const rows = [];
       for (let rowIndex = 0; rowIndex < count / 7; rowIndex += 1) {
-        const row = document.createElement('tr');
+        const row = builtIn(document).createElement('tr');
         row.setAttribute('data-citry-ui-part', 'week');
         for (let column = 0; column < 7; column += 1) {
           const value = addDays(bounds.start, rowIndex * 7 + column - shift);
-          const cell = document.createElement('td');
+          const cell = builtIn(document).createElement('td');
           cell.setAttribute('data-citry-ui-part', 'day');
           if (value === null) { cell.setAttribute('aria-disabled', 'true'); row.append(cell); continue; }
           const outside = value < bounds.start || value > bounds.end;
@@ -517,7 +519,7 @@ $component({
       message: 'citry-ui-calendar-unavailable',
       onChange: text => { unavailableMessage = text; if (ready) render(); },
     });
-    const unsubscribe = i18n?.subscribe(() => { if (ready) render(document.activeElement?.matches?.('[data-citry-ui-part="day"]') ?? false); });
+    const unsubscribe = i18n?.subscribe(() => { if (ready) render(builtIn(document).activeElement?.matches?.('[data-citry-ui-part="day"]') ?? false); });
 
     effect(() => {
       reportFieldOwned();

@@ -635,6 +635,10 @@ _SLIDER_TEMPLATE = """
 
 
 _SLIDER_JS = r"""
+  // Page markup can hide a document's members behind named elements. The core runtime's helper
+  // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+  const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
   $component({
     props: {
       value: {}, min: {}, max: {}, step: {}, largeStep: {}, minStepsBetweenThumbs: {},
@@ -812,7 +816,7 @@ _SLIDER_JS = r"""
             bubble.textContent = format(value);
             bubble.hidden = configuration.showValue === 'never';
           }
-          thumb.toggleAttribute('data-active', activeIndex === index && (dragging || document.activeElement === thumb));
+          thumb.toggleAttribute('data-active', activeIndex === index && (dragging || builtIn(document).activeElement === thumb));
         });
         syncRelationships();
         applyGeometry();
@@ -1002,7 +1006,7 @@ _SLIDER_JS = r"""
       });
       if (i18n) unsubscribe = i18n.subscribe(() => applyState());
       if (data.kind === 'range' && data.fieldLabelId) {
-        const label = root.ownerDocument.getElementById(data.fieldLabelId);
+        const label = builtIn(root.ownerDocument).getElementById(data.fieldLabelId);
         if (label) listeners.add(label, 'click', event => queueMicrotask(() => {
           if (!event.defaultPrevented && root.isConnected && !configuration.disabled) thumbs[0].focus({ preventScroll: true });
         }));

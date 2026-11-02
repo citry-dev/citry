@@ -291,7 +291,7 @@ def test_runtime_has_delegation_controlled_state_forms_i18n_and_cleanup():
     assert "i18n.bind" in source
     assert "citry-ui-transfer-list-added-one" in source
     assert "native.dispatchEvent(new Event('input'" in source
-    assert "form?.addEventListener('reset'" in source
+    assert "builtIn(form).addEventListener('reset'" in source
     assert "new MutationObserver" in source
     assert "transport.replaceChildren" in source
     assert "interactive descendants" in source

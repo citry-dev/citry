@@ -357,6 +357,10 @@ class CTagGroup(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           value: {}, disabled: {}, variant: {}, size: {},
@@ -640,7 +644,7 @@ class CTagGroup(LibraryComponent):
             return raw.replace(/\s+/g, " ").trim();
           };
           const lower = (value) => {
-            const lang = root.closest("[lang]")?.getAttribute("lang") || document.documentElement.lang;
+            const lang = root.closest("[lang]")?.getAttribute("lang") || builtIn(document).documentElement.lang;
             try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
             catch { return value.toLowerCase(); }
           };
@@ -703,7 +707,7 @@ class CTagGroup(LibraryComponent):
             if (entry) runtime.focusedValue = entry.value;
           };
           const onFocusOut = () => setTimeout(() => {
-            focusWithin = root.contains(root.ownerDocument.activeElement);
+            focusWithin = root.contains(builtIn(root.ownerDocument).activeElement);
           }, 0);
           root.addEventListener("click", onClick, true);
           root.addEventListener("keydown", onKeyDown, true);

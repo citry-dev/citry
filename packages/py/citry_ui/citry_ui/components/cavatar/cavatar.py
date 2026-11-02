@@ -293,6 +293,10 @@ class CAvatar(LibraryComponent):
     """
 
     js = """
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           src: {},
@@ -309,7 +313,7 @@ class CAvatar(LibraryComponent):
           const props = component.$props;
           let image = root.querySelector('[data-citry-ui-part="image"]');
           if (!(image instanceof HTMLImageElement)) {
-            image = document.createElement("img");
+            image = builtIn(document).createElement("img");
             for (const [name, value] of Object.entries(data.imgAttrs)) {
               image.setAttribute(name, value);
             }

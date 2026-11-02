@@ -65,6 +65,13 @@
 
 ### Fixed
 
+- Menus, popovers, dialogs, selects and the other interactive components
+  keep working when data puts a `name` on a `form`, `img`, `iframe`,
+  `embed` or `object` that matches a `document` member they read, such as
+  `<form name="activeElement">`, or when a field inside a form has a `name`
+  that matches a form member. This needs Citry 0.7.0 or later; with an
+  older Citry the fix does not apply.
+
 - `CImage` now checks a long `srcset` in time proportional to its
   length. A `srcset` with a long run of spaces could keep the server
   busy for minutes or longer during a render, and a client `srcset`

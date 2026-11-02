@@ -392,6 +392,10 @@ class CFileInput(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           accept: {}, capture: {}, multiple: {}, required: {}, disabled: {}, invalid: {},
@@ -550,7 +554,7 @@ class CFileInput(LibraryComponent):
           input.addEventListener("invalid", onInvalid);
           input.addEventListener("input", onInput);
           input.addEventListener("change", onInput);
-          nativeForm?.addEventListener("reset", onReset);
+          if (nativeForm) builtIn(nativeForm).addEventListener("reset", onReset);
           const stop = Citry.vue.watchEffect(applyState);
           input.setAttribute("data-citry-file-input-initialized", "");
           return () => {
@@ -558,7 +562,7 @@ class CFileInput(LibraryComponent):
             input.removeEventListener("invalid", onInvalid);
             input.removeEventListener("input", onInput);
             input.removeEventListener("change", onInput);
-            nativeForm?.removeEventListener("reset", onReset);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("reset", onReset);
             resetTimers.forEach(clearTimeout);
             resetTimers.clear();
             fieldsetObserver?.disconnect();
@@ -732,6 +736,10 @@ class CDropTarget(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           accept: {}, capture: {}, multiple: {}, required: {}, disabled: {}, invalid: {},
@@ -924,7 +932,7 @@ class CDropTarget(LibraryComponent):
           root.addEventListener("dragover", onDragOver);
           root.addEventListener("dragleave", onDragLeave);
           root.addEventListener("drop", onDrop);
-          nativeForm?.addEventListener("reset", onReset);
+          if (nativeForm) builtIn(nativeForm).addEventListener("reset", onReset);
           const stop = Citry.vue.watchEffect(applyState);
           reconcileStructure();
           return () => {
@@ -936,7 +944,7 @@ class CDropTarget(LibraryComponent):
             root.removeEventListener("dragover", onDragOver);
             root.removeEventListener("dragleave", onDragLeave);
             root.removeEventListener("drop", onDrop);
-            nativeForm?.removeEventListener("reset", onReset);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("reset", onReset);
             resetTimers.forEach(clearTimeout);
             resetTimers.clear();
             observer.disconnect();

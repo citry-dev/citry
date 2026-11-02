@@ -1,3 +1,5 @@
+// Page markup can hide a document's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
 $component({
   props: {
     sort: {}, selected: {}, disabled: {}, overscan: {},
@@ -131,7 +133,7 @@ $component({
     const reorderCompleteRows = sort => {
       if (!completeCollection) return;
       locallySorted = true;
-      const locale = i18n?.context.locale || root.ownerDocument.documentElement.lang || undefined;
+      const locale = i18n?.context.locale || builtIn(root.ownerDocument).documentElement.lang || undefined;
       const collator = new Intl.Collator(locale, {numeric: true, sensitivity: 'base'});
       const ordered = [...rows].sort((left, right) => {
         for (const item of sort) {
@@ -347,7 +349,7 @@ $component({
       if (activeEditor?.cell === cell) return true;
       if (activeEditor && !commitEdit(event, 'next-cell', {focus: false})) return false;
       const control = descriptor.editor === 'select'
-        ? root.ownerDocument.createElement('select') : root.ownerDocument.createElement('input');
+        ? builtIn(root.ownerDocument).createElement('select') : builtIn(root.ownerDocument).createElement('input');
       if (descriptor.editor !== 'select') control.type = descriptor.editor;
       control.setAttribute('data-citry-ui-part', 'editor');
       control.setAttribute('aria-label', translateEdit('edit', descriptor.columnLabel));
@@ -357,7 +359,7 @@ $component({
       }
       if (descriptor.editor === 'select') {
         for (const option of descriptor.options) {
-          const element = root.ownerDocument.createElement('option');
+          const element = builtIn(root.ownerDocument).createElement('option');
           element.value = option.value;
           element.textContent = option.label;
           element.disabled = option.disabled;
@@ -533,7 +535,7 @@ $component({
     const onPointerMove = event => {
       const session = pointerSelection;
       if (!session || event.pointerId !== session.pointerId || !(event.buttons & 1)) return;
-      const hovered = root.ownerDocument.elementFromPoint(event.clientX, event.clientY);
+      const hovered = builtIn(root.ownerDocument).elementFromPoint(event.clientX, event.clientY);
       const row = hovered?.closest?.('[data-citry-ui-part="row"]');
       if (!row || !table.contains(row)) return;
       const endKey = row.dataset.rowKey;
@@ -589,7 +591,7 @@ $component({
     table.addEventListener('pointermove', onPointerMove);
     table.addEventListener('pointerup', onPointerUp);
     table.addEventListener('pointercancel', onPointerCancel);
-    root.ownerDocument.addEventListener('pointerdown', onDocumentPointerDown, true);
+    builtIn(root.ownerDocument).addEventListener('pointerdown', onDocumentPointerDown, true);
     viewport.addEventListener('focus', onViewportFocus);
     viewport.addEventListener('scroll', onScroll, {passive: true});
     const observer = typeof ResizeObserver === 'function'
@@ -686,7 +688,7 @@ $component({
       table.removeEventListener('pointermove', onPointerMove);
       table.removeEventListener('pointerup', onPointerUp);
       table.removeEventListener('pointercancel', onPointerCancel);
-      root.ownerDocument.removeEventListener('pointerdown', onDocumentPointerDown, true);
+      builtIn(root.ownerDocument).removeEventListener('pointerdown', onDocumentPointerDown, true);
       viewport.removeEventListener('focus', onViewportFocus);
       viewport.removeEventListener('scroll', onScroll);
       root.removeAttribute('data-citry-data-grid-initialized');

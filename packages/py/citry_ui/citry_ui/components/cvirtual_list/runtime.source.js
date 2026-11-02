@@ -1,3 +1,5 @@
+// Page markup can hide a document's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
 $component({
   props: {overscan: {}, itemSize: {}, onRangeChange: {}},
   onServerRender: ({component}) => {
@@ -70,8 +72,8 @@ $component({
       );
       let start = Math.max(0, visibleStart - effectiveOverscan);
       let end = Math.min(data.totalCount, visibleEnd + effectiveOverscan);
-      const focused = root.contains(document.activeElement)
-        ? document.activeElement?.closest?.('[data-citry-ui-part="item"]')
+      const focused = root.contains(builtIn(document).activeElement)
+        ? builtIn(document).activeElement?.closest?.('[data-citry-ui-part="item"]')
         : null;
       if (focused && root.contains(focused)) {
         const focusedIndex = Number(focused.getAttribute("data-index"));
