@@ -188,13 +188,14 @@ a `c-if` branch. A `<c-element>` with a fixed `is` and no `c-bind` renders
 like the same tag written in the template, so this check does not apply to
 it.
 
-`textarea` and `title` work. The browser shows any tag inside them as
-text, and Citry escapes your values, so text shows exactly as written. On
-a page without Vue, a tag you write inside one shows as literal text. In
-an interactive component (one with `js` or server events), put only text
-inside them: a tag, a child component, `<c-raw>`, or a `Markup` value
-there raises an error, because Vue would build real elements there and
-the page would change once Vue starts.
+A `<c-element>` can render `textarea` and `title`. The browser shows any
+tag inside them as text, and Citry escapes your values. In a component
+without Vue (no `js` and no server events), a tag inside shows as literal
+text. In an interactive component, put only text inside: a tag, a child
+component, `<c-raw>`, or a `Markup` value there raises `TypeError`,
+because Vue would create real elements and the page would change once Vue
+starts. A `title` inside `<svg>` or `<math>` is SVG's or MathML's own
+element and can hold child elements.
 
 ### Letter case of `is`
 

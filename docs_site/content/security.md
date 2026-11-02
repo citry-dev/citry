@@ -175,15 +175,17 @@ take a link or an image URL refuse other schemes themselves.
 
 ## Check form field names { #check-form-field-names }
 
-A browser lets a form's fields stand in for the form's own methods: inside
-`<form>`, an `<input name="addEventListener">` makes the form's
-`addEventListener` that input. Vue calls such methods on the forms it
-renders, so a field name that data chooses can stop the component that
-holds the form. Citry's own browser code reads past these fields, and past
-an `id` or `name` on any element that matches a name it reads, such as
-`<div id="Citry">`. Before you take a field name from request or stored
-data, check it against the fields you expect, or add a fixed prefix such
-as `field-`.
+A browser lets a form's fields replace the form's own methods: inside
+`<form>`, `<input name="addEventListener">` replaces the form's
+`addEventListener` method with that input. Vue calls such methods on the
+forms it renders, so a field name that data chooses can stop the component
+that holds the form. Citry's own browser code ignores these fields. It also
+ignores an element whose `id` matches a global it reads, such as
+`<div id="Citry">`, and a `form`, `img`, `iframe`, `embed` or `object`
+whose `name` matches a `document` method, such as
+`<form name="createElement">`. Before you take a field name from request
+or stored data, check it against the fields you expect, or add a fixed
+prefix such as `field-`.
 
 ## Protect against CSRF { #protect-event-posts-from-csrf }
 

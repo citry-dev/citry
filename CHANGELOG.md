@@ -294,8 +294,8 @@
     `element` component in a Python call. Write such an element directly
     in the template.
   - Markup inside a `<c-element>` that renders `textarea` or `title` in
-    an interactive component, such as a tag, a child component,
-    `<c-raw>`, or a `Markup` value (a `TypeError`). Put only text there.
+    an interactive component raises `TypeError`: a tag, a child
+    component, `<c-raw>`, or a `Markup` value. Put only text there.
   - A `css_data()` value that has a comment, a brace, `<`, or a backslash
     outside a string or `url()`; a `;` or `!` outside brackets; an
     unbalanced bracket; or a malformed string or `url()`. A null or
@@ -418,10 +418,9 @@
 
 ### Fixes
 
-- Citry's Vue runtime and server events now keep working when the page
-  holds an element whose `id` or `name` matches a name they read, such as
-  `<div id="Citry">` or `<form name="createElement">`, for example a
-  comment id taken from data. A form field named after a form method, such
+- Citry's Vue runtime and server events keep working when data puts an
+  `id` or `name` on an element that matches a name Citry reads, such as
+  `<div id="Citry">` or `<form name="createElement">`. A form field named after a form method, such
   as `addEventListener`, can still stop the component that holds the form,
   so do not take field names from data unchecked
   ([details](https://citry.dev/security/#check-form-field-names)).
