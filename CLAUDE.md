@@ -300,6 +300,18 @@ render, or an Events action), check its security before delivery, as follows:
    step 5 and [`SECURITY.md`](SECURITY.md) instead, and gets a record only
    after its fix is released and disclosed.
 
+**Check new code against what went wrong in other frameworks.** When a
+change adds or alters library, package, or production code (not tests,
+docs, or examples), the review also reads the maintainers' survey of
+published advisories in comparable frameworks: Vue, Nuxt, Jinja2, Django,
+Svelte, React, Angular, Next.js and others, grouped by kind of bug. It is
+kept in the maintainers' private security repository, in
+`reports/259-advisory-survey.md`. Find the kinds of bug that touch the code
+you changed, and check that the change doesn't bring one of them into
+Citry. Say in the review which kinds you checked. An agent without access
+to that repository asks the maintainer for the relevant kinds instead of
+skipping the step.
+
 ## Where new agent knowledge goes
 
 When you discover something worth recording, pick **one** location. All of
