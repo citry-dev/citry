@@ -418,11 +418,13 @@
 
 ### Fixes
 
-- Citry's browser code now keeps working on a page that holds an element
-  whose `id` or `name` matches a name Citry or Vue reads, such as
-  `<div id="Citry">` or `<form name="createElement">`. Before, such a
-  value, for example a comment id or field name taken from data, could
-  stop the page's Vue app from starting or make its server events fail.
+- Citry's Vue runtime and server events now keep working when the page
+  holds an element whose `id` or `name` matches a name they read, such as
+  `<div id="Citry">` or `<form name="createElement">`, for example a
+  comment id taken from data. A form field named after a form method, such
+  as `addEventListener`, can still stop the component that holds the form,
+  so do not take field names from data unchecked
+  ([details](https://citry.dev/security/#check-form-field-names)).
 - Citry now labels the JavaScript and CSS files it serves as UTF-8, and
   writes each non-ASCII character in a `css_data()` value as a CSS escape
   (`表` becomes `\8868`). Before, a page declared in an encoding such as

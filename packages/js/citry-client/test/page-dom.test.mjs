@@ -24,9 +24,9 @@ const pageDom = await import(
   `data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`
 );
 
-// Pull the two helpers out of the coordinator, so the copy it ships is the one under test.
+// Pull the helpers out of the coordinator, so the copy it ships is the one under test.
 const client = await readFile(new URL("../../../py/citry/citry/_vue/client.js", import.meta.url), "utf8");
-// `ownGlobal` is one line; `documentMembers` ends where its body closes at the declaration's indent.
+// `ownGlobal` is one line; each other helper ends where its body closes at the declaration's indent.
 const helperSource = (name, terminator) => {
   const start = client.indexOf(`  const ${name} = `);
   assert.ok(start >= 0, `client.js declares ${name}`);
@@ -35,7 +35,13 @@ const helperSource = (name, terminator) => {
 const clientHelpers = (global) => {
   const context = vm.createContext({ global, Object, Reflect, Proxy, WeakMap });
   vm.runInContext(
-    `${helperSource("ownGlobal", ";\n")}${helperSource("documentMembers", "\n  };\n")}\nthis.helpers = {ownGlobal, documentMembers};`,
+    [
+      helperSource("ownGlobal", ";\n"),
+      helperSource("builtInMember", "\n  };\n"),
+      helperSource("callBuiltIn", "\n  };\n"),
+      helperSource("documentMembers", "\n  };\n"),
+      "this.helpers = {ownGlobal, callBuiltIn, documentMembers};",
+    ].join("\n"),
     context,
   );
   return context.helpers;
@@ -58,8 +64,10 @@ class FakeDocument extends FakeDocumentBase {
 // A document whose page named elements after its members, as `<form name="...">` does.
 const clobberedDocument = () => {
   const doc = new FakeDocument();
-  for (const name of ["createElement", "cookie", "location"])
+  for (const name of ["createElement", "cookie"])
     Object.defineProperty(doc, name, { configurable: true, value: { element: name } });
+  // The real document's `location` is an own getter, which no markup can create.
+  Object.defineProperty(doc, "location", { get: () => "https://example.test/" });
   return doc;
 };
 
@@ -91,10 +99,10 @@ for (const [label, documentMembers] of implementations) {
     assert.equal(doc._cookie, "a=b");
   });
 
-  test(`${label}: a name no prototype defines reads the document's own property`, () => {
-    // The real document's own `location` lives here, as do the members of a test's plain-object document.
+  test(`${label}: an own getter such as location is kept, and a plain-object document still works`, () => {
     const doc = clobberedDocument();
-    assert.deepEqual(documentMembers(() => doc).location, { element: "location" });
+    assert.equal(documentMembers(() => doc).location, "https://example.test/");
+    // A name no prototype defines falls back to an ordinary read, which serves a test's plain object.
     const plain = {
       currentScript: null,
       dispatchEvent() {
@@ -129,4 +137,27 @@ test("ownGlobal reads only a global defined on the global object itself", () => 
   } finally {
     delete globalThis.__citryPageDomProbe;
   }
+});
+
+test("callBuiltIn calls a form's own method past a named field", () => {
+  // `<form><input name="addEventListener"></form>` makes the field an own data property of the form.
+  class FakeForm {
+    addEventListener(type) {
+      this.added = type;
+    }
+  }
+  const form = new FakeForm();
+  Object.defineProperty(form, "addEventListener", { configurable: true, value: { element: "input" } });
+  const { callBuiltIn } = clientHelpers({});
+  callBuiltIn(form, "addEventListener", "submit");
+  assert.equal(form.added, "submit");
+  // A plain-object stand-in with its own method still works.
+  const plain = {
+    calls: 0,
+    dispatchEvent() {
+      this.calls += 1;
+    },
+  };
+  callBuiltIn(plain, "dispatchEvent");
+  assert.equal(plain.calls, 1);
 });

@@ -26,7 +26,7 @@ from citry import Citry, Component
 pytestmark = pytest.mark.e2e
 
 # Globals that Citry's scripts define on `window`. Taken as an element id, each
-# is found by a plain read of `window` before (or instead of) Citry's own value.
+# is what a plain read of `window` returns until Citry's script defines its own value.
 CITRY_GLOBALS = [
     "Citry",
     "__citryRuntime",
@@ -63,6 +63,19 @@ NAMES = DOCUMENT_MEMBERS + CITRY_GLOBALS
 # prototype, inside a function because the nonce page's CSP refuses a string to evaluate.
 _FIND = "Document.prototype.querySelector.bind(document)"
 
+# A form found as `window.<id>` hands out its named fields as properties. The
+# definition table entry is named after the page's own definition id.
+DEFINITION = object()
+NESTED = [
+    ("Citry", "vue"),
+    ("Citry", "events"),
+    ("Citry", "fragments"),
+    ("__citryRuntime", "compilerRuntime"),
+    ("__citryRuntimeDefinitions", DEFINITION),
+    ("CitryVueEvents", "createVueEventsBridge"),
+    ("CitryVueFragments", "installFragmentManager"),
+]
+
 NONCE = "cGFnZS1ub25jZQ"
 CSP = f"script-src 'nonce-{NONCE}' 'strict-dynamic'; object-src 'none'"
 
@@ -74,15 +87,7 @@ def _named_values(*, all_kinds: bool, definition_id: str) -> dict[str, Any]:
         "form_names": NAMES,
         "other_names": NAMES if all_kinds else [],
         # A form found as `window.<id>` hands out its named inputs as properties.
-        "nested": [
-            ("Citry", "vue"),
-            ("Citry", "events"),
-            ("Citry", "fragments"),
-            ("__citryRuntime", "compilerRuntime"),
-            ("__citryRuntimeDefinitions", definition_id),
-            ("CitryVueEvents", "createVueEventsBridge"),
-            ("CitryVueFragments", "installFragmentManager"),
-        ],
+        "nested": [(form_id, definition_id if field == DEFINITION else field) for form_id, field in NESTED],
     }
 
 
@@ -174,20 +179,16 @@ def _render(component: type[Component], named: str, variant: str) -> str:
     return named + rendered.serialize(csp_nonce=NONCE)
 
 
-@pytest.mark.parametrize("all_kinds", [False, True], ids=["one-form-each", "five-kinds-each"])
-@pytest.mark.parametrize("variant", ["hydrated", "prepend", "nonce"])
-def test_data_chosen_ids_and_names_leave_the_runtime_working(
-    page: Any, serve_live: Any, wait_for_citry_ready: Any, *, all_kinds: bool, variant: str
-) -> None:
-    app = Citry(autodiscover=False, secret="s" * 40)
-    app.set_mounted_prefix("/citry")
-    component = _counter(app)
-    # The definition table entry the page's own manifest names, so a form can
-    # try to stand in for it.
+def _definition_id(component: type[Component]) -> str:
+    # The definition table entry the page's own manifest names, so a form can try to stand in for it.
     probe = component().render().serialize()
-    definition_id = probe.split('"definitions":[{', 1)[1].split('"id":"', 1)[1].split('"', 1)[0]
-    named = _named_markup(app, _named_values(all_kinds=all_kinds, definition_id=definition_id))
-    html = _render(component, named, variant)
+    return probe.split('"definitions":[{', 1)[1].split('"id":"', 1)[1].split('"', 1)[0]
+
+
+def _check_page_works(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any, app: Citry, html: str, variant: str
+) -> None:
+    """Load the page, wait for Vue to start, and finish one Events call."""
     base = serve_live(app, html, "")
     if variant == "nonce":
         # Serve the same page under a nonce CSP header, so only nonced scripts run.
@@ -218,6 +219,38 @@ def test_data_chosen_ids_and_names_leave_the_runtime_working(
         """() => ['Citry', '__citryRuntime', 'CitryVueEvents', 'Vue'].every(name =>
             Object.prototype.hasOwnProperty.call(window, name) && !(window[name] instanceof Element))"""
     )
+
+
+@pytest.mark.parametrize("all_kinds", [False, True], ids=["one-form-each", "five-kinds-each"])
+@pytest.mark.parametrize("variant", ["hydrated", "prepend", "nonce"])
+def test_data_chosen_ids_and_names_leave_the_runtime_working(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any, *, all_kinds: bool, variant: str
+) -> None:
+    app = Citry(autodiscover=False, secret="s" * 40)
+    app.set_mounted_prefix("/citry")
+    component = _counter(app)
+    values = _named_values(all_kinds=all_kinds, definition_id=_definition_id(component))
+    html = _render(component, _named_markup(app, values), variant)
+    _check_page_works(page, serve_live, wait_for_citry_ready, app, html, variant)
+
+
+@pytest.mark.parametrize(
+    ("form_id", "field"),
+    NESTED,
+    ids=[f"{form_id}-{'definition' if field is DEFINITION else field}" for form_id, field in NESTED],
+)
+def test_a_named_field_in_a_data_id_form_leaves_the_runtime_working(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any, *, form_id: str, field: object
+) -> None:
+    # One form per page: with a second element of the same id, `window.<id>` is a
+    # collection, which does not hand out the form's fields, so the route would go untested.
+    app = Citry(autodiscover=False, secret="s" * 40)
+    app.set_mounted_prefix("/citry")
+    component = _counter(app)
+    name = _definition_id(component) if field is DEFINITION else field
+    values = {"ids": [], "form_names": [], "other_names": [], "nested": [(form_id, name)]}
+    html = _render(component, _named_markup(app, values), "hydrated")
+    _check_page_works(page, serve_live, wait_for_citry_ready, app, html, "hydrated")
 
 
 # The page a fragment strategy targets: it has no Citry runtime of its own and
@@ -254,10 +287,13 @@ def test_fragment_preloader_ignores_data_chosen_ids_and_names(page: Any, serve_l
 
     fragment_html = Frag().render().serialize(deps_strategy="fragment")
     # The script that loads the runtime reads `Citry`, `document.createElement`,
-    # `document.head` and `document.currentScript`; data names each of them.
+    # `document.head` and `document.currentScript`, and the fragment manager reads
+    # `document.querySelectorAll` and `document.body`; data names each of them.
     named = (
         '<form id="Citry"><input name="fragments"></form>'
         '<form name="createElement"></form><form name="head"></form><form name="currentScript"></form>'
+        # The fragment manager reads these two when it mounts the fragment.
+        '<form name="querySelectorAll"></form><form name="body"></form>'
     )
     base = serve_live(app, _FRAGMENT_PAGE.format(named=named), fragment_html)
     errors: list[str] = []

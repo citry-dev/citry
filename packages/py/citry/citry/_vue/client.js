@@ -3,22 +3,44 @@
   "use strict";
   // A browser turns some elements into properties of `window` and `document`: an element with an
   // `id` is found on `window` when `window` has no own property of that name, and a `form`,
-  // `img`, `iframe`, `embed` or `object` with a `name` hides the document's own member of that
+  // `img`, `iframe`, `embed` or `object` with a `name` hides the document's built-in member of that
   // name (`<form name="createElement">` makes `document.createElement` that form). Data that
   // chooses such an `id` or `name` would then hand this runtime an element in place of its own
-  // objects and stop it. These two helpers read past those elements; they are a copy of
-  // packages/js/citry-client/src/page-dom.ts, which the bundled scripts import, so keep both in
-  // step.
+  // objects and stop it. The helpers below read past those elements. `ownGlobal`,
+  // `builtInMember` and `documentMembers` are a copy of packages/js/citry-client/src/page-dom.ts,
+  // which the bundled scripts import, so keep both in step.
   //
   // Read a global that a Citry script defines. Every such script assigns it to `window`, which
   // makes it an own property, and an element's `id` never is one.
   const ownGlobal = name => Object.prototype.hasOwnProperty.call(global, name) ? global[name] : undefined;
-  // An object whose members are the current document's DOM members: each read looks the member
-  // up on the document's prototype chain, where markup cannot add anything, calls a getter there
-  // with the real document and binds a method to it. An own getter or setter wins, because markup
-  // never creates one. A name no prototype defines (the document's
-  // own `location`, or a test's plain-object document) falls back to an ordinary read. Pass the
-  // real `document` wherever a DOM call needs the node itself, because the browser rejects a proxy.
+  // The built-in member named `key` of `target`, or undefined when no prototype defines it. A
+  // named element shows up as an own data property (on `document`, or a named field on a `form`),
+  // so own data properties are passed over; an own getter or setter can only come from a script
+  // (a test's stub, a polyfill, the real document's `location`), so it is kept.
+  const builtInMember = (target, key) => {
+    const own = Object.getOwnPropertyDescriptor(target, key);
+    if (own !== undefined && (own.get !== undefined || own.set !== undefined)) return own;
+    for (let proto = Object.getPrototypeOf(target); proto !== null; proto = Object.getPrototypeOf(proto)) {
+      const descriptor = Object.getOwnPropertyDescriptor(proto, key);
+      if (descriptor !== undefined) return descriptor;
+    }
+    return undefined;
+  };
+  // Call a built-in method of any DOM object. A form's named field can hide the form's own
+  // `addEventListener`, so a listener Citry attaches to a form goes through here. A name no
+  // prototype defines (a test's plain-object stand-in) falls back to an ordinary read.
+  const callBuiltIn = (target, key, ...args) => {
+    const descriptor = builtInMember(target, key);
+    const method = descriptor === undefined ? Reflect.get(target, key)
+      : descriptor.get !== undefined ? descriptor.get.call(target) : descriptor.value;
+    return method.apply(target, args);
+  };
+  // A stand-in for the document whose members are always the browser's built-in ones: each read
+  // finds the member through `builtInMember`, calls a getter with the real document and binds a
+  // method to it. A name no prototype defines (a test's plain-object document) falls back to an
+  // ordinary read. Use the real `document` where it is passed to a DOM call
+  // (`observer.observe(document)`) or compared (`target === document`): the browser rejects this
+  // proxy as an argument, and it never equals the document.
   const documentMembers = currentDocument => {
     // One bound copy per method and document, so a hot path does not build a function per call.
     const bound = new WeakMap();
@@ -29,21 +51,10 @@
       bound.set(method, {target, method: boundMethod});
       return boundMethod;
     };
-    // A named element shows up as an own data property, so own data properties are passed over;
-    // an own getter or setter can only come from a script (a test's stub, a polyfill), so it is kept.
-    const prototypeMember = (target, key) => {
-      const own = Object.getOwnPropertyDescriptor(target, key);
-      if (own !== undefined && (own.get !== undefined || own.set !== undefined)) return own;
-      for (let proto = Object.getPrototypeOf(target); proto !== null; proto = Object.getPrototypeOf(proto)) {
-        const descriptor = Object.getOwnPropertyDescriptor(proto, key);
-        if (descriptor !== undefined) return descriptor;
-      }
-      return undefined;
-    };
     return new Proxy({}, {
       get(_shell, key) {
         const target = currentDocument();
-        const descriptor = prototypeMember(target, key);
+        const descriptor = builtInMember(target, key);
         let value;
         if (descriptor === undefined) value = Reflect.get(target, key);
         else if (descriptor.get !== undefined) return descriptor.get.call(target);
@@ -53,7 +64,7 @@
       },
       set(_shell, key, value) {
         const target = currentDocument();
-        const descriptor = prototypeMember(target, key);
+        const descriptor = builtInMember(target, key);
         // A setter such as `cookie` runs on the real document; anything else is written to it.
         if (descriptor?.set !== undefined) {
           descriptor.set.call(target, value);
@@ -65,10 +76,6 @@
   };
   // Read again on every access, because test harnesses swap the document after this script loads.
   const pageDocument = documentMembers(() => document);
-  // The object to call DOM methods on for an event target: the document's members come through
-  // `pageDocument`, while `window` and elements are read directly (markup cannot hide a member
-  // that `window` inherits).
-  const eventTargetMembers = target => target === document ? pageDocument : target;
 
   const V = ownGlobal("Vue");
   if (!V) throw new Error("Vue runtime must load before Citry's private Vue client");
@@ -1551,7 +1558,7 @@
     if (types.has(type)) return;
     types.add(type);
     // Passive, so a page-wide touch or wheel listener never delays scrolling.
-    eventTargetMembers(target).addEventListener(type, numberCitryEvent, {capture: true, passive: true});
+    callBuiltIn(target, "addEventListener", type, numberCitryEvent, {capture: true, passive: true});
   }
   function numberCitryEvents(state) {
     const type = state.spec.event;
@@ -1711,10 +1718,10 @@
     // leave it unset for a listener inside a shadow root. Only an event of
     // this type can reach the listener, so no other is kept alive.
     state.attachEvent = window.event?.type === event ? window.event : undefined;
-    eventTargetMembers(state.target).addEventListener(event, state.listener, state.options);
+    callBuiltIn(state.target, "addEventListener", event, state.listener, state.options);
   }
   function removeCitryListener(state) {
-    if (state.target) eventTargetMembers(state.target).removeEventListener(state.spec.event, state.listener, state.options);
+    if (state.target) callBuiltIn(state.target, "removeEventListener", state.spec.event, state.listener, state.options);
     if (state.startListener) pageDocument.removeEventListener(state.spec.event, state.startListener, {capture: true});
   }
   function detachCitryListener(element, id) {

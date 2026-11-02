@@ -75,7 +75,8 @@ export const citryVueBuildOptions = function (overrides = {}) {
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "false",
     },
     // Vue keeps a reference to `document` and calls its methods; page markup can hide those
-    // methods behind a named element, so Vue reads the document through Citry's wrapper.
+    // methods behind a named element, so Vue reads the document through `pageDocument`
+    // (src/vue-document.ts).
     inject: [fileURLToPath(new URL("src/vue-document.ts", import.meta.url))],
     minifyIdentifiers: true,
     minifySyntax: true,
