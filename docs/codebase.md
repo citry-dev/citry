@@ -1920,7 +1920,8 @@ Prepare a release as follows:
     which exists only after publication, so no earlier check can prove them.
     If a link returns 404, check that the package's tag exists. Rerunning
     **Release qualified packages** with the same candidate resumes the
-    remaining steps, including creating the tag.
+    remaining steps, including creating the tag (see
+    [When a release stops partway](#when-a-release-stops-partway)).
 11. When an example raised its Citry or citry-lsp floor to a version that
     this release published, run `uv lock` in that example, run
     `python -m examples._internal.release_gate` from the repository root, and
@@ -1934,16 +1935,61 @@ wait for a selected Citry only when their compatibility floor requires that
 new release. The VS Code extension waits for its selected citry-lsp version.
 Packages without a dependency relationship publish together.
 
-Rerunning publication is safe only for the same candidate. Python workers
-accept an already-public version only when its complete filename and SHA-256
-inventory exactly matches the retained candidate. The VS Code worker uses
-duplicate-safe registry commands, then downloads both registry versions and
-compares them to the qualified VSIX. An absent version can be uploaded, and a
-completed matching upload can resume later closeout steps. A partial Python
-inventory or any different public bytes stop for deliberate reconciliation.
-The two extension registries can recover independently because both accept the
-same one-file VSIX. No worker rebuilds during promotion or overwrites an
-existing release asset.
+#### When a release stops partway
+
+A registry or sigstore can fail for a few minutes. The controller handles that
+in two ways, so a release finishes without steps by hand.
+
+First, it retries a failed publish step. When a worker fails in a step that
+uploads to a registry or signs with sigstore, the controller waits five
+minutes and starts that run's failed jobs again, up to two times. The new
+attempt reads the registry first. When some qualified files are already
+there, it uploads only the missing ones (`skip-existing`), and the check after
+the upload compares every public file's SHA-256 with the qualified bytes. A
+failure in any other step, such as a hash check, stops the release at once.
+Signing stays on in every attempt: Citry never publishes without attestations.
+
+Second, the whole release can be started again. When a release still stops,
+run **Release qualified packages** again with the same candidate run ID:
+
+```sh
+gh workflow run repo--release.yml -f candidate_run_id=<run-id>
+```
+
+For each package, the controller first looks for its tag:
+
+- No tag yet: the package goes to its publish worker as usual.
+- The tag exists and the GitHub Release exists: the controller downloads the
+  retained qualification archive, checks it against the candidate's digest,
+  and compares each qualified file's SHA-256 with what the registry serves.
+  PyPI lists its own hashes. For the VS Code extension, the controller
+  downloads the VSIX from both the Marketplace and Open VSX. When every file
+  matches, the package is skipped. When some files are still missing, the
+  worker runs and uploads only those.
+- The tag exists but the GitHub Release does not: the worker runs. It skips
+  the upload when the registry already has the files, then creates the
+  missing GitHub Release.
+
+A public file that differs from the qualified file stops the release with an
+error that names the file and the registry. A registry never lets a version's
+file be replaced, so this needs a person to decide what to do. A tag that
+names a different commit stops the release in the same way.
+
+After the remaining layers, the restarted run also does the closing steps,
+such as starting the documentation release.
+
+Restart only with the same candidate. A new candidate builds the packages
+again, and only the packages that have no tag yet. A package that is on its
+registry but has no tag would then be compared against the new build. When
+that build differs from the earlier one, the publish fails with the hash
+error above. **Prepare release candidate** also refuses an explicit package
+list that names a version whose tag exists.
+
+Open VSX reviews a new version before serving it, and answers 404 until the
+review ends. After a successful upload, the VS Code worker waits up to 45
+minutes for Open VSX, and logs each check as "still under review". It waits
+up to five minutes for the Marketplace. No worker rebuilds during promotion
+or replaces an existing release asset.
 
 If publication created the GitHub Release but failed to start documentation
 or Discord, recover that remaining step directly. Rerunning package
