@@ -12,6 +12,15 @@
   call. During a rolling deploy, old and new processes reject each
   other's signed tokens until every process runs the new version.
 
+### Fixed
+
+- When you pass a `Markup` value to an attribute, a numeric character
+  reference in it such as `&#1;` or `&#xfdd0;` now becomes that
+  character, as the browser reads it, instead of being dropped:
+  `Markup("a&#1;b")` in `title` gives `a`, U+0001, `b` rather than `ab`.
+  The development warning for a repeated `id` no longer treats
+  `id="a&#1;b"` and `id="ab"` as the same id.
+
 ## v0.7.0
 
 Citry 0.7.0 catches more mistakes. A component input of the wrong type
