@@ -3140,6 +3140,131 @@ mod tests {
         }
     }
 
+    // === WHICH LOOP VARIABLES EACH PART OF A COMPREHENSION SEES ===
+    //
+    // Python evaluates the first iterable in the enclosing scope, before any loop variable
+    // exists, and each later iterable once the earlier `for` clauses have bound theirs. A
+    // name that is not bound yet must be read through `_sx_variable()`: left as a plain
+    // name, Python would look it up in the generated code's globals.
+
+    fn _code(input: &str) -> String {
+        generate_python_code(&transform_expression_string(input).unwrap().expression)
+    }
+
+    #[test]
+    fn test_the_first_iterable_reads_a_loop_variable_name_from_the_context() {
+        _test_transformation(
+            "[x for x in x]",
+            "[x for x in _sx_variable(_sx_context, _sx_source, (12, 13), 'x')]",
+            vec![("x", 12, 13, (1, 13))],
+            vec![],
+        );
+        _test_transformation(
+            "[len for len in [len]]",
+            "[len for len in [_sx_variable(_sx_context, _sx_source, (17, 20), 'len')]]",
+            vec![("len", 17, 20, (1, 18))],
+            vec![],
+        );
+    }
+
+    #[test]
+    fn test_the_first_iterable_is_checked_in_every_kind_of_comprehension() {
+        for input in [
+            "{x for x in x}",
+            "{x: 1 for x in x}",
+            "(x for x in x)",
+            "[1 for (a, x) in x]",
+        ] {
+            let code = _code(input);
+            assert!(
+                code.contains("in _sx_variable(_sx_context, _sx_source, "),
+                "{input} generated {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_a_later_iterable_sees_only_the_earlier_loop_variables() {
+        // `a` is bound by the first clause, so the second iterable reads it directly.
+        _test_transformation(
+            "[b for a in xs for b in a]",
+            "[b for a in _sx_variable(_sx_context, _sx_source, (12, 14), 'xs') for b in a]",
+            vec![("xs", 12, 14, (1, 13))],
+            vec![],
+        );
+        // `b` is not bound yet when its own iterable runs.
+        _test_transformation(
+            "[b for a in xs for b in b]",
+            "[b for a in _sx_variable(_sx_context, _sx_source, (12, 14), 'xs') for b in _sx_variable(_sx_context, _sx_source, (24, 25), 'b')]",
+            vec![("xs", 12, 14, (1, 13)), ("b", 24, 25, (1, 25))],
+            vec![],
+        );
+    }
+
+    #[test]
+    fn test_a_condition_sees_its_own_clause_but_not_later_ones() {
+        _test_transformation(
+            "[a for a in xs if a]",
+            "[a for a in _sx_variable(_sx_context, _sx_source, (12, 14), 'xs') if a]",
+            vec![("xs", 12, 14, (1, 13))],
+            vec![],
+        );
+        _test_transformation(
+            "[1 for a in xs if b for b in a]",
+            "[1 for a in _sx_variable(_sx_context, _sx_source, (12, 14), 'xs') if _sx_variable(_sx_context, _sx_source, (18, 19), 'b') for b in a]",
+            vec![("xs", 12, 14, (1, 13)), ("b", 18, 19, (1, 19))],
+            vec![],
+        );
+    }
+
+    #[test]
+    fn test_nested_comprehensions_and_lambdas_in_the_first_iterable() {
+        // The inner first iterable runs where the outer element runs, so it sees `a`.
+        _test_transformation(
+            "[[b for b in a] for a in xs]",
+            "[[b for b in a] for a in _sx_variable(_sx_context, _sx_source, (25, 27), 'xs')]",
+            vec![("xs", 25, 27, (1, 26))],
+            vec![],
+        );
+        // An inner comprehension or lambda inside the outer first iterable runs before
+        // `a` exists, so `a` is read from the context.
+        for input in ["[1 for a in [b for b in a]]", "[1 for a in (lambda: a)()]"] {
+            let code = _code(input);
+            assert!(
+                code.contains("_sx_variable(_sx_context, _sx_source, ") && code.contains("'a')"),
+                "{input} generated {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_a_walrus_in_an_iterable_cannot_rebind_a_loop_variable() {
+        for (input, name) in [
+            ("[x for x in (x := items)]", "x"),
+            ("[1 for a in xs for b in (b := a)]", "b"),
+            ("[1 for a in (b := xs) for b in a]", "b"),
+        ] {
+            let error = _transform_error(input);
+            assert_eq!(
+                error,
+                format!(
+                    "SyntaxError: assignment expression cannot rebind comprehension iteration variable '{name}'"
+                ),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_an_outer_lambda_parameter_stays_local_in_the_first_iterable() {
+        _test_transformation(
+            "lambda xs: [x for x in xs]",
+            "lambda xs: [x for x in xs]",
+            vec![],
+            vec![],
+        );
+    }
+
     #[test]
     fn test_unsupported_comprehension_targets_give_an_error() {
         // These targets are valid Python but the sandbox does not support them. An

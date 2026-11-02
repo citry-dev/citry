@@ -175,6 +175,11 @@ def safe_eval(
         # Pass through the source string. This way we won't have to re-define
         # the functions on each evaluation.
         "_sx_source": source,
+        # Without this entry, `exec()` adds the real builtins to the namespace, and a plain
+        # name the transformer let through would reach them. The generated code needs no
+        # builtin, so an empty mapping is a second layer behind the Rust check. PyPy
+        # ignores it, as it does for `compile_expr(sandboxed=False)`.
+        "__builtins__": _NO_BUILTINS,
     }
 
     # Get transformed code from Rust

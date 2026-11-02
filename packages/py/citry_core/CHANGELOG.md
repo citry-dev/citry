@@ -25,6 +25,9 @@
   or `operator.methodcaller` inside an expression, and a
   `functools.partial` of any call it refuses. Use an f-string instead of
   `format`.
+- A sandboxed comprehension now reads a name in an iterable from the
+  template's variables, as Python does, unless an earlier `for` clause
+  binds it. For example, `[x for x in x]` loops over the template's `x`.
 - A comprehension variable that is an attribute, an item, a list, or a
   starred name, such as `[x for a.b in items]`, now raises `SyntaxError`
   instead of stopping the process with a Rust panic.

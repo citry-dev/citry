@@ -43,9 +43,13 @@ It is a second layer of protection. It does not make a template from a stranger 
   context, as a value.
 
 The generated code names its own helpers and arguments with the `_sx_` prefix
-(`_sx_variable`, `_sx_context`, and so on). A template cannot read a name that starts with
-`_`, and the Rust transformer raises `SyntaxError` for a lambda parameter or comprehension
-variable that starts with `_sx_`, so no template name can replace a check.
+(`_sx_variable`, `_sx_context`, and so on). The Rust transformer turns every name the
+expression does not bind itself into an `_sx_variable()` lookup, which refuses names that
+start with `_`. That includes a name in a comprehension's first iterable, which Python reads
+before the loop variable exists. The transformer also raises `SyntaxError` for a lambda
+parameter or comprehension variable that starts with `_sx_`, so no template name can replace
+a check. On CPython, the evaluation namespace holds an empty `__builtins__`, so a plain name
+never reaches a Python builtin.
 
 We do NOT support:
 - Builtins. If you need to use `len()`, `str()`, `int()`, `list()`, `dict()`, etc.,

@@ -84,11 +84,13 @@ pub fn call(func: Expr, args: Vec<Expr>, keywords: Vec<Keyword>, range: TextRang
 /// (`interceptor_call`) and the two arguments, the context mapping and the source text, it
 /// passes to each of them.
 ///
-/// A template reads a free name through `_sx_variable()`, and the Python runtime refuses
-/// every name that starts with `_`, so a template cannot read or replace these names that
-/// way. A lambda parameter or comprehension variable is bound by Python directly, so the
-/// transformer refuses one that starts with this prefix (`refuse_generated_name`). Any
-/// other name, `context` and `source` included, is free for the template to use.
+/// A template reads every name it does not bind itself through `_sx_variable()`, including
+/// a name in a comprehension's first iterable, which Python reads before the loop variables
+/// exist. The Python runtime refuses every name that starts with `_`, so a template cannot
+/// read these names that way. Python binds a lambda parameter or comprehension variable
+/// directly, so the transformer refuses one that starts with this prefix
+/// (`refuse_generated_name`). Any other name, `context` and `source` included, is free
+/// for the template to use.
 pub const GENERATED_NAME_PREFIX: &str = "_sx_";
 
 /// The local variable that holds the context mapping inside the function the Python

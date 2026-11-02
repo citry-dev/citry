@@ -940,16 +940,47 @@ impl SandboxTransformer {
         self.propagate_from_child(&child_transformer);
     }
 
-    /// Visit a comprehension with additional local variables from the generator targets
-    fn visit_comprehension_with_locals(
+    /// Visit one `for` clause of a comprehension. Its iterable sees only the variables
+    /// of the clauses before it, and its `if` conditions also see its own variables.
+    ///
+    /// This matches how Python evaluates a comprehension: the first iterable runs in the
+    /// enclosing scope, before any loop variable exists, and each later iterable runs once
+    /// the earlier clauses have bound theirs. A name the iterable reads that is not bound
+    /// yet must go through `_sx_variable()`. Left as a plain name, Python would look it up
+    /// in the generated code's globals, where the sandbox's own helpers live.
+    fn visit_comprehension_clause(
         &self,
         comprehension: &mut ast::Comprehension,
-        new_comprehension_vars: HashSet<String>,
+        earlier_vars: &HashSet<String>,
+        own_vars: &HashSet<String>,
+        all_vars: &HashSet<String>,
     ) {
-        let child_transformer = self.with_locals(new_comprehension_vars, HashSet::new());
-        child_transformer.visit_comprehension(comprehension);
+        let iter_transformer = self.with_locals(earlier_vars.clone(), HashSet::new());
+        iter_transformer.visit_expr(&mut comprehension.iter);
+        // A walrus in an iterable that writes one of this comprehension's loop variables
+        // stays refused, as it is everywhere else in the comprehension. The variable is not
+        // bound yet while the iterable runs, so the check in `Expr::Named` cannot see it.
+        let rebound = iter_transformer
+            .get_assignments()
+            .into_iter()
+            .find(|(name, _, _)| all_vars.contains(name));
+        if let Some((name, _, _)) = rebound {
+            self.set_error(format!(
+                "SyntaxError: assignment expression cannot rebind comprehension iteration variable '{}'",
+                name
+            ));
+            return;
+        }
         // Comprehensions propagate walrus assignments (they leak out in Python)
-        self.propagate_from_child(&child_transformer);
+        self.propagate_from_child(&iter_transformer);
+
+        let mut condition_vars = earlier_vars.clone();
+        condition_vars.extend(own_vars.iter().cloned());
+        let condition_transformer = self.with_locals(condition_vars, HashSet::new());
+        for if_expr in comprehension.ifs.iter_mut() {
+            condition_transformer.visit_expr(if_expr);
+        }
+        self.propagate_from_child(&condition_transformer);
     }
 
     /// Refuse a name that a lambda or comprehension introduces when it starts with the
@@ -1022,28 +1053,33 @@ impl SandboxTransformer {
             }
         }
 
-        // Extract all comprehension variables from all generators
-        let mut names = Vec::new();
+        // Extract the variables of each `for` clause, in source order
+        let mut clause_vars: Vec<HashSet<String>> = Vec::with_capacity(generators.len());
         for generator in generators.iter() {
+            let mut names = Vec::new();
             if let Err(error) = Self::extract_target_variables(&generator.target, &mut names) {
                 self.set_error(error);
                 return;
             }
-        }
-        // Check in source order so the same expression always reports the same name.
-        for name in &names {
-            if self.refuse_generated_name(name, "comprehension variable") {
-                return;
+            // Check in source order so the same expression always reports the same name.
+            for name in &names {
+                if self.refuse_generated_name(name, "comprehension variable") {
+                    return;
+                }
             }
+            clause_vars.push(names.into_iter().collect());
         }
-        let comprehension_vars: HashSet<String> = names.into_iter().collect();
 
         // IMPORTANT: Visit generators FIRST (including if conditions where walrus might occur)
         // This way, any walrus assignments in the if conditions will be tracked and propagated
-        // before we visit the element
-        for generator in generators.iter_mut() {
-            self.visit_comprehension_with_locals(generator, comprehension_vars.clone());
+        // before we visit the element. Each clause sees only the variables bound before it.
+        let all_vars: HashSet<String> = clause_vars.iter().flatten().cloned().collect();
+        let mut earlier_vars: HashSet<String> = HashSet::new();
+        for (generator, own_vars) in generators.iter_mut().zip(&clause_vars) {
+            self.visit_comprehension_clause(generator, &earlier_vars, own_vars, &all_vars);
+            earlier_vars.extend(own_vars.iter().cloned());
         }
+        let comprehension_vars = earlier_vars;
 
         // Transform the element(s) with comprehension variables
         // This includes the variables introduced by generators (like 'x' in [x+1 for x in items])
