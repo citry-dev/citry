@@ -24,6 +24,8 @@ import re
 import traceback
 from base64 import b64decode
 from binascii import Error as BinasciiError
+from enum import Enum
+from html.entities import html5 as _html5_entities
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote_to_bytes
 
@@ -44,6 +46,8 @@ _JAVASCRIPT_URL_RE = re.compile(
     re.IGNORECASE,
 )
 _URL_ATTRIBUTES = frozenset({"action", "formaction", "href", "src", "xlink:href"})
+_ANIMATION_VALUE_ATTRIBUTES = frozenset({"to", "from", "by", "values"})
+_HTML_SPACE = " \t\n\r\x0c"
 # A decimal reference this short converts to an int directly: `&#` plus
 # twelve digits plus `;`.
 _MAX_PLAIN_DECIMAL_REFERENCE = 15
@@ -169,8 +173,9 @@ class ReferenceCspValidator(_CspRenderValidator):
                     self._add_raw_tag(
                         tag, component, own_instance, node.start_tag.name.start_index, node.start_tag.name.end_index
                     )
+            animates_href = _animation_sets_href(tag, attrs)
             for attr in attrs:
-                self._validate_attribute(tag, attr, component, own_instance)
+                self._validate_attribute(tag, attr, component, own_instance, animates_href=animates_href)
             body = getattr(node, "body", None)
             if body is not None:
                 self._walk_template(
@@ -247,7 +252,9 @@ class ReferenceCspValidator(_CspRenderValidator):
             dedupe_key=self._site_key(instance, (component, "raw-tag", tag)),
         )
 
-    def _validate_attribute(self, tag: str, attr: OutputAttr, component: str, instance: str | None) -> None:
+    def _validate_attribute(
+        self, tag: str, attr: OutputAttr, component: str, instance: str | None, *, animates_href: bool
+    ) -> None:
         name = attr.key.content.translate(_ASCII_LOWER)
         inner = attr.inner_value
         raw_source = "" if inner is None else inner.content
@@ -262,7 +269,7 @@ class ReferenceCspValidator(_CspRenderValidator):
                 attribute=attr.key.content,
                 dedupe_key=self._site_key(instance, (component, "native-event", name, decoded)),
             )
-        if _is_url_attribute(tag, name) and _javascript_url(decoded):
+        if _is_url_value(tag, name, animates_href) and _javascript_url_value(name, decoded):
             self._add(
                 f"a javascript: URL in {attr.key.content!r}; use a normal URL or a Vue handler",
                 component,
@@ -436,6 +443,8 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
                     )
 
             activation_attrs: list[str] = []
+            animates_href = _animation_sets_href(tag, attrs)
+            refreshes = _meta_refreshes(tag, attrs)
             for attr in attrs:
                 name = attr.key.content.translate(_ASCII_LOWER)
                 decoded = _decoded_attr(attr)
@@ -475,7 +484,7 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
                         end=attr.key.end_index,
                         key=self._site_key(own_instance, ("native", name, attr.key.start_index)),
                     )
-                if _is_url_attribute(tag, name) and _javascript_url(decoded):
+                if _is_url_value(tag, name, animates_href) and _javascript_url_value(name, decoded):
                     inner_value = attr.inner_value
                     start = attr.key.end_index if inner_value is None else inner_value.start_index
                     self._add(
@@ -488,12 +497,14 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
                         end=start + len(("" if inner_value is None else inner_value.content).encode()),
                         key=self._site_key(own_instance, ("javascript-url", tag, name, start)),
                     )
-                if _embedded_document_requires_javascript(tag, name, decoded):
+                if _attribute_document_requires_javascript(
+                    tag, name, decoded, animates_href=animates_href, refreshes=refreshes, depth=0
+                ):
                     inner_value = attr.inner_value
                     start = attr.key.end_index if inner_value is None else inner_value.start_index
                     self._add(
                         "embedded-document",
-                        f"{attr.key.content!r} contains an embedded HTML document with executable browser code",
+                        f"{attr.key.content!r} contains an embedded document with executable browser code",
                         component,
                         attribute=attr.key.content,
                         range_kind="settled HTML",
@@ -591,21 +602,50 @@ def _node_html(html: str, node: Any) -> str:
 
 
 def _decode_html_attribute(source: str) -> str:
-    """Decode HTML character references in an attribute value so the checks see roughly what the browser sees."""
+    """Decode HTML character references in an attribute value the way a browser reads a quoted value."""
     decoded: list[str] = []
     position = 0
     while position < len(source):
         match = _ENTITY_RE.match(source, position)
-        raw = match.group(0) if match is not None else source[position]
-        value = html_module.unescape(_bounded_decimal_reference(raw))
-        # An unknown reference such as `&bogus;` stays literal, so step past
-        # only its `&` and keep scanning the rest as ordinary text.
-        if value == raw and match is not None:
-            raw = source[position]
-            value = raw
+        if match is None:
+            decoded.append(source[position])
+            position += 1
+            continue
+        raw = match.group(0)
+        # The browser's attribute rule looks at the character after the
+        # reference to decide a legacy name without ";".
+        following = source[match.end()] if match.end() < len(source) else ""
+        value = _decode_reference(raw, following)
+        if value is None:
+            # Keep the reference as typed; step past only its "&" and read
+            # the rest as ordinary text.
+            decoded.append("&")
+            position += 1
+            continue
         decoded.append(value)
         position += len(raw)
     return "".join(decoded)
+
+
+def _decode_reference(raw: str, following: str) -> str | None:
+    """Decode one reference, or return None when the browser keeps it as typed."""
+    body = raw[1:]
+    if body.startswith("#"):
+        return html_module.unescape(_bounded_decimal_reference(raw))
+    # A reference that ends with ";" and names an entity decodes in full.
+    if body.endswith(";") and body in _html5_entities:
+        return _html5_entities[body]
+    # A legacy name without ";" decodes only when the next source character
+    # is not "=" or an ASCII letter or digit, so "?a=1&copy=2" stays a URL.
+    name = body.removesuffix(";")
+    if name in _html5_entities:
+        if following == "=" or (following.isascii() and following.isalnum()):
+            return None
+        return _html5_entities[name]
+    # The name is not an entity. Any known prefix of it is followed by
+    # another name character, so in an attribute value the browser keeps
+    # the whole reference as typed.
+    return None
 
 
 def _bounded_decimal_reference(raw: str) -> str:
@@ -639,6 +679,33 @@ def _is_native_event_attribute(name: str) -> bool:
 
 def _is_url_attribute(tag: str, name: str) -> bool:
     return name in _URL_ATTRIBUTES or (tag == "object" and name == "data")
+
+
+def _animation_sets_href(tag: str, attrs: tuple[OutputAttr, ...]) -> bool:
+    """Whether an SVG `<animate>` or `<set>` writes the `href` or `xlink:href` of its target."""
+    if tag not in {"animate", "set"}:
+        return False
+    # The browser reads the first of two same-named attributes. The name is
+    # compared without case and without the spaces around it, which is wider
+    # than the browsers tested, so a looser browser is covered too.
+    first = next((attr for attr in attrs if attr.key.content.translate(_ASCII_LOWER) == "attributename"), None)
+    if first is None:
+        return False
+    name = _decoded_attr(first).strip(_HTML_SPACE).translate(_ASCII_LOWER)
+    return name in {"href", "xlink:href"}
+
+
+def _is_url_value(tag: str, name: str, animates_href: bool) -> bool:
+    """An attribute whose value the browser may use as a URL, including what an href animation sets."""
+    return _is_url_attribute(tag, name) or (animates_href and name in _ANIMATION_VALUE_ATTRIBUTES)
+
+
+def _javascript_url_value(name: str, value: str) -> bool:
+    # `values` is a list the browser's SVG animation code (SMIL) splits on
+    # `;`, and any item can become the URL.
+    if name == "values":
+        return any(_javascript_url(item) for item in value.split(";"))
+    return _javascript_url(value)
 
 
 def _attribute_map(attrs: tuple[OutputAttr, ...]) -> dict[str, str]:
@@ -717,30 +784,145 @@ def _handler_only_control(
     return tag in {"div", "span", "section"}
 
 
-def _embedded_document_requires_javascript(tag: str, name: str, value: str) -> bool:
-    if tag == "iframe" and name == "srcdoc":
-        return _html_document_requires_javascript(value, depth=0)
-    if (tag, name) not in {("iframe", "src"), ("object", "data"), ("embed", "src")}:
+_DOCUMENT_URL_ATTRIBUTES = {("iframe", "src"), ("frame", "src"), ("object", "data"), ("embed", "src")}
+# A link or form opens a `data:` document in a frame, which `target` or
+# `<base target>` can pick for any link, so every link and form counts.
+_OPENED_URL_ATTRIBUTES = {
+    ("a", "href"),
+    ("area", "href"),
+    ("a", "xlink:href"),
+    ("form", "action"),
+    ("button", "formaction"),
+    ("input", "formaction"),
+}
+
+
+def _meta_refreshes(tag: str, attrs: tuple[OutputAttr, ...]) -> bool:
+    """Whether a `<meta>` has `http-equiv="refresh"`, so the browser opens the URL in its `content`."""
+    if tag != "meta":
         return False
-    decoded = _decode_html_data_url(value)
-    return decoded is not None and _html_document_requires_javascript(decoded, depth=0)
+    first = next((attr for attr in attrs if attr.key.content.translate(_ASCII_LOWER) == "http-equiv"), None)
+    return first is not None and _decoded_attr(first).strip(_HTML_SPACE).translate(_ASCII_LOWER) == "refresh"
 
 
-def _decode_html_data_url(value: str) -> str | None:
-    header, separator, payload = value.lstrip(_LEADING_URL_SPACE).partition(",")
+def _refresh_data_url(content: str) -> str | None:
+    # The HTML refresh steps: a delay, spaces, `;` or `,`, spaces, an
+    # optional `url=`, an optional quote, then the URL. The delay is
+    # optional here and the text after a closing quote is kept, so this
+    # reads at least what the browser opens.
+    content = content.translate({0x09: None, 0x0A: None, 0x0D: None})
+    rest = content.lstrip(_HTML_SPACE).lstrip("0123456789.").lstrip(_HTML_SPACE)
+    rest = rest.removeprefix(";") if rest.startswith(";") else rest.removeprefix(",")
+    rest = rest.lstrip(_HTML_SPACE)
+    candidates = [rest]
+    if rest[:3].translate(_ASCII_LOWER) == "url":
+        after = rest[3:].lstrip(_HTML_SPACE)
+        candidates.append(after.removeprefix("="))
+    for candidate in candidates:
+        unspaced = candidate.lstrip(_HTML_SPACE)
+        unquoted = unspaced[1:] if unspaced[:1] in {'"', "'"} else unspaced
+        # The URL parser drops leading control characters and spaces.
+        url = unquoted.lstrip(_LEADING_URL_SPACE)
+        if url[:5].translate(_ASCII_LOWER) == "data:":
+            return url
+    return None
+
+
+def _opens_document_url(tag: str, name: str, *, animates_href: bool) -> bool:
+    return (
+        (tag, name) in _DOCUMENT_URL_ATTRIBUTES
+        or (tag, name) in _OPENED_URL_ATTRIBUTES
+        or (animates_href and name in _ANIMATION_VALUE_ATTRIBUTES)
+    )
+
+
+def _attribute_document_requires_javascript(
+    tag: str, name: str, value: str, *, animates_href: bool, refreshes: bool, depth: int
+) -> bool:
+    if tag == "iframe" and name == "srcdoc":
+        return _html_document_requires_javascript(value, depth=depth)
+    if refreshes and name == "content":
+        url = _refresh_data_url(value)
+        return url is not None and _data_url_requires_javascript(url, depth=depth)
+    if not _opens_document_url(tag, name, animates_href=animates_href):
+        return False
+    # The browser splits an animation's `values` on `;` and sets each item.
+    if animates_href and name == "values":
+        return any(_data_url_requires_javascript(item, depth=depth) for item in value.split(";"))
+    return _data_url_requires_javascript(value, depth=depth)
+
+
+def _data_url_requires_javascript(value: str, *, depth: int) -> bool:
+    # A document the check does not read counts as running code: an XML
+    # document, which the HTML scanner reads wrongly, or a type a browser may
+    # read as HTML on its own.
+    decoded = _decode_data_url_document(value)
+    if decoded is _DataUrlDocument.UNREAD:
+        return True
+    return decoded is not None and _html_document_requires_javascript(decoded, depth=depth)
+
+
+class _DataUrlDocument(Enum):
+    """The marker `_decode_data_url_document` returns for a document the check does not read."""
+
+    UNREAD = "unread"
+
+
+_INERT_MEDIA_TYPES = {
+    "",
+    "text/plain",
+    "text/css",
+    "text/csv",
+    "application/json",
+    "application/pdf",
+    "application/octet-stream",
+}
+
+
+def _is_inert_media_type(media_type: str) -> bool:
+    """Whether the browser shows this lowercased media type as text, an image, media, a font, or a download."""
+    kind, _slash, subtype = media_type.partition("/")
+    return media_type in _INERT_MEDIA_TYPES or (
+        kind in {"image", "audio", "video", "font"} and bool(subtype) and not subtype.endswith("+xml")
+    )
+
+
+def _data_url_is_base64(header: str) -> bool:
+    # The Fetch rule (`;`, any spaces, `base64` at the end), or `;base64`
+    # anywhere, as the Rust check reads it.
+    rest, found, after = header.strip(" \t\n\r\f").rpartition("base64")
+    ends_in_base64 = bool(found) and not after and rest.rstrip(" ").endswith(";")
+    return ends_in_base64 or ";base64" in header
+
+
+def _payload_may_hide_markup(body: bytes) -> bool:
+    # UTF-16 (zero bytes) and ISO-2022-JP (the escape byte) are the
+    # encodings that could hide a tag from a UTF-8 reading.
+    return b"\x00" in body or b"\x1b" in body
+
+
+def _decode_data_url_document(value: str) -> str | Literal[_DataUrlDocument.UNREAD] | None:
+    # The browser drops tabs and line breaks anywhere in a URL.
+    value = value.lstrip(_LEADING_URL_SPACE).translate({0x09: None, 0x0A: None, 0x0D: None})
+    header, separator, payload = value.partition(",")
     folded_header = header.translate(_ASCII_LOWER)
-    media_type = folded_header.removeprefix("data:").partition(";")[0].strip(" \t\n\r\f")
-    if not separator or not folded_header.startswith("data:") or media_type != "text/html":
+    if not separator or not folded_header.startswith("data:"):
         return None
+    header = folded_header.removeprefix("data:")
+    media_type = header.partition(";")[0].strip(" \t\n\r\f")
+    if media_type != "text/html":
+        return None if _is_inert_media_type(media_type) else _DataUrlDocument.UNREAD
     try:
         body = (
             _decode_strict_base64(unquote_to_bytes(payload))
-            if ";base64" in folded_header
+            if _data_url_is_base64(header)
             else unquote_to_bytes(payload)
         )
-        return body.decode("utf8", errors="replace")
     except (BinasciiError, ValueError, TypeError):
-        return "<script>"
+        return _DataUrlDocument.UNREAD
+    if _payload_may_hide_markup(body):
+        return _DataUrlDocument.UNREAD
+    return body.decode("utf8", errors="replace")
 
 
 def _decode_strict_base64(data: bytes) -> bytes:
@@ -770,17 +952,19 @@ def _parsed_document_requires_javascript(template: OutputTemplate, *, depth: int
         tag = node.start_tag.name.content.translate(_ASCII_LOWER)
         if tag == "script" and _raw_script_is_executable(attrs):
             return True
+        animates_href = _animation_sets_href(tag, attrs)
+        refreshes = _meta_refreshes(tag, attrs)
         for attr in attrs:
             name = attr.key.content.translate(_ASCII_LOWER)
             value = _decoded_attr(attr)
-            if _is_native_event_attribute(name) or (_is_url_attribute(tag, name) and _javascript_url(value)):
+            if _is_native_event_attribute(name) or (
+                _is_url_value(tag, name, animates_href) and _javascript_url_value(name, value)
+            ):
                 return True
-            if tag == "iframe" and name == "srcdoc" and _html_document_requires_javascript(value, depth=depth + 1):
+            if _attribute_document_requires_javascript(
+                tag, name, value, animates_href=animates_href, refreshes=refreshes, depth=depth + 1
+            ):
                 return True
-            if (tag, name) in {("iframe", "src"), ("object", "data"), ("embed", "src")}:
-                decoded = _decode_html_data_url(value)
-                if decoded is not None and _html_document_requires_javascript(decoded, depth=depth + 1):
-                    return True
         body = getattr(node, "body", None)
         if body is not None and _parsed_document_requires_javascript(body, depth=depth):
             return True

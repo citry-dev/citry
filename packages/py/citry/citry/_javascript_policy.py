@@ -355,7 +355,7 @@ class _JavascriptPolicy:
             signature = ("javascript-url", tag, name, start)
         elif rule == "js-embedded-document":
             finding = "embedded-document"
-            detail = f"{attribute!r} contains an embedded HTML document with executable browser code"
+            detail = f"{attribute!r} contains an embedded document with executable browser code"
             signature = ("embedded-document", tag, name, start)
         elif rule == "js-handler-only-control":
             finding = "handler-only-control"

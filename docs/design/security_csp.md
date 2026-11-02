@@ -781,8 +781,12 @@ outside Citry contains none.
   active in the rendered tree;
 - executable raw `<script>` elements, native event attributes, and
   `javascript:` URLs;
-- executable embedded HTML in `iframe srcdoc` and HTML data-document
-  contexts; and
+- executable embedded HTML in `iframe srcdoc` and in an HTML `data:` URL,
+  and any other `data:` URL the page loads or opens as a
+  document (`iframe`, `frame`, `object`, and `embed` URLs, links, forms,
+  and `<meta http-equiv="refresh">`), which Citry counts as executable
+  without reading it unless its type is text, an image, media, a font, a
+  PDF, or a download; and
 - extension output or a fragment strategy that requires a browser manager.
 
 Detection must operate on the settled render and final extension output, not

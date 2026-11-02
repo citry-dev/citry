@@ -49,8 +49,8 @@ COMPONENT_CLASSES = {"known": "Known", "other": "Other", "": "Empty"}
 # ---------------------------------------------------------------------------
 
 _TAGS = [
-    "a", "iframe", "object", "embed", "form", "button", "input", "select", "textarea", "div", "span",
-    "section", "svg", "math", "title", "noscript", "template", "table", "p", "script", "style", "link",
+    "a", "area", "meta", "iframe", "frame", "object", "embed", "form", "button", "input", "select", "textarea",
+    "div", "span", "section", "svg", "math", "title", "noscript", "template", "table", "p", "script", "style", "link",
     "x-\u00e9l\u00e9ment", "D\u0130V",
 ]  # fmt: skip
 _SCRIPT_TYPES = [
@@ -111,6 +111,40 @@ def _javascript_text(rng: random.Random) -> str:
     return "".join(out)
 
 
+_ANIMATION_NAMES = [
+    "href", "xlink:href", "HREF", "XLink:Href", " href", "href ", "\thref\n", "hr&#101;f", "&#104;ref", "x", "",
+    "svg:href", "hrefx", "xlink:href;x", "\x0bhref", "\u00a0href", "\x1chref",
+]  # fmt: skip
+_ANIMATION_VALUE_KEYS = ["to", "from", "by", "values", "TO", "Values", "title", "begin", "dur"]
+
+
+def _animation_value(rng: random.Random, key: str) -> str:
+    """A value for an animation's `to`, `from`, `by` or `values`, often hiding `javascript:` in a list."""
+    # A `data:` URL the link opens counts as well, unless its type is inert.
+    documents = ["data:text/xml,x", "data:image/png,x", "data:text/html,%3Cb%3E", "data:text/html,%3Cscript%3E"]
+    if key.lower() != "values":
+        return rng.choice([_javascript_text(rng)] * 3 + ["#x", "", "1s", rng.choice(documents)])
+    choices = [_javascript_text(rng), "#a", " #b ", "", "x", rng.choice(documents)]
+    items = [rng.choice(choices) for _ in range(rng.randint(1, 4))]
+    return rng.choice([";", "&#59;", ";", ";"]).join(items)
+
+
+def _animation(rng: random.Random) -> str:
+    """An SVG `<animate>` or `<set>`: whether it writes `href`, and which value attributes it carries."""
+    tag = rng.choice(["animate", "set", "set", "SET", "animateTransform", "animateMotion"])
+    attributes = []
+    # Most animations name `href`, so the value attributes below decide the outcome often.
+    names = ["href", "href", "xlink:href", *_ANIMATION_NAMES]
+    for _ in range(rng.choice([1, 1, 1, 1, 2, 2])):
+        spelled = f'attributeName="{rng.choice(names)}"'
+        attributes.append(rng.choice([spelled, spelled, spelled, "attributeName", "ATTRIBUTENAME=href"]))
+    for _ in range(rng.randint(1, 3)):
+        key = rng.choice(_ANIMATION_VALUE_KEYS)
+        attributes.append(f'{key}="{_animation_value(rng, key).replace(chr(34), "")}"')
+    rng.shuffle(attributes)
+    return f"<svg><a {rng.choice(['', 'href=#'])}><{tag} {' '.join(attributes)}/></a></svg>"
+
+
 def _document(rng: random.Random, depth: int) -> str:
     """A small HTML document for `srcdoc` and `data:` URLs."""
     pieces = [rng.choice(["<p>hi</p>", "<b>x</b>", "", "text"])]
@@ -130,12 +164,19 @@ def _document(rng: random.Random, depth: int) -> str:
             pieces.append(f'<iframe srcdoc="{_escape(nested, rng)}"></iframe>')
         elif roll < 0.6:
             pieces.append(f'<iframe src="{_data_url(rng, nested)}"></iframe>')
-        elif roll < 0.8:
+        elif roll < 0.7:
             pieces.append(f"<object data='{_data_url(rng, nested)}'></object>")
-        else:
+        elif roll < 0.8:
             pieces.append(f'<embed src="{_data_url(rng, nested)}">')
+        elif roll < 0.9:
+            # A refresh or a link inside the document opens one too.
+            pieces.append(f"<meta http-equiv=refresh content='0;url={_data_url(rng, nested)}'>")
+        else:
+            pieces.append(f'<a target=f href="{_data_url(rng, nested)}">a</a>')
     elif roll < 0.8:
         pieces.append("<title><script>inert()</script></title>")
+    elif roll < 0.9:
+        pieces.append(_animation(rng))
     return "".join(pieces)
 
 
@@ -151,8 +192,8 @@ def _deep_document(rng: random.Random) -> str:
 
 
 def _escape(text: str, rng: random.Random | None = None) -> str:
-    # A legacy reference without `;`, such as `&lt` or `&ltscript`, still
-    # decodes, by its longest known prefix.
+    # Write `<` in several forms, including a legacy reference without `;`
+    # (`&lt`), so the generator exercises how the decoder reads each one.
     less_than = "&lt;" if rng is None else rng.choice(["&lt;", "&lt;", "&lt", "&LT", "&#60", "&#x3c;"])
     return text.replace("&", "&amp;").replace('"', "&quot;").replace("<", less_than)
 
@@ -161,6 +202,16 @@ def _data_url(rng: random.Random, document: str) -> str:
     header = rng.choice([
         "data:text/html", "DATA:Text/HTML", " data:text/html", "data:text/html;charset=utf-8",
         "data:text/html ;x", "data:text/plain", "data:", "data:text/htmlx", "\x00data:text/html",
+        # Types other than HTML count as running code whatever they hold,
+        # unless the browser shows them as text, media, or a download.
+        "data:image/svg+xml", "DATA:Image/SVG+XML;charset=utf-8", "data:application/xhtml+xml",
+        "data:text/xml", "data:application/xml ;x", "data:text/xsl", "data:application/rss+xml",
+        "data:x/+xml", "data:/svg+xml", "data:\timage/svg+xml\x0c;x", "data:*/*", "data:foo",
+        "data:image/svg", "data:image/svg+xmlx", "data:image/png", "data:video/", "data:text/csv",
+        "data:application/pdf", "data:application/pdfx", "data:font/woff", "data:audio/mpeg",
+        "data:audio/x+xml", "data:font/", "data:text/html;base64;charset=x",
+        # Tabs and line breaks anywhere in the URL, and `base64` after spaces.
+        "da\tta:text/html", "data:text/ht\nml", "data:text/html; ", "data:text/html;\r",
     ])  # fmt: skip
     roll = rng.random()
     if roll < 0.4:
@@ -176,13 +227,21 @@ def _data_url(rng: random.Random, document: str) -> str:
             encoded = quote(encoded)
         elif variant < 0.42:
             encoded = encoded[:-1] + "%" + encoded[-1:]
-        return f"{header};base64,{encoded}"
+        # The browser also reads spaces or a tab before `base64`.
+        marker = rng.choice([";base64", ";base64", "; base64", ";  BASE64 ", ";\tbase64"])
+        return f"{header}{marker},{encoded}"
     if roll < 0.5:
         return f"{header}{rng.choice(['', ';base64'])}"
     if roll < 0.6:
         # Bytes that are not valid UTF-8 decode to U+FFFD, also inside a
-        # tag name, where dropping them instead would make a <script>.
-        broken = rng.choice(["%ff", "%fe", "%C3%28", "%ed%a0%80", "%F0%9F%98", "%c0%af", "%e2%82"])
+        # tag name, where dropping them instead would make a <script>. A
+        # zero byte or an escape byte marks an encoding the check does not
+        # read.
+        broken = rng.choice(["%ff", "%fe", "%C3%28", "%ed%a0%80", "%F0%9F%98", "%c0%af", "%e2%82", "%00", "%1b(B"])
+        # Those two bytes matter only in an HTML document, so they get an
+        # HTML header half the time.
+        if broken in {"%00", "%1b(B"} and rng.random() < 0.5:
+            header = "data:text/html"
         return f"{header},%3Cp%3E{broken}%3C/p%3E%3Cscr{broken}ipt%3Ex()%3C/script%3E{quote(document)}"
     return f"{header},{quote(document, safe=rng.choice(['', '<>/= ']))}%%41%4%zz"
 
@@ -205,8 +264,18 @@ def _value(rng: random.Random, name: str, tag: str) -> str:
         if roll < 0.15:
             return _escape(_deep_document(rng), rng)
         return _escape(_document(rng, 0), rng) if roll < 0.9 else "&lt;script&gt;" * 2
+    if lowered == "http-equiv":
+        return rng.choice(["refresh", "refresh", " Refresh ", "REFRESH", "refreshx", "content-type"])
+    if lowered == "content":
+        # The delay and `url=` in the spellings the browser accepts, then a
+        # `data:` URL or a plain one.
+        lead = rng.choice([
+            "0;url=", "0; URL='", "1, ", "0;url=da\tta:", "", " .5 ; url = ", "0;url=https://x/?next=", "0 url",
+        ])  # fmt: skip
+        target = _data_url(rng, _document(rng, 0)) if roll < 0.7 else "/next"
+        return lead + (target.removeprefix("data:") if lead.endswith("da\tta:") else target)
     if lowered in {"href", "src", "action", "formaction", "xlink:href", "data"}:
-        if tag in _DOCUMENT_ATTRIBUTE and roll < 0.45:
+        if (tag in _DOCUMENT_ATTRIBUTE or tag in _LINK_TAGS) and roll < 0.45:
             return _data_url(rng, _document(rng, 0))
         if roll < 0.75:
             return _javascript_text(rng)
@@ -220,7 +289,15 @@ def _value(rng: random.Random, name: str, tag: str) -> str:
     return rng.choice(["", "x", "save()", "open", "a b", "1", "\u00e9t\u00e9"])
 
 
-_DOCUMENT_ATTRIBUTE = {"iframe": ["src", "srcdoc"], "object": ["data"], "embed": ["src"]}
+_DOCUMENT_ATTRIBUTE = {
+    "iframe": ["src", "srcdoc"],
+    "frame": ["src"],
+    "object": ["data"],
+    "embed": ["src"],
+    "meta": ["http-equiv", "content"],
+}
+# Tags whose link or form URL the browser can open as a document in a frame.
+_LINK_TAGS = {"a", "area", "form", "button", "input"}
 
 
 def _attribute(rng: random.Random, tag: str, marker: bool) -> str:
@@ -311,6 +388,8 @@ def _piece(rng: random.Random, depth: int, marker: bool) -> str:
         return rng.choice(["text", "a &amp; b", "<!-- <script>x</script> -->", "\u00e9", " "])
     if roll < 0.85:
         return "<!DOCTYPE html>"
+    if roll < 0.9:
+        return _animation(rng)
     return rng.choice(["<br>", "<img src=x onerror=y>", "<svg><script/></svg>", "<svg><style>s</style></svg>"])
 
 
@@ -595,3 +674,20 @@ def test_rust_output_checks_match_the_python_rules(chunk: int) -> None:
             # so neither allowed difference can occur and no page is needed.
             block_differences = _differences(_blocks_results(blocks), "", component_classes={})
             assert not block_differences, (blocks, block_differences)
+
+
+def test_the_generated_animations_include_both_reported_and_inert_ones() -> None:
+    # The comparison above proves nothing about animations if the generator
+    # rarely makes one that sets `href` to a `javascript:` URL, or never makes
+    # one that looks like it and does not.
+    rng = random.Random(f"{SEED}-animation")  # noqa: S311 - a seeded page generator, not a secret
+    reported = 0
+    inert = 0
+    for _ in range(PAGES):
+        events = _output_policy.check_output_html(_animation(rng), csp=True).events
+        if any(event[0] == "csp-javascript-url" and event[1] in {"animate", "set"} for event in events):
+            reported += 1
+        else:
+            inert += 1
+    assert reported > PAGES // 20
+    assert inert > PAGES // 20

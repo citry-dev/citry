@@ -33,6 +33,28 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   `packages/py/citry/citry/_javascript_policy.py`) write the messages and
   decide whether to warn or raise. Its character-reference decoding and
   letter matching copy Python's on purpose.
+  - `animation_sets_href`, `is_url_value`, and `is_javascript_url_value`
+    are the one rule for "this attribute holds a `javascript:` URL". The
+    page check and the embedded-document check both call them. They cover
+    the `to`, `from`, `by`, and `values` of an SVG `<animate>` or `<set>`
+    that sets `href`. The Python reference keeps a matching copy.
+  - `data_url_requires_javascript` is the one rule for a `data:` URL the
+    page loads or opens as a document: `iframe src`, `frame src`,
+    `object data`, `embed src` (`loads_document_url`), a link or form URL
+    or the value of an SVG animation of a link (`opens_document_url`), and
+    a `<meta http-equiv="refresh">` (`meta_refreshes`, `refresh_data_url`).
+    `attribute_document_requires_javascript` routes each attribute to it,
+    at the top level and inside embedded documents. A `text/html` document
+    is read as the browser reads the URL: tabs and line breaks dropped,
+    `; base64` accepted, and a payload in UTF-16 or ISO-2022-JP counted as
+    running code. A type in
+    `is_inert_media_type` (text, images, media, fonts, PDF, downloads) runs
+    nothing. Every other type, SVG and the other XML types included, counts
+    as running code without being read. The Python reference keeps a
+    matching copy.
+  - `classify_dependency_attribute` (in `citry_core_py`) reads only
+    structured `Script` and `Style` attributes, so it keeps calling
+    `is_url_attribute` and `is_javascript_url` directly.
   `packages/py/citry/tests/_output_policy_reference.py` keeps the Python
   rules, `packages/py/citry/tests/test_output_policy_differential.py`
   compares the two on generated pages, and running any test suite with
