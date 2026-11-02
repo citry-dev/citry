@@ -46,7 +46,8 @@ the variable's name:
 ```
 
 `message` is the message ID. `c-values` holds every variable that is not
-a `Slot`; the `c-` prefix makes Citry evaluate it as Python. A name may appear in `values` or as a fill, not both.
+a `Slot`; the `c-` prefix makes Citry evaluate it as Python. A name may
+appear in `c-values` or as a fill, not both.
 
 Citry reports a missing, unknown, or wrongly typed value or fill. It
 checks fixed calls like this one before rendering, and checks values
@@ -79,6 +80,16 @@ my-app-safe-message = <unsafe> { $link } & text
 in `c-values`. Only the content of the fill is rendered as HTML. A
 translation therefore cannot add an event handler, an unsafe URL, an
 attribute, or a component.
+
+This holds only while the translation stays text. Do not wrap the
+string that `tr()` returns in [`Markup`][citry.Markup], and do not
+show a translation with `v-html`, such as `v-html="$i18n.tr(...)"`.
+Either one inserts the translation as HTML without escaping it, so tags
+in the translation, or in a value you pass to `tr()`, become elements on
+the page. When a message needs a link or other markup, give it a `Slot`
+variable, render it with `<c-trans>`, and put the markup in a
+`<c-fill>`; see [Add a slot variable](#add-a-slot-variable) and
+[Fill the message](#fill-the-message).
 
 ## Less common cases
 
