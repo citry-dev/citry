@@ -300,6 +300,27 @@ render, or an Events action), check its security before delivery, as follows:
    step 5 and [`SECURITY.md`](SECURITY.md) instead, and gets a record only
    after its fix is released and disclosed.
 
+## Mechanism 8 - check library code against other frameworks' advisories
+
+Other frameworks and template engines have already shipped security bugs
+that Citry could repeat. The maintainers keep a survey of published
+security advisories for Vue, Nuxt, Jinja2, Django, Svelte, React,
+Angular, Next.js, and others, grouped by kind of bug. It is the advisory
+survey report (`reports/259-advisory-survey.md`) in the maintainers'
+private security repository, `citry-dev/citry--security`.
+
+When a change alters what code in a published package does (under
+`crates/` or `packages/`, not tests, docs, or examples), the independent
+reviewer (Mechanism 6) reads the survey, picks the kinds of bug that
+could occur in the code the change touches, and checks that the change
+does not introduce one. Its report lists the kinds it checked, or says
+that none apply.
+
+A reviewer that cannot open the survey says so in its report and
+describes what the change touches. The author, or the agent that started
+the review, then asks the maintainer which kinds apply. Until someone
+with access has done the check, the report lists it as not done.
+
 ## Where new agent knowledge goes
 
 When you discover something worth recording, pick **one** location. All of
