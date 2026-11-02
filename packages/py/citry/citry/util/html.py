@@ -28,14 +28,17 @@ same ``Markup`` class directly.
 
 from __future__ import annotations
 
+import functools
+import html.parser
 import json
 import re
 import sys
+from collections import deque
 from html import unescape
 from html.entities import html5
 from html.parser import HTMLParser
 from types import BuiltinFunctionType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 from markupsafe import Markup, escape
 
@@ -43,6 +46,9 @@ from citry.util import deep_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+# A parser method that receives a start tag's name and attributes.
+_TagHandler = TypeVar("_TagHandler", bound="Callable[[Any, str, list[tuple[str, str | None]]], None]")
 
 # markupsafe's escaper that returns a plain ``str`` (the same function that
 # ``escape`` runs internally before wrapping the result in a ``Markup``).
@@ -113,8 +119,13 @@ def _short_numeric_reference(name: str) -> str | None:
     return f"&{prefix}{significant or '0'}{semicolon}"
 
 
-def _decode_text_numeric_reference(name: str) -> str:
-    """Return the character a browser reads in text from the numeric reference ``name`` (``#106`` or ``#x6A;``)."""
+def _decode_numeric_reference(name: str) -> str:
+    """
+    Return the character a browser reads from the numeric reference ``name`` (``#106`` or ``#x6A;``).
+
+    The HTML standard decodes a numeric reference the same way in text and
+    in an attribute value, so both decoders call this.
+    """
     reference = _short_numeric_reference(name)
     # Too many digits to be at or below U+10FFFF.
     if reference is None:
@@ -143,7 +154,7 @@ def _decode_text_charref(match: re.Match[str]) -> str:
     name = match.group(1)
     if name[0] != "#":
         return unescape(match.group(0))
-    return _decode_text_numeric_reference(name)
+    return _decode_numeric_reference(name)
 
 
 def decode_character_references(html: str) -> str:
@@ -167,10 +178,10 @@ def decode_character_references(html: str) -> str:
 def _decode_attribute_charref(match: re.Match[str]) -> str:
     """Decode one character reference the way a browser does inside an attribute value."""
     name = match.group(1)
-    # A numeric reference decodes as ``html.unescape`` reads it.
+    # A numeric reference decodes as the browser reads it, which keeps some
+    # code points (such as U+0001 and U+FDD0) that ``html.unescape`` drops.
     if name[0] == "#":
-        reference = _short_numeric_reference(name)
-        return "\ufffd" if reference is None else unescape(reference)
+        return _decode_numeric_reference(name)
     # A name that matches exactly decodes as in text.
     if name in html5:
         return unescape(match.group(0))
@@ -201,6 +212,12 @@ _LONG_DECIMAL_REFERENCE_PATTERNS: dict[int, re.Pattern[str]] = {}
 # A reference that may still be unfinished at the end of a chunk: ``&#`` and
 # any digits after it, with no ``;`` yet.
 _UNFINISHED_DECIMAL_REFERENCE = re.compile(r"&#[0-9]*\Z")
+# The patterns ``HTMLParser`` splits a start tag with, so the original text
+# splits exactly as ``HTMLParser`` splits it. Python's type stubs leave them
+# out; should a later Python drop them, attribute values decode as
+# ``HTMLParser`` decodes them.
+_START_TAG_NAME: re.Pattern[str] | None = getattr(html.parser, "tagfind_tolerant", None)
+_ATTRIBUTE: re.Pattern[str] | None = getattr(html.parser, "attrfind_tolerant", None)
 
 
 def _int_digit_limit() -> int:
@@ -250,21 +267,57 @@ def bound_long_decimal_references(html: str) -> str:
     return _long_decimal_reference_pattern(limit).sub(_same_length_reference, html)
 
 
+def _with_browser_attributes(handler: _TagHandler) -> _TagHandler:
+    """Wrap a start tag handler so it receives the attribute values a browser reads."""
+
+    @functools.wraps(handler)
+    def handle(self: LongReferenceSafeParser, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        handler(self, tag, self._browser_attributes(attrs))
+
+    handle._citry_browser_attributes = True  # type: ignore[attr-defined]
+    return handle  # type: ignore[return-value]
+
+
 class LongReferenceSafeParser(HTMLParser):
     """
-    An ``HTMLParser`` that reads decimal references of any length.
+    An ``HTMLParser`` that reads long decimal references and gives handlers the attribute values a browser reads.
 
     ``HTMLParser`` decodes attribute values (and text, with
     ``convert_charrefs=True``) with ``html.unescape``, which raises
     ``ValueError`` for a decimal reference with more than 4,300 digits.
     This parser rewrites such a reference before parsing, as
-    ``bound_long_decimal_references`` describes, so the decoded attribute
-    values and text are what an unlimited ``html.unescape`` gives. Text the
-    parser does not decode, such as ``<script>`` content, comments and
-    ``get_starttag_text()``, shows the rewritten form of such a reference,
-    and with ``convert_charrefs=False`` ``handle_charref`` receives its
-    pieces. Input without one parses exactly as with ``HTMLParser``.
+    ``bound_long_decimal_references`` describes, so the decoded text is what
+    an unlimited ``html.unescape`` gives. Text the parser does not decode,
+    such as ``<script>`` content, comments and ``get_starttag_text()``,
+    shows the rewritten form of such a reference, and with
+    ``convert_charrefs=False`` ``handle_charref`` receives its pieces. Input
+    without one parses exactly as with ``HTMLParser``.
+
+    A subclass's ``handle_starttag`` and ``handle_startendtag`` receive the
+    attribute values a browser reads, decoded from the original input with
+    ``decode_attribute_entities``. ``html.unescape`` drops some code points
+    that a browser keeps (such as U+0001 and U+FDD0), so the values
+    ``HTMLParser`` gives would differ from the page the browser builds.
+    Text is decoded with ``html.unescape``, so a reference such as ``&#1;``
+    in text reads as nothing.
     """
+
+    # A subclass whose handlers never look at attribute values sets this to
+    # False, which skips reading each tag a second time. The setting applies
+    # only to the class that sets it, so a subclass that reads values still
+    # gets the browser's.
+    _reads_attribute_values: ClassVar[bool] = True
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if not cls.__dict__.get("_reads_attribute_values", True):
+            return
+        # Wrap only the handlers this class defines; an inherited handler is
+        # wrapped already.
+        for name in ("handle_starttag", "handle_startendtag"):
+            handler = cls.__dict__.get(name)
+            if handler is not None and not getattr(handler, "_citry_browser_attributes", False):
+                setattr(cls, name, _with_browser_attributes(handler))
 
     def __init__(self, *, convert_charrefs: bool = True) -> None:
         super().__init__(convert_charrefs=convert_charrefs)
@@ -275,6 +328,82 @@ class LongReferenceSafeParser(HTMLParser):
     def reset(self) -> None:
         super().reset()
         self._held_reference = ""
+        # The input as given, before long references are rewritten, kept in
+        # the chunks it arrived in so a feed costs no copy. The first chunk
+        # starts at ``_source_start`` characters into the whole input, and
+        # ``_fed`` counts every character fed so far.
+        self._source: deque[str] = deque()
+        self._source_start = 0
+        self._fed = 0
+        # Where the start tag being parsed begins in the whole input, and
+        # whether its handler has yet to receive the browser's values.
+        self._tag_start = 0
+        self._tag_needs_values = False
+
+    def parse_starttag(self, i: int) -> int:
+        # ``HTMLParser`` joins any input it buffered into ``rawdata`` before
+        # parsing, so ``rawdata`` ends where the input fed so far ends. That
+        # turns ``i`` into a position in the whole input, which the rewrite
+        # keeps the same in the original text.
+        self._tag_start = self._fed - len(self.rawdata) + i
+        # Nothing before this tag is read again, so drop it.
+        while self._source and self._source_start + len(self._source[0]) <= self._tag_start:
+            self._source_start += len(self._source.popleft())
+        # Only the handler call this method makes gets the browser's values;
+        # a handler that calls another handler passes its own values on.
+        self._tag_needs_values = True
+        try:
+            return super().parse_starttag(i)
+        finally:
+            self._tag_needs_values = False
+
+    def _parse(self, text: str) -> None:
+        """Feed ``text`` to ``HTMLParser`` with long references rewritten, keeping the original text."""
+        self._source.append(text)
+        self._fed += len(text)
+        super().feed(bound_long_decimal_references(text))
+
+    def _browser_attributes(self, attrs: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
+        """Return the current start tag's attributes with the values a browser reads."""
+        if not self._tag_needs_values:
+            return attrs
+        self._tag_needs_values = False
+        tag_text = self.get_starttag_text()
+        # Without a reference both decoders read the same values, and most
+        # tags have none, so skip the second reading.
+        if tag_text is None or "&" not in tag_text or _START_TAG_NAME is None or _ATTRIBUTE is None:
+            return attrs
+        # Join the kept chunks once; later tags read the same string.
+        if len(self._source) > 1:
+            joined = "".join(self._source)
+            self._source.clear()
+            self._source.append(joined)
+        offset = self._tag_start - self._source_start
+        source = self._source[0][offset : offset + len(tag_text)] if self._source else ""
+        # The rewrite changes only digits and adds only the characters ``&``,
+        # ``#`` and ``;``, which never end an attribute, so the patterns
+        # ``HTMLParser`` used find the same attributes in the original text.
+        match = _START_TAG_NAME.match(source, 1)
+        if len(source) != len(tag_text) or match is None:
+            return attrs
+        decoded: list[tuple[str, str | None]] = []
+        position = match.end()
+        while position < len(source):
+            found = _ATTRIBUTE.match(source, position)
+            if found is None:
+                break
+            name, rest, value = found.group(1, 2, 3)
+            if not rest:
+                value = None
+            elif value[:1] == "'" == value[-1:] or value[:1] == '"' == value[-1:]:
+                value = value[1:-1]
+            decoded.append((name.lower(), decode_attribute_entities(value) if value else value))
+            position = found.end()
+        # Should a later Python split the tag differently, keep its reading
+        # rather than pair values with the wrong names.
+        if [name for name, _ in decoded] != [name for name, _ in attrs]:
+            return attrs
+        return decoded
 
     def feed(self, data: str) -> None:
         # Hold back a possibly unfinished reference, so the rewrite always
@@ -287,13 +416,13 @@ class LongReferenceSafeParser(HTMLParser):
             self._held_reference = text[held.start() :]
             text = text[: held.start()]
         if text:
-            super().feed(bound_long_decimal_references(text))
+            self._parse(text)
 
     def close(self) -> None:
         # At the end of the input, a held reference without ";" is complete.
         held, self._held_reference = self._held_reference, ""
         if held:
-            super().feed(bound_long_decimal_references(held))
+            self._parse(held)
         super().close()
 
 
@@ -304,7 +433,9 @@ def decode_attribute_entities(html: str) -> str:
     This follows the HTML parser's rule for a legacy reference in an
     attribute value: a named reference written without ``;`` stays as typed
     when ``=`` or a letter or digit follows it, so ``?a=1&copy=2`` stays a
-    URL.
+    URL. A numeric reference decodes as the browser decodes it, the same as
+    in ``decode_character_references``, so ``a&#1;b`` keeps its U+0001
+    between the two letters.
     """
     if "&" not in html:
         return html

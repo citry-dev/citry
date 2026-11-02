@@ -116,6 +116,9 @@ class _PreparedMarkupTracker(LongReferenceSafeParser):
     present in that textarea without changing the prepared value itself.
     """
 
+    # Only the nesting matters here, never an attribute value.
+    _reads_attribute_values = False
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=False)
         self.elements: list[_PreparedElementState] = []
