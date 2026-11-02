@@ -33,6 +33,8 @@ interface PluginHost {
   readonly development?: boolean;
   occurrence(id: string): Occurrence | null;
   occurrenceId(component: ComponentPublicInstance): string | null;
+  /** The headers that carry the page's CSRF token to `url`; empty for another origin or no token. */
+  csrfHeaders?(url: string): Record<string, string>;
 }
 interface RuntimeRegistry {
   registerBrowserPlugin(
@@ -238,6 +240,11 @@ interface PluginGlobal extends Window {
       const tree = createProviderTreeCore<ProviderInternal, Requirement, MessageRuntime>(runtimeState, fail, treeRoot, {
         createMessageRuntime: wire.createMessageRuntime,
         fetch: globalThis.fetch.bind(globalThis),
+        // The message request is a POST, so a host with a CSRF token check (Django's
+        // CsrfViewMiddleware) rejects it without the page's token. The core runtime owns that token
+        // for every extension and hands it out through the plugin host; a host without
+        // `csrfHeaders` (such as a test double) leaves the request without one.
+        csrfHeaders: (url) => (typeof host.csrfHeaders === "function" ? host.csrfHeaders(url) : {}),
       });
       function artifactsAgree(left: MessageRuntime, right: MessageRuntime): boolean {
         for (const [message, entry] of Object.entries(left.artifact.messages)) {

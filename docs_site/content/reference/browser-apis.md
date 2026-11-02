@@ -1,6 +1,6 @@
 ---
 title: Browser APIs
-description: Reference for $component, Citry.vue, server-render callbacks, and component Events helpers.
+description: Reference for $component, Citry.vue, server-render callbacks, page-wide settings, and component Events helpers.
 ---
 
 # Browser APIs
@@ -10,7 +10,7 @@ for, what it takes and returns, and when it fails. Vue still provides
 component state, props, events, and lifecycle hooks. This page covers only
 what Citry adds on top.
 
-The names fall into four groups:
+The names fall into five groups:
 
 - **Component JavaScript:** [`$component`](#component),
   [`onServerRender`](#on-server-render), and
@@ -18,6 +18,7 @@ The names fall into four groups:
 - **Events helpers on a component:** [`$state`](#state),
   [`$loading`](#loading), [`$error`](#error),
   [`$sendEvent`](#send-event), and [`$onEvent`](#on-event).
+- **Page-wide settings:** [`Citry.configure`](#citry-configure).
 - **Page-wide events API:** [`Citry.events`](#citry-events).
 - **Vue and translations:** [`Citry.vue`](#citry-vue),
   [`Citry.vue.use`](#citry-vue-use), and [`$i18n`](#i18n).
@@ -321,6 +322,58 @@ After the component unmounts, `$onEvent` adds nothing. On a component
 without `Events`, no server handler can dispatch to it, so `$onEvent` adds
 nothing and returns a `stop()` that does nothing.
 
+## Page-wide settings
+
+<h3 class="doc-heading" id="citry-configure"><code>Citry.configure</code></h3>
+
+Tell Citry where the page's CSRF token comes from. Citry's browser code
+sends the token with every request it makes to Citry's routes except
+`GET` requests: event calls, and the request that loads messages when
+`$i18n` switches locale. A web framework that checks CSRF tokens, such as
+Django's `CsrfViewMiddleware`, refuses these requests without it. See
+[Protect against CSRF](/security/#protect-event-posts-from-csrf).
+
+Call it in a script that runs after Citry's runtime has loaded, such as a
+component's `js`, and before the first event call or language switch.
+
+```js
+Citry.configure({
+  csrf: {
+    token: () => document.querySelector(
+      '[name="csrfmiddlewaretoken"]',
+    ).value,
+  },
+});
+```
+
+| `csrf` option | Meaning |
+| --- | --- |
+| `token` | The token: a string, or a function that returns one. Citry calls the function before each request. |
+| `cookie` | The name of the cookie to read the token from when `token` is not set. The default is `csrftoken`. |
+| `header` | The request header that carries the token. The default is `X-CSRFToken`. |
+
+With no `Citry.configure` call, Citry reads the `csrftoken` cookie and sends
+it as `X-CSRFToken`, which is what Django expects. Each `csrf` value
+replaces the earlier one as a whole, and requests sent afterwards use it.
+When the token is empty, or the cookie is missing, Citry sends no token
+header.
+
+If your `token` function throws, the request that needed it fails: the
+event call rejects, or the language switch fails and the old language
+stays.
+
+The call throws a `TypeError` when the argument or `csrf` is not a plain
+object, when either has an option not listed here, when `cookie` is empty,
+or when `token` is neither a string nor a function. It also throws when
+`header` is not a valid header name, or is a name the token cannot use:
+`Content-Type` and names that start with `X-Citry-`, which Citry uses for
+its own headers, and names the browser does not let a page send, such as
+`Cookie`, `Origin`, and names that start with `Sec-` or `Proxy-`.
+
+[`Citry.events.configure`](#citry-events-configure) can set a different
+token for event calls. Event calls then use that token, and the request
+that loads messages keeps using the `Citry.configure` token.
+
 ## Page-wide events API
 
 <h3 class="doc-heading" id="citry-events"><code>Citry.events</code></h3>
@@ -377,7 +430,7 @@ Citry.events.configure({
 
 | Option | Meaning |
 | --- | --- |
-| `csrf` | Where the CSRF token comes from: `{token}` with a string or a function that returns one, or `{cookie}` with a cookie name. `header` names the request header, `X-CSRFToken` by default. |
+| `csrf` | Where the CSRF token for event calls comes from: `{token}` with a string or a function that returns one, or `{cookie}` with a cookie name. `header` names the request header, `X-CSRFToken` by default. It replaces the page-wide [`Citry.configure`](#citry-configure) setting for event calls only. |
 | `timeout` | Milliseconds before a call rejects. The default is `30000`. A call's own `timeout` option wins. |
 | `transport` | The name of a transport added with [`registerTransport`](#citry-events-register-transport). The default is `"fetch"`. |
 | `url` | The base URL of the event routes. Citry normally reads it from the page. |
@@ -386,9 +439,11 @@ Each call merges its options into the earlier ones. Citry reads them each
 time it sends a call, so calls made afterwards use the new values. A new
 `csrf` value replaces the earlier one as a whole.
 
-By default Citry reads the `csrftoken` cookie for every transport. Once you
-pass `csrf`, Citry reads `csrf.cookie` only for the built-in `fetch`
-transport. A custom transport gets a token only from `csrf.token`.
+Without `csrf` here, event calls use the
+[`Citry.configure`](#citry-configure) setting. When that setting reads a
+cookie, it does so for every transport, including a custom one. Once you pass `csrf`
+here, Citry reads `csrf.cookie` only for the built-in `fetch` transport,
+and a custom transport gets a token only from `csrf.token`.
 
 The argument and its `csrf` value must be plain objects, or the call throws
 a `TypeError`. Citry ignores an unknown option. When `transport` names a

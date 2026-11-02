@@ -99,6 +99,15 @@
   const citryNamespace = existingCitry === undefined ? {} : existingCitry;
   if ((typeof citryNamespace !== "object" || citryNamespace === null) && typeof citryNamespace !== "function")
     throw new TypeError("the global Citry namespace must be an object");
+  // `Citry.configure` and `Citry.events` are installed further down. Check both names here, before
+  // anything is added to the page, so a page that already uses them stops the runtime instead of
+  // leaving it half installed. A second load of this runtime finds its own `configure` and returns at
+  // the `__citryRuntime` check below, so that case is let through.
+  if (Object.prototype.hasOwnProperty.call(citryNamespace, "configure") && !ownGlobal("__citryRuntime"))
+    throw new TypeError("the global Citry.configure name is already taken");
+  if (Object.prototype.hasOwnProperty.call(citryNamespace, "events") && citryNamespace.events !== undefined &&
+      (!citryNamespace.events || typeof citryNamespace.events !== "object"))
+    throw new TypeError("the global Citry.events namespace must be an object");
   if (Object.prototype.hasOwnProperty.call(citryNamespace, "vue")) {
     if (citryNamespace.vue !== V) throw new Error("the global Citry.vue namespace uses a different Vue runtime");
   } else {
@@ -276,6 +285,86 @@
   } else {
     Object.defineProperty(citryNamespace, "events", {value: publicEvents, enumerable: true, configurable: true, writable: true});
   }
+  // The page's CSRF setting. Every Citry request that a host's CSRF check can refuse (an event call
+  // that is not GET, the i18n message POST) reads its token from here, so a page configures the token
+  // once with `Citry.configure({csrf})` and each extension's browser code gets it through the same
+  // core function rather than through another extension's private state.
+  let pageCsrf = Object.freeze({});
+  const CSRF_KEYS = new Set(["cookie", "header", "token"]);
+  // An HTTP header name (RFC 9110 token), so a typo cannot reach fetch as an invalid header that fails
+  // every request later and far from the configure call.
+  const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+  // Names a token cannot use. Citry uses `Content-Type` and the `X-Citry-` names for its own headers,
+  // so a token there would break every call or be replaced; the browser drops the rest from a fetch
+  // without an error, so the token would never arrive.
+  const FORBIDDEN_CSRF_HEADERS = new Set([
+    "accept-charset", "accept-encoding", "access-control-request-headers", "access-control-request-method",
+    "connection", "content-length", "content-type", "cookie", "cookie2", "date", "dnt", "expect", "host",
+    "keep-alive", "origin", "referer", "set-cookie", "te", "trailer", "transfer-encoding", "upgrade", "via",
+  ]);
+  const reservedCsrfHeader = name => {
+    const lower = name.toLowerCase();
+    return FORBIDDEN_CSRF_HEADERS.has(lower) || ["x-citry-", "sec-", "proxy-"].some(prefix => lower.startsWith(prefix));
+  };
+  const readCsrfCookie = name => {
+    const match = pageDocument.cookie.split(";").map(value => value.trim()).find(value => value.startsWith(name + "="));
+    return match ? decodeURIComponent(match.slice(name.length + 1)) : "";
+  };
+  // With no configured token, read Django's default `csrftoken` cookie: Django apps work with no setup,
+  // and on another host a missing cookie only means no header is sent.
+  const pageCsrfToken = () => {
+    const token = pageCsrf.token;
+    if (token !== undefined) return typeof token === "function" ? token() : token;
+    return readCsrfCookie(pageCsrf.cookie ?? "csrftoken");
+  };
+  const pageCsrfHeader = () => pageCsrf.header ?? "X-CSRFToken";
+  // The headers that carry the page's CSRF token on one request to `url`. They are given only for a URL
+  // that resolves to the page's own origin: a URL that resolves elsewhere (another site, an opaque or
+  // unparseable URL) gets none. The page's origin is read from `origin`, which is "null" in a sandboxed
+  // document even when its `location` has a real address, so such a page never reads its cookie here.
+  const csrfHeaders = url => {
+    let target;
+    try {
+      target = new URL(String(url), pageDocument.baseURI);
+    } catch {
+      return {};
+    }
+    const pageOrigin = typeof global.origin === "string" ? global.origin : global.location.origin;
+    if (target.origin === "null" || target.origin !== pageOrigin) return {};
+    const token = pageCsrfToken();
+    return typeof token === "string" && token ? {[pageCsrfHeader()]: token} : {};
+  };
+  // The Events bridge reads `csrf.header` and `csrf.token` each time it sends a call, so these getters
+  // let a later `Citry.configure({csrf})` reach calls made after it. `Citry.events.configure({csrf})`
+  // still wins for event calls, because the bridge checks that value first.
+  const eventsPageCsrf = Object.freeze({
+    get header() { return pageCsrfHeader(); },
+    token: () => pageCsrfToken(),
+  });
+  const publicConfigure = (options = {}) => {
+    plain(options, "Citry.configure options");
+    // A misspelt option would otherwise be ignored and leave requests without a token, so unknown
+    // names are rejected here, where the mistake is.
+    for (const key of Object.keys(options))
+      if (key !== "csrf") throw new TypeError("Citry.configure got an unknown option: " + key);
+    if (options.csrf === undefined) return;
+    // Copy first and check the copy, so a getter on the caller's object cannot pass the checks with
+    // one value and store another.
+    const csrf = {...plain(options.csrf, "Citry.configure csrf")};
+    for (const key of Object.keys(csrf))
+      if (!CSRF_KEYS.has(key)) throw new TypeError("Citry.configure csrf got an unknown option: " + key);
+    if (csrf.cookie !== undefined && (typeof csrf.cookie !== "string" || !csrf.cookie))
+      throw new TypeError("Citry.configure csrf.cookie must be a non-empty string");
+    if (csrf.header !== undefined && (typeof csrf.header !== "string" || !HEADER_NAME.test(csrf.header)))
+      throw new TypeError("Citry.configure csrf.header must be an HTTP header name");
+    if (csrf.header !== undefined && reservedCsrfHeader(csrf.header))
+      throw new TypeError("Citry.configure csrf.header names a header Citry or the browser reserves");
+    if (csrf.token !== undefined && typeof csrf.token !== "string" && typeof csrf.token !== "function")
+      throw new TypeError("Citry.configure csrf.token must be a string or a function that returns one");
+    // Frozen, and a copy, so a later change to the caller's object does not change the setting.
+    pageCsrf = Object.freeze(csrf);
+  };
+  Object.defineProperty(citryNamespace, "configure", {value: publicConfigure, enumerable: true, configurable: true, writable: true});
   const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
   const plain = (value, name) => {
     if (!value || Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError(name + " must be a plain object");
@@ -3201,6 +3290,10 @@
       },
       occurrence(id) { return definitionRegistry(appId).occurrences.get(id) || null; },
       revision() { return definitionRegistry(appId).revision; },
+      // A plugin adds these headers to a POST it sends to a Citry route, so the request carries the
+      // page's CSRF token the same way an Events call does and passes the host's token check (Django's
+      // CsrfViewMiddleware). A fresh object each call, so one caller cannot change what the next gets.
+      csrfHeaders(url) { return {...csrfHeaders(url)}; },
     });
     const cleanupPluginStages = (values, method) => {
       for (const item of [...values].reverse()) {
@@ -4050,10 +4143,6 @@
             mounted.record.state.pending[key] = cloneStateValue(value);
       },
     };
-    const cookieToken = () => {
-      const match = pageDocument.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("csrftoken="));
-      return match ? decodeURIComponent(match.slice("csrftoken=".length)) : "";
-    };
     const hasEvents = manifest.occurrences.some(occurrence => occurrence.eventContext);
     if (manifest.occurrences.some(occurrence => own(occurrence, "renderId"))) addressSnapshot();
     let bridge = null;
@@ -4067,7 +4156,8 @@
         endpoint: configuration.endpoint,
         eventBaseUrl: configuration.eventBaseUrl,
         host,
-        csrf: configuration.csrf || {token: cookieToken},
+        // The page-wide setting from `Citry.configure({csrf})`, read on every call.
+        csrf: configuration.csrf || eventsPageCsrf,
         runtimeConfig: () => publicEventsConfig,
         transport: () => {
           const name = typeof publicEventsConfig.transport === "string" && publicEventsConfig.transport

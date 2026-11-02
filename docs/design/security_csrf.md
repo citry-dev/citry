@@ -1,6 +1,7 @@
 # Design and guide: Cross-Site Request Forgery protection
 
-**Status (2026-08-12): implemented for Citry Events.** The host owns token
+**Status (2026-11-03): implemented for Citry Events and the i18n message
+request.** The host owns token
 generation and validation. Citry preserves the host's middleware and token
 convention on requests made by Citry's browser runtime, and adds an always-on
 cross-site request floor to non-GET Events calls. Native forms continue to use
@@ -134,8 +135,12 @@ developer contract: expose only reads.
 ### 4.1 Default readable CSRF cookie
 
 Keep `CsrfViewMiddleware` enabled. Citry's browser runtime reads Django's
-default `csrftoken` cookie and sends it as `X-CSRFToken` on Events requests.
-No component-specific wiring is required.
+default `csrftoken` cookie and sends it as `X-CSRFToken` on Events requests
+and on the i18n message request (`POST ext/i18n/messages`, sent when
+`$i18n.switchLocale()` needs messages the page did not include). No
+component-specific wiring is required. Django sets the cookie only on a
+response whose view called `get_token()`, so a page view that never calls
+it, directly or through `{% csrf_token %}`, must use `ensure_csrf_cookie`.
 
 ```python
 MIDDLEWARE = [
@@ -172,10 +177,11 @@ def profile(request):
 >
 ```
 
-Configure the Citry Events client before it sends a request:
+Configure the page's CSRF setting before Citry sends a request. Events and
+i18n both read it:
 
 ```javascript
-Citry.events.configure({
+Citry.configure({
   csrf: {
     token: () => document.querySelector(
       '[name="csrfmiddlewaretoken"]',
@@ -258,7 +264,7 @@ layers.
 Tell the browser where to read the token and which header to send:
 
 ```javascript
-Citry.events.configure({
+Citry.configure({
   csrf: {
     cookie: "app_csrf",
     header: "X-CSRF-Token",
@@ -270,7 +276,7 @@ For a meta element, hidden input, or in-memory source, provide a string or a
 zero-argument function instead of `cookie`:
 
 ```javascript
-Citry.events.configure({
+Citry.configure({
   csrf: {
     token: () => document.querySelector(
       'meta[name="csrf-token"]',
@@ -279,6 +285,25 @@ Citry.events.configure({
   },
 });
 ```
+
+The core browser runtime (`citry/_vue/client.js`) owns this setting. The
+Events bridge uses it on every call unless `Citry.events.configure({csrf})`
+gave event calls their own `csrf` setting. Every browser plugin receives a
+`host` object
+from the core runtime. Its `host.csrfHeaders(url)` returns
+`{[header]: token}`, or `{}` when there is no token or when `url` is not on
+the page's origin (including a URL that cannot be parsed). The i18n plugin
+adds those headers to its message request. No extension reads another
+extension's browser state.
+
+`Citry.configure` rejects an unknown option, an empty `cookie`, a `header`
+that is not an HTTP header name or that names a header Citry uses
+(`Content-Type`, a name that starts with `X-Citry-`) or the browser does not
+let a page send (such as `Cookie` or a `Sec-` name), and a `token` that is neither a string nor a function, with a
+`TypeError` at the call. A token function that throws makes
+the request that needed it fail. An empty token or a missing cookie sends no
+header, and the host's middleware then answers as it would for any request
+without a token.
 
 If the host does not validate that header before dispatch, add a Citry-side
 callable:
@@ -350,7 +375,10 @@ Citry keeps component isolation and addresses the jobs separately:
 
 1. native forms receive the host token as an explicit input and render the
    host's hidden field; and
-2. the Events runtime attaches the configured token to requests it owns.
+2. the core browser runtime holds one page-wide token setting
+   (`Citry.configure({csrf})`). The Events bridge and the i18n plugin send
+   that token on the requests they make. `Citry.events.configure({csrf})`
+   can give event calls a different token.
 
 This avoids ambient context leakage without asking every event binding to
 repeat token plumbing.
@@ -362,6 +390,7 @@ repeat token plumbing.
 | Generate, rotate, store, and validate token | Owns | Does not duplicate | Does not invent |
 | Cookies, SameSite, trusted origins, and proxy setup | Owns | Preserves browser behavior | Does not override locally |
 | Events custom header and Fetch credentials | Configures convention | Owns transport | Normally no work |
+| Page-wide browser token setting (`Citry.configure`) | Chooses cookie, header, or token source | Owns the setting; sends the token only on requests Citry's runtime makes | Normally no work |
 | Non-GET cross-site request floor | May add stronger checks | Owns and keeps enabled | Cannot disable |
 | Native form hidden field | Supplies token | Renders explicit input; drops the field from server event arguments | Declares the input and field |
 | Optional custom callable | Defines policy | Invokes after floor | Selects component or handler scope |

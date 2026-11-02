@@ -619,6 +619,78 @@ async function fallbackService({ pageLocale, pageDirection, bundleLocale, bundle
   });
 }
 
+test("the message request carries the CSRF headers the adapter gives for its URL", async () => {
+  const { createI18nRuntimeState, createProviderTreeCore } = await coreModule();
+  const state = createI18nRuntimeState({ effect: () => () => {}, isAlive: () => true, commitContext: () => {} });
+  state.configuration = { catalogRevision: "catalog", contexts: new Map(), messagesUrl: "/citry/ext/i18n/messages" };
+  const requirement = { artifacts: new Map(), messages: new Set(["hello"]), outputs: new Set() };
+  const requests = [];
+  const asked = [];
+  const transport = (csrfHeaders) => ({
+    createMessageRuntime: (_value, locale) => ({ locale }),
+    fetch: async (url, init) => {
+      requests.push({ url, headers: init.headers, method: init.method, redirect: init.redirect });
+      return { ok: true, json: async () => ({}) };
+    },
+    ...(csrfHeaders ? { csrfHeaders } : {}),
+  });
+  const fail = (code) => {
+    throw new Error(code);
+  };
+  const tree = createProviderTreeCore(
+    state,
+    fail,
+    (node) => node,
+    transport((url) => {
+      asked.push(url);
+      return { "X-CSRFToken": "page-token" };
+    }),
+  );
+  await tree.fetchArtifact(requirement, "cs");
+  // An adapter with no page token (no `csrfHeaders`) sends only the body type.
+  await createProviderTreeCore(state, fail, (node) => node, transport(null)).fetchArtifact(
+    { ...requirement, artifacts: new Map() },
+    "cs",
+  );
+  assert.deepEqual(asked, ["/citry/ext/i18n/messages"]);
+  assert.deepEqual(requests, [
+    {
+      url: "/citry/ext/i18n/messages",
+      method: "POST",
+      headers: { "X-CSRFToken": "page-token", "Content-Type": "application/json" },
+      // The message request never follows a redirect.
+      redirect: "error",
+    },
+    {
+      url: "/citry/ext/i18n/messages",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      redirect: "error",
+    },
+  ]);
+});
+
+test("a message request the fetch rejects, such as a refused redirect, fails with the usual code", async () => {
+  const { createI18nRuntimeState, createProviderTreeCore } = await coreModule();
+  const state = createI18nRuntimeState({ effect: () => () => {}, isAlive: () => true, commitContext: () => {} });
+  state.configuration = { catalogRevision: "catalog", contexts: new Map(), messagesUrl: "/citry/ext/i18n/messages" };
+  const fail = (code, message) => {
+    const error = new Error(message);
+    error.code = code;
+    throw error;
+  };
+  const tree = createProviderTreeCore(state, fail, (node) => node, {
+    createMessageRuntime: () => ({}),
+    fetch: async () => {
+      throw new TypeError("Failed to fetch");
+    },
+  });
+  await assert.rejects(
+    tree.fetchArtifact({ artifacts: new Map(), messages: new Set(["hello"]), outputs: new Set() }, "cs"),
+    (error) => error.code === "I18N_MESSAGES_UNAVAILABLE" && error.message === "the cs message request failed.",
+  );
+});
+
 test("fallback text in the page direction is returned unchanged", async () => {
   const service = await fallbackService({
     pageLocale: "cs",

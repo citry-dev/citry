@@ -170,6 +170,13 @@ The provider first loads every message the new locale needs. Then it
 changes its context and its `lang` and `dir` attributes together. If
 loading fails, the old language stays.
 
+When the language does not change and the browser console shows `the
+<locale> message request failed with 403`, the server's CSRF check
+refused the request. Citry sends the page's CSRF token with this `POST`
+to its `ext/i18n/messages` route, as it does for event calls. On Django,
+see [Use Django's token](/security/#use-djangos-token). To use your own
+token, see [`Citry.configure`](/reference/browser-apis/#citry-configure).
+
 Nested client providers follow the parent's language, unless they set
 their own `locale`. A provider without `client` inside a client provider
 keeps its server-rendered language and needs a real `tag`:
