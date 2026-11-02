@@ -804,6 +804,23 @@ pygments-citry and runs their release verifiers with `--skip-install-smoke`.
 That checks the wheel, the sdist, and a wheel rebuilt from the sdist, leaving
 only the install smoke test to release qualification.
 
+That job starts with a size report, before the checks above. It runs
+[`scripts/check_package_sizes.py`](../scripts/check_package_sizes.py) on every
+wheel and source distribution the job built, prints each file's size next to
+its cap, and writes a GitHub Actions warning for a file at 90 percent of its
+cap or more. A pull request then shows that a cap needs raising before a
+release fails on it.
+
+The script reads each cap from the verifier that enforces it
+(`MAX_WHEEL_BYTES` or `MAX_SDIST_BYTES`), so no number is written twice, and
+the warning names the constant to raise. It only measures files, so it adds no
+build. It fails its step only when a file is missing or it has no cap for it;
+it never fails on size. The release checks do that for every wheel and for the
+LSP and Pygments source distributions. Only release qualification checks the
+citry-ui source distribution against its cap, so this warning is the one
+notice a pull request gives for it. The VS Code extension's file is not built
+in this job, so it has no warning.
+
 The main test workflow has a separate i18n release-qualification job. It builds
 the native extension in release mode, runs `benchmarks/i18n.py`, checks the
 browser i18n payload, and uploads the machine-readable result. The Citry UI
@@ -1826,6 +1843,10 @@ prepare release changes on a branch from current main
   -> the main documentation workflow deploys the updated site
 ```
 
+When a fix for this release was built in a private security advisory, land it
+on `main` and wait for CI there to pass before you start the steps below (see
+[Releasing advisory fixes](#releasing-advisory-fixes)).
+
 Prepare a release as follows:
 
 1. Update each selected package manifest, compatibility constraint, owning
@@ -1849,7 +1870,14 @@ Prepare a release as follows:
    qualifying candidate is created automatically when the release surfaces
    change. To retry candidate preparation or make an explicit
    selection, run **Prepare release candidate** with `auto` or a comma-separated
-   list such as `citry-core,citry,citry-lsp,vscode-citry`.
+   list such as `citry-core,citry,citry-lsp,vscode-citry`. From the command
+   line, start the run, then list the recent candidate runs to find its ID
+   (a new run can take a few seconds to appear in the list):
+
+   ```sh
+   gh workflow run repo--release-candidate.yml -f packages=auto
+   gh run list --workflow repo--release-candidate.yml --limit 5
+   ```
 5. Inspect the candidate run and its selected package graph. Require the
    repository Check and applicable language, browser, and example CI runs to
    pass for the same commit before publishing. Qualification is
@@ -1871,7 +1899,9 @@ Prepare a release as follows:
    run tests the tip of the branch it is started on, gets a group of its own,
    and is never cancelled. Delete the branch afterwards.
 6. Start the only publication entry point, **Release qualified packages**, and
-   supply the successful candidate workflow run ID. From the command line:
+   supply the successful candidate workflow run ID (the ID column of
+   `gh run list --workflow repo--release-candidate.yml`, or the number after
+   `/runs/` in the run page's address). From the command line:
 
    ```sh
    gh workflow run repo--release.yml -f candidate_run_id=<run-id>
@@ -1935,6 +1965,58 @@ wait for a selected Citry only when their compatibility floor requires that
 new release. The VS Code extension waits for its selected citry-lsp version.
 Packages without a dependency relationship publish together.
 
+#### Releasing advisory fixes
+
+Use this section when a release includes a fix that was built in a private
+security advisory. GitHub builds such a fix in a temporary private fork of the
+repository, and the fork causes two problems for a release.
+
+**The fix has never run in CI.** GitHub Actions does not run in a temporary
+private fork, so a fix reaches `main` without a single CI run. For 0.7.0, the
+failures on Windows, Python 3.11, and Python 3.15 first appeared on `main`
+during the release. No code enforces the wait in step 4 of the list below. It
+is a rule for whoever runs the release.
+
+**The fork's pull request cannot be merged.** GitHub offers no way to merge it,
+from the web page or through the API, so the fixes reach `main` another way.
+Every change a person makes reaches `main` through a pull request (see
+[How changes reach `main`](#how-changes-reach-main)), except this one.
+
+Land the fixes in this order, as for 0.7.0:
+
+1. In the private forks, put the fixes in one chain of commits, so `main` can
+   move to the last one in a single fast-forward. Each advisory's branch
+   merges the branches before it, so the last branch contains every fix.
+2. Move `main` to the last commit of that chain with a fast-forward, so every
+   commit keeps its hash and no merge commit is added. The rulesets in
+   [Main branch and release permissions](#main-branch-and-release-permissions)
+   block a direct push to `main`. For 0.7.0 the maintainer set **Require
+   checks for main** and **Require pull requests for main** to Disabled,
+   pushed, and set both back to Active straight away. Check afterwards that
+   their bypass lists match what that section describes.
+3. Close each advisory's fork pull request. GitHub does not publish an
+   advisory while its fork pull request is open, so close these before you
+   publish the advisories.
+4. Wait for the runs that push started on `main` to pass: **Check**,
+   **Python tests**, **Rust tests**, and the example and docs runs that apply.
+   A push to `main` that changes the paths in
+   [`py--tests.yml`](../.github/workflows/py--tests.yml) runs the Python tests
+   on every supported system and Python version, where a pull request runs
+   fewer. Do not merge anything else until the runs finish, because a newer
+   push cancels the older push's Python tests (see
+   [Cancelling stale runs and targeted diagnostics](#cancelling-stale-runs-and-targeted-diagnostics)).
+5. Fix any failure with an ordinary pull request, and wait again on the new
+   tip of `main`.
+6. Raise the package versions and follow the release steps above. After any
+   fix lands on `main`, prepare a new candidate, because a candidate built
+   earlier does not contain it.
+
+**Prepare release candidate** selects only packages whose version has no tag,
+so a push of fixes that leaves every version alone starts no qualification.
+When a version without a tag is already on `main`, a push that changes one of
+that workflow's paths (changelogs, package manifests, the release scripts and
+workflows) starts a candidate on its own. Wait for the test runs anyway.
+
 #### When a release stops partway
 
 PyPI, the extension registries, or sigstore can fail for a few minutes.
@@ -1962,6 +2044,12 @@ again with the same candidate run ID:
 ```sh
 gh workflow run repo--release.yml -f candidate_run_id=<run-id>
 ```
+
+When publication stops with an error, the controller prints this command
+after the error, filled in with the candidate's run ID, and a note that
+starting again fails the same way when the cause is not a short outage. A
+failure before the controller starts on the candidate, such as a missing token
+or an unreadable candidate file, prints no command.
 
 For each package, the controller first looks for its tag:
 
@@ -2162,7 +2250,10 @@ Create a branch from current `origin/main`, commit the work there, push it,
 and open a pull request against `main`. The required checks must pass against
 an up-to-date base before the pull request merges, as described in
 [Main branch and release permissions](#main-branch-and-release-permissions).
-Releases start from `main` after the pull request merges.
+Releases start from `main` after the pull request merges. A fix built in a
+private security advisory is the one change a person makes that does not go
+through a pull request, because GitHub cannot merge its pull request (see
+[Releasing advisory fixes](#releasing-advisory-fixes)).
 
 For audits of older work, the `origin/review` branch and the
 `reviewed-baseline` tag keep the historical diff of changes that were
@@ -2381,7 +2472,8 @@ The paths are:
 - `crates/**` - Rust code (Python packages depend on Rust via PyO3 bindings)
 - `third_party/**` - Third-party dependencies used by both Rust and Python
 - root Python, Cargo, pnpm, lockfile, and toolchain inputs
-- the exact release-helper scripts imported or executed by package tests
+- the exact release-helper scripts imported or executed by package tests or by
+  the `citry-ui-wheel-build` job
 - `.github/workflows/py--tests.yml` plus the Pygments and Citry UI publish
   workflows whose safety contracts are tested
 - `.gitmodules` - Submodule configuration changes

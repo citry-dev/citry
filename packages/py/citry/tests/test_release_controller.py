@@ -422,6 +422,91 @@ def test_a_failed_job_lookup_still_reports_the_run_failure(monkeypatch: pytest.M
     assert str(raised.value) == "Qualify citry for candidate 1 failed: https://example.test/runs/7"
 
 
+# The text printed when publication stops. These tests call `main` with the
+# step that fails replaced, so no GitHub request is made.
+
+
+def _command_args(tmp_path: Path, command: str) -> list[str]:
+    path = str(tmp_path / "input.json")
+    Path(path).write_text("{}", encoding="utf-8")
+    if command == "publish":
+        flags = {
+            "--candidate": path,
+            "--repository": "citry-dev/citry",
+            "--publication-id": "9",
+            "--candidate-run-id": "123",
+        }
+    else:
+        flags = {
+            "--plan": path,
+            "--repository": "citry-dev/citry",
+            "--candidate-id": "9",
+            "--output": str(tmp_path / "out.json"),
+        }
+    return [command, *(part for flag in flags.items() for part in flag)]
+
+
+def test_a_publication_that_stops_prints_the_command_that_starts_it_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "token")
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise ReleaseError("Publish citry for candidate 9 failed: https://example.test/runs/7")
+
+    monkeypatch.setattr(release, "publish_candidate", fail)
+
+    assert release.main(_command_args(tmp_path, "publish")) == 1
+    lines = capsys.readouterr().err.splitlines()
+    assert lines[0] == "release error: Publish citry for candidate 9 failed: https://example.test/runs/7"
+    # The candidate run ID is the one the release was started with, not this
+    # release run's own ID, so the command works as printed.
+    assert "  gh workflow run repo--release.yml --repo citry-dev/citry -f candidate_run_id=123" in lines
+    assert any("wait until every publish run it started has finished" in line for line in lines)
+    # A failure that is not an outage is also printed with the command, so the
+    # text must warn that starting again does not fix it.
+    assert any("starting again fails the same way until its cause is fixed" in line for line in lines)
+
+
+def test_a_failure_before_publication_begins_prints_no_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+
+    # Nothing was published, so there is nothing to start again.
+    assert release.main(_command_args(tmp_path, "publish")) == 1
+    assert capsys.readouterr().err == "release error: GH_TOKEN is required\n"
+
+
+def test_a_failed_qualification_prints_no_restart_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "token")
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise ReleaseError("Qualify citry for candidate 9 failed: https://example.test/runs/7")
+
+    monkeypatch.setattr(release, "qualify_plan", fail)
+
+    # No candidate exists yet, so there is nothing to start again.
+    assert release.main(_command_args(tmp_path, "qualify")) == 1
+    assert capsys.readouterr().err == (
+        "release error: Qualify citry for candidate 9 failed: https://example.test/runs/7\n"
+    )
+
+
+def test_the_restart_command_names_a_workflow_that_publishes_with_that_input() -> None:
+    # A renamed workflow or input would leave the printed command pointing at
+    # something that does not exist.
+    path = Path(release.__file__).resolve().parents[1] / ".github/workflows" / release.RELEASE_WORKFLOW
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    # PyYAML reads the Actions key `on` as the boolean True.
+    inputs = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
+    assert release.RELEASE_CANDIDATE_INPUT in inputs
+    commands = [str(step.get("run", "")) for step in workflow["jobs"]["publish"]["steps"]]
+    assert any("scripts.release publish" in command for command in commands)
+
+
 # Restart and retry. Every registry answer below is a synthetic payload; no
 # test reaches PyPI, the Marketplace, Open VSX, or GitHub.
 

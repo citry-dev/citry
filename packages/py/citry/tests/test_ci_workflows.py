@@ -287,6 +287,54 @@ def test_python_tests_start_on_every_pull_request_and_skip_without_python_change
     assert "citry-ui-wheel-build" in jobs
 
 
+# The files the wheel build job produces that have a size cap, as the
+# directory they are built into and a sample name. The report step must be
+# given a pattern that matches each one.
+_CAPPED_BUILD_OUTPUTS = [
+    ("dist", "citry-0.7.0-py3-none-any.whl"),
+    ("dist", "citry_core-1.0.0-cp311-abi3-manylinux_2_28_x86_64.whl"),
+    ("dist", "citry_ui-0.4.0-py3-none-any.whl"),
+    ("dist", "citry_ui-0.4.0.tar.gz"),
+    ("dist-citry-lsp", "citry_lsp-0.3.0-py3-none-any.whl"),
+    ("dist-citry-lsp", "citry_lsp-0.3.0.tar.gz"),
+    ("dist-pygments-citry", "pygments_citry-0.2.1-py3-none-any.whl"),
+    ("dist-pygments-citry", "pygments_citry-0.2.1.tar.gz"),
+]
+
+
+def test_the_package_size_report_runs_after_every_build_and_before_every_release_check() -> None:
+    workflow = _load_workflow("py--tests.yml")
+    # A change to the script must start the job that runs it.
+    assert "scripts/check_package_sizes.py" in workflow["on"]["push"]["paths"]
+
+    commands = [step.get("run", "") for step in workflow["jobs"]["citry-ui-wheel-build"]["steps"]]
+    report = next(index for index, command in enumerate(commands) if "scripts/check_package_sizes.py" in command)
+    # The job builds the five packages with `uv build --package`; the later
+    # wheel rebuilt from an sdist does not use that flag.
+    builds = [index for index, command in enumerate(commands) if "uv build --package" in command]
+    checks = [
+        index
+        for index, command in enumerate(commands)
+        if "scripts/verify_" in command or "quality/qualify_wheel.py" in command
+    ]
+    assert builds
+    assert checks
+    # Running first means one run lists every package's size even when the
+    # first release check then fails on a file that is over its cap.
+    assert max(builds) < report < min(checks)
+
+    # Each argument is a shell pattern, so every built file must match one,
+    # and no pattern may match nothing the job builds.
+    arguments = shlex.split(commands[report])[2:]
+    for directory, name in _CAPPED_BUILD_OUTPUTS:
+        assert any(fnmatch.fnmatchcase(f"{directory}/{name}", argument) for argument in arguments), name
+    for argument in arguments:
+        assert any(fnmatch.fnmatchcase(f"{directory}/{name}", argument) for directory, name in _CAPPED_BUILD_OUTPUTS)
+    # The patterns point into directories that the builds write to.
+    out_dirs = {match for command in commands for match in re.findall(r"--out-dir (\S+)", command)}
+    assert {directory for directory, _ in _CAPPED_BUILD_OUTPUTS} <= out_dirs
+
+
 _BASH = shutil.which("bash")
 _JQ = shutil.which("jq")
 
