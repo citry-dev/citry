@@ -18,11 +18,12 @@ yanked = "deny"
 ignore = [
     # zip 8.6.0 reaches us only through the vendored ruff formatter (ruff_db),
     # which pins zip 8. Citry formats source text and never extracts an archive,
-    # so the affected extraction code never runs. Remove these once ruff moves
-    # to zip 9 (issue #378).
+    # so the affected extraction code never runs. Remove these when the ruff
+    # pin moves to a ruff release that uses zip 9: ruff main has it since
+    # astral-sh/ruff#29808, but no release does yet (issue #378).
     { id = "RUSTSEC-2026-0367", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
     { id = "RUSTSEC-2026-0368", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
     { id = "RUSTSEC-2026-0369", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
-    { id = "RUSTSEC-2026-0429", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
+    { id = "RUSTSEC-2026-0429", reason = "zip extraction, unused; remove when the ruff pin reaches a release with zip 9 (#378)" },
 ]
 
