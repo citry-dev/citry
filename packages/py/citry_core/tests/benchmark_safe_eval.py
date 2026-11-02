@@ -83,17 +83,17 @@ def benchmark_eval_vs_lambda(
     def evaluate_old_approach(context: dict[str, Any]) -> Any:
         """Old approach: create namespace dict and call eval() each time"""
         eval_namespace = {
-            "variable": variable,
-            "attribute": attribute,
-            "subscript": subscript,
-            "call": call,
-            "assign": assign,
-            "slice": slice,
-            "interpolation": interpolation,
-            "template": template,
-            "format": format,
-            "source": source,
-            "context": context,
+            "_sx_variable": variable,
+            "_sx_attribute": attribute,
+            "_sx_subscript": subscript,
+            "_sx_call": call,
+            "_sx_assign": assign,
+            "_sx_slice": slice,
+            "_sx_interpolation": interpolation,
+            "_sx_template": template,
+            "_sx_format": format,
+            "_sx_source": source,
+            "_sx_context": context,
         }
         return eval(compiled_code_old, eval_namespace, {})
 

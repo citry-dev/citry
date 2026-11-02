@@ -81,17 +81,65 @@ pub fn call(func: Expr, args: Vec<Expr>, keywords: Vec<Keyword>, range: TextRang
     })
 }
 
-/// Helper to create a call to an interceptor function (e.g. `variable()`, `call()`, etc)
+/// The prefix of every name the generated code reads: the helper functions it calls
+/// (`interceptor_call`) and the two arguments, the context mapping and the source text, it
+/// passes to each of them.
+///
+/// A template reads every name it does not bind itself through `_sx_variable()`, including
+/// a name in a comprehension's first iterable, which Python reads before the loop variables
+/// exist. The Python runtime refuses every name that starts with `_`, so a template cannot
+/// read these names that way. Python binds a lambda parameter or comprehension variable
+/// directly, so the transformer refuses one that starts with this prefix
+/// (`refuse_generated_name`). Any other name, `context` and `source` included, is free
+/// for the template to use.
+pub const GENERATED_NAME_PREFIX: &str = "_sx_";
+
+/// The local variable that holds the context mapping inside the function the Python
+/// runtime wraps around the generated code. Every helper receives it first.
+pub const CONTEXT_NAME: &str = "_sx_context";
+
+/// The expression's source text, which the Python runtime puts in the evaluation
+/// namespace so a helper can point an error at the failing part.
+pub const SOURCE_NAME: &str = "_sx_source";
+
+/// Every name the generated code reads, each starting with `GENERATED_NAME_PREFIX`. The
+/// Python runtime (`citry_core/safe_eval/eval.py`) defines the same names: the helpers and
+/// `_sx_source` in its evaluation namespace, and `_sx_context` as a local variable of the
+/// wrapper function.
+/// The test `test_generated_names_list_matches_what_the_transformer_writes` fails when the
+/// transformer writes a name that is missing here.
+pub const GENERATED_NAMES: [&str; 11] = [
+    "_sx_variable",
+    "_sx_attribute",
+    "_sx_subscript",
+    "_sx_call",
+    "_sx_assign",
+    "_sx_slice",
+    "_sx_interpolation",
+    "_sx_template",
+    "_sx_format",
+    SOURCE_NAME,
+    CONTEXT_NAME,
+];
+
+/// Helper to create a call to an interceptor function, given its name without the prefix
+/// (e.g. `"variable"` writes `_sx_variable(...)`).
 pub fn interceptor_call(
     func_name: &str,
     args: Vec<Expr>,
     keywords: Vec<Keyword>,
     range: ruff_text_size::TextRange,
 ) -> Expr {
+    // Every helper name carries the prefix, so the transformer can refuse any template
+    // binding that would match one
+    let helper_name = format!("{GENERATED_NAME_PREFIX}{func_name}");
+    // A helper missing from the list would not be cross-checked against the runtime
+    debug_assert!(GENERATED_NAMES.contains(&helper_name.as_str()));
+
     // Prepend context, source, and token tuple as first arguments
     let mut all_args = vec![
-        variable_name("context", range),
-        variable_name("source", range),
+        variable_name(CONTEXT_NAME, range),
+        variable_name(SOURCE_NAME, range),
         // Create tuple: (start_index_int, end_index_int)
         tuple_literal(
             vec![
@@ -105,8 +153,13 @@ pub fn interceptor_call(
     // Followed by the rest of the arguments
     all_args.extend(args);
 
-    // E.g. `call(context, source, (start_index, end_index), fn, *args, **kwargs)`
-    call(variable_name(func_name, range), all_args, keywords, range)
+    // E.g. `_sx_call(_sx_context, _sx_source, (start_index, end_index), fn, *args, **kwargs)`
+    call(
+        variable_name(&helper_name, range),
+        all_args,
+        keywords,
+        range,
+    )
 }
 
 /// Helper to extract the TextRange from an Expr.

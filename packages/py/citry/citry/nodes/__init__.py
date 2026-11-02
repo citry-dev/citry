@@ -75,6 +75,7 @@ from weakref import ReferenceType, ref
 from typing_extensions import Unpack, override
 
 from citry._i18n_directives import looks_like_i18n_binding
+from citry._nested_declarations import _schema_field_names
 from citry._vue import native_render as _native_render
 from citry._vue import native_walk as _native_walk
 from citry.attrs import (
@@ -341,6 +342,25 @@ def _find_attr(attrs: tuple[HtmlAttr, ...], key: str) -> HtmlAttr | None:
         if attr.key == key:
             return attr
     return None
+
+
+def _is_declared_slot_field(slots_class: type, name: str) -> bool:
+    """
+    Whether ``name`` is a field that the component's ``Slots`` class declares.
+
+    A dynamic slot name (``<c-slot c-name="...">``) can come from data, and the
+    default lookup reads the attribute of that name. Only a declared field is a
+    slot, so a name such as ``__class__``, ``_fields``, or a tuple method like
+    ``count`` must not select an attribute of the ``Slots`` object.
+    """
+    if name.startswith("_"):
+        return False
+    declared = _schema_field_names(slots_class)
+    # A ``Slots`` class whose fields Citry cannot list accepts no name, so a
+    # name from data never reads an attribute Citry cannot vouch for. A static
+    # ``name="..."`` gets no default fill from such a class either, because
+    # Citry cannot tell which attributes are slots.
+    return declared is not None and name in declared
 
 
 def _validate_introduced_variables(
@@ -3062,7 +3082,9 @@ class SlotNode(Node):
         # default (or a dynamic name that is not a field) yields no fill, so the
         # in-template body below stays the fallback and a required slot still
         # raises. A passed fill always wins over the default.
-        if fill is None and type(component).Slots is not None:
+        # Read `Slots` once so the type checker sees the narrowed, non-None class.
+        slots_class = type(component).Slots
+        if fill is None and slots_class is not None and _is_declared_slot_field(slots_class, name):
             default = getattr(component.slots, name, None)
             if default is not None:
                 fill = normalize_slot_fills({name: default}, component_name=type(component).__name__).get(name)

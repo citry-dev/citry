@@ -431,6 +431,10 @@
   a quoted string early. Styles render the same, but script that reads the
   custom property with `getComputedStyle()` now gets the escape text instead
   of the character.
+- A dynamic slot name, as in `<c-slot c-name="which" />`, now picks only a
+  field that the component's `Slots` class declares. Before, a name such as
+  `__class__` or `_fields` could select another attribute of the `Slots`
+  object.
 - A form field named `__proto__` is now sent with the Events call like
   any other field.
 - An Events `actions.Redirect` to a relative URL, such as `"?page=2"` or

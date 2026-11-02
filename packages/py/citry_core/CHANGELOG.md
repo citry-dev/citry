@@ -20,6 +20,24 @@
 
 ### Fixed
 
+- A lambda parameter or loop variable in a sandboxed expression can no
+  longer replace one of the sandbox's own checks. The sandbox's
+  helpers now have names that start with `_sx_`, and a lambda parameter or
+  loop variable with that prefix raises `SyntaxError`. Every other name
+  works as before, including `source`, `context`, and `call`.
+- The expression sandbox now refuses `format` and `format_map` on string
+  subclasses such as `markupsafe.Markup`, on `collections.UserString`, and
+  on any other string type, as it already did for `str`. It also refuses
+  the methods of a `string.Formatter`, building an `operator.attrgetter`
+  or `operator.methodcaller` inside an expression, and a
+  `functools.partial` of any call it refuses. Use an f-string instead of
+  `format`.
+- A sandboxed comprehension now reads a name in an iterable from the
+  template's variables, as Python does, unless an earlier `for` clause
+  binds it. For example, `[x for x in x]` loops over the template's `x`.
+- A comprehension variable that is an attribute, an item, a list, or a
+  starred name, such as `[x for a.b in items]`, now raises `SyntaxError`
+  instead of stopping the process with a Rust panic.
 - `parse_template()` no longer rejects Vue-only syntax inside `v-pre`, such
   as `v-once`, `<transition>`, or `@click.bogus`, because Vue reads it as
   plain HTML there. `<c-*>` tags inside `v-pre` keep their checks.

@@ -250,17 +250,24 @@ whichever comes first. See [Comments](/syntax/comments/#comment-an-expression).
 
 ## Sandbox limits
 
-Every template expression runs in a sandbox that blocks code which could
-reach outside the template:
+Every template expression runs in a sandbox that refuses the known ways an
+expression could reach outside the template:
 
 | What | Result |
 |--|--|
 | Private attributes such as `_name` | Access blocked |
 | Dunder attributes such as `__class__` | Access blocked |
 | Unsafe functions such as `eval`, `exec`, and `open` | Call blocked |
-| `str.format()` and `str.format_map()` | Call blocked; use an f-string |
+| `format()` and `format_map()` on any string, `Markup` included | Blocked; use an f-string |
+| A lambda parameter or loop variable whose name starts with `_sx_`, the prefix of the sandbox's own helpers | `SyntaxError` |
 
-A blocked operation raises [`SecurityError`][citry.SecurityError].
+A blocked operation raises [`SecurityError`][citry.SecurityError] when the
+expression runs. A lambda parameter or loop variable that starts with
+`_sx_` raises `SyntaxError` when Citry compiles the template.
+
+The sandbox checks the names and calls that the expression writes. It does
+not check what the objects in the render context can do: an expression can
+read every public attribute and call every public method of them.
 
 Only the template author writes expressions. Data from a request, or
 text a site visitor saved, reaches a template only as a value, such as

@@ -639,7 +639,7 @@ class CImage(LibraryComponent):
       >
         <c-if cond="has_sources">
           <picture data-citry-ui-part="picture">
-            <source c-for="source in sources" c-bind="source" />
+            <source c-for="picture_source in sources" c-bind="picture_source" />
             <img c-bind="image_attrs" data-citry-ui-part="image" />
           </picture>
         </c-if>

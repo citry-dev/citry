@@ -33,32 +33,34 @@ It works by:
    - F-strings → `format("...")` calls with transformed arguments
    - T-strings → `template(...)` calls with interpolation objects
 
+   The list shows short forms. The generated helper names start with `_sx_`, so the transformer can refuse them as lambda parameters and loop variables, and a template cannot read them. Every call also receives the context mapping (`_sx_context`), the expression text (`_sx_source`), and the source span first.
+
    **Example conversions:**
 
    ```python
    # Before: Simple variable access
    x
    # After:
-   variable(context, source, (0, 1), 'x')
+   _sx_variable(_sx_context, _sx_source, (0, 1), 'x')
 
    # Before: Function call
    foo(x, 2)
    # After:
-   call(context, source, (0, 10), variable(context, source, (0, 3), 'foo'), variable(context, source, (4, 5), 'x'), 2)
+   _sx_call(_sx_context, _sx_source, (0, 10), _sx_variable(_sx_context, _sx_source, (0, 3), 'foo'), _sx_variable(_sx_context, _sx_source, (4, 5), 'x'), 2)
 
    # Before: Attribute access
    obj.attr
    # After:
-   attribute(context, source, (0, 8), variable(context, source, (0, 3), 'obj'), 'attr')
+   _sx_attribute(_sx_context, _sx_source, (0, 8), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'attr')
 
    # Before: Complex nested access
    obj.items[key].value
    # After:
-   attribute(context, source, (0, 20), subscript(context, source, (0, 14), attribute(context, source, (0, 9), variable(context, source, (0, 3), 'obj'), 'items'), variable(context, source, (10, 13), 'key')), 'value')
+   _sx_attribute(_sx_context, _sx_source, (0, 20), _sx_subscript(_sx_context, _sx_source, (0, 14), _sx_attribute(_sx_context, _sx_source, (0, 9), _sx_variable(_sx_context, _sx_source, (0, 3), 'obj'), 'items'), _sx_variable(_sx_context, _sx_source, (10, 13), 'key')), 'value')
    ```
 
 4. Re-generating Python code from the modified AST using `ruff_python_codegen`
-5. On the Python side we define `call()`, `variable()`, etc.
+5. On the Python side we define `_sx_call()`, `_sx_variable()`, etc.
    - This is the logic that runs when the target expression uses e.g. function calls.
      Here we implement similar safety measures as Jinja.
 6. User receives back a function to evaluate the compiled code.
@@ -291,14 +293,19 @@ Here's a list of all unsafe scenarios that will trigger `SecurityError`:
 - **Unsafe methods**:
   - Functions decorated with `@unsafe`
   - Django methods marked with `alters_data = True`
-  - `str.format` and `str.format_map` (use f-strings instead)
+  - `format` and `format_map` of any string type (`str`, its subclasses such as `markupsafe.Markup`, and `collections.UserString`), every method of a `string.Formatter`, and building an `operator.attrgetter` or `operator.methodcaller` (use f-strings instead)
 - **Internal attributes**: Prevents access to frame, code, and other internal Python object attributes
+- **Names the sandbox uses itself**: A lambda parameter or comprehension variable whose name starts with `_sx_` is a `SyntaxError`, because the sandbox's own helpers use that prefix and the name could replace one of them.
 
 ## Security and safety considerations
 
-While `safe_eval()` prevents the execution of unsafe code and goes further than Jinja2 or Django's template engine in terms of security (blocking unsafe builtins, private attributes, etc.).
+`safe_eval()` checks every variable, attribute, item, and call that the expression text writes. It refuses unsafe builtins, private attributes, and the string formatting methods that follow attribute paths.
 
-However, it CANNOT protect against all forms of misuse.
+It is a second layer of protection, not a promise that a template from a stranger is safe to run, and it CANNOT protect against all forms of misuse:
+
+- **It does not limit the objects you pass in.** An expression can read every attribute and call every method of a context object whose name does not start with `_`. A secret in a public attribute is readable, and a public method that deletes data can be called.
+- **It checks only what the expression text writes.** A function you pass in that calls other functions or looks up names from text (`map`, `functools.reduce`, the `key=` argument of `sorted`, a `getattr`-style helper, `inspect`, `importlib`) does so without these checks.
+- **Item keys that start with `_` are not hidden.** `data["_key"]` is refused, but `data.get("_key")` and `"%(_key)s" % data` read the same item.
 
 ### Denial of service (DoS) attacks
 

@@ -13,7 +13,7 @@ leaves others to you:
 |---|---|---|
 | A user edits the values a handler receives | Signs State so it cannot be changed silently | Validate State and check permissions in every handler |
 | Another site posts to your event routes | Rejects cross-site calls | Keep your framework's CSRF check on |
-| A template expression reaches dangerous Python | Runs expressions in a sandbox | Put only safe objects in the template context |
+| A template expression reads or calls something it should not | Runs expressions in a sandbox that refuses known unsafe names and calls | Put in the template context only objects that every template author may read and call |
 | A secret ends up in the page source | Refuses to send a value wrapped in `Secret` | Wrap each secret in `Secret` and read it on the server |
 | Injected scripts on the page | Nothing until you opt in | Send a Content Security Policy with a nonce |
 
@@ -379,14 +379,25 @@ from the same body, so `_max_body_bytes` limits them too.
 ## Sandbox template code { #sandbox-python-template-expressions }
 
 Anything inside `{{ }}` or a `c-*` attribute is a Python expression. Citry
-runs it in a sandbox that blocks the known ways an expression could reach
+runs it in a sandbox that refuses the known ways an expression could reach
 dangerous parts of Python. The sandbox is on by default and modeled on
 Jinja's sandbox.
 
-Only the template author writes expressions. Never build a template, or
-any part of an expression, from request data or from text a site
-visitor saved. Pass that data to the template as values in the render
-context, where an expression can read them.
+The sandbox is a second layer of protection, not a promise that a template
+from a stranger is safe to run. It checks the names and calls that the
+expression text writes. It does not check what the objects you pass in can
+do. Two things decide how much you can trust a template with:
+
+- **Who writes the template text.** Only the template author writes
+  expressions. Never build a template, or any part of an expression, from
+  request data or from text a site visitor saved. Pass that data to the
+  template as values in the render context, where an expression can read
+  them.
+- **What you put in the render context.** An expression can read every
+  attribute and call every method of a context object whose name does not
+  start with `_`. If you pass a settings object, a template can read
+  `settings.SECRET_KEY`. If you pass a user model, a template can call its
+  public methods. Pass only what every template author may use.
 
 ### What is blocked { #what-the-sandbox-blocks }
 
@@ -397,11 +408,22 @@ context, where an expression can read them.
 - **Dangerous functions.** A list of builtins such as `eval`, `exec`,
   `__import__`, `getattr`, `setattr`, and `open` is blocked. The check
   compares the function itself, not its name, so passing `eval` into the
-  context under another name does not get around it.
-- **`str.format` and `str.format_map`.** Their format syntax can reach
-  builtins. Use an f-string instead.
+  context under another name, or wrapped in `functools.partial`, does not
+  get around it.
+- **Formatting methods that follow paths.** A format string such as
+  `'{0.name}'` reads attributes by name, and it skips the checks above. So
+  `format` and `format_map` are blocked on every kind of string: `str`,
+  subclasses of `str` such as `Markup`, and `collections.UserString`. Every
+  method of a `string.Formatter` is blocked, and so is building an
+  `operator.attrgetter` or `operator.methodcaller`. Use an f-string
+  instead.
 - **Statements.** Assignments, `del`, `import`, `raise`, `assert`,
   `async`/`await`, and `yield` are not expressions.
+- **Names the sandbox uses itself.** The sandbox's own helpers have names
+  that start with `_sx_`. A lambda parameter or loop variable with that
+  prefix, including a `<c-for>` loop variable, fails with `SyntaxError`,
+  because it could replace one of the sandbox's checks. Every other name
+  works, such as `source` in `<source c-for="source in sources">`.
 
 A statement fails with `SyntaxError` when Citry compiles the template. A
 blocked access fails with [`SecurityError`][citry.SecurityError] only when
@@ -447,13 +469,25 @@ See [Expressions](/syntax/expressions/) for more.
 The sandbox checks names. It does not know what your code does, and it is
 not guaranteed to block every way out:
 
-- **Your objects expose every public method.** An expression can call any
-  attribute or method of a context object whose name does not start with
-  `_`. If one of them deletes data, a template can call it.
+- **Your objects expose every public attribute and method.** An expression
+  can read any attribute and call any method of a context object whose name
+  does not start with `_`. A secret kept in a public attribute is readable.
+  A method that deletes data can be called. A database queryset in the
+  context lets a template filter it with any field lookup.
 - **Your functions can be called.** A function you put in the context is
   allowed until you block it, as shown next.
+- **Helpers that call other functions or look up names from text run
+  without the checks.** The sandbox checks the calls and lookups that the
+  expression text writes. A function you put in the context that calls its
+  arguments (`map`, `functools.reduce`, the `key=` argument of `sorted`
+  or `list.sort`) or reads an attribute from a string (a `getattr`-style
+  helper, `inspect`, `importlib`, Django's `format_html`) does that work
+  unchecked. Do not put such helpers in the context.
+- **Dict keys that start with `_` are not hidden.** `data['_key']` is
+  blocked, but `data.get('_key')`, looping over `data`, and
+  `'%(_key)s' % data` read the same item.
 - **The blocked list covers known dangers.** It is a list of specific
-  functions, not a guarantee.
+  functions and types, not a guarantee.
 - **Time and memory are not limited.** An expression can run as long
   and use as much memory as the server process allows. To cap them, set
   limits on the worker process that renders pages.

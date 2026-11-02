@@ -1,9 +1,55 @@
 """
-A sandbox layer that ensures unsafe operations cannot be performed.
-Useful when the Python expression itself comes from an untrusted source.
+A sandbox layer that refuses unsafe names and calls in a Python expression.
 
 Based on the Jinja v3.1.6 sandbox implementation.
 See https://github.com/pallets/jinja/blob/5ef70112a1ff19c05324ff889dd30405b1002044/src/jinja2/sandbox.py
+
+What the sandbox does
+---------------------
+It checks every variable, attribute, item, and call that the expression text writes.
+It refuses:
+
+- Names that start with `_`: variables, attributes (so no `obj.__class__`), and string
+  item keys (`data["_key"]`).
+- Calls to functions that are dangerous by themselves, such as `eval`, `getattr`, and `open`.
+  The check compares the function, not its name, so a function passed in under another
+  name, or wrapped in `functools.partial`, is refused too.
+- Text formatting that follows paths written inside the string: `format` and `format_map`
+  of any string type (`str`, its subclasses such as `markupsafe.Markup`, and
+  `collections.UserString`), every method of a `string.Formatter`, and building an
+  `operator.attrgetter` or `operator.methodcaller`. Use f-strings instead.
+- Functions marked with `@unsafe` or `alters_data = True`.
+
+What the sandbox does not promise
+---------------------------------
+It is a second layer of protection. It does not make a template from a stranger safe to run.
+
+- It does not limit the objects you pass in. Every attribute and method of a context
+  object whose name does not start with `_` can be read and called, so what such an
+  object can reach or do is available to the expression. A secret in a public attribute
+  is readable, and a public method that deletes data can be called. Mark such a method
+  with `@unsafe`, or leave the object out of the context.
+- It checks only the lookups and calls that the expression text writes. A function that
+  you pass in and that calls other functions or looks up names from text does so without
+  these checks. Examples are `map`, `functools.reduce`, a `key=` argument of `sorted` or
+  `list.sort`, a `getattr`-style helper, `inspect`, `importlib`, and `logging.Formatter`
+  with `{` style. Do not pass such helpers in.
+- It hides an item key that starts with `_` only when the expression writes the lookup
+  itself. `data["_key"]` is refused, but `data.get("_key")`, iterating over `data`, and
+  `"%(_key)s" % data` read the same item.
+- It does not limit time or memory. `9 ** 9 ** 9` and `"x" * 10**10` run until the process
+  runs out of resources.
+- The expression text must come from the template author. Request data belongs in the
+  context, as a value.
+
+The generated code names its own helpers and arguments with the `_sx_` prefix
+(`_sx_variable`, `_sx_context`, and so on). The Rust transformer turns every name the
+expression does not bind itself into an `_sx_variable()` lookup, which refuses names that
+start with `_`. That includes a name in a comprehension's first iterable, which Python reads
+before the loop variable exists. The transformer also raises `SyntaxError` for a lambda
+parameter or comprehension variable that starts with `_sx_`, so no template name can replace
+a check. On CPython, the evaluation namespace holds an empty `__builtins__`, so a plain name
+never reaches a Python builtin.
 
 We do NOT support:
 - Builtins. If you need to use `len()`, `str()`, `int()`, `list()`, `dict()`, etc.,
@@ -12,8 +58,9 @@ We do NOT support:
   We don't expose `range()` function to the sandboxed code at all.
 - "Immutable" sandbox (e.g. raising when mutating a list).
 - Async functions, coroutines, etc.
-- `str.format` and `str.format_map` are not allowed as they can be used to access unsafe variables.
-  Use f-strings instead.
+- The string formatting methods above. Jinja runs them through a sandboxed formatter;
+  we refuse them. Use f-strings instead, which the transformer rewrites so that every
+  lookup inside is checked.
 
 We add these safety features not present in Jinja:
 - Prevent users from calling unsafe builtins like `eval` even if they were passed as variables.
@@ -31,7 +78,11 @@ def delete(self):
 
 import builtins
 import contextlib
+import functools
+import operator
+import string
 import types
+from collections import UserString
 from collections.abc import Callable
 from typing import Any, TypeVar
 
@@ -89,12 +140,46 @@ UNSAFE_BUILTIN_FUNCTIONS: dict[Any, str | None] = {
     if hasattr(builtins, attr)
 }
 
-# These are not allowed as they can be used to access unsafe variables,
-# e.g. `"a{0.b.__builtins__[__import__]}b".format({"b": 42})`
+# `format` and `format_map` read the attribute and item paths written inside the string,
+# e.g. `"a{0.b.__builtins__[__import__]}b".format({"b": 42})`, and they look each field up
+# with the real `getattr`, so the checks in this module never see the lookup. Every string
+# type that has such methods is refused, not only `str`: `str` subclasses may define their
+# own (`markupsafe.Markup` does), `collections.UserString` is not a `str` subclass and calls
+# the real `str.format`, and `string.Formatter` is the object that does the lookup.
 # Use f-strings instead.
+_FORMAT_MESSAGE = "Use f-strings instead."
+
+#: The methods that format a string by following the paths written inside it.
+_FORMAT_METHOD_NAMES = frozenset({"format", "format_map"})
+
+#: The public methods of `string.Formatter`. Each one either follows a path or hands
+#: out the pieces a path is built from, so all of them are refused on a formatter.
+_FORMATTER_METHOD_NAMES = frozenset(name for name in vars(string.Formatter) if not name.startswith("_"))
+
+#: Attribute names that need the extra string-type check in `is_safe_attribute`. Checking
+#: this set first keeps the extra `isinstance` calls off the path of every other name.
+_FORMATTING_ATTRIBUTE_NAMES = _FORMAT_METHOD_NAMES | _FORMATTER_METHOD_NAMES
+
+# The functions below are what a class lookup returns, such as `UserString.format`. They are
+# refused by identity. A subclass's own override (`Markup.format`) is a different function
+# that cannot be listed ahead of time, so `is_safe_attribute` refuses it by the type of the
+# object it is read from, and `_formatting_method_message` refuses a bound one by its owner.
 UNSAFE_FUNCTIONS: dict[Any, str | None] = {
-    str.format: "Use f-strings instead.",
-    str.format_map: "Use f-strings instead.",
+    str.format: _FORMAT_MESSAGE,
+    str.format_map: _FORMAT_MESSAGE,
+    UserString.format: _FORMAT_MESSAGE,
+    UserString.format_map: _FORMAT_MESSAGE,
+    **{
+        function: _FORMAT_MESSAGE
+        for function in vars(string.Formatter).values()
+        if isinstance(function, types.FunctionType)
+    },
+    # These build a function that reads an attribute or calls a method named by a string
+    # (`attrgetter("__class__")(obj)`), with the real `getattr`. They are refused when
+    # called, so the template author cannot choose the path. A reader that the app built
+    # with its own path is a plain callable and keeps working.
+    operator.attrgetter: "Read the attribute in the expression instead.",
+    operator.methodcaller: "Call the method in the expression instead.",
 }
 
 # Exact instances of these built-ins cannot be any of Python's frame/code/
@@ -172,6 +257,32 @@ def _is_internal_attribute(obj: Any, attr: str) -> bool:
     return attr.startswith("__")
 
 
+def _is_formatting_member(obj: Any, attr: str) -> bool:
+    """
+    Test if reading `attr` from `obj` gives a method that formats text by following paths.
+
+    That is `format` or `format_map` on a `str` subclass or `collections.UserString` (the
+    object or the class itself), and any method of `string.Formatter` on a formatter or a
+    formatter class. Exact `str` and `UserString` are left out: their methods are known
+    functions that `is_safe_callable` refuses with a message when they are called.
+
+    >>> _is_formatting_member(string.Formatter(), "vformat")
+    True
+    >>> _is_formatting_member("text", "format")
+    False
+    """
+    is_class = isinstance(obj, type)
+
+    def derives_from(kinds: type | tuple[type, ...]) -> bool:
+        return issubclass(obj, kinds) if is_class else isinstance(obj, kinds)
+
+    if derives_from(string.Formatter):
+        return attr in _FORMATTER_METHOD_NAMES
+    if attr in _FORMAT_METHOD_NAMES and derives_from((str, UserString)):
+        return (obj if is_class else type(obj)) not in (str, UserString)
+    return False
+
+
 def is_safe_attribute(obj: Any, attr: str) -> bool:
     """
     Check if the attribute of an object is safe to access.
@@ -179,6 +290,9 @@ def is_safe_attribute(obj: Any, attr: str) -> bool:
     Unsafe attributes are:
     - Starting with an underscore `_`
     - Internal attributes as set by `_is_internal_attribute`.
+    - The methods that format text by following paths inside it: `format` and
+      `format_map` on a `str` subclass or `UserString`, and the methods of a
+      `string.Formatter` (see `_is_formatting_member`).
     """
     # Non-string subscripts should be fine, as they should be found only
     # as list slices.
@@ -188,7 +302,34 @@ def is_safe_attribute(obj: Any, attr: str) -> bool:
         return False
     if type(obj) in _SAFE_EXACT_ATTRIBUTE_TYPES:
         return True
+    # The name test comes first so that no other attribute pays for the `isinstance` calls.
+    if attr in _FORMATTING_ATTRIBUTE_NAMES and _is_formatting_member(obj, attr):
+        return False
     return not _is_internal_attribute(obj, attr)
+
+
+def unsafe_attribute_hint(attr: str) -> str | None:
+    """Return advice to show with a refused attribute, or None when there is none."""
+    return _FORMAT_MESSAGE if attr in _FORMATTING_ATTRIBUTE_NAMES else None
+
+
+def _formatting_method_message(obj: Any) -> str | None:
+    """
+    Return the refusal message if `obj` is a bound method that formats text by following paths.
+
+    This looks at the object the method is bound to, not at the function, because a `str`
+    subclass defines its own `format` function and each one is a different function.
+    """
+    owner = getattr(obj, "__self__", None)
+    if owner is None:
+        return None
+    # Every method of a formatter is refused: `vformat`, `get_field` and the rest take
+    # part in the same path lookup as `format`.
+    if isinstance(owner, string.Formatter):
+        return _FORMAT_MESSAGE
+    if isinstance(owner, (str, UserString)) and getattr(obj, "__name__", None) in _FORMAT_METHOD_NAMES:
+        return _FORMAT_MESSAGE
+    return None
 
 
 def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
@@ -204,7 +345,12 @@ def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
     - Decorated with `@unsafe`
     - Marked with `obj.alters_data = True` (Django convention)
     - Unsafe builtins (e.g. `eval`)
-    - `str.format` or `str.format_map` (use f-strings instead)
+    - `format` or `format_map` of any `str` instance, subclasses included, and of
+      `collections.UserString` (use f-strings instead)
+    - Every method of a `string.Formatter` instance
+    - `operator.attrgetter` and `operator.methodcaller`, which would let the template name
+      the attribute to read
+    - A `functools.partial` of any of the above
 
     """
     # Check for bound methods (e.g., "string".format())
@@ -238,6 +384,18 @@ def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
         return (False, UNSAFE_FUNCTIONS[obj])
     if obj in UNSAFE_BUILTIN_FUNCTIONS:
         return (False, UNSAFE_BUILTIN_FUNCTIONS[obj])
+
+    # Check the type the method is bound to. The identity checks above know `str.format`
+    # but not the `format` that a subclass such as `Markup` defines for itself.
+    message = _formatting_method_message(obj)
+    if message is not None:
+        return (False, message)
+
+    # A partial calls its wrapped function with some arguments filled in, so it is as
+    # safe as that function. Without this, `partial(getattr, obj)` would be a way to call
+    # a refused function under another name.
+    if isinstance(obj, functools.partial):
+        return is_safe_callable(obj.func)
 
     return (True, None)
 

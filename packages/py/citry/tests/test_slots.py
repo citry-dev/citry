@@ -7,7 +7,8 @@ Slots embedded in template expressions, and focused integration with
 ``<c-slot>`` / ``<c-fill>`` (see docs/design/component_slots.md).
 """
 
-from typing import get_args, get_origin, get_type_hints
+from dataclasses import dataclass
+from typing import NamedTuple, get_args, get_origin, get_type_hints
 
 import pytest
 
@@ -592,6 +593,92 @@ class TestDeclaredSlotCheck:
 
         with pytest.raises(RuntimeError, match=r"does not declare 'ghost'"):
             str(Card())
+
+
+class TestDynamicSlotNameReadsOnlyDeclaredFields:
+    """
+    A dynamic slot name (``<c-slot c-name="...">``) can come from data. It picks a
+    declared ``Slots`` field and nothing else: other attributes of the ``Slots``
+    object, such as ``__class__`` or ``_fields``, are not slots, so the body of
+    the ``<c-slot>`` renders instead.
+    """
+
+    @staticmethod
+    def _plain() -> type:
+        class Slots:
+            header: str = "DEFAULT-HEADER"
+
+        return Slots
+
+    @staticmethod
+    def _named_tuple() -> type:
+        class Slots(NamedTuple):
+            header: str = "DEFAULT-HEADER"
+
+        return Slots
+
+    @staticmethod
+    def _dataclass() -> type:
+        @dataclass
+        class Slots:
+            header: str = "DEFAULT-HEADER"
+
+        return Slots
+
+    @pytest.fixture(params=["_plain", "_named_tuple", "_dataclass"])
+    def slots_class(self, request: pytest.FixtureRequest) -> type:
+        return getattr(self, request.param)()
+
+    @staticmethod
+    def _render(slots_class: type, which: str) -> str:
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = '<div><c-slot c-name="which">FALLBACK</c-slot></div>'
+            Slots = slots_class
+
+            def template_data(self, kwargs, slots):
+                return {"which": which}
+
+        return str(Card())
+
+    def test_a_declared_field_still_supplies_its_default(self, slots_class):
+        assert "DEFAULT-HEADER" in self._render(slots_class, "header")
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "__class__",
+            "__module__",
+            "__doc__",
+            "__dict__",
+            "__init__",
+            "__eq__",
+            "_fields",
+            "_field_defaults",
+            "_asdict",
+            "count",
+            "index",
+        ],
+    )
+    def test_a_name_that_is_not_a_declared_field_renders_the_fallback(self, slots_class, name):
+        html = self._render(slots_class, name)
+        assert "FALLBACK" in html
+        # Nothing read from the Slots object or its class reaches the page.
+        assert "DEFAULT-HEADER" not in html
+        assert "SlotContext" not in html
+
+    def test_a_slots_class_whose_fields_citry_cannot_list_accepts_no_name(self):
+        # A plain tuple subclass has no `_fields`, so Citry cannot tell which of its
+        # attributes are slots. A name from data then picks none of them.
+        class Slots(tuple):
+            __slots__ = ()
+            header = "DEFAULT-HEADER"
+
+        html = self._render(Slots, "header")
+        assert "FALLBACK" in html
+        assert "DEFAULT-HEADER" not in html
 
 
 class TestSlotFieldDefaultFill:
