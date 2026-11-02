@@ -2444,7 +2444,10 @@ so each of those steps sets `enable-cache: false` or
 `release_caches` validator
 ([`scripts/validators/release_caches.py`](../scripts/validators/release_caches.py))
 fails the gate when a publish workflow restores a cache or uses an action
-nobody has checked for caching. Ordinary CI keeps its caches.
+nobody has checked for caching. Ordinary CI keeps its caches. In `qualify` mode, `verify-version` stops the run unless
+`release_commit` equals the run's own `github.sha`. The build and smoke jobs
+therefore check out `github.sha`, which CodeQL does not treat as untrusted
+code.
 
 **PyPI auth is Trusted Publishing (OIDC), not a stored API token.** The release jobs carry `id-token: write` and target a GitHub environment named `pypi`; PyPI verifies the workflow's OIDC identity, so there is no secret to keep. Before a package's first publish, configure a PyPI **publisher** (a *pending publisher* if the project does not exist yet) with:
 

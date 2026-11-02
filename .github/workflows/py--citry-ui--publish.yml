@@ -81,7 +81,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_commit }}
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
@@ -151,7 +154,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_commit }}
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
       - uses: actions/download-artifact@v8
         with:
           name: raw-citry-ui-distributions
