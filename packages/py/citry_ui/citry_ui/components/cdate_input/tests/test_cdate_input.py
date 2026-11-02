@@ -131,13 +131,13 @@ def test_field_and_form_own_relationships_and_state() -> None:
         ({"value": "2026-8-19"}, ValueError, "canonical YYYY-MM-DD"),
         ({"value": "2025-02-29"}, ValueError, "real calendar date"),
         ({"value": datetime(2026, 8, 19, tzinfo=timezone.utc)}, TypeError, "exact date"),
-        ({"value": 20260819}, TypeError, "exact date"),
+        ({"value": 20260819}, TypeError, r"CDateInput\.Kwargs\.value expects date \| str \| None"),
         ({"min": "2026-09-01", "max": "2026-08-31"}, ValueError, "cannot be later"),
         ({"step": True}, TypeError, "exact positive integer"),
         ({"step": 0}, ValueError, "greater than zero"),
-        ({"variant": "soft"}, ValueError, "must be one of"),
-        ({"size": "xl"}, ValueError, "must be one of"),
-        ({"attrs": []}, TypeError, "mapping or None"),
+        ({"variant": "soft"}, TypeError, r"CDateInput\.Kwargs\.variant expects Literal\["),
+        ({"size": "xl"}, TypeError, r"CDateInput\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"),
+        ({"attrs": []}, TypeError, r"CDateInput\.Kwargs\.attrs expects Mapping\[str, object\] \| None"),
     ],
 )
 def test_invalid_server_inputs_fail_deterministically(kwargs, error, match) -> None:

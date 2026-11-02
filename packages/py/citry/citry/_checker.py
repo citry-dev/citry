@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import json
 import re
-import symtable
 import sys
 import textwrap
 import tokenize
@@ -14,6 +14,7 @@ import weakref
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from types import (
     GetSetDescriptorType,
@@ -26,6 +27,8 @@ from types import (
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message
+from citry._authored_expression import parse_authored_expression
+from citry._browser_expressions import _ascii_lower
 from citry._class_introspection import (
     _safe_class_import_path,
     _safe_class_text,
@@ -75,6 +78,7 @@ from citry._diagnostic_catalog import (
     JS_DATA_UNSUPPORTED_TYPE,
     PARSE_CONFIGURATION,
     TEMPLATE_MARKER_NAME_INVALID,
+    TEMPLATE_UNDECLARED_TEMPLATE_DATA_KEY,
     TEMPLATE_UNKNOWN_COMPONENT,
 )
 from citry._diagnostics import render_diagnostic
@@ -99,7 +103,15 @@ from citry._registry_lint import (
     unknown_inject_key_findings,
     unknown_url_findings,
 )
-from citry._source_lines import line_break_count, source_lines
+from citry._slot_props import (
+    SlotOutlet,
+    lint_unknown_slot_props,
+    scoped_fills,
+    slot_outlets,
+    unknown_slot_props_for,
+)
+from citry._source_lines import byte_offset_position, source_lines
+from citry._symbol_table import symtable
 from citry._template_data_source import (
     TemplateDataSourceShape,
     analyze_css_data_source,
@@ -107,6 +119,7 @@ from citry._template_data_source import (
 )
 from citry._vue.json_data import _json_plain, _secret_key_path, _SecretInBrowserDataError
 from citry._vue_compile_lint import lint_vue_compile
+from citry._walk import Call, run
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
@@ -200,7 +213,7 @@ from citry_core.template_parser import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Generator, Iterable
 
     from citry.citry import Citry
     from citry.ext.i18n.extension import I18nExtension
@@ -258,11 +271,27 @@ class CheckFinding:
 
 @dataclass(frozen=True, slots=True)
 class CheckReport:
-    """Complete output and exit status for one check run."""
+    """
+    Complete output and exit status for one check run.
+
+    ``skipped_library_findings`` counts, per library name, the findings
+    left out because they are in components a registered library provides.
+    ``library_owners`` tells which findings those are, so
+    ``citry check --types`` can leave out its own findings in the same
+    components; it is ``None`` when the run reports library findings or
+    checked no registry.
+    """
 
     findings: tuple[CheckFinding, ...] = ()
     app_failure: str | None = None
     notes: tuple[str, ...] = ()
+    skipped_library_findings: tuple[tuple[str, int], ...] = ()
+    library_owners: _LibraryOwners | None = dataclass_field(default=None, compare=False, repr=False)
+
+    @property
+    def all_notes(self) -> tuple[str, ...]:
+        """The notes to print, ending with the count of left-out library findings when there are any."""
+        return (*self.notes, *library_findings_note(dict(self.skipped_library_findings)))
 
     def __post_init__(self) -> None:
         # A position without its base cannot be placed by a tool reading the
@@ -304,8 +333,15 @@ class _BrowserSource:
     source_kind: SourceKind
 
 
-def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
-    """Check a registry when one is available, otherwise scan definite literals."""
+def check_project(selection: CheckAppSelection, cwd: Path, *, include_libraries: bool = False) -> CheckReport:
+    """
+    Check a registry when one is available, otherwise scan definite literals.
+
+    Findings in components that a registered library provides are left out
+    and counted in a note, unless ``include_libraries`` or
+    ``LintSettings.include_libraries`` asks for them: the app's author
+    cannot change that code, so they would only hide the app's own findings.
+    """
     if selection.failure is not None:
         findings, notes = _check_static(cwd)
         return CheckReport(findings=tuple(findings), app_failure=selection.failure, notes=tuple(notes))
@@ -322,22 +358,158 @@ def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
         findings, notes = _check_static(cwd)
         return CheckReport(findings=tuple(findings), app_failure=app_failure_message(exc), notes=tuple(notes))
 
-    findings, notes = _check_registry(engine, registrations, rules)
+    findings, notes, origin_consumers = _check_registry(engine, registrations, rules)
     # An inject key finding points into the component's Python file.
     findings.extend(_counted_in(_unknown_inject_key_findings(engine, registrations, cwd), "file"))
-    return CheckReport(findings=tuple(findings), notes=(TRANSFORM_NOTE, *notes))
+    if include_libraries or engine.settings.lint.include_libraries:
+        return CheckReport(findings=tuple(findings), notes=(TRANSFORM_NOTE, *notes))
+    owners = _LibraryOwners(engine, origin_consumers)
+    kept, skipped = owners.split(findings)
+    return CheckReport(
+        findings=tuple(kept),
+        notes=(TRANSFORM_NOTE, *notes),
+        skipped_library_findings=tuple(sorted(skipped.items())),
+        library_owners=owners,
+    )
+
+
+def library_findings_note(skipped: Mapping[str, int]) -> tuple[str, ...]:
+    """The one note that says how many findings were left out and which libraries they came from, or none."""
+    total = sum(skipped.values())
+    if total == 0:
+        return ()
+    names = ", ".join(repr(name) for name in sorted(skipped))
+    noun = "library" if len(skipped) == 1 else "libraries"
+    findings = "finding" if total == 1 else "findings"
+    return (
+        f"left out {total} {findings} in components from the registered {noun} {names}; "
+        "pass --include-libraries to report them",
+    )
+
+
+class _LibraryOwners:
+    """
+    Which registered components each finding belongs to, and which of them a library provides.
+
+    A finding names its place as text: a component's import path with the
+    attribute it is about (``pkg.mod.Card.template``), a file path with a
+    component in brackets (``/src/card.py (pkg.mod.Card.js_data)``), or a
+    file path with a line and column (``/src/card.py:3:5``). A finding
+    belongs to a library only when every component it can be traced to
+    comes from a library; a finding that names no known component is kept.
+    """
+
+    def __init__(self, engine: Citry, origin_consumers: Mapping[str, set[type[Component]]]) -> None:
+        # A library's own classes are the concrete components it installed.
+        self._library_of = engine._library_names_by_component()
+        self._by_origin: dict[str, set[type[Component]]] = {}
+        for origin, consumers in origin_consumers.items():
+            self._by_origin.setdefault(_origin_path_key(origin), set()).update(consumers)
+        self._by_label: dict[str, set[type[Component]]] = {}
+        unique = {id(comp_cls): comp_cls for comp_cls in engine.components.values()}
+        for comp_cls in unique.values():
+            self._by_label.setdefault(_class_label(comp_cls), set()).add(comp_cls)
+            module_file = _loaded_python_file(comp_cls)
+            if module_file is not None:
+                self._by_origin.setdefault(_origin_path_key(str(module_file)), set()).add(comp_cls)
+            messages_file = _resolved_messages_file(engine, comp_cls)
+            if messages_file is not None:
+                self._by_origin.setdefault(_origin_path_key(str(messages_file)), set()).add(comp_cls)
+
+    def library(self, origin: str) -> str | None:
+        """The library a finding at ``origin`` is counted under, or ``None`` when an app component may own it."""
+        owners = self._owners(origin)
+        if not owners:
+            return None
+        libraries = {self._library_of.get(owner) for owner in owners}
+        if None in libraries:
+            return None
+        # Code shared by two libraries, such as a theme library built on
+        # another one, is still no app's code; it counts under one name.
+        return min(cast("set[str]", libraries))
+
+    def split(self, findings: Iterable[CheckFinding]) -> tuple[list[CheckFinding], dict[str, int]]:
+        """Keep the findings an app component may own, and count the others per library."""
+        kept: list[CheckFinding] = []
+        skipped: dict[str, int] = {}
+        for finding in findings:
+            library = self.library(finding.origin)
+            if library is None:
+                kept.append(finding)
+            else:
+                skipped[library] = skipped.get(library, 0) + 1
+        return kept, skipped
+
+    def _owners(self, origin: str) -> set[type[Component]]:
+        match = _ORIGIN_SHAPE.fullmatch(origin)
+        place = origin if match is None else match["place"]
+        label = None if match is None else match["label"]
+        # A component in brackets is the one the finding is about, even when
+        # the file holds code it inherits from another component.
+        if label is not None:
+            labelled = self._label_owners(label)
+            if labelled:
+                return labelled
+        # A template, script, or stylesheet names exactly the components that use it.
+        owners = self._by_origin.get(_origin_path_key(place))
+        if owners:
+            return owners
+        # An inline `messages` string is named `<file>::<Class>.messages`.
+        file_part, separator, _ = place.partition("::")
+        if separator:
+            owners = self._by_origin.get(_origin_path_key(file_part))
+            if owners:
+                return owners
+        return self._label_owners(place)
+
+    def _label_owners(self, text: str) -> set[type[Component]]:
+        # The longest import path that the text starts with names the
+        # component, so `pkg.mod.Card.JsData.field` finds `pkg.mod.Card`.
+        candidate = text
+        while candidate:
+            owners = self._by_label.get(candidate)
+            if owners:
+                return owners
+            candidate, _, _ = candidate.rpartition(".")
+        return set()
+
+
+def _resolved_messages_file(engine: Citry, comp_cls: type[Component]) -> Path | None:
+    """The messages file a component reads, resolved as for its template file, or ``None``."""
+    with suppress(Exception):
+        owner, _inline, filepath = _find_pair_declaration(comp_cls, "messages", "messages_file")
+        if isinstance(filepath, (str, Path)):
+            inspection = _inspect_asset_path(filepath, owner_dir=module_dir(owner), search_dirs=engine.settings.dirs)
+            if inspection.resolved_path is not None:
+                return inspection.resolved_path.resolve()
+    return None
+
+
+# A place with an optional `:line:column` and an optional `(component label)`.
+_ORIGIN_SHAPE = re.compile(r"(?P<place>.+?)(?::\d+:\d+)?(?: \((?P<label>[^()]*)\))?")
+
+
+def _origin_path_key(place: str) -> str:
+    """The text two origins share when they name the same file, however each spelled the path."""
+    if not (place.startswith(("/", "\\")) or re.match(r"[A-Za-z]:[\\/]", place)):
+        return place
+    with suppress(OSError, ValueError):
+        return str(Path(place).resolve())
+    return place
 
 
 def _check_registry(
     engine: Citry,
     registrations: Mapping[str, type[Component]],
     rules: Mapping[str, TagRules],
-) -> tuple[list[CheckFinding], list[str]]:
+) -> tuple[list[CheckFinding], list[str], dict[str, set[type[Component]]]]:
     """
     Read each authored registry template directly and continue after failures.
 
-    Returns the findings, and the notes about checks that could not run,
-    such as link paths no web framework integration could answer for.
+    Returns the findings, the notes about checks that could not run, such
+    as link paths no web framework integration could answer for, and the
+    components that use each template, script, and stylesheet, keyed by
+    the origin its findings name.
     """
     known_names = {name.lower() for name in registrations}
     unique_classes = {id(comp_cls): comp_cls for comp_cls in registrations.values()}
@@ -422,6 +594,7 @@ def _check_registry(
                 )
             )
         findings.extend(_counted_in(_check_js_data_types(engine, comp_cls), "file"))
+        findings.extend(_undeclared_template_data_key_findings(engine, comp_cls))
         _collect_browser_source(engine, comp_cls, browser_sources)
         _collect_browser_source(engine, comp_cls, css_sources, kind="css")
         class_label = _class_label(comp_cls)
@@ -622,7 +795,12 @@ def _check_registry(
     findings.extend(_css_class_findings(engine, css_templates, known_css))
     for css_source in css_sources.values():
         findings.extend(_counted_in(_check_css_source(engine, css_source, known_css), css_source.source_kind))
-    return findings, links.notes()
+    origin_consumers: dict[str, set[type[Component]]] = {}
+    for template_source in sources.values():
+        origin_consumers.setdefault(template_source.origin, set()).update(template_source.consumers)
+    for browser_source in (*browser_sources.values(), *css_sources.values()):
+        origin_consumers.setdefault(browser_source.origin, set()).update(browser_source.consumers)
+    return findings, links.notes(), origin_consumers
 
 
 def _checker_foreign_options(
@@ -789,7 +967,7 @@ def _check_template(
                 end_index=diagnostic.end_index,
             )
         ]
-    findings = _unknown_component_findings(source, template, known_names) if known_names is not None else []
+    findings = run(_unknown_component_findings(source, template, known_names)) if known_names is not None else []
     nested_parser = lambda value: parse_template(  # noqa: E731 - parser hook is passed as a value
         value,
         user_rules=dict(rules) if rules is not None else None,
@@ -941,9 +1119,15 @@ def _check_template(
                 i18n_configured=i18n_configured,
             )
         )
+    unknown_slot_prop_findings = (
+        _unknown_slot_prop_findings(engine, template, component_templates or {}, parse_nested=nested_parser)
+        if engine is not None
+        else ()
+    )
     for finding in (
         *lint_unknown_vue_variables(browser_hosts, vue_lint_consumers),
         *lint_vue_python_variables(browser_hosts, vue_lint_consumers),
+        *unknown_slot_prop_findings,
     ):
         line, column = _byte_offset_coordinates(source.content, finding.start_index)
         end_line, end_column = _byte_offset_coordinates(source.content, finding.end_index)
@@ -1418,7 +1602,7 @@ def _i18n_template_findings(
                 fallback_severity=fallback_severity,
             )
         )
-    for node in _trans_nodes(template):
+    for node in run(_trans_nodes(template)):
         attrs = {attr.key.content: attr for attr in node.start_tag.attrs}
         message_attr = attrs.get("message")
         if message_attr is None or message_attr.inner_value is None:
@@ -1520,7 +1704,7 @@ def _browser_i18n_type_accepts(expected: str, actual: JsonWireType) -> bool:
     return True if allowed is None or actual.kind == "unknown" else actual.kind in allowed
 
 
-def _trans_nodes(template: Template) -> list[Any]:
+def _trans_nodes(template: Template) -> Generator[Call, Any, list[Any]]:
     result: list[Any] = []
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -1530,7 +1714,7 @@ def _trans_nodes(template: Template) -> list[Any]:
             result.append(node)
         body = getattr(node, "body", None)
         if body is not None:
-            result.extend(_trans_nodes(body))
+            result.extend((yield Call(_trans_nodes, body)))
     return result
 
 
@@ -1552,8 +1736,10 @@ def _trans_contract_findings(
     if values_attr is not None and values_attr.inner_value is not None:
         values = None
         try:
-            expression = ast.parse(values_attr.inner_value.content, mode="eval").body
-        except SyntaxError:
+            # The value may start on an indented line of a multi-line
+            # attribute, which only the wrapped parse accepts.
+            expression = parse_authored_expression(values_attr.inner_value.content).body
+        except (SyntaxError, ValueError):
             expression = None
         if isinstance(expression, ast.Dict) and all(
             key is not None and isinstance(key, ast.Constant) and type(key.value) is str for key in expression.keys
@@ -1875,6 +2061,12 @@ def _checker_lint_consumer(engine: Citry, component: type[Component]) -> Templat
                 namespace_policy = kwargs_schema.namespace_policy
             else:
                 namespace_policy = "closed"
+    if lint.template_data_keys is not None:
+        # The component lists every key its template_data() returns, so the
+        # template may use only the listed keys, the keys Citry can read from
+        # the method, and the declared variables.
+        known_names.update(lint.template_data_keys)
+        namespace_policy = "closed"
     if lint.allows_extra_variables:
         namespace_policy = "allow-extra"
     return TemplateLintConsumer(
@@ -1882,6 +2074,56 @@ def _checker_lint_consumer(engine: Citry, component: type[Component]) -> Templat
         namespace_policy=namespace_policy,
         rule_unknown_template_variable=lint.rule_unknown_template_variable,
     )
+
+
+def _undeclared_template_data_key_findings(engine: Citry, component: type[Component]) -> list[CheckFinding]:
+    """
+    Report a key that template_data() provably returns but ``Lint.template_data_keys`` leaves out.
+
+    The list should name every key the method returns. A literal key it
+    leaves out still works in the template, because Citry adds the keys it
+    can read, but the list no longer says what the method returns. Only
+    keys written as literals count: the keys a helper adds are the reason
+    the list exists, and Citry cannot see them.
+    """
+    declared = _component_lint_info(engine, component).template_data_keys
+    if declared is None:
+        return []
+    component_info = engine.inspect_component(component)
+    kwargs_schema = component_info.schemas.kwargs
+    kwargs_fields = tuple(field.name for field in kwargs_schema.fields) if kwargs_schema.kind == "fields" else None
+    shape = _disk_template_data_shape(component, kwargs_fields)
+    # Key ranges are offsets in the file of the class that defines
+    # template_data(), which may be a base class.
+    owner = next(
+        (candidate for candidate in _static_class_mro(component) if "template_data" in _static_class_dict(candidate)),
+        None,
+    )
+    source_file = None if owner is None else _loaded_python_file(owner)
+    if shape is None or source_file is None:
+        return []
+    try:
+        with tokenize.open(source_file) as source_stream:
+            source = source_stream.read()
+    except (OSError, SyntaxError, UnicodeError):
+        return []
+    findings: list[CheckFinding] = []
+    known = set(declared)
+    for root in shape.roots:
+        if root.name in known or "literal" not in root.origins or not root.definitions:
+            continue
+        key_range = root.definitions[0].key_range
+        findings.append(
+            _source_finding(
+                origin=f"{source_file} ({_class_label(component)}.template_data)",
+                message=render_diagnostic(TEMPLATE_UNDECLARED_TEMPLATE_DATA_KEY, name=root.name),
+                code=TEMPLATE_UNDECLARED_TEMPLATE_DATA_KEY,
+                severity="warning",
+                coordinates=_lsp_range_coordinates(source, key_range),
+                source_kind="file",
+            )
+        )
+    return findings
 
 
 def _checker_alpine_lint_consumer(engine: Citry, component: type[Component]) -> AlpineAttributeLintConsumer:
@@ -1969,6 +2211,53 @@ def _emit_findings(
             ),
         )
     ]
+
+
+def _unknown_slot_prop_findings(
+    engine: Citry,
+    template: Template,
+    component_templates: Mapping[type[Component], str],
+    *,
+    parse_nested: Callable[[str], Template],
+) -> tuple[VueLintFinding, ...]:
+    """
+    Report ``v-slot`` keys that the receiving component's ``<c-slot>`` does not pass.
+
+    Each fill's component tag is looked up in the registry, and that
+    component's template is read for its ``<c-slot>`` tags. A tag that is not
+    registered, or whose template is unknown or does not parse, gets no
+    finding, because nothing proves which props its slots pass.
+    """
+    fills = scoped_fills(template, parse_nested=parse_nested)
+    if not fills:
+        return ()
+    receivers: dict[str, tuple[SlotOutlet, ...] | None] = {}
+    for fill in fills:
+        key = _ascii_lower(fill.tag)
+        if key in receivers:
+            continue
+        try:
+            receiver = engine.get(key.removeprefix("c-"))
+        except NotRegistered:
+            receivers[key] = None
+            continue
+        receivers[key] = _receiver_outlets(component_templates.get(receiver))
+    return lint_unknown_slot_props(fills, unknown_slot_props_for(receivers))
+
+
+@functools.lru_cache(maxsize=256)
+def _receiver_outlets(content: str | None) -> tuple[SlotOutlet, ...] | None:
+    """Return a receiving template's ``<c-slot>`` tags, kept for the process and keyed by the template text."""
+    if content is None:
+        return None
+    try:
+        parsed = parse_template(content)
+        # Template-valued attributes are parsed the same way, without the
+        # registry's tag rules. Those only add errors, such as for an unknown
+        # attribute or slot, and never change which `<c-slot>` tags are found.
+        return slot_outlets(parsed, parse_nested=parse_template)
+    except (SyntaxError, ValueError):
+        return None
 
 
 def _missing_component_key_findings(
@@ -2636,6 +2925,9 @@ def _checker_markup_lint_consumer(
     return MarkupLintConsumer(
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
         root_may_receive_attributes=_may_have_browser_code(component) and inherits_attributes,
+        # The engine's CSP policy decides whether its templates are checked
+        # for what a strict policy blocks.
+        csp=lint.security_csp,
     )
 
 
@@ -2896,7 +3188,9 @@ def _names_sent_as_written(value_source: str) -> list[_SentName]:
     value.
     """
     try:
-        node = ast.parse(value_source.strip(), mode="eval").body
+        # The value may come from inside a dict literal, where it can span
+        # lines without parentheses of its own.
+        node = parse_authored_expression(value_source.strip()).body
     except (SyntaxError, ValueError):
         return []
     names: list[_SentName] = []
@@ -2960,9 +3254,6 @@ _PLAIN_ATTRIBUTE_CLASSES = (object, type, ModuleType, SimpleNamespace)
 # code the value's own class defines. A Secret is a leaf the check reports.
 _PLAIN_JSON_LEAVES = (type(None), bool, int, float, str, Secret)
 _PLAIN_JSON_KEYS = (type(None), bool, int, float, str)
-# Frames that rendering has already used when it starts reading data, so a
-# part this close to Python's recursion limit is never reached.
-_RECURSION_MARGIN = 200
 
 
 def _is_one_of(cls: type, classes: tuple[type, ...]) -> bool:
@@ -3066,8 +3357,6 @@ class _OpaquePart:
     path: str
     # Whether the part is a dict key rather than a value.
     is_key: bool
-    # How many containers deep the part sits.
-    depth: int
 
 
 def _key_text(key: object) -> str:
@@ -3087,14 +3376,14 @@ def _first_opaque_part(value: object) -> _OpaquePart | None:
     only, so it runs none of it, and it does not recurse, so a deeply nested
     value cannot stop the check.
     """
-    pending: list[tuple[object, str, int]] = [(value, "", 0)]
+    pending: list[tuple[object, str]] = [(value, "")]
     seen: set[int] = set()
     while pending:
-        current, path, depth = pending.pop()
+        current, path = pending.pop()
         # Citry's own Const proxy sends what it wraps unchanged.
         unwrapped, current = _unwrap_const_markers(current)
         if not unwrapped:
-            return _OpaquePart(current, path, is_key=False, depth=depth)
+            return _OpaquePart(current, path, is_key=False)
         current_type = type(current)
         if _is_one_of(current_type, _PLAIN_JSON_LEAVES):
             continue
@@ -3107,15 +3396,15 @@ def _first_opaque_part(value: object) -> _OpaquePart | None:
             items = list(cast("dict[object, object]", current).items())
             for key, _item in items:
                 if not _is_one_of(type(key), _PLAIN_JSON_KEYS):
-                    return _OpaquePart(key, path, is_key=True, depth=depth)
+                    return _OpaquePart(key, path, is_key=True)
             # Reversed so the stack pops them in the order the JSON check reads them.
-            pending.extend((item, f"{path}{_key_text(key)}", depth + 1) for key, item in reversed(items))
+            pending.extend((item, f"{path}{_key_text(key)}") for key, item in reversed(items))
         elif current_type is list or current_type is tuple:
             seen.add(id(current))
             items = list(enumerate(cast("list[object]", current)))
-            pending.extend((item, f"{path}[{index}]", depth + 1) for index, item in reversed(items))
+            pending.extend((item, f"{path}[{index}]") for index, item in reversed(items))
         else:
-            return _OpaquePart(current, path, is_key=False, depth=depth)
+            return _OpaquePart(current, path, is_key=False)
     return None
 
 
@@ -3240,17 +3529,11 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         if opaque is not None:
             # A value reached through attributes is judged only when it is
             # plain data. A module constant that holds something else is
-            # reported only when no code of its own could make it pass, and
-            # only within the depth rendering can read. Rendering fails with
-            # RecursionError somewhat before Python's recursion limit,
-            # because frames are already in use, so the cutoff leaves room.
+            # reported only when no code of its own could make it pass.
+            # Rendering checks data at any depth and raises for such a part,
+            # so the part is reported however deeply it sits.
             name = _safe_class_text(type(opaque.value), "__name__")
-            if (
-                len(sent.path) > 1
-                or name is None
-                or opaque.depth >= sys.getrecursionlimit() - _RECURSION_MARGIN
-                or not _never_json(opaque.value, is_key=opaque.is_key)
-            ):
+            if len(sent.path) > 1 or name is None or not _never_json(opaque.value, is_key=opaque.is_key):
                 return None
             what = "a dict key" if opaque.is_key else "a value"
             return _ModuleValueIssue(
@@ -3262,10 +3545,7 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         except _SecretInBrowserDataError:
             # Rendering would raise for this value, so name the key that
             # holds the Secret, the way the runtime error does.
-            try:
-                path = _secret_key_path(value) or ""
-            except RecursionError:
-                path = ""
+            path = _secret_key_path(value) or ""
             return _ModuleValueIssue(
                 f"{label}{path} is a Secret; read the value on the server instead",
                 secret=True,
@@ -3274,10 +3554,6 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
             return _ModuleValueIssue(f"{label}: {exc}", secret=False)
         except ValueError as exc:
             return _ModuleValueIssue(f"{label}: {exc}", secret=False)
-        except RecursionError:
-            # A value nested too deeply for the JSON check is left
-            # unjudged, so one constant cannot stop the whole check.
-            return None
         return None
 
     return issue
@@ -3290,10 +3566,13 @@ def _function_local_names(source: str, function: ast.FunctionDef | ast.AsyncFunc
     Python's own symbol table decides, so a parameter, an assignment, an
     import, an `except ... as` name, a `match` capture, and a nested `def`
     all count, while a `global` name does not. None means the source could
-    not be read.
+    not be read, or that this interpreter has no symbol table (PyPy).
     """
     text = ast.get_source_segment(source, function)
     if text is None:
+        return None
+    # No symbol table means no answer, so the caller reads no module values.
+    if symtable is None:
         return None
     try:
         table = symtable.symtable(textwrap.dedent(text), "<js_data>", "exec")
@@ -3628,7 +3907,7 @@ def _unknown_component_findings(
     source: _TemplateSource,
     template: Template,
     known_names: set[str],
-) -> list[CheckFinding]:
+) -> Generator[Call, Any, list[CheckFinding]]:
     findings: list[CheckFinding] = []
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -3651,7 +3930,7 @@ def _unknown_component_findings(
                 )
         body = getattr(node, "body", None)
         if body is not None:
-            findings.extend(_unknown_component_findings(source, body, known_names))
+            findings.extend((yield Call(_unknown_component_findings, source, body, known_names)))
     return findings
 
 
@@ -3784,13 +4063,9 @@ def _byte_offset_coordinates(source: str, offset: int) -> tuple[int, int]:
     finding range whose text the checker holds goes through here, which keeps
     all rules on one numbering.
     """
-    prefix = source.encode("utf-8")[:offset].decode("utf-8")
     # Lines end where Python and editors end them (CR LF, CR, or LF), so a
     # Python file and the template inside it count lines the same way.
-    current = source_lines(prefix)[-1] if prefix else ""
-    if current.endswith(("\n", "\r")):
-        current = ""
-    return line_break_count(prefix), len(current.encode("utf-16-le")) // 2
+    return byte_offset_position(source, offset)
 
 
 def _byte_range_coordinates(source: str, start_index: int, end_index: int) -> tuple[int, int, int, int, int, int]:

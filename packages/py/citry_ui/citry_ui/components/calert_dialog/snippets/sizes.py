@@ -25,7 +25,11 @@ class AlertDialogSizes(Component):
             <c-fill name="title">{{ size }} decision surface</c-fill>
             <c-fill name="description">Compare the responsive width for this size.</c-fill>
             <c-fill name="cancel" data="{cancel_attrs}">
-              <c-CButton #c-key="f'{size}-cancel'" c-attrs="cancel_attrs" variant="outline">Cancel</c-CButton>
+              <c-CButton
+                #c-key="f'{size}-cancel'"
+                c-attrs="cancel_attrs"
+                variant="outline"
+              >Cancel</c-CButton>
             </c-fill>
             <c-fill name="action" data="{action_attrs}">
               <c-CButton #c-key="f'{size}-action'" c-attrs="action_attrs">Continue</c-CButton>

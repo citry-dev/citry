@@ -25,7 +25,11 @@ class BreadcrumbOverflow(Component):
     template = """
       <c-CCol class_="breadcrumb-overflow">
         <c-CBreadcrumbs c-items="items" label="Wrapping book location" />
-        <c-CBreadcrumbs c-items="items" label="Scrolling book location" c-wrap="False" />
+        <c-CBreadcrumbs
+          c-items="items"
+          label="Scrolling book location"
+          c-wrap="False"
+        />
       </c-CCol>
     """
     css = """

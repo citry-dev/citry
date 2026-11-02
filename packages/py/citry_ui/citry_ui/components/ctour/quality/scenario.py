@@ -1,7 +1,5 @@
 """Shared Tour scenario used by repository quality tools."""
 
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from citry import Citry, Component
 
 
@@ -22,7 +20,10 @@ def tour_states_component(app: Citry) -> type[Component]:
               id="quality-tour"
               c-open="True"
               c-attrs="quality_attrs"
-              :open="open" :active="active" :onOpenChange="(next,detail)=>{last=detail.reason;open=next}" :onActiveChange="(next,detail)=>{last=detail.reason;active=next}"
+              :open="open"
+              :active="active"
+              :onOpenChange="(next,detail)=>{last=detail.reason;open=next}"
+              :onActiveChange="(next,detail)=>{last=detail.reason;active=next}"
             >
               <c-CTourStep value="intro" c-describe="True">
                 <c-fill name="title">Welcome to Tour quality</c-fill>
@@ -30,7 +31,11 @@ def tour_states_component(app: Citry) -> type[Component]:
                   This centered step exercises dialog naming, progress, actions, and focus.
                 </c-fill>
               </c-CTourStep>
-              <c-CTourStep value="target" target_id="quality-tour-target" placement="bottom-end">
+              <c-CTourStep
+                value="target"
+                target_id="quality-tour-target"
+                placement="bottom-end"
+              >
                 <c-fill name="title">A target-aware step</c-fill>
                 <c-fill name="default">
                   The target remains interactive while geometry follows viewport changes

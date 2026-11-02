@@ -104,22 +104,45 @@ each `LibraryComponent` class, after its methods and its `template`, `js`, and
 `css` assets. Do not put source messages at the top of the class beside its
 input schemas.
 
-Each Citry UI component checks its public inputs itself, with an error that
-names the input and the accepted values (for example "Tabs loop must be a
-bool, got 'x'."), and some accept values their annotations do not name, such
-as `heading_level="2"`. Citry's general input type check would replace those
-messages and reject such values, so each definition, including the internal
-ones, turns it off with a nested `Lint` class after its input schemas:
+Citry's general input type check rejects an input whose type does not match
+its annotation, or a value outside a listed choice (a `Literal`), with a
+`TypeError` that names the input and the expected type. Leave it on unless a
+component has a reason to turn it off:
+
+- **Internal components** (`CInternal*`) keep it on. Their inputs come only
+  from Citry UI's own templates, so a failure there is a Citry UI bug.
+- **Public components keep it on** when their annotations name every value
+  they accept. Their own checks then run after Citry's and cover what an
+  annotation cannot say, such as a number range or a non-empty string.
+  Keep those checks complete for types and choices too: an app can turn
+  Citry's check off, and then a component's own checks are all that stand
+  between a hostile value, such as `Markup`, and the page.
+- **Turn it off on a public component** only when its own checks give a
+  clearly better error than Citry's, for example when the annotation lists
+  dozens of names, or lists each number twice (as a number and as text) and
+  the component's own error can say that in a few words, or when it accepts
+  values its annotations do not name. Do this with a nested `Lint` class after its input schemas,
+  and say why in a comment:
 
 ```python
-class CTabs(LibraryComponent):
+class CDisclosure(LibraryComponent):
     class Kwargs: ...
 
     class Slots: ...
 
+    # heading_level allows 2 to 6 as a number or as text. Citry's error would
+    # print all 10 values twice; Citry UI's says it in one line.
     class Lint:
         check_input_types = False
 ```
+
+When `template_data()` builds its result through a helper, which most
+Citry UI components do, list every key it returns in the same `Lint`
+class with `template_data_keys`. `citry check --include-libraries` and the
+editor then check the template against that list. When you add a key to
+the helper and read it in the template, add it to the list too:
+`test_citry_ui_templates_check_clean_against_their_declared_keys` fails
+until you do.
 
 ## Edit readable assets and ship checked production files
 

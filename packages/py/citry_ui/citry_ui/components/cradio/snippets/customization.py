@@ -7,7 +7,11 @@ citry.register_library(citry_ui)
 class RadioCustomization(Component):
     template = """
       <div class="radio-custom">
-        <c-CRadioGroup name="collection" value="fern" orientation="horizontal">
+        <c-CRadioGroup
+          name="collection"
+          value="fern"
+          orientation="horizontal"
+        >
           <c-fill name="label">Plant collection</c-fill>
           <c-fill name="default">
             <c-CRadio value="fern">Fern house</c-CRadio>

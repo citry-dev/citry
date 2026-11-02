@@ -181,9 +181,29 @@ class CCarousel(LibraryComponent):
     class Slots:
         default: SlotInput[CCarouselDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "catalog_next_label",
+            "catalog_picker_label",
+            "catalog_previous_label",
+            "catalog_role_description",
+            "controls",
+            "disabled",
+            "draggable",
+            "index",
+            "indicators",
+            "label",
+            "loop",
+            "next_label",
+            "orientation",
+            "picker_label",
+            "previous_label",
+            "role_description",
+            "root_id",
+            "size",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_carousel_snapshot", None)
@@ -319,7 +339,11 @@ class CCarousel(LibraryComponent):
             data-citry-ui-part="next"
           ><span aria-hidden="true">&#x2192;</span></button>
         </div>
-        <div tabindex="0" data-citry-carousel-viewport data-citry-ui-part="viewport">
+        <div
+          tabindex="0"
+          data-citry-carousel-viewport
+          data-citry-ui-part="viewport"
+        >
           <div data-citry-ui-part="track"><c-slot required /></div>
         </div>
         <div
@@ -738,10 +762,6 @@ class CCarouselSlide(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CCarouselSlideDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         provided = self.inject(_CONTEXT_KEY, None)

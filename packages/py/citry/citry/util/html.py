@@ -39,6 +39,8 @@ from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup, escape
 
+from citry.util import deep_json
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -356,7 +358,16 @@ def script_json(value: object, *, sort_keys: bool = False, ensure_ascii: bool = 
 
     Non-finite numbers are rejected, because ``JSON.parse`` cannot read them.
     """
-    text = json.dumps(value, allow_nan=False, separators=(",", ":"), sort_keys=sort_keys, ensure_ascii=ensure_ascii)
+    try:
+        text = json.dumps(
+            value, allow_nan=False, separators=(",", ":"), sort_keys=sort_keys, ensure_ascii=ensure_ascii
+        )
+    except RecursionError:
+        # On Python 3.11 and PyPy the encoder counts each nested container
+        # against the recursion limit, and later CPython versions against a
+        # fixed limit of their own, so deep enough data stops it. Writing the
+        # same text with a stack uses a fixed number of frames.
+        text = deep_json.dumps(value, sort_keys=sort_keys, ensure_ascii=ensure_ascii)
     return text.replace("<", "\\u003c")
 
 

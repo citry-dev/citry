@@ -199,9 +199,20 @@ class CSortable(LibraryComponent):
     class Slots:
         default: SlotInput[CSortableDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "catalog",
+            "disabled",
+            "form",
+            "labels",
+            "layout",
+            "name",
+            "order",
+            "registry",
+            "root_id",
+            "size",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_sortable_snapshot", None)
@@ -282,9 +293,17 @@ class CSortable(LibraryComponent):
       <c-CInternalSortableDeclarations><c-slot required /></c-CInternalSortableDeclarations>
       <c-CInternalSortable
         ref="root"
-        c-root_id="root_id" c-order="order" c-name="name" c-form="form"
-        c-layout="layout" c-disabled="disabled" c-size="size"
-        c-catalog="catalog" c-labels="labels" c-attrs="attrs" c-registry="registry"
+        c-root_id="root_id"
+        c-order="order"
+        c-name="name"
+        c-form="form"
+        c-layout="layout"
+        c-disabled="disabled"
+        c-size="size"
+        c-catalog="catalog"
+        c-labels="labels"
+        c-attrs="attrs"
+        c-registry="registry"
       />
     """
 
@@ -330,10 +349,6 @@ class CSortableItem(LibraryComponent):
         default: SlotInput[CSortableItemSlotData] | None = None
         handle: SlotInput[CSortableItemSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         validate_boolean("CSortableItem", "disabled", kwargs.disabled)
         registry = _registry(self)
@@ -368,10 +383,6 @@ class CInternalSortableDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CSortableDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -404,10 +415,6 @@ class CInternalSortable(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declarations = kwargs.registry.items
@@ -480,7 +487,9 @@ class CInternalSortable(LibraryComponent):
 
     template = """
       <div
-        class="cui-sortable" c-bind="attrs" c-id="root_id"
+        class="cui-sortable"
+        c-bind="attrs"
+        c-id="root_id"
         data-citry-ui-part="sortable"
       >
         <ol
@@ -501,7 +510,11 @@ class CInternalSortable(LibraryComponent):
           <c-for each="item in items"><c-CInternalSortableItem c-item="item" c-name="name" c-form="form" c-disabled="disabled" c-catalog_handle="catalog_handle" /></c-for>
         </ol>
         <p data-citry-sortable-instructions data-citry-ui-part="instructions">{{ instructions }}</p>
-        <div aria-live="polite" aria-atomic="true" data-citry-ui-part="status"></div>
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          data-citry-ui-part="status"
+        ></div>
       </div>
     """
 
@@ -511,7 +524,8 @@ class CInternalSortableItem(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        # A read-only Mapping, so the parent's dict of narrower values fits it.
+        item: Mapping[str, object]
         name: str | None
         form: str | None
         disabled: bool
@@ -521,9 +535,24 @@ class CInternalSortableItem(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "button_disabled",
+            "catalog_handle",
+            "content",
+            "declaration",
+            "form",
+            "handle",
+            "handle_label",
+            "index",
+            "item_id",
+            "label",
+            "morph_key",
+            "name",
+            "root_disabled",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item
@@ -547,7 +576,15 @@ class CInternalSortableItem(LibraryComponent):
         }
 
     template = """
-      <li class="cui-sortable__item" #c-key="morph_key" c-bind="attrs" c-id="item_id" c-data-label="label" data-citry-sortable-item data-citry-ui-part="item">
+      <li
+        class="cui-sortable__item"
+        #c-key="morph_key"
+        c-bind="attrs"
+        c-id="item_id"
+        c-data-label="label"
+        data-citry-sortable-item
+        data-citry-ui-part="item"
+      >
         <button
           c-if="catalog_handle"
           type="button"
@@ -566,7 +603,15 @@ class CInternalSortableItem(LibraryComponent):
           data-citry-ui-part="handle"
         ><c-if cond="handle is not None">{{ handle }}</c-if><c-else><span aria-hidden="true">⠿</span></c-else></button>
         <div data-citry-ui-part="content">{{ content }}</div>
-        <input c-if="name is not None" type="hidden" c-name="name" c-form="form" c-value="value" c-disabled="root_disabled" data-citry-sortable-input />
+        <input
+          c-if="name is not None"
+          type="hidden"
+          c-name="name"
+          c-form="form"
+          c-value="value"
+          c-disabled="root_disabled"
+          data-citry-sortable-input
+        />
       </li>
     """
 

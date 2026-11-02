@@ -9,8 +9,8 @@ inputs:
     entries:
       - {id: value, name: value, type: 'Sequence[str]', default: {kind: literal, value: '()'}, effect: Supplies the accepted continuous root-to-Option path.}
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets root and related popup IDs.}
-      - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: Gives the trigger an explicit accessible name.}
-      - {id: aria-labelledby, name: aria_labelledby, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the trigger with external labeling elements.}
+      - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: 'Starts the trigger''s name, which ends with the path the trigger shows, and names the tree. Ignored when `aria_labelledby` is set.'}
+      - {id: aria-labelledby, name: aria_labelledby, type: 'str | None', default: {kind: literal, value: null}, effect: 'Names the trigger by the referenced elements, followed by the path it shows, and names the tree by them.'}
       - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Emits one hidden input per accepted path segment.}
       - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates hidden inputs with an external form.}
       - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Choose an option}, effect: Supplies empty trigger text or overrides its catalog message.}
@@ -60,7 +60,7 @@ events:
     component: CCascader
     entries:
       - {id: value-change, name: onValueChange, signature: {display: '(value: string[], detail: CCascaderValueChangeDetail) => void', interfaces: [CCascaderValueChangeDetail]}, trigger: An allowed Option is activated., detail: {display: '{value, labels, previousValue, controlled, source, option, sourceEvent}', interfaces: [CCascaderValueChangeDetail]}, behavior: Commits only while uncontrolled.}
-      - {id: open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CCascaderOpenChangeDetail) => void', interfaces: [CCascaderOpenChangeDetail]}, trigger: "The popup is requested open or closed, or disabling closes an open popup.", detail: {display: '{open, reason, sourceEvent}', interfaces: [CCascaderOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
+      - {id: open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CCascaderOpenChangeDetail) => void', interfaces: [CCascaderOpenChangeDetail]}, trigger: "The popup is requested open or closed, disabling closes an open popup, or a dialog or popover around the cascader closes it.", detail: {display: '{open, reason, sourceEvent}', interfaces: [CCascaderOpenChangeDetail]}, behavior: "Commits only while uncontrolled, except that disabling or a closing ancestor closes the popup either way."}
 
 methods: []
 
@@ -146,7 +146,7 @@ interfaces:
     name: CCascaderOpenChangeDetail
     entries:
       - {id: open, name: open, type: bool, meaning: Requested popup visibility.}
-      - {id: reason, name: reason, type: str, meaning: Trigger selection escape tab outside or disabled.}
+      - {id: reason, name: reason, type: str, meaning: Trigger selection escape tab outside disabled or ancestor.}
       - {id: source-event, name: sourceEvent, type: object, meaning: Native source Event.}
 
 translations:

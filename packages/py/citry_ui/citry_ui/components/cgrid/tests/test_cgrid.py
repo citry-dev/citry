@@ -178,7 +178,7 @@ def test_intrinsic_mode_uses_one_plain_length_and_no_count_snapshot():
         ({"cols": True}, TypeError, "must be an integer"),
         ({"cols": "two"}, TypeError, "must be an integer"),
         ({"sm": "2.5"}, TypeError, "must be an integer or None"),
-        ({"min_col": 12}, TypeError, "must be a string or None"),
+        ({"min_col": 12}, TypeError, r"CGrid\.Kwargs\.min_col expects str \| None"),
         ({"min_col": "0rem"}, ValueError, "one positive"),
         ({"min_col": "-1rem"}, ValueError, "one positive"),
         ({"min_col": "16%"}, ValueError, "one positive"),
@@ -186,9 +186,9 @@ def test_intrinsic_mode_uses_one_plain_length_and_no_count_snapshot():
         ({"min_col": "16rem; color: red"}, ValueError, "one positive"),
         ({"min_col": "16rem", "cols": 2}, ValueError, "cannot be combined"),
         ({"min_col": "16rem", "lg": 3}, ValueError, "cannot be combined"),
-        ({"gap": "xxl"}, ValueError, "gap must be one of"),
-        ({"tag": "table"}, ValueError, "tag must be one of"),
-        ({"attrs": []}, TypeError, "attrs must be a mapping"),
+        ({"gap": "xxl"}, TypeError, r"CGrid\.Kwargs\.gap expects Literal\["),
+        ({"tag": "table"}, TypeError, r"CGrid\.Kwargs\.tag expects Literal\["),
+        ({"attrs": []}, TypeError, r"CGrid\.Kwargs\.attrs expects Mapping\[str, object\] \| None"),
     ],
 )
 def test_grid_rejects_invalid_and_conflicting_inputs(kwargs, error, match):
@@ -203,7 +203,7 @@ def test_grid_rejects_invalid_and_conflicting_inputs(kwargs, error, match):
         ({"span": 13}, ValueError, "between 1 and 12"),
         ({"span": False}, TypeError, "must be an integer"),
         ({"md": "4.5"}, TypeError, "must be an integer or None"),
-        ({"tag": "nav"}, ValueError, "tag must be one of"),
+        ({"tag": "nav"}, TypeError, r"CGridItem\.Kwargs\.tag expects Literal\["),
     ],
 )
 def test_grid_item_rejects_invalid_inputs(kwargs, error, match):
@@ -214,11 +214,11 @@ def test_grid_item_rejects_invalid_inputs(kwargs, error, match):
 @pytest.mark.parametrize(
     ("component", "kwargs", "error", "match"),
     [
-        (CContainer, {"fluid": 1}, TypeError, "fluid must be a bool"),
+        (CContainer, {"fluid": 1}, TypeError, r"CContainer\.Kwargs\.fluid expects bool"),
         (CContainer, {"fluid": True, "size": "lg"}, ValueError, "non-default size"),
-        (CContainer, {"size": "wide"}, ValueError, "size must be one of"),
-        (CContainer, {"gutter": "xxl"}, ValueError, "gutter must be one of"),
-        (CContainer, {"tag": "header"}, ValueError, "tag must be one of"),
+        (CContainer, {"size": "wide"}, TypeError, r"CContainer\.Kwargs\.size expects Literal\["),
+        (CContainer, {"gutter": "xxl"}, TypeError, r"CContainer\.Kwargs\.gutter expects Literal\["),
+        (CContainer, {"tag": "header"}, TypeError, r"CContainer\.Kwargs\.tag expects Literal\["),
     ],
 )
 def test_container_rejects_invalid_and_inactive_configuration(component, kwargs, error, match):

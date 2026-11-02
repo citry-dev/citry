@@ -233,7 +233,7 @@ def main() -> int:
         },
         "combinedBundle": {
             "rawBytes": len(combined),
-            "gzipBytes": len(gzip.compress(combined, mtime=0)),
+            "gzipBytes": len(gzip.compress(combined, compresslevel=9, mtime=0)),
         },
     }
     if args.timings:

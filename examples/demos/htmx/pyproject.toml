@@ -2,7 +2,7 @@
 name = "citry-demo-htmx"
 version = "0.1.0"
 description = "HTMX examples rendered with FastAPI and Citry"
-requires-python = ">=3.10,<4"
+requires-python = ">=3.11,<4"
 dependencies = [
   "citry>=0.6.0",
   "fastapi>=0.141,<1",

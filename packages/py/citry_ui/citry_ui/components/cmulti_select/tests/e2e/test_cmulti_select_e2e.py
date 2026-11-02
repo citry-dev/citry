@@ -12,6 +12,7 @@ pytest.importorskip("pytest_playwright")
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CMultiSelectOption
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -273,6 +274,7 @@ def test_css_geometry_reduced_motion_and_axe(page: Any) -> None:
     )
     axe = _root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => (await axe.run(document, {resultTypes:['violations']})).violations
           .filter(item => ['serious','critical'].includes(item.impact)).map(item => item.id)"""

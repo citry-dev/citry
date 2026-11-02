@@ -41,7 +41,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from difflib import get_close_matches
 from inspect import getattr_static
-from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast, final
 
 from citry._class_introspection import (
     _component_declaration_generation,
@@ -75,6 +75,7 @@ from citry.assets import _TEMPLATE_CACHE, load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement, _PreparedCallMetadata
 from citry.citry_render import (
+    _PRINT_IN_MANY_PLACES_ADVICE,
     _VALUE_CONTEXT,
     CitryRender,
     DeferredComponent,
@@ -105,6 +106,7 @@ from citry.ext.dependencies.extension import _DependencyCacheCapture
 from citry.ext.dependencies.scripts import has_component_asset
 from citry.ext.dependencies.types import DependencyRecord
 from citry.nodes import (
+    BodySteps,
     ComponentNode,
     ElementAttrsNode,
     ElementKeyNode,
@@ -119,6 +121,7 @@ from citry.nodes import (
     SlotNode,
     StaticHtmlAttr,
     TemplateHtmlAttr,
+    _CarriedStopIteration,
 )
 from citry.slots import Slot
 from citry.util.exception import (
@@ -128,13 +131,13 @@ from citry.util.exception import (
 )
 from citry.util.html import Markup, escape
 from citry.util.id import gen_render_id, validate_render_id
-from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
+from citry.util.logger import is_tracing, logger, trace_component_msg, trace_node_msg
 from citry.util.misc import get_fields, is_generator, to_dict
 from citry_core.template_parser import ForeignSpan, ParseOptions, compile_template, parse_template
 
 if TYPE_CHECKING:
     from collections import OrderedDict
-    from collections.abc import Callable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
     from contextlib import AbstractContextManager
 
     from citry._vue.direct import DirectExecutionFrame
@@ -720,6 +723,18 @@ def _simple_vue_record(
         and component_class.citry.mode != "development"
         else None
     )
+    # A template nested past the native path's depth limits renders the same,
+    # only more slowly, so a debug message is enough. It is cleared once
+    # logged, so it appears about once per template (twice if two threads
+    # build the plan at the same moment).
+    if native is None and leaf_node.native_depth_refusal is not None:
+        reason = leaf_node.native_depth_refusal
+        leaf_node.native_depth_refusal = None
+        logger.debug(
+            "Citry renders the simple='vue' component %s with its Python path, because %s.",
+            component_class.__name__,
+            reason,
+        )
     leaf = (
         leaf_node.render_static_instance_free(
             variables,
@@ -1183,7 +1198,10 @@ def _settle_render(
                 root_generator,
             )
         )
-    stack.extend(reversed(_scan_deferred(root_render, child_depth)))
+    # Shared by every scan of this run, so content printed in two places is
+    # caught even when two components' outputs print it.
+    scans = _QueueScans()
+    stack.extend(reversed(_scan_deferred(root_render, child_depth, scans)))
 
     root_result = root_render
 
@@ -1237,7 +1255,11 @@ def _settle_render(
                 depth=task.depth,
             )
         )
-        stack.extend(reversed(_scan_deferred(new_render, task.depth + 1)))
+        # The replacement may hold the output it replaces (a hook that
+        # returns or wraps what it received); that output moved, so its lists
+        # are not printed twice.
+        scans.forget(old)
+        stack.extend(reversed(_scan_deferred(new_render, task.depth + 1, scans)))
 
     def settle(task: _FinalizeTask, error: Exception | None) -> CitryRender | None:
         # Settle a component whose subtree has finished rendering (or, when
@@ -1399,7 +1421,7 @@ def _settle_render(
                 depth=depth,
             )
         )
-        stack.extend(reversed(_scan_deferred(child.render, depth + 1)))
+        stack.extend(reversed(_scan_deferred(child.render, depth + 1, scans)))
 
     while stack:
         task = stack.pop()
@@ -1584,21 +1606,94 @@ class _InitialRender(NamedTuple):
     cache_hit: bool = False
 
 
+class _QueueScans:
+    """
+    What the scans of one render queue run have reached, to catch content printed in two places.
+
+    The render queue (the loop in ``_settle_render``) scans each component's
+    output for the child components still to render. One render printed in
+    two places, by one template or by a component and a child it passes the
+    value to, reaches the same parts list twice; queueing its components
+    twice would render each of them twice, and the second render would find
+    its place taken. A copied parts list holds the same placeholders, so the
+    placeholders are tracked too. The values keep each list and placeholder
+    alive for the run, so an ``id`` is never reused while it is remembered.
+    """
+
+    __slots__ = ("placeholders", "walked")
+
+    def __init__(self) -> None:
+        # Each entered parts list.
+        self.walked: dict[int, list[RenderPart]] = {}
+        # Each queued placeholder (a DeferredComponent or a row of a call
+        # run), with the parts list it was queued from.
+        self.placeholders: dict[int, tuple[object, list[RenderPart]]] = {}
+
+    def forget(self, render: CitryRender) -> None:
+        """
+        Forget the lists and placeholders reachable from ``render``.
+
+        An ``on_render`` hook may return or wrap the output it received. The
+        replacement moves that output rather than printing it a second time,
+        so its lists are scanned again as new.
+        """
+        pending: list[CitryRender] = [render]
+        seen: set[int] = set()
+        while pending:
+            current = pending.pop()
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            self.walked.pop(id(current.parts), None)
+            for part in current.parts:
+                if type(part) is str:
+                    continue
+                if isinstance(part, DeferredComponent) or type(part) is _DeferredRunRow:
+                    self.placeholders.pop(id(part), None)
+                elif isinstance(part, CitryRender):
+                    pending.append(part)
+
+
+def _shared_content_error(message: str, parent_context: CitryContext) -> RuntimeError:
+    """Build the error for content printed in two places, naming the component whose output prints it."""
+    error = RuntimeError(message)
+    # Name the component whose output prints it, as a render error from
+    # that component would. Raised while a component's output is queued,
+    # this error skips on_render error handling, as the nesting-depth error
+    # does: it is a mistake in the code, and a fallback would hide it.
+    # (Raised from an on_render replacement, it goes to that component's own
+    # hook or extensions first, then to its ancestors, like any error in that
+    # output.)
+    set_component_error_message(error, _component_path(parent_context.component))
+    return error
+
+
 def _scan_deferred_parts(
     parts: list[RenderPart],
     parent_context: CitryContext,
     tasks: list[_RenderTask | _ContextMergeTask | _RunTask],
     depth: int,
+    scans: _QueueScans | None = None,
 ) -> bool:
     """Append child work in source order at ``depth``, merging contexts after their children."""
+    if scans is None:
+        scans = _QueueScans()
     initial_count = len(tasks)
     stack: list[tuple[Iterator[tuple[int, RenderPart]], list[RenderPart], CitryContext, int]] = [
         (iter(enumerate(parts)), parts, parent_context, initial_count)
     ]
-    # The parts lists this scan has entered. One render printed in two places
-    # reaches its list twice; queueing its components twice would render each
-    # of them twice, and the second render would find its place taken.
-    walked = {id(parts)}
+    scans.walked.setdefault(id(parts), parts)
+
+    def queue_placeholder(placeholder: object, in_parts: list[RenderPart]) -> None:
+        # A placeholder queued again from another list sits in a copy of a
+        # list the run already scanned; rendering it again would find its
+        # place taken. Repeated within one list, as an extension hook may
+        # do, it renders at each of its positions.
+        queued = scans.placeholders.get(id(placeholder))
+        if queued is not None and queued[1] is not in_parts:
+            raise _shared_content_error(_SHARED_UNRENDERED_MESSAGE, parent_context)
+        scans.placeholders[id(placeholder)] = (placeholder, in_parts)
+
     while stack:
         entries, current_parts, context, task_count = stack[-1]
         try:
@@ -1613,6 +1708,7 @@ def _scan_deferred_parts(
         if type(part) is str:
             continue
         if isinstance(part, DeferredComponent):
+            queue_placeholder(part, current_parts)
             tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context), depth))
         elif type(part) is _DeferredRunRow:
             # Rows of one run next to each other would each get a task, one
@@ -1633,6 +1729,8 @@ def _scan_deferred_parts(
             # Skip the rows just taken, so the walk resumes after them.
             for _ in range(end - i - 1):
                 next(entries)
+            for row in rows:
+                queue_placeholder(row, current_parts)
             tasks.append(_RunTask(run, current_parts, tuple(rows), tuple(positions), 0, context, depth))
         elif type(part) is SimpleVueRecord:
             # A root simple='vue' render holds its called children in its
@@ -1643,37 +1741,37 @@ def _scan_deferred_parts(
         else:
             unwrapped = part
             if isinstance(unwrapped, CitryRender):
-                if id(unwrapped.parts) in walked:
-                    # A finished render printed twice gives the queue nothing
-                    # to render, so only a render whose components are still
-                    # waiting is an error.
+                if id(unwrapped.parts) in scans.walked:
+                    # Components still waiting to render would render twice.
                     if _contains_deferred(unwrapped):
-                        error = RuntimeError(_SHARED_UNRENDERED_MESSAGE)
-                        # Name the component whose output prints it, as a
-                        # render error from that component would.
-                        set_component_error_message(error, _component_path(parent_context.component))
-                        # Raised while a component's output is queued, this
-                        # error skips on_render error handling, as the
-                        # nesting-depth error does: it is a mistake in the
-                        # code, and a fallback would hide it. (Raised from an
-                        # on_render replacement, it goes to that component's
-                        # own hook or extensions first, then to its
-                        # ancestors, like any error in that output.)
-                        raise error
+                        raise _shared_content_error(_SHARED_UNRENDERED_MESSAGE, parent_context)
+                    # Content whose components already rendered, printed
+                    # again, would put them on the page twice, whichever
+                    # output prints it. Content without components can
+                    # appear anywhere.
+                    if _holds_components(unwrapped.parts):
+                        raise _shared_content_error(_SHARED_RENDERED_MESSAGE, parent_context)
                     continue
-                walked.add(id(unwrapped.parts))
+                scans.walked[id(unwrapped.parts)] = unwrapped.parts
                 stack.append((iter(enumerate(unwrapped.parts)), unwrapped.parts, unwrapped.context, len(tasks)))
     return len(tasks) > initial_count
 
 
 _SHARED_UNRENDERED_MESSAGE = (
     "This content is printed in more than one place, but the components inside it have not rendered yet, "
-    "so each would render twice. Print it in one place, or make it once for each place: for a slot, call "
-    "the slot once for each place you print its result."
+    f"so each would render twice. {_PRINT_IN_MANY_PLACES_ADVICE}"
+)
+_SHARED_RENDERED_MESSAGE = (
+    "This content is printed in more than one place, but the components inside it can appear only once on "
+    f"the page. {_PRINT_IN_MANY_PLACES_ADVICE}"
 )
 
 
-def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _ContextMergeTask | _RunTask]:
+def _scan_deferred(
+    render: CitryRender,
+    depth: int,
+    scans: _QueueScans | None = None,
+) -> list[_RenderTask | _ContextMergeTask | _RunTask]:
     """
     Find the child components inside ``render`` that still need rendering.
 
@@ -1695,18 +1793,20 @@ def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _Conte
     component whose template wrote it), which is where the child's
     dependencies belong (see docs/design/component_slots.md section 8).
 
-    One render can appear in ``render`` more than once, for example a slot's
-    result that the template prints twice. The scan enters each parts list
-    once. When it reaches a list a second time and every component in it has
-    rendered, it skips the list; when the list still holds components waiting
-    to render, it raises ``RuntimeError``, because queueing them again would
-    render each one twice. The scan compares lists by identity and remembers
-    them only for one call, so a copy of a list that holds the same
-    placeholders, or one list reached from the outputs of two components, is
-    not caught here.
+    One render can appear more than once, for example a slot's result that
+    the template prints twice, or prints once and passes to a child that
+    prints it too. ``scans`` remembers, for the whole queue run, the parts
+    lists entered and the placeholders queued (see ``_QueueScans``). The
+    scan raises ``RuntimeError`` when it reaches a list a second time while
+    components in it still wait to render, when it reaches a list again
+    whose components already rendered (they would appear twice on the
+    page), or when it would queue a placeholder a second time from another
+    list, as a copied list does. It skips a list reached again that holds
+    no components. Without ``scans``, the scan remembers only its own
+    call.
     """
     tasks: list[_RenderTask | _ContextMergeTask | _RunTask] = []
-    _scan_deferred_parts(render.parts, render.context, tasks, depth)
+    _scan_deferred_parts(render.parts, render.context, tasks, depth, scans)
     return tasks
 
 
@@ -1775,6 +1875,27 @@ def _render_selection(render: CitryRender) -> tuple[set[str], set[int]]:
                 render_ids.add(render_id)
             pending.extend(current.parts)
     return render_ids, object_ids
+
+
+def _holds_components(parts: list[RenderPart]) -> bool:
+    """Whether a parts list holds a rendered component, including a ``simple='vue'`` record."""
+    pending: list[list[RenderPart]] = [parts]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        for part in current:
+            if type(part) is str:
+                continue
+            if type(part) is SimpleVueRecord:
+                return True
+            if isinstance(part, CitryRender):
+                if part.frame.render_id is not None:
+                    return True
+                pending.append(part.parts)
+    return False
 
 
 def _render_ids_from_parts(parts: list[RenderPart]) -> set[str]:
@@ -2540,6 +2661,49 @@ def _i18n_body_capture_is_empty(component: Component) -> bool:
 
 def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInteriorBody | PurePreparedPart | None:
     """Detach one ownership-free output part for a render-local pure plan."""
+    first = _capture_pure_leaf(part, context)
+    if first is not _DESCEND:
+        return cast("str | PurePreparedPart | None", first)
+    # A nested body is captured with a stack of (part iterator, plan) entries
+    # rather than a call per level, so this walk uses the same number of Python
+    # frames however deep the template nests.
+    stack: list[tuple[Iterator[RenderPart], list[str | PureInteriorBody | PurePreparedPart]]] = [
+        (iter(cast("CitryRender", part).parts), [])
+    ]
+    while True:
+        nested_parts, plan = stack[-1]
+        nested_part = next(nested_parts, _END)
+        if nested_part is _END:
+            stack.pop()
+            body = PureInteriorBody(tuple(plan))
+            if not stack:
+                return body
+            stack[-1][1].append(body)
+            continue
+        captured = _capture_pure_leaf(nested_part, context)
+        if captured is None:
+            # One part that cannot be replayed makes the whole part live.
+            return None
+        if captured is _DESCEND:
+            stack.append((iter(cast("CitryRender", nested_part).parts), []))
+            continue
+        plan.append(cast("str | PurePreparedPart", captured))
+
+
+# `_DESCEND` marks a render whose parts `_capture_pure_part` captures one level
+# down, and `_END` marks a used-up part iterator in this module's stack walks.
+_DESCEND = object()
+_END = object()
+
+
+def _capture_pure_leaf(part: object, context: CitryContext) -> str | PurePreparedPart | object | None:
+    """
+    Capture one part that holds no nested parts, or say how to handle it.
+
+    Returns the captured value, ``None`` when the part cannot be replayed,
+    or ``_DESCEND`` for a render of this component's own body, whose parts
+    are captured in turn.
+    """
     if isinstance(part, str):
         return part
     from citry._vue.capture import (  # noqa: PLC0415
@@ -2550,7 +2714,7 @@ def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInt
     )
 
     if type(part) in {PreparedSourceText, PreparedStaticRun, PreparedElementClose}:
-        return PurePreparedPart(part)
+        return PurePreparedPart(cast("RenderPart", part))
     if (
         type(part) is PreparedTextValue
         and part.browser_binding is None
@@ -2564,13 +2728,7 @@ def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInt
         or part.frame.is_transparent_root
     ):
         return None
-    plan: list[str | PureInteriorBody | PurePreparedPart] = []
-    for nested_part in part.parts:
-        captured = _capture_pure_part(nested_part, context)
-        if captured is None:
-            return None
-        plan.append(captured)
-    return PureInteriorBody(tuple(plan))
+    return _DESCEND
 
 
 def _render_and_capture_pure_body(
@@ -2622,15 +2780,26 @@ def _render_pure_live_item(item: Node, context: CitryContext, *, tracing: bool) 
 def _replay_pure_body(plan: PureBodyPlan, context: CitryContext) -> list[RenderPart]:
     """Recreate transparent render wrappers against the current component context."""
     parts: list[RenderPart] = []
-    for item in plan:
+    # Each entry is a nested plan's item iterator and the parts built for it. A
+    # stack keeps the number of Python frames the same however deep the
+    # template nests, and items still replay in document order.
+    stack: list[tuple[Iterator[object], list[RenderPart]]] = [(iter(plan), parts)]
+    while stack:
+        items, current = stack[-1]
+        item = next(items, _END)
+        if item is _END:
+            stack.pop()
+            if stack:
+                stack[-1][1].append(CitryRender(parts=current, context=context))
+            continue
         if isinstance(item, str):
-            parts.append(item)
+            current.append(item)
         elif isinstance(item, PurePreparedPart):
-            parts.append(item.part)
+            current.append(item.part)
         elif isinstance(item, PureInteriorBody):
-            parts.append(CitryRender(parts=_replay_pure_body(item.parts, context), context=context))
+            stack.append((iter(item.parts), []))
         else:
-            parts.append(_render_pure_live_item(item.item, context, tracing=is_tracing()))
+            current.append(_render_pure_live_item(cast("PureLiveBodyItem", item).item, context, tracing=is_tracing()))
     return parts
 
 
@@ -2813,6 +2982,11 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
             )
         ]
     if isinstance(value, CitryRender):
+        if value.context is context and value.frame.is_component_root and value.frame.render_id == component.id:
+            # The hook returned the output it received (or an earlier
+            # replacement): it is already this component's content, not a
+            # second occurrence of the component inside itself.
+            return [CitryRender(parts=list(value.parts), context=context)]
         # An already-rendered subtree is inlined; its collected data is
         # copied into this render.
         if value.context is not context:
@@ -3142,6 +3316,53 @@ def _compile_nested_template(
     return lambda: compiled
 
 
+@final
+class _BodyFrame:
+    """
+    One body the body renderer is partway through.
+
+    ``items`` is an iterator, so the renderer's inner loop resumes where it
+    stopped after it finishes a nested body. The frame sets the value
+    context while its items render and resets it when it finishes or an
+    error passes through it.
+    """
+
+    __slots__ = ("context", "direct_prepared", "items", "parts", "tracing", "value_token")
+
+    def __init__(self, body: Iterable[BodyItem], context: CitryContext, parts: list[RenderPart]) -> None:
+        self.items = iter(body)
+        self.context = context
+        self.parts = parts
+        self.direct_prepared = vue_render_active()
+        # Hoisted: one level check per body walk, not per node.
+        self.tracing = is_tracing()
+        # Set last: once it is set, the renderer's error handling resets it.
+        self.value_token = _VALUE_CONTEXT.set(context)
+
+
+@final
+class _NodeFrame:
+    """
+    An ``IfNode``, ``ForNode`` or ``SlotNode`` whose bodies the body renderer is rendering.
+
+    Every body's parts go into ``parts``: the node's own list when its steps
+    pass one, otherwise a new one. When ``bodies`` runs out, ``finish``
+    wraps them into the node's part, which joins ``outer``, the frame of the
+    body that holds the node. ``wraps_errors`` says how an error leaves it
+    (see ``_unwind_body_frames``).
+    """
+
+    __slots__ = ("bodies", "finish", "node", "outer", "parts", "wraps_errors")
+
+    def __init__(self, node: BodyItem, steps: BodySteps, outer: _BodyFrame) -> None:
+        self.node = node
+        self.bodies = steps.bodies
+        self.finish = steps.finish
+        self.outer = outer
+        self.parts: list[RenderPart] = [] if steps.parts is None else steps.parts
+        self.wraps_errors = steps.wraps_errors
+
+
 def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[RenderPart]:
     """
     Render a body (a list of static strings and nodes) into a list of parts.
@@ -3160,44 +3381,231 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     The parts are returned as a list, not joined into one string, so that an
     already-rendered value embedded in the middle can still be read later. Joining
     happens in ``CitryRender.serialize()``.
-    """
-    value_token = _VALUE_CONTEXT.set(context)
-    try:
-        direct_prepared = vue_render_active()
-        parts: list[RenderPart] = []
-        tracing = is_tracing()  # hoisted: one level check per body walk, not per node
-        for item in body:
-            if isinstance(item, str):
-                if direct_prepared:
-                    raise TypeError("prepared Vue rendering received unsupported raw compiled output")
-                parts.append(item)
-                continue
-            if tracing:
-                trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
-            try:
-                part = item.render(context)
-            except Exception as err:
-                _attach_template_position(err, item, context)
-                raise
-            if type(part) is str:
-                if direct_prepared:
-                    raise TypeError(
-                        f"prepared Vue rendering received unsupported raw output from {type(item).__name__}"
-                    )
-                parts.append(part)
-                continue
-            unwrapped = part
-            if (
-                isinstance(unwrapped, CitryRender)
-                and unwrapped.context is not context
-                and not _contains_deferred(unwrapped)
-            ):
-                _merge_dependencies(context, unwrapped.context)
-            parts.append(part)
 
-        return parts
-    finally:
-        _VALUE_CONTEXT.reset(value_token)
+    ``<c-if>`` and ``<c-for>`` nodes, and a ``<c-slot>`` that renders its
+    own fallback or a template fill the component was given, render their
+    bodies on this function's own stack, so Python's call depth does not
+    grow with how deeply they nest, or with how many components a fill is
+    passed on through. Each one adds a ``_NodeFrame`` and one
+    ``_BodyFrame`` per body, and its part is wrapped exactly as its
+    ``render`` would wrap it. An error raised inside
+    passes out through every frame in turn, innermost first: each body frame
+    resets the value context, and each node frame closes its loop (or, for a
+    slot, raises the error inside the slot's ``with`` blocks, which add the
+    slot to the error's component path) and adds its node's template
+    position, in the same order as their ``render`` methods.
+    """
+    root = _BodyFrame(body, context, [])
+    # Body and node frames alternate above the root: a node frame's bodies
+    # sit directly on top of it.
+    stack: list[_BodyFrame | _NodeFrame] = [root]
+    try:
+        while True:
+            # Only body frames are ever on top here: a node frame always has
+            # its current body above it.
+            frame: _BodyFrame = stack[-1]  # type: ignore[assignment]
+            parts = frame.parts
+            frame_context = frame.context
+            direct_prepared = frame.direct_prepared
+            tracing = frame.tracing
+            pushed = False
+            # A StopIteration a slot's steps carried out, raised below,
+            # outside the `except`, so its context stays the one it had.
+            stopped: StopIteration | None = None
+            for item in frame.items:
+                if isinstance(item, str):
+                    if direct_prepared:
+                        raise TypeError("prepared Vue rendering received unsupported raw compiled output")
+                    parts.append(item)
+                    continue
+                if tracing:
+                    trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
+                item_type = type(item)
+                part: RenderPart
+                try:
+                    if item_type is IfNode or item_type is ForNode or item_type is SlotNode:
+                        steps = item._render_steps(frame_context)  # type: ignore[attr-defined]
+                        if type(steps) is BodySteps:
+                            node_frame = _NodeFrame(item, steps, frame)
+                            # The first body is read inside this `try`, as
+                            # `render` would read it: evaluating the loop can
+                            # fail, and the error then gets this node's
+                            # position once. The node frame joins the stack
+                            # only once it has a body to render.
+                            first = next(node_frame.bodies, None)
+                            if first is not None:
+                                stack.append(node_frame)
+                                stack.append(_BodyFrame(first[0], first[1], node_frame.parts))
+                                pushed = True
+                                break
+                            part = node_frame.finish(node_frame.parts)
+                        else:
+                            part = steps
+                    else:
+                        part = item.render(frame_context)
+                except _CarriedStopIteration as carried:
+                    stopped = carried.stop
+                    break
+                except Exception as err:
+                    _attach_template_position(err, item, frame_context)
+                    raise
+                # The same steps as `_add_rendered_part`, written out here
+                # because this runs once for every part of every render; the
+                # two must stay alike.
+                if type(part) is str:
+                    if direct_prepared:
+                        raise TypeError(
+                            f"prepared Vue rendering received unsupported raw output from {type(item).__name__}"
+                        )
+                    parts.append(part)
+                    continue
+                if (
+                    isinstance(part, CitryRender)
+                    and part.context is not frame_context
+                    and not _contains_deferred(part)
+                ):
+                    _merge_dependencies(frame_context, part.context)
+                parts.append(part)
+            if stopped is not None:
+                # Template code or the slot hook raised this StopIteration; it
+                # passes on as it would out of a Slot call.
+                _attach_template_position(stopped, item, frame_context)
+                raise stopped
+            if pushed:
+                continue
+
+            # This body is finished. Back in the node that holds it, read its
+            # next body, or wrap the node's part once there are no more.
+            stack.pop()
+            _VALUE_CONTEXT.reset(frame.value_token)
+            if not stack:
+                return root.parts
+            node_frame = stack[-1]  # type: ignore[assignment]
+            outer = node_frame.outer
+            try:
+                following = next(node_frame.bodies, None)
+                if following is not None:
+                    stack.append(_BodyFrame(following[0], following[1], node_frame.parts))
+                    continue
+                stack.pop()
+                part = node_frame.finish(node_frame.parts)
+            except _CarriedStopIteration as carried:
+                stack.pop()
+                stopped = carried.stop
+            except Exception as err:
+                stack.pop()
+                _attach_template_position(err, node_frame.node, outer.context)
+                raise
+            if stopped is not None:
+                # Raised outside the `except`, as above.
+                _attach_template_position(stopped, node_frame.node, outer.context)
+                raise stopped
+            _add_rendered_part(part, node_frame.node, outer)
+    except BaseException as err:
+        _unwind_body_frames(stack, err)
+        raise
+
+
+def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> None:
+    """
+    Add a finished ``<c-if>``, ``<c-for>`` or ``<c-slot>`` part to the body that holds it.
+
+    These are the same steps the main loop in ``_render_body`` takes, inline,
+    for every other node's part; the two must stay alike.
+    """
+    if type(part) is str:
+        if frame.direct_prepared:
+            raise TypeError(f"prepared Vue rendering received unsupported raw output from {type(item).__name__}")
+        frame.parts.append(part)
+        return
+    if isinstance(part, CitryRender) and part.context is not frame.context and not _contains_deferred(part):
+        _merge_dependencies(frame.context, part.context)
+    frame.parts.append(part)
+
+
+def _unwind_body_frames(stack: list[_BodyFrame | _NodeFrame], err: BaseException) -> None:
+    """
+    Take an error out through every frame still open, innermost first.
+
+    A body frame resets its value context. A node frame closes its loop, so
+    the loop's ``finally`` blocks run now, and adds its node's template
+    position, as the node's ``render`` does when an error passes out of it.
+    A slot instead gets the error thrown in where it waits for its body,
+    so the ``with`` blocks it holds there see the error as they
+    would around a ``Slot`` call; one of them adds the slot to the error's
+    component path. Adding a position can replace the error with a clearer
+    one; the replacement is raised from the original and passes through the
+    frames that remain.
+    """
+    while stack:
+        frame = stack.pop()
+        if type(frame) is _BodyFrame:
+            _VALUE_CONTEXT.reset(frame.value_token)
+            continue
+        node_frame = cast("_NodeFrame", frame)
+        if node_frame.wraps_errors:
+            raised = _throw_into(node_frame.bodies, err)
+            if raised is not err:
+                # A `with` block in the steps raised a different error, which
+                # continues outward as it would from a `Slot` call: through
+                # this node's position and every frame that remains.
+                if isinstance(raised, Exception):
+                    try:
+                        _attach_template_position(raised, node_frame.node, node_frame.outer.context)
+                    except Exception as replacement:
+                        _unwind_body_frames(stack, replacement)
+                        raise
+                _unwind_body_frames(stack, raised)
+                raise raised
+            # The same error, now with the slot on its component path; it
+            # gets this node's position below, as any node's error does.
+        else:
+            close = getattr(node_frame.bodies, "close", None)
+            if close is not None:
+                close()
+        if isinstance(err, Exception):
+            try:
+                _attach_template_position(err, node_frame.node, node_frame.outer.context)
+            except Exception as replacement:
+                # `_attach_template_position` raised the replacement from
+                # `err` itself; it passes through the frames that remain.
+                _unwind_body_frames(stack, replacement)
+                raise
+
+
+def _throw_into(bodies: Iterator[Any], err: BaseException) -> BaseException:
+    """
+    Throw ``err`` into a node's ``bodies`` generator, and return the error that comes out.
+
+    The generator is paused at the ``yield`` that handed out the body the
+    error left, so its ``with`` blocks exit with the error, as they would
+    if the body had rendered inside them. Citry's own steps always raise
+    here. If the generator finishes or yields again instead, it has dropped
+    the error, and this returns a ``RuntimeError`` caused by it.
+    """
+    generator = cast("Generator[Any, None, None]", bodies)
+    try:
+        generator.throw(err)
+    except StopIteration:
+        # The generator finished without raising: it dropped the error.
+        pass
+    except _CarriedStopIteration as carried:
+        # Template code raised this StopIteration inside the body.
+        return carried.stop
+    except BaseException as raised:  # noqa: BLE001 - the caller raises whatever comes out
+        return raised
+    else:
+        # It yielded again and still holds its scopes; close it so they are
+        # left now, not whenever it is collected.
+        try:
+            generator.close()
+        except _CarriedStopIteration as carried:
+            return carried.stop
+        except BaseException as raised:  # noqa: BLE001 - the caller raises whatever comes out
+            return raised
+    replacement = RuntimeError("Citry internal error: a template node's renderer dropped an error raised in its body")
+    replacement.__cause__ = err
+    return replacement
 
 
 def _attach_template_position(err: Exception, node: BodyItem, context: CitryContext) -> None:
@@ -3207,9 +3615,9 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
     Every compiler-emitted node carries ``source`` (the whole template
     string) and ``position`` (its start/end indices in it); a node injected
     by an extension may not, in which case this does nothing. The snippet is
-    added once per error, by the innermost failing node: control-flow bodies
-    render through ``_render_body`` recursively, so the enclosing node's
-    pass through here is a no-op (see ``set_template_position_error_message``).
+    added once per error, by the innermost failing node: an error passes out
+    through every enclosing node, and each enclosing node's pass through here
+    is a no-op (see ``set_template_position_error_message``).
 
     The header names the lexical template class, which can be a simple class
     rendering under another component's ownership. Slot-fill content retains

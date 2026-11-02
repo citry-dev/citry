@@ -28,6 +28,22 @@ branch a render may pick is compiled. It differs from a render in these ways:
 - A component that renders in place (a built-in such as `<c-provide>`, or a
   component the caller knows is `transparent` or `simple`) is written as its
   body, or as nothing when its own template decides what renders.
+- A render leaves a `v-pre` element to Vue, with `v-pre` kept, only when it
+  holds nothing Citry produces. Otherwise Citry handles the element itself:
+  it writes it without `v-pre`, and its contents as one block of HTML where
+  the browser can keep one (see `write_element_open`). Here,
+  any component inside the element counts as something Citry produces,
+  except `<c-js>`, `<c-css>`, and a `<c-provide>` or `<c-cache>` without
+  `#c-key`. A render also leaves the element to Vue when a transparent
+  component in it renders only markup its author wrote, but that
+  component's template is not known here.
+- A `c-` attribute whose value is None or False adds no attribute in a
+  render, so a render can still leave the `v-pre` element that carries or
+  encloses it to Vue. Here it always counts as something Citry produces.
+- Attributes Citry adds to a component's root element (such as the one
+  `css_data()` needs) are left out. A render handles a `v-pre` root element
+  that takes such an attribute itself; here it is left to Vue when it holds
+  only markup its author wrote.
 - The leaf program question is asked as for an ordinary component, before
   any constant is folded and without extension hooks, so a component that
   is `simple`, `pure`, or `transparent`, an application with an attribute
@@ -49,8 +65,9 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from citry._walk import Call, run
 from citry.client_directives import ComponentTagClientBindingKind, classify_component_tag_client_binding_key
 from citry.nodes import ComponentNode, FillNode, ForNode, IfNode, SlotNode, StaticHtmlAttr
 
@@ -66,7 +83,9 @@ from .capture import (
     coalesce_prepared_static_nodes,
     static_element_opening,
 )
+from .compiler import _authored_vue_attr, _guard_template_braces
 from .direct_capture import (
+    _TEXT_ONLY_TAGS,
     _append_element_open,
     _append_opaque_html,
     _append_slot_outlet,
@@ -75,12 +94,13 @@ from .direct_capture import (
     _component_call_identity,
     _DefinitionFragment,
     _fill_opening,
+    _html_block_placement_problem,
     document_body_bounds,
 )
 from .leaf_program import branch_opening, compile_leaf_program, loop_empty_opening, loop_opening
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Generator, Sequence
 
     from citry.nodes import BodyItem
 
@@ -151,6 +171,10 @@ class StaticVueTemplate:
     # Where each component call known to be an ordinary call starts in the
     # Vue template; only such a call is reported inside a Vue `v-for`.
     ordinary_calls: frozenset[int]
+    # Fills with `v-slot` passed to a component that copies them in place,
+    # where no Vue slot function receives the props, so every render
+    # refuses them: `(start, end, message)` in authored bytes.
+    scoped_fill_refusals: tuple[tuple[int, int, str], ...] = ()
 
     def authored_range(self, start: int, end: int) -> tuple[int, int] | None:
         """
@@ -241,7 +265,7 @@ def static_vue_template(
         raise UnsupportedStaticTemplate(str(error)) from error
     writer = _Writer(source.encode(), leaf=_is_leaf_program(nodes), renders_in_place=renders_in_place)
     # A whole-document template gets only its body contents compiled, as in a render.
-    writer.write_nodes(nodes if bounds is None else nodes[bounds[0] : bounds[1]])
+    run(writer.write_nodes(nodes if bounds is None else nodes[bounds[0] : bounds[1]]))
     return StaticVueTemplate(
         writer.source,
         writer.output.compile_input(),
@@ -249,6 +273,7 @@ def static_vue_template(
         tuple(writer.else_directives),
         tuple(writer.elements),
         frozenset(writer.ordinary_calls),
+        tuple(writer.scoped_fill_refusals),
     )
 
 
@@ -271,8 +296,15 @@ class _Writer:
     else_directives: list[ElseDirective] = field(default_factory=list)
     elements: list[tuple[str, int, int, int]] = field(default_factory=list)
     ordinary_calls: set[int] = field(default_factory=set)
+    scoped_fill_refusals: list[tuple[int, int, str]] = field(default_factory=list)
     # The elements open at this point, as `(tag, start of the opening tag)`.
     open_elements: list[tuple[str, int]] = field(default_factory=list)
+    # For each open element whose authored `v-pre` a render keeps (see
+    # `_v_pre_left_to_vue`), the number of elements open outside it. Vue
+    # reads everything under it as written, so while one is open no
+    # `v-citry-vue-owned` marker (the attribute that names the form
+    # properties a Vue binding owns) is written, as in a render.
+    v_pre_depths: list[int] = field(default_factory=list)
     # Data keys only need to be distinct within one template.
     counter: int = 0
 
@@ -280,12 +312,12 @@ class _Writer:
         self.counter += 1
         return f"{prefix}{self.counter}"
 
-    def write_nodes(self, nodes: Sequence[BodyItem]) -> None:
+    def write_nodes(self, nodes: Sequence[BodyItem]) -> Generator[Call, Any, None]:
         index = 0
         while index < len(nodes):
-            index = self.write_node(nodes, index)
+            index = yield Call(self.write_node, nodes, index)
 
-    def write_node(self, nodes: Sequence[BodyItem], index: int) -> int:
+    def write_node(self, nodes: Sequence[BodyItem], index: int) -> Generator[Call, Any, int]:
         """Write `nodes[index]` and return the index of the next node to write."""
         node = nodes[index]
         if isinstance(node, PreparedSourceTextNode):
@@ -305,45 +337,47 @@ class _Writer:
             if self.open_elements and self.open_elements[-1][0] == node.tag.lower():
                 tag, start = self.open_elements.pop()
                 self.elements.append((tag, start, node.position[0], node.position[1]))
+                if self.v_pre_depths and self.v_pre_depths[-1] == len(self.open_elements):
+                    self.v_pre_depths.pop()
         elif isinstance(node, IfNode):
-            self.write_if(node)
+            yield Call(self.write_if, node)
         elif isinstance(node, ForNode):
-            self.write_for(node)
+            yield Call(self.write_for, node)
         elif isinstance(node, ComponentNode):
-            self.write_component(node)
+            yield Call(self.write_component, node)
         elif isinstance(node, SlotNode):
-            self.write_slot(node)
+            yield Call(self.write_slot, node)
         else:
             msg = f"no Vue form for {type(node).__name__}"
             raise UnsupportedStaticTemplate(msg)
         return index + 1
 
-    def write_if(self, node: IfNode) -> None:
+    def write_if(self, node: IfNode) -> Generator[Call, Any, None]:
         if not self.leaf:
             # A render writes the branch it picks, so each branch is written
             # in turn and every one must compile.
             for branch in node.branches:
-                self.write_nodes(branch[2])
+                yield Call(self.write_nodes, branch[2])
             return
         key = self.next_key("citryIf")
         for index, branch in enumerate(node.branches):
             self.write_generated(branch_opening(key, index), branch[0])
-            self.write_nodes(branch[2])
+            yield Call(self.write_nodes, branch[2])
             self.write_generated("</template>", branch[0])
 
-    def write_for(self, node: ForNode) -> None:
+    def write_for(self, node: ForNode) -> Generator[Call, Any, None]:
         if not self.leaf:
             # A render repeats the body once per row; one copy compiles the same.
             for branch in node.branches:
-                self.write_nodes(branch[2])
+                yield Call(self.write_nodes, branch[2])
             return
         key = self.next_key("citryLoop")
         self.write_generated(loop_opening(key), node.branches[0][0])
-        self.write_nodes(node.branches[0][2])
+        yield Call(self.write_nodes, node.branches[0][2])
         self.write_generated("</template>", node.branches[0][0])
         for branch in node.branches[1:]:
             self.write_generated(loop_empty_opening(key), branch[0])
-            self.write_nodes(branch[2])
+            yield Call(self.write_nodes, branch[2])
             self.write_generated("</template>", branch[0])
 
     def write_generated(self, text: str, span: tuple[int, int]) -> None:
@@ -354,6 +388,14 @@ class _Writer:
 
     def write_copy(self, text: str, span: tuple[int, int]) -> None:
         """Write text that the author wrote at `span`, if it is a copy, mapped byte for byte."""
+        if text.endswith("{") and span[1] > span[0]:
+            # A trailing `{` is written as `&#123;` (`_guard_template_braces`),
+            # so map the text before the brace byte for byte, and map the
+            # reference to the brace.
+            if len(text) > 1:
+                self.write_copy(text[:-1], (span[0], span[1] - 1))
+            self.write_generated(_guard_template_braces("{"), (span[1] - 1, span[1]))
+            return
         start = self.output.byte_length
         self.output.append(text)
         if self.source[span[0] : span[1]] == text.encode():
@@ -371,6 +413,18 @@ class _Writer:
         start = self.output.byte_length
         first_chunk = len(self.output.chunks)
         static = node._static_prepared
+        own_v_pre = any(attr.key.casefold() == "v-pre" for attr in node._authored_vue_attrs)
+        # A render compiles a `v-pre` element itself when it holds anything
+        # Citry produces, and then writes it without `v-pre`, so Vue reads
+        # Citry's bindings on it and the contents follow as Citry writes them.
+        compiled_v_pre = own_v_pre and not _v_pre_left_to_vue(nodes, index)
+        # The `v-pre` such a render drops (see `_without_v_pre` in
+        # `direct_capture.py`) is left out here too.
+        source_attrs = [
+            (attr, text)
+            for attr, text in node._static_source_attrs
+            if not (compiled_v_pre and attr.key.casefold() == "v-pre")
+        ]
         if static is not None and not node._authored_vue_attrs:
             # The same markup a render joins into one block of static text.
             self.output.append(static_element_opening(static))
@@ -379,10 +433,7 @@ class _Writer:
                 node.source,
                 node.position,
                 node.tag,
-                tuple(
-                    PreparedAttribute(attr.key, "source", attr.position, text)
-                    for attr, text in node._static_source_attrs
-                ),
+                tuple(PreparedAttribute(attr.key, "source", attr.position, text) for attr, text in source_attrs),
                 node.is_void,
                 node.is_self_closing,
                 (),
@@ -397,21 +448,39 @@ class _Writer:
                 part,
                 self.next_key("citryAttrs") if has_data_attrs else None,
                 self.next_key("citryKey") if has_key else None,
+                # With its `v-pre` dropped, a `v-pre` element Citry compiles
+                # sits outside `v-pre`, so it takes the marker.
+                under_v_pre=(own_v_pre and not compiled_v_pre) or bool(self.v_pre_depths),
             )
         self.map_opening(
             start,
             "".join(self.output.chunks[first_chunk:]),
             node.position,
             node.tag,
-            [(attr.key, text, attr.position) for attr, text in node._static_source_attrs],
+            [(attr.key, text, attr.position) for attr, text in source_attrs],
         )
         if not node.is_void:
+            if own_v_pre and not compiled_v_pre:
+                self.v_pre_depths.append(len(self.open_elements))
             self.open_elements.append((node.tag.lower(), node.position[0]))
-        ignored = any(name == "morph" and value == "ignore" for name, value in node.element_metadata)
-        if not ignored or node.is_void:
+        if node.is_void:
             return index + 1
-        # A render keeps a `#c-ignore` element's contents as HTML that Vue
-        # does not compile, so only the element's own tags are written.
+        ignored = any(name == "morph" and value == "ignore" for name, value in node.element_metadata)
+        # A render writes the contents of a `v-pre` element it compiles as one
+        # block of HTML, as for `#c-ignore`, unless the element holds text
+        # (such as `<textarea>`), is a table or one of its rows or sections,
+        # or sits inside SVG or MathML, where the browser cannot keep such a
+        # block. Those contents are then written as ordinary nodes, so this
+        # returns before the block is written.
+        v_pre_block = (
+            compiled_v_pre
+            and node.tag.lower() not in _TEXT_ONLY_TAGS
+            and _html_block_placement_problem(node.tag, [tag for tag, _start in self.open_elements], "v-pre") is None
+        )
+        if not ignored and not v_pre_block:
+            return index + 1
+        # A render keeps these contents as HTML that Vue does not compile, so
+        # only the element's own tags are written.
         close_index, close = _matching_close(nodes, index)
         start = self.output.byte_length
         _append_opaque_html(self.output, self.next_key("citryOpaque"), "raw")
@@ -478,20 +547,43 @@ class _Writer:
         if end > cursor:
             self.segments.append(SourceSegment(cursor, end, span[0], span[1], authored=False))
 
-    def write_component(self, node: ComponentNode) -> None:
+    def refuse_scoped_fills(self, node: ComponentNode) -> None:
+        """Record each fill with `v-slot` that this in-place component would copy into the template."""
+        # A built-in passes no Vue slot props at all; a component of the
+        # author's own could stop copying its content in place.
+        fix = (
+            f"<c-{node.name}> passes no Vue slot props; remove 'v-slot' from the fill."
+            if node.name in _BUILTIN_NAMES
+            else "Remove 'v-slot' from the fill and read Python slot data with 'data=\"...\"', or remove "
+            f"transparent = True or simple = True from {node.name}."
+        )
+        for _site_id, span, _body, pattern in _fills(node):
+            if pattern is not None:
+                self.scoped_fill_refusals.append(
+                    (
+                        span[0],
+                        span[1],
+                        f"<c-{node.name}> copies this fill into the template around it, so "
+                        f"'v-slot=\"{pattern}\"' has no Vue slot to read from, and the page fails to render. " + fix,
+                    )
+                )
+
+    def write_component(self, node: ComponentNode) -> Generator[Call, Any, None]:
         # A built-in is decided by its name; only another component's kind
         # comes from the caller, which may count a built-in as transparent.
         in_place = node.name in _IN_PLACE_BODIES or (
             node.name not in _BUILTIN_NAMES and self.renders_in_place is not None and self.renders_in_place(node.name)
         )
+        if in_place or node.name == "element":
+            self.refuse_scoped_fills(node)
         if node.name in _NO_VUE_SOURCE or (in_place and node.name not in _IN_PLACE_BODIES):
             # Its own template decides what renders here, and this module
             # does not have it.
             return
         if in_place:
             # The render copies the body into the caller's template.
-            for _site_id, _span, body in _fills(node):
-                self.write_nodes(body)
+            for _site_id, _span, body, _pattern in _fills(node):
+                yield Call(self.write_nodes, body)
             return
         if node.name == "element":
             # A `<c-element>` whose tag Python chooses. The tag is unknown
@@ -500,7 +592,9 @@ class _Writer:
             start = self.output.byte_length
             self.output.append("<template>")
             self.mark_generated(start, node.position)
-            self.write_nodes(node.body)
+            # Its fills render in place, as a `<c-provide>` body does.
+            for _site_id, _span, body, _pattern in _fills(node):
+                yield Call(self.write_nodes, body)
             start = self.output.byte_length
             self.output.append("</template>")
             self.mark_generated(start, node.position)
@@ -525,11 +619,15 @@ class _Writer:
         self.output.append(">")
         opening_end = self.output.byte_length
         self.mark_generated(start, node.position)
-        for site_id, span, body in _fills(node):
+        for site_id, span, body, vue_pattern in _fills(node):
             start = self.output.byte_length
-            self.output.append(_fill_opening(site_id))
+            # The pattern binds the fill's Vue slot props, so the compiler sees
+            # them as the fill's own names, as it does on a render.
+            self.output.append(
+                _fill_opening(site_id, "" if vue_pattern is None else _authored_vue_attr("", vue_pattern))
+            )
             self.mark_generated(start, span)
-            self.write_nodes(body)
+            yield Call(self.write_nodes, body)
             start = self.output.byte_length
             self.output.append("</template>")
             self.mark_generated(start, span)
@@ -583,17 +681,31 @@ class _Writer:
             )
         return {"kind": kind.value, "name": attr.key, "value": value, "sourceStart": start, "sourceEnd": end}
 
-    def write_slot(self, node: SlotNode) -> None:
+    def write_slot(self, node: SlotNode) -> Generator[Call, Any, None]:
         # The fallback is written on its own first, because the shared writer
         # takes it as one finished fragment.
-        fallback = _Writer(self.source, leaf=self.leaf, renders_in_place=self.renders_in_place, counter=self.counter)
-        fallback.write_nodes(node.body)
+        fallback = _Writer(
+            self.source,
+            leaf=self.leaf,
+            renders_in_place=self.renders_in_place,
+            counter=self.counter,
+            # A render places the fallback inside the elements open here, so a
+            # `v-pre` element in it that sits inside an `<svg>` around the
+            # outlet has its contents compiled as usual, as in a render. An
+            # outlet makes any `v-pre` element around it Citry's, so no
+            # `v-pre` left to Vue encloses it and `v_pre_depths` starts empty.
+            open_elements=list(self.open_elements),
+        )
+        yield Call(fallback.write_nodes, node.body)
         self.counter = fallback.counter
         # Element spans are authored positions, so they need no shift.
         self.elements.extend(fallback.elements)
         start = self.output.byte_length
         name = _static_attr(node, "name") or "default"
-        _append_slot_outlet(self.output, _site_id(name), fallback.output)
+        # The outlet carries the slot's Vue props, so the compiler checks
+        # their expressions in this component's scope, as on a render.
+        props = "".join(" " + _authored_vue_attr(key, value) for key, value in node.vue_props)
+        _append_slot_outlet(self.output, _site_id(name), fallback.output, props)
         end = self.output.byte_length
         if not fallback.output.chunks:
             self.mark_generated(start, node.position)
@@ -613,6 +725,7 @@ class _Writer:
             for item in fallback.else_directives
         )
         self.ordinary_calls.update(start + offset for start in fallback.ordinary_calls)
+        self.scoped_fill_refusals.extend(fallback.scoped_fill_refusals)
         self.segments.append(
             SourceSegment(
                 offset + fallback.output.byte_length, end, node.position[0], node.position[1], authored=False
@@ -633,9 +746,9 @@ def _site_id(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]", "_", name)
 
 
-def _fills(node: ComponentNode) -> list[tuple[str, tuple[int, int], Sequence[BodyItem]]]:
+def _fills(node: ComponentNode) -> list[tuple[str, tuple[int, int], Sequence[BodyItem], str | None]]:
     """
-    List the fills a component call passes, as `(site id, span, body)`.
+    List the fills a component call passes, as `(site id, span, body, v-slot pattern or None)`.
 
     A render passes the fills of the `<c-if>` branch it picks; every branch's
     fills are listed here. Two fills for one slot in different branches get
@@ -643,28 +756,30 @@ def _fills(node: ComponentNode) -> list[tuple[str, tuple[int, int], Sequence[Bod
     """
     fills: list[FillNode] = []
 
-    def collect(body: Sequence[BodyItem]) -> None:
+    def collect(body: Sequence[BodyItem]) -> Generator[Call, Any, None]:
         for item in body:
             if isinstance(item, FillNode):
                 fills.append(item)
             elif isinstance(item, (IfNode, ForNode)):
                 for branch in item.branches:
-                    collect(branch[2])
+                    yield Call(collect, branch[2])
 
-    collect(node.body)
+    run(collect(node.body))
     if not fills:
         # Content without `<c-fill>` is the default fill.
         # A render passes any content, a comment included, but not whitespace alone.
         if any(not isinstance(item, PreparedSourceTextNode) or item.text.strip() for item in node.body):
-            return [("default", node.position, node.body)]
+            return [("default", node.position, node.body, None)]
         return []
     seen: dict[str, int] = {}
-    listed: list[tuple[str, tuple[int, int], Sequence[BodyItem]]] = []
+    listed: list[tuple[str, tuple[int, int], Sequence[BodyItem], str | None]] = []
     for fill in fills:
         site_id = _site_id(_static_attr(fill, "name") or "default")
         count = seen.get(site_id, 0)
         seen[site_id] = count + 1
-        listed.append((site_id if count == 0 else f"{site_id}-{count + 1}", fill.position, fill.body))
+        listed.append(
+            (site_id if count == 0 else f"{site_id}-{count + 1}", fill.position, fill.body, fill.vue_pattern)
+        )
     return listed
 
 
@@ -691,5 +806,69 @@ def _matching_close(nodes: Sequence[BodyItem], index: int) -> tuple[int, Prepare
             depth -= 1
             if depth == 0:
                 return position, node
-    msg = "a `#c-ignore` element has no close in the same body"
+    msg = f"the <{getattr(nodes[index], 'tag', '?')}> element has no close in the same body"
     raise UnsupportedStaticTemplate(msg)
+
+
+def _v_pre_left_to_vue(nodes: Sequence[BodyItem], index: int) -> bool:
+    """
+    Return whether a render leaves the `v-pre` element opened at `nodes[index]` to Vue.
+
+    A render does so when the element and its contents hold only markup the
+    author wrote (`_v_pre_left_to_vue` in `direct_capture.py`); Vue then reads
+    them as written, with `v-pre` kept. Anything Citry produces (a value, a
+    `c-` attribute, `#c-key`, a `<c-if>`, a component other than those the
+    module docstring lists) makes the render compile the element itself. The render asks this of the parts it
+    rendered, and this module has only the template's nodes, so the two
+    walks are separate; the parity tests in `test_vue_static_template.py`
+    keep them in step.
+    """
+    opening = nodes[index]
+    assert isinstance(opening, PreparedElementOpenNode)  # noqa: S101 - the caller dispatched on the type
+    if not _authored_opening(opening):
+        return False
+    if opening.is_void:
+        return True
+    close_index, _close = _matching_close(nodes, index)
+    return _authored_nodes_only(nodes[index + 1 : close_index])
+
+
+def _authored_opening(node: PreparedElementOpenNode) -> bool:
+    """Return whether an opening carries only attributes written in the template, and no Citry bindings."""
+    # The node builds its opening in advance only when it has no `c-`
+    # attribute, `#c-` metadata, or event, poll, or control binding. A
+    # render asks nearly the same of the opening it renders
+    # (`_authored_element_only`), except that a `c-` attribute whose value
+    # is None or False adds nothing there.
+    return node._static_prepared is not None
+
+
+def _authored_nodes_only(nodes: Sequence[BodyItem]) -> bool:
+    """Return whether these nodes render only markup the author wrote, as `_authored_markup_only` asks of a render."""
+    # A stack of node iterators keeps the number of Python frames the same
+    # however deep the template nests.
+    pending = [iter(nodes)]
+    while pending:
+        node = next(pending[-1], None)
+        if node is None:
+            pending.pop()
+            continue
+        if isinstance(node, (PreparedSourceTextNode, PreparedElementCloseNode)):
+            continue
+        if isinstance(node, PreparedElementOpenNode) and _authored_opening(node):
+            continue
+        if isinstance(node, ComponentNode) and node.name in {"js", "css"}:
+            # `<c-js />` and `<c-css />` write nothing in a component.
+            continue
+        if isinstance(node, ComponentNode) and node.name in _IN_PLACE_BODIES and node.key is None:
+            # A `<c-provide>` or `<c-cache>` renders its body in place and
+            # adds nothing for Vue to read, unless a `#c-key` wraps the body
+            # in a keyed Vue `<template>`.
+            pending.extend(iter(body) for _site_id, _span, body, _pattern in _fills(node))
+            continue
+        # A value, a `<c-if>` or `<c-for>` (whose branch or rows are data), a
+        # slot outlet, or any other component. A transparent component that
+        # renders only written markup is also left to Vue by a render, but
+        # its template is not known here, so it counts as Citry's.
+        return False
+    return True

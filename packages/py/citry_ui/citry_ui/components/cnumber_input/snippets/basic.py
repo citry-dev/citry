@@ -33,7 +33,12 @@ class BasicNumberInput(Component):
           <c-fill name="label">Crates</c-fill>
           <c-fill name="description">Choose from 1 through 20.</c-fill>
           <c-fill name="default">
-            <c-CNumberInput name="crates" value="2" min="1" max="20" />
+            <c-CNumberInput
+              name="crates"
+              value="2"
+              min="1"
+              max="20"
+            />
           </c-fill>
         </c-CField>
         <article><h3>Python composition</h3>{{ python_control }}</article>

@@ -21,6 +21,7 @@ from citry_ui.components._attrs import (
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
+from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -305,7 +306,7 @@ def _normalize_options(
 
 class CSelect(LibraryComponent):
     class Dependencies:
-        js = (ANCHORED_LAYER_RUNTIME_DEPENDENCY,)
+        js = (ANCHORED_LAYER_RUNTIME_DEPENDENCY, REVEAL_RUNTIME_DEPENDENCY)
 
     @dataclass(slots=True)
     class Kwargs:
@@ -335,9 +336,56 @@ class CSelect(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "anchorName",
+            "anchor_name",
+            "aria_describedby",
+            "aria_disabled",
+            "aria_errormessage",
+            "aria_expanded",
+            "aria_invalid",
+            "aria_label",
+            "aria_labelledby",
+            "aria_readonly",
+            "aria_required",
+            "attrs",
+            "disabled",
+            "empty",
+            "externalDescribedBy",
+            "externalErrorMessage",
+            "field_control",
+            "form",
+            "groups",
+            "inheritsReadonly",
+            "input_id",
+            "invalid",
+            "listbox_aria_label",
+            "listbox_attrs",
+            "listbox_id",
+            "loop",
+            "matchWidth",
+            "name",
+            "native_disabled",
+            "native_name",
+            "open",
+            "options",
+            "options_resolved",
+            "placeholder",
+            "placement",
+            "popup_anchor_style",
+            "popup_id",
+            "readonly",
+            "readonly_name",
+            "required",
+            "selected_label",
+            "size",
+            "trigger_anchor_style",
+            "trigger_attrs",
+            "trigger_id",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_select_snapshot", None)
@@ -578,7 +626,11 @@ class CSelect(LibraryComponent):
           data-citry-ui-part="control"
         >
           <span data-citry-ui-part="value">{{ selected_label }}</span>
-          <span class="cui-select__indicator" aria-hidden="true" data-citry-ui-part="indicator"></span>
+          <span
+            class="cui-select__indicator"
+            aria-hidden="true"
+            data-citry-ui-part="indicator"
+          ></span>
         </button>
         <select
           class="cui-select__native"

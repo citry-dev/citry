@@ -11,12 +11,20 @@ def list_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack" data-quality-list-ready>
             <h1>List states</h1>
-            <c-CList label="Navigation" variant="surface" c-divided="True">
+            <c-CList
+              label="Navigation"
+              variant="surface"
+              c-divided="True"
+            >
               <c-CListItem href="/sky" c-current="True">Sky</c-CListItem>
               <c-CListItem href="/sessions">Sessions</c-CListItem>
               <c-CListItem href="/archive" c-disabled="True">Archive</c-CListItem>
             </c-CList>
-            <c-CList c-ordered="True" marker="decimal" c-start="3">
+            <c-CList
+              c-ordered="True"
+              marker="decimal"
+              c-start="3"
+            >
               <c-CListItem>Align</c-CListItem>
               <c-CListItem>Calibrate</c-CListItem>
             </c-CList>

@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from typing import Any
 
 import citry_ui
@@ -17,7 +15,6 @@ class BasicCommandPalette(Component):
                     value="open-settings",
                     label="Open settings",
                     keywords=("preferences",),
-                    shortcut="Ctrl ,",
                 ),
                 CCommandPaletteCommand(value="create-project", label="Create project"),
                 CCommandPaletteCommand(value="invite-teammate", label="Invite teammate"),
@@ -33,7 +30,9 @@ class BasicCommandPalette(Component):
         <c-CCommandPalette
           label="Workspace commands"
           c-entries="commands"
-          :onAction="(value)=>lastAction=value" :onQueryChange="(value)=>lastQuery=value" :onOpenChange="(value)=>lastOpen=value ? 'open' : 'closed'"
+          :onAction="(value)=>lastAction=value"
+          :onQueryChange="(value)=>lastQuery=value"
+          :onOpenChange="(value)=>lastOpen=value ? 'open' : 'closed'"
         >
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
             <c-CButton

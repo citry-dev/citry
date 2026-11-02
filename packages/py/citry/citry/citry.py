@@ -53,6 +53,7 @@ from citry._class_introspection import _static_class_dict
 from citry._component_graph import _build_component_graph
 from citry._component_introspection import _build_component_catalog, _build_component_info
 from citry._linting import _application_lint_info, _component_lint_info
+from citry._model_base import ModelBase, resolve_model_base
 from citry.analysis import TemplateAnalysis
 from citry.autodiscovery import import_component_modules
 from citry.cache import CitryCache, InMemoryCache, _forget_stored_keys
@@ -184,6 +185,7 @@ class Citry:
         ssr_element_threshold: int = 0,
         vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES,
         max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH,
+        model_base: object = None,
     ) -> None:
         self._engine_id = _new_engine_id()
         # CitrySettings.__post_init__ copies every field into its immutable
@@ -212,6 +214,7 @@ class Citry:
             ssr_element_threshold=ssr_element_threshold,
             vue_asset_max_bytes=vue_asset_max_bytes,
             max_component_depth=max_component_depth,
+            model_base=model_base,
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,
@@ -241,6 +244,11 @@ class Citry:
         # settings spec to a live callable. None means "use the built-in
         # generator" (the fallback lives at the mint site in component.py).
         self.id_generator: Callable[[], str] | None = self._resolve_id_generator(id_generator)
+
+        # The kind of class plain schema declarations become (see
+        # CitrySettings.model_base), resolved once: an import string is
+        # imported here, so a missing package fails now, not at render.
+        self._model_base: ModelBase | None = resolve_model_base(self.settings.model_base)
         # Private component-name storage also coordinates lifecycle state and
         # creates the built-ins (<c-provide>, ...) on first use.
         self._registry = _ComponentRegistry(self)
@@ -351,6 +359,11 @@ class Citry:
         # (docs/design/dependencies.md section 9.3); None means no
         # integration is mounted, and URL building raises with guidance.
         self._mounted_prefix: str | None = None
+        # Returns the sub-path the host app is served below for the current
+        # request, such as "/shop", which every URL Citry builds starts with.
+        # The integration's mount() registers it (citry/_sub_path.py); None
+        # means the app is served at the site root.
+        self._sub_path_reader: Callable[[], str] | None = None
         # Functions the web framework integrations register to answer whether
         # the host app serves a path, so `citry check` and the editor can
         # report a link to a missing page or file (citry/_path_checks.py).
@@ -848,6 +861,28 @@ class Citry:
         """Validate a retained handle under lifecycle read protection."""
         with self._registry._lifecycle.read("validate a component library installation"):
             self._validate_library_installation_locked(installation)
+
+    def _library_name_of(self, comp_cls: type[Component]) -> str | None:
+        """Name the registered library that installed ``comp_cls``, or ``None`` for an app component."""
+        # Most components are the app's own, and this map answers them
+        # without walking every installation.
+        definition = self._library_definitions_by_class.get(comp_cls)
+        if definition is None:
+            return None
+        for name, installation in tuple(self._library_installations.items()):
+            if definition in installation.library.components:
+                return name
+        return None
+
+    def _library_names_by_component(self) -> dict[type[Component], str]:
+        """Map each component a registered library installed to that library's name."""
+        names: dict[type[Component], str] = {}
+        for name, installation in self._library_installations.items():
+            for definition in installation.library.components:
+                concrete = self._library_components.get(definition)
+                if concrete is not None:
+                    names[concrete] = name
+        return names
 
     def _validate_library_installation_locked(self, installation: LibraryInstallation) -> None:
         """Check one installation while lifecycle access is already protected."""
@@ -1585,8 +1620,11 @@ class Citry:
         An absolute URL path for one of this instance's routes.
 
         ``path`` is the route's full path (no leading slash), e.g.
-        ``"cache/Table_a1b2c3.js"``. Raises ``RuntimeError`` when no web
-        integration is mounted, since the URL would point nowhere.
+        ``"cache/Table_a1b2c3.js"``. When the host app is served below a
+        sub-path, such as ``/shop``, the URL starts with that sub-path. The
+        integration that ``mount()`` set up reads it from the current
+        request. Raises ``RuntimeError`` when no web integration is
+        mounted, since the URL would point nowhere.
         """
         if self._mounted_prefix is None:
             msg = (
@@ -1595,7 +1633,23 @@ class Citry:
                 " or call set_mounted_prefix() in processes that only build URLs."
             )
             raise RuntimeError(msg)
-        return f"{self._mounted_prefix}/{path}"
+        # The browser resolves the URL from the site root, so an app served
+        # below a sub-path needs the sub-path in front of the mount prefix.
+        return f"{self._current_sub_path()}{self._mounted_prefix}/{path}"
+
+    def _current_sub_path(self) -> str:
+        """Return the sub-path the host app is served below for the current request, or ``""`` at the site root."""
+        return "" if self._sub_path_reader is None else self._sub_path_reader()
+
+    def _set_sub_path_reader(self, reader: Callable[[], str] | None) -> None:
+        """
+        Record the function that returns the host app's sub-path for the current request.
+
+        Each web integration's ``mount()`` calls this, so ``build_url()``
+        writes URLs the browser can reach when the app is served below a
+        sub-path such as ``/shop``. Mounting into another app replaces it.
+        """
+        self._sub_path_reader = reader
 
     def get_component_by_class_id(self, class_id: str) -> type[Component]:
         """
@@ -1956,16 +2010,22 @@ class Citry:
                 # rebuilds the registry. Even though the modules are already
                 # imported, the scan re-registers their components.
                 self._discovered = False
-                # A shared backend may not want a full wipe; the built-in
-                # in-memory cache supports it. The revision guard remains held
-                # so new keys cannot be stored before this clear finishes.
-                cache_clear = getattr(self.cache, "clear", None)
-                if callable(cache_clear):
-                    cache_clear()
-                # This engine skips re-checking keys it recently saw stored;
-                # after a wipe that memory is wrong, so the next render must
-                # write its assets again.
-                _forget_stored_keys(self)
+            # The backend is the application's own code, often a network
+            # call, so it is wiped after the invalidation released its lock:
+            # renders building cache keys do not wait for it. The invalidation
+            # has already moved the revision, which every render key includes,
+            # so an entry stored meanwhile under the old revision is never
+            # read; an entry stored meanwhile under the new revision may be
+            # wiped too, which only costs a rebuild.
+            # A shared backend may not want a full wipe; the built-in
+            # in-memory cache supports it.
+            cache_clear = getattr(self.cache, "clear", None)
+            if callable(cache_clear):
+                cache_clear()
+            # This engine skips re-checking keys it recently saw stored;
+            # after a wipe that memory is wrong, so the next render must
+            # write its assets again.
+            _forget_stored_keys(self)
 
     def _clear_standalone_template_cache(self) -> None:
         """Discard sources compiled against an obsolete component registry."""

@@ -8,23 +8,23 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "citry-lsp"
 version = "0.2.0"
-requires-python = ">=3.10, <4.0"
+requires-python = ">=3.11, <4.0"
 description = "Language server for Citry component templates"
 readme = "README.md"
 keywords = ["citry", "language server", "lsp", "templates", "html"]
 authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Plugins",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Typing :: Typed",
 ]
 license = "MIT"
@@ -34,7 +34,7 @@ dependencies = [
     "packaging>=25.0",
     "pygls==2.1.1",
     "python-dotenv>=1.2.3,<2",
-    "ty==0.0.89",
+    "ty==0.0.94",
 ]
 
 [project.scripts]

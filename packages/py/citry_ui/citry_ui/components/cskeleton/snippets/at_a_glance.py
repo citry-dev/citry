@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class SkeletonGlance(Component):
     template = """
-      <section class="skeleton-glance" aria-label="Loading field note" aria-busy="true">
+      <section
+        class="skeleton-glance"
+        aria-label="Loading field note"
+        aria-busy="true"
+      >
         <c-CSkeleton height="8rem" animation="wave" />
         <c-CRow c-gap="'sm'">
           <c-CSkeleton kind="circle" width="2.75rem" />

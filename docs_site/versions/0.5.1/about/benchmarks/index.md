@@ -33,7 +33,7 @@ including dependencies, browser runtimes and ownership data. It takes about 55%
 less time than django-components once warm.
 
 These optimizations are explicit application choices with documented contracts.
-The [repository benchmark guide](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md)
+The [repository benchmark guide](https://github.com/citry-dev/citry/blob/citry@0.5.1/benchmarks/README.md)
 also retains the ordinary Citry measurements and the paired comparison that
 isolates the effect of opting the three classes into simple mode.
 
@@ -89,7 +89,7 @@ uv run --no-project --with matplotlib python benchmarks/plot.py
 ```
 
 
-The [benchmark repository guide](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md)
+The [benchmark repository guide](https://github.com/citry-dev/citry/blob/citry@0.5.1/benchmarks/README.md)
 contains dependency setup, detailed methodology and links to raw observations.
 The extension must be built in release mode; a debug build does not provide
 comparable Citry timings.

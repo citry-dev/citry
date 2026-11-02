@@ -10,9 +10,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, final, overload
 
 import citry.citry_render as render_module
+from citry._authored_expression import parse_authored_expression
+from citry._walk import Call, run, walk
 from citry.attrs import (
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
@@ -74,15 +76,17 @@ from .compiler import (
     _generated_event_args,
     _generated_event_modifiers,
     _generated_vue_attr,
+    _guard_template_braces,
     _RuntimeEventDeclaration,
 )
 from .json_data import _JS_SAFE_INTEGER, _vue_attribute_map, _vue_attribute_value
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import Callable, Generator, Iterator, Sequence
     from typing import Protocol, TypeAlias
 
     from citry.citry_context import CitryContext
+    from citry.nodes import BodyItem
 
     # A generated row HTML writer, called as (data, resolved_opens, row_html, row_marks).
     _RowHtmlWrite: TypeAlias = Callable[[dict[str, object], dict[Any, Any], list[str | None], list[int]], None]
@@ -358,6 +362,9 @@ class _SimpleJsonReadSet:
 class _SimpleJsonProgram:
     readset_preflight: _SimpleJsonPreflight
     evaluate: _SimpleJsonEvaluate
+    # How many generated functions nest inside each other, the root body
+    # counted as one. Each one costs a Python frame while it runs.
+    nesting: int
 
 
 _SIMPLE_VUE_ERROR_COMPONENT: ContextVar[str | None] = ContextVar("citry_simple_vue_error_component", default=None)
@@ -408,8 +415,11 @@ def _compile_simple_json_expr(source: object, used_vars: object) -> _SimpleJsonE
     if type(source) is not str or type(used_vars) is not tuple:
         return None
     try:
-        parsed = ast.parse(source, mode="eval")
-    except SyntaxError:
+        # Parse the text the way Citry runs it, so an expression split across
+        # lines without parentheses compiles like the same expression on one
+        # line.
+        parsed = parse_authored_expression(source)
+    except (SyntaxError, ValueError):
         return None
     expression = _simple_json_expr_from_ast(parsed.body)
     if expression is None:
@@ -429,8 +439,8 @@ def _compile_call_input(source: str, used_vars: tuple[str, ...]) -> _SimpleJsonE
     attribute expressions keep numbers out of the shared subset.
     """
     try:
-        parsed = ast.parse(source, mode="eval").body
-    except SyntaxError:
+        parsed = parse_authored_expression(source).body
+    except (SyntaxError, ValueError):
         return None
     if type(parsed) is ast.Constant and type(parsed.value) in {int, float}:
         return _SimpleJsonExpr("constant", value=parsed.value)
@@ -445,7 +455,8 @@ def _compile_simple_json_loop(node: ForNode) -> tuple[str, _SimpleJsonExpr] | No
     if type(each) is not ExprHtmlAttr or type(each.expr) is not str:
         return None
     try:
-        expression = ast.parse(f"[None for {each.expr}]", mode="eval").body
+        # The newline keeps a clause's trailing `# comment` from hiding the `]`.
+        expression = ast.parse(f"[None for {each.expr}\n]", mode="eval").body
     except SyntaxError:
         return None
     if type(expression) is not ast.ListComp or len(expression.generators) != 1:
@@ -576,12 +587,101 @@ class _MaterializedRowPlan:
 # The byte-level rules below mirror crates/citry_html_transform/src/marker.rs.
 # The row HTML writer exists only when this Python walk and the native
 # scan provably agree, so every rule that is not copied exactly declines.
+# The walk keeps the names of the open elements, innermost last, so it can
+# check that each end tag closes the element it opened. The native scan
+# follows more of the browser's rules (end tags that close several elements,
+# a new `<li>` or `<p>` ending an open one, SVG and MathML); the walk
+# declines wherever one of those could apply.
 _MARKER_WHITESPACE = " \t\n\r\x0c"
 _MARKER_ASCII_LETTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 _MARKER_VOID_TAGS = frozenset(
-    ("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr")
+    (
+        "area",
+        "base",
+        "basefont",
+        "bgsound",
+        "br",
+        "col",
+        "embed",
+        "frame",
+        "hr",
+        "image",
+        "img",
+        "input",
+        "keygen",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    )
 )
-_MARKER_RAW_TEXT_TAGS = frozenset(("script", "style", "textarea", "title"))
+_MARKER_RAW_TEXT_TAGS = frozenset(("script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"))
+# Tags the walk does not model: SVG and MathML change how the browser reads
+# `/>` and text elements, and `<plaintext>` runs to the end of the input.
+_MARKER_DECLINED_TAGS = frozenset(("svg", "math", "plaintext"))
+# Start tags before which the browser may end an open element (see
+# `close_implied` in marker.rs); the walk declines when one could apply.
+_MARKER_HEADINGS = frozenset(("h1", "h2", "h3", "h4", "h5", "h6"))
+_MARKER_CLOSES_P = frozenset(
+    (
+        "address",
+        "article",
+        "aside",
+        "blockquote",
+        "center",
+        "dd",
+        "details",
+        "dialog",
+        "dir",
+        "div",
+        "dl",
+        "dt",
+        "fieldset",
+        "figcaption",
+        "figure",
+        "footer",
+        "form",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "hgroup",
+        "hr",
+        "li",
+        "listing",
+        "main",
+        "menu",
+        "nav",
+        "ol",
+        "p",
+        "plaintext",
+        "pre",
+        "search",
+        "section",
+        "table",
+        "ul",
+    )
+)
+
+
+def _marker_ends_an_open_element(name: str, stack: tuple[str, ...]) -> bool:
+    """Whether the browser may end an open element before a start tag named ``name``, which the walk declines."""
+    if name in _MARKER_CLOSES_P and "p" in stack:
+        return True
+    if name == "li" and "li" in stack:
+        return True
+    if name in {"dt", "dd"} and ("dt" in stack or "dd" in stack):
+        return True
+    if name in {"option", "button"} and name in stack:
+        return True
+    return name in _MARKER_HEADINGS and bool(stack) and stack[-1] in _MARKER_HEADINGS
+
+
 _MARKER_PLACEHOLDER_ATTR = frozenset(("c-render-id",))
 _MARKER_PLACEHOLDER_TAG = frozenset(("template",))
 
@@ -677,18 +777,20 @@ def _marker_raw_text_end(html: str, start: int, name: str) -> int | None:
 
 def _marker_scan_piece(
     html: str,
-    depth: int,
+    stack: tuple[str, ...],
     raw: str | None,
     *,
     allow_roots: bool,
-) -> tuple[int, str | None, list[int]] | None:
+) -> tuple[tuple[str, ...], str | None, list[int]] | None:
     """
     Advance the native marker scan over one fixed piece of output.
 
-    ``depth`` and ``raw`` (the raw-text element being skipped, if any) carry
-    the scan state between pieces. Returns the new state and the positions
-    of root start tags inside the piece. None declines: the piece ends inside
-    a comment or tag, or holds a root where roots are not allowed.
+    ``stack`` (the open elements' lowercase names, innermost last) and
+    ``raw`` (the raw-text element being skipped, if any) carry the scan
+    state between pieces. Returns the new state and the positions of root
+    start tags inside the piece. None declines: the piece ends inside a
+    comment or tag, holds a root where roots are not allowed, or uses a rule
+    the walk does not mirror.
     """
     position = 0
     length = len(html)
@@ -698,7 +800,7 @@ def _marker_scan_piece(
         if end is None:
             return None
         if end < 0:
-            return depth, raw, root_positions
+            return stack, raw, root_positions
         position = end
         raw = None
     while position < length:
@@ -727,8 +829,12 @@ def _marker_scan_piece(
             end = html.find(">", position)
             if end < 0:
                 return None
-            if not _marker_name_is(html[position + 2 : name_end], _MARKER_VOID_TAGS):
-                depth -= 1
+            # An end tag that does not close the innermost open element can
+            # close several elements, or none, in the native scan.
+            closed = html[position + 2 : name_end]
+            if not stack or not closed.isascii() or closed.lower() != stack[-1]:
+                return None
+            stack = stack[:-1]
             position = end + 1
         elif position + 1 < length and html[position + 1] in _MARKER_ASCII_LETTERS:
             tag = _marker_start_tag(html, position)
@@ -737,26 +843,36 @@ def _marker_scan_piece(
             if tag is None or tag[4]:
                 return None
             name, insert_at, position, self_closing, _render_id = tag
-            if depth == 0:
+            if not name.isascii():
+                return None
+            lowered = name.lower()
+            if lowered in _MARKER_DECLINED_TAGS or _marker_ends_an_open_element(lowered, stack):
+                return None
+            is_void = lowered in _MARKER_VOID_TAGS
+            # The native scan keeps a self-closed element that is not void
+            # open, which compiled output never writes.
+            if self_closing and not is_void:
+                return None
+            if not stack:
                 if not allow_roots:
                     return None
                 root_positions.append(insert_at)
-            if not self_closing and not _marker_name_is(name, _MARKER_VOID_TAGS):
-                if _marker_name_is(name, _MARKER_RAW_TEXT_TAGS):
+            if not is_void:
+                if lowered in _MARKER_RAW_TEXT_TAGS:
                     end = _marker_raw_text_end(html, position, name)
                     if end is None:
                         return None
                     if end < 0:
-                        return depth, name, root_positions
+                        return stack, name, root_positions
                     position = end
                 else:
-                    depth += 1
+                    stack = (*stack, lowered)
         elif position + 1 >= length:
             # A trailing "<" would join the next piece's first character.
             return None
         else:
             position += 1
-    return depth, raw, root_positions
+    return stack, raw, root_positions
 
 
 def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _MaterializedRowPlan | None:
@@ -774,13 +890,16 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
     plain_name_opens: set[int] = set()
 
     def open_tag(
-        simple: _SimpleJsonOperation, depth: int, raw: str | None, *, top: bool
-    ) -> tuple[int, str | None] | None:
+        simple: _SimpleJsonOperation, stack: tuple[str, ...], raw: str | None, *, top: bool
+    ) -> tuple[tuple[str, ...], str | None] | None:
         operation = cast("_Open", simple.operation)
         node = operation.node
         # An opening written per occurrence cannot sit inside skipped raw
         # text, and a template tag could become a serialize placeholder.
-        if raw is not None or _marker_name_is(node.tag, _MARKER_PLACEHOLDER_TAG):
+        if raw is not None or _marker_name_is(node.tag, _MARKER_PLACEHOLDER_TAG) or not node.tag.isascii():
+            return None
+        lowered = node.tag.lower()
+        if lowered in _MARKER_DECLINED_TAGS or _marker_ends_an_open_element(lowered, stack):
             return None
         # The opening ends with "/>" only for self-closing void syntax, and
         # the native scan must read the same tag the same way.
@@ -788,7 +907,7 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
         native_void = _marker_name_is(node.tag, _MARKER_VOID_TAGS)
         if self_closing and not native_void:
             return None
-        is_root = depth == 0
+        is_root = not stack
         if is_root and (not top or self_closing):
             return None
         runtime_opens[id(simple)] = is_root
@@ -798,21 +917,24 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
             if _marker_name_is(node.tag, _MARKER_RAW_TEXT_TAGS):
                 raw = node.tag
             else:
-                depth += 1
+                stack = (*stack, lowered)
         if node.is_self_closing and not node.is_void:
-            scanned = _marker_scan_piece(f"</{node.tag}>", depth, raw, allow_roots=False)
+            scanned = _marker_scan_piece(f"</{node.tag}>", stack, raw, allow_roots=False)
             if scanned is None:
                 return None
-            depth, raw, _positions = scanned
-        return depth, raw
+            stack, raw, _positions = scanned
+        return stack, raw
 
-    def walk(
+    # `walk_body` yields `Call(...)` where it would call itself, and
+    # `citry._walk.run` runs those calls from a list, so checking the plan
+    # does not need one Python call per level of control flow.
+    def walk_body(
         simple_operations: tuple[_SimpleJsonOperation, ...],
-        depth: int,
+        stack: tuple[str, ...],
         raw: str | None,
         *,
         top: bool,
-    ) -> tuple[int, str | None] | None:
+    ) -> Generator[Call, Any, tuple[tuple[str, ...], str | None] | None]:
         for simple in simple_operations:
             if simple.kind == "skip":
                 operation = simple.operation
@@ -821,15 +943,15 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
                 ):
                     # Data attributes are escaped per occurrence, like the
                     # serialize-time path, instead of formatted once here.
-                    state = open_tag(simple, depth, raw, top=top)
+                    state = open_tag(simple, stack, raw, top=top)
                 else:
                     piece = _static_html_piece(operation)
                     if piece is None:
                         return None
-                    scanned = _marker_scan_piece(piece, depth, raw, allow_roots=top)
+                    scanned = _marker_scan_piece(piece, stack, raw, allow_roots=top)
                     if scanned is None:
                         return None
-                    depth, raw, positions = scanned
+                    stack, raw, positions = scanned
                     bounds = [0, *positions, len(piece)]
                     literal_pieces[id(simple)] = tuple(piece[start:end] for start, end in pairwise(bounds))
                     continue
@@ -838,9 +960,9 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
                 # both ordinary text and skipped raw text.
                 continue
             elif simple.kind in {"open", "generic"}:
-                state = open_tag(simple, depth, raw, top=top)
+                state = open_tag(simple, stack, raw, top=top)
             elif simple.kind in {"if", "for"}:
-                if raw is not None or depth <= 0:
+                if raw is not None or not stack:
                     return None
                 bodies = (
                     tuple(body for _condition, body in simple.branches)
@@ -848,17 +970,17 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
                     else (simple.body, simple.empty)
                 )
                 for body in bodies:
-                    if walk(body, depth, None, top=False) != (depth, None):
+                    if (yield Call(walk_body, body, stack, None, top=False)) != (stack, None):
                         return None
                 continue
             else:
                 return None
             if state is None:
                 return None
-            depth, raw = state
-        return depth, raw
+            stack, raw = state
+        return stack, raw
 
-    if walk(operations, 0, None, top=True) is None:
+    if run(walk_body(operations, (), None, top=True)) is None:
         return None
     return _MaterializedRowPlan(literal_pieces, runtime_opens, frozenset(plain_name_opens))
 
@@ -1066,6 +1188,27 @@ def _compile_simple_json_operations(
     lexical_names: tuple[str, ...] = (),
     allow_instance_free_spread: bool = False,
 ) -> tuple[_SimpleJsonOperation, ...] | None:
+    """Compile operations for the generated evaluator, or return None when one is unsupported."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(
+        _compile_simple_json_walk(
+            operations,
+            nested=nested,
+            lexical_names=lexical_names,
+            allow_instance_free_spread=allow_instance_free_spread,
+        )
+    )
+
+
+def _compile_simple_json_walk(
+    operations: tuple[object, ...],
+    *,
+    nested: bool,
+    lexical_names: tuple[str, ...],
+    allow_instance_free_spread: bool,
+) -> Generator[Call, Any, tuple[_SimpleJsonOperation, ...] | None]:
+    """The walk generator behind ``_compile_simple_json_operations``."""
     compiled: list[_SimpleJsonOperation] = []
     for operation in operations:
         if isinstance(operation, (_Static, _Close)):
@@ -1141,7 +1284,8 @@ def _compile_simple_json_operations(
                     condition = _compile_simple_json_expr(condition_attr.expr, condition_attr.used_vars)
                     if condition is None or condition.kind != "path":
                         return None
-                body = _compile_simple_json_operations(
+                body = yield Call(
+                    _compile_simple_json_walk,
                     branch_operations,
                     nested=True,
                     lexical_names=lexical_names,
@@ -1158,13 +1302,15 @@ def _compile_simple_json_operations(
             target, iterable = loop
             if target in lexical_names:
                 return None
-            body = _compile_simple_json_operations(
+            body = yield Call(
+                _compile_simple_json_walk,
                 operation.body,
                 nested=True,
                 lexical_names=(*lexical_names, target),
                 allow_instance_free_spread=allow_instance_free_spread,
             )
-            empty = _compile_simple_json_operations(
+            empty = yield Call(
+                _compile_simple_json_walk,
                 operation.empty,
                 nested=True,
                 lexical_names=lexical_names,
@@ -1257,10 +1403,12 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
             return
         raise AssertionError(f"unknown simple JSON read expression: {expression.kind}")
 
+    # `visit` and `freeze` are walk generators run by `run`, so Python's call
+    # depth does not grow with how deeply the template nests.
     def visit(
         scoped_operations: tuple[_SimpleJsonOperation, ...],
         local_nodes: dict[str, _SimpleJsonReadNodeBuilder],
-    ) -> None:
+    ) -> Generator[Call, Any, None]:
         for simple in scoped_operations:
             if simple.kind == "text":
                 add_expression(cast("_SimpleJsonExpr", simple.expression), "scalar", local_nodes)
@@ -1277,7 +1425,7 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
                 for condition, body in simple.branches:
                     if condition is not None:
                         add_expression(condition, "truth", local_nodes)
-                    visit(body, local_nodes)
+                    yield Call(visit, body, local_nodes)
             elif simple.kind == "call":
                 # A call passes each value to the child unchanged, as the
                 # ordinary call does. The walk to it must still go through
@@ -1293,49 +1441,68 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
                     iterable.items = new_node()
                 loop_nodes = dict(local_nodes)
                 loop_nodes[cast("str", simple.target)] = iterable.items
-                visit(simple.body, loop_nodes)
+                yield Call(visit, simple.body, loop_nodes)
                 # Empty branches do not introduce the loop variable.
-                visit(simple.empty, local_nodes)
+                yield Call(visit, simple.empty, local_nodes)
 
-    visit(operations, {})
+    run(visit(operations, {}))
 
-    def freeze(node: _SimpleJsonReadNodeBuilder) -> _SimpleJsonReadNode:
-        return _SimpleJsonReadNode(
-            frozenset(node.kinds),
-            tuple((key, freeze(child)) for key, child in node.children.items()),
-            None if node.items is None else freeze(node.items),
-        )
+    def freeze(node: _SimpleJsonReadNodeBuilder) -> Generator[Call, Any, _SimpleJsonReadNode]:
+        children: list[tuple[str, _SimpleJsonReadNode]] = []
+        for key, child in node.children.items():
+            children.append((key, (yield Call(freeze, child))))
+        items = None if node.items is None else (yield Call(freeze, node.items))
+        return _SimpleJsonReadNode(frozenset(node.kinds), tuple(children), items)
 
     return _SimpleJsonReadSet(
-        tuple((name, freeze(node)) for name, node in roots.items()),
+        tuple((name, run(freeze(node))) for name, node in roots.items()),
         _simple_json_loop_targets(operations),
     )
 
 
 def _simple_json_loop_targets(operations: tuple[_SimpleJsonOperation, ...]) -> tuple[str, ...]:
+    """Return every loop variable in ``operations``, in first-seen order."""
+    return run(_loop_targets_walk(operations))
+
+
+def _loop_targets_walk(operations: tuple[_SimpleJsonOperation, ...]) -> Generator[Call, Any, tuple[str, ...]]:
+    """The walk generator behind ``_simple_json_loop_targets``."""
     targets: list[str] = []
     for operation in operations:
         if operation.kind == "for":
             targets.append(cast("str", operation.target))
-            targets.extend(_simple_json_loop_targets(operation.body))
-            targets.extend(_simple_json_loop_targets(operation.empty))
+            targets.extend((yield Call(_loop_targets_walk, operation.body)))
+            targets.extend((yield Call(_loop_targets_walk, operation.empty)))
         elif operation.kind == "if":
             for _condition, body in operation.branches:
-                targets.extend(_simple_json_loop_targets(body))
+                targets.extend((yield Call(_loop_targets_walk, body)))
     return tuple(dict.fromkeys(targets))
 
 
 def _simple_json_nested_operations(
     operations: tuple[_SimpleJsonOperation, ...],
 ) -> Iterator[_SimpleJsonOperation]:
+    """
+    Yield every operation in ``operations``, nested ones included, in source order.
+
+    `walk` drives the nested bodies, so reading the operations does not cost
+    one Python frame per level of nesting.
+    """
+    return walk(_nested_operations_walk(operations))
+
+
+def _nested_operations_walk(
+    operations: tuple[_SimpleJsonOperation, ...],
+) -> Generator[_SimpleJsonOperation | Call, Any, None]:
+    """The walk generator behind ``_simple_json_nested_operations``."""
     for operation in operations:
         yield operation
         if operation.kind == "if":
             for _condition, body in operation.branches:
-                yield from _simple_json_nested_operations(body)
+                yield Call(_nested_operations_walk, body)
         elif operation.kind == "for":
-            yield from _simple_json_nested_operations(operation.body)
-            yield from _simple_json_nested_operations(operation.empty)
+            yield Call(_nested_operations_walk, operation.body)
+            yield Call(_nested_operations_walk, operation.empty)
 
 
 def _simple_json_has_dynamic_attributes(operations: tuple[_SimpleJsonOperation, ...]) -> bool:
@@ -1381,6 +1548,27 @@ def _simple_vue_spread_hooks_supported(extensions: Any) -> bool:
     return True
 
 
+# The deepest nesting of generated functions a leaf uses on a path that has a
+# Python alternative. Each branch or loop body is one generated function that
+# calls the next, so each level costs a Python frame; the root body counts as
+# one, so up to 15 nested `<c-if>`/`<c-for>` levels use generated code.
+# - The row HTML writer refuses a deeper template with ValueError while it
+#   generates, and the row then takes the per-row path.
+# - The evaluator is still generated for a deeper template, because the
+#   context-free `simple='vue'` renderer has no other evaluator. The ordinary
+#   leaf render uses it only up to this depth and walks a deeper template
+#   with the Python evaluator, which keeps its own stack.
+_MAX_GENERATED_NESTING = 16
+
+
+def _enter_generated_body(depth: int) -> int:
+    """Return the next body's nesting depth, or refuse one past the limit."""
+    if depth >= _MAX_GENERATED_NESTING:
+        msg = f"leaf program nests more than {_MAX_GENERATED_NESTING} bodies deep for generated code"
+        raise ValueError(msg)
+    return depth + 1
+
+
 class _SimpleJsonCodegen:
     """Build a cached evaluator for the deliberately small JSON expression subset."""
 
@@ -1388,6 +1576,10 @@ class _SimpleJsonCodegen:
         self.operations: list[object] = []
         self.functions: list[str] = []
         self.counter = 0
+        # How many generated functions the one being written is nested in,
+        # and the most there have been.
+        self._depth = 0
+        self.max_depth = 0
         self._root_operations = operations
         self._read_set = _simple_json_read_set(operations)
         self.readset_preflight_root = self._readset_preflight_function()
@@ -1446,7 +1638,10 @@ class _SimpleJsonCodegen:
         operations: tuple[_SimpleJsonOperation, ...],
         local_names: tuple[tuple[str, str], ...],
         indent: int,
-    ) -> list[str]:
+    ) -> Generator[Call, Any, list[str]]:
+        # A walk generator: each branch and loop body's function is written
+        # through the walk driver, so writing the code does not need one Python
+        # call per level of nesting.
         lines: list[str] = []
         pad = " " * indent
         for simple in operations:
@@ -1562,7 +1757,7 @@ class _SimpleJsonCodegen:
                     )
                 )
                 for branch_index, (_condition, body) in enumerate(simple.branches):
-                    branch_function = self._evaluate_function(body, local_names)
+                    branch_function = yield Call(self._evaluate_function, body, local_names)
                     lines.append(f"{pad}if {selected} == {branch_index}:")
                     lines.append(
                         f"{pad}    {branch_function}("
@@ -1577,8 +1772,10 @@ class _SimpleJsonCodegen:
                 rendered_any = self._new_name("rendered_any")
                 loop_value = self._new_name("loop_value")
                 body_locals = (*local_names, (cast("str", simple.target), loop_value))
-                body_function = self._evaluate_function(simple.body, body_locals)
-                empty_function = self._evaluate_function(simple.empty, local_names) if simple.empty else None
+                body_function = yield Call(self._evaluate_function, simple.body, body_locals)
+                empty_function = (
+                    (yield Call(self._evaluate_function, simple.empty, local_names)) if simple.empty else None
+                )
                 lines.extend(
                     (
                         f"{pad}{records} = []",
@@ -1676,7 +1873,26 @@ class _SimpleJsonCodegen:
         local_names: tuple[tuple[str, str], ...] = (),
         *,
         sets_value_context: bool = False,
-    ) -> str:
+    ) -> Generator[Call, Any, str]:
+        outer_depth = self._depth
+        self._depth = outer_depth + 1
+        self.max_depth = max(self.max_depth, self._depth)
+        try:
+            return (
+                yield Call(
+                    self._write_evaluate_function, operations, local_names, sets_value_context=sets_value_context
+                )
+            )
+        finally:
+            self._depth = outer_depth
+
+    def _write_evaluate_function(
+        self,
+        operations: tuple[_SimpleJsonOperation, ...],
+        local_names: tuple[tuple[str, str], ...],
+        *,
+        sets_value_context: bool,
+    ) -> Generator[Call, Any, str]:
         name = self._new_name("evaluate")
         lines = [
             f"def {name}(context, variables, data, root_data, vue_errors, special, resolved_opens"
@@ -1686,19 +1902,19 @@ class _SimpleJsonCodegen:
             # Branch and loop-body functions run only inside the root function,
             # which already made this same `context` current, and any other
             # code that sets `_VALUE_CONTEXT` resets it before returning.
-            body_lines = self._evaluate_lines(operations, local_names, 4)
+            body_lines = yield Call(self._evaluate_lines, operations, local_names, 4)
             lines.extend(body_lines or ["    pass"])
             self.functions.append("\n".join(lines))
             return name
         lines.extend(("    value_token = _VALUE_CONTEXT.set(context)", "    try:"))
-        body_lines = self._evaluate_lines(operations, local_names, 8)
+        body_lines = yield Call(self._evaluate_lines, operations, local_names, 8)
         lines.extend(body_lines or ["        pass"])
         lines.extend(("    finally:", "        _VALUE_CONTEXT.reset(value_token)"))
         self.functions.append("\n".join(lines))
         return name
 
     def build(self) -> _SimpleJsonProgram:
-        evaluate_root = self._evaluate_function(self._root_operations, sets_value_context=True)
+        evaluate_root = run(self._evaluate_function(self._root_operations, sets_value_context=True))
         source = "\n\n".join(self.functions)
         namespace: dict[str, object] = {
             "_ConstMapping": _ConstMapping,
@@ -1729,6 +1945,7 @@ class _SimpleJsonCodegen:
         return _SimpleJsonProgram(
             cast("_SimpleJsonPreflight", namespace[self.readset_preflight_root]),
             cast("_SimpleJsonEvaluate", namespace[evaluate_root]),
+            self.max_depth,
         )
 
 
@@ -1759,6 +1976,8 @@ class _RowHtmlWriterCodegen:
         # so the source text stays the same from run to run.
         self.namespace: dict[str, object] = {}
         self.counter = 0
+        # How many generated functions the one being written is nested in.
+        self._depth = 0
 
     def _new_name(self, prefix: str) -> str:
         self.counter += 1
@@ -1772,6 +1991,14 @@ class _RowHtmlWriterCodegen:
         return name, f"{name}_id"
 
     def _function(self, operations: tuple[_SimpleJsonOperation, ...]) -> str:
+        outer_depth = self._depth
+        self._depth = _enter_generated_body(outer_depth)
+        try:
+            return self._write_function(operations)
+        finally:
+            self._depth = outer_depth
+
+    def _write_function(self, operations: tuple[_SimpleJsonOperation, ...]) -> str:
         # Each branch and loop body is its own function, as in the evaluator,
         # so a deeply nested template never hits Python's nested-block limit.
         name = self._new_name("write")
@@ -1937,7 +2164,9 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
     lines.append(f"{pad}plain_scalar_types = _simple_json_plain_scalar_types()")
     counter = 0
 
-    def emit(value: str, plan: _SimpleJsonReadNode, depth: int) -> None:
+    # `emit` is a walk generator run by `run`, so writing the check does not
+    # need one Python call per level of the read set.
+    def emit(value: str, plan: _SimpleJsonReadNode, depth: int) -> Generator[Call, Any, None]:
         nonlocal counter
         counter += 1
         kind = f"value_type{counter}"
@@ -1990,7 +2219,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                         f"{at}{child_value} = dict.__getitem__({value}, {key!r})",
                     )
                 )
-                emit(child_value, child, depth)
+                yield Call(emit, child_value, child, depth)
         if plan.items is not None:
             counter += 1
             item_value = f"item{counter}"
@@ -2001,7 +2230,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                     f"{at}for {item_value} in {value}:",
                 )
             )
-            emit(item_value, plan.items, depth + 4)
+            yield Call(emit, item_value, plan.items, depth + 4)
 
     for name, plan in read_set.roots:
         counter += 1
@@ -2013,7 +2242,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                 f"{pad}{root_value} = dict.__getitem__(variables, {name!r})",
             )
         )
-        emit(root_value, plan, indent)
+        run(emit(root_value, plan, indent))
     lines.append(f"{pad}return True")
     return lines
 
@@ -2050,6 +2279,35 @@ def _simple_json_readset_is_plain(variables: object, read_set: _SimpleJsonReadSe
 
 
 def _simple_json_read_node_is_plain(value: object, plan: _SimpleJsonReadNode) -> bool:
+    """
+    Return whether ``value`` has only the plain JSON shapes ``plan`` reads.
+
+    The plan nests as deeply as the template's paths and loops do, so its
+    children and list items are checked on this function's own stack rather
+    than by calling it again for each level.
+    """
+    pending: list[tuple[object, _SimpleJsonReadNode]] = [(value, plan)]
+    while pending:
+        node_value, node_plan = pending.pop()
+        if not _simple_json_read_value_is_plain(node_value, node_plan):
+            return False
+        if node_plan.children:
+            if type(node_value) is not dict:
+                return False
+            mapping = cast("dict[object, object]", node_value)
+            for key, child in node_plan.children:
+                if not dict.__contains__(mapping, key):
+                    return False
+                pending.append((dict.__getitem__(mapping, key), child))
+        if node_plan.items is not None:
+            if type(node_value) is not list:
+                return False
+            pending.extend((item, node_plan.items) for item in cast("list[object]", node_value))
+    return True
+
+
+def _simple_json_read_value_is_plain(value: object, plan: _SimpleJsonReadNode) -> bool:
+    """Check one value against the reads ``plan`` makes of it, without its children or items."""
     value_type = type(value)
     plain_scalar_types = _simple_json_plain_scalar_types() if "scalar" in plan.kinds else frozenset()
     if "scalar" in plan.kinds:
@@ -2083,21 +2341,6 @@ def _simple_json_read_node_is_plain(value: object, plan: _SimpleJsonReadNode) ->
             if type(name) is not str or item_type not in {str, int, bool, type(None), float}:
                 return False
             if item_type is float and not math.isfinite(cast("float", item)):
-                return False
-    if plan.children:
-        if value_type is not dict:
-            return False
-        mapping = cast("dict[object, object]", value)
-        for key, child in plan.children:
-            if not dict.__contains__(mapping, key):
-                return False
-            if not _simple_json_read_node_is_plain(dict.__getitem__(mapping, key), child):
-                return False
-    if plan.items is not None:
-        if value_type is not list:
-            return False
-        for item in cast("list[object]", value):
-            if not _simple_json_read_node_is_plain(item, plan.items):
                 return False
     return True
 
@@ -2133,6 +2376,13 @@ def _simple_json_plain_scalar_types() -> frozenset[type[object]]:
 
 def _evaluation_only_operations(operations: tuple[object, ...]) -> tuple[object, ...]:
     """Drop static materialization visits while retaining dynamic branch/loop decisions."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(_evaluation_only_walk(operations))
+
+
+def _evaluation_only_walk(operations: tuple[object, ...]) -> Generator[Call, Any, tuple[object, ...]]:
+    """The walk generator behind ``_evaluation_only_operations``."""
     selected: list[object] = []
     for operation in operations:
         if isinstance(operation, (_Static, _Close)):
@@ -2140,22 +2390,14 @@ def _evaluation_only_operations(operations: tuple[object, ...]) -> tuple[object,
         if isinstance(operation, _Open) and operation.static is not None:
             continue
         if isinstance(operation, _If):
-            selected.append(
-                _If(
-                    operation.node,
-                    operation.key,
-                    tuple(_evaluation_only_operations(branch) for branch in operation.branches),
-                )
-            )
+            branches: list[tuple[object, ...]] = []
+            for branch in operation.branches:
+                branches.append((yield Call(_evaluation_only_walk, branch)))
+            selected.append(_If(operation.node, operation.key, tuple(branches)))
         elif isinstance(operation, _For):
-            selected.append(
-                _For(
-                    operation.node,
-                    operation.key,
-                    _evaluation_only_operations(operation.body),
-                    _evaluation_only_operations(operation.empty),
-                )
-            )
+            body = yield Call(_evaluation_only_walk, operation.body)
+            empty = yield Call(_evaluation_only_walk, operation.empty)
+            selected.append(_For(operation.node, operation.key, body, empty))
         else:
             selected.append(operation)
     return tuple(selected)
@@ -2231,6 +2473,15 @@ def _native_row_operations(
     operations: tuple[_SimpleJsonOperation, ...],
 ) -> tuple[tuple[object, ...], ...] | None:
     """Describe one scope of simple JSON operations, or return None for a shape Rust does not run."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(_native_row_operations_walk(operations))
+
+
+def _native_row_operations_walk(
+    operations: tuple[_SimpleJsonOperation, ...],
+) -> Generator[Call, Any, tuple[tuple[object, ...], ...] | None]:
+    """The walk generator behind ``_native_row_operations``."""
     described: list[tuple[object, ...]] = []
     for simple in operations:
         operation = simple.operation
@@ -2269,15 +2520,15 @@ def _native_row_operations(
             branches: list[tuple[tuple[object, ...] | None, tuple[tuple[object, ...], ...]]] = []
             for condition, body in simple.branches:
                 described_condition = None if condition is None else _native_row_expr(condition)
-                described_body = _native_row_operations(body)
+                described_body = yield Call(_native_row_operations_walk, body)
                 if (condition is not None and described_condition is None) or described_body is None:
                     return None
                 branches.append((described_condition, described_body))
             described.append(("if", cast("_If", operation).key, tuple(branches)))
         elif simple.kind == "for":
             iterable = _native_row_expr(cast("_SimpleJsonExpr", simple.iterable))
-            loop_body = _native_row_operations(simple.body)
-            loop_empty = _native_row_operations(simple.empty)
+            loop_body = yield Call(_native_row_operations_walk, simple.body)
+            loop_empty = yield Call(_native_row_operations_walk, simple.empty)
             if iterable is None or loop_body is None or loop_empty is None:
                 return None
             described.append(("for", cast("_For", operation).key, simple.target, iterable, loop_body, loop_empty))
@@ -2290,11 +2541,18 @@ def _native_row_operations(
 
 def _native_row_read_node(node: _SimpleJsonReadNode) -> tuple[object, ...]:
     """Describe one read-set node as (kinds, children, items)."""
-    return (
-        tuple(sorted(node.kinds)),
-        tuple((key, _native_row_read_node(child)) for key, child in node.children),
-        None if node.items is None else _native_row_read_node(node.items),
-    )
+    # A read set nests as deeply as the template's paths and loops; the walk
+    # driver keeps that from costing one Python frame per level.
+    return run(_native_row_read_node_walk(node))
+
+
+def _native_row_read_node_walk(node: _SimpleJsonReadNode) -> Generator[Call, Any, tuple[object, ...]]:
+    """The walk generator behind ``_native_row_read_node``."""
+    children: list[tuple[str, tuple[object, ...]]] = []
+    for key, child in node.children:
+        children.append((key, (yield Call(_native_row_read_node_walk, child))))
+    items = None if node.items is None else (yield Call(_native_row_read_node_walk, node.items))
+    return (tuple(sorted(node.kinds)), tuple(children), items)
 
 
 # What ``native_row_plan_tuples`` returns: the described operations, the
@@ -2372,6 +2630,9 @@ class LeafProgramNode(Node):
         # depends on changes, so the plan cannot go stale.
         self._native_row_plan: Any = None
         self._native_row_plan_attempted = False
+        # Why Rust refused the plan for nesting too deeply, until the render
+        # that first meets it logs the reason and clears it.
+        self.native_depth_refusal: str | None = None
 
     @property
     def native_row_plan(self) -> Any:
@@ -2394,13 +2655,18 @@ class LeafProgramNode(Node):
                     # fails loudly instead of quietly taking the slower path.
                     try:
                         plan = native._RowPlan(*tuples)
-                    except ValueError:
+                    except ValueError as error:
                         # Rust refuses a shape it cannot evaluate exactly;
                         # those rows keep the Python evaluator. A key with
                         # no UTF-8 form (a lone surrogate, which no Rust
                         # string can hold) raises UnicodeEncodeError, a
                         # ValueError, here.
                         plan = None
+                        # A template nested past Rust's depth limits renders
+                        # correctly, only more slowly. The caller, which knows
+                        # the component's name, reports it once at debug level.
+                        if str(error).startswith("too_deep"):
+                            self.native_depth_refusal = str(error).removeprefix("too_deep: ")
             # Publish the plan before the flag, so a concurrent render sees
             # either nothing yet (and builds it too) or the final value.
             self._native_row_plan = plan
@@ -2463,7 +2729,19 @@ class LeafProgramNode(Node):
         if self._simple_json_program is None or self._simple_json_has_i18n_spread or self._simple_json_has_i18n_attrs:
             return False
 
-        def supported(operations: Sequence[object]) -> bool:
+        # Nested branch and loop bodies are checked on this function's own
+        # stack, so the check does not need Python stack in proportion to how
+        # deeply the template nests. The answer does not depend on the order
+        # bodies are checked in.
+        def supported(root: Sequence[object]) -> bool:
+            pending: list[Sequence[object]] = [root]
+            while pending:
+                if not supported_level(pending.pop(), pending):
+                    return False
+            return True
+
+        def supported_level(operations: Sequence[object], pending: list[Sequence[object]]) -> bool:
+            """Check one body's own operations; queue its branch and loop bodies on ``pending``."""
             for operation in operations:
                 if isinstance(operation, (_Static, _Close, _Text)):
                     continue
@@ -2499,12 +2777,11 @@ class LeafProgramNode(Node):
                         return False
                     continue
                 if isinstance(operation, _If):
-                    if any(not supported(branch) for branch in operation.branches):
-                        return False
+                    pending.extend(operation.branches)
                     continue
                 if isinstance(operation, _For):
-                    if not supported(operation.body) or not supported(operation.empty):
-                        return False
+                    pending.append(operation.body)
+                    pending.append(operation.empty)
                     continue
                 if isinstance(operation, _Call):
                     continue
@@ -2658,6 +2935,10 @@ class LeafProgramNode(Node):
                 # Unsupported templates keep the established evaluator.
                 self._simple_json_program = None
         simple_program = self._simple_json_program
+        if simple_program is not None and simple_program.nesting > _MAX_GENERATED_NESTING:
+            # Too deep for one frame per level here; the Python evaluator
+            # below walks it on its own stack.
+            simple_program = None
         if simple_program is not None:
             extensions = component.citry.extensions if component is not None else None
             if self._simple_json_has_i18n_spread or (
@@ -2747,7 +3028,9 @@ def compile_leaf_program(
     how to render the children the evaluator records.
     """
     compiler = _Compiler(allow_i18n_passthrough=allow_i18n_passthrough, allow_calls=allow_calls)
-    operations = compiler.compile_body(body)
+    # The compiler's methods are walk generators, so Python's call depth does
+    # not grow with how deeply the template nests.
+    operations = run(compiler.compile_body(body))
     if operations is None or (not compiler.has_data_ops and not allow_static_only) or not compiler.safe_body:
         return None
     evaluation_operations = _evaluation_only_operations(operations)
@@ -2802,7 +3085,7 @@ class _Compiler:
         self.output.append(value)
         self.byte_position += len(value.encode("utf-8"))
 
-    def compile_body(self, body: Sequence[object]) -> tuple[object, ...] | None:
+    def compile_body(self, body: Sequence[object]) -> Generator[Call, Any, tuple[object, ...] | None]:
         operations: list[object] = []
         skip_close_tag: str | None = None
         index = 0
@@ -2817,7 +3100,7 @@ class _Compiler:
                 index += 1
                 continue
             skip_close_tag = None
-            operation = self.compile_item(item)
+            operation = yield Call(self.compile_item, item)
             if operation is None:
                 return None
             operations.append(operation)
@@ -2826,16 +3109,18 @@ class _Compiler:
             index += 1
         return tuple(operations)
 
-    def compile_item(self, item: object) -> object | None:
+    def compile_item(self, item: object) -> Generator[Call, Any, object | None]:
         if type(item) is PreparedStaticRunNode:
             if _unsafe_body_text(item._prepared.html):
                 self.safe_body = False
-            self.append(item._prepared.html)
+            # Static text may meet the next item's `{` across a Citry tag;
+            # the server still writes the text itself.
+            self.append(_guard_template_braces(item._prepared.html))
             return _Static(item._prepared.html, item._prepared)
         if type(item) is PreparedSourceTextNode:
             if _unsafe_body_text(item.text):
                 self.safe_body = False
-            self.append(item.text)
+            self.append(_guard_template_braces(item.text))
             return _Static(item.text, item._prepared)
         if type(item) is PreparedVerbatimHtmlNode:
             # Raw HTML is data, never Vue template source. Keep this component
@@ -2867,11 +3152,11 @@ class _Compiler:
         if type(item) is ComponentNode and self.allow_calls:
             return self._compile_call(item)
         if type(item) is IfNode:
-            return self._compile_if(item)
+            return (yield Call(self._compile_if, item))
         if type(item) is ForNode:
             if item._precomputed_parts is not None:
                 return None
-            return self._compile_for(item)
+            return (yield Call(self._compile_for, item))
         return None
 
     def _compile_open(self, node: PreparedElementOpenNode, renderer: Node) -> _Open:
@@ -2884,6 +3169,11 @@ class _Compiler:
         # ordinary Vue nodes, which Vue then updates. The general assembler
         # writes them as HTML the browser keeps.
         if any(item[0] == "morph" for item in node.element_metadata):
+            self.safe_body = False
+        # Vue does not compile anything inside `v-pre`, so a leaf template's
+        # data bindings there would reach the page as written. The general
+        # assembler writes the contents as the HTML the server renders.
+        if any(attr.key.casefold() == "v-pre" for attr in node._authored_vue_attrs):
             self.safe_body = False
         if node._has_spread and not _source_attrs_are_projectable(node):
             # A spread can remove or replace these authored values, so the
@@ -3087,7 +3377,7 @@ class _Compiler:
         self.calls.append(call)
         return call
 
-    def _compile_if(self, node: IfNode) -> _If | None:
+    def _compile_if(self, node: IfNode) -> Generator[Call, Any, _If | None]:
         self.has_data_ops = True
         key = f"citryIf{self.if_index}"
         self.if_index += 1
@@ -3095,7 +3385,7 @@ class _Compiler:
         for index, branch in enumerate(node.branches):
             self.append(branch_opening(key, index))
             self.scope_steps.append({"kind": "branch", "key": key, "index": index})
-            compiled = self.compile_body(branch[2])
+            compiled = yield Call(self.compile_body, branch[2])
             self.scope_steps.pop()
             if compiled is None:
                 return None
@@ -3103,7 +3393,7 @@ class _Compiler:
             self.append("</template>")
         return _If(node, key, tuple(branches))
 
-    def _compile_for(self, node: ForNode) -> _For | None:
+    def _compile_for(self, node: ForNode) -> Generator[Call, Any, _For | None]:
         self.has_data_ops = True
         key = f"citryLoop{self.loop_index}"
         self.loop_index += 1
@@ -3115,7 +3405,7 @@ class _Compiler:
         )
         child.open_tags = list(self.open_tags)
         child.scope_steps = [*self.scope_steps, {"kind": "each", "key": key}]
-        compiled_body = child.compile_body(node.branches[0][2])
+        compiled_body = yield Call(child.compile_body, node.branches[0][2])
         if compiled_body is None:
             return None
         offset = self.byte_position
@@ -3133,7 +3423,7 @@ class _Compiler:
         if len(node.branches) > 1:
             self.append(loop_empty_opening(key))
             self.scope_steps.append({"kind": "empty", "key": key})
-            compiled_empty = self.compile_body(node.branches[1][2])
+            compiled_empty = yield Call(self.compile_body, node.branches[1][2])
             self.scope_steps.pop()
             if compiled_empty is None:
                 return None
@@ -3282,214 +3572,327 @@ def _evaluate_inner(
     special: dict[tuple[int, str], RenderPart],
     resolved_opens: dict[tuple[int, int], PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen],
 ) -> None:
-    for operation in operations:
-        if isinstance(operation, _Static):
-            continue
-        if isinstance(operation, _Text):
-            try:
-                text_value = operation.node.resolve_value(context)
-            except Exception as error:
-                _attach_error(error, operation.node, context)
-                raise
-            if not isinstance(text_value, str):
-                special[(id(data), operation.key)] = text_value
-                if isinstance(text_value, CitryRender) and text_value.context is not context:
-                    from citry.component_render import _contains_deferred, _merge_dependencies  # noqa: PLC0415
+    """
+    Evaluate a leaf program's operations into ``data``.
 
-                    if not _contains_deferred(text_value):
-                        _merge_dependencies(context, text_value.context)
-            else:
-                data[operation.key] = text_value
-        elif isinstance(operation, _Open):
-            if operation.static is not None:
+    A branch's or loop row's operations are evaluated on this function's own
+    stack, so Python's call depth does not grow with how deeply control flow
+    nests. Each body frame makes its context current while it runs, and an
+    error passes out through the frames innermost first: each loop frame
+    closes its loop and adds its ``<c-for>``'s template position, because an
+    error anywhere inside a loop belongs to that loop as well.
+    """
+    root = _LeafBodyFrame(operations, context, data, set_value_context=False)
+    frames: list[_LeafBodyFrame | _LeafLoopFrame] = [root]
+    try:
+        while frames:
+            frame = frames[-1]
+            if type(frame) is _LeafLoopFrame:
+                loop_frame = frame
+                try:
+                    following = _next_leaf_row(loop_frame)
+                except Exception as error:
+                    frames.pop()
+                    _attach_error(error, loop_frame.operation.node, loop_frame.context)
+                    raise
+                if following is not None:
+                    frames.append(following)
+                    continue
+                frames.pop()
+                _finish_leaf_loop(loop_frame)
                 continue
-            if operation.fixed_attrs is not None:
-                try:
-                    open_value: PreparedElementOpen | dict[str, object] = {
-                        name: resolved
-                        for name, attr in operation.fixed_attrs
-                        if (resolved := const_value(attr.resolve(context))) is not None and resolved is not False
-                    }
-                    # Fixed attributes record the same dict for data and for
-                    # the opening; the spread branch below may record a
-                    # _SpreadResolvedOpen instead, hence the wider type.
-                    resolved_open: PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen = open_value
-                except Exception as error:
-                    _attach_error(error, operation.node, context)
-                    raise
-            elif operation.spread_renderer is not None and _spread_passthrough_is_live(
-                operation.spread_renderer, context, operation.node
-            ):
-                try:
-                    resolved, extension_validated = operation.node._resolve_for_output(context)
-                    projected_attrs = (
-                        _spread_project_attrs(operation.node, resolved)
-                        if type(operation.spread_renderer) is I18nBindingElementAttrsNode
-                        else None
-                    )
-                    if projected_attrs is not None:
-                        open_value = projected_attrs
-                        resolved_open = _SpreadResolvedOpen(resolved, context, extension_validated)
-                    else:
-                        fallback_value = operation.node._prepared_from_resolved(
-                            resolved,
-                            context=context,
-                            extension_validated=extension_validated,
-                        )
-                        open_value = _spread_data_attrs(operation.node, fallback_value)
-                        resolved_open = fallback_value
-                    if vue_render_active():
-                        _reject_executable_dynamic_attrs(open_value, tag=operation.node.tag)
-                    validation_error = _validate_data_attrs(open_value, tag=operation.node.tag)
-                    if validation_error is not None:
-                        vue_errors.append(validation_error)
-                except Exception as error:
-                    _attach_error(error, operation.node, context)
-                    raise
-            else:
-                if operation.renderer is None:
-                    raise AssertionError("general leaf attribute plan lost its renderer")
-                try:
-                    rendered_open = operation.renderer.render(context)
-                except Exception as error:
-                    _attach_error(error, operation.node, context)
-                    raise
-                if not isinstance(rendered_open, PreparedElementOpen):
-                    raise TypeError("leaf browser program attribute produced structured output")
-                validation_error = _validate_open(rendered_open)
-                if validation_error is not None:
-                    vue_errors.append(validation_error)
-                resolved_open = rendered_open
-                open_value = rendered_open
+            body_frame = cast("_LeafBodyFrame", frame)
+            context = body_frame.context
+            data = body_frame.data
+            for operation in body_frame.operations:
+                if isinstance(operation, _Static):
+                    continue
+                if isinstance(operation, _Text):
+                    try:
+                        text_value = operation.node.resolve_value(context)
+                    except Exception as error:
+                        _attach_error(error, operation.node, context)
+                        raise
+                    if not isinstance(text_value, str):
+                        special[(id(data), operation.key)] = text_value
+                        if isinstance(text_value, CitryRender) and text_value.context is not context:
+                            from citry.component_render import _contains_deferred, _merge_dependencies  # noqa: PLC0415
 
-            resolved_opens.setdefault((id(data), id(operation)), resolved_open)
-            if operation.attrs_key is not None:
-                if isinstance(open_value, PreparedElementOpen):
-                    attrs = (
-                        _spread_data_attrs(operation.node, open_value)
-                        if operation.node._has_spread
-                        else dict(open_value.data_attrs)
-                    )
-                else:
-                    attrs = open_value
-                # Vue must set the same attribute text Python's HTML writes.
-                data[operation.attrs_key] = _vue_attribute_map(attrs)
-            if operation.key_key is not None:
-                if not isinstance(resolved_open, PreparedElementOpen):
-                    raise AssertionError("prepared key metadata requires a structured opening")
-                metadata = dict(resolved_open.element_metadata)
-                data[operation.key_key] = metadata["key"]
-            if operation.control_key is not None:
-                control_value = (
-                    ",".join(str(binding["id"]) for binding in resolved_open.control_bindings)
-                    if isinstance(resolved_open, PreparedElementOpen)
-                    else ""
-                )
-                data[operation.control_key] = control_value
-            if operation.runtime_events_key is not None:
-                runtime_events_value = (
-                    ",".join(
-                        str(binding["id"])
-                        for binding in (*resolved_open.runtime_event_bindings, *resolved_open.runtime_poll_bindings)
-                    )
-                    if isinstance(resolved_open, PreparedElementOpen)
-                    else ""
-                )
-                data[operation.runtime_events_key] = runtime_events_value
-            if isinstance(resolved_open, PreparedElementOpen) and (
-                resolved_open.event_bindings or resolved_open.runtime_event_bindings
-            ):
-                events = root_data.setdefault("eventBindings", {})
-                if not isinstance(events, dict):
-                    raise AssertionError("leaf event binding container changed type")
-                for binding in resolved_open.event_bindings:
-                    binding_id = str(binding["id"])
-                    serialized = dict(binding)
-                    previous = events.setdefault(binding_id, serialized)
-                    if previous != serialized:
-                        raise ValueError("one leaf event binding id has conflicting metadata")
-                for binding in resolved_open.runtime_event_bindings:
-                    binding_id = str(binding["id"])
-                    serialized = dict(binding)
-                    previous = events.setdefault(binding_id, serialized)
-                    if previous != serialized:
-                        raise ValueError("one leaf runtime event binding id has conflicting metadata")
-            if isinstance(resolved_open, PreparedElementOpen) and (
-                resolved_open.poll_bindings or resolved_open.runtime_poll_bindings
-            ):
-                polls = root_data.setdefault("pollBindings", {})
-                if not isinstance(polls, dict):
-                    raise AssertionError("leaf poll binding container changed type")
-                for binding in resolved_open.poll_bindings:
-                    polls[str(binding["id"])] = dict(binding)
-                for binding in resolved_open.runtime_poll_bindings:
-                    binding_id = str(binding["id"])
-                    serialized = dict(binding)
-                    previous = polls.setdefault(binding_id, serialized)
-                    if previous != serialized:
-                        raise ValueError("one leaf runtime poll binding id has conflicting metadata")
-            if isinstance(resolved_open, PreparedElementOpen) and resolved_open.control_bindings:
-                controls = root_data.setdefault("controlBindings", {})
-                if not isinstance(controls, dict):
-                    raise AssertionError("leaf control binding container changed type")
-                for binding in resolved_open.control_bindings:
-                    controls[str(binding["id"])] = dict(binding)
-        elif isinstance(operation, _Close):
-            continue
-        elif isinstance(operation, _If):
-            try:
-                body = operation.node.active_branch_body(context)
-            except Exception as error:
-                _attach_error(error, operation.node, context)
-                raise
-            selected = next((index for index, branch in enumerate(operation.node.branches) if branch[2] is body), -1)
-            data[operation.key] = selected
-            if selected >= 0:
-                _evaluate(
-                    operation.branches[selected],
-                    context,
-                    data,
-                    root_data,
-                    vue_errors,
-                    special,
-                    resolved_opens,
-                )
-        elif isinstance(operation, _For):
-            records: list[dict[str, object]] = []
-            rendered_any = False
-            try:
-                for _body, child_context in operation.node.iter_bodies(context):
-                    if child_context is context:
-                        _evaluate(
-                            operation.empty,
-                            context,
-                            data,
-                            root_data,
-                            vue_errors,
-                            special,
-                            resolved_opens,
-                        )
+                            if not _contains_deferred(text_value):
+                                _merge_dependencies(context, text_value.context)
+                    else:
+                        data[operation.key] = text_value
+                elif isinstance(operation, _Open):
+                    if operation.static is not None:
                         continue
-                    rendered_any = True
-                    record: dict[str, object] = {}
-                    records.append(record)
-                    _evaluate(
-                        operation.body,
-                        child_context,
-                        record,
-                        root_data,
-                        vue_errors,
-                        special,
-                        resolved_opens,
+                    if operation.fixed_attrs is not None:
+                        try:
+                            open_value: PreparedElementOpen | dict[str, object] = {
+                                name: resolved
+                                for name, attr in operation.fixed_attrs
+                                if (resolved := const_value(attr.resolve(context))) is not None
+                                and resolved is not False
+                            }
+                            # Fixed attributes record the same dict for data and for
+                            # the opening; the spread branch below may record a
+                            # _SpreadResolvedOpen instead, hence the wider type.
+                            resolved_open: PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen = open_value
+                        except Exception as error:
+                            _attach_error(error, operation.node, context)
+                            raise
+                    elif operation.spread_renderer is not None and _spread_passthrough_is_live(
+                        operation.spread_renderer, context, operation.node
+                    ):
+                        try:
+                            resolved, extension_validated = operation.node._resolve_for_output(context)
+                            projected_attrs = (
+                                _spread_project_attrs(operation.node, resolved)
+                                if type(operation.spread_renderer) is I18nBindingElementAttrsNode
+                                else None
+                            )
+                            if projected_attrs is not None:
+                                open_value = projected_attrs
+                                resolved_open = _SpreadResolvedOpen(resolved, context, extension_validated)
+                            else:
+                                fallback_value = operation.node._prepared_from_resolved(
+                                    resolved,
+                                    context=context,
+                                    extension_validated=extension_validated,
+                                )
+                                open_value = _spread_data_attrs(operation.node, fallback_value)
+                                resolved_open = fallback_value
+                            if vue_render_active():
+                                _reject_executable_dynamic_attrs(open_value, tag=operation.node.tag)
+                            validation_error = _validate_data_attrs(open_value, tag=operation.node.tag)
+                            if validation_error is not None:
+                                vue_errors.append(validation_error)
+                        except Exception as error:
+                            _attach_error(error, operation.node, context)
+                            raise
+                    else:
+                        if operation.renderer is None:
+                            raise AssertionError("general leaf attribute plan lost its renderer")
+                        try:
+                            rendered_open = operation.renderer.render(context)
+                        except Exception as error:
+                            _attach_error(error, operation.node, context)
+                            raise
+                        if not isinstance(rendered_open, PreparedElementOpen):
+                            raise TypeError("leaf browser program attribute produced structured output")
+                        validation_error = _validate_open(rendered_open)
+                        if validation_error is not None:
+                            vue_errors.append(validation_error)
+                        resolved_open = rendered_open
+                        open_value = rendered_open
+
+                    resolved_opens.setdefault((id(data), id(operation)), resolved_open)
+                    if operation.attrs_key is not None:
+                        if isinstance(open_value, PreparedElementOpen):
+                            attrs = (
+                                _spread_data_attrs(operation.node, open_value)
+                                if operation.node._has_spread
+                                else dict(open_value.data_attrs)
+                            )
+                        else:
+                            attrs = open_value
+                        # Vue must set the same attribute text Python's HTML writes.
+                        data[operation.attrs_key] = _vue_attribute_map(attrs)
+                    if operation.key_key is not None:
+                        if not isinstance(resolved_open, PreparedElementOpen):
+                            raise AssertionError("prepared key metadata requires a structured opening")
+                        metadata = dict(resolved_open.element_metadata)
+                        data[operation.key_key] = metadata["key"]
+                    if operation.control_key is not None:
+                        control_value = (
+                            ",".join(str(binding["id"]) for binding in resolved_open.control_bindings)
+                            if isinstance(resolved_open, PreparedElementOpen)
+                            else ""
+                        )
+                        data[operation.control_key] = control_value
+                    if operation.runtime_events_key is not None:
+                        runtime_events_value = (
+                            ",".join(
+                                str(binding["id"])
+                                for binding in (
+                                    *resolved_open.runtime_event_bindings,
+                                    *resolved_open.runtime_poll_bindings,
+                                )
+                            )
+                            if isinstance(resolved_open, PreparedElementOpen)
+                            else ""
+                        )
+                        data[operation.runtime_events_key] = runtime_events_value
+                    if isinstance(resolved_open, PreparedElementOpen) and (
+                        resolved_open.event_bindings or resolved_open.runtime_event_bindings
+                    ):
+                        events = root_data.setdefault("eventBindings", {})
+                        if not isinstance(events, dict):
+                            raise AssertionError("leaf event binding container changed type")
+                        for binding in resolved_open.event_bindings:
+                            binding_id = str(binding["id"])
+                            serialized = dict(binding)
+                            previous = events.setdefault(binding_id, serialized)
+                            if previous != serialized:
+                                raise ValueError("one leaf event binding id has conflicting metadata")
+                        for binding in resolved_open.runtime_event_bindings:
+                            binding_id = str(binding["id"])
+                            serialized = dict(binding)
+                            previous = events.setdefault(binding_id, serialized)
+                            if previous != serialized:
+                                raise ValueError("one leaf runtime event binding id has conflicting metadata")
+                    if isinstance(resolved_open, PreparedElementOpen) and (
+                        resolved_open.poll_bindings or resolved_open.runtime_poll_bindings
+                    ):
+                        polls = root_data.setdefault("pollBindings", {})
+                        if not isinstance(polls, dict):
+                            raise AssertionError("leaf poll binding container changed type")
+                        for binding in resolved_open.poll_bindings:
+                            polls[str(binding["id"])] = dict(binding)
+                        for binding in resolved_open.runtime_poll_bindings:
+                            binding_id = str(binding["id"])
+                            serialized = dict(binding)
+                            previous = polls.setdefault(binding_id, serialized)
+                            if previous != serialized:
+                                raise ValueError("one leaf runtime poll binding id has conflicting metadata")
+                    if isinstance(resolved_open, PreparedElementOpen) and resolved_open.control_bindings:
+                        controls = root_data.setdefault("controlBindings", {})
+                        if not isinstance(controls, dict):
+                            raise AssertionError("leaf control binding container changed type")
+                        for binding in resolved_open.control_bindings:
+                            controls[str(binding["id"])] = dict(binding)
+                elif isinstance(operation, _Close):
+                    continue
+                elif isinstance(operation, _If):
+                    try:
+                        body = operation.node.active_branch_body(context)
+                    except Exception as error:
+                        _attach_error(error, operation.node, context)
+                        raise
+                    selected = next(
+                        (index for index, branch in enumerate(operation.node.branches) if branch[2] is body), -1
                     )
-            except Exception as error:
-                _attach_error(error, operation.node, context)
+                    data[operation.key] = selected
+                    if selected >= 0:
+                        frames.append(_LeafBodyFrame(operation.branches[selected], context, data))
+                        break
+                elif isinstance(operation, _For):
+                    loop_frame = _LeafLoopFrame(operation, context, data)
+                    # The loop's first row is read inside this `try`, because
+                    # evaluating the loop can fail; the frame joins the stack
+                    # once it has started, so an error gets this node's
+                    # position only once.
+                    try:
+                        loop_frame.iterations = operation.node.iter_bodies(context)
+                        first = _next_leaf_row(loop_frame)
+                    except Exception as error:
+                        _attach_error(error, operation.node, context)
+                        raise
+                    if first is not None:
+                        frames.append(loop_frame)
+                        frames.append(first)
+                        break
+                    _finish_leaf_loop(loop_frame)
+                else:
+                    raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
+
+            else:
+                frames.pop()
+                body_frame.finish()
+    except BaseException as error:
+        _unwind_leaf_frames(frames, error)
+        raise
+
+
+@final
+class _LeafBodyFrame:
+    """One body of a leaf program being evaluated against one context and row."""
+
+    __slots__ = ("context", "data", "operations", "value_token")
+
+    def __init__(
+        self,
+        operations: tuple[object, ...],
+        context: CitryContext,
+        data: dict[str, object],
+        *,
+        set_value_context: bool = True,
+    ) -> None:
+        self.operations = iter(operations)
+        self.context = context
+        self.data = data
+        # The root body runs inside `_evaluate`, which already made its
+        # context current; every nested body sets its own, as `_evaluate`
+        # does for the root body.
+        self.value_token = _VALUE_CONTEXT.set(context) if set_value_context else None
+
+    def finish(self) -> None:
+        if self.value_token is not None:
+            _VALUE_CONTEXT.reset(self.value_token)
+            self.value_token = None
+
+
+@final
+class _LeafLoopFrame:
+    """A ``<c-for>`` whose rows are being evaluated, one row at a time."""
+
+    __slots__ = ("context", "data", "iterations", "operation", "records", "rendered_any")
+
+    def __init__(self, operation: _For, context: CitryContext, data: dict[str, object]) -> None:
+        self.operation = operation
+        self.context = context
+        self.data = data
+        self.iterations: Iterator[tuple[list[BodyItem], CitryContext]] | None = None
+        self.records: list[dict[str, object]] = []
+        self.rendered_any = False
+
+
+def _next_leaf_row(loop_frame: _LeafLoopFrame) -> _LeafBodyFrame | None:
+    """Read the loop's next row and return the body frame that evaluates it."""
+    iterations = cast("Iterator[tuple[list[BodyItem], CitryContext]]", loop_frame.iterations)
+    following = next(iterations, None)
+    if following is None:
+        return None
+    child_context = following[1]
+    if child_context is loop_frame.context:
+        # `iter_bodies` yields the surrounding context for the empty branch.
+        return _LeafBodyFrame(loop_frame.operation.empty, loop_frame.context, loop_frame.data)
+    loop_frame.rendered_any = True
+    record: dict[str, object] = {}
+    loop_frame.records.append(record)
+    return _LeafBodyFrame(loop_frame.operation.body, child_context, record)
+
+
+def _finish_leaf_loop(loop_frame: _LeafLoopFrame) -> None:
+    """Store a finished loop's records in the row that holds the loop."""
+    operation = loop_frame.operation
+    loop_frame.data[operation.key] = loop_frame.records
+    if not loop_frame.rendered_any and not operation.empty:
+        loop_frame.data[operation.key] = []
+
+
+def _unwind_leaf_frames(frames: list[_LeafBodyFrame | _LeafLoopFrame], error: BaseException) -> None:
+    """
+    Take an error out through every frame still open, innermost first.
+
+    A body frame resets its value context. A loop frame closes its loop and
+    adds its ``<c-for>``'s position. Adding a position can replace the error
+    with a clearer one, which then passes through the frames that remain.
+    """
+    while frames:
+        frame = frames.pop()
+        if type(frame) is _LeafBodyFrame:
+            frame.finish()
+            continue
+        loop_frame = cast("_LeafLoopFrame", frame)
+        close = getattr(loop_frame.iterations, "close", None)
+        if close is not None:
+            close()
+        if isinstance(error, Exception):
+            try:
+                _attach_error(error, loop_frame.operation.node, loop_frame.context)
+            except Exception as replacement:
+                _unwind_leaf_frames(frames, replacement)
                 raise
-            data[operation.key] = records
-            if not rendered_any and not operation.empty:
-                data[operation.key] = []
-        else:
-            raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
 
 
 def _attach_error(error: Exception, node: Node, context: CitryContext | None) -> None:
@@ -3992,104 +4395,138 @@ def typed_leaf_parts(value: PreparedLeafProgram) -> list[RenderPart]:
     return output
 
 
+@final
+class _TypedLoopFrame:
+    """A ``<c-for>`` whose rows ``_materialize_typed`` is writing, one row at a time."""
+
+    __slots__ = ("body", "output", "parent_output", "records", "run_call", "run_type")
+
+    def __init__(
+        self,
+        records: Iterator[object],
+        body: tuple[object, ...],
+        output: list[RenderPart],
+        parent_output: list[RenderPart],
+        run_call: object,
+        run_type: str | None,
+    ) -> None:
+        self.records = records
+        self.body = body
+        self.output = output
+        self.parent_output = parent_output
+        self.run_call = run_call
+        self.run_type = run_type
+
+
 def _materialize_typed(
     operations: tuple[object, ...],
     data: dict[str, object],
-    root_data: dict[str, object],
+    root_data: dict[str, object],  # noqa: ARG001 - part of the shared materializer signature
     special: dict[tuple[int, str], RenderPart],
     resolved_opens: dict[tuple[int, int], PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen],
     output: list[RenderPart],
     call_runs: dict[str, str] | None = None,
 ) -> None:
-    for operation in operations:
-        if isinstance(operation, _Static):
-            output.append(operation.typed)
-        elif isinstance(operation, _Text):
-            special_value = special.get((id(data), operation.key))
-            if special_value is not None:
-                output.append(special_value)
-            else:
-                output.append(
-                    PreparedTextValue(
-                        operation.node.source,
-                        operation.node.position,
-                        data[operation.key],
-                    )
-                )
-        elif isinstance(operation, _Open):
-            resolved = operation.static or resolved_opens[(id(data), id(operation))]
-            output.append(_prepared_open(operation, resolved))
-            if operation.node.is_self_closing and not operation.node.is_void:
-                end = operation.node.position[1]
-                output.append(PreparedElementClose(operation.node.source, (end, end), operation.node.tag))
-        elif isinstance(operation, _Close):
-            output.append(operation.value)
-        elif isinstance(operation, _Call):
-            output.append(special[(id(data), operation.key)])
-        elif isinstance(operation, _If):
-            selected_value = data[operation.key]
-            if type(selected_value) is not int:
-                raise AssertionError("leaf branch selection changed type")
-            selected = selected_value
-            if selected >= 0:
-                _materialize_typed(
-                    operation.branches[selected],
-                    data,
-                    root_data,
-                    special,
-                    resolved_opens,
-                    output,
-                    call_runs,
-                )
-        elif isinstance(operation, _For):
-            records = data[operation.key]
-            if not isinstance(records, list):
-                raise TypeError("leaf loop record changed type")
-            run_call = operation.body[0] if len(operation.body) == 1 else None
-            run_type = (
-                call_runs.get(run_call.key)
-                if call_runs and isinstance(run_call, _Call) and len(operation.node.branches) == 1
-                else None
-            )
-            # A loop whose whole body is one keyed call is kept together, as
-            # ForNode.render keeps it for an ordinary parent, so the browser
-            # gets one loop over the children rather than one call each.
-            loop_output: list[RenderPart] = output if run_type is None else []
-            if records:
-                for record in records:
-                    if not isinstance(record, dict):
-                        raise TypeError("leaf loop item changed type")
-                    _materialize_typed(
-                        operation.body,
-                        record,
-                        root_data,
-                        special,
-                        resolved_opens,
-                        loop_output,
-                        call_runs,
-                    )
-            else:
-                _materialize_typed(
-                    operation.empty,
-                    data,
-                    root_data,
-                    special,
-                    resolved_opens,
-                    loop_output,
-                    call_runs,
-                )
-            if run_type is not None:
+    """
+    Write a leaf program's typed output for one set of evaluated data.
+
+    Branches and loop rows are walked on this function's own stack, so
+    Python's call depth does not grow with how deeply control flow nests.
+    Each loop row's body is finished before the next row is read, and a loop
+    kept together as a call run is wrapped once all its rows are written.
+    """
+    frames: list[tuple[Iterator[object], dict[str, object], list[RenderPart]] | _TypedLoopFrame] = [
+        (iter(operations), data, output)
+    ]
+    while frames:
+        frame = frames[-1]
+        if type(frame) is _TypedLoopFrame:
+            record = next(frame.records, _NO_MORE_RECORDS)
+            if record is not _NO_MORE_RECORDS:
+                if not isinstance(record, dict):
+                    raise TypeError("leaf loop item changed type")
+                frames.append((iter(frame.body), cast("dict[str, object]", record), frame.output))
+                continue
+            frames.pop()
+            if frame.run_type is not None:
                 from citry.citry_context import CitryContext  # noqa: PLC0415
 
                 from .direct import DirectCallRunRender  # noqa: PLC0415
 
-                output.append(
+                frame.parent_output.append(
                     DirectCallRunRender(
-                        CitryRender(parts=loop_output, context=CitryContext()),
-                        call_node=cast("_Call", run_call).node,
-                        child_type_key=run_type,
+                        CitryRender(parts=frame.output, context=CitryContext()),
+                        call_node=cast("_Call", frame.run_call).node,
+                        child_type_key=frame.run_type,
                     )
                 )
+            continue
+        remaining, row, row_output = cast("tuple[Iterator[object], dict[str, object], list[RenderPart]]", frame)
+        for operation in remaining:
+            if isinstance(operation, _Static):
+                row_output.append(operation.typed)
+            elif isinstance(operation, _Text):
+                special_value = special.get((id(row), operation.key))
+                if special_value is not None:
+                    row_output.append(special_value)
+                else:
+                    row_output.append(
+                        PreparedTextValue(
+                            operation.node.source,
+                            operation.node.position,
+                            row[operation.key],
+                        )
+                    )
+            elif isinstance(operation, _Open):
+                resolved = operation.static or resolved_opens[(id(row), id(operation))]
+                row_output.append(_prepared_open(operation, resolved))
+                if operation.node.is_self_closing and not operation.node.is_void:
+                    end = operation.node.position[1]
+                    row_output.append(PreparedElementClose(operation.node.source, (end, end), operation.node.tag))
+            elif isinstance(operation, _Close):
+                row_output.append(operation.value)
+            elif isinstance(operation, _Call):
+                row_output.append(special[(id(row), operation.key)])
+            elif isinstance(operation, _If):
+                selected_value = row[operation.key]
+                if type(selected_value) is not int:
+                    raise AssertionError("leaf branch selection changed type")
+                if selected_value >= 0:
+                    frames.append((iter(operation.branches[selected_value]), row, row_output))
+                    break
+            elif isinstance(operation, _For):
+                loop_records = row[operation.key]
+                if not isinstance(loop_records, list):
+                    raise TypeError("leaf loop record changed type")
+                run_call = operation.body[0] if len(operation.body) == 1 else None
+                run_type = (
+                    call_runs.get(run_call.key)
+                    if call_runs and isinstance(run_call, _Call) and len(operation.node.branches) == 1
+                    else None
+                )
+                # A loop whose whole body is one keyed call is kept together, as
+                # ForNode.render keeps it for an ordinary parent, so the browser
+                # gets one loop over the children rather than one call each.
+                loop_output: list[RenderPart] = row_output if run_type is None else []
+                if loop_records:
+                    frames.append(
+                        _TypedLoopFrame(
+                            iter(loop_records), operation.body, loop_output, row_output, run_call, run_type
+                        )
+                    )
+                else:
+                    # The empty branch is written once, then the loop finishes
+                    # exactly as it does after its last row.
+                    frames.append(_TypedLoopFrame(iter(()), (), loop_output, row_output, run_call, run_type))
+                    frames.append((iter(operation.empty), row, loop_output))
+                break
+        else:
+            frames.pop()
+
+
+# Marks the end of a loop's records; a record itself can be any value, which
+# is then rejected as the wrong type.
+_NO_MORE_RECORDS = object()
 
 
 def _materialize(
@@ -4101,65 +4538,69 @@ def _materialize(
     *,
     preserve_dynamic_text: bool = False,
 ) -> None:
-    for operation in operations:
-        if isinstance(operation, _Static):
-            output.append(operation.html)
-        elif isinstance(operation, _Text):
-            text = escape_to_str(data[operation.key])
-            output.append(PreparedStaticText(text) if preserve_dynamic_text else text)
-        elif isinstance(operation, _Open):
-            # _row_open_html must produce the same text for simple='vue' row
-            # HTML; tests compare both paths byte for byte.
-            output.append(
-                _materialized_open_html(operation, operation.static or resolved_opens[(id(data), id(operation))])
-            )
-            if operation.node.is_self_closing and not operation.node.is_void:
-                output.append(f"</{operation.node.tag}>")
-        elif isinstance(operation, _Close):
-            output.append(f"</{operation.value.tag}>")
-        elif isinstance(operation, _Call):
-            output.append(children[(id(data), operation.key)])
-        elif isinstance(operation, _If):
-            selected_value = data[operation.key]
-            if type(selected_value) is not int:
-                raise AssertionError("leaf branch selection changed type")
-            selected = selected_value
-            if selected >= 0:
-                _materialize(
-                    operation.branches[selected],
-                    data,
-                    resolved_opens,
-                    output,
-                    children,
-                    preserve_dynamic_text=preserve_dynamic_text,
+    """
+    Write a leaf program's output for one set of evaluated data.
+
+    A branch's or loop row's operations are walked on this function's own
+    stack, so Python's call depth does not grow with how deeply control flow
+    nests. Each loop row's body is finished before the next row is read.
+    """
+    # A body entry walks operations against one row of data. A rows entry
+    # holds a loop's remaining records and the body each one renders.
+    bodies: list[tuple[Iterator[object], dict[str, object]] | tuple[Iterator[object], tuple[object, ...], None]] = [
+        (iter(operations), data)
+    ]
+    while bodies:
+        entry = bodies[-1]
+        if len(entry) == 3:
+            records, loop_body, _ = cast("tuple[Iterator[object], tuple[object, ...], None]", entry)
+            record = next(records, _NO_MORE_RECORDS)
+            if record is _NO_MORE_RECORDS:
+                bodies.pop()
+                continue
+            if not isinstance(record, dict):
+                raise TypeError("leaf loop item changed type")
+            bodies.append((iter(loop_body), cast("dict[str, object]", record)))
+            continue
+        remaining, row = cast("tuple[Iterator[object], dict[str, object]]", entry)
+        for operation in remaining:
+            if isinstance(operation, _Static):
+                output.append(operation.html)
+            elif isinstance(operation, _Text):
+                text = escape_to_str(row[operation.key])
+                output.append(PreparedStaticText(text) if preserve_dynamic_text else text)
+            elif isinstance(operation, _Open):
+                # _row_open_html must produce the same text for simple='vue' row
+                # HTML; tests compare both paths byte for byte.
+                output.append(
+                    _materialized_open_html(operation, operation.static or resolved_opens[(id(row), id(operation))])
                 )
-        elif isinstance(operation, _For):
-            records = data[operation.key]
-            if not isinstance(records, list):
-                raise TypeError("leaf loop record changed type")
-            if records:
-                for record in records:
-                    if not isinstance(record, dict):
-                        raise TypeError("leaf loop item changed type")
-                    _materialize(
-                        operation.body,
-                        record,
-                        resolved_opens,
-                        output,
-                        children,
-                        preserve_dynamic_text=preserve_dynamic_text,
-                    )
+                if operation.node.is_self_closing and not operation.node.is_void:
+                    output.append(f"</{operation.node.tag}>")
+            elif isinstance(operation, _Close):
+                output.append(f"</{operation.value.tag}>")
+            elif isinstance(operation, _Call):
+                output.append(children[(id(row), operation.key)])
+            elif isinstance(operation, _If):
+                selected_value = row[operation.key]
+                if type(selected_value) is not int:
+                    raise AssertionError("leaf branch selection changed type")
+                if selected_value >= 0:
+                    bodies.append((iter(operation.branches[selected_value]), row))
+                    break
+            elif isinstance(operation, _For):
+                loop_records = row[operation.key]
+                if not isinstance(loop_records, list):
+                    raise TypeError("leaf loop record changed type")
+                if loop_records:
+                    bodies.append((iter(loop_records), operation.body, None))
+                else:
+                    bodies.append((iter(operation.empty), row))
+                break
             else:
-                _materialize(
-                    operation.empty,
-                    data,
-                    resolved_opens,
-                    output,
-                    children,
-                    preserve_dynamic_text=preserve_dynamic_text,
-                )
+                raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
         else:
-            raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
+            bodies.pop()
 
 
 def _prepared_open(

@@ -9,9 +9,17 @@ class TreeDisabledItems(Component):
       <c-CTree label="Deployment targets" c-expanded="['regions']">
         <c-CTreeItem value="regions" label="Regions">
           <c-CTreeItem value="eu" label="Europe" />
-          <c-CTreeItem value="us" label="United States" disabled />
+          <c-CTreeItem
+            value="us"
+            label="United States"
+            disabled
+          />
         </c-CTreeItem>
-        <c-CTreeItem value="archive" label="Archived targets" disabled />
+        <c-CTreeItem
+          value="archive"
+          label="Archived targets"
+          disabled
+        />
       </c-CTree>
     """
 

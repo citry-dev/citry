@@ -190,6 +190,61 @@ fail.
 An `@c-*` attribute in a template does not receive the value. To let browser
 code react to such a call, return `actions.Dispatch` instead.
 
+## Skip the call queue { #skip-the-queue-for-a-read-only-call }
+
+Calls from one Vue app go to the server one at a time, so a slow call
+holds up the ones after it. A handler that only reads, such as a spell
+check while the user types, can skip the line. Declare it with
+[`@event(detached=True)`][citry.ext.events.event]:
+
+```python
+from citry.ext.events import event
+
+
+class SpellCheckIn:
+    text: str
+
+
+class Events:
+    @event(detached=True)
+    def spell_check(self, data: SpellCheckIn):
+        return {"typos": find_typos(data.text)}
+```
+
+Declaring the handler is not enough on its own: a call without
+`wait: false` still waits its turn. Pass it where you send the call:
+
+```js
+const result = await this.$sendEvent(
+  "spell_check",
+  {text: this.draft},
+  {wait: false},
+);
+```
+
+This `wait` is an option of `$sendEvent`. It is not the `wait=False` that
+actions take (see [Action lists](#return-several-actions-in-order)).
+
+In exchange, a detached handler must leave the page and State as they are.
+It may read State and return data, a `Dispatch`, a `Redirect`, a
+`PushUrl` or `ReplaceUrl`, or a `Download` (which also needs
+`bundle=False`). These calls fail:
+
+- The handler returns a component or `actions.Render`, or changes State:
+  the `$sendEvent` Promise rejects with a `handler_error`, and the server
+  log names the handler. The handler has already run, so anything it
+  saved stays saved.
+- `wait: false` on a handler without `detached=True` rejects the Promise
+  with a `TypeError` before anything is sent.
+
+The handler reads State from the token the browser sends with the call.
+Changes the browser has not sent yet are not in it: they stay in the
+browser for the next call to a handler that is not detached, so pass text
+the user is still typing as an argument, as above.
+
+The server may run a detached call while another call from the same page
+is running, so do not let the handler rely on what that call writes.
+
 ## `Redirect` to a page { #redirect-to-a-page }
 
 [`actions.Redirect`][citry.ext.events.actions.Redirect] makes the browser
@@ -204,6 +259,28 @@ class Events:
 
 When a plain HTML form posts to the handler's URL, the same action becomes a
 real HTTP redirect. See [Event routes](/events/routes/).
+
+A relative URL, such as `"?page=2"` or `"next"`, is relative to the page
+the visitor is on, with or without JavaScript. Without JavaScript, the
+server reads that page's address from the `Referer` header, which browsers
+send by default. Use a path that starts with `/` instead when your page:
+
+- sets a `Referrer-Policy` that stops the browser sending the full address.
+  With no `Referer`, the visitor lands next to the handler's URL, usually on
+  a "not found" page, and for a form that posts, the server logs a warning.
+  With only the site's address, the URL resolves against the home page,
+  with no warning.
+- sets `<base href>`, which changes what the browser resolves against but
+  not what it sends.
+
+!!! warning "Check a URL that comes from the request"
+
+    A URL taken from the request, such as a `next` parameter, can point to
+    another site. Check it before you redirect to it. A prefix check such
+    as `url.startswith("/")` is not enough, because browsers treat
+    `//other.example` and `/\other.example` as addresses on another site.
+    Django's `url_has_allowed_host_and_scheme` does a full check; see
+    [Check redirect URLs](/security/#check-redirect-urls).
 
 ## `PushUrl`, `ReplaceUrl` { #change-the-url }
 

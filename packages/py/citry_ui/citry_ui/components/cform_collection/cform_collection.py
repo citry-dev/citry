@@ -195,9 +195,27 @@ class CFormCollection(LibraryComponent):
         # Keep this camelCase spelling in sync with the JavaScript data key.
         serverDefaults: dict[str, bool]  # noqa: N815
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "action_name",
+            "add_value",
+            "allow_add",
+            "allow_remove",
+            "allow_reorder",
+            "attrs",
+            "catalog",
+            "description",
+            "description_id",
+            "disabled",
+            "label",
+            "labels",
+            "legend_id",
+            "max_items",
+            "min_items",
+            "registry",
+            "root_id",
+            "size",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_form_collection_snapshot", None)
@@ -268,11 +286,24 @@ class CFormCollection(LibraryComponent):
     template = """
       <c-CInternalFormCollectionDeclarations><c-slot /></c-CInternalFormCollectionDeclarations>
       <c-CInternalFormCollection
-        c-root_id="root_id" c-legend_id="legend_id" c-description_id="description_id"
-        c-label="label" c-description="description" c-action_name="action_name" c-add_value="add_value"
-        c-allow_add="allow_add" c-allow_remove="allow_remove" c-allow_reorder="allow_reorder"
-        c-min_items="min_items" c-max_items="max_items" c-disabled="disabled" c-size="size"
-        c-catalog="catalog" c-labels="labels" c-attrs="attrs" c-registry="registry"
+        c-root_id="root_id"
+        c-legend_id="legend_id"
+        c-description_id="description_id"
+        c-label="label"
+        c-description="description"
+        c-action_name="action_name"
+        c-add_value="add_value"
+        c-allow_add="allow_add"
+        c-allow_remove="allow_remove"
+        c-allow_reorder="allow_reorder"
+        c-min_items="min_items"
+        c-max_items="max_items"
+        c-disabled="disabled"
+        c-size="size"
+        c-catalog="catalog"
+        c-labels="labels"
+        c-attrs="attrs"
+        c-registry="registry"
       />
     """
 
@@ -308,10 +339,6 @@ class CFormCollectionItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CFormCollectionItemSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "default" not in self.raw_slots:
@@ -360,10 +387,6 @@ class CInternalFormCollectionDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CFormCollectionDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -403,9 +426,30 @@ class CInternalFormCollection(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "action_name",
+            "add_disabled",
+            "add_structural_disabled",
+            "add_value",
+            "allow_add",
+            "allow_remove",
+            "allow_reorder",
+            "attrs",
+            "button_type",
+            "catalog",
+            "catalog_add",
+            "count",
+            "description",
+            "description_id",
+            "disabled",
+            "items",
+            "label",
+            "labels",
+            "legend_id",
+            "min_items",
+            "root_id",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         count = len(kwargs.registry.items)
@@ -477,12 +521,9 @@ class CInternalFormCollection(LibraryComponent):
             "catalog_add": kwargs.catalog["add"],
         }
 
-    template = (
-        """
-"""
-        '      <fieldset ref="root" class="cui-form-collection" c-bind="attrs" c-id="root_id" d'
-        'ata-citry-ui-part="form-collection">\n'
-        """        <legend c-id="legend_id" data-citry-ui-part="legend">{{ label }}</legend>
+    template = """
+      <fieldset ref="root" class="cui-form-collection" c-bind="attrs" c-id="root_id" data-citry-ui-part="form-collection">
+        <legend c-id="legend_id" data-citry-ui-part="legend">{{ label }}</legend>
         <p c-if="description is not None" c-id="description_id" data-citry-ui-part="description">{{ description }}</p>
         <ol data-citry-ui-part="items">
           <c-for each="item in items">
@@ -517,8 +558,7 @@ class CInternalFormCollection(LibraryComponent):
           data-citry-ui-part="add"
         >{{ labels['add'] }}</button>
       </fieldset>
-    """
-    )
+    """  # noqa: E501
 
 
 class CInternalFormCollectionItem(LibraryComponent):
@@ -526,7 +566,8 @@ class CInternalFormCollectionItem(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        # A read-only Mapping, so the parent's dict of narrower values fits it.
+        item: Mapping[str, object]
         action_name: str | None
         button_type: str
         allow_remove: bool
@@ -540,9 +581,40 @@ class CInternalFormCollectionItem(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "action_name",
+            "attrs",
+            "button_type",
+            "catalog_down",
+            "catalog_remove",
+            "catalog_up",
+            "content",
+            "count",
+            "declaration",
+            "disabled",
+            "down_disabled",
+            "down_structural_disabled",
+            "formnovalidate",
+            "index",
+            "item_id",
+            "label",
+            "label_id",
+            "morph_key",
+            "move_down_label",
+            "move_down_value",
+            "move_up_label",
+            "move_up_value",
+            "remove_disabled",
+            "remove_label",
+            "remove_structural_disabled",
+            "remove_value",
+            "show_remove",
+            "show_reorder",
+            "up_disabled",
+            "up_structural_disabled",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item
@@ -587,8 +659,15 @@ class CInternalFormCollectionItem(LibraryComponent):
         }
 
     template = """
-      <li class="cui-form-collection__item" #c-key="morph_key" c-bind="attrs" c-id="item_id"
-        c-data-label="label" data-citry-form-collection-item data-citry-ui-part="item">
+      <li
+        class="cui-form-collection__item"
+        #c-key="morph_key"
+        c-bind="attrs"
+        c-id="item_id"
+        c-data-label="label"
+        data-citry-form-collection-item
+        data-citry-ui-part="item"
+      >
         <div role="group" c-aria-labelledby="label_id">
           <header data-citry-ui-part="item-header">
             <div c-id="label_id" data-citry-ui-part="item-label">{{ label }}</div>

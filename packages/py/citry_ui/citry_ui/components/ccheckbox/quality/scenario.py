@@ -46,12 +46,20 @@ def checkbox_states_component(app: Citry) -> type[Component]:
 
               <div class="citry-ui-quality-grid">
                 <c-for each="variant in variants">
-                  <c-CCheckbox #c-key="variant" c-variant="variant" checked>
+                  <c-CCheckbox
+                    #c-key="variant"
+                    c-variant="variant"
+                    checked
+                  >
                     {{ variant }} Checkbox
                   </c-CCheckbox>
                 </c-for>
                 <c-for each="size in sizes">
-                  <c-CCheckbox #c-key="size" c-size="size" indeterminate>
+                  <c-CCheckbox
+                    #c-key="size"
+                    c-size="size"
+                    indeterminate
+                  >
                     {{ size }} mixed Checkbox
                   </c-CCheckbox>
                 </c-for>

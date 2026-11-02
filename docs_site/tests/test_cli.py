@@ -464,3 +464,68 @@ def test_serve_targets_the_internal_asgi_app(monkeypatch: pytest.MonkeyPatch) ->
         "app": "docs_site._internal.serve:create_local_app",
         "kwargs": {"host": "127.0.0.1", "port": 8123, "reload": False, "factory": True},
     }
+
+
+def test_build_one_points_the_snapshot_links_at_its_tag(tmp_path: Path, monkeypatch) -> None:
+    # A tagged builder that predates the rewrite still writes main links, so
+    # the controller pins them before the snapshot replaces the old one.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    version_dir = tmp_path / "versions" / "1.0.0"
+
+    def fake_git(_repo, *args, **_kwargs):
+        if args[:3] == ("worktree", "add", "--detach"):
+            docs = Path(args[3]) / "docs_site"
+            docs.mkdir(parents=True)
+            (docs / "__main__.py").touch()
+            (docs / "versioning.py").touch()
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    def fake_run(command, **_kwargs):
+        if command[1] == "sync":
+            return subprocess.CompletedProcess(command, 0, stdout="synced", stderr="")
+        staged = Path(command[command.index("-o") + 1])
+        staged.mkdir(parents=True, exist_ok=True)
+        (staged / "index.html").write_text(
+            '<a href="https://github.com/citry-dev/citry/blob/main/x.py#L3">source</a>'
+            '<a href="https://github.com/citry-dev/citry/edit/main/docs/x.md">edit</a>',
+            encoding="utf-8",
+        )
+        (staged / BUILD_INFO_NAME).write_text("{}", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, stdout="built", stderr="")
+
+    monkeypatch.setattr(cli, "_git", fake_git)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    # The tag differs from `citry@<version>`, so the link must use the tag itself.
+    assert cli._make_build_one(repo, {"v1.0.0": "citry@v1.0.0"})("v1.0.0", "1.0.0", version_dir) == "built"
+
+    page = (version_dir / "index.html").read_text(encoding="utf-8")
+    assert "/blob/citry@v1.0.0/x.py#L3" in page
+    # Editing always happens on main, so the edit link stays.
+    assert "/edit/main/docs/x.md" in page
+
+
+def test_versions_check_runs_only_the_named_guard(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # The manifest lists a version with no dir on disk, which only the manifest
+    # guard reports; naming another guard leaves that problem unreported.
+    root = tmp_path / "versions"
+    _make_version(root, "0.1.0")
+    _write_versions(root, [("0.1.0", ()), ("0.9.0", ())])
+
+    rc = cli.main(["versions-check", "--versions-dir", str(root), "--guard", "snapshot_static_files"])
+
+    assert rc == 0
+    assert "does not exist" not in capsys.readouterr().out
+    assert cli.main(["versions-check", "--versions-dir", str(root), "--guard", "versions_manifest"]) == 1
+
+
+def test_versions_check_rejects_an_unknown_guard_name(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # A misspelt name must fail loudly rather than run no guard and pass.
+    root = tmp_path / "versions"
+    _make_version(root, "0.1.0")
+    _write_versions(root, [("0.1.0", ())])
+
+    rc = cli.main(["versions-check", "--versions-dir", str(root), "--guard", "snapshot_static_file"])
+
+    assert rc == 2
+    assert "Unknown version guard" in capsys.readouterr().out

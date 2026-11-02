@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -18,7 +16,13 @@ class ButtonConfiguration(Component):
 
         <div class="button-configurator__stage">
           <c-CButton
-            :variant="variant" :intent="intent" :size="size" :loadingPosition="loading_pos" :loading="loading" :disabled="disabled" :block="block"
+            :variant="variant"
+            :intent="intent"
+            :size="size"
+            :loadingPosition="loading_pos"
+            :loading="loading"
+            :disabled="disabled"
+            :block="block"
           >
             <c-fill name="start">
               <span aria-hidden="true">✿</span>

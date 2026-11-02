@@ -10,7 +10,11 @@ class SkeletonCard(Component):
         <c-fill name="media"><c-CSkeleton height="9rem" /></c-fill>
         <c-fill name="default">
           <c-CCol c-gap="'sm'">
-            <c-CSkeleton kind="text" height="1.2rem" width="48%" />
+            <c-CSkeleton
+              kind="text"
+              height="1.2rem"
+              width="48%"
+            />
             <c-CSkeleton kind="text" c-lines="3" />
           </c-CCol>
         </c-fill>

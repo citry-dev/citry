@@ -8,7 +8,12 @@ class GridAsymmetricLayout(Component):
     template = """
       <c-CContainer class_="field-journal" size="lg">
         <c-CGrid cols="12" gap="lg">
-          <c-CGridItem tag="article" span="12" md="8" class_="field-journal__notes">
+          <c-CGridItem
+            tag="article"
+            span="12"
+            md="8"
+            class_="field-journal__notes"
+          >
             <p class="field-journal__eyebrow">Expedition 14 · obsidian ridge</p>
             <h2>Glass formed at the lava margin</h2>
             <p>
@@ -16,7 +21,12 @@ class GridAsymmetricLayout(Component):
               banding, and almost no visible crystal growth.
             </p>
           </c-CGridItem>
-          <c-CGridItem tag="aside" span="12" md="4" class_="field-journal__index">
+          <c-CGridItem
+            tag="aside"
+            span="12"
+            md="4"
+            class_="field-journal__index"
+          >
             <h3>Specimen index</h3>
             <dl>
               <div><dt>R-14A</dt><dd>Black glass</dd></div>

@@ -14,7 +14,7 @@ from citry_core.html_transform import mark_html
 from citry_core.i18n import CatalogCompiler, canonicalize_locale, locale_direction
 from citry_core.safe_eval import safe_eval
 from citry_core.template_formatter import format_template, prepare_embedded_format
-from citry_core.template_parser import analyze_browser_source, compile_template, parse_template
+from citry_core.template_parser import analyze_browser_source, compile_template, parse_diagnostic, parse_template
 
 
 def main() -> None:
@@ -93,6 +93,44 @@ def main() -> None:
             raise RuntimeError("the native render module declined a plain row")
         native_row_json = native_row.prepared_json
         native_occurrences = native._encode_occurrences([native_item], {"o": native_row}, json.dumps)
+    # The largest expressions the depth check accepts (97 chained additions,
+    # 65 nested lists, 97 attribute lookups) must still be evaluated, parsed
+    # and formatted here. On Pyodide the WebAssembly engine's own call stack
+    # cannot grow, so this checks that the Rust passes fit in it; the
+    # formatter's frames are the largest. One more level must give the clean
+    # error instead of a crash.
+    deepest_sum = safe_eval("1" + "+1" * 97)({})
+    deepest_lists_parse = bool(parse_template("{{ " + "[" * 65 + "]" * 65 + " }}").elements)
+    deepest_formats = all(
+        "<p>" in format_template("<p>{{ " + expression + " }}</p>")
+        for expression in ("[" * 65 + "]" * 65, "a" + ".b" * 97, "1" + "+1" * 97)
+    )
+    try:
+        safe_eval("1" + "+1" * 98)
+    except SyntaxError as error:
+        too_deep_rejected = "expression is nested too deeply" in str(error)
+    else:
+        too_deep_rejected = False
+    # Templates nested exactly to the parser's two limits (512 tags, 256
+    # logic levels) must parse and compile here, and one level more must be
+    # the clean too-deep error. On Pyodide this checks that the Rust walks
+    # over a tree that deep fit in the engine's call stack.
+    tags = _rust.template_parser._MAX_TAG_NESTING
+    logic = _rust.template_parser._MAX_LOGIC_NESTING
+    deepest_templates_compile = all(
+        "def generate_template" in compile_template(parse_template(source))
+        for source in (
+            "<div>" * tags + "x" + "</div>" * tags,
+            '<c-if cond="x">' * logic + "x" + "</c-if>" * logic,
+        )
+    )
+    try:
+        parse_template('<c-if cond="x">' * (logic + 1) + "x" + "</c-if>" * (logic + 1))
+    except SyntaxError as error:
+        diagnostic = parse_diagnostic(error)
+        too_deep_template_rejected = diagnostic is not None and diagnostic.code == "citry.parse.too-deep"
+    else:
+        too_deep_template_rejected = False
     segments, placeholders = mark_html(
         "<main><p>Hello</p></main>",
         ["data-citry"],
@@ -101,6 +139,10 @@ def main() -> None:
 
     checks = {
         "compiled": "def generate_template" in compiled,
+        "deepest_formats": deepest_formats,
+        "deepest_templates_compile": deepest_templates_compile,
+        "deepest_lists_parse": deepest_lists_parse,
+        "deepest_sum": deepest_sum,
         "embedded_languages": [request.language.value for request in embedded_plan.requests],
         "extension": _rust.__file__,
         "formatted": formatted,
@@ -117,11 +159,17 @@ def main() -> None:
         "rich_slot_count": sum(segment["type"] == "slot" for segment in rich["segments"]),
         "rich_has_private_marker": "__CITRY_SLOT_" in json.dumps(rich),
         "text_direction": locale_direction("ar"),
+        "too_deep_rejected": too_deep_rejected,
+        "too_deep_template_rejected": too_deep_template_rejected,
         "used_variables": [token.content for token in parsed.used_variables],
         "version": installed_version,
     }
     expected = {
         "compiled": True,
+        "deepest_formats": True,
+        "deepest_templates_compile": True,
+        "deepest_lists_parse": True,
+        "deepest_sum": 98,
         "embedded_languages": ["javascript", "css"],
         "locale": "en-US",
         "marked": '<main data-citry=""><p>Hello</p></main>',
@@ -133,6 +181,8 @@ def main() -> None:
         "rich_slot_count": 2,
         "rich_has_private_marker": False,
         "text_direction": "rtl",
+        "too_deep_rejected": True,
+        "too_deep_template_rejected": True,
         "used_variables": ["title"],
     }
     if reads_rows:

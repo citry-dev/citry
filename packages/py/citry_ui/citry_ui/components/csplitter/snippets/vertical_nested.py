@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class VerticalNested(Component):
     template = """
-      <c-CSplitter orientation="vertical" c-sizes="[35, 65]" variant="outline">
+      <c-CSplitter
+        orientation="vertical"
+        c-sizes="[35, 65]"
+        variant="outline"
+      >
         <c-CSplitterPanel id="header" label="Header preview">Header preview</c-CSplitterPanel>
         <c-CSplitterPanel id="workbench" label="Workbench">
           <c-CSplitter c-sizes="[40, 60]" size="sm">

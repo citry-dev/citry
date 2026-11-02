@@ -13,7 +13,8 @@ class ControlledSelect(Component):
           placeholder="Choose a status"
           value="draft"
           c-trigger_attrs="{'aria-label':'Status'}"
-          :value="value" :onValueChange="(next) => value = next"
+          :value="value"
+          :onValueChange="(next) => value = next"
         />
         <p>Current: <strong v-text="value"></strong></p>
       </div>

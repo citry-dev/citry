@@ -299,12 +299,16 @@ def test_attrs_without_vue_syntax_stay_ordinary_attributes():
     ("kwargs", "error", "match"),
     [
         ({"name": ""}, ValueError, "name must be non-empty"),
-        ({"name": 4}, TypeError, "name must be a string"),
-        ({"name": "choice", "required": "yes"}, TypeError, "required must be a bool"),
-        ({"name": "choice", "orientation": "diagonal"}, ValueError, "orientation must be one of"),
-        ({"name": "choice", "variant": "plain"}, ValueError, "variant must be one of"),
-        ({"name": "choice", "size": "xl"}, ValueError, "size must be one of"),
-        ({"name": "choice", "label_pos": "above"}, ValueError, "label_pos must be one of"),
+        ({"name": 4}, TypeError, r"CRadioGroup\.Kwargs\.name expects str"),
+        ({"name": "choice", "required": "yes"}, TypeError, r"CRadioGroup\.Kwargs\.required expects bool \| None"),
+        (
+            {"name": "choice", "orientation": "diagonal"},
+            TypeError,
+            r"CRadioGroup\.Kwargs\.orientation expects Literal",
+        ),
+        ({"name": "choice", "variant": "plain"}, TypeError, r"CRadioGroup\.Kwargs\.variant expects Literal"),
+        ({"name": "choice", "size": "xl"}, TypeError, r"CRadioGroup\.Kwargs\.size expects Literal"),
+        ({"name": "choice", "label_pos": "above"}, TypeError, r"CRadioGroup\.Kwargs\.label_pos expects Literal"),
     ],
 )
 def test_invalid_group_inputs_fail_deterministically(kwargs, error, match):

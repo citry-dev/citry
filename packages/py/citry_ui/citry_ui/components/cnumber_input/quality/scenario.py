@@ -41,7 +41,8 @@ def number_input_states_component(app: Citry) -> type[Component]:
                 value="2.5"
                 c-input_attrs="{'aria-label':'Controlled quantity'}"
                 c-attrs="{'data-quality-states':'controlled refusal acceptance callback'}"
-                :value="controlled" :onValueChange="(next)=>{controlled=next;last=`Accepted ${next}`}"
+                :value="controlled"
+                :onValueChange="(next)=>{controlled=next;last=`Accepted ${next}`}"
               />
               <c-CNumberInput
                 value="2"

@@ -9,16 +9,17 @@ import copy
 import itertools
 import keyword
 import re
-import symtable
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._source_lines import source_lines
+from citry._symbol_table import symtable
+from citry._walk import Call, run
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement, parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Generator, Mapping
 
 # A type display may use these names without importing them.
 _BUILTIN_NAMES = frozenset(dir(builtins))
@@ -247,7 +248,7 @@ def template_python_query_at(
     """Return the Python expression or loop clause containing one parser byte index."""
     if type(index) is not int or index < 0:
         return None
-    return _query_in_template(template, index, (), base_index=0, parse_nested=parse_nested)
+    return run(_query_in_template(template, index, (), base_index=0, parse_nested=parse_nested))
 
 
 def template_python_queries(
@@ -255,19 +256,32 @@ def template_python_queries(
     *,
     parse_nested: Callable[[str], Any] = parse_template,
 ) -> tuple[TemplatePythonQuery, ...]:
-    """Return every Python-valued host with its exact lexical context."""
-    indexes = _query_start_indexes(template, base_index=0, parse_nested=parse_nested)
+    """
+    Return every Python-valued host with its exact lexical context, in source order.
+
+    One walk visits each node once and carries what encloses it (its `c-if`
+    conditions, `c-for` variables and slot fill) down to the Python values
+    inside it, so the cost grows with the size of the template. Each query
+    is the one `template_python_query_at` returns at the value's start.
+    """
+    found: list[TemplatePythonQuery] = []
+    run(_collect_template_queries(template, (), found, base_index=0, parse_nested=parse_nested))
     queries: list[TemplatePythonQuery] = []
     seen: set[tuple[int, int, str]] = set()
-    for index in sorted(indexes):
-        query = _query_in_template(template, index, (), base_index=0, parse_nested=parse_nested)
-        if query is None:
-            continue
+    # The walk already reaches hosts in source order; the sort keeps that
+    # order guaranteed if the walk changes, and costs little on a list that
+    # is already sorted.
+    for query in sorted(found, key=lambda item: item.start_index):
         key = query.start_index, query.end_index, query.host_kind
         if key not in seen:
             seen.add(key)
             queries.append(query)
     return tuple(queries)
+
+
+# Built-in tags whose attributes are not a component's inputs, so an empty
+# value there is not a string some input receives.
+_NOT_INPUT_TAGS = frozenset({"c-slot", "c-fill", "c-element"})
 
 
 def template_static_input_queries(
@@ -285,11 +299,14 @@ def template_static_input_queries(
     text as written, without decoding character references, so the literal
     matches it exactly. A value with a backslash, which Python would read
     as an escape, or with a line break, which a quoted literal cannot hold,
-    is left out. An unquoted value is left out too, and so is an empty or
-    missing one, which passes ``True`` rather than a string.
+    is left out. An unquoted value is left out too, and so is a missing one
+    (a bare attribute passes ``True``). An empty value such as ``alt=""``
+    passes ``""`` to a component and is reported like any other string, but
+    not on ``<c-slot>``, ``<c-fill>``, or ``<c-element>``, whose attributes
+    are not a component's inputs.
     """
     queries: list[TemplatePythonQuery] = []
-    _collect_static_input_queries(template, queries, base_index=0, parse_nested=parse_nested)
+    run(_collect_static_input_queries(template, queries, base_index=0, parse_nested=parse_nested))
     return tuple(sorted(queries, key=lambda query: query.start_index))
 
 
@@ -299,7 +316,7 @@ def _collect_static_input_queries(
     *,
     base_index: int,
     parse_nested: Callable[[str], Any],
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -312,7 +329,8 @@ def _collect_static_input_queries(
                 nested = _nested_template(attr.inner_value.content, parse_nested)
                 if nested is not None:
                     nested_template, nested_start = nested
-                    _collect_static_input_queries(
+                    yield Call(
+                        _collect_static_input_queries,
                         nested_template,
                         queries,
                         base_index=base_index + attr.inner_value.start_index + nested_start,
@@ -325,7 +343,7 @@ def _collect_static_input_queries(
                 or value is None
                 or attr.quote_char not in {'"', "'"}
                 or attr.inner_value is None
-                or not attr.inner_value.content
+                or (not attr.inner_value.content and tag_name.lower() in _NOT_INPUT_TAGS)
                 or "\\" in value.content
                 or "\n" in value.content
                 or "\r" in value.content
@@ -342,7 +360,7 @@ def _collect_static_input_queries(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_static_input_queries(body, queries, base_index=base_index, parse_nested=parse_nested)
+            yield Call(_collect_static_input_queries, body, queries, base_index=base_index, parse_nested=parse_nested)
 
 
 def build_inferred_template_shadow(
@@ -411,7 +429,17 @@ def build_inferred_template_shadow(
     # template loop `c-for="resolved in items"`, would lend its declared type
     # to the template name. Renaming those locals gives each template name its
     # own type, while the copied method computes the same value.
-    conflicts = _renamable_method_locals(module_source, class_qualname) & _template_bound_names(roots, query)
+    template_names = _template_bound_names(roots, query)
+    renamable = _renamable_method_locals(module_source, class_qualname)
+    if renamable is None:
+        # Without a symbol table (PyPy) the locals to rename are unknown. When
+        # the method binds none of the template's names, the CPython path would
+        # rename none of them either, so the copy below is exact; otherwise
+        # give no type answer rather than a wrong one.
+        if _method_bound_names(module_source, class_qualname) & template_names:
+            return None
+        renamable = frozenset()
+    conflicts = renamable & template_names
     prepared = _prepared_template_data_method(
         module_source,
         class_qualname,
@@ -863,7 +891,62 @@ def _prepared_template_data_method(
 
 
 @lru_cache(maxsize=32)
-def _renamable_method_locals(module_source: str, class_qualname: str) -> frozenset[str]:
+def _method_bound_names(module_source: str, class_qualname: str) -> frozenset[str]:
+    """
+    Return every name that one class's ``template_data`` method binds, or that the whole module binds.
+
+    This reads only the syntax tree, so it works where ``symtable`` does not.
+    It lists at least the method's locals: every name the method or code
+    nested in it assigns, deletes, imports, defines, takes as a parameter,
+    or declares ``global`` or ``nonlocal``. Names the method only reads are
+    left out, because Python never treats those as locals. When the class or
+    its one ``template_data`` function cannot be found, it lists the names
+    the whole module binds, so the caller gives no answer for more templates
+    rather than fewer. A module that does not parse gives an empty set; the
+    caller has already given no answer for that module.
+    """
+    try:
+        tree = ast.parse(module_source)
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        return frozenset()
+    # Find the method the same way the CPython path does: a class for each
+    # part of the qualname, so a function that happens to share a class's
+    # name is never read in its place.
+    scope: ast.AST = tree
+    class_node = _class_for_qualname(tree, class_qualname)
+    if class_node is not None:
+        methods = [
+            node
+            for node in class_node.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "template_data"
+        ]
+        if len(methods) == 1:
+            scope = methods[0]
+    names: set[str] = set()
+    for node in ast.walk(scope):
+        if isinstance(node, ast.Name):
+            # A read is never a local, so only a store or delete counts.
+            if isinstance(node.ctx, (ast.Store, ast.Del)):
+                names.add(node.id)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(node, ast.alias):
+            names.add((node.asname or node.name).split(".")[0])
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            names.update(node.names)
+        elif (isinstance(node, ast.ExceptHandler) and node.name) or (
+            isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name
+        ):
+            names.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            names.add(node.rest)
+    return frozenset(names)
+
+
+@lru_cache(maxsize=32)
+def _renamable_method_locals(module_source: str, class_qualname: str) -> frozenset[str] | None:
     """
     Return the names local to one class's ``template_data`` method that can be renamed safely.
 
@@ -875,7 +958,11 @@ def _renamable_method_locals(module_source: str, class_qualname: str) -> frozens
     a nested function called by keyword or a nested class's attribute. On
     Python 3.12 and later the table also lists a comprehension's loop
     variable as a method local, and the same rule covers it.
+
+    Returns None where the interpreter has no symbol table (PyPy).
     """
+    if symtable is None:
+        return None
     try:
         table = symtable.symtable(module_source, "<citry-template-data>", "exec")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
@@ -1046,7 +1133,10 @@ def _root_binding_lines(
             # Analysis-only globals do not come from the copied TemplateData
             # carrier. The caller has canonicalized this expression-shaped
             # annotation, so ty can read it without retaining the runtime value.
-            value = f"__citry_cast({root.type_display}, None)" if root.type_display is not None else "__citry_Unknown"
+            # A root with no known type gets a value typed Any, not the Any
+            # special form itself, which ty would type as `<special-form Any>`.
+            unknown_type = root.type_display if root.type_display is not None else "__citry_Unknown"
+            value = f"__citry_cast({unknown_type}, None)"
         elif (
             root.access == "attribute" and direct_attribute_owner is not None and root_owner == direct_attribute_owner
         ):
@@ -1091,8 +1181,9 @@ def _root_type_imports(
     references = {
         owner: owner[1] if owner[0] == source_module else f"{module_aliases[owner]}.{owner[1]}" for owner in owners
     }
-    needs_cast = bool(references) or any(root.access == "analysis" and root.type_display for root in roots)
     needs_unknown = any(root.access == "analysis" and root.type_display is None for root in roots)
+    # Every analysis root, typed or not, is written as a cast.
+    needs_cast = bool(references) or any(root.access == "analysis" for root in roots)
     if not needs_cast and not needs_unknown:
         return [], {}
     imports: list[str] = []
@@ -1853,7 +1944,7 @@ def _query_in_template(
     base_index: int,
     parse_nested: Callable[[str], Any],
     fill_owner: str | None = None,
-) -> TemplatePythonQuery | None:
+) -> Generator[Call, Any, TemplatePythonQuery | None]:
     """
     Return the query at ``index`` in one template, with the controls around it.
 
@@ -1890,7 +1981,8 @@ def _query_in_template(
             TemplatePythonControl("if", f"not (\n{source}\n)", free_names=free_names)
             for source, free_names in branch_conditions
         )
-        query = _query_in_node(
+        query = yield Call(
+            _query_in_node,
             value,
             index,
             (*controls, *prior_branch_controls),
@@ -1910,42 +2002,167 @@ def _query_in_template(
     return None
 
 
-def _query_start_indexes(
+def _collect_template_queries(
     template: Any,
+    controls: tuple[TemplatePythonControl, ...],
+    found: list[TemplatePythonQuery],
     *,
     base_index: int,
     parse_nested: Callable[[str], Any],
-) -> set[int]:
-    indexes: set[int] = set()
+    fill_owner: str | None = None,
+) -> Generator[Call, Any, None]:
+    """
+    Append the query of every host in one template, with the controls around it.
+
+    This is the walk `_query_in_template` makes for one position, made once
+    for all of them: the same negated conditions of earlier `c-if`/`c-elif`
+    siblings, the same controls and the same fill owner reach each host, so
+    each query matches the one found at its start.
+    """
+    branch_conditions: list[tuple[str, tuple[str, ...]]] = []
     for element in template.elements:
         value: Any = element._0
         if isinstance(element, TemplateElement.Expr):
-            indexes.add(base_index + value.value.start_index)
+            found.append(
+                TemplatePythonQuery(
+                    value.value.content,
+                    base_index + value.value.start_index,
+                    base_index + value.value.end_index,
+                    "interpolation",
+                    controls,
+                    _used_names(value),
+                )
+            )
+            branch_conditions.clear()
+            continue
+        if isinstance(element, TemplateElement.Text):
+            if value.token.content.strip():
+                branch_conditions.clear()
             continue
         if not isinstance(element, TemplateElement.Node):
             continue
-        for attr in value.start_tag.attrs:
-            inner = attr.inner_value
-            if inner is None:
+        branch_kind = _condition_branch_kind(value)
+        if branch_kind not in {"elif", "else"}:
+            branch_conditions.clear()
+        prior_branch_controls = tuple(
+            TemplatePythonControl("if", f"not (\n{source}\n)", free_names=free_names)
+            for source, free_names in branch_conditions
+        )
+        yield Call(
+            _collect_node_queries,
+            value,
+            (*controls, *prior_branch_controls),
+            found,
+            base_index=base_index,
+            parse_nested=parse_nested,
+            fill_owner=fill_owner,
+        )
+        condition = _condition_control(value)
+        if branch_kind in {"if", "elif"}:
+            branch_conditions.append(
+                (condition.source, condition.free_names) if condition is not None else ("True", ())
+            )
+        elif branch_kind == "else":
+            branch_conditions.clear()
+
+
+def _collect_node_queries(
+    node: Any,
+    controls: tuple[TemplatePythonControl, ...],
+    found: list[TemplatePythonQuery],
+    *,
+    base_index: int,
+    parse_nested: Callable[[str], Any],
+    fill_owner: str | None = None,
+) -> Generator[Call, Any, None]:
+    """Append the queries of one node's attributes and body, as `_query_in_node` finds each one."""
+    condition = _condition_control(node)
+    loop = _loop_control(node)
+    body_controls = (
+        *controls,
+        *((condition,) if condition is not None else ()),
+        *((loop,) if loop is not None else ()),
+        *_unknown_binding_controls(node, loop, fill_owner),
+    )
+    for attr in node.start_tag.attrs:
+        inner = attr.inner_value
+        if inner is None:
+            continue
+        start = base_index + inner.start_index
+        name = attr.key.content
+        if attr.kind == HtmlAttrKind.Template:
+            nested = _nested_template(inner.content, parse_nested)
+            if nested is None:
                 continue
-            start = base_index + inner.start_index
-            if attr.kind == HtmlAttrKind.Template:
-                nested = _nested_template(inner.content, parse_nested)
-                if nested is not None:
-                    nested_template, nested_start = nested
-                    indexes.update(
-                        _query_start_indexes(
-                            nested_template,
-                            base_index=start + nested_start,
-                            parse_nested=parse_nested,
-                        )
-                    )
-            elif attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta:  # noqa: PLR1714
-                indexes.add(start)
-        body = getattr(value, "body", None)
-        if body is not None:
-            indexes.update(_query_start_indexes(body, base_index=base_index, parse_nested=parse_nested))
-    return indexes
+            nested_template, nested_start = nested
+            # The content of a template-valued attribute starts with no fill
+            # owner, as `_query_in_node` starts it.
+            yield Call(
+                _collect_template_queries,
+                nested_template,
+                body_controls if _attribute_sees_loop(name) else controls,
+                found,
+                base_index=start + nested_start,
+                parse_nested=parse_nested,
+            )
+            continue
+        if attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta:  # noqa: PLR1714
+            found.append(_attribute_query(node, attr, controls, body_controls, condition, base_index))
+    # Read a body only when the node has an end tag, as `_node_body_contains`
+    # does, so both searches visit the same bodies.
+    body = getattr(node, "body", None)
+    if body is not None and getattr(node, "end_tag", None) is not None:
+        yield Call(
+            _collect_template_queries,
+            body,
+            body_controls,
+            found,
+            base_index=base_index,
+            parse_nested=parse_nested,
+            fill_owner=_body_fill_owner(node, fill_owner),
+        )
+
+
+def _attribute_query(
+    node: Any,
+    attr: Any,
+    controls: tuple[TemplatePythonControl, ...],
+    body_controls: tuple[TemplatePythonControl, ...],
+    condition: TemplatePythonControl | None,
+    base_index: int,
+) -> TemplatePythonQuery:
+    """Return the query of one Python-valued attribute, with the controls that apply to it."""
+    inner = attr.inner_value
+    name = attr.key.content
+    attr_controls = controls
+    host_kind: Literal["attribute", "loop"] = "attribute"
+    if _is_loop_attribute(node, name):
+        # A combined condition runs before its loop, so it can narrow the
+        # iterable while the loop target itself is still unavailable.
+        if condition is not None:
+            attr_controls = (*attr_controls, condition)
+        host_kind = "loop"
+    elif not _is_condition_attribute(node, name):
+        attr_controls = body_controls
+    # A `c-*` value that sets an attribute or a component input can be
+    # checked against that target's type; control attributes cannot.
+    target = (
+        (node.start_tag.name.content, name.removeprefix("c-"))
+        if attr.kind == HtmlAttrKind.Expression
+        and host_kind == "attribute"
+        and name.startswith("c-")
+        and _attribute_sees_loop(name)
+        else None
+    )
+    return TemplatePythonQuery(
+        inner.content,
+        base_index + inner.start_index,
+        base_index + inner.end_index,
+        host_kind,
+        attr_controls,
+        _used_names(attr),
+        target,
+    )
 
 
 def _query_in_node(
@@ -1956,7 +2173,7 @@ def _query_in_node(
     base_index: int,
     parse_nested: Callable[[str], Any],
     fill_owner: str | None = None,
-) -> TemplatePythonQuery | None:
+) -> Generator[Call, Any, TemplatePythonQuery | None]:
     condition = _condition_control(node)
     loop = _loop_control(node)
     body_controls = (
@@ -1982,54 +2199,32 @@ def _query_in_node(
                 return None
             nested_template, nested_start = nested
             nested_controls = body_controls if _attribute_sees_loop(name) else controls
-            return _query_in_template(
-                nested_template,
-                index,
-                nested_controls,
-                base_index=start + nested_start,
-                parse_nested=parse_nested,
+            return (
+                yield Call(
+                    _query_in_template,
+                    nested_template,
+                    index,
+                    nested_controls,
+                    base_index=start + nested_start,
+                    parse_nested=parse_nested,
+                )
             )
         if not (attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta):  # noqa: PLR1714
             return None
-        attr_controls = controls
-        host_kind: Literal["attribute", "loop"] = "attribute"
-        if _is_loop_attribute(node, name):
-            # A combined condition runs before its loop, so it can narrow the
-            # iterable while the loop target itself is still unavailable.
-            if condition is not None:
-                attr_controls = (*attr_controls, condition)
-            host_kind = "loop"
-        elif not _is_condition_attribute(node, name):
-            attr_controls = body_controls
-        # A `c-*` value that sets an attribute or a component input can be
-        # checked against that target's type; control attributes cannot.
-        target = (
-            (node.start_tag.name.content, name.removeprefix("c-"))
-            if attr.kind == HtmlAttrKind.Expression
-            and host_kind == "attribute"
-            and name.startswith("c-")
-            and _attribute_sees_loop(name)
-            else None
-        )
-        return TemplatePythonQuery(
-            inner.content,
-            start,
-            end,
-            host_kind,
-            attr_controls,
-            _used_names(attr),
-            target,
-        )
+        return _attribute_query(node, attr, controls, body_controls, condition, base_index)
 
     body = getattr(node, "body", None)
     if body is not None and _node_body_contains(node, index, base_index=base_index):
-        return _query_in_template(
-            body,
-            index,
-            body_controls,
-            base_index=base_index,
-            parse_nested=parse_nested,
-            fill_owner=_body_fill_owner(node, fill_owner),
+        return (
+            yield Call(
+                _query_in_template,
+                body,
+                index,
+                body_controls,
+                base_index=base_index,
+                parse_nested=parse_nested,
+                fill_owner=_body_fill_owner(node, fill_owner),
+            )
         )
     return None
 

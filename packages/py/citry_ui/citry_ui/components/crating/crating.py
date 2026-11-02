@@ -210,9 +210,37 @@ class CRating(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "allow_clear",
+            "choices",
+            "described_by",
+            "disabled",
+            "error_message",
+            "field_control",
+            "form",
+            "group_label",
+            "group_labelledby",
+            "input_attrs",
+            "invalid",
+            "maximum",
+            "name",
+            "precision",
+            "public_id",
+            "ratio_style",
+            "readonly",
+            "readonly_described_by",
+            "readonly_value_id",
+            "readonly_value_label",
+            "required",
+            "root_attrs",
+            "root_id",
+            "size",
+            "stars",
+            "transport_id",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_rating_snapshot", None)
@@ -461,7 +489,12 @@ class CRating(LibraryComponent):
           </span>
         </span>
         <span c-aria-hidden="'true' if readonly else None" data-citry-ui-part="choices">
-          <label c-for="choice in choices" c-style="choice['position']" c-data-value="choice['value']" data-citry-ui-part="choice">
+          <label
+            c-for="choice in choices"
+            c-style="choice['position']"
+            c-data-value="choice['value']"
+            data-citry-ui-part="choice"
+          >
             <input
               c-id="choice['id']"
               c-name="name"
@@ -481,7 +514,12 @@ class CRating(LibraryComponent):
             <span class="cui-rating__visually-hidden" data-citry-ui-part="choice-label">{{ choice['label'] }}</span>
           </label>
         </span>
-        <span c-if="readonly and value is not None" class="cui-rating__visually-hidden" c-id="readonly_value_id" data-citry-ui-part="readonly-value">{{ readonly_value_label }}</span>
+        <span
+          c-if="readonly and value is not None"
+          class="cui-rating__visually-hidden"
+          c-id="readonly_value_id"
+          data-citry-ui-part="readonly-value"
+        >{{ readonly_value_label }}</span>
         <input
           c-id="transport_id"
           c-name="name"

@@ -62,6 +62,14 @@ interpreter, application, and Citry version in use.
 The extension needs desktop VS Code 1.101 or newer, or a compatible fork. It
 also works in remote workspaces, but not in VS Code for the Web.
 
+The extension starts the Python interpreter from your project's
+environment and imports your app. VS Code opens a folder you have not
+trusted in
+[Restricted Mode](https://code.visualstudio.com/docs/editing/workspaces/workspace-trust),
+and there it turns the extension off completely: no highlighting, and no
+Citry status bar item.
+Trust the workspace to turn it on.
+
 ## Connect your app
 
 Set `citry.app` in your workspace settings to the `module:attribute` path of
@@ -263,6 +271,35 @@ For `<c-element>`, a literal tag such as `is="form"` gets the attribute help
 for `<form>`. With a dynamic `c-is` or `c-bind`, only global HTML attributes
 are offered, because the final tag is not known.
 
+### Listener modifiers
+
+Type a dot after a Vue listener, such as `@click.` or `v-on:keydown.`, to
+see the modifiers that work on it. The list has Vue's own modifiers, such
+as `.stop`, and Citry's
+[extra listener modifiers](/syntax/vue/#listener-modifiers), such as
+`.outside`. On a keyboard event it also has key names, such as `.enter`.
+Hover a modifier to see what it does.
+
+After `.debounce` or `.throttle`, the list offers durations such as
+`.300ms`.
+
+The list leaves out:
+
+- a modifier the listener already has;
+- a modifier that conflicts with one already on it, such as `.window`
+  after `.outside`;
+- Citry's modifiers on a component tag, `<template>`, `<slot>`, or
+  `<component>`, where they cannot work;
+- `.ctrl`, `.shift`, `.alt`, `.meta`, `.exact`, and the mouse buttons on
+  events that carry no held keys or mouse button, such as `input`,
+  `scroll`, or `focus`;
+- anything but `.debounce` or `.throttle` right before a duration you
+  already typed.
+
+If you type a combination Citry rejects, such as `@click.outside.window`
+or `.outside` on a component tag, the editor underlines the whole
+attribute and the message says what to change.
+
 ## Check component inputs
 
 A `c-*` value on a component tag is a Python keyword argument, so Citry checks
@@ -292,7 +329,9 @@ an `int`.
 
 ### Slot data in fills
 
-Once your app is loaded, Citry checks each use of a fill's `data` name
+When a child component's slot passes data, `<c-fill data="card">` gives
+that data the name `card`. Once your app is
+[connected](#connect-your-app), the editor checks each use of `card`
 against the fields of the slot's data class. When the child declares
 `footer: SlotInput[FooterData]` in its `Slots`, a misspelled field or a
 wrong use of one is an error:
@@ -309,11 +348,58 @@ wrong use of one is an error:
 </c-Card>
 ```
 
-`card` stays a read-only mapping, as it is at runtime, so `card["aria-label"]`
-and `len(card)` are not errors. A field named like a mapping method, such as
-`items`, is read with brackets, as at runtime. A fill for a slot whose name
-is computed with `c-name`, or whose data class is an open type such as
-`dict[str, Any]`, is not checked.
+`card` is a read-only mapping, as it is at runtime, so `card["aria-label"]`
+and `len(card)` are not errors. Read a field with brackets, such as
+`card["items"]`, when its name is also a mapping method or starts with
+`_`. At runtime `card.items` is the mapping's own method, and
+`card._id` is an error.
+
+The editor does not check a fill whose slot name is set with `c-name` or
+`c-bind`, or a fill for a slot whose data type lists no fields, such as
+`SlotInput[dict[str, Any]]`. `citry check --types` reports the same
+errors.
+
+### Vue slot props in fills { #vue-slot-props-in-fills }
+
+A slot can also pass values that exist only in the browser, with a `:`
+attribute such as `<c-slot :row="row">`. Each one is a Vue slot prop,
+and the fill reads it with `v-slot="{ row }"` in Vue expressions, not
+with `data=` ([Pass Vue data](/vue/slots/#scoped-slots)). Once your app
+is [connected](#connect-your-app), the editor reads the child
+component's template to find the props each slot passes:
+
+- Inside `v-slot="{ }"`, it suggests them.
+- Hovering the fill's `name` lists them with their types. A prop that
+  only some of the slot's `<c-slot>` tags pass is marked optional.
+- In the fill's Vue expressions, `row` has the type of the value the
+  child passes, so hover shows it and a misspelled field such as
+  `row.titel` is an error. The editor knows that type when the child
+  passes a [`js_data()`](#types-of-js_data) value, a `v-for` item over
+  one, a field of either, or a literal. Any other value has no type, so
+  the editor does not check it. A name inside a nested pattern, such as
+  `title` in `{ row: { title } }`, or a `...rest` name has no type either.
+
+A name the slot does not pass is a warning, in the editor and in
+`citry check`. Vue sets that name to `undefined` without a warning of its
+own, so the fill shows nothing, or fails in the browser when it reads a
+field such as `item.title`:
+
+```citry-html
+{# Table's template: <c-slot name="item" :row="row" /> #}
+<c-Table>
+  {# Warning: citry.vue.unknown-slot-prop #}
+  <c-fill name="item" v-slot="{ item }">
+    <span v-text="item.title"></span>
+  </c-fill>
+</c-Table>
+```
+
+A fill that names the whole object, as in `v-slot="props"`, gets no
+warning. The editor does not suggest, type, or check props for a fill
+whose slot name is set with `c-name` or `c-bind`. It does the same for a
+child whose template it cannot read, such as a
+[template set by code](#templates-set-by-code), and for a child with any
+`<c-slot>` named with `c-name` or `c-bind`.
 
 ## Vue and component JS { #complete-vue-expressions-and-component-javascript }
 

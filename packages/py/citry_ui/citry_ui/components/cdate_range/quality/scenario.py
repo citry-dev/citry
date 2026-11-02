@@ -17,7 +17,17 @@ def date_range_states_component(app: Citry) -> type[Component]:
               <fieldset>
                 <legend>Required travel dates</legend>
                 <p id="date-range-description">Choose an available interval in August or September 2026.</p>
-                <c-CDateRange start_name="arrival" end_name="departure" start="2026-08-16" end="2026-08-19" min="2026-08-10" max="2026-09-15" c-unavailable_dates="('2026-08-20','2026-08-24')" required c-attrs="{'aria-describedby':'date-range-description','data-quality-states':'required canonical form fieldset legend description popup calendar keyboard pointer draft preview same-day normalized reset bounds unavailable localized display trigger-name'}" />
+                <c-CDateRange
+                  start_name="arrival"
+                  end_name="departure"
+                  start="2026-08-16"
+                  end="2026-08-19"
+                  min="2026-08-10"
+                  max="2026-09-15"
+                  c-unavailable_dates="('2026-08-20','2026-08-24')"
+                  required
+                  c-attrs="{'aria-describedby':'date-range-description','data-quality-states':'required canonical form fieldset legend description popup calendar keyboard pointer draft preview same-day normalized reset bounds unavailable localized display trigger-name'}"
+                />
               </fieldset>
               <button type="submit">Submit range</button><button type="reset">Reset range</button>
             </form>
@@ -27,7 +37,11 @@ def date_range_states_component(app: Citry) -> type[Component]:
               <fieldset><legend>Readonly</legend><c-CDateRange start="2026-08-21" end="2026-08-23" size="lg" readonly c-attrs="{'data-quality-states':'readonly submitted lg outline inspectable'}" /></fieldset>
               <fieldset><legend>Disabled</legend><c-CDateRange start="2026-08-22" end="2026-08-23" disabled c-attrs="{'data-quality-states':'disabled omitted md outline'}" /></fieldset>
               <fieldset><legend>Invalid</legend><c-CDateRange start="2026-08-22" end="2026-08-23" invalid c-attrs="{'data-quality-states':'invalid'}" /></fieldset>
-              <fieldset lang="ar" dir="rtl" style="color-scheme:dark"><legend>RTL dark range with a deliberately long label</legend><c-CDateRange start="2026-08-24" end="2026-08-27" placement="top-end" c-first_day_of_week="7" c-attrs="{'data-quality-states':'rtl dark locale-week-start placement collision touch long-content'}" /></fieldset>
+              <fieldset
+                lang="ar"
+                dir="rtl"
+                style="color-scheme:dark"
+              ><legend>RTL dark range with a deliberately long label</legend><c-CDateRange start="2026-08-24" end="2026-08-27" placement="top-end" c-first_day_of_week="7" c-attrs="{'data-quality-states':'rtl dark locale-week-start placement collision touch long-content'}" /></fieldset>
             </div>
             <output v-text="last">No DateRange action yet</output>
           </section>

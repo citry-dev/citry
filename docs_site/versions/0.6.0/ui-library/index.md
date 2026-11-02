@@ -221,7 +221,7 @@ CRangeSlider when the user chooses an ordered lower and upper value.
 
 Citry UI is in alpha, so a new release can change how a component looks
 or behaves. Read the
-[Citry UI changelog](https://github.com/citry-dev/citry/blob/main/packages/py/citry_ui/CHANGELOG.md){: target="_blank" rel="noopener"}
+[Citry UI changelog](https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry_ui/CHANGELOG.md){: target="_blank" rel="noopener"}
 before you upgrade, and check the component states your application
 depends on.
 

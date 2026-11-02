@@ -33,7 +33,9 @@ def tooltip_states_component(app: Citry) -> type[Component]:
                 id="quality-controlled-tooltip"
                 text="Controlled visibility"
                 placement="bottom-start"
-                :open="controlledOpen" :text="liveText" :onOpenChange="(open) => controlledOpen = open"
+                :open="controlledOpen"
+                :text="liveText"
+                :onOpenChange="(open) => controlledOpen = open"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <c-CButton variant="outline" c-attrs="activator_attrs">Ganymede</c-CButton>

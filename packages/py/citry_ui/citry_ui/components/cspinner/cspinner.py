@@ -88,9 +88,13 @@ class CSpinner(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "intent",
+            "label",
+            "size",
+        )
 
     def _normalized(self, kwargs: Kwargs) -> dict[str, str]:
         return {

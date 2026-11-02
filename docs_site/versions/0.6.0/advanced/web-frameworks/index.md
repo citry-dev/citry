@@ -54,7 +54,7 @@ The `prefix` is the URL path where Citry's routes live. It must start with
 trailing slash is ignored, so `"/citry/"` works like `"/citry"`.
 
 For complete, runnable apps, see the
-[starter projects](https://github.com/citry-dev/citry/tree/main/examples){: target="_blank" rel="noopener"}
+[starter projects](https://github.com/citry-dev/citry/tree/citry@0.6.0/examples){: target="_blank" rel="noopener"}
 for FastAPI, Django, Flask, bare ASGI, and bare WSGI.
 
 ## `initialize()` at startup

@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class SkeletonCustomization(Component):
     template = """
-      <div class="skeleton-lichen" aria-label="Loading lichen plates" aria-busy="true">
+      <div
+        class="skeleton-lichen"
+        aria-label="Loading lichen plates"
+        aria-busy="true"
+      >
         <c-CSkeleton height="5rem" animation="wave" />
         <c-CSkeleton kind="text" c-lines="3" />
       </div>

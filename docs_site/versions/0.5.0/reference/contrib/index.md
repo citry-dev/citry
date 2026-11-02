@@ -12,7 +12,7 @@ Adapters mounting citry into web frameworks, and cache adapters for shared store
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/fastapi.py#L32" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/fastapi.py#L32" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -47,7 +47,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/flask.py#L35" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/flask.py#L35" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -82,7 +82,7 @@ record the prefix on the instance.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/django.py#L132" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/django.py#L132" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -123,7 +123,7 @@ pointing at the ASGI adapter as the fix.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/django.py#L178" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/django.py#L178" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -168,7 +168,7 @@ if you ever need to).</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/django.py#L221" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/django.py#L221" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -232,7 +232,7 @@ empty); Django's own message explains the problem.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/django.py#L271" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/django.py#L271" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -259,7 +259,7 @@ backend the Django project already runs (Redis, Memcached, database, ...).</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/django.py#L281" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/django.py#L281" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -290,7 +290,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/django.py#L285" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/django.py#L285" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -321,7 +321,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/django.py#L295" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/django.py#L295" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -352,7 +352,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/django.py#L298" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/django.py#L298" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -392,7 +392,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/asgi.py#L113" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/asgi.py#L113" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -433,7 +433,7 @@ ones run in a worker thread), and translates the returned
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/asgi.py#L182" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/asgi.py#L182" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -489,7 +489,7 @@ mirror :func:<code>citry.reload.watch</code>.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/wsgi.py#L78" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/wsgi.py#L78" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -528,7 +528,7 @@ pointed error up front: WSGI is synchronous.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L37" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L37" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -557,7 +557,7 @@ other uses. (Citry's own keys already start with <code>citry:</code>.)</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L51" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L51" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -588,7 +588,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L57" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L57" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -619,7 +619,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L67" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L67" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -650,7 +650,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L70" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L70" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -690,7 +690,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L74" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L74" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -717,7 +717,7 @@ process on the host.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L84" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L84" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -748,7 +748,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L88" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L88" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -779,7 +779,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L95" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L95" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -810,7 +810,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/contrib/caches.py#L98" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.5.0/packages/py/citry/citry/contrib/caches.py#L98" target="_blank" rel="noopener">
 View source
 </a>
 

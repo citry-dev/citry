@@ -71,7 +71,7 @@ The `prefix` must start with `/` and is stored without a trailing slash (so
 `"/citry/"` becomes `"/citry"`).
 
 If you would rather run and copy a complete application, the
-[starter project matrix](https://github.com/citry-dev/citry/tree/main/examples){: target="_blank" rel="noopener"}
+[starter project matrix](https://github.com/citry-dev/citry/tree/citry@0.4.6/examples){: target="_blank" rel="noopener"}
 contains independently locked FastAPI, Django, Flask, bare ASGI, and bare WSGI
 projects. They intentionally remain separate from the smaller examples built
 into this documentation site.

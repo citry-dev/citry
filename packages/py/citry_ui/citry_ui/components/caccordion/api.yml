@@ -34,9 +34,9 @@ inputs:
         effect: Places the chevron at the logical start or end of every trigger.
       - id: heading-level
         name: heading_level
-        type: {display: 'Literal[2, 3, 4, 5, 6]', interfaces: [CAccordionHeadingLevel]}
+        type: {display: CAccordionHeadingLevel, interfaces: [CAccordionHeadingLevel]}
         default: {kind: literal, value: 3}
-        effect: Chooses the native heading level for every direct item.
+        effect: 'Chooses the heading element, from `<h2>` to `<h6>`, for every direct item. Pass the number, or the same number as text such as "2".'
       - {id: region, name: region, type: bool, default: {kind: literal, value: false}, effect: 'Adds `role="region"` and trigger-based naming to every panel. Use selectively to avoid landmark proliferation.'}
       - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the root ID and stable trigger/panel ID prefix.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
@@ -198,7 +198,7 @@ interfaces:
       - {id: accordion-variant, name: CAccordionVariant, definition: 'Literal["outline", "soft", "separated", "plain"]'}
       - {id: accordion-size, name: CAccordionSize, definition: 'Literal["sm", "md", "lg"]'}
       - {id: accordion-indicator-pos, name: CAccordionIndicatorPos, definition: 'Literal["start", "end"]'}
-      - {id: accordion-heading-level, name: CAccordionHeadingLevel, definition: 'Literal[2, 3, 4, 5, 6]'}
+      - {id: accordion-heading-level, name: CAccordionHeadingLevel, definition: 'Literal[2, 3, 4, 5, 6, "2", "3", "4", "5", "6"]'}
       - {id: accordion-value-change-detail, name: CAccordionValueChangeDetail, definition: '{value: string | null | string[], previousValue: string | null | string[], itemValue: string | null, removedValues: string[], expanded: boolean, source: "activation" | "removal"}'}
   - {id: accordion-slot-data, kind: record, name: CAccordionDefaultSlotData, entries: []}
   - {id: accordion-item-title-slot-data, kind: record, name: CAccordionItemTitleSlotData, entries: []}

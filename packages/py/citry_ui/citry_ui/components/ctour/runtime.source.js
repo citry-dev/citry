@@ -43,6 +43,28 @@ $component({
     let controlledOpen = false;
     let controlledActive = false;
     let appliedOpen = dialog.open;
+    // The owner's last `open` input, to tell a new request from a repeated one.
+    let requestedOpen = null;
+    // Whether the owner was already told that an ancestor hides the tour.
+    // While it stays hidden, the owner is told once: an owner that asks again
+    // after each report would otherwise loop.
+    let reportedWhileHidden = false;
+    // The owner was told that an ancestor hides the tour. That holds until
+    // the tour can be seen again, however that happens (a dialog reopened in
+    // the browser, a collapsed region expanded), which a ResizeObserver
+    // notices; it watches only while the flag is set.
+    let shownWatch = null;
+    function markReportedWhileHidden() {
+      reportedWhileHidden = true;
+      if (shownWatch || typeof ResizeObserver !== 'function') return;
+      shownWatch = new ResizeObserver(() => {
+        if (host.getClientRects().length === 0) return;
+        shownWatch.disconnect();
+        shownWatch = null;
+        reportedWhileHidden = false;
+      });
+      shownWatch.observe(host);
+    }
     let active = internalActive;
     let onOpenChange = null;
     let onActiveChange = null;
@@ -300,11 +322,51 @@ $component({
       }
       return previous;
     };
+    // A dialog, popover or <details> around the tour that closes hides it,
+    // so close the tour and report reason "ancestor", as CMenu does. `close`
+    // and `toggle` do not bubble and do not leave a shadow root, so each root
+    // node from the tour's up to the document listens in the capture phase,
+    // and containment is checked across shadow boundaries. The tour's own
+    // dialog reports through onNativeClose.
+    let ancestorListening = false;
+    let ancestorRoots = [];
+    const composedContains = (ancestor, node) => {
+      for (let current = node; current; current = current.getRootNode().host ?? null) {
+        if (ancestor.contains(current)) return true;
+      }
+      return false;
+    };
+    const onAncestorClose = event => {
+      const target = event.target;
+      if (!appliedOpen || target === dialog || !(target instanceof Node) || !composedContains(target, host)) return;
+      if (event.type === 'toggle' && event.newState !== 'closed') return;
+      // A dialog closed and opened again in one task still shows the tour.
+      if (event.type === 'close' && target.open) return;
+      if (!controlledOpen) internalOpen = false;
+      applyOpen(false);
+      markReportedWhileHidden();
+      notifyOpen(false, 'ancestor', target);
+    };
+    const listenForAncestorClose = listen => {
+      if (listen === ancestorListening) return;
+      ancestorListening = listen;
+      if (listen) {
+        ancestorRoots = [];
+        for (let node = host.getRootNode(); node; node = node.host?.getRootNode() ?? null) ancestorRoots.push(node);
+      }
+      for (const node of ancestorRoots) {
+        for (const type of ['close', 'toggle']) {
+          if (listen) node.addEventListener(type, onAncestorClose, true);
+          else node.removeEventListener(type, onAncestorClose, true);
+        }
+      }
+    };
     const applyOpen = (next, source = null) => {
       if (next) {
         if (!appliedOpen && source instanceof HTMLElement) handoff.restoreFocus = source;
         if (!dialog.open) dialog.show();
         appliedOpen = true;
+        listenForAncestorClose(true);
         host.toggleAttribute('data-open', true);
         dialog.toggleAttribute('data-open', true);
         updateActivators(true);
@@ -317,6 +379,7 @@ $component({
       }
       if (!appliedOpen && !dialog.open) return;
       appliedOpen = false;
+      listenForAncestorClose(false);
       host.removeAttribute('data-open');
       dialog.removeAttribute('data-open');
       updateActivators(false);
@@ -387,6 +450,7 @@ $component({
       if (internalClose) { internalClose = false; return; }
       if (!appliedOpen) return;
       appliedOpen = false;
+      listenForAncestorClose(false);
       internalOpen = false;
       host.removeAttribute('data-open');
       dialog.removeAttribute('data-open');
@@ -432,6 +496,10 @@ $component({
       if (resolved !== null && resolved !== active) showPanel(resolved);
       const suppliedOpen = props.open;
       let nextOpen = internalOpen;
+      // A controlled owner that asks for the tour to open after the first
+      // render is told when an ancestor keeps it closed, once per request.
+      const newlyRequested = !firstReconcile && suppliedOpen === true && requestedOpen !== true;
+      requestedOpen = typeof suppliedOpen === 'boolean' ? suppliedOpen : null;
       if (suppliedOpen === undefined || suppliedOpen === null) {
         controlledOpen = false;
         invalid.delete('open');
@@ -450,7 +518,23 @@ $component({
         const skip = panel.querySelector('[data-citry-tour-action="skip"]');
         if (skip) skip.hidden = !configuration.skippable;
       }
-      if (nextOpen && resolveIndex(active, 1) === null) {
+      const hidden = host.getClientRects().length === 0;
+      if (!hidden) reportedWhileHidden = false;
+      if (nextOpen && hidden) {
+        // An ancestor such as a dialog the server closed hides the tour, so
+        // it cannot stay open either. Close it and report reason "ancestor",
+        // as CMenu does, when it was showing or the owner just asked for it.
+        // On this run's first update it was showing only if the previous run
+        // left it open; a tour the server rendered open inside a closed
+        // dialog was never shown, so the first render reports nothing.
+        const wasShowing = firstReconcile ? handedOver && Boolean(handoff.open) : appliedOpen;
+        if (!controlledOpen) internalOpen = false;
+        applyOpen(false);
+        if (wasShowing || (newlyRequested && !reportedWhileHidden)) {
+          markReportedWhileHidden();
+          notifyOpen(false, 'ancestor', null);
+        }
+      } else if (nextOpen && resolveIndex(active, 1) === null) {
         if (appliedOpen) requestOpen(false, 'missing-target', null);
       } else if (firstReconcile && handedOver && nextOpen && appliedOpen) {
         // The previous run left this tour open and this run keeps it. Restore the
@@ -460,6 +544,7 @@ $component({
         dialog.toggleAttribute('data-open', true);
         updateActivators(true);
         startGeometry();
+        listenForAncestorClose(true);
       } else if (nextOpen !== appliedOpen || firstReconcile) {
         applyOpen(nextOpen);
       }
@@ -475,7 +560,9 @@ $component({
       host.ownerDocument.removeEventListener('keydown', onKeyDown, true);
       host.ownerDocument.removeEventListener('pointerdown', onPointerDown, true);
       dialog.removeEventListener('close', onNativeClose);
+      listenForAncestorClose(false);
       stopGeometry();
+      shownWatch?.disconnect();
       host.removeAttribute('data-citry-tour-initialized');
     };
   },

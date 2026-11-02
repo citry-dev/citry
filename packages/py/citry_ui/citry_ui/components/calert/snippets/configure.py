@@ -14,7 +14,11 @@ class ConfigureAlert(Component):
           <h2>Observation status</h2>
         </header>
         <c-CAlert
-          :intent="intent" :variant="variant" :size="size" :announce="announce" :icon="icon"
+          :intent="intent"
+          :variant="variant"
+          :size="size"
+          :announce="announce"
+          :icon="icon"
         >
           <c-fill name="title">Tracking update</c-fill>
           <c-fill name="default">

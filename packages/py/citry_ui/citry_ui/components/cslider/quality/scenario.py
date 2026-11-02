@@ -45,7 +45,8 @@ def slider_states_component(app: Citry) -> type[Component]:
                 c-value="(20, 80)"
                 c-min_steps_between_thumbs="10"
                 c-attrs="{'data-quality-states':'range lower upper collision tab-order localized labels'}"
-                :value="controlled" :onValueChange="(next)=>{controlled=next;last=`Accepted ${next.join('-')}`}"
+                :value="controlled"
+                :onValueChange="(next)=>{controlled=next;last=`Accepted ${next.join('-')}`}"
               />
               <c-CSlider
                 value="30"

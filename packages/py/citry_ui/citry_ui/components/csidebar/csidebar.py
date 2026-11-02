@@ -102,10 +102,6 @@ class CSidebar(LibraryComponent):
         footer: SlotInput[CSidebarFooterSlotData] | None = None
         toggle: SlotInput[CSidebarToggleSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         validate_html_id("CSidebar", kwargs.id)
         validate_non_empty_string("CSidebar", "label", kwargs.label)
@@ -199,7 +195,11 @@ class CSidebar(LibraryComponent):
           c-aria-expanded="'false' if collapsed else 'true'"
           data-citry-ui-part="toggle"
         >
-          <span class="cui-sidebar__toggle-icon" aria-hidden="true" data-citry-ui-part="toggle-icon">
+          <span
+            class="cui-sidebar__toggle-icon"
+            aria-hidden="true"
+            data-citry-ui-part="toggle-icon"
+          >
             <c-if cond="has_toggle"><c-slot name="toggle" c-collapsed="collapsed" /></c-if>
             <c-else>&#8801;</c-else>
           </span>

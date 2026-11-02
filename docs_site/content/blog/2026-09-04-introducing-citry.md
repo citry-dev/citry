@@ -276,7 +276,7 @@ Dare I say, Citry will catch more bugs than any other Python frontend
 framework.
 
 <c-image
-  src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/refs_hints.gif"
+  src="https://raw.githubusercontent.com/citry-dev/citry/6f5de52168fba10f02e1e4b98c73cd5136f82920/packages/editors/vscode/images/refs_hints.gif"
   alt="Citry editor hover information and navigation between templates and Python definitions"
   width="960"
 />

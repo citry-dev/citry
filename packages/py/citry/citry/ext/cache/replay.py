@@ -9,6 +9,7 @@ behavior-preserving codec.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from types import MappingProxyType
@@ -54,6 +55,7 @@ from citry._vue.leaf_program import (
     static_leaf_parts,
     typed_leaf_parts,
 )
+from citry._walk import Call, run
 from citry.assets import load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import _PreparedCallMetadata
@@ -103,12 +105,14 @@ from .artifact import (
     _require_attribute_origin,
     _thaw_json,
 )
-from .errors import CacheArtifactError
+from .errors import CacheArtifactError, _CacheRevisionChanged
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Generator, Mapping
 
     from citry.component import Component
+
+logger = logging.getLogger("citry")
 
 
 class _UnsupportedTypedCachePart(CacheArtifactError):
@@ -151,10 +155,22 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
     if not component.citry._is_builtin_component(mark_class) or mark_class.name != "mark":
         raise CacheArtifactError("cache marker built-in identity is invalid")
 
-    def collect_instances(current: CitryRender, seen: set[int]) -> None:
-        if id(current) in seen:
-            return
-        seen.add(id(current))
+    def collect_instances(root: CitryRender) -> None:
+        # Nested renders are visited in document order from a stack rather than
+        # with a call per level, so this walk uses the same number of Python
+        # frames however deep the template nests. The stack holds renders still
+        # to visit; the next one is at the end.
+        seen: set[int] = set()
+        pending = [root]
+        while pending:
+            current = pending.pop()
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            collect_instance(current)
+            pending.extend(value for value in reversed(current.parts) if isinstance(value, CitryRender))
+
+    def collect_instance(current: CitryRender) -> None:
         live = current.frame
         live_component = current.context.component
         if live_component is not None and type(live_component) is mark_class:
@@ -170,13 +186,13 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
             instance_by_id[live.render_id] = index
             instances.append(RenderCacheInstance(index, live.render_id, live.class_id))
             selected_ids.add(live.render_id)
-        for value in current.parts:
-            if isinstance(value, CitryRender):
-                collect_instances(value, seen)
 
-    collect_instances(render, set())
+    collect_instances(render)
 
-    def detach(current: CitryRender) -> int:
+    def detach(current: CitryRender) -> Generator[Call, int, int]:
+        # A generator walk (see `citry._walk`): each nested frame is detached
+        # with `yield Call(...)`, so this walk uses the same number of Python
+        # frames however deep the template nests.
         from citry.citry_render import RenderDecoration  # noqa: PLC0415
 
         if isinstance(current, RenderDecoration):
@@ -238,12 +254,15 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
                     raise _UnsupportedTypedCachePart("direct slot has a non-text writer anchor")
                 parts.append(
                     ArtifactDirectSlotPart(
-                        frame=detach(
-                            CitryRender(
-                                parts=list(part.parts),
-                                context=part.selected.context,
-                                frame=part.selected.frame,
-                                render_target="prepared",
+                        frame=(
+                            yield Call(
+                                detach,
+                                CitryRender(
+                                    parts=list(part.parts),
+                                    context=part.selected.context,
+                                    frame=part.selected.frame,
+                                    render_target="prepared",
+                                ),
                             )
                         ),
                         execution=local_execution,
@@ -259,6 +278,10 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
                         source=part.source,
                         span=part.span,
                         origin=fill.origin,
+                        vue_props=part.vue_props,
+                        fill_vue_pattern=fill.vue_pattern,
+                        from_outlet=part.from_outlet,
+                        fill_public_name=None if fill.public_name == part.public_name else fill.public_name,
                     )
                 )
             elif isinstance(part, DirectCallRunRender):
@@ -274,15 +297,17 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
                     parts=list(part.parts), context=part.context, frame=part.frame, render_target="prepared"
                 )
                 parts.append(
-                    ArtifactDirectCallRunPart(detach(selected), part.child_type_key, call_source, call_position)
+                    ArtifactDirectCallRunPart(
+                        (yield Call(detach, selected)), part.child_type_key, call_source, call_position
+                    )
                 )
             elif isinstance(part, DirectPythonComponentRender):
                 selected = CitryRender(
                     parts=list(part.parts), context=part.context, frame=part.frame, render_target="prepared"
                 )
-                parts.append(ArtifactDirectPythonComponentPart(detach(selected), part.local_ordinal))
+                parts.append(ArtifactDirectPythonComponentPart((yield Call(detach, selected)), part.local_ordinal))
             elif type(part) is CitryRender:
-                parts.append(ArtifactFramePart(detach(part)))
+                parts.append(ArtifactFramePart((yield Call(detach, part))))
             elif isinstance(part, CitryRender):
                 raise _UnsupportedTypedCachePart(
                     f"typed wrapper {type(part).__name__} requires its relationship codec"
@@ -342,7 +367,7 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
         active.remove(identity)
         return frame_index
 
-    root_frame = detach(render)
+    root_frame = run(detach(render))
     extensions = component.citry.extensions._export_render_cache(
         OnRenderCacheExportContext(
             citry=component.citry,
@@ -510,7 +535,10 @@ def _replay_boundary_artifact(
                 raise CacheArtifactError("staged frame marker refers to a missing occurrence")
             marker_by_instance.setdefault(instance, []).extend(markers)
 
-    def build(frame_index: int) -> CitryRender:
+    def build(frame_index: int) -> Generator[Call, CitryRender, CitryRender]:
+        # A generator walk (see `citry._walk`): each nested frame is built with
+        # `yield Call(...)`, so this walk uses the same number of Python frames
+        # however deep the template nests.
         saved = artifact.frames[frame_index]
         if saved.instance is None:
             render_id = None
@@ -570,7 +598,7 @@ def _replay_boundary_artifact(
         parts: list[RenderPart] = []
         for item in saved.parts:
             if type(item) is ArtifactFramePart:
-                parts.append(build(item.frame))
+                parts.append((yield Call(build, item.frame)))
             elif type(item) is ArtifactPlaceholderPart:
                 parts.append(Placeholder(item.key))
             elif type(item) is ArtifactDirectSlotPart:
@@ -617,11 +645,12 @@ def _replay_boundary_artifact(
                     session=replay_session,
                     lexical_render_id=lexical_render_id,
                     kind=item.kind,
-                    public_name=item.public_name,
+                    public_name=item.public_name if item.fill_public_name is None else item.fill_public_name,
                     source=item.fill_source,
                     span=item.span,
                     origin=item.origin,
                     strict_session=True,
+                    vue_pattern=item.fill_vue_pattern,
                 )
                 live_execution = replay_session.next_execution()
                 execution = DirectExecutionFrame(
@@ -633,24 +662,42 @@ def _replay_boundary_artifact(
                     item.source,
                     item.span,
                     consumed=True,
+                    vue_props=item.vue_props,
+                    from_outlet=item.from_outlet,
                 )
                 executions[item.execution] = execution
-                selected = build(item.frame)
-                projection_type = DirectNestedTemplateRender if item.kind == "nested-template" else DirectSlotRender
-                parts.append(
-                    projection_type(
-                        selected,
-                        execution_index=live_execution,
-                        fill_source=fill_source,
-                        parent_execution=parent_execution,
-                        public_name=item.public_name,
-                        receiver_render_id=receiver_render_id,
-                        source=item.source,
-                        span=item.span,
+                selected = yield Call(build, item.frame)
+                if item.kind == "nested-template":
+                    parts.append(
+                        DirectNestedTemplateRender(
+                            selected,
+                            execution_index=live_execution,
+                            fill_source=fill_source,
+                            parent_execution=parent_execution,
+                            public_name=item.public_name,
+                            receiver_render_id=receiver_render_id,
+                            source=item.source,
+                            span=item.span,
+                        )
                     )
-                )
+                else:
+                    parts.append(
+                        DirectSlotRender(
+                            selected,
+                            execution_index=live_execution,
+                            fill_source=fill_source,
+                            parent_execution=parent_execution,
+                            public_name=item.public_name,
+                            receiver_render_id=receiver_render_id,
+                            source=item.source,
+                            span=item.span,
+                            # Only a slot outlet passes Vue slot props.
+                            vue_props=item.vue_props,
+                            from_outlet=item.from_outlet,
+                        )
+                    )
             elif type(item) is ArtifactDirectCallRunPart:
-                selected = build(item.frame)
+                selected = yield Call(build, item.frame)
                 call_node = _CachedCallNode(item.source, item.span)
                 _rebind_call_run_sources(selected, call_node, item.child_class_id)
                 parts.append(
@@ -661,7 +708,9 @@ def _replay_boundary_artifact(
                     )
                 )
             elif type(item) is ArtifactDirectPythonComponentPart:
-                parts.append(DirectPythonComponentRender(build(item.frame), local_ordinal=item.local_ordinal))
+                parts.append(
+                    DirectPythonComponentRender((yield Call(build, item.frame)), local_ordinal=item.local_ordinal)
+                )
             else:
                 parts.append(_apply_typed_replacements(_replay_typed_leaf(item), typed_replacements))
         markers = list(saved.root_markers)
@@ -682,11 +731,13 @@ def _replay_boundary_artifact(
             render_target="prepared",
         )
 
-    replayed = build(artifact.root_frame)
+    replayed = run(build(artifact.root_frame))
     written: list[str] = []
     original_extra = context.extra
     try:
-        with cache_extension._stable_revision(revision):
+        # The backend calls run with no lock held, so a reset does not wait
+        # for them; the revision is checked before and after them.
+        with cache_extension._unchanged_revision(revision):
             for contribution in staged:
                 for write in contribution.cache_writes:
                     previous_cached = boundary.citry.cache.get(write.key)
@@ -695,7 +746,19 @@ def _replay_boundary_artifact(
                     boundary.citry.cache.set(write.key, write.value, ttl=write.ttl)
                     if write.rollback_delete and previous_cached is None:
                         written.append(write.key)
-            context.extra = merged_extra
+        context.extra = merged_extra
+    except _CacheRevisionChanged:
+        context.extra = original_extra
+        # Undo only the keys this replay created and marked safe to delete;
+        # content-addressed repairs stay valid. The undo is best-effort: a
+        # failed delete leaves an unused key, and the caller must still see
+        # the revision change, so it renders again.
+        for key in reversed(written):
+            try:
+                boundary.citry.cache.delete(key)
+            except Exception as error:  # noqa: BLE001 - the backend is the application's code
+                logger.warning("Render cache rollback delete failed exception=%s", type(error).__name__)
+        raise
     except Exception:
         context.extra = original_extra
         for key in reversed(written):

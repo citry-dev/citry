@@ -8,13 +8,13 @@ import pytest
 from markupsafe import Markup
 
 import citry_ui
-from citry import Citry, Component
+from citry import Citry, Component, LintSettings
 from citry_ui import CBadge
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(badge: object, *, include_css: bool = False) -> str:
-    app = Citry(autodiscover=False)
+def _render(badge: object, *, include_css: bool = False, check_input_types: bool = True) -> str:
+    app = Citry(autodiscover=False, lint=LintSettings(check_input_types=check_input_types))
     app.register_library(citry_ui)
 
     class Page(Component):
@@ -97,12 +97,12 @@ def test_optional_icon_wrappers_and_root_styling_render_only_when_supplied():
 @pytest.mark.parametrize(
     ("input_name", "bad_value", "error", "match"),
     [
-        ("variant", 2, TypeError, "variant must be a string"),
-        ("variant", "filled", ValueError, "variant must be one of"),
-        ("intent", "error", ValueError, "intent must be one of"),
-        ("size", "xl", ValueError, "size must be one of"),
-        ("shape", "circle", ValueError, "shape must be one of"),
-        ("attrs", [], TypeError, "attrs must be a mapping"),
+        ("variant", 2, TypeError, r"CBadge\.Kwargs\.variant expects Literal"),
+        ("variant", "filled", TypeError, r"CBadge\.Kwargs\.variant expects Literal"),
+        ("intent", "error", TypeError, r"CBadge\.Kwargs\.intent expects Literal"),
+        ("size", "xl", TypeError, r"CBadge\.Kwargs\.size expects Literal"),
+        ("shape", "circle", TypeError, r"CBadge\.Kwargs\.shape expects Literal"),
+        ("attrs", [], TypeError, r"CBadge\.Kwargs\.attrs expects Mapping"),
     ],
 )
 def test_invalid_inputs_fail_deterministically(input_name, bad_value, error, match):
@@ -161,8 +161,11 @@ def test_attrs_without_vue_syntax_stay_ordinary_attributes():
     assert 'data-note="kept"' in html
 
 
-def test_direct_choices_are_detrusted_before_rendering():
-    with pytest.raises(ValueError, match="variant must be one of"):
+def test_markup_outside_the_choices_is_rejected_before_rendering():
+    # Markup is a str subclass that templates do not escape, so a Markup value
+    # that is not one of the choices must fail before it reaches an attribute.
+    # Citry's check compares the text with each choice.
+    with pytest.raises(TypeError, match=r"CBadge\.Kwargs\.variant expects Literal"):
         _render(CBadge(variant=Markup('soft" onfocus="evil'), slots={"default": "Badge"}))
 
 
@@ -184,3 +187,10 @@ def test_css_exposes_every_public_variable_and_no_component_javascript():
     assert "@media (forced-colors: active)" in css
     assert "@media print" in css
     assert getattr(CBadge, "js", None) is None
+
+
+def test_markup_outside_the_choices_is_rejected_with_citrys_check_off():
+    # An app can turn Citry's input check off, and then Citry UI's own check
+    # is the only thing between a Markup value and the rendered attribute.
+    with pytest.raises(ValueError, match="variant must be one of"):
+        _render(CBadge(variant=Markup('soft" onfocus="evil'), slots={"default": "Badge"}), check_input_types=False)

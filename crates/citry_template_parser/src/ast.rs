@@ -11,6 +11,147 @@ use unicode_normalization::UnicodeNormalization;
 use crate::grammar::Rule;
 
 // #########################################################
+// SHARED VALUES
+// #########################################################
+
+/// A list in the tree that every copy of the tree shares.
+///
+/// Python reads a parsed template through PyO3, which copies the field it
+/// reads. Each node holds the variable uses and comments of its whole
+/// subtree, so copying a list together with everything below it would cost
+/// about depth² values near the root, and a walk over the tree depth³ (#384).
+/// Copying a `Shared` only adds one to a reference count, and the lists below
+/// stay shared, so a read copies one node.
+///
+/// No code changes a list that another copy still holds. `Shared` has no
+/// `DerefMut`, so every write goes through [`Shared::make_mut`], which copies
+/// the value first if anything else still holds it. That keeps a copy from
+/// happening without the code saying so.
+pub struct Shared<T>(std::sync::Arc<T>);
+
+impl<T> Shared<T> {
+    pub fn new(value: T) -> Self {
+        Shared(std::sync::Arc::new(value))
+    }
+
+    /// Give the value to change in place. It is copied first only when another
+    /// reference to it exists. While the parser builds a tree, nothing else
+    /// holds one, except where `Node::from_start_and_end_tags` starts a
+    /// node's lists from a copy of its body's, which copies them as before.
+    pub fn make_mut(this: &mut Self) -> &mut T
+    where
+        T: Clone,
+    {
+        std::sync::Arc::make_mut(&mut this.0)
+    }
+
+    /// Take the value out: without a copy when this is the only reference,
+    /// and as a copy otherwise.
+    pub fn into_inner(this: Self) -> T
+    where
+        T: Clone,
+    {
+        std::sync::Arc::unwrap_or_clone(this.0)
+    }
+
+    /// The value when this is the only reference, without a copy; otherwise
+    /// the shared value back.
+    pub fn try_into_inner(this: Self) -> Result<T, Self> {
+        std::sync::Arc::try_unwrap(this.0).map_err(Shared)
+    }
+
+    /// Whether nothing else holds this value.
+    pub fn is_unique(this: &Self) -> bool {
+        std::sync::Arc::strong_count(&this.0) == 1
+    }
+
+    /// Whether two shared values are the same allocation.
+    pub fn ptr_eq(this: &Self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&this.0, &other.0)
+    }
+}
+
+impl<T> std::ops::Deref for Shared<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> Clone for Shared<T> {
+    fn clone(&self) -> Self {
+        Shared(std::sync::Arc::clone(&self.0))
+    }
+}
+
+impl<T: Default> Default for Shared<T> {
+    fn default() -> Self {
+        Shared::new(T::default())
+    }
+}
+
+// `for item in &node.comments` keeps working on a shared list.
+impl<'a, T> IntoIterator for &'a Shared<Vec<T>> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<T> From<T> for Shared<T> {
+    fn from(value: T) -> Self {
+        Shared::new(value)
+    }
+}
+
+// Equality and printing look through to the value, so `==` and `repr` give
+// the same results as on the value itself. The same-allocation shortcut is
+// sound because no tree value is a float, so every value equals itself.
+impl<T: PartialEq> PartialEq for Shared<T> {
+    fn eq(&self, other: &Self) -> bool {
+        Shared::ptr_eq(self, other) || *self.0 == *other.0
+    }
+}
+
+impl<T: Eq> Eq for Shared<T> {}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Shared<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Passing the same formatter keeps `{:#?}` and every other flag.
+        std::fmt::Debug::fmt(&*self.0, formatter)
+    }
+}
+
+// Python sees the value itself: a getter converts a copy of it, as PyO3
+// does for a plain field, and a constructor accepts what the value accepts.
+impl<'py, T> IntoPyObject<'py> for Shared<T>
+where
+    T: IntoPyObject<'py> + Clone,
+{
+    type Target = T::Target;
+    type Output = T::Output;
+    type Error = T::Error;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Shared::into_inner(self).into_pyobject(py)
+    }
+}
+
+impl<'a, 'py, T> FromPyObject<'a, 'py> for Shared<T>
+where
+    T: FromPyObject<'a, 'py>,
+{
+    type Error = T::Error;
+
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        T::extract(obj).map(Shared::new)
+    }
+}
+
+// #########################################################
 // TOKEN
 // #########################################################
 
@@ -18,7 +159,7 @@ use crate::grammar::Rule;
 ///
 /// The section may represent anything from variable references, Python expressions,
 /// entire components or tags, plain text, or even comments.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     /// String content of the token
@@ -196,7 +337,7 @@ impl Token {
 ///
 /// - `{# ... #}` comments are NOT included in the output.
 /// - `<!-- ... -->` comments ARE included in the output, and treated as text.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Comment {
     /// Token containing the entire comment span including `{# #}` or `<!-- ... -->` delimiters
@@ -228,7 +369,7 @@ impl Comment {
 // #########################################################
 
 /// One source-to-target field in a `<c-fill data="{ ... }">` binding.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct FillDataField {
     /// Slot-data key read by this field.
@@ -259,7 +400,7 @@ impl FillDataField {
 }
 
 /// Parsed binding form for a `<c-fill>` `data` attribute.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct FillDataPattern {
     /// Token containing the complete binding expression.
@@ -306,7 +447,7 @@ impl FillDataPattern {
 }
 
 /// The kind of HTML attribute, determining how it should be processed
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum HtmlAttrKind {
     /// Static attribute - name doesn't start with `c-`, value interpreted literally
@@ -356,7 +497,7 @@ impl HtmlAttrKind {
 /// Attributes can be:
 /// - Key-value pairs: `key="value"`, `key='value'`, `key=value`
 /// - Boolean attributes: `disabled` (no value)
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct HtmlAttr {
     /// Token containing the entire attribute span
@@ -457,7 +598,7 @@ impl HtmlAttr {
 // #########################################################
 
 /// Represents an HTML tag (start tag, or self-closing tag)
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct HtmlStartTag {
     /// Token containing the entire tag span including `<`, `>`, and `/` delimiters
@@ -526,7 +667,7 @@ impl HtmlStartTag {
 }
 
 /// Represents an HTML end tag
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct HtmlEndTag {
     /// Token containing the entire tag span including `<`, `>`, and `/` delimiters
@@ -568,7 +709,7 @@ impl HtmlEndTag {
 // #########################################################
 
 /// Represents a template expression `{{ ... }}`
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Expr {
     /// Token containing the entire expression span including `{{ }}` delimiters
@@ -617,7 +758,7 @@ impl Expr {
 // #########################################################
 
 /// Represents plain text in a template
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Text {
     /// Token containing the text content and position information
@@ -650,7 +791,7 @@ impl Text {
 /// A node can be:
 /// - An HTML element: `<div>...</div>`, `<img/>`
 /// - A component: `<c-MyComp>...</c-MyComp>`, `<c-img/>`
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum Node {
     /// A node with a body (has opening tag, body content, and closing tag)
@@ -662,11 +803,11 @@ pub enum Node {
         /// The body content (template elements inside the node)
         body: Template,
         /// All variables used both within the start tag and the body content
-        used_variables: Vec<Token>,
+        used_variables: Shared<Vec<Token>>,
         /// Variables introduced by this node (e.g., loop variables from `<c-for>`)
-        introduced_variables: Vec<Token>,
+        introduced_variables: Shared<Vec<Token>>,
         /// All comments found in the node (start/end tags and body content)
-        comments: Vec<Comment>,
+        comments: Shared<Vec<Comment>>,
         /// Whether this node contains any `<c-fill>` tags in its body
         contains_fills: bool,
     },
@@ -675,11 +816,11 @@ pub enum Node {
         /// The start tag with attributes
         start_tag: HtmlStartTag,
         /// All variables used both within the start tag and the body content
-        used_variables: Vec<Token>,
+        used_variables: Shared<Vec<Token>>,
         /// Variables introduced by this node (e.g., loop variables from `<c-for>`)
-        introduced_variables: Vec<Token>,
+        introduced_variables: Shared<Vec<Token>>,
         /// All comments found in the node (start tag)
-        comments: Vec<Comment>,
+        comments: Shared<Vec<Comment>>,
         /// Whether this node contains any `<c-fill>` tags in its body (always false for self-closing nodes)
         contains_fills: bool,
     },
@@ -807,7 +948,7 @@ impl Node {
         // Extract comments from end tag
         // NOTE: End tags don't use variables
         let comments_from_end_tag = end_tag.comments.clone();
-        comments.extend(comments_from_end_tag);
+        Shared::make_mut(&mut comments).extend(comments_from_end_tag);
 
         // Extract comments and used variables from start tag and its attrs
         let used_variables_from_attrs: Vec<Token> = start_tag
@@ -820,18 +961,19 @@ impl Node {
             .iter()
             .flat_map(|attr| attr.comments.clone());
         let comments_from_start_tag = start_tag.comments.clone();
-        comments.extend(comments_from_attrs);
-        comments.extend(comments_from_start_tag);
-        used_variables.extend(used_variables_from_attrs);
+        Shared::make_mut(&mut comments).extend(comments_from_attrs);
+        Shared::make_mut(&mut comments).extend(comments_from_start_tag);
+        Shared::make_mut(&mut used_variables).extend(used_variables_from_attrs);
 
-        let used_variables = remove_introduced_variables(used_variables, &introduced_variables);
+        let used_variables =
+            remove_introduced_variables(Shared::into_inner(used_variables), &introduced_variables);
 
         Self::WithBody {
             start_tag,
             end_tag,
             body,
-            used_variables,
-            introduced_variables,
+            used_variables: used_variables.into(),
+            introduced_variables: introduced_variables.into(),
             comments,
             contains_fills: false, // Will be set in finalize_node
         }
@@ -869,7 +1011,7 @@ pub(crate) fn remove_introduced_variables(
 // #########################################################
 
 /// Original source owned by an installed external template provider.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ForeignSourcePart {
     #[pyo3(get)]
@@ -908,7 +1050,7 @@ impl ForeignSourcePart {
 }
 
 /// Represents a single element in a template
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum TemplateElement {
     Node(Node),
@@ -963,7 +1105,7 @@ impl TemplateElement {
 ///
 /// Then we can infer and raise as error that the component declared "bar",
 /// but "bar" is missing, and instead there's "fee".
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct StaticNamedSlot {
     /// Token containing the slot name (from the `name` attribute's inner value)
@@ -1001,24 +1143,200 @@ impl StaticNamedSlot {
 // #########################################################
 
 /// Represents a complete parsed template
-#[pyclass]
-#[derive(Debug, PartialEq, Clone)]
+#[pyclass(from_py_object)]
 pub struct Template {
     /// The elements in the template
     #[pyo3(get)]
-    pub elements: Vec<TemplateElement>,
+    pub elements: Shared<Vec<TemplateElement>>,
 
     /// All comments found in the template at any nesting level.
     #[pyo3(get)]
-    pub comments: Vec<Comment>,
+    pub comments: Shared<Vec<Comment>>,
 
     /// Context variables that this Template needs (used variables from all tags and expressions)
     #[pyo3(get)]
-    pub used_variables: Vec<Token>,
+    pub used_variables: Shared<Vec<Token>>,
 
     /// All slots defined by `<c-slot>` tags (with static names) found in the template (at any nesting level)
     #[pyo3(get)]
-    pub slots: Vec<StaticNamedSlot>,
+    pub slots: Shared<Vec<StaticNamedSlot>>,
+}
+
+/// Cloning a template shares its four lists with the copy, so it costs the
+/// same at any depth and never walks the tree. PyO3 clones a template when
+/// Python reads a field that holds one, such as a node's `body`.
+impl Clone for Template {
+    fn clone(&self) -> Self {
+        Template {
+            elements: self.elements.clone(),
+            comments: self.comments.clone(),
+            used_variables: self.used_variables.clone(),
+            slots: self.slots.clone(),
+        }
+    }
+}
+
+/// Comparing two templates also walks both trees. It keeps its own stack of
+/// the element lists still to compare, so it does not grow the native stack
+/// with the depth, and it never runs the derived `PartialEq` of a node with
+/// a body. Python reaches it through `==`, for example in a test's
+/// `assert a == b`. The answer is the same as the derived implementation's.
+impl PartialEq for Template {
+    fn eq(&self, other: &Self) -> bool {
+        if !template_fields_equal(self, other) {
+            return false;
+        }
+        // With no node on this side, any node on the other side is a
+        // different variant, so the plain comparison does not go deeper.
+        if !has_child_nodes(&self.elements) {
+            return self.elements == other.elements;
+        }
+        let mut pending = vec![(self.elements.iter(), other.elements.iter())];
+        while let Some((left, right)) = pending.last_mut() {
+            let (left, right) = match (left.next(), right.next()) {
+                (None, None) => {
+                    pending.pop();
+                    continue;
+                }
+                (Some(left), Some(right)) => (left, right),
+                _ => return false,
+            };
+            match (left, right) {
+                (
+                    TemplateElement::Node(Node::WithBody {
+                        start_tag: left_start,
+                        end_tag: left_end,
+                        body: left_body,
+                        used_variables: left_used,
+                        introduced_variables: left_introduced,
+                        comments: left_comments,
+                        contains_fills: left_fills,
+                    }),
+                    TemplateElement::Node(Node::WithBody {
+                        start_tag: right_start,
+                        end_tag: right_end,
+                        body: right_body,
+                        used_variables: right_used,
+                        introduced_variables: right_introduced,
+                        comments: right_comments,
+                        contains_fills: right_fills,
+                    }),
+                ) => {
+                    let same = left_start == right_start
+                        && left_end == right_end
+                        && template_fields_equal(left_body, right_body)
+                        && left_used == right_used
+                        && left_introduced == right_introduced
+                        && left_comments == right_comments
+                        && left_fills == right_fills;
+                    if !same {
+                        return false;
+                    }
+                    pending.push((left_body.elements.iter(), right_body.elements.iter()));
+                }
+                // Any other pair holds no body, so the derived comparison
+                // does not walk any further.
+                (left, right) => {
+                    if left != right {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+}
+
+/// Compare a template's own fields and how many elements it has, but not
+/// the elements themselves.
+fn template_fields_equal(left: &Template, right: &Template) -> bool {
+    // Naming every field makes the build fail when `Template` gains one, so
+    // a new field cannot be left out of the comparison by mistake.
+    let Template {
+        elements,
+        comments,
+        used_variables,
+        slots,
+    } = left;
+    elements.len() == right.elements.len()
+        && *comments == right.comments
+        && *used_variables == right.used_variables
+        && *slots == right.slots
+}
+
+/// Printing a template also walks the whole tree, once per level, through
+/// the derived `Debug` of its elements. Python reaches it through `repr()`,
+/// and pytest calls `repr()` on a failed comparison. Printing in the derived
+/// format without calling itself would mean writing that format by hand, so
+/// this one runs each level through the stack guard. The output is the same
+/// as the derived implementation's.
+impl std::fmt::Debug for Template {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let print = |formatter: &mut std::fmt::Formatter<'_>| {
+            formatter
+                .debug_struct("Template")
+                .field("elements", &self.elements)
+                .field("comments", &self.comments)
+                .field("used_variables", &self.used_variables)
+                .field("slots", &self.slots)
+                .finish()
+        };
+        if has_child_nodes(&self.elements) {
+            crate::stack::with_enough_stack(|| print(formatter))
+        } else {
+            print(formatter)
+        }
+    }
+}
+
+/// Whether `elements` holds a node, the only element that can nest further.
+fn has_child_nodes(elements: &[TemplateElement]) -> bool {
+    elements
+        .iter()
+        .any(|element| matches!(element, TemplateElement::Node(_)))
+}
+
+/// Dropping the last reference to a template frees its whole tree. A drop
+/// that called itself per level would grow the native stack with the depth:
+/// a template parsed from an attribute value is freed while the parser is
+/// still reading the tag that holds it, and there a 128 KiB thread ran out at
+/// 192 levels. So the drop takes each nested body's elements out and frees
+/// them from one work list; each body is already empty when it is freed. A
+/// list that another copy of the tree still holds is left to that copy.
+impl Drop for Template {
+    fn drop(&mut self) {
+        // Only a list with child nodes can nest further, and only one nothing
+        // else holds is freed here. A list another copy still holds is left
+        // to that copy, which also avoids allocating an empty list for every
+        // throwaway copy, such as the one behind each Python read of a node's
+        // `body`. If another thread drops that copy meanwhile, the list is
+        // freed by the ordinary drop instead, which goes one level down before
+        // the next body's own `drop` takes over.
+        if !has_child_nodes(&self.elements) || !Shared::is_unique(&self.elements) {
+            return;
+        }
+        let mut pending = vec![std::mem::take(&mut self.elements)];
+        while let Some(list) = pending.pop() {
+            // Every list here was checked to be unique and is owned by this
+            // loop, so this always succeeds; if a later change lets another
+            // copy hold one, leaving it to that copy is still correct.
+            let Ok(elements) = Shared::try_into_inner(list) else {
+                continue;
+            };
+            for mut element in elements {
+                // Only a body with child nodes can nest further, and only one
+                // nothing else holds is freed here; the others drop as usual.
+                match &mut element {
+                    TemplateElement::Node(Node::WithBody { body, .. })
+                        if has_child_nodes(&body.elements) && Shared::is_unique(&body.elements) =>
+                    {
+                        pending.push(std::mem::take(&mut body.elements));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
 }
 
 #[pymethods]
@@ -1031,18 +1349,15 @@ impl Template {
         slots: Option<Vec<StaticNamedSlot>>,
     ) -> Self {
         Self {
-            elements,
-            comments: comments.unwrap_or_default(),
-            used_variables,
-            slots: slots.unwrap_or_default(),
+            elements: elements.into(),
+            comments: comments.unwrap_or_default().into(),
+            used_variables: used_variables.into(),
+            slots: slots.unwrap_or_default().into(),
         }
     }
 
     fn __eq__(&self, other: &Template) -> bool {
-        self.elements == other.elements
-            && self.comments == other.comments
-            && self.used_variables == other.used_variables
-            && self.slots == other.slots
+        self == other
     }
 
     fn __repr__(&self) -> String {

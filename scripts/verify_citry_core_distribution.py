@@ -22,18 +22,7 @@ from itertools import product
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Final
 
-_tomllib: Any
-try:
-    import tomllib as _stdlib_tomllib
-except ModuleNotFoundError:  # Python 3.10 is part of the package test matrix.
-    try:
-        import tomli as _stdlib_tomllib  # type: ignore[import-untyped, no-redef]
-    except ModuleNotFoundError:
-        _tomllib = None
-    else:
-        _tomllib = _stdlib_tomllib
-else:
-    _tomllib = _stdlib_tomllib
+import tomllib
 
 try:
     from scripts import build_constraints, release_links
@@ -51,8 +40,8 @@ SOURCE_ROOT: Final = PACKAGE_ROOT / "citry_core"
 PYODIDE_CONFIG: Final = PACKAGE_ROOT / "pyodide-build.json"
 SMOKE_SCRIPT: Final = REPO_ROOT / "scripts" / "smoke_citry_core.py"
 VENDORED_VIZE_CRATES: Final = {
-    "vize_atelier_core": "0.420.0+citry.6",
-    "vize_s1_to_s2": "0.420.0+citry.6",
+    "vize_atelier_core": "0.420.0+citry.7",
+    "vize_s1_to_s2": "0.420.0+citry.7",
 }
 LICENSE_FILES: Final = {
     "LICENSE": PACKAGE_ROOT / "LICENSE",
@@ -102,9 +91,7 @@ class DistributionVerificationError(RuntimeError):
 
 def _loads_toml(payload: str) -> dict[str, Any]:
     """Parse TOML for the inventory/sdist gates."""
-    if _tomllib is None:
-        raise DistributionVerificationError("TOML artifact checks require tomllib or tomli")
-    return _tomllib.loads(payload)
+    return tomllib.loads(payload)
 
 
 def sha256_bytes(payload: bytes) -> str:
@@ -139,19 +126,7 @@ def vendored_vize_inventory() -> dict[str, str]:
 def package_version() -> str:
     """Read the release version from the package metadata."""
     content = (PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    if _tomllib is not None:
-        version: Any = _tomllib.loads(content)["project"].get("version")
-    else:
-        project = re.search(r"(?ms)^\[project\][ \t]*\n(?P<body>.*?)(?=^\[|\Z)", content)
-        version_line = (
-            None
-            if project is None
-            else re.search(
-                r"""(?m)^version\s*=\s*["'](?P<version>[^"']+)["']\s*(?:#.*)?$""",
-                project.group("body"),
-            )
-        )
-        version = None if version_line is None else version_line.group("version")
+    version: Any = tomllib.loads(content)["project"].get("version")
     if not isinstance(version, str) or not version:
         raise DistributionVerificationError("citry-core has no project version")
     return version
@@ -161,11 +136,12 @@ def expected_release_filenames(version: str) -> set[str]:
     """Return the closed artifact set for the support matrix."""
     wheels: set[str] = set()
     for platform in (*LINUX_PLATFORMS.values(), *MUSL_PLATFORMS.values()):
-        wheels.add(f"citry_core-{version}-cp310-abi3-{platform}.whl")
+        wheels.add(f"citry_core-{version}-cp311-abi3-{platform}.whl")
         wheels.add(f"citry_core-{version}-cp314-cp314t-{platform}.whl")
+        wheels.add(f"citry_core-{version}-cp315-cp315t-{platform}.whl")
         wheels.add(f"citry_core-{version}-pp311-pypy311_pp73-{platform}.whl")
     for platform in (*WINDOWS_PLATFORMS, *MACOS_PLATFORMS):
-        wheels.add(f"citry_core-{version}-cp310-abi3-{platform}.whl")
+        wheels.add(f"citry_core-{version}-cp311-abi3-{platform}.whl")
     config: Any = json.loads(PYODIDE_CONFIG.read_text(encoding="utf-8"))
     wheels.add(f"citry_core-{version}-{config['python_tag']}-{config['abi_tag']}-{config['platform_tag']}.whl")
     wheels.add(f"citry_core-{version}.tar.gz")
@@ -214,7 +190,7 @@ def _require_metadata(metadata: Message, *, artifact: Path, version: str) -> Non
         raise DistributionVerificationError(f"{artifact.name} has unexpected Name metadata")
     if metadata.get("Version") != version:
         raise DistributionVerificationError(f"{artifact.name} has unexpected Version metadata")
-    if metadata.get("Requires-Python") != ">=3.10, <4.0":
+    if metadata.get("Requires-Python") != ">=3.11, <4.0":
         raise DistributionVerificationError(f"{artifact.name} has unexpected Requires-Python metadata")
     if metadata.get("Requires-Dist") is not None:
         raise DistributionVerificationError(f"{artifact.name} unexpectedly declares a runtime dependency")
@@ -497,8 +473,8 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         elif payload != release_links.checkout_bytes(PACKAGE_ROOT, source_path):
             raise DistributionVerificationError(f"{path.name} contains changed source bytes in {name}")
     workspace = _loads_toml(relative["Cargo.toml"].decode("utf-8"))
-    if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.96":
-        raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.96 minimum")
+    if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.97":
+        raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.97 minimum")
     workspace_dependencies = workspace.get("workspace", {}).get("dependencies", {})
     patches = workspace.get("patch", {}).get("crates-io", {})
     for crate, vendored_version in VENDORED_VIZE_CRATES.items():
@@ -736,7 +712,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     promote.add_argument("--output-dir", type=Path, required=True)
     sdist = subparsers.add_parser("smoke-sdist")
     sdist.add_argument("--sdist", required=True)
-    sdist.add_argument("--rust-toolchain", default="1.96.0")
+    sdist.add_argument("--rust-toolchain", default="1.97.0")
     args = parser.parse_args(argv)
     try:
         if args.command == "inventory":

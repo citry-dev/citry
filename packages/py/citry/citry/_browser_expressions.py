@@ -18,6 +18,7 @@ from citry._state_binding_targets import (
     _element_of,
     _validate_binding_target,
 )
+from citry._walk import Call, run
 from citry_core.template_parser import (
     RESERVED_TAG_NAMES,
     HtmlAttrKind,
@@ -35,7 +36,7 @@ from citry_core.template_parser import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
     from citry_core.template_parser import BrowserOptionsSection, Template
 
@@ -488,7 +489,7 @@ def mark_literal_findings(
 ) -> tuple[MarkLiteralFinding, ...]:
     """Find violations of the static marker-name contract at byte offsets."""
     found: list[MarkLiteralFinding] = []
-    _collect_mark_literal_findings(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_mark_literal_findings(template, found, parse_nested=parse_nested, base_index=0))
     return tuple(found)
 
 
@@ -695,14 +696,16 @@ def browser_expressions(
 ) -> tuple[BrowserExpression, ...]:
     """Extract supported Vue/Citry browser hosts, including nested templates."""
     found: list[BrowserExpression] = []
-    _collect_browser_expressions(
-        template,
-        found,
-        parse_nested=parse_nested,
-        base_index=0,
-        bindings=(),
-        ambient_names=(),
-        python_names=(),
+    run(
+        _collect_browser_expressions(
+            template,
+            found,
+            parse_nested=parse_nested,
+            base_index=0,
+            bindings=(),
+            ambient_names=(),
+            python_names=(),
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -715,12 +718,14 @@ def browser_declarative_events(
 ) -> tuple[BrowserDeclarativeEvent, ...]:
     """Extract literal server handlers from parser-proven Citry bindings."""
     found: list[BrowserDeclarativeEvent] = []
-    _collect_declarative_events(
-        template,
-        found,
-        known_names=known_names,
-        parse_nested=parse_nested,
-        base_index=0,
+    run(
+        _collect_declarative_events(
+            template,
+            found,
+            known_names=known_names,
+            parse_nested=parse_nested,
+            base_index=0,
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -732,7 +737,7 @@ def browser_state_binding_target_errors(
 ) -> tuple[BrowserStateBindingTargetError, ...]:
     """Report statically invalid State binding targets without requiring a loaded app."""
     found: list[BrowserStateBindingTargetError] = []
-    _collect_state_target_errors(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_state_target_errors(template, found, parse_nested=parse_nested, base_index=0))
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
@@ -742,7 +747,7 @@ def _collect_state_target_errors(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -780,7 +785,8 @@ def _collect_state_target_errors(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_state_target_errors(
+                    yield Call(
+                        _collect_state_target_errors,
                         parsed,
                         found,
                         parse_nested=parse_nested,
@@ -788,7 +794,7 @@ def _collect_state_target_errors(
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_state_target_errors(body, found, parse_nested=parse_nested, base_index=base_index)
+            yield Call(_collect_state_target_errors, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def browser_state_bindings(
@@ -798,7 +804,7 @@ def browser_state_bindings(
 ) -> tuple[BrowserStateBinding, ...]:
     """Extract State keys from parsed template attributes, including nested templates."""
     found: list[BrowserStateBinding] = []
-    _collect_state_bindings(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_state_bindings(template, found, parse_nested=parse_nested, base_index=0))
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
@@ -808,7 +814,7 @@ def _collect_state_bindings(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -826,7 +832,8 @@ def _collect_state_bindings(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_state_bindings(
+                    yield Call(
+                        _collect_state_bindings,
                         parsed,
                         found,
                         parse_nested=parse_nested,
@@ -834,7 +841,7 @@ def _collect_state_bindings(
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_state_bindings(body, found, parse_nested=parse_nested, base_index=base_index)
+            yield Call(_collect_state_bindings, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def browser_bindings(
@@ -844,11 +851,13 @@ def browser_bindings(
 ) -> tuple[BrowserBinding, ...]:
     """Return every exact Vue binding declaration, including nested templates."""
     found: list[BrowserBinding] = []
-    _collect_browser_bindings(
-        template,
-        found,
-        parse_nested=parse_nested,
-        base_index=0,
+    run(
+        _collect_browser_bindings(
+            template,
+            found,
+            parse_nested=parse_nested,
+            base_index=0,
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -863,7 +872,12 @@ def enclosing_vue_loops(template: Template, start_index: int, end_index: int) ->
     are separate sources and are not searched.
     """
     elements: list[tuple[object, str, int]] = []
-    _collect_enclosing_elements(template, start_index, end_index, elements)
+    run(_collect_enclosing_elements(template, start_index, end_index, elements))
+    # Vue reads no `v-for` at or inside an element with `v-pre`, so the loops
+    # stop at the first such element.
+    v_pre = next((depth for depth, (node, _tag, _start) in enumerate(elements) if _has_v_pre(node)), None)
+    if v_pre is not None:
+        elements = elements[:v_pre]
     tags = [tag for _node, tag, _start in elements]
     return tuple(
         EnclosingVueLoop(binding, tag, tag_start, _v_for_expression(node), tuple(tags[depth + 1 :]))
@@ -879,7 +893,7 @@ def _collect_enclosing_elements(
     start_index: int,
     end_index: int,
     found: list[tuple[object, str, int]],
-) -> None:
+) -> Generator[Call, Any, None]:
     """Append each element that contains the byte span, outermost first, with its tag name and start."""
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -894,7 +908,7 @@ def _collect_enclosing_elements(
         found.append((node, node.start_tag.name.content, tag_token.start_index))
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_enclosing_elements(body, start_index, end_index, found)
+            yield Call(_collect_enclosing_elements, body, start_index, end_index, found)
 
 
 def _v_for_expression(node: Any) -> str:
@@ -916,7 +930,7 @@ def browser_component_prop_sites(
 ) -> tuple[BrowserComponentPropSite, ...]:
     """Return byte-mapped native Vue prop supplies on static component calls."""
     found: list[BrowserComponentPropSite] = []
-    _collect_component_prop_sites(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_component_prop_sites(template, found, parse_nested=parse_nested, base_index=0))
     return tuple(sorted(found, key=lambda item: (item.tag_start_index, item.tag_end_index)))
 
 
@@ -1090,11 +1104,13 @@ def browser_i18n_binding_directives(
 ) -> tuple[BrowserI18nBindingDirective, ...]:
     """Return parser-backed declarative browser translation bindings."""
     found: list[BrowserI18nBindingDirective] = []
-    _collect_i18n_binding_directives(
-        template,
-        found,
-        parse_nested=parse_nested,
-        base_index=0,
+    run(
+        _collect_i18n_binding_directives(
+            template,
+            found,
+            parse_nested=parse_nested,
+            base_index=0,
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.name_start_index, item.name_end_index)))
 
@@ -2101,12 +2117,19 @@ def _collect_browser_expressions(
     bindings: tuple[BrowserBinding, ...],
     ambient_names: tuple[str, ...],
     python_names: tuple[str, ...],
-) -> None:
+    vue_skipped: bool = False,
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
         node = element._0
-        introduced = _node_browser_bindings(node, base_index)
+        # Vue does not compile an element with `v-pre` or anything inside it,
+        # so Vue attributes there are plain attributes that read no names.
+        # Citry renders the template on the server first, so its own
+        # attributes are still checked here, although the render refuses most
+        # of them inside the element's contents.
+        inside_v_pre = vue_skipped or _has_v_pre(node)
+        introduced = () if inside_v_pre else _node_browser_bindings(node, base_index)
         # The parser records the Python names a `c-for` loop or `c-fill`
         # binding introduces. The body always sees them. The node's own
         # attributes see them only for the `c-for` shorthand, because
@@ -2127,7 +2150,7 @@ def _collect_browser_expressions(
         )
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
-            dynamic_slot_name = _dynamic_slot_name(attr.key.content)
+            dynamic_slot_name = None if inside_v_pre else _dynamic_slot_name(attr.key.content)
             if dynamic_slot_name is not None:
                 name_source, relative_start, relative_end = dynamic_slot_name
                 name_start = base_index + attr.key.start_index + len(attr.key.content[:relative_start].encode("utf-8"))
@@ -2155,7 +2178,8 @@ def _collect_browser_expressions(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_browser_expressions(
+                    yield Call(
+                        _collect_browser_expressions,
                         parsed,
                         found,
                         parse_nested=parse_nested,
@@ -2165,6 +2189,7 @@ def _collect_browser_expressions(
                         # A nested template renders in the same Python scope
                         # as the attribute that holds it.
                         python_names=own_python,
+                        vue_skipped=inside_v_pre,
                     )
                 continue
             canonical_attribute = _ascii_lower(attr.key.content)
@@ -2193,6 +2218,8 @@ def _collect_browser_expressions(
                     host = "citry-i18n-values"
                 else:
                     host = "vue"
+            if inside_v_pre and host == "vue":
+                continue
             raw_boundary_expression = component_boundary and (
                 canonical_attribute == "v-on" or canonical_attribute.startswith(("@", "v-on:", ":", "v-bind:"))
             )
@@ -2216,7 +2243,8 @@ def _collect_browser_expressions(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_browser_expressions(
+            yield Call(
+                _collect_browser_expressions,
                 body,
                 found,
                 parse_nested=parse_nested,
@@ -2224,7 +2252,13 @@ def _collect_browser_expressions(
                 bindings=(*bindings, *introduced),
                 ambient_names=descendant_ambient,
                 python_names=descendant_python,
+                vue_skipped=inside_v_pre,
             )
+
+
+def _has_v_pre(node: Any) -> bool:
+    """Return whether an element carries `v-pre`, which makes Vue leave it and everything inside it as written."""
+    return any(_ascii_lower(attr.key.content) == "v-pre" for attr in node.start_tag.attrs)
 
 
 def _i18n_descendant_ambient(node: object, ambient_names: tuple[str, ...]) -> tuple[str, ...]:
@@ -2269,7 +2303,7 @@ def _collect_declarative_events(
     known_names: frozenset[str],
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2282,7 +2316,8 @@ def _collect_declarative_events(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_declarative_events(
+                    yield Call(
+                        _collect_declarative_events,
                         parsed,
                         found,
                         known_names=known_names,
@@ -2309,7 +2344,8 @@ def _collect_declarative_events(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_declarative_events(
+            yield Call(
+                _collect_declarative_events,
                 body,
                 found,
                 known_names=known_names,
@@ -2324,12 +2360,17 @@ def _collect_browser_bindings(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+    vue_skipped: bool = False,
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
         node = element._0
-        found.extend(_node_browser_bindings(node, base_index))
+        # A `v-for` or `v-slot` under `v-pre` is a plain attribute that Vue
+        # never reads, so it declares nothing.
+        inside_v_pre = vue_skipped or _has_v_pre(node)
+        if not inside_v_pre:
+            found.extend(_node_browser_bindings(node, base_index))
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
             if inner is None or attr.kind != HtmlAttrKind.Template:
@@ -2338,19 +2379,23 @@ def _collect_browser_bindings(
             if nested is None:
                 continue
             parsed, nested_start = nested
-            _collect_browser_bindings(
+            yield Call(
+                _collect_browser_bindings,
                 parsed,
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index + inner.start_index + nested_start,
+                vue_skipped=inside_v_pre,
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_browser_bindings(
+            yield Call(
+                _collect_browser_bindings,
                 body,
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index,
+                vue_skipped=inside_v_pre,
             )
 
 
@@ -2360,15 +2405,21 @@ def _collect_component_prop_sites(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+    vue_skipped: bool = False,
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
         node = element._0
         authored_tag = node.start_tag.name.content
         canonical_tag = _ascii_lower(authored_tag)
+        # Vue renders no component under `v-pre`, so no tag there passes props.
+        inside_v_pre = vue_skipped or _has_v_pre(node)
         component_boundary = (
-            canonical_tag.startswith("c-") and canonical_tag != "c-element" and canonical_tag not in RESERVED_TAG_NAMES
+            not inside_v_pre
+            and canonical_tag.startswith("c-")
+            and canonical_tag != "c-element"
+            and canonical_tag not in RESERVED_TAG_NAMES
         )
         contributions: list[BrowserComponentPropContribution] = []
         for attr in node.start_tag.attrs:
@@ -2378,11 +2429,13 @@ def _collect_component_prop_sites(
                     nested = _nested_template(inner.content, parse_nested)
                     if nested is not None:
                         nested_template, nested_start = nested
-                        _collect_component_prop_sites(
+                        yield Call(
+                            _collect_component_prop_sites,
                             nested_template,
                             found,
                             parse_nested=parse_nested,
                             base_index=base_index + inner.start_index + nested_start,
+                            vue_skipped=inside_v_pre,
                         )
                 continue
             if not component_boundary:
@@ -2479,11 +2532,13 @@ def _collect_component_prop_sites(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_component_prop_sites(
+            yield Call(
+                _collect_component_prop_sites,
                 body,
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index,
+                vue_skipped=inside_v_pre,
             )
 
 
@@ -2493,7 +2548,7 @@ def _collect_mark_literal_findings(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2629,7 +2684,8 @@ def _collect_mark_literal_findings(
             nested = _nested_template(inner.content, parse_nested)
             if nested is not None:
                 parsed, nested_start = nested
-                _collect_mark_literal_findings(
+                yield Call(
+                    _collect_mark_literal_findings,
                     parsed,
                     found,
                     parse_nested=parse_nested,
@@ -2637,7 +2693,7 @@ def _collect_mark_literal_findings(
                 )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_mark_literal_findings(body, found, parse_nested=parse_nested, base_index=base_index)
+            yield Call(_collect_mark_literal_findings, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def _collect_i18n_binding_directives(
@@ -2646,7 +2702,7 @@ def _collect_i18n_binding_directives(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2667,7 +2723,8 @@ def _collect_i18n_binding_directives(
                     nested = _nested_template(inner.content, parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        _collect_i18n_binding_directives(
+                        yield Call(
+                            _collect_i18n_binding_directives,
                             parsed,
                             found,
                             parse_nested=parse_nested,
@@ -2741,7 +2798,8 @@ def _collect_i18n_binding_directives(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_i18n_binding_directives(
+            yield Call(
+                _collect_i18n_binding_directives,
                 body,
                 found,
                 parse_nested=parse_nested,

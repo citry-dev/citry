@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._protocol.events import MAX_JSON_DEPTH, JsonNestingError, loads_strict_json
 from citry.util.routing import RouteResponse, URLRoute
 
 from .emission import MESSAGES_PATH, RUNTIME_PATH, client_runtime_resource
@@ -50,7 +51,15 @@ def i18n_routes(extension: I18nExtension) -> list[URLRoute]:
 
     return [
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_i18n_runtime", methods=("GET",)),
-        URLRoute(MESSAGES_PATH, handler=serve_messages, name="citry_i18n_messages", methods=("POST",)),
+        URLRoute(
+            MESSAGES_PATH,
+            handler=serve_messages,
+            name="citry_i18n_messages",
+            methods=("POST",),
+            # The host adapters stop reading one byte past the size the
+            # handler rejects, so an oversized request is never held whole.
+            max_body_bytes=lambda: _MAX_REQUEST_BYTES,
+        ),
     ]
 
 
@@ -60,8 +69,14 @@ def _decode_request(request: RouteRequest) -> dict[str, object]:
     if request.content_type.split(";", 1)[0].strip().lower() != _JSON_TYPE:
         raise ValueError("i18n browser requests require Content-Type application/json")
     try:
-        value = json.loads(request.body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        # Read the body with the Events parser so this route applies the
+        # same rules: standard JSON only, nested at most MAX_JSON_DEPTH levels.
+        value = loads_strict_json(request.body)
+    except JsonNestingError as error:
+        raise ValueError(f"i18n browser request nests JSON more than {MAX_JSON_DEPTH} levels deep") from error
+    except ValueError as error:
+        # Covers malformed JSON, a body that is not UTF-8, and the
+        # non-standard literals alike.
         raise ValueError("i18n browser request is not valid UTF-8 JSON") from error
     if type(value) is not dict or set(value) != {
         "catalog_revision",

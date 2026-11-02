@@ -66,6 +66,40 @@
       "documentationPath": "/ide/diagnostics/#citry.parse.value"
     },
     {
+      "code": "citry.parse.too-deep",
+      "constant": "PARSE_TOO_DEEP",
+      "title": "Template nested too deeply",
+      "summary": "The template nests tags deeper than Citry allows, so it does not render.",
+      "when": "A tag would sit more than 512 levels deep, or more than 256 Citry logic levels deep: every c- tag except <c-raw>, and each c-if=, c-elif=, c-else, c-for= or c-empty attribute. A template inside an attribute counts from the depth of the tag that holds it.",
+      "fix": "Move the inner part into its own component's template, which starts counting from zero. Markup passed to a component between its tags still counts toward the template that writes it.",
+      "defaultSeverity": "error",
+      "surfaces": [
+        "parser",
+        "formatter",
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Parser-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
+      "examples": [
+        {
+          "title": "Tags of any kind past the total limit",
+          "language": "citry-html",
+          "source": "<div>\n  <div>\n    <!-- ... 510 more nested <div> tags ... -->\n    <p>Too deep</p>\n  </div>\n</div>"
+        },
+        {
+          "title": "Logic tags past the logic limit",
+          "language": "citry-html",
+          "source": "<c-if cond=\"a\">\n  <c-for each=\"item in items\">\n    <!-- ... 254 more nested logic tags ... -->\n    <c-if cond=\"b\">Too deep</c-if>\n  </c-for>\n</c-if>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.parse.too-deep"
+    },
+    {
       "code": "citry.parse.configuration",
       "constant": "PARSE_CONFIGURATION",
       "title": "Template parser setup failed",
@@ -91,7 +125,7 @@
       "title": "Unknown template variable",
       "summary": "A template reads a variable that nothing provides, often because of a typo. Rendering then fails with a KeyError.",
       "when": "A name in {{ ... }} or in a c-* attribute is not in the component's template data, a c-for or c-fill binding around it, template_globals, or the declared template_variables. In a template that several components share, every one of them must provide the name.",
-      "fix": "Correct the name, or add it to the data that template_data() returns. If another integration provides it, declare it in template_variables, or change rule_unknown_template_variable.",
+      "fix": "Correct the name, or add it to the data that template_data() returns. If template_data() builds its result in a way Citry cannot read, such as by calling a helper function, list every key it returns in Lint.template_data_keys. If another integration provides the name, declare it in template_variables, or change rule_unknown_template_variable.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
       "surfaces": [
@@ -119,6 +153,33 @@
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.template.unknown-variable"
+    },
+    {
+      "code": "citry.template.undeclared-template-data-key",
+      "constant": "TEMPLATE_UNDECLARED_TEMPLATE_DATA_KEY",
+      "title": "Key missing from template_data_keys",
+      "summary": "A component's template_data() returns a key that its Lint.template_data_keys does not list, so the list no longer names every key the method returns.",
+      "when": "A component declares Lint.template_data_keys, and its template_data() writes a key as a literal, such as {\"title\": ...} or data[\"title\"] = ..., that the list leaves out.",
+      "fix": "Add the key to Lint.template_data_keys, or stop returning it.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": false,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The key that template_data() returns."
+      },
+      "messages": {
+        "default": "template_data() returns '{name}', but Lint.template_data_keys does not list it. Add '{name}' to the list so it names every key the method returns."
+      },
+      "examples": [
+        {
+          "title": "A key the list leaves out",
+          "language": "citry",
+          "source": "class Card(Component):\n    class Lint:\n        template_data_keys = (\"title\",)\n\n    def template_data(self, kwargs, slots):\n        data = build_card(kwargs)\n        data[\"badge\"] = \"new\"\n        return data"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.undeclared-template-data-key"
     },
     {
       "code": "citry.template.unknown-component",
@@ -491,6 +552,42 @@
       "documentationPath": "/ide/diagnostics/#citry.template.missing-image-alt"
     },
     {
+      "code": "citry.template.csp-incompatible",
+      "constant": "TEMPLATE_CSP_INCOMPATIBLE",
+      "title": "Breaks a strict Content Security Policy",
+      "summary": "The template writes something that a strict Content Security Policy blocks in the browser: an inline <script> or <style> element, an inline event attribute such as onclick, or a javascript: URL. Citry reports it only when security_csp is \"warn\" or \"strict\".",
+      "when": "Off by default. When the application sets security_csp to \"warn\", it is a warning; with \"strict\", an error. The template writes one of these directly: a <script> or <style> element; an attribute with a fixed value (not a binding such as :onclick) whose name is longer than two characters and starts with on, such as onclick or online; or an action, formaction, href, src, or xlink:href attribute, or data on <object>, whose value starts with javascript: once character references such as &#115; are decoded. Letter case does not matter. The content of <c-raw> and of v-pre regions is checked the same way, and <c-element is=\"...\"> is checked as the element it names. Citry bindings such as c-href and c-bind, and HTML passed to a component in an attribute, are checked when the page renders instead. Vue bindings such as :href and v-bind get their values in the browser, so neither check sees them. Attributes on component tags (including a capitalized tag such as <Card> that may be a Vue component) are not checked, and neither is the content of <noscript>, <xmp>, <iframe>, <noembed>, <noframes>, or <plaintext>, which the browser reads as text, or markup inside an SVG <title> or <style>. citry check --static and an editor that has not loaded your application do not report it, because they do not know security_csp.",
+      "fix": "Move a script or style into the component's js or css, or into a Script or Style dependency. Replace an inline handler such as onclick with a Vue listener such as @click. Use a real URL, and a Vue listener for the action, instead of a javascript: URL. A custom attribute that starts with on, such as online, needs another name, for example data-online, because browsers and the policy treat every on* attribute as a possible event handler.",
+      "defaultSeverity": "ignore",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "tag": "The element name as written in the template, for the raw-tag message.",
+        "name": "The attribute name as written in the template."
+      },
+      "messages": {
+        "raw-tag": "A strict Content Security Policy blocks this inline <{tag}>. Move it into the component's js or css, or into a Script or Style dependency.",
+        "native-event": "A strict Content Security Policy blocks the inline event attribute '{name}'. Use a Vue listener such as @click instead, or rename a custom attribute, for example to data-{name}.",
+        "javascript-url": "A strict Content Security Policy blocks the javascript: URL in '{name}'. Use a real URL, and a Vue listener for the action."
+      },
+      "examples": [
+        {
+          "title": "An inline click handler",
+          "language": "citry-html",
+          "source": "<button onclick=\"save()\">Save</button>"
+        },
+        {
+          "title": "A javascript: URL",
+          "language": "citry-html",
+          "source": "<a href=\"javascript:void(0)\">Open</a>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.csp-incompatible"
+    },
+    {
       "code": "citry.template.unknown-url",
       "constant": "TEMPLATE_UNKNOWN_URL",
       "title": "Link to a missing page or file",
@@ -718,7 +815,7 @@
       "title": "Unknown Vue variable",
       "summary": "A Vue expression reads a name the component does not send to the browser, often because of a typo. Vue shows nothing, or the expression fails in the browser.",
       "when": "A name in a Vue expression is not a JsData or js_data() key, a v-for or slot alias around it, a Vue or Citry helper, a browser global, or a declared vue_variables entry.",
-      "fix": "Correct the name, or send the value from js_data(). If it is a Python variable, pass it with a c- attribute instead. Declare names that come from outside Citry in vue_variables, or change rule_unknown_vue_variable.",
+      "fix": "Correct the name, or send the value from js_data(). If it is a Python variable, pass it with a c- attribute instead. Declare names that come from outside Citry in vue_variables, or change rule_unknown_vue_variable. On <c-slot>, a c- attribute passes Python slot data, which the fill reads with data= rather than v-slot.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
       "surfaces": [
@@ -730,7 +827,8 @@
       },
       "messages": {
         "default": "Vue variable '{name}' is not available in this component.",
-        "python": "Vue variable '{name}' is not available in this component. '{name}' is a Python variable here, which the browser never sees; pass its value with a c- attribute or loop with Vue's v-for."
+        "python": "Vue variable '{name}' is not available in this component. '{name}' is a Python variable here, which the browser never sees; pass its value with a c- attribute or loop with Vue's v-for.",
+        "python-slot-prop": "Vue variable '{name}' is not available in this component. '{name}' is a Python variable here, which the browser never sees, and a Vue prop on <c-slot>, such as :row, needs a browser value. Loop with Vue's v-for, or pass it as Python slot data with a c- attribute and read it with data= in the fill."
       },
       "examples": [
         {
@@ -747,7 +845,7 @@
       "title": "Python variable read by a Vue expression",
       "summary": "A Vue expression reads a Python c-for or c-fill variable. The browser never sees that variable, so the value is missing, or Vue shows a different browser value with the same name.",
       "when": "A Vue expression inside a c-for loop or c-fill binding reads the Python variable, and no Vue v-for or slot alias of that name is around it. When Citry knows every name the component sends to the browser and the name is not among them, it reports citry.vue.unknown-variable instead, unless that rule is set to ignore.",
-      "fix": "Pass the Python value with a c- attribute, such as c-title=\"item\" instead of :title=\"item\", or loop with Vue's v-for. If a browser value has the same name, rename one of them.",
+      "fix": "Pass the Python value with a c- attribute, such as c-title=\"item\" instead of :title=\"item\", or loop with Vue's v-for. If a browser value has the same name, rename one of them. On <c-slot>, a c- attribute passes Python slot data, which the fill reads with data= rather than v-slot.",
       "defaultSeverity": "warning",
       "configurableSeverity": true,
       "surfaces": [
@@ -762,7 +860,9 @@
         "default": "Vue reads '{name}' from browser state, but '{name}' is a Python variable here. Pass its value with a c- attribute or loop with Vue's v-for instead.",
         "attribute": "Vue reads '{name}' from browser state, but '{name}' is a Python variable here. Use c-{attribute}=\"{name}\" to pass the Python value.",
         "browser": "Vue reads the component's browser value '{name}' here, not the Python loop or slot variable '{name}'. Pass the Python value with a c- attribute, or rename one of them.",
-        "browser-attribute": "Vue reads the component's browser value '{name}' here, not the Python loop or slot variable '{name}'. Use c-{attribute}=\"{name}\" for the Python value, or rename one of them."
+        "browser-attribute": "Vue reads the component's browser value '{name}' here, not the Python loop or slot variable '{name}'. Use c-{attribute}=\"{name}\" for the Python value, or rename one of them.",
+        "slot-prop": "Vue reads '{name}' from browser state, but '{name}' is a Python variable here, and a Vue prop on <c-slot>, such as :row, needs a browser value. Loop with Vue's v-for, or pass it as Python slot data with a c- attribute and read it with data= in the fill.",
+        "browser-slot-prop": "Vue reads the component's browser value '{name}' here, not the Python loop or slot variable '{name}'. To pass the Python value, write it as a c- attribute on <c-slot> and read it with data= in the fill, or rename one of them."
       },
       "examples": [
         {
@@ -772,6 +872,38 @@
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.vue.python-variable"
+    },
+    {
+      "code": "citry.vue.unknown-slot-prop",
+      "constant": "VUE_UNKNOWN_SLOT_PROP",
+      "title": "Unknown Vue slot prop",
+      "summary": "A <c-fill v-slot=\"{ ... }\"> reads a name that the component's <c-slot> never passes as a Vue prop, such as :row. Vue sets the name to undefined without a warning, so the fill shows nothing for it, or fails in the browser when it reads a field of it.",
+      "when": "A <c-fill> reads a name with v-slot=\"{ ... }\", and no <c-slot> for that slot in the component's template passes that name as a Vue prop, such as :row or v-bind:row. Vue writes prop names in camelCase, so :row-data passes rowData. Citry checks only when it can read the component's template and every slot name involved is a plain name=\"...\", not c-name or c-bind.",
+      "fix": "Use a prop name the slot passes, add the prop to the slot's <c-slot>, such as :row=\"row\", or read the value as Python slot data with data= instead.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": false,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "The name the v-slot pattern reads.",
+        "slot": "The slot the fill targets.",
+        "tag": "The component tag that receives the fill.",
+        "available": "The Vue props the slot passes, separated by commas."
+      },
+      "messages": {
+        "default": "Slot '{slot}' on <{tag}> passes no Vue prop named '{name}', so it is undefined in this fill. The slot passes: {available}.",
+        "none": "Slot '{slot}' on <{tag}> passes no Vue props, so '{name}' is undefined in this fill. If the slot passes Python data, read it with data= instead. Otherwise add it to its <c-slot> as a Vue prop, such as :row=\"row\"."
+      },
+      "examples": [
+        {
+          "title": "A name the slot does not pass",
+          "language": "citry-html",
+          "source": "{# The component's template #}\n<c-slot name=\"item\" :row=\"row\" />\n\n{# The caller #}\n<c-Table>\n  <c-fill name=\"item\" v-slot=\"{ item }\">\n    <span v-text=\"item.title\"></span>\n  </c-fill>\n</c-Table>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.vue.unknown-slot-prop"
     },
     {
       "code": "citry.vue.invalid-expression",

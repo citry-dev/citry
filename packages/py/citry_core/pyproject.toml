@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "citry_core"
 version = "1.9.0"
-requires-python = ">=3.10, <4.0"
+requires-python = ">=3.11, <4.0"
 description = "Rust-powered parsing, formatting, HTML transforms, and internationalization for Citry"
 keywords = [
     "citry",
@@ -18,13 +18,14 @@ keywords = [
 readme = "README.md"
 authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",

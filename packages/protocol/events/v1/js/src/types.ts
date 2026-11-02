@@ -198,6 +198,8 @@ export interface EventHandlerOptions {
 	throttleMilliseconds?: number;
 	latestCallWins?: true;
 	allowBatching?: false;
+	/** The browser may send calls outside the app's call queue; the handler never renders or changes State. */
+	detached?: true;
 }
 
 export interface EventComponentClass {

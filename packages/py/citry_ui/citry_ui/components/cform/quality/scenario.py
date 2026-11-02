@@ -88,7 +88,11 @@ def form_states_component(app: Citry) -> type[Component]:
                 </c-fill>
               </c-CField>
             </c-CForm>
-            <c-CForm id="quality-readonly-form" readonly submitting>
+            <c-CForm
+              id="quality-readonly-form"
+              readonly
+              submitting
+            >
               <c-CField control_id="quality-readonly-name">
                 <c-fill name="label">
                   Submitting read-only form

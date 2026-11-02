@@ -51,6 +51,8 @@ use python_safe_eval::safe_eval as safe_eval_rust;
 #[pyfunction]
 #[pyo3(signature = (source))]
 pub fn safe_eval(source: &str) -> PyResult<String> {
+    // `safe_eval_rust` starts with python_safe_eval's own stack guard, so it
+    // needs none here.
     let result = safe_eval_rust(source).map_err(|e| PySyntaxError::new_err(e.to_string()))?;
     Ok(result)
 }

@@ -170,7 +170,7 @@ or structural child component is needed.
 | `disabled` | `bool | None` | Field/Form or `False` | reactive state fallback | blocks every interaction and Form participation |
 | `readonly` | `bool | None` | Field/Form or `False` | reactive state fallback | permits navigation but not selection |
 | `invalid` | `bool | None` | Field or `False` | reactive state fallback | combines with revealed native invalidity |
-| `first_day_of_week` | `Literal[1,2,3,4,5,6,7] | None` | `None` | reactive locale policy | ISO weekday; `None` follows the locale |
+| `first_day_of_week` | `CCalendarFirstDayOfWeek | None`: `1` to `7`, as a number or as text such as `"1"` | `None` | reactive locale policy | ISO weekday; `None` follows the locale |
 | `show_adjacent_days` | `bool` | `True` | reactive presentation | shows selectable dates outside the named month |
 | `fixed_weeks` | `bool` | `True` | reactive presentation | renders six rows instead of four to six |
 | `label` | `str` | catalog `Calendar` | server accessible text | names a standalone calendar; explicit value stays literal |

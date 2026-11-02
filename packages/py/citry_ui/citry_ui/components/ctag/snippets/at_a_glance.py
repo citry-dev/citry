@@ -12,7 +12,11 @@ class TagGlance(Component):
           <c-CTag value="html">HTML</c-CTag>
           <c-CTag value="accessibility">Accessibility</c-CTag>
         </c-CTagGroup>
-        <c-CTagGroup label="Amenities" selection_mode="multiple" c-value="['wifi']">
+        <c-CTagGroup
+          label="Amenities"
+          selection_mode="multiple"
+          c-value="['wifi']"
+        >
           <c-CTag value="wifi">Wi-Fi</c-CTag>
           <c-CTag value="parking">Parking</c-CTag>
           <c-CTag value="pool">Pool</c-CTag>

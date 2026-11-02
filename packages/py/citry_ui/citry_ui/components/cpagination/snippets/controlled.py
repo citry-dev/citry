@@ -11,7 +11,8 @@ class ControlledPagination(Component):
         <c-CPagination
           c-pages="18"
           c-page="3"
-          :page="page" :onPageChange="(next) => page = next"
+          :page="page"
+          :onPageChange="(next) => page = next"
         />
       </section>
     """

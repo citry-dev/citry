@@ -19,10 +19,7 @@ from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Final
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10 qualification runner
-    tomllib = None  # type: ignore[assignment]
+import tomllib
 
 try:
     from scripts import build_constraints, release_links
@@ -53,19 +50,7 @@ def sha256_bytes(value: bytes) -> str:
 def package_version() -> str:
     """Read the package version from the release manifest."""
     content = (PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    if tomllib is None:
-        project = re.search(r"(?ms)^\[project\][ \t]*\n(?P<body>.*?)(?=^\[|\Z)", content)
-        version_line = (
-            None
-            if project is None
-            else re.search(
-                r"""(?m)^version\s*=\s*["'](?P<version>[^"']+)["']\s*(?:#.*)?$""",
-                project.group("body"),
-            )
-        )
-        version: Any = None if version_line is None else version_line.group("version")
-    else:
-        version = tomllib.loads(content)["project"].get("version")
+    version: Any = tomllib.loads(content)["project"].get("version")
     if not isinstance(version, str) or not version:
         raise DistributionVerificationError("citry-ui has no project version")
     return version
@@ -126,7 +111,7 @@ def _require_metadata(metadata: Message, *, artifact: Path, version: str) -> Non
         raise DistributionVerificationError(f"{artifact.name} has unexpected Name metadata")
     if metadata.get("Version") != version:
         raise DistributionVerificationError(f"{artifact.name} has unexpected Version metadata")
-    if metadata.get("Requires-Python") not in {">=3.10, <4.0", "<4.0,>=3.10"}:
+    if metadata.get("Requires-Python") not in {">=3.11, <4.0", "<4.0,>=3.11"}:
         raise DistributionVerificationError(f"{artifact.name} has unexpected Requires-Python metadata")
     if set(metadata.get_all("Requires-Dist", [])) != EXPECTED_REQUIRES_DIST:
         raise DistributionVerificationError(f"{artifact.name} has unexpected runtime dependencies")

@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class TransferListCustomization(Component):
     template = """
-      <c-CTransferList class_="brand-transfer" size="lg" c-value="['stable']">
+      <c-CTransferList
+        class_="brand-transfer"
+        size="lg"
+        c-value="['stable']"
+      >
         <c-CTransferListItem value="alpha" label="Alpha channel" />
         <c-CTransferListItem value="beta" label="Beta channel" />
         <c-CTransferListItem value="stable" label="Stable channel" />

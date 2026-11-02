@@ -32,7 +32,10 @@ def accordion_states_component(app: Citry) -> type[Component]:
                   'controlled single collapsible open closed disabled-item '
                   'actions region outline md indicator-end ltr',
               }"
-              :value="value" :variant="variant" :size="size" :onValueChange="(value) => value = value"
+              :value="value"
+              :variant="variant"
+              :size="size"
+              :onValueChange="(value) => value = value"
             >
               <c-CAccordionItem value="canopy">
                 <c-fill name="title">Canopy</c-fill>
@@ -114,7 +117,12 @@ def accordion_states_component(app: Citry) -> type[Component]:
                 <c-CAccordionItem value="outer">
                   <c-fill name="title">Nested group</c-fill>
                   <c-fill name="default">
-                    <c-CAccordion value="inner" heading_level="3" variant="plain" size="sm">
+                    <c-CAccordion
+                      value="inner"
+                      heading_level="3"
+                      variant="plain"
+                      size="sm"
+                    >
                       <c-CAccordionItem value="inner">
                         <c-fill name="title">Inner section</c-fill>
                         <c-fill name="default">Nested panel content.</c-fill>

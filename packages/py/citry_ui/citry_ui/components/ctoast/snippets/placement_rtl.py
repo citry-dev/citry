@@ -10,7 +10,11 @@ class ToastPlacementRtl(Component):
     template = """
       <section class="toast-example" dir="rtl">
         <p>Logical start follows this RTL context.</p>
-        <c-CToastRegion c-items="items" placement="block-end-start" c-duration_ms="0" />
+        <c-CToastRegion
+          c-items="items"
+          placement="block-end-start"
+          c-duration_ms="0"
+        />
       </section>
     """
 

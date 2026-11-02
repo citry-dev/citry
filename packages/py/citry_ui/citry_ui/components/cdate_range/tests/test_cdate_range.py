@@ -205,6 +205,8 @@ def test_python_dates_empty_source_mode_and_explicit_text_overrides() -> None:
         ({"unavailable_dates": ("2026-08-21", "2026-08-21")}, ValueError, "duplicates"),
         ({"start_name": "same", "end_name": "same"}, ValueError, "must be different"),
         ({"first_day_of_week": 0}, ValueError, "from 1 through 7"),
+        ({"first_day_of_week": "8"}, ValueError, "from 1 through 7"),
+        ({"first_day_of_week": True}, TypeError, "same number as text"),
         ({"placement": "sideways"}, ValueError, "placement"),
         ({"variant": "glass"}, ValueError, "variant"),
         ({"size": "xl"}, ValueError, "size"),

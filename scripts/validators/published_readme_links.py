@@ -33,10 +33,7 @@ skipped: their text is shown as code, not followed as a link.
 import re
 from pathlib import Path
 
-try:
-    import tomllib
-except ImportError:  # Python < 3.11
-    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
+import tomllib
 
 try:
     from scripts import release

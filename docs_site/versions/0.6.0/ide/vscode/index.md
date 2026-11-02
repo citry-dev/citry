@@ -21,12 +21,12 @@ standalone template files, you get:
 
 Citry completes components and their inputs without leaving the Python file:
 
-<img src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/autocomplete.gif" alt="Citry component autocomplete inside an inline Python template" width="960" />
+<img src="https://raw.githubusercontent.com/citry-dev/citry/citry@0.6.0/packages/editors/vscode/images/autocomplete.gif" alt="Citry component autocomplete inside an inline Python template" width="960" />
 
 Hover explains template values, and references and navigation connect them to
 their Python definitions:
 
-<img src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/refs_hints.gif" alt="Citry hover hints and references connecting a template to Python" width="960" />
+<img src="https://raw.githubusercontent.com/citry-dev/citry/citry@0.6.0/packages/editors/vscode/images/refs_hints.gif" alt="Citry hover hints and references connecting a template to Python" width="960" />
 
 ## Set up the extension
 
@@ -629,7 +629,7 @@ Two commands in the command palette format a Python component's strings:
 Formatting lays out the template's HTML structure and formats the JavaScript
 and CSS, while keeping the Python triple-quoted strings readable:
 
-<img src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/formatting.gif" alt="Citry formatting an inline template, JavaScript, and CSS inside a Python component" width="960" />
+<img src="https://raw.githubusercontent.com/citry-dev/citry/citry@0.6.0/packages/editors/vscode/images/formatting.gif" alt="Citry formatting an inline template, JavaScript, and CSS inside a Python component" width="960" />
 
 Your Python formatter keeps formatting the rest of the file. To run Citry's
 formatter whenever you save a Python file, add it as a save action:

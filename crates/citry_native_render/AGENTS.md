@@ -56,5 +56,12 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   `start_occurrence`: `take_native_run` makes the class checks once per
   run, and `_NativeRun.try_new` and `commit` make the per-row ones. Add a
   new check there too, or make `try_new` decline the rows it concerns.
+- **Code that calls itself once per nesting level counts the level.** The
+  plan's walks run on the caller's own thread stack, so `MAX_BODY_DEPTH`
+  and `MAX_READ_DEPTH` in `src/plan.rs` bound them, with a value for each
+  build profile. A new recursive walk of the plan or of a row's values
+  stays within those limits, or gets its own. After a change that makes a
+  level's stack frame larger, rerun `tests/test_native_render_depth.py` in
+  the `citry` package on a `maturin develop` build and on a release build.
 - **The crate has no PyO3 dependency.** Keep it that way, so its tests run
   without Python and another binding could reuse it.

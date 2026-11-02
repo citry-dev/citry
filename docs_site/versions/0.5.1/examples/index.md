@@ -13,7 +13,7 @@ tabs to see the complete page and its live result.
 The recipes below are optimized for the documentation renderer. For an
 independently copyable application with its own `pyproject.toml`, lockfile,
 server command, and tests, use the
-[complete starter projects](https://github.com/citry-dev/citry/tree/main/examples){: target="_blank" rel="noopener"}.
+[complete starter projects](https://github.com/citry-dev/citry/tree/citry@0.5.1/examples){: target="_blank" rel="noopener"}.
 The collection includes standalone rendering, FastAPI, Django, Flask, bare
 ASGI, and bare WSGI, plus the larger Project Board and HTMX integration demos.
 Every web starter shows the same Alpine and server Events behavior so the

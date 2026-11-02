@@ -32,7 +32,9 @@ class CommandAdornments(Component):
         <c-CCommandPalette
           label="Release commands"
           c-entries="commands"
-          :open="open" :onOpenChange="(value)=>open=value" :onAction="(value)=>last=value"
+          :open="open"
+          :onOpenChange="(value)=>open=value"
+          :onAction="(value)=>last=value"
         >
           <c-fill
             name="item_start"

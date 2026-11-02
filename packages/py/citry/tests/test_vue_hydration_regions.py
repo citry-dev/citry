@@ -12,15 +12,19 @@ written host HTML and the recorded decision.
 """
 
 import re
+import threading
+from collections.abc import Callable
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
-from citry import Citry, Component, Markup
+from citry import Citry, Component, Extension, Markup
 from citry._vue.compiler import NativeCompiler
 from citry._vue.direct_capture import _prepared_root_markers, _source_attribute_reads_instance
 from citry._vue.serialization import HydrationAdmission, VueSerializationPlan, hydration_admission
 from citry.ext.dependencies.types import Script
+from citry_core import _rust
 
 
 def _host(html: str) -> str:
@@ -566,6 +570,506 @@ $component({});
     assert admission.declines == ()
 
 
+@pytest.mark.parametrize(
+    ("template", "host"),
+    [
+        # A constant `<c-if>` writes nothing, so the braces around it meet.
+        ('<main><p>{<c-if cond="True">{ 1 + 1 }}</c-if></p></main>', "<main><p>{{ 1 + 1 }}</p></main>"),
+        # An unrolled literal loop does the same for each item.
+        ('<main><p>{<c-for each="i in [1, 2]">{ i }}</c-for></p></main>', "<main><p>{{ i }}{ i }}</p></main>"),
+        # A value next to a brace stays a value, on either side.
+        ('<main><p>a {{ "{" }}{ b</p></main>', "<main><p>a {{ b</p></main>"),
+        ('<main><p>a {<c-if cond="True">{{ "X" }}</c-if></p></main>', "<main><p>a {X</p></main>"),
+    ],
+)
+def test_braces_that_meet_across_a_citry_tag_stay_text(template: str, host: str) -> None:
+    # Without Vue the page shows the braces as text, so Vue must not read
+    # them as an interpolation and run what is between them.
+    engine = Citry(autodiscover=False)
+    page = type("Page", (Component,), {"citry": engine, "template": template, "js": "\n$component({});\n"})
+
+    rendered, admission = _hydrated_host(page)
+    assert rendered == host
+    assert admission.declines == ()
+
+
+def test_braces_that_meet_before_a_root_with_css_variables_stay_text() -> None:
+    # A component with `css_data` marks its roots, which writes the text
+    # before each root in its own piece.
+    engine = Citry(autodiscover=False)
+
+    class Root(Component):
+        citry = engine
+        template = """
+{<c-if cond="True">{ 1 + 1 }}</c-if><div>x</div>
+"""
+        css = """
+div { color: var(--tone); }
+"""
+
+        def css_data(self, kwargs, slots):
+            return {"tone": "red"}
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><c-Root /></main>
+"""
+        js = """
+$component({});
+"""
+
+    rendered, admission = _hydrated_host(Page)
+    assert "{{ 1 + 1 }}" in rendered
+    assert admission.declines == ()
+
+
+def test_braces_beside_raw_html_stay_text_when_a_branch_is_chosen_on_the_server() -> None:
+    # A `<c-raw>` block keeps the component off the single-program path, so
+    # only the chosen branch is written and its braces meet the text before.
+    engine = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><p>{<c-if cond="flag">{ x }}</c-if></p><c-raw><b>r</b></c-raw></main>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"flag": True}
+
+    rendered, admission = _hydrated_host(Page)
+    assert rendered.startswith("<main><p>{{ x }}</p>")
+    assert admission.declines == ()
+
+
+def test_a_simple_component_that_writes_a_brace_does_not_open_an_interpolation() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Brace(Component):
+        citry = engine
+        simple = True
+        # One line on purpose: the brace must be the last character, and a
+        # multiline template would end with a line break instead.
+        template = """{"""
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><p><c-Brace />{ 'a' }}</p></main>
+"""
+        js = """
+$component({});
+"""
+
+    rendered, admission = _hydrated_host(Page)
+    assert rendered == "<main><p>{{ 'a' }}</p></main>"
+    assert admission.declines == ()
+
+
+def _v_pre_page(template: str, data: dict[str, object]) -> type[Component]:
+    engine = Citry(autodiscover=False)
+
+    def template_data(self: Component, kwargs: object, slots: object) -> dict[str, object]:
+        return data
+
+    return type(
+        "Page",
+        (Component,),
+        {"citry": engine, "template": template, "js": "\n$component({});\n", "template_data": template_data},
+    )
+
+
+@pytest.mark.parametrize(
+    ("template", "host"),
+    [
+        (
+            '<main><div v-pre>{{ name }} and {{ "a" }}</div><p>{{ name }}</p></main>',
+            "<main><div><!--[-->Ann &amp; Bo and a<!--]--></div><p>Ann &amp; Bo</p></main>",
+        ),
+        (
+            '<main><div v-pre><p c-title="name" :x="y">t</p><c-if cond="True">yes</c-if>'
+            '<c-for each="i in [1, 2]">{{ i }}</c-for></div></main>',
+            '<main><div><!--[--><p title="Ann &amp; Bo" :x="y">t</p>yes12<!--]--></div></main>',
+        ),
+        # The element's own Citry bindings work, as on any element.
+        (
+            '<main><div v-pre c-title="name">x</div><br v-pre c-title="name"></main>',
+            '<main><div title="Ann &amp; Bo"><!--[-->x<!--]--></div><br title="Ann &amp; Bo"></main>',
+        ),
+        ("<main><textarea v-pre>{{ name }}</textarea></main>", "<main><textarea>Ann &amp; Bo</textarea></main>"),
+        # A component whose root holds `v-pre`. Such a template has no child
+        # components, so it takes the fast path in `leaf_program.py`.
+        ("<p v-pre>{{ name }}</p>", "<p><!--[-->Ann &amp; Bo<!--]--></p>"),
+        # Whitespace stays as the server writes it.
+        ("<main><div v-pre>{{ spaced }}</div></main>", "<main><div><!--[-->a\n\n  b<!--]--></div></main>"),
+        ("<main><div v-pre>{{ closing }}</div></main>", "<main><div><!--[-->a &lt;/script&gt; b<!--]--></div></main>"),
+        # The browser drops the newline written straight after `<pre>`.
+        ("<main><pre v-pre>\n{{ name }}\n</pre></main>", "<main><pre><!--[-->Ann &amp; Bo\n<!--]--></pre></main>"),
+        # Table rows and sections cannot hold a block of HTML, so contents
+        # with no Vue syntax are compiled as usual. A nested `v-pre`
+        # element there gets its own block.
+        (
+            "<main><table v-pre><tbody><tr><td>{{ name }}</td></tr></tbody></table></main>",
+            "<main><table><tbody><tr><td>Ann &amp; Bo</td></tr></tbody></table></main>",
+        ),
+        (
+            "<main><table v-pre><tr><td v-pre>{{ name }}</td></tr></table></main>",
+            "<main><table><tbody><tr><td><!--[-->Ann &amp; Bo<!--]--></td></tr></tbody></table></main>",
+        ),
+        ("<main><pre v-pre>{{ crlf }}</pre></main>", "<main><pre><!--[-->A<!--]--></pre></main>"),
+        # A transparent component's body is written in place, its Vue
+        # attributes kept as Vue keeps them under `v-pre`.
+        (
+            '<main><div v-pre><c-element c-is="\'b\'" :x="y">{{ name }}</c-element><c-js /></div></main>',
+            '<main><div><!--[--><b :x="y">Ann &amp; Bo</b><!--]--></div></main>',
+        ),
+        # A `#c-key` on a transparent component wraps its body in a keyed
+        # Vue `<template>`, which Vue would not read under `v-pre`.
+        (
+            "<main><div v-pre><c-provide key='x' value='1' #c-key=\"'k'\"><b :x='y'>t</b></c-provide></div></main>",
+            "<main><div><!--[--><b :x='y'>t</b><!--]--></div></main>",
+        ),
+    ],
+)
+def test_citry_values_inside_v_pre_are_written_as_the_server_renders_them(template: str, host: str) -> None:
+    # Vue does not compile anything inside `v-pre`, so Citry writes the
+    # contents as HTML that Vue inserts; a data binding would show as written.
+    page = _v_pre_page(
+        template, {"name": "Ann & Bo", "spaced": "a\n\n  b", "closing": "a </script> b", "crlf": "\r\nA"}
+    )
+
+    rendered, admission = _hydrated_host(page)
+    assert rendered == host
+    assert admission.declines == ()
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        '<main><div v-pre :title="y"><p @click="go">static</p><c-js /></div></main>',
+        '<main><table v-pre><tr><td :x="y">a</td></tr></table></main>',
+        "<main><my-widget v-pre>static</my-widget></main>",
+    ],
+)
+def test_v_pre_with_only_written_markup_is_left_to_vue(template: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Vue reads such an element and its contents as written, so Citry
+    # compiles them with `v-pre` kept.
+    compiled: list[str] = []
+    compile_vue = _rust.vue._compile_vue
+
+    def record(*args: Any) -> str:
+        compiled.append(args[0])
+        return compile_vue(*args)
+
+    monkeypatch.setattr(_rust.vue, "_compile_vue", record)
+    _v_pre_page(template, {})().render().serialize()
+    assert len(compiled) == 1
+    assert " v-pre" in compiled[0]
+    assert "citry-opaque-html" not in compiled[0]
+
+
+def test_v_pre_contents_stay_data_so_rows_share_one_compiled_template(monkeypatch: pytest.MonkeyPatch) -> None:
+    compiled: list[str] = []
+    compile_vue = _rust.vue._compile_vue
+
+    def record(*args: Any) -> str:
+        compiled.append(args[0])
+        return compile_vue(*args)
+
+    monkeypatch.setattr(_rust.vue, "_compile_vue", record)
+    page = _v_pre_page(
+        '<main><c-for each="v in values"><p #c-key="v" v-pre>{{ v }}</p></c-for></main>',
+        {"values": [f"row {index}" for index in range(20)]},
+    )
+
+    rendered, admission = _hydrated_host(page)
+    assert "<p><!--[-->row 19<!--]--></p>" in rendered
+    assert admission.declines == ()
+    assert len(compiled) == 1
+    assert "row" not in compiled[0]
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        '<main><svg v-pre viewBox="0 0 1 1"><text>{{ name }}</text></svg></main>',
+        '<main><svg viewBox="0 0 1 1"><g v-pre><text>{{ name }}</text></g></svg></main>',
+    ],
+)
+def test_v_pre_in_svg_compiles_contents_that_hold_no_vue_syntax(template: str) -> None:
+    # SVG contents cannot be inserted as a block of HTML. Vue writes plain
+    # SVG as written whether or not it compiles it, so Citry compiles it.
+    html = _v_pre_page(template, {"name": "Ann & Bo"})().render().serialize()
+    assert '<svg viewBox="0 0 1 1">' in html
+    assert "<text>Ann &amp; Bo</text>" in html
+    assert "v-pre" not in html
+
+
+def test_a_simple_component_inside_v_pre_renders_in_place() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Chip(Component):
+        citry = engine
+        simple = True
+        template = """
+<b>{{ "chip" }}</b>
+"""
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><div v-pre><c-Chip /></div></main>
+"""
+        js = """
+$component({});
+"""
+
+    rendered, admission = _hydrated_host(Page)
+    assert rendered == "<main><div><!--[-->\n<b>chip</b>\n<!--]--></div></main>"
+    assert admission.declines == ()
+
+
+def test_a_simple_components_slot_content_inside_v_pre_is_written_with_it() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Chip(Component):
+        citry = engine
+        simple = True
+        template = """
+<em><c-slot /></em>
+"""
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><div v-pre><c-Chip><b :x="y">{{ "in" }}</b></c-Chip></div></main>
+"""
+        js = """
+$component({});
+"""
+
+    rendered, admission = _hydrated_host(Page)
+    assert rendered == '<main><div><!--[-->\n<em><b :x="y">in</b></em>\n<!--]--></div></main>'
+    assert admission.declines == ()
+
+
+def test_v_pre_rows_from_c_for_stay_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The rows a `<c-for>` writes are data, so the compiled template is the
+    # same for any number of rows.
+    compiled: set[str] = set()
+    compile_vue = _rust.vue._compile_vue
+
+    def record(*args: Any) -> str:
+        compiled.add(args[0])
+        return compile_vue(*args)
+
+    monkeypatch.setattr(_rust.vue, "_compile_vue", record)
+    template = '<main><div v-pre><c-for each="i in items"><b>r</b></c-for></div></main>'
+    for count in (1, 3):
+        _v_pre_page(template, {"items": list(range(count))})().render().serialize()
+    assert len(compiled) == 1
+
+
+def test_a_component_inside_v_pre_is_refused_with_its_name() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = engine
+        template = """
+<b>child</b>
+"""
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><div v-pre><c-Child /></div></main>
+"""
+        js = """
+$component({});
+"""
+
+    with pytest.raises(TypeError, match=r"'v-pre' on the <div> element .* cannot hold the component Child"):
+        Page().render().serialize()
+
+    # Inside a table, Citry compiles the contents, and Vue would compile
+    # the slot content the child is given, so the child is refused there too.
+    class Table(Component):
+        citry = engine
+        template = """
+<main><table v-pre><tr><td><c-Child><b :x="y">{{ "in" }}</b></c-Child></td></tr></table></main>
+"""
+        js = """
+$component({});
+"""
+
+    with pytest.raises(TypeError, match=r"'v-pre' on the <table> element .* cannot hold the component Child"):
+        Table().render().serialize()
+
+
+@pytest.mark.parametrize(
+    ("template", "data", "error", "match"),
+    [
+        (
+            '<main><div v-pre :title="y">{{ name }}</div></main>',
+            {"name": "Ann"},
+            TypeError,
+            r"also has the Vue attribute ':title'. Under 'v-pre', Vue would write it as a plain attribute",
+        ),
+        # A later render replaces the block, which '#c-ignore' must keep.
+        (
+            "<main><div v-pre><div #c-ignore>{{ name }}</div></div></main>",
+            {"name": "Ann"},
+            TypeError,
+            r"cannot hold a '#c-ignore' element \(<div>\)",
+        ),
+        (
+            "<main><div v-pre>{{ html }}</div></main>",
+            {"html": Markup("</div><p>{{ 7*7 }}</p><div>")},
+            ValueError,
+            r"is not a complete HTML fragment",
+        ),
+        (
+            "<main><div v-pre><c-slot /></div></main>",
+            {},
+            TypeError,
+            r"cannot hold a <c-slot> outlet",
+        ),
+        # A built-in is named by its tag.
+        (
+            "<main><div v-pre><c-error-fallback>{{ name }}</c-error-fallback></div></main>",
+            {"name": "Ann"},
+            TypeError,
+            r"cannot hold the component <c-error-fallback>",
+        ),
+        # Where a block of HTML cannot sit, compiling the contents would run
+        # the Vue syntax that `v-pre` keeps as written.
+        (
+            '<main><table v-pre><tr><td :x="y">{{ name }}</td></tr></table></main>',
+            {"name": "Ann"},
+            TypeError,
+            r"'v-pre' on the <table> element .* because the browser moves a block of HTML out of a table's rows"
+            r" .* cannot hold the Vue attribute ':x' on <td>. Put 'v-pre' on a <td> or <th> inside it",
+        ),
+        (
+            '<main><svg v-pre><path :d="y"></path>{{ name }}</svg></main>',
+            {"name": "Ann"},
+            TypeError,
+            r"'v-pre' on the <svg> element .* SVG or MathML .* cannot hold the Vue attribute ':d' on <path>",
+        ),
+    ],
+)
+def test_v_pre_refuses_what_it_cannot_write_as_html(
+    template: str, data: dict[str, object], error: type[Exception], match: str
+) -> None:
+    with pytest.raises(error, match=match):
+        _v_pre_page(template, data)().render().serialize()
+
+
+def _moved_slot_page(page_template: str, data: dict[str, object], *, hide_first: bool) -> type[Component]:
+    """
+    Build a page where an `on_slot_rendered` hook moves one slot result to another component.
+
+    `Wrap` passes its content to `Inner`, and both are transparent. The hook
+    saves the first `Inner` slot result and returns it again at the second
+    `Inner`, so that content sits under a `Wrap` that did not receive it.
+    """
+    saved: list[object] = []
+
+    class MoveSlot(Extension):
+        name = "move_slot"
+
+        def on_slot_rendered(self, ctx):
+            # Moving the result at `Inner` puts the first `Wrap`'s content
+            # inside the second `Wrap`.
+            if not isinstance(ctx.component, Inner):
+                return None
+            if not saved:
+                saved.append(ctx.result)
+                # Hiding the first copy means anything Citry reads or refuses
+                # comes from the moved copy alone.
+                return "" if hide_first else None
+            return saved[0]
+
+    engine = Citry(autodiscover=False, extensions=[MoveSlot])
+
+    class Inner(Component):
+        citry = engine
+        transparent = True
+        template = """
+<c-slot />
+"""
+
+    class Wrap(Component):
+        citry = engine
+        transparent = True
+        template = """
+<c-Inner><c-slot /></c-Inner>
+"""
+
+    class Page(Component):
+        citry = engine
+
+        def template_data(self, kwargs, slots):
+            return data
+
+        template = page_template
+        js = """
+$component({});
+"""
+
+    return Page
+
+
+@pytest.mark.parametrize(
+    ("template", "hide_first", "expected"),
+    [
+        (
+            "<main><div v-pre><c-Wrap>A</c-Wrap><c-Wrap>B</c-Wrap></div></main>",
+            False,
+            "<main><div v-pre>AA</div></main>",
+        ),
+        (
+            "<main><table v-pre><tr><td><c-Wrap><b :x='y'>A</b></c-Wrap><c-Wrap>B</c-Wrap></td></tr></table></main>",
+            True,
+            "<main><table v-pre><tr><td><b :x='y'>A</b></td></tr></table></main>",
+        ),
+    ],
+)
+def test_v_pre_reads_written_markup_that_a_hook_moved_between_transparent_components(
+    template: str, hide_first: bool, expected: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The moved content is still markup written in this template, so Vue
+    # reads it as written and Citry keeps `v-pre`.
+    compiled: list[str] = []
+    compile_vue = _rust.vue._compile_vue
+
+    def record(*args: Any) -> str:
+        compiled.append(args[0])
+        return compile_vue(*args)
+
+    monkeypatch.setattr(_rust.vue, "_compile_vue", record)
+    _moved_slot_page(template, {}, hide_first=hide_first)().render().serialize()
+    # The components' templates add line breaks around the content.
+    assert [text.replace("\n", "") for text in compiled] == [expected]
+
+
+def test_v_pre_refuses_vue_syntax_that_a_hook_moved_between_transparent_components() -> None:
+    # The data value makes Citry compile the table's contents. Compiling the
+    # moved `<b :x>` would make Vue run `:x` under `v-pre`, so it is refused.
+    template = """
+<main><table v-pre><tr><td>{{ name }}<c-Wrap><b :x='y'>A</b></c-Wrap><c-Wrap>B</c-Wrap></td></tr></table></main>
+"""
+    page = _moved_slot_page(template, {"name": "Ann"}, hide_first=True)
+    with pytest.raises(
+        TypeError, match=r"'v-pre' on the <table> element .* cannot hold the Vue attribute ':x' on <b>"
+    ):
+        page().render().serialize()
+
+
 def test_spread_attributes_vary_per_row_and_follow_vue_value_rules() -> None:
     engine = Citry(autodiscover=False)
 
@@ -611,6 +1115,59 @@ def test_checked_is_also_written_as_an_attribute() -> None:
     # Vue sets `checked` as a property and an attribute, so the checked box
     # carries it in the HTML and the unchecked one does not.
     assert host == '<form><input type="checkbox" value="yes" checked=""><input type="checkbox" value="no"></form>'
+
+
+def test_hidden_and_boolean_attributes_are_written_as_vues_server_renderer_writes_them() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Hidden(Component):
+        citry = engine
+        template = """
+<div>
+<p c-hidden="text">text</p>
+<p c-hidden="false_text">false text</p>
+<p c-hidden="zero_text">zero text</p>
+<p c-hidden="until_found">until found</p>
+<p c-hidden="markup">markup</p>
+<p c-hidden="empty_text">empty text</p>
+<p c-hidden="one">one</p>
+<p c-hidden="zero">zero</p>
+<p c-hidden="yes">yes</p>
+<p c-hidden="no">no</p>
+<p c-hidden="nothing">nothing</p>
+<input c-disabled="false_text">
+<input c-disabled="zero">
+</div>
+"""
+        js = "$component({});"
+
+        def template_data(self, kwargs, slots):
+            return {
+                "text": "foo",
+                "false_text": "false",
+                "zero_text": "0",
+                "until_found": "until-found",
+                "markup": 'a&"b',
+                "empty_text": "",
+                "one": 1,
+                "zero": 0,
+                "yes": True,
+                "no": False,
+                "nothing": None,
+            }
+
+    host, _ = _hydrated_host(Hidden)
+
+    # Hydration keeps the server's attribute, so it matches Vue 3.5.44's
+    # `renderToString`: `hidden` keeps a string as written (escaped), and
+    # `hidden` with a boolean or number, like `disabled`, is present for a
+    # truthy value or "" and left out for 0, False or None.
+    assert host == (
+        '<div><p hidden="foo">text</p><p hidden="false">false text</p><p hidden="0">zero text</p>'
+        '<p hidden="until-found">until found</p><p hidden="a&amp;&quot;b">markup</p>'
+        '<p hidden="">empty text</p><p hidden="">one</p><p>zero</p><p hidden="">yes</p>'
+        '<p>no</p><p>nothing</p><input disabled=""><input></div>'
+    )
 
 
 def test_document_page_hydrates_with_title_and_textarea() -> None:
@@ -1049,3 +1606,273 @@ def test_runtime_empties_shells_only_when_one_carries_served_html() -> None:
     assert '<div data-allow-mismatch="children"></div>' in _host(html)
     assert [item.shell_content for item in _admission(rendered).declines] == [False]
     assert '"emptyShells":true' in Filled().render().serialize()
+
+
+def test_a_lone_surrogate_escape_in_a_vue_expression_is_left_to_the_browser() -> None:
+    # Vue builds strings holding U+D800 and U+DC00 from these escapes.
+    # Neither Rust nor the page's UTF-8 HTML can hold them, so the server
+    # leaves those values out and Vue writes them in the browser, rather
+    # than the server writing U+FFFD and the hex digits.
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = r"""
+<main><p v-text="'a\ud800b'"></p><p :title="'c\udc00d'">x</p><p v-text="'eéf'"></p></main>
+"""
+        js = """
+$component({});
+"""
+
+    rendered = Card().render()
+    host = _host(rendered.serialize())
+    assert "\ufffd" not in host
+    assert host == '<main data-allow-mismatch="children"><p></p><p>x</p><p>e\xe9f</p></main>'
+    assert _declines(_admission(rendered)) == [("text-value", "title", "shell", "main", "Card")]
+
+
+# The nesting limits from #272, read from the parser: 512 nested tags, 256
+# of them Citry logic. The server writes elements up to 400 deep inside the
+# host, because Chrome's parser moves elements nested past about 510 out of
+# their parents.
+_TAG_NESTING = _rust.template_parser._MAX_TAG_NESTING
+_LOGIC_NESTING = _rust.template_parser._MAX_LOGIC_NESTING
+_ELEMENT_NESTING = 400
+
+
+def _nested_page(template: str) -> type[Component]:
+    engine = Citry(autodiscover=False)
+
+    def template_data(self: Component, kwargs: object, slots: object) -> dict[str, object]:
+        return {"n": 7, "rows": [1]}
+
+    return type(
+        "Deep",
+        (Component,),
+        {"citry": engine, "template": template, "js": "\n$component({});\n", "template_data": template_data},
+    )
+
+
+def _around_divs(opening: Callable[[int], str], closing: str, divs: int) -> str:
+    """Nest `_LOGIC_NESTING` levels of ``opening`` around ``divs`` nested `<div>` elements."""
+    return (
+        "".join(opening(level) for level in range(_LOGIC_NESTING))
+        + "<div>" * divs
+        + "{{ n }}"
+        + "</div>" * divs
+        + closing * _LOGIC_NESTING
+    )
+
+
+_DEEP_TEMPLATES = {
+    "elements": "<div>" * _ELEMENT_NESTING + "{{ n }}" + "</div>" * _ELEMENT_NESTING,
+    # `<c-if>` writes no element, so all 512 tags fit.
+    "c-if tags": _around_divs(lambda _level: '<c-if cond="n">', "</c-if>", _TAG_NESTING - _LOGIC_NESTING),
+    # A `<div>` with a shorthand is two levels, the tag and the `c-if` around
+    # it, so 256 of them reach both limits with no room for more elements.
+    "c-if attributes": _around_divs(lambda _level: '<div c-if="n">', "</div>", _TAG_NESTING - 2 * _LOGIC_NESTING),
+    # Each level needs its own loop variable.
+    "c-for attributes": _around_divs(
+        lambda level: f'<div c-for="row{level} in rows">', "</div>", _TAG_NESTING - 2 * _LOGIC_NESTING
+    ),
+}
+
+
+@pytest.mark.parametrize("template", list(_DEEP_TEMPLATES.values()), ids=list(_DEEP_TEMPLATES))
+def test_deep_templates_are_written_whole_on_the_server(template: str) -> None:
+    host, admission = _hydrated_host(_nested_page(template))
+
+    # Vue adopts every level: nothing is left for the browser to build.
+    assert admission.declines == ()
+    assert "data-allow-mismatch" not in host
+    assert ">7<" in host
+
+
+def test_elements_nested_past_what_browsers_parse_become_a_shell() -> None:
+    # `<main>` and 511 `<div>` elements: the deepest a template may nest.
+    divs = _TAG_NESTING - 1
+    page = _nested_page("<main>" + "<div>" * divs + "{{ n }}" + "</div>" * divs + "</main>")
+
+    host, admission = _hydrated_host(page)
+
+    # The page still hydrates; Vue builds the deepest part in the browser.
+    assert [item.code for item in admission.declines] == ["nesting-depth"]
+    assert host.count('data-allow-mismatch="children"') == 1
+    # The 401st element would pass the cap, so its parent, `<main>` and 399
+    # `<div>` elements down, is the shell.
+    assert host[: host.index("data-allow-mismatch")].count("<div") == _ELEMENT_NESTING - 1
+
+
+def test_a_deep_template_renders_on_a_thread_with_a_small_stack() -> None:
+    # A thread started outside Python gets 512 KiB of stack on macOS, and
+    # `threading.stack_size()` gives a Python thread the same. Vue's compiler,
+    # the server renderer and the native path's leaf JSON writer all run on
+    # the thread that renders. The 256 nested `c-for` loops send data about
+    # 512 containers deep, which the leaf JSON writer walks 200 levels into
+    # before leaving it to Python.
+    page = _nested_page(_DEEP_TEMPLATES["c-for attributes"])
+    results: list[tuple[str, HydrationAdmission]] = []
+    previous = threading.stack_size(512 * 1024)
+    try:
+        thread = threading.Thread(target=lambda: results.append(_hydrated_host(page)))
+        thread.start()
+        thread.join()
+    finally:
+        threading.stack_size(previous)
+    assert len(results) == 1
+    assert results[0][1].declines == ()
+
+
+def test_a_v_pre_elements_colon_attribute_is_written_on_the_server() -> None:
+    # Vue sets `:x` with `setAttribute` and hydration keeps the server's
+    # text, so the server writes it instead of leaving the element's parent
+    # for Vue to build.
+    page = _v_pre_page("<main><table v-pre><tr><td><b :x='y' title='t'>A</b></td></tr></table></main>", {})
+    rendered, admission = _hydrated_host(page)
+    assert rendered == '<main><table><tbody><tr><td><b :x="y" title="t">A</b></td></tr></tbody></table></main>'
+    assert admission.declines == ()
+
+
+@pytest.mark.parametrize(
+    ("template", "compiled", "host"),
+    [
+        # Vue reads a `v-pre` element that holds only written markup as it
+        # is, so its `:value` and `:selected` are plain attributes and take
+        # no ownership marker. A real binding outside keeps its marker.
+        (
+            "<main><div v-pre><input :value='y'></div><input :value='name'></main>",
+            "<main><div v-pre><input :value='y'></div><input :value='name' v-citry-vue-owned=\"'value'\"></main>",
+            '<main><div><input :value="y"></div><input></main>',
+        ),
+        (
+            "<main><div v-pre><select><option :selected='y'>a</option></select></div></main>",
+            "<main><div v-pre><select><option :selected='y'>a</option></select></div></main>",
+            '<main><div><select><option :selected="y">a</option></select></div></main>',
+        ),
+        # The element's own `v-pre` covers its own attributes too.
+        (
+            "<main><input v-pre :value='y'><input :value='name'></main>",
+            "<main><input v-pre :value='y'><input :value='name' v-citry-vue-owned=\"'value'\"></main>",
+            '<main><input :value="y"><input></main>',
+        ),
+        # A nested `v-pre` closes before its parent; the input between the
+        # two closes is still inside the outer one.
+        (
+            "<main><div v-pre><div v-pre><input :value='y'></div><input :value='y'></div><input :value='name'></main>",
+            "<main><div v-pre><div v-pre><input :value='y'></div><input :value='y'></div>"
+            "<input :value='name' v-citry-vue-owned=\"'value'\"></main>",
+            '<main><div><div v-pre=""><input :value="y"></div><input :value="y"></div><input></main>',
+        ),
+        (
+            "<main><table v-pre><tr><td><input :value='y'></td></tr></table></main>",
+            "<main><table v-pre><tr><td><input :value='y'></td></tr></table></main>",
+            '<main><table><tbody><tr><td><input :value="y"></td></tr></tbody></table></main>',
+        ),
+        # A transparent component's body is walked on its own, and it still
+        # sits inside the `v-pre` element.
+        (
+            "<main><div v-pre><c-provide key='x' value='1'><select><option :selected='y'>a</option>"
+            "</select></c-provide><input :value='y'></div><select><option :selected='name'>b</option>"
+            "</select></main>",
+            "<main><div v-pre><select><option :selected='y'>a</option></select><input :value='y'></div>"
+            "<select><option :selected='name' v-citry-vue-owned=\"'selected'\">b</option></select></main>",
+            '<main><div><select><option :selected="y">a</option></select><input :value="y"></div>'
+            "<select><option>b</option></select></main>",
+        ),
+        # A `v-pre` element with a Citry value is written as one block of
+        # HTML, which carries no marker either.
+        (
+            "<main><div v-pre><input :value='y'>{{ name }}</div><input :value='name'></main>",
+            '<main><div><citry-opaque-html :record="$citryPrepared.opaqueHtml.citryOpaque0"></citry-opaque-html>'
+            "</div><input :value='name' v-citry-vue-owned=\"'value'\"></main>",
+            "<main><div><!--[--><input :value='y'>Ann<!--]--></div><input></main>",
+        ),
+    ],
+)
+def test_a_v_pre_form_control_gets_no_vue_ownership_marker(
+    template: str, compiled: str, host: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The marker tells the browser which form properties a Vue binding
+    # owns. Inside `v-pre` nothing is a binding, and Vue would write the
+    # marker into the page as a plain attribute.
+    templates: list[str] = []
+    compile_vue = _rust.vue._compile_vue
+
+    def record(*args: Any) -> str:
+        templates.append(args[0])
+        return compile_vue(*args)
+
+    monkeypatch.setattr(_rust.vue, "_compile_vue", record)
+    rendered, admission = _hydrated_host(_v_pre_page(template, {"name": "Ann"}))
+    assert templates == [compiled]
+    assert rendered == host
+    assert admission.declines == ()
+
+
+def _css_data_page(child_template: str) -> type[Component]:
+    """Return a Vue page that renders one child whose `css_data()` gives its root element an attribute."""
+    engine = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = engine
+        template = child_template
+        css = """
+div { color: var(--color); }
+"""
+
+        def css_data(self, kwargs: object, slots: object) -> dict[str, object]:
+            return {"color": "red"}
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><c-Child /></main>
+"""
+        js = """
+$component({});
+"""
+
+    return Page
+
+
+@pytest.mark.parametrize(
+    ("child_template", "host"),
+    [
+        # Citry adds the attribute `css_data()` needs with a Vue binding,
+        # which Vue would not read on a `v-pre` element. So Citry compiles
+        # such a root without `v-pre` and writes its contents as one block
+        # of HTML.
+        ("<div v-pre><b :x='y'>a</b></div>", "<main><div {marker}><!--[--><b :x='y'>a</b><!--]--></div></main>"),
+        ("<div v-pre>plain</div>", "<main><div {marker}><!--[-->plain<!--]--></div></main>"),
+        # A `v-pre` element below the root takes no such attribute, so it
+        # is still left to Vue, which drops `v-pre` from the page.
+        (
+            "<section><div v-pre><b :x='y'>a</b></div></section>",
+            '<main><section {marker}><div><b :x="y">a</b></div></section></main>',
+        ),
+    ],
+)
+def test_a_v_pre_component_root_keeps_its_root_markers(child_template: str, host: str) -> None:
+    rendered, admission = _hydrated_host(_css_data_page(child_template))
+    marker = re.search(r'data-ccss-[0-9a-f]+=""', rendered)
+    assert marker is not None, rendered
+    assert rendered == host.format(marker=marker.group(0))
+    assert admission.declines == ()
+
+
+def test_a_v_pre_component_roots_own_vue_attribute_is_refused_with_the_reason() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"also has the Vue attribute ':title'.* because it is the root element of its component and Citry"
+        r" adds attributes to it, such as the one 'css_data\(\)' needs\. Wrap the 'v-pre' element in another"
+        r" element, or remove ':title'\.",
+    ):
+        _css_data_page("<div v-pre :title='y'>a</div>")().render().serialize()
+
+
+def test_a_v_pre_component_root_names_its_root_only_when_that_is_the_reason() -> None:
+    # The `{{ }}` value is why Citry compiles this root, so the error does
+    # not blame the attribute `css_data()` needs.
+    with pytest.raises(TypeError, match=r"also has the Vue attribute ':title'") as error:
+        _css_data_page("<div v-pre :title='y'>{{ 'v' }}</div>")().render().serialize()
+    assert "root element" not in str(error.value)

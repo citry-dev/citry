@@ -10,6 +10,11 @@
     "export": {
       "httpMethod": "POST",
       "allowBatching": false
+    },
+    "preview": {
+      "httpMethod": "POST",
+      "usesState": true,
+      "detached": true
     }
   },
   "writableStateFields": ["query"]

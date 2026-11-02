@@ -10,7 +10,8 @@ class TreeSingleSelection(Component):
         <c-CTree
           label="Planets"
           c-selected="['mercury']"
-          :selected="selected" :onSelectionChange="(next) => selected = next"
+          :selected="selected"
+          :onSelectionChange="(next) => selected = next"
         >
           <c-CTreeItem value="mercury" label="Mercury" />
           <c-CTreeItem value="venus" label="Venus" />

@@ -215,12 +215,20 @@ def test_command_link_and_item_regions_keep_exact_accessible_relationships():
     assert 'data-citry-ui-part="menu-item-end"' in html
 
 
+def test_a_self_closed_element_in_an_item_label_renders_like_its_open_form():
+    # A template `<span/>` is written as `<span></span>`, so the menu's check
+    # of its direct content reads it the same way.
+    for label in ("Rename <span/>", "Rename <span></span>"):
+        html = _render(_menu(f'<c-CMenuItem value="rename">{label}</c-CMenuItem>'))
+        assert "Rename <span></span>" in html, label
+
+
 @pytest.mark.parametrize(
     ("root_inputs", "message"),
     [
-        ("open=1", "open must be a bool"),
-        ('placement="left"', "placement must be one of"),
-        ('size="xl"', "size must be one of"),
+        ("open=1", r"CMenu\.Kwargs\.open expects bool"),
+        ('placement="left"', r"CMenu\.Kwargs\.placement expects Literal"),
+        ('size="xl"', r"CMenu\.Kwargs\.size expects Literal"),
         ('id="two words"', "cannot contain ASCII whitespace"),
     ],
 )
@@ -238,12 +246,12 @@ def test_menu_rejects_invalid_root_inputs(root_inputs: str, message: str):
         ),
         (
             '<c-CMenuCheckboxItem value="x" c-checked="1">X</c-CMenuCheckboxItem>',
-            "checked must be false, true, or 'mixed'",
+            r"CMenuCheckboxItem\.Kwargs\.checked expects bool \| Literal\['mixed'\]",
         ),
         (
             '<c-CMenuSubmenu value="x" intent="quiet"><c-fill name="label">X</c-fill>'
             '<c-fill name="default"><c-CMenuItem>Y</c-CMenuItem></c-fill></c-CMenuSubmenu>',
-            "intent must be one of",
+            r"CMenuSubmenu\.Kwargs\.intent expects Literal",
         ),
     ],
 )

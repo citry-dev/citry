@@ -10,7 +10,10 @@ class InfiniteScrollErrorRetry(Component):
         <c-CInfiniteScroll
           aria_label="Orders"
           c-auto="False"
-          :loading="loading" :error="error" :hasMore="hasMore" :onLoadMore="retryPage"
+          :loading="loading"
+          :error="error"
+          :hasMore="hasMore"
+          :onLoadMore="retryPage"
         >
           <ul>
             <li>Order #1042</li>

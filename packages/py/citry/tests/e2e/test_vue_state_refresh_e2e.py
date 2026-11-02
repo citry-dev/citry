@@ -29,8 +29,8 @@ _FIRST_STATE = """() => {
 }"""
 
 
-def _engine(secret: str) -> Citry:
-    app = Citry(secret=secret, autodiscover=False)
+def _engine(secret: str, model_base: str | None = None) -> Citry:
+    app = Citry(secret=secret, autodiscover=False, model_base=model_base)
     app.set_mounted_prefix("/citry")
     return app
 
@@ -53,14 +53,20 @@ def _collect_errors(page: Any) -> list[str]:
     return errors
 
 
+# A Pydantic model base makes the plain State below a Pydantic model, which
+# the browser must see refreshed the same way.
+@pytest.mark.parametrize("model_base", [None, "pydantic.BaseModel"])
 @pytest.mark.parametrize("handler", ["bump_none", "bump_data", "bump_mark"])
 def test_state_bindings_show_values_a_handler_changed_without_rendering(
     page: Any,
     serve_live: Any,
     handler: str,
+    model_base: str | None,
     open_citry_page: Any,
 ) -> None:
-    app = _engine("state-refresh-test")
+    if model_base is not None:
+        pytest.importorskip("pydantic")
+    app = _engine("state-refresh-test", model_base)
 
     class Badge(Component):
         citry = app

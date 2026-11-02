@@ -11,7 +11,11 @@ class MultiSelectAtAGlance(Component):
         <c-fill name="label">Workspaces</c-fill>
         <c-fill name="description">Choose every workspace that should receive this observation.</c-fill>
         <c-fill name="default">
-          <c-CMultiSelect c-options="options" placeholder="Choose workspaces" c-value="['atlas', 'aurora']" />
+          <c-CMultiSelect
+            c-options="options"
+            placeholder="Choose workspaces"
+            c-value="['atlas', 'aurora']"
+          />
         </c-fill>
       </c-CField>
     """

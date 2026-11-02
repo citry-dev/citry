@@ -7,12 +7,13 @@ import hashlib
 import json
 import re
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Generator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from html import escape
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeGuard, TypeVar, cast
 
+from citry._walk import Call, run
 from citry.assets import _TEMPLATE_CACHE
 from citry.attrs import (
     VueCodeError,
@@ -34,7 +35,9 @@ from citry.citry_render import (
 )
 from citry.citry_template import CitryTemplate
 from citry.client_directives import ComponentTagClientBindingKind
+from citry.component_registry import BUILTIN_COMPONENT_NAMES
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
+from citry.serialize import _REPEATED_RENDER_MESSAGE
 from citry.util.html import Markup, decode_attribute_entities, decode_character_references, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
@@ -60,12 +63,13 @@ from .capture import (
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
     is_ignored_element_open,
-    is_native_state_tag,
+    is_v_pre_element_open,
     is_vue_directive_name,
     prepared_spread_index,
     template_location,
     vue_owned_native_marker,
     vue_owned_native_properties,
+    writes_vue_owned_marker,
 )
 from .compiler import (
     DefinitionCompileInput,
@@ -75,6 +79,7 @@ from .compiler import (
     _generated_event_args,
     _generated_event_modifiers,
     _generated_vue_attr,
+    _guard_template_braces,
     _LocalCallBindingDeclaration,
     _LocalCallDeclaration,
     _LocalCallRunDeclaration,
@@ -112,6 +117,19 @@ if TYPE_CHECKING:
     from citry.citry_context import CitryContext
     from citry.component import Component
     from citry_core import _rust
+
+# The assembler runs its nested walks directly, one inside another with
+# ``yield from``, while the direct walks stay under the limits below, and
+# hands deeper ones to the walk driver, which starts a fresh count (see
+# `nested`). One component's body runs at most this many nested levels
+# directly, at two frames each.
+_INLINE_WALK_DEPTH = 8
+# The direct walks together, across components, use at most about this many
+# Python frames. An ordinary page stays well below it, so only a very deep
+# component tree pays for the driver.
+_INLINE_WALK_FRAMES = 128
+
+_R = TypeVar("_R")
 
 TagForType = Callable[[str], str]
 ComponentMetadataForType = Callable[[str, type[object] | None], str]
@@ -332,6 +350,23 @@ class _FillFragment:
     public_name: str
     lexical_owner: str
     body: _DefinitionFragment
+    # The fill's `v-slot` pattern (`None` when it reads no Vue slot props).
+    vue_pattern: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _CallerFallback:
+    """
+    A receiver's slot fallback that a caller's ``<c-fill fallback=...>`` shows.
+
+    The caller's template compiles that fallback. The walk over it carries
+    this record so an error can name the receiver, the caller, and the slot
+    when content in the fallback needs something only the receiver has.
+    """
+
+    receiver_owner: str
+    caller_owner: str
+    slot_name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -505,6 +540,10 @@ def assemble_typed_render(
         lambda: defaultdict(int)
     )
     seen_render_ids: set[str] = set()
+    # Each output an on_render hook passed on, by object id, once a
+    # projection has placed it (see _projected_content). The value keeps the
+    # output alive, so an id is never reused while it is remembered.
+    placed_outputs: dict[int, CitryRender] = {}
     seen_occurrence_ids: set[str] = set()
     flattened_transparent_receivers: set[str] = set()
     # A transparent component has no Vue definition: its template is copied
@@ -559,6 +598,34 @@ def assemble_typed_render(
 
     context_binding_attrs = "".join(f' :{name}="{name}"' for name in template_context_names)
     context_binding_pattern = "" if not template_context_names else '="{ ' + ", ".join(template_context_names) + ' }"'
+
+    def fill_binding_pattern(vue_pattern: str | None) -> str:
+        """
+        Return the parameter text of one fill's Vue slot function, starting at its `=`.
+
+        Citry's context names come first, then the author's `v-slot` names:
+        `{ row }` becomes `{ $i18n, row }`, and an identifier `p` becomes
+        `{ $i18n, key: citrySlotKey, ...p }`. A fill without a pattern keeps
+        the slot function with the context names only.
+        """
+        if vue_pattern is None:
+            return context_binding_pattern
+        names = [*template_context_names]
+        # Vue adds the key of Citry's `v-if` around each outlet to the props
+        # it passes. Binding it to a reserved name keeps it out of a props
+        # object or `...rest` the author reads. A `...` inside a literal
+        # default only adds an unused name.
+        if not vue_pattern.startswith("{") or "..." in vue_pattern:
+            names.append("key: citrySlotKey")
+        if not names:
+            return _authored_vue_attr("", vue_pattern)
+        joined = ", ".join(names)
+        if vue_pattern.startswith("{"):
+            authored = vue_pattern[1:-1].strip()
+            merged = f"{{ {joined}, {authored} }}" if authored else f"{{ {joined} }}"
+        else:
+            merged = f"{{ {joined}, ...{vue_pattern} }}"
+        return _authored_vue_attr("", merged)
 
     def owner_values(owner_id: str) -> dict[str, object]:
         """Return ``prepared_by_occurrence[owner_id]`` for an owner whose values assembly reads or merges."""
@@ -633,6 +700,21 @@ def assemble_typed_render(
         for author_owner, receiving_owner, reads in browser_read_trackers:
             if owner_id in {author_owner, receiving_owner}:
                 reads.append(description)
+
+    def receiver_label(render_id: str | None, occurrence: str) -> str:
+        """Name a receiver for an error: a built-in by the tag the author wrote, any other by its class."""
+        class_id = transparent_class_ids.get(render_id) if render_id is not None else None
+        try:
+            component = citry.get_component_by_class_id(class_id or occurrence_types[occurrence])
+        except KeyError:
+            component = None
+        # Only Citry's own classes carry the token, so an author's class
+        # named `Provide` keeps its name.
+        if component is not None and getattr(component, "_citry_builtin_token", None) is not None:
+            tag = _BUILTIN_RECEIVER_TAGS.get(component.__name__)
+            if tag is not None:
+                return tag
+        return class_name_of(render_id, occurrence)
 
     def class_name_of(render_id: str | None, occurrence: str) -> str:
         """Name the component that owns a render, preferring the transparent component itself."""
@@ -710,6 +792,82 @@ def assemble_typed_render(
             f"{{{{ title }}}}, works from any component."
         )
 
+    def describe_fallback_in_passed_content(
+        containing_slot: DirectProjectionRender,
+        caller_owner: str,
+        holder_owner: str,
+        current_owner: str,
+        part: DirectProjectionRender,
+    ) -> str:
+        """Explain a fallback a caller shows whose `<c-slot>` its receiver placed in content for another component."""
+        # Prefer the transparent component that wrote the fill, as the author
+        # knows it, over the component whose template it lands in.
+        caller = class_name_of(containing_slot.fill_source.lexical_render_id, caller_owner)
+        holder = class_name_of(part.fill_source.lexical_render_id, holder_owner)
+        # The component that wrote the `<c-slot>` into the passed content.
+        # It is usually the holder, but a transparent component in the
+        # caller's fill that passes its own slot on is copied into the
+        # holder's place, and the author knows it by its own name.
+        passer = class_name_of(part.receiver_render_id, holder_owner)
+        # The component the content is passed to is the first one below the
+        # holder on the way to the template being built.
+        passed_to = current_owner
+        steps = 0
+        while occurrence_parents.get(passed_to) not in (holder_owner, None) and steps <= len(occurrence_parents):
+            passed_to = cast("str", occurrence_parents[passed_to])
+            steps += 1
+        middle = class_name_of(None, passed_to)
+        return (
+            f"In a component that uses Vue, {caller} shows the fallback of {holder}'s"
+            f" '{part.fill_source.public_name}' slot through '<c-fill fallback=...>', but {passer} puts that"
+            f" '<c-slot>' inside the content it passes to {middle}, so Citry cannot place the fallback in"
+            f" {caller}'s template. Write the fallback content in {caller}'s fill itself, leave the slot unfilled"
+            f" so {holder} shows its own fallback, or move the '<c-slot>' out of the content {passer} passes to"
+            f" {middle}."
+        )
+
+    def describe_fallback_in_other_component(
+        containing_slot: DirectProjectionRender,
+        holder_owner: str,
+        part: DirectProjectionRender,
+    ) -> str:
+        """Explain a fallback a caller shows inside the slot of a component that is not transparent."""
+        caller_owner = _stable_owner(containing_slot.fill_source.lexical_render_id, render_to_occurrence)
+        caller = (
+            "A component"
+            if caller_owner is None
+            else class_name_of(containing_slot.fill_source.lexical_render_id, caller_owner)
+        )
+        # Prefer the component that wrote the fallback, as the author knows
+        # it, even when it is transparent and lands in another template.
+        holder = class_name_of(part.fill_source.lexical_render_id, holder_owner)
+        # The handle's receiver is the innermost component around it that is
+        # not transparent, because a transparent one is copied into its
+        # parent's template. Name that one: the fallback must leave it first,
+        # and each outer component gets its own error after that.
+        wrapper_owner = _stable_owner(part.receiver_render_id, render_to_occurrence)
+        wrapper = "another component" if wrapper_owner is None else class_name_of(None, wrapper_owner)
+        slot = part.fill_source.public_name
+        return (
+            f"In a component that uses Vue, {caller} shows the fallback of {holder}'s '{slot}' slot"
+            f" through '<c-fill fallback=...>', but it puts that fallback inside {wrapper}'s slot. Citry"
+            f" can show {holder}'s fallback inside another component only when that component is transparent. Use an"
+            f" HTML element in place of {wrapper}, or mark {wrapper} with 'transparent = True' if it only"
+            f" wraps content. You can also write the fallback content in {caller}'s fill itself, or leave the"
+            f" slot unfilled so {holder} shows its own fallback."
+        )
+
+    def describe_caller_fallback(fallback: _CallerFallback, what: str) -> str:
+        receiver = class_name_of(None, fallback.receiver_owner)
+        caller = class_name_of(None, fallback.caller_owner)
+        return (
+            f"In a component that uses Vue, {caller} shows the fallback of {receiver}'s '{fallback.slot_name}' slot"
+            f" through '<c-fill fallback=...>', so that fallback cannot hold {what}. Citry compiles the fallback"
+            f" in {caller}'s template, which cannot reach {receiver}'s slots, Vue data, or event handlers. Write"
+            f" that content in {caller}'s fill itself, or leave the slot unfilled so {receiver} shows its own"
+            " fallback."
+        )
+
     def note_attribute_reads(owner_id: str, tag: str, attrs: Sequence[PreparedAttribute]) -> None:
         for attr in attrs:
             if attr.origin == "source" and _source_attribute_reads_instance(
@@ -782,7 +940,17 @@ def assemble_typed_render(
                 raise UnsupportedPreparedView(
                     f"flattened projection reused a prepared container with conflicting physical data: {name!r}"
                 )
-            for nested_key, item in value.items():
+            if name == "opaqueHtml":
+                # The manifest requires a definition's blocks of HTML to match
+                # its declared sites exactly, so a block moves to the
+                # definition that reads it, and only the blocks this body
+                # wrote move.
+                entries = [(nested_key, value.pop(nested_key)) for nested_key in sorted(keys & value.keys())]
+                if not value:
+                    del lexical_values[name]
+            else:
+                entries = list(value.items())
+            for nested_key, item in entries:
                 prior = existing.setdefault(nested_key, _json_plain(item))
                 if prior != item:
                     raise UnsupportedPreparedView(
@@ -859,7 +1027,10 @@ def assemble_typed_render(
         if not (selected_transparent_root or ordinary_component_root) or frame.render_id is None:
             raise UnsupportedPreparedView("prepared component must be a nontransparent component root")
         if frame.render_id in seen_render_ids:
-            raise UnsupportedPreparedView("render occurrence appears more than once")
+            # One rendered output printed in two places, such as
+            # Row().render() printed twice. Serialization raises the same
+            # error for a page without Vue.
+            raise RuntimeError(_REPEATED_RENDER_MESSAGE)
         if occurrence_id in seen_occurrence_ids:
             raise UnsupportedPreparedView("prepared occurrence identity collided")
         seen_render_ids.add(frame.render_id)
@@ -1109,6 +1280,48 @@ def assemble_typed_render(
         native_run_taken = True
         return run.member_ids(), member_tag
 
+    # Since the driver last started a walk: how many nested levels of the
+    # current component's body run inside one another with ``yield from``,
+    # and how many Python frames all the direct walks use. See `nested`.
+    inline_depth = 0
+    inline_frames = 0
+
+    def nested(
+        function: Callable[..., Generator[Call, Any, _R]], *args: Any, **kwargs: Any
+    ) -> Generator[Call, Any, _R]:
+        """
+        Run one nested walk of the assembler; a walker writes ``result = yield from`` this helper.
+
+        The assembler's walkers are generators run by `citry._walk.run`, so
+        the walk uses the same number of Python frames however deep the
+        template nests. Handing every nested body to the driver costs about
+        0.7 microseconds a call, which an ordinary page makes about a
+        thousand times, so the first `_INLINE_WALK_DEPTH` levels of a
+        component's body run directly with ``yield from``, while the direct
+        walks stay under `_INLINE_WALK_FRAMES`. Deeper levels go through the
+        driver, which starts both counts again at 0.
+        """
+        nonlocal inline_depth, inline_frames
+        if inline_depth < _INLINE_WALK_DEPTH and inline_frames < _INLINE_WALK_FRAMES:
+            inline_depth += 1
+            inline_frames += 2
+            try:
+                return (yield from function(*args, **kwargs))
+            finally:
+                inline_depth -= 1
+                inline_frames -= 2
+        return (yield from by_driver(function(*args, **kwargs)))
+
+    def by_driver(walker: Generator[Call, Any, _R]) -> Generator[Call, Any, _R]:
+        """Hand an assembler walker to the walk driver, which starts the direct-walk counts again at 0."""
+        nonlocal inline_depth, inline_frames
+        saved = inline_depth, inline_frames
+        inline_depth = inline_frames = 0
+        try:
+            return (yield Call(_resume, walker))
+        finally:
+            inline_depth, inline_frames = saved
+
     def run_members(
         run_group: list[CitryRender | SimpleVueRecord],
         occurrence_id: str,
@@ -1117,7 +1330,7 @@ def assemble_typed_render(
         placement_route: tuple[str, ...],
         element_stack: list[str],
         local_identity_keys: set[tuple[tuple[object, ...], tuple[str, ...], object]],
-    ) -> tuple[list[tuple[str, str, str, tuple[_FillFragment, ...]]], str | None]:
+    ) -> Generator[Call, Any, tuple[list[tuple[str, str, str, tuple[_FillFragment, ...]]], str | None]]:
         """
         Record every row of one call run, one row at a time; return the rows and their component tag.
 
@@ -1129,6 +1342,7 @@ def assemble_typed_render(
         every other run, and every run that ``take_native_run`` declines,
         raising any error at the row it belongs to.
         """
+        nonlocal inline_depth, inline_frames
         members: list[tuple[str, str, str, tuple[_FillFragment, ...]]] = []
         run_component_tag: str | None = None
         # On the native render path Rust computes both ids of
@@ -1221,7 +1435,7 @@ def assemble_typed_render(
                     member, occurrence_id, member_child_id, member_placement_key, data_owner_id
                 )
             else:
-                transform_component(
+                child_walker = transform_component(
                     member,
                     occurrence_id,
                     member_child_id,
@@ -1229,6 +1443,18 @@ def assemble_typed_render(
                     physical_parent_stack=tuple(element_stack),
                     marker_owner_id=data_owner_id,
                 )
+                # The child's own body starts its nested-level count again, and the
+                # child runs directly while the direct walks stay under
+                # `_INLINE_WALK_FRAMES`; see `nested`.
+                saved_counts = inline_depth, inline_frames
+                try:
+                    if inline_frames < _INLINE_WALK_FRAMES:
+                        inline_depth, inline_frames = 0, inline_frames + 2
+                        yield from child_walker
+                    else:
+                        yield from by_driver(child_walker)
+                finally:
+                    inline_depth, inline_frames = saved_counts
                 member_tag = component_tag(member_type)
             if run_component_tag is None:
                 run_component_tag = member_tag
@@ -1247,7 +1473,7 @@ def assemble_typed_render(
         inherited_root_markers: tuple[tuple[str, object], ...] = (),
         physical_parent_stack: tuple[str, ...] = (),
         marker_owner_id: str | None = None,
-    ) -> str:
+    ) -> Generator[Call, Any, str]:
         # A simple='vue' record is its own frame. The type checker
         # forbids subclasses of the final SimpleVueRecord, so isinstance acts
         # like an exact type check and narrows
@@ -1341,9 +1567,19 @@ def assemble_typed_render(
             int
         )
         dynamic_site_index = 0
+        # How many `v-pre` elements that Vue reads as written (see
+        # `_v_pre_left_to_vue`) enclose the part being walked. A nested walk,
+        # such as a transparent component's body, runs between the element's
+        # opening and its close, so it reads the same count.
+        authored_v_pre_depth = 0
 
         active_projected_data_keys: list[set[str] | None] = []
         active_projected_data_containers: list[set[str] | None] = []
+        # The occurrence whose compiled template receives the body that each
+        # active `transform_parts` call builds. Values the body's author wrote
+        # are copied into that occurrence's data, because its template reads
+        # them.
+        active_definition_owners: list[str] = []
 
         def data_key(prefix: str, source: str, span: tuple[int, int], owner_id: str) -> str:
             del source, span
@@ -1351,23 +1587,37 @@ def assemble_typed_render(
             index = binding_counts[prefix]
             binding_counts[prefix] += 1
             key = f"citry{prefix}{index}"
+            # The key lands in the data of the occurrence whose template reads
+            # it: the owner's own, or, for a value copied into another
+            # template, that template's occurrence.
+            physical_owner = active_definition_owners[-1] if active_definition_owners else occurrence_id
             projected = (
-                owner_id != occurrence_id and active_projected_data_keys and active_projected_data_keys[-1] is not None
+                owner_id != physical_owner
+                and active_projected_data_keys
+                and active_projected_data_keys[-1] is not None
             )
             # Only this dict's keys are read here, so an occurrence holding
             # leaf JSON placeholders needs no owner_values check.
-            physical_values = prepared_by_occurrence[occurrence_id]
-            reserved_keys = projected_data_keys_by_occurrence[occurrence_id]
-            if owner_id == occurrence_id:
-                # Leaf data and an earlier flattened projection may already
-                # occupy this compact key. Advance the physical owner counter
-                # rather than aliasing two independently changing values.
-                while key in physical_values or key in reserved_keys:
+            physical_values = prepared_by_occurrence[physical_owner]
+            reserved_keys = projected_data_keys_by_occurrence[physical_owner]
+            # A block of HTML is stored under its key inside `opaqueHtml`, not
+            # at the top level, so its key is checked there too.
+            nested_values = physical_values.get("opaqueHtml") if prefix == "Opaque" else None
+            nested_keys = nested_values if type(nested_values) is dict else {}
+
+            def occupied(candidate: str) -> bool:
+                return candidate in physical_values or candidate in reserved_keys or candidate in nested_keys
+
+            if owner_id == physical_owner:
+                # Leaf data and an earlier copied value may already occupy
+                # this compact key. Advance the owner's counter so two values
+                # that change independently never share one key.
+                while occupied(key):
                     index = binding_counts[prefix]
                     binding_counts[prefix] += 1
                     key = f"citry{prefix}{index}"
             elif projected:
-                if key in physical_values or key in reserved_keys:
+                if occupied(key):
                     # The lexical owner already uses this compact ordinal in
                     # its own namespace, but the physical definition cannot
                     # reuse it. Keep the ordinary key when possible and use a
@@ -1377,7 +1627,7 @@ def assemble_typed_render(
                     # the loop below keeps it unique.
                     key = f"citry{prefix}p{_digest('projected', prefix, index)[:20]}"
                     suffix = 0
-                    while key in physical_values or key in reserved_keys:
+                    while occupied(key):
                         suffix += 1
                         key = f"citry{prefix}p{_digest('projected', prefix, index, suffix)[:20]}"
                 reserved_keys.add(key)
@@ -1428,8 +1678,8 @@ def assemble_typed_render(
             if len({fill.site_id for fill in fills}) != len(fills):
                 raise UnsupportedPreparedView("prepared component call has duplicate supplied fill sites")
             for fill in fills:
-                output.append(_fill_opening(fill.site_id, context_binding_pattern))
                 if fill.lexical_owner == definition_owner_id:
+                    output.append(_fill_opening(fill.site_id, fill_binding_pattern(fill.vue_pattern)))
                     output.extend(fill.body)
                 else:
                     ancestor = occurrence_id
@@ -1458,9 +1708,19 @@ def assemble_typed_render(
                     # placement key is the same for every instance.
                     forwarded_site_id = f"citrySlot{_digest('forwarded', fill.site_id, child_placement_key)[:16]}"
                     supplied_fills[definition_owner_id].append(
-                        _FillFragment(forwarded_site_id, fill.public_name, fill.lexical_owner, fill.body)
+                        _FillFragment(
+                            forwarded_site_id, fill.public_name, fill.lexical_owner, fill.body, fill.vue_pattern
+                        )
                     )
-                    output.append(f'<slot name="{forwarded_site_id}"{context_binding_attrs}></slot>')
+                    if fill.vue_pattern is None:
+                        output.append(_fill_opening(fill.site_id, context_binding_pattern))
+                        output.append(f'<slot name="{forwarded_site_id}"{context_binding_attrs}></slot>')
+                    else:
+                        # A pattern names only the props its author reads, so
+                        # pass on the whole props object the receiver's outlet
+                        # gave, for the author's slot function to destructure.
+                        output.append(_fill_opening(fill.site_id, '="citrySlotProps"'))
+                        output.append(f'<slot name="{forwarded_site_id}" v-bind="citrySlotProps"></slot>')
                 output.append("</template>")
 
         def transform_parts(
@@ -1474,9 +1734,22 @@ def assemble_typed_render(
             project_root_markers: bool = True,
             parent_element_stack: tuple[str, ...] = (),
             parent_element_keys: tuple[str | None, ...] | None = None,
-            projected_data: bool = False,
-        ) -> _DefinitionFragment:
-            nonlocal dynamic_site_index
+            # The occurrence whose definition this body is compiled into. The
+            # values of parts another occurrence wrote are copied into its
+            # data, which its template reads.
+            definition_owner_id: str = occurrence_id,
+            # Set while walking a receiver's slot fallback that a caller's
+            # `<c-fill fallback=...>` shows: the body is compiled in the
+            # caller's template, so only content that template can show is
+            # allowed in it.
+            caller_fallback: _CallerFallback | None = None,
+        ) -> Generator[Call, Any, _DefinitionFragment]:
+            nonlocal dynamic_site_index, inline_depth, inline_frames, authored_v_pre_depth
+            # Every walk records its component calls in the data of the
+            # component whose template it builds, so the two owners differ
+            # only if a walk was started with the wrong one.
+            if call_owner_id != definition_owner_id:
+                raise AssertionError("a walk records component calls outside the template it builds")
             output = _DefinitionFragment.empty()
             dynamic_stack: list[tuple[str, str]] = []
             element_stack = list(parent_element_stack)
@@ -1492,12 +1765,23 @@ def assemble_typed_render(
             inherited_element_depth = len(element_stack)
             dom_depth = 0
             data_values = owner_values(data_owner_id)
-            projected_keys: set[str] | None = set() if projected_data and data_owner_id != occurrence_id else None
-            projected_containers: set[str] | None = (
-                set() if projected_data and data_owner_id != occurrence_id else None
-            )
+            projected_keys: set[str] | None = set() if data_owner_id != definition_owner_id else None
+            projected_containers: set[str] | None = set() if data_owner_id != definition_owner_id else None
             active_projected_data_keys.append(projected_keys)
             active_projected_data_containers.append(projected_containers)
+            active_definition_owners.append(definition_owner_id)
+
+            def refuse_in_caller_fallback(what: str) -> None:
+                # A receiver's slot fallback that `<c-fill fallback=...>`
+                # shows is compiled in the caller's template. Its component
+                # calls are recorded in the caller's data, which that template
+                # reads, but a `<c-slot>` outlet in it would choose its content
+                # from the receiver's slots, and a component given fills would
+                # pass them on through a `<slot>` in the caller's template,
+                # which the caller's call does not supply.
+                if caller_fallback is not None:
+                    raise UnsupportedPreparedView(describe_caller_fallback(caller_fallback, what))
+
             # A projected body keeps the lexical data owner for values, but its
             # component declarations and prepared call bindings belong to the
             # definition that receives the body.  These owners coincide for an
@@ -1526,16 +1810,25 @@ def assemble_typed_render(
                     for candidate in parts
                 )
                 if not matching:
-                    return transform_parts(
-                        parts,
-                        placement_route=placement_route,
-                        data_owner_id=data_owner_id,
-                        call_owner_id=call_owner_id,
-                        containing_slot=containing_slot,
-                        project_root_markers=project_root_markers,
-                        parent_element_stack=tuple(element_stack),
-                        parent_element_keys=tuple(element_keys),
-                        projected_data=projected_data,
+                    # The call below pushes its own entries, so drop this
+                    # call's before handing the parts over.
+                    active_projected_data_keys.pop()
+                    active_projected_data_containers.pop()
+                    active_definition_owners.pop()
+                    return (
+                        yield from nested(
+                            transform_parts,
+                            parts,
+                            placement_route=placement_route,
+                            data_owner_id=data_owner_id,
+                            call_owner_id=call_owner_id,
+                            containing_slot=containing_slot,
+                            project_root_markers=project_root_markers,
+                            parent_element_stack=tuple(element_stack),
+                            parent_element_keys=tuple(element_keys),
+                            definition_owner_id=definition_owner_id,
+                            caller_fallback=caller_fallback,
+                        )
                     )
                 if parts:
                     # `matching` has just proven every part eligible, so the run is all of them.
@@ -1572,42 +1865,85 @@ def assemble_typed_render(
                 parts: Sequence[RenderPart],
                 open_index: int,
                 data_values: dict[str, object],
+                *,
+                v_pre: bool = False,
             ) -> int:
-                """Write a `#c-ignore` element's contents as one pinned HTML block; return the close index."""
+                """
+                Write a `#c-ignore` or `v-pre` element's contents as one HTML block; return where the caller resumes.
+
+                That is the close index once the block is written. Where no
+                block can sit, the contents are only checked, and the caller
+                resumes just after the opening to compile them as usual.
+
+                The block reaches the browser as data, which Vue inserts as
+                HTML without compiling it, so request values never enter the
+                compiled template. A `#c-ignore` block is pinned: the browser
+                keeps it as first rendered. A `v-pre` block is not, so a later
+                render replaces it with the new values.
+                """
                 opening = cast("PreparedElementOpen", parts[open_index])
-                label = _ignored_element_label(opening)
-                # The browser keeps the block as HTML parsed in an HTML parent,
-                # so an SVG or MathML parent or a text-only element cannot hold it.
-                if any(tag in {"svg", "math"} for tag in element_stack):
+                directive = "v-pre" if v_pre else "#c-ignore"
+                label = _directive_element_label(opening, directive)
+                if opening.tag.lower() in _TEXT_ONLY_TAGS:
                     raise UnsupportedPreparedView(
-                        f"{label} is inside SVG or MathML, whose contents the browser cannot keep as HTML."
-                        " Put '#c-ignore' on an HTML element that wraps the <svg> or <math> element."
+                        f"{label} has text contents, not elements, so there is nothing to keep. Remove '{directive}'."
                     )
-                if opening.tag.lower() in {"script", "style", "textarea", "title"}:
-                    raise UnsupportedPreparedView(
-                        f"{label} has text contents, not elements, so there is nothing to keep. Remove '#c-ignore'."
-                    )
-                close_index = _ignored_element_close_index(parts, open_index)
+                close_index = _ignored_element_close_index(parts, open_index, label)
+                contents = parts[open_index + 1 : close_index]
+                # `element_stack` already holds this element, so a `<svg>`
+                # carrying the directive counts as SVG here.
+                placement = _html_block_placement_problem(opening.tag, element_stack, directive)
+                if placement is not None:
+                    if not v_pre:
+                        # The template parser refuses these placements for
+                        # `#c-ignore`, so this only runs for a template that
+                        # skipped the parser's check.
+                        raise UnsupportedPreparedView(f"{label} cannot be used here: {placement[0]}. {placement[1]}")
+                    # Vue writes plain HTML elements the same way whether or
+                    # not it compiles them, so the contents are compiled as
+                    # usual. Vue syntax is refused, since compiling it would
+                    # run what 'v-pre' keeps as written.
+                    reason, advice = placement
+                    found = _authored_vue_syntax(contents, _component_display_name(citry))
+                    if found is not None:
+                        raise UnsupportedPreparedView(
+                            f"{label} cannot keep its contents uncompiled here, because {reason}. Citry"
+                            f" compiles the contents instead, so they cannot hold {found}. {advice}"
+                        )
+                    return open_index
                 html = _ignored_contents_html(
                     opening,
-                    parts[open_index + 1 : close_index],
-                    lambda class_id: citry.get_component_by_class_id(class_id).__name__,
+                    contents,
+                    _component_display_name(citry),
+                    label=label,
+                    allowed=_V_PRE_CONTENTS_ALLOWED if v_pre else _IGNORED_CONTENTS_ALLOWED,
+                    keep_vue_attributes=v_pre,
                 )
+                if v_pre and opening.tag.lower() in _LEADING_NEWLINE_TAGS:
+                    # The browser drops one line break written straight after
+                    # `<pre>`, as Vue does when it compiles the element. The
+                    # block sits after a marker comment, where the browser
+                    # would keep that line break as a blank first line.
+                    line_break = next((item for item in ("\r\n", "\n", "\r") if html.startswith(item)), "")
+                    html = html.removeprefix(line_break)
                 reject_cross_boundary_html(html, origin=f"The HTML inside {label.removesuffix(',')}")
                 key = data_key("Opaque", opening.source, opening.span, data_owner_id)
                 projected_data_container("opaqueHtml")
                 opaque_values = data_values.setdefault("opaqueHtml", {})
                 if type(opaque_values) is not dict:
                     raise AssertionError("prepared opaqueHtml container changed type")
-                record = opaque_html_record(html, pinned=True)
+                record = opaque_html_record(html, pinned=not v_pre)
                 if opaque_values.setdefault(key, record) != record:
                     raise UnsupportedPreparedView("one prepared opaque HTML site produced conflicting bytes")
                 _append_opaque_html(output, key, "raw")
                 return close_index
 
-            # Parts before this index are a `#c-ignore` element's contents,
-            # already written as one block of HTML the browser keeps.
+            # Parts before this index are a `#c-ignore` or `v-pre` element's
+            # contents, already written as one block of HTML.
             ignored_contents_end = 0
+            # The indexes of the closes that end the `v-pre` elements this walk
+            # opened and left to Vue, innermost last.
+            v_pre_closes: list[int] = []
             for part_index, part in enumerate(parts):
                 if part_index in run_followers or part_index < ignored_contents_end:
                     continue
@@ -1667,6 +2003,10 @@ def assemble_typed_render(
                     lexical_owner = _stable_owner(fill_source.lexical_render_id, render_to_occurrence)
                     if lexical_owner is None:
                         raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
+                    # The occurrence of the component that wrote the fill,
+                    # kept before a transparent author is replaced below by
+                    # the component whose template it is copied into.
+                    fill_author_owner = lexical_owner
                     # Vue compiles a fill in its author's render function and
                     # reads the fill's values from that component's
                     # $citryPrepared. A transparent author has no render
@@ -1681,7 +2021,15 @@ def assemble_typed_render(
                     flattened_transparent_receiver = (
                         not nested_template
                         and part.receiver_render_id in flattened_transparent_receivers
-                        and lexical_owner == call_owner_id
+                        # In a receiver's fallback that a caller's fill shows,
+                        # the template being built is the caller's, but the
+                        # fills that this fallback gives its transparent
+                        # components were written by the receiver, whose data
+                        # this walk reads, so they are copied in place too.
+                        and (
+                            lexical_owner == call_owner_id
+                            or (caller_fallback is not None and lexical_owner == data_owner_id)
+                        )
                     )
                     # Otherwise the template being built belongs to another
                     # component. When the author encloses the receiver, the
@@ -1702,6 +2050,37 @@ def assemble_typed_render(
                         except UnsupportedPreparedView:
                             flattened_transparent_receiver = True
                             copied_outside_author = True
+                    if (
+                        fill_source.kind == "fallback"
+                        and containing_slot is not None
+                        and not nested_template
+                        and not flattened_transparent_receiver
+                        and fill_author_owner != receiver_owner
+                    ):
+                        # The fallback handle (the Slot that `fallback="..."`
+                        # names, printed as `{{ fallback }}`) normally lands in
+                        # the outlet of the component that wrote the fallback.
+                        # Printed inside another component's slot, it lands
+                        # in that component's outlet instead, and that
+                        # component's template has no place for content
+                        # another component wrote as its fallback.
+                        raise UnsupportedPreparedView(
+                            describe_fallback_in_other_component(containing_slot, fill_author_owner, part)
+                        )
+                    if not flattened_transparent_receiver:
+                        # A transparent component's own outlet is copied in
+                        # place, but any other outlet records which content
+                        # it shows in a receiver's data.
+                        if nested_template:
+                            what = "a template value that it prints (a c- attribute written as a template)"
+                        elif part.from_outlet:
+                            what = "a '<c-slot>' outlet"
+                        else:
+                            # The fill's own slot name is not kept when a
+                            # render is replayed from the cache, so the label
+                            # names the kind of content only.
+                            what = "a Slot value that it prints, such as one taken from slots"
+                        refuse_in_caller_fallback(what)
                     # Calls inside this body are counted and keyed in the
                     # lexical owner's namespace, so two receivers that share
                     # one slot name must still give their bodies different
@@ -1737,40 +2116,8 @@ def assemble_typed_render(
                                 raise AssertionError("prepared slotKeys container changed type")
                             if slot_keys.setdefault(site_id, slot_key) != slot_key:
                                 raise UnsupportedPreparedView("one prepared slot site received conflicting keys")
-                    fill_reads: list[str] = []
-                    if copied_outside_author:
-                        browser_read_trackers.append((lexical_owner, call_owner_id, fill_reads))
-                    selected = transform_parts(
-                        list(part.parts),
-                        placement_route=(*placement_route, body_route_step),
-                        data_owner_id=lexical_owner,
-                        # A flattened transparent receiver contributes its
-                        # selected body directly to the fragment being built,
-                        # which belongs to this fragment's call owner (the fill
-                        # author when this body sits inside a fill).  A real
-                        # receiver instead carries a supplied fill back to its
-                        # lexical caller, where Vue creates the slot closure.
-                        # Keep those destinations separate from the lexical
-                        # value owner: using the intermediate receiver here
-                        # makes every forwarded call declaration land in the
-                        # wrong $citryPrepared.calls table.
-                        call_owner_id=call_owner_id if flattened_transparent_receiver else lexical_owner,
-                        containing_slot=part,
-                        project_root_markers=project_root_markers and dom_depth == 0,
-                        parent_element_stack=tuple(element_stack),
-                        parent_element_keys=tuple(element_keys),
-                        projected_data=projected_data or flattened_transparent_receiver,
-                    )
-                    if copied_outside_author:
-                        browser_read_trackers.pop()
-                        if fill_reads:
-                            raise UnsupportedPreparedView(
-                                describe_fill_outside_author(part, lexical_owner, receiver_owner, fill_reads[0])
-                            )
-                    if flattened_transparent_receiver:
-                        output.extend(selected)
-                        continue
-                    fill = _FillFragment(site_id, part.public_name, lexical_owner, selected)
+                    # The occurrence whose definition this fill's body lands
+                    # in when it is not passed on to another receiver.
                     output_owner = (
                         data_owner_id
                         if containing_slot is not None
@@ -1783,12 +2130,127 @@ def assemble_typed_render(
                         and receiver_owner == data_owner_id
                         else occurrence_id
                     )
+                    # The body stays in the definition being built when it is
+                    # copied here or becomes the outlet's inline content (the
+                    # branches below). Otherwise it is handed on as a Vue slot,
+                    # compiled in its author's definition, and reads its values
+                    # from its author's data.
+                    body_stays_here = flattened_transparent_receiver or (
+                        not nested_template and receiver_owner == output_owner and lexical_owner == output_owner
+                    )
+                    # A fill handed on as a Vue slot is compiled in its
+                    # author's definition.
+                    body_definition_owner = definition_owner_id if body_stays_here else lexical_owner
+                    # A receiver's fallback that a caller's fill shows stays in
+                    # the caller's template although the receiver wrote it, so
+                    # its calls are recorded in the caller's data. Vue data and
+                    # Citry event handlers in it would be read from the caller,
+                    # so the walk below watches for them, as it does for a fill
+                    # copied outside its author.
+                    body_caller_fallback = caller_fallback
+                    if (
+                        caller_fallback is None
+                        and not flattened_transparent_receiver
+                        and body_definition_owner != lexical_owner
+                    ):
+                        body_caller_fallback = _CallerFallback(lexical_owner, body_definition_owner, part.public_name)
+                    watches_reads = copied_outside_author or body_caller_fallback is not caller_fallback
+                    fill_reads: list[str] = []
+                    if watches_reads:
+                        browser_read_trackers.append((lexical_owner, call_owner_id, fill_reads))
+                    walker = transform_parts(
+                        _projected_content(part, placed_outputs),
+                        placement_route=(*placement_route, body_route_step),
+                        data_owner_id=lexical_owner,
+                        # The body's component calls are recorded in the data of
+                        # the component whose template compiles it. Using the
+                        # intermediate receiver here would put every forwarded
+                        # call declaration in the wrong $citryPrepared.calls
+                        # table.
+                        call_owner_id=body_definition_owner,
+                        containing_slot=part,
+                        project_root_markers=project_root_markers and dom_depth == 0,
+                        parent_element_stack=tuple(element_stack),
+                        parent_element_keys=tuple(element_keys),
+                        definition_owner_id=body_definition_owner,
+                        caller_fallback=body_caller_fallback,
+                    )
+                    # Every slot a page shows passes through here, so this site runs
+                    # the walker without `nested`'s extra frame and call, under
+                    # the same two limits.
+                    if inline_depth < _INLINE_WALK_DEPTH and inline_frames < _INLINE_WALK_FRAMES:
+                        inline_depth += 1
+                        inline_frames += 1
+                        try:
+                            selected = yield from walker
+                        finally:
+                            inline_depth -= 1
+                            inline_frames -= 1
+                    else:
+                        selected = yield from by_driver(walker)
+                    if watches_reads:
+                        browser_read_trackers.pop()
+                    if (flattened_transparent_receiver or copied_outside_author) and (
+                        part.vue_props or part.fill_source.vue_pattern is not None
+                    ):
+                        # The fill is copied into another template, so there is
+                        # no Vue slot function to receive the props. Checked
+                        # before the reads below, which would call a `v-slot`
+                        # name the author's Vue data.
+                        raise UnsupportedPreparedView(
+                            describe_inline_scoped_fill(part, receiver_label(part.receiver_render_id, receiver_owner))
+                        )
+                    if fill_reads and copied_outside_author:
+                        raise UnsupportedPreparedView(
+                            describe_fill_outside_author(part, lexical_owner, receiver_owner, fill_reads[0])
+                        )
+                    if fill_reads and body_caller_fallback is not None:
+                        raise UnsupportedPreparedView(
+                            describe_caller_fallback(
+                                body_caller_fallback, f"content that uses Vue data or event handlers ({fill_reads[0]})"
+                            )
+                        )
+                    if flattened_transparent_receiver:
+                        output.extend(selected)
+                        continue
+                    fill = _FillFragment(
+                        site_id, part.public_name, lexical_owner, selected, part.fill_source.vue_pattern
+                    )
+                    # The receiving `<c-slot>`'s Vue slot props, written on
+                    # every outlet below. Only the fill that `<c-slot>` called
+                    # carries them (`capture_slot_call` gives any other Slot,
+                    # a fallback handle included, none), and its outlet lands
+                    # in the receiver's own definition, so the expressions
+                    # read the receiver's data.
+                    outlet_attrs = context_binding_attrs + "".join(
+                        " " + _authored_vue_attr(key, value) for key, value in part.vue_props
+                    )
                     if receiver_owner != output_owner:
                         if containing_slot is None:
                             raise UnsupportedPreparedView("direct slot result moved outside its receiver")
                         containing_lexical = _stable_owner(
                             containing_slot.fill_source.lexical_render_id, render_to_occurrence
                         )
+                        if (
+                            containing_lexical is not None
+                            and containing_lexical != receiver_owner
+                            and part.fill_source.kind == "fallback"
+                            and _stable_owner(containing_slot.receiver_render_id, render_to_occurrence)
+                            == receiver_owner
+                        ):
+                            # A caller's `<c-fill fallback=...>` (the fill
+                            # around this fallback handle is the caller's
+                            # fill to this same receiver) shows the fallback
+                            # of a `<c-slot>` that the receiver put inside
+                            # content it passes to another component. That
+                            # `<c-slot>` sits in content the other component
+                            # shows through its own slot, so the caller's
+                            # template cannot hold the fallback.
+                            raise UnsupportedPreparedView(
+                                describe_fallback_in_passed_content(
+                                    containing_slot, containing_lexical, receiver_owner, occurrence_id, part
+                                )
+                            )
                         if containing_lexical != receiver_owner:
                             raise UnsupportedPreparedView(
                                 "direct slot result moved across unrelated receivers: "
@@ -1796,28 +2258,27 @@ def assemble_typed_render(
                                 f"container_lexical={containing_lexical!r}"
                             )
                         supplied_fills[receiver_owner].append(fill)
-                        output.append(f'<slot name="{site_id}"{context_binding_attrs}></slot>')
+                        output.append(f'<slot name="{site_id}"{outlet_attrs}></slot>')
                     elif nested_template:
                         supplied_fills[output_owner].append(fill)
-                        output.append(f'<slot name="{site_id}"{context_binding_attrs}></slot>')
+                        output.append(f'<slot name="{site_id}"{outlet_attrs}></slot>')
                     elif lexical_owner == output_owner:
-                        _append_slot_outlet(
-                            output, site_id, selected, context_binding_attrs, keyed=slot_key is not None
-                        )
+                        _append_slot_outlet(output, site_id, selected, outlet_attrs, keyed=slot_key is not None)
                     else:
                         supplied_fills[output_owner].append(fill)
                         _append_slot_outlet(
                             output,
                             site_id,
                             _DefinitionFragment.empty(),
-                            context_binding_attrs,
+                            outlet_attrs,
                             keyed=slot_key is not None,
                         )
                     continue
                 if isinstance(part, RenderDecoration) and (
                     not part.frame.is_component_root or part.frame.render_id == frame.render_id
                 ):
-                    decorated = transform_parts(
+                    decorated = yield from nested(
+                        transform_parts,
                         list(part.parts),
                         placement_route=placement_route,
                         data_owner_id=data_owner_id,
@@ -1827,20 +2288,25 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
-                        projected_data=projected_data,
+                        definition_owner_id=definition_owner_id,
+                        caller_fallback=caller_fallback,
                     )
                     wrapped = _DefinitionFragment.empty()
                     wrapped.extend(
-                        transform_parts(
-                            list(cast("Sequence[RenderPart]", part.opening)),
-                            placement_route=placement_route,
-                            data_owner_id=data_owner_id,
-                            call_owner_id=call_owner_id,
-                            containing_slot=containing_slot,
-                            project_root_markers=False,
-                            parent_element_stack=tuple(element_stack),
-                            parent_element_keys=tuple(element_keys),
-                            projected_data=projected_data,
+                        (
+                            yield from nested(
+                                transform_parts,
+                                list(cast("Sequence[RenderPart]", part.opening)),
+                                placement_route=placement_route,
+                                data_owner_id=data_owner_id,
+                                call_owner_id=call_owner_id,
+                                containing_slot=containing_slot,
+                                project_root_markers=False,
+                                parent_element_stack=tuple(element_stack),
+                                parent_element_keys=tuple(element_keys),
+                                definition_owner_id=definition_owner_id,
+                                caller_fallback=caller_fallback,
+                            )
                         )
                     )
                     wrapped.extend(decorated)
@@ -1857,33 +2323,41 @@ def assemble_typed_render(
                         else None
                     )
                     output.extend(
-                        transform_parts(
-                            list(part.parts),
-                            placement_route=placement_route,
-                            data_owner_id=data_owner_id,
-                            call_owner_id=call_owner_id,
-                            containing_slot=containing_slot,
-                            call_run=eligible_run,
-                            project_root_markers=project_root_markers and dom_depth == 0,
-                            parent_element_stack=tuple(element_stack),
-                            parent_element_keys=tuple(element_keys),
-                            projected_data=projected_data,
+                        (
+                            yield from nested(
+                                transform_parts,
+                                list(part.parts),
+                                placement_route=placement_route,
+                                data_owner_id=data_owner_id,
+                                call_owner_id=call_owner_id,
+                                containing_slot=containing_slot,
+                                call_run=eligible_run,
+                                project_root_markers=project_root_markers and dom_depth == 0,
+                                parent_element_stack=tuple(element_stack),
+                                parent_element_keys=tuple(element_keys),
+                                definition_owner_id=definition_owner_id,
+                                caller_fallback=caller_fallback,
+                            )
                         )
                     )
                     continue
                 if type(part) is SimpleRender:
                     validate_flattened_render_identity(part, "simple")
                     output.extend(
-                        transform_parts(
-                            list(part.parts),
-                            placement_route=placement_route,
-                            data_owner_id=data_owner_id,
-                            call_owner_id=call_owner_id,
-                            containing_slot=containing_slot,
-                            project_root_markers=project_root_markers and dom_depth == 0,
-                            parent_element_stack=tuple(element_stack),
-                            parent_element_keys=tuple(element_keys),
-                            projected_data=projected_data,
+                        (
+                            yield from nested(
+                                transform_parts,
+                                list(part.parts),
+                                placement_route=placement_route,
+                                data_owner_id=data_owner_id,
+                                call_owner_id=call_owner_id,
+                                containing_slot=containing_slot,
+                                project_root_markers=project_root_markers and dom_depth == 0,
+                                parent_element_stack=tuple(element_stack),
+                                parent_element_keys=tuple(element_keys),
+                                definition_owner_id=definition_owner_id,
+                                caller_fallback=caller_fallback,
+                            )
                         )
                     )
                     continue
@@ -1987,7 +2461,7 @@ def assemble_typed_render(
                                 call_owner_id,
                             )
                             call_values[wrapper_binding] = wrapper_key
-                        transparent_body = transform_parts(
+                        walker = transform_parts(
                             list(render_part.parts),
                             placement_route=transparent_route,
                             data_owner_id=data_owner_id,
@@ -1996,8 +2470,22 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            projected_data=projected_data,
+                            definition_owner_id=definition_owner_id,
+                            caller_fallback=caller_fallback,
                         )
+                        # Every transparent component passes through here, so this site
+                        # runs the walker without `nested`'s extra frame and call,
+                        # under the same two limits.
+                        if inline_depth < _INLINE_WALK_DEPTH and inline_frames < _INLINE_WALK_FRAMES:
+                            inline_depth += 1
+                            inline_frames += 1
+                            try:
+                                transparent_body = yield from walker
+                            finally:
+                                inline_depth -= 1
+                                inline_frames -= 1
+                        else:
+                            transparent_body = yield from by_driver(walker)
                         if wrapper_key is None:
                             output.extend(transparent_body)
                             continue
@@ -2075,15 +2563,21 @@ def assemble_typed_render(
                             run_member_ids, run_component_tag = taken
                             members: list[tuple[str, str, str, tuple[_FillFragment, ...]]] = []
                         else:
-                            members, run_component_tag = run_members(
-                                run_group,
-                                occurrence_id,
-                                call_owner_id,
-                                data_owner_id,
-                                placement_route,
-                                element_stack,
-                                local_identity_keys,
-                            )
+                            # The run's own frame counts toward the direct
+                            # walks' frame limit; see `nested`.
+                            inline_frames += 1
+                            try:
+                                members, run_component_tag = yield from run_members(
+                                    run_group,
+                                    occurrence_id,
+                                    call_owner_id,
+                                    data_owner_id,
+                                    placement_route,
+                                    element_stack,
+                                    local_identity_keys,
+                                )
+                            finally:
+                                inline_frames -= 1
                         if run_component_tag is None:
                             raise AssertionError("nonempty prepared call run produced no component tag")
                         if not any(member_fills for _, _, _, member_fills in members):
@@ -2164,7 +2658,7 @@ def assemble_typed_render(
                     )
                     placement_key = f"citryPlacement{placement_digest[:24]}"
                     child_id = f"citryOccurrence{_digest(occurrence_id, placement_key)[:24]}"
-                    transform_component(
+                    child_walker = transform_component(
                         render_part,
                         occurrence_id,
                         child_id,
@@ -2173,6 +2667,18 @@ def assemble_typed_render(
                         tuple(element_stack),
                         data_owner_id,
                     )
+                    # The child's own body starts its nested-level count again, and the
+                    # child runs directly while the direct walks stay under
+                    # `_INLINE_WALK_FRAMES`; see `nested`.
+                    saved_counts = inline_depth, inline_frames
+                    try:
+                        if inline_frames < _INLINE_WALK_FRAMES:
+                            inline_depth, inline_frames = 0, inline_frames + 2
+                            yield from child_walker
+                        else:
+                            yield from by_driver(child_walker)
+                    finally:
+                        inline_depth, inline_frames = saved_counts
                     calls = call_values["calls"]
                     if type(calls) is not dict:
                         raise AssertionError("prepared calls container changed type")
@@ -2395,6 +2901,8 @@ def assemble_typed_render(
                     output.append(">")
                     opening_end = output.byte_length
                     fills = tuple(supplied_fills.pop(child_id, ()))
+                    if fills:
+                        refuse_in_caller_fallback("a component with fill content")
                     append_child_fills(
                         output,
                         fills,
@@ -2414,7 +2922,8 @@ def assemble_typed_render(
                     )
                     continue
                 if isinstance(part, PreparedSourceText):
-                    output.append(part.text)
+                    # Static text may meet the next part's `{` across a Citry tag.
+                    output.append(_guard_template_braces(part.text))
                     continue
                 if isinstance(part, PreparedVerbatimHtml):
                     parent_tag = element_stack[-1] if element_stack else None
@@ -2470,9 +2979,9 @@ def assemble_typed_render(
                             data_values[attrs_key] = _json_presence_attribute_map(dict(root_markers))
                             _append_static_root_projection(output, part.html, attrs_key, root_openings)
                         else:
-                            output.append(part.html)
+                            output.append(_guard_template_braces(part.html))
                     else:
-                        output.append(part.html)
+                        output.append(_guard_template_braces(part.html))
                     if structure is not None:
                         for operation, tag in structure.tag_transitions:
                             if operation == "open":
@@ -2587,8 +3096,39 @@ def assemble_typed_render(
                     output.extend(fragment)
                     continue
                 if isinstance(part, PreparedElementOpen):
+                    # Vue reads a `v-pre` element and its contents as written,
+                    # so one that holds only authored markup is left to Vue.
+                    # A component's root element is not left to Vue when Citry adds
+                    # attributes to it (such as the one `css_data()` needs),
+                    # since Citry adds them with a Vue binding that Vue would
+                    # not read under `v-pre`.
+                    takes_root_markers = bool(project_root_markers and root_markers and dom_depth == 0)
+                    v_pre_left_to_vue = (
+                        is_v_pre_element_open(part)
+                        and not takes_root_markers
+                        and _v_pre_left_to_vue(parts, part_index)
+                    )
+                    v_pre_open = is_v_pre_element_open(part) and not v_pre_left_to_vue
+                    under_v_pre = v_pre_left_to_vue or authored_v_pre_depth > 0
+                    if v_pre_open:
+                        # The rest of this branch writes the element without
+                        # `v-pre`; its contents follow as one HTML block.
+                        # Blame the root attributes in the error only when they
+                        # are the only reason Citry compiles this element.
+                        part = _without_v_pre(  # noqa: PLW2901
+                            part,
+                            takes_root_markers=takes_root_markers and _v_pre_left_to_vue(parts, part_index),
+                        )
                     if browser_read_trackers:
-                        note_attribute_reads(data_owner_id, part.tag, part.attrs)
+                        # Under `v-pre` Vue still reads `ref`, but every other
+                        # attribute stays a plain attribute that reads no Vue data.
+                        note_attribute_reads(
+                            data_owner_id,
+                            part.tag,
+                            [attr for attr in part.attrs if attr.name.casefold() == "ref"]
+                            if under_v_pre
+                            else part.attrs,
+                        )
                         note_event_reads(data_owner_id, part.tag, part)
                         for browser_binding in part.browser_bindings:
                             if browser_binding.values_expression is not None and _vue_expression_reads_instance(
@@ -2773,7 +3313,14 @@ def assemble_typed_render(
                         browser_attrs,
                         browser_keys,
                         runtime_events_key,
+                        under_v_pre=under_v_pre,
                     )
+                    if v_pre_left_to_vue and not part.is_void:
+                        # The parts up to this element's close sit under
+                        # `v-pre`; the close branch further down lowers the
+                        # count again.
+                        v_pre_closes.append(_ignored_element_close_index(parts, part_index))
+                        authored_v_pre_depth += 1
                     if not part.is_void:
                         element_stack.append(part.tag.lower())
                         element_keys.append(
@@ -2784,6 +3331,10 @@ def assemble_typed_render(
                         dom_depth += 1
                     if is_ignored_element_open(part) and not part.is_void:
                         ignored_contents_end = append_ignored_contents(output, parts, part_index, data_values)
+                    elif v_pre_open and not part.is_void and part.tag.lower() not in _TEXT_ONLY_TAGS:
+                        ignored_contents_end = append_ignored_contents(
+                            output, parts, part_index, data_values, v_pre=True
+                        )
                     continue
                 if isinstance(part, PreparedDynamicElementOpen):
                     if not is_authenticated_dynamic_element_open(part):
@@ -2901,7 +3452,7 @@ def assemble_typed_render(
                                 has_spread=part.has_spread,
                             )
                         )
-                        if is_native_state_tag(part.tag)
+                        if writes_vue_owned_marker(part.tag, under_v_pre=authored_v_pre_depth > 0)
                         else ""
                     )
                     if spread_index is None:
@@ -2978,6 +3529,9 @@ def assemble_typed_render(
                     continue
                 if isinstance(part, PreparedElementClose):
                     output.append(f"</{part.tag}>")
+                    if v_pre_closes and v_pre_closes[-1] == part_index:
+                        v_pre_closes.pop()
+                        authored_v_pre_depth -= 1
                     if len(element_stack) <= inherited_element_depth or element_stack.pop() != part.tag.lower():
                         raise UnsupportedPreparedView("prepared element stack changed during text capture")
                     element_keys.pop()
@@ -2993,13 +3547,14 @@ def assemble_typed_render(
             if projected_keys is not None and projected_containers is not None:
                 merge_projected_data(
                     data_values,
-                    owner_values(occurrence_id),
+                    owner_values(definition_owner_id),
                     projected_keys,
                     projected_containers,
-                    occurrence_id,
+                    definition_owner_id,
                 )
             active_projected_data_keys.pop()
             active_projected_data_containers.pop()
+            active_definition_owners.pop()
             return output
 
         if isinstance(value, SimpleVueRecord) and value.call_children is not None and value_parts == [value.leaf]:
@@ -3013,10 +3568,19 @@ def assemble_typed_render(
             if len(call_children) != len(call_fragment_source.calls):
                 raise UnsupportedPreparedView("simple='vue' called children do not match the template's calls")
             attach_leaf_data(call_leaf, prepared_values)
-            call_outputs = [
-                transform_parts([child], parent_element_stack=(*physical_parent_stack, *call.element_stack))
-                for call, child in zip(call_fragment_source.calls, call_children, strict=True)
-            ]
+            call_outputs = []
+            for call, child in zip(call_fragment_source.calls, call_children, strict=True):
+                # Each row's template is compiled into this occurrence's
+                # definition, so parts authored elsewhere copy their values here.
+                call_outputs.append(
+                    (
+                        yield from nested(
+                            transform_parts,
+                            [child],
+                            parent_element_stack=(*physical_parent_stack, *call.element_stack),
+                        )
+                    )
+                )
             # The element text names the child's tag and call id, both fixed
             # by the call site and the child's class, so equal text means an
             # equal definition.
@@ -3088,7 +3652,12 @@ def assemble_typed_render(
                     tuple(dict(value) for value in leaf.fragment.runtime_event_sites),
                 )
             else:
-                fragment = transform_parts(
+                # The body is compiled into this occurrence's definition, so a
+                # part authored elsewhere inside it has its values copied here.
+                # The component's own body runs directly: the call site that
+                # assembles this component already counted its frames (see
+                # `nested`).
+                fragment = yield from transform_parts(
                     selected_parts,
                     parent_element_stack=physical_parent_stack,
                 )
@@ -3126,7 +3695,7 @@ def assemble_typed_render(
         raise UnsupportedPreparedView("prepared root occurrence id is not a string")
     if re.fullmatch(r"citryOccurrence[0-9A-Za-z]+", root_id) is None:
         raise UnsupportedPreparedView("prepared root occurrence id is not generated-safe")
-    transform_component(root_record or render, None, root_id, marker_owner_id=root_id)
+    run(transform_component(root_record or render, None, root_id, marker_owner_id=root_id))
     if any(supplied_fills.values()):
         raise UnsupportedPreparedView("selected direct fills were not consumed by their receiver call")
     placements: set[tuple[str, str]] = set()
@@ -3668,7 +4237,9 @@ def _append_static_root_projection(
     replacement = f'v-bind="$citryPrepared.{attrs_key}"'
     cursor = 0
     for opening in openings:
-        output.append(html[cursor : opening.insert_at])
+        # Each piece of authored text may hold a joined `{{` or meet the next
+        # part's `{`; the piece ends inside a tag, so only a `{{` changes.
+        output.append(_guard_template_braces(html[cursor : opening.insert_at]))
         binding_start = output.byte_length - len(html[opening.start_at : opening.insert_at].encode())
         output.append(" ")
         output.append(replacement)
@@ -3682,7 +4253,7 @@ def _append_static_root_projection(
                 "keyBindingKey": None,
             }
         )
-    output.append(html[cursor:])
+    output.append(_guard_template_braces(html[cursor:]))
 
 
 # The writers below produce the Vue source for one kind of template content.
@@ -3724,6 +4295,42 @@ def _component_call_binding_attr(key: str, value: str) -> str:
     return key if value == "" else _authored_vue_attr(key, value)
 
 
+# The built-ins that copy a slot's content in place, by the tag an author writes.
+_BUILTIN_RECEIVER_TAGS = {"Provide": "<c-provide>", "Cache": "<c-cache>", "DynamicElement": "<c-element>"}
+
+
+def describe_inline_scoped_fill(part: DirectProjectionRender, receiver: str) -> str:
+    """Explain why Vue slot props cannot pass through a slot whose content Citry copies in place."""
+    copies = f"{receiver} copies the content of slot '{part.public_name}' into the template around it"
+    if part.fill_source.vue_pattern is None:
+        # The receiver's own `<c-slot>` passes the props, so the fix is in it.
+        names = ", ".join(repr(key) for key, _ in part.vue_props)
+        verb = "has" if len(part.vue_props) == 1 else "have"
+        return (
+            f"{copies}, as components with transparent = True do, so its slot "
+            f"{'prop' if len(part.vue_props) == 1 else 'props'} {names} {verb} no Vue slot to travel through. "
+            f"Remove transparent = True from {receiver}, or pass the value as Python slot data ('c-' attributes "
+            "on '<c-slot>', 'data=\"...\"' on the fill)."
+        )
+    pattern = f"'v-slot=\"{part.fill_source.vue_pattern}\"'"
+    if receiver.startswith("<c-"):
+        # A built-in passes no Vue slot props at all, so the pattern can only go.
+        hint = (
+            " To fill a slot of a Vue component, write '<template #name>' inside '<c-element>'."
+            if receiver == "<c-element>"
+            else ""
+        )
+        return (
+            f"{copies}, so the fill's {pattern} has no Vue slot to read from. {receiver} passes no Vue slot "
+            f"props; remove 'v-slot' from the fill.{hint}"
+        )
+    return (
+        f"{copies}, as components with transparent = True do, so the fill's {pattern} has no Vue slot to "
+        f"read from. Remove 'v-slot' from the fill and read Python slot data with 'data=\"...\"', or remove "
+        f"transparent = True from {receiver}."
+    )
+
+
 def _fill_opening(site_id: str, context_binding_pattern: str = "") -> str:
     """Return the `<template>` that passes one fill to the child's slot outlet."""
     return f"<template v-slot:['{site_id}']{context_binding_pattern}>"
@@ -3757,10 +4364,76 @@ def _append_slot_outlet(
 _IGNORED_CONTENTS_ALLOWED = (
     "Inside a '#c-ignore' element, write plain HTML, '{{ }}' expressions, '<c-if>', '<c-for>', and '<c-raw>'."
 )
+_V_PRE_CONTENTS_ALLOWED = (
+    "Inside a 'v-pre' element, write plain HTML, '{{ }}' expressions, Vue attributes, 'c-' attributes"
+    " other than event handlers, '<c-if>', '<c-for>', '<c-raw>', and 'simple = True' or transparent"
+    " components."
+)
+
+
+def _projected_content(part: DirectProjectionRender, placed_outputs: dict[int, CitryRender]) -> list[RenderPart]:
+    """
+    Return the parts a projection passes to its receiver.
+
+    The output an ``on_render`` hook received and passed to another
+    component is projected with its component's frame still on it (see
+    ``bind_received_output``). That frame is the author's own output, not
+    another occurrence of the author inside its receiver, so the content is
+    the parts inside it.
+    """
+    # A cache replay stores the content inside an extra render with the
+    # same frame, so look through every level that is the author's output
+    # or no component's output.
+    inner = list(part.parts)
+    output: CitryRender | None = None
+    while len(inner) == 1:
+        level = inner[0]
+        # Only a plain render or a decoration can carry the output's frame;
+        # a projection or call record inside is the content itself. The
+        # isinstance check is for the type checker, which the exact type
+        # check does not narrow.
+        if not isinstance(level, CitryRender) or type(level) not in {CitryRender, RenderDecoration}:
+            break
+        frame = level.frame
+        # A transparent component's output carries its own kind of root.
+        is_root = frame.is_component_root or frame.is_transparent_root
+        if is_root and frame.render_id != part.fill_source.lexical_render_id:
+            break
+        if output is None and is_root:
+            output = level
+        if type(level) is RenderDecoration:
+            # An extension decorated the output before passing it on, as the
+            # debug outline does. Keep the decoration around the content,
+            # without the component's frame, as a slot's decoration is.
+            inner = [
+                RenderDecoration(
+                    list(level.parts),
+                    level.context,
+                    opening=level.opening,
+                    closing=level.closing,
+                    omit_around_document=level.omit_around_document,
+                )
+            ]
+            break
+        inner = list(level.parts)
+    if output is None:
+        return list(part.parts)
+    if id(output) in placed_outputs:
+        # The output was rendered once, by the template the hook replaced,
+        # so a second placement would put one output in two places. A page
+        # without Vue raises the same error when it writes the HTML.
+        raise RuntimeError(_REPEATED_RENDER_MESSAGE)
+    placed_outputs[id(output)] = output
+    return inner
 
 
 def _ignored_element_label(part: PreparedElementOpen) -> str:
     """Name a `#c-ignore` element and where the template writes it."""
+    return _directive_element_label(part, "#c-ignore")
+
+
+def _directive_element_label(part: PreparedElementOpen, directive: str) -> str:
+    """Name an element by the `directive` it carries and where the template writes it."""
     template = part.template
     # Spans are byte offsets into the authored template source.
     location = template_location(
@@ -3770,12 +4443,347 @@ def _ignored_element_label(part: PreparedElementOpen) -> str:
         template.source if template is not None else None,
         with_column=True,
     )
-    return f"'#c-ignore' on the <{part.tag}> element {location},"
+    return f"'{directive}' on the <{part.tag}> element {location},"
 
 
-def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int) -> int:
-    """Return the index of the close that ends the `#c-ignore` element opened at ``open_index``."""
+# Elements whose contents are text, where a block of HTML cannot sit.
+_TEXT_ONLY_TAGS = frozenset({"script", "style", "textarea", "title"})
+
+# Elements after whose start tag the HTML parser drops one newline.
+_LEADING_NEWLINE_TAGS = frozenset({"pre", "listing"})
+
+# Table rows and sections, which the HTML parser lets hold only table elements.
+_TABLE_SECTION_TAGS = frozenset({"table", "thead", "tbody", "tfoot", "tr", "colgroup"})
+
+
+def _html_block_placement_problem(tag: str, element_stack: Sequence[str], directive: str) -> tuple[str, str] | None:
+    """
+    Say why a block of HTML cannot sit inside this element, and where to put ``directive`` instead.
+
+    Vue inserts the block between marker comments, and the browser parses it
+    as HTML in an HTML parent. The template parser refuses `#c-ignore` in the
+    same placements (`validate_ignored_element_contents` in the parser
+    crate's `parser.rs`), so the two lists must stay in step. ``element_stack`` holds
+    the lowercased open elements, this one included.
+    """
+    if tag.lower() in _TABLE_SECTION_TAGS:
+        return (
+            "the browser moves a block of HTML out of a table's rows and sections",
+            f"Put '{directive}' on a <td> or <th> inside it, or on a <div> that wraps the <table>.",
+        )
+    if any(open_tag in {"svg", "math"} for open_tag in element_stack):
+        return (
+            "the browser cannot insert SVG or MathML contents as a block of HTML",
+            f"Put '{directive}' on an HTML element that wraps the <svg> or <math> element.",
+        )
+    return None
+
+
+def _component_display_name(citry: Citry) -> Callable[[str], str]:
+    """Return a function that names a component class as a template author writes it."""
+
+    def name(class_id: str) -> str:
+        component = citry.get_component_by_class_id(class_id)
+        # A built-in such as `<c-element>` has an internal class name that
+        # the author never writes, so name it by its tag. The registry
+        # builds that tag the same way, from `name` or else the class name.
+        tag = str(getattr(component, "name", None) or component.__name__).lower()
+        if getattr(component, "_citry_builtin_token", None) is not None and tag in BUILTIN_COMPONENT_NAMES:
+            return f"<c-{tag}>"
+        return str(component.__name__)
+
+    return name
+
+
+def _without_v_pre(part: PreparedElementOpen, *, takes_root_markers: bool = False) -> PreparedElementOpen:
+    """
+    Return the opening without its authored `v-pre`, refusing other Vue attributes on it.
+
+    Citry handles `v-pre` itself: it writes the element's contents as HTML
+    that Vue inserts without compiling (see `append_ignored_contents`), so
+    the element can keep Citry's own bindings, key and events, which Vue
+    would leave unread under `v-pre`. Under `v-pre`, Vue would also write an
+    authored attribute such as `:title` on the element as a plain attribute,
+    which a compiled element cannot do, so that is refused.
+
+    ``takes_root_markers`` is True when Citry compiles the element only
+    because it is a component's root that Citry adds attributes to. The
+    error then names that reason.
+
+    Under `v-pre`, Vue also writes the element itself as a plain element, so
+    a `<slot>`, `<component>`, a Vue built-in, or a component name, which
+    Vue writes with capitals (SVG's camelCase elements excepted), stays a
+    plain element. Citry compiles this element as live
+    Vue, where those tags would run as a slot, a component, or a built-in,
+    so they are refused too.
+    """
+    if _vue_types_tag(part.tag):
+        raise UnsupportedPreparedView(
+            f"{_directive_element_label(part, 'v-pre')} cannot be kept. Under 'v-pre', Vue writes <{part.tag}>"
+            " as a plain element, but this element holds Citry values, so Citry compiles it as live Vue, where"
+            f" <{part.tag}> would run as a slot, a component, or a built-in. Put 'v-pre' on an element around it."
+        )
+    for attr in part.attrs:
+        if attr.origin == "source" and is_vue_directive_name(attr.name) and attr.name.casefold() != "v-pre":
+            # At a component root, moving the attribute inward would put it on
+            # another element, so the advice is to wrap the root instead.
+            if takes_root_markers:
+                advice = (
+                    ", because it is the root element of its component and Citry adds attributes to it, such as"
+                    f" the one 'css_data()' needs. Wrap the 'v-pre' element in another element, or remove"
+                    f" '{attr.name}'."
+                )
+            else:
+                advice = ". Put it on an element inside the 'v-pre' element."
+            raise UnsupportedPreparedView(
+                f"{_directive_element_label(part, 'v-pre')} also has the Vue attribute '{attr.name}'. Under"
+                f" 'v-pre', Vue would write it as a plain attribute, but Citry compiles this element{advice}"
+            )
+    return replace(
+        part,
+        attrs=tuple(attr for attr in part.attrs if not (attr.origin == "source" and attr.name.casefold() == "v-pre")),
+    )
+
+
+# The tags Vue gives a meaning of its own: a slot outlet, a dynamic component,
+# and the built-in components, in both the spellings a template may use.
+_VUE_TYPED_TAGS = frozenset(
+    {
+        "slot",
+        "component",
+        "teleport",
+        "keep-alive",
+        "keepalive",
+        "transition",
+        "transition-group",
+        "transitiongroup",
+        "suspense",
+    }
+)
+
+
+# SVG's camelCase element names (Vue's `isSVGTag` list). Vue reads these as
+# native elements, so their capital letters do not make them components.
+_SVG_CAMEL_CASE_TAGS = frozenset(
+    {
+        "altGlyph",
+        "altGlyphDef",
+        "altGlyphItem",
+        "animateColor",
+        "animateMotion",
+        "animateTransform",
+        "clipPath",
+        "feBlend",
+        "feColorMatrix",
+        "feComponentTransfer",
+        "feComposite",
+        "feConvolveMatrix",
+        "feDiffuseLighting",
+        "feDisplacementMap",
+        "feDistantLight",
+        "feDropShadow",
+        "feFlood",
+        "feFuncA",
+        "feFuncB",
+        "feFuncG",
+        "feFuncR",
+        "feGaussianBlur",
+        "feImage",
+        "feMerge",
+        "feMergeNode",
+        "feMorphology",
+        "feOffset",
+        "fePointLight",
+        "feSpecularLighting",
+        "feSpotLight",
+        "feTile",
+        "feTurbulence",
+        "foreignObject",
+        "glyphRef",
+        "linearGradient",
+        "radialGradient",
+        "textPath",
+    }
+)
+
+
+def _vue_types_tag(tag: str) -> bool:
+    """Return whether Vue reads ``tag`` as more than a plain element when it compiles it outside `v-pre`."""
+    if tag.casefold() in _VUE_TYPED_TAGS:
+        return True
+    # A capital letter makes Vue resolve the tag as a component, except in
+    # SVG's camelCase element names; HTML tags and custom elements are
+    # lowercase.
+    return tag != tag.lower() and tag not in _SVG_CAMEL_CASE_TAGS
+
+
+def _v_pre_left_to_vue(parts: Sequence[RenderPart], open_index: int) -> bool:
+    """
+    Return whether the `v-pre` element opened at ``open_index`` holds only authored markup.
+
+    Vue then reads the element and its contents as written, as it does on a
+    page without Citry, so Citry writes them unchanged with `v-pre` kept.
+    Anything Citry produces (a value, a `c-` binding, `#c-key`, a Citry
+    tag) needs Citry's own handling instead.
+
+    `citry check` makes this decision again from the template's nodes
+    (`_v_pre_left_to_vue` in `static_template.py`, whose module docstring
+    lists where the two differ), so a change here needs the same change
+    there; the parity tests in `test_vue_static_template.py` compare the two.
+    """
     opening = cast("PreparedElementOpen", parts[open_index])
+    if not _authored_element_only(opening):
+        return False
+    if opening.is_void:
+        return True
+    try:
+        close_index = _ignored_element_close_index(parts, open_index)
+    except UnsupportedPreparedView:
+        # The general path reports the missing close with its own message.
+        return False
+    return _authored_markup_only(parts[open_index + 1 : close_index])
+
+
+def _authored_element_only(part: PreparedElementOpen) -> bool:
+    """Return whether an opening carries only attributes written in the template, and no Citry bindings."""
+    return (
+        all(attr.origin == "source" for attr in part.attrs)
+        and not part.element_metadata
+        and not part.has_spread
+        and not part.event_bindings
+        and not part.poll_bindings
+        and not part.control_bindings
+        and not part.browser_bindings
+        and not part.runtime_event_bindings
+        and not part.runtime_poll_bindings
+        and not part.runtime_events_candidate
+    )
+
+
+def _authored_markup_only(parts: Sequence[RenderPart]) -> bool:
+    """Return whether these parts are markup written in the template, which Vue can read as written."""
+    # The render ids of the transparent components entered so far. Their
+    # `<c-slot />` outlets show content written in these parts, so that
+    # content is read too. Like `_ignored_contents_html`, this keeps one set
+    # for the whole walk, so content that a hook moved from one of these
+    # components to a later one is still read as written here.
+    receivers: set[str] = set()
+    # A stack of part iterators keeps the number of Python frames the same
+    # however deep the template nests.
+    pending = [iter(parts)]
+    while pending:
+        part = next(pending[-1], _END_OF_PARTS)
+        if part is _END_OF_PARTS:
+            pending.pop()
+            continue
+        if (type(part) is str and part == "") or isinstance(
+            part, (PreparedSourceText, PreparedStaticRun, PreparedElementClose)
+        ):
+            continue
+        if isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
+            # `<c-js />` and `<c-css />` mark where Citry writes the page's
+            # script and style tags, and write nothing in a component.
+            continue
+        if isinstance(part, PreparedElementOpen) and _authored_element_only(part):
+            continue
+        if (
+            type(part) is CitryRender
+            and not part.frame.is_component_root
+            and (part.frame.is_transparent_root or part.frame.class_id is None)
+        ):
+            # A transparent component, such as `<c-provide>`, that renders
+            # only written markup adds nothing for Vue to read. Its body
+            # renders under no component class. A `<c-if>` or `<c-for>` body
+            # renders under its component's class and takes Citry's path,
+            # since the branch or the rows it picks are data.
+            prepared = part.frame.prepared_occurrence if part.frame.is_transparent_root else None
+            if prepared is not None and prepared.call is not None and prepared.call.explicit_key is not None:
+                # A `#c-key` wraps the body in a keyed Vue `<template>`, which
+                # Vue would not read under `v-pre`, so Citry writes the `v-pre`
+                # element's contents as one block of HTML.
+                return False
+            if part.frame.is_transparent_root and part.frame.render_id is not None:
+                receivers.add(part.frame.render_id)
+            pending.append(iter(part.parts))
+            continue
+        if isinstance(part, DirectProjectionRender) and part.receiver_render_id in receivers:
+            # An outlet of a transparent component entered earlier in this
+            # walk shows content written here, so read that content too.
+            pending.append(iter(part.parts))
+            continue
+        return False
+    return True
+
+
+def _authored_vue_syntax(parts: Sequence[RenderPart], component_name: Callable[[str], str]) -> str | None:
+    """
+    Name the first Vue syntax in these parts that Vue would read once Citry compiles them, or return None.
+
+    This checks the contents of a `v-pre` element where no block of HTML can
+    sit. A nested `v-pre` element is skipped, since Citry handles it on its
+    own. A child component counts as Vue syntax, because Vue would compile
+    the slot content this template gives it. A `<c-slot />` outlet holds
+    content another template wrote, so it is skipped, except the outlet of a
+    transparent or `simple = True` component written inside these parts.
+    """
+    # The same import cycle as in `_ignored_contents_html` keeps this lazy.
+    from citry._simple_runtime import SimpleRender  # noqa: PLC0415
+
+    # The render ids of the transparent and `simple = True` components
+    # entered so far, whose outlets show content written here. As in
+    # `_authored_markup_only`, one set covers the whole walk.
+    receivers: set[str] = set()
+    # Each stack entry is a part list and the index of its next part. A
+    # stack keeps the number of Python frames the same however deep the
+    # template nests, and an index lets a nested `v-pre` element be skipped
+    # to its close.
+    pending: list[tuple[Sequence[RenderPart], int]] = [(parts, 0)]
+    while pending:
+        current, index = pending[-1]
+        if index >= len(current):
+            pending.pop()
+            continue
+        part = current[index]
+        # Move past this part first, so the walk resumes after it once a
+        # body pushed below is done.
+        pending[-1] = (current, index + 1)
+        if isinstance(part, PreparedElementOpen):
+            if is_v_pre_element_open(part) and not part.is_void:
+                pending[-1] = (current, _ignored_element_close_index(current, index) + 1)
+                continue
+            vue_attr = next(
+                (attr.name for attr in part.attrs if attr.origin == "source" and is_vue_directive_name(attr.name)),
+                None,
+            )
+            if vue_attr is not None:
+                return f"the Vue attribute '{vue_attr}' on <{part.tag}>"
+        elif isinstance(part, PreparedDynamicElementOpen):
+            vue_attr = next((attr.name for attr in part.authored_attrs if is_vue_directive_name(attr.name)), None)
+            if vue_attr is not None:
+                return f"the Vue attribute '{vue_attr}' on <{part.tag}>"
+        elif (type(part) is CitryRender and not part.frame.is_component_root) or type(part) is SimpleRender:
+            # A transparent or `simple = True` component writes its body
+            # here, and its `<c-slot />` outlets hold content written here.
+            if (part.frame.is_transparent_root or type(part) is SimpleRender) and part.frame.render_id is not None:
+                receivers.add(part.frame.render_id)
+            pending.append((part.parts, 0))
+        elif isinstance(part, CitryRender) and part.frame.class_id and not isinstance(part, DirectProjectionRender):
+            # A child component's slot content is written in this template
+            # and Vue would compile it there, so a child is refused here, as
+            # inside the block.
+            return f"the component {component_name(part.frame.class_id)}"
+        elif isinstance(part, DirectProjectionRender) and part.receiver_render_id in receivers:
+            # An outlet of a transparent or `simple = True` component entered
+            # earlier in this walk shows content written here, so check that
+            # content too.
+            pending.append((part.parts, 0))
+    return None
+
+
+def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int, label: str | None = None) -> int:
+    """Return the index of the close that ends the `#c-ignore` or `v-pre` element opened at ``open_index``."""
+    opening = cast("PreparedElementOpen", parts[open_index])
+    label = _ignored_element_label(opening) if label is None else label
     depth = 0
     for index in range(open_index + 1, len(parts)):
         part = parts[index]
@@ -3786,9 +4794,7 @@ def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int) -
             # `<ul>` ... `</ul>` around a loop, so follow its depth change.
             if part.root_structure is None:
                 if "<" in part.html:
-                    raise UnsupportedPreparedView(
-                        f"{_ignored_element_label(opening)} holds markup whose structure is unknown"
-                    )
+                    raise UnsupportedPreparedView(f"{label} holds markup whose structure is unknown")
             else:
                 depth += part.root_structure.final_depth_delta
         elif isinstance(part, (PreparedElementClose, PreparedDynamicElementClose)):
@@ -3797,34 +4803,71 @@ def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int) -
                     break
                 return index
             depth -= 1
-    raise UnsupportedPreparedView(f"{_ignored_element_label(opening)} has no matching close tag in the same template")
+    raise UnsupportedPreparedView(f"{label} has no matching close tag in the same template")
+
+
+# Marks the end of a part iterator in the stack walks of `_authored_markup_only`
+# and `_ignored_contents_html`.
+_END_OF_PARTS = object()
+
+
+def _resume(walker: Generator[Call, Any, _R]) -> Generator[Call, Any, _R]:
+    """Run an already created walker as a nested walk of the driver."""
+    return (yield from walker)
 
 
 def _ignored_contents_html(
     opening: PreparedElementOpen,
     parts: Sequence[RenderPart],
     component_name: Callable[[str], str],
+    *,
+    label: str | None = None,
+    allowed: str = _IGNORED_CONTENTS_ALLOWED,
+    keep_vue_attributes: bool = False,
 ) -> str:
     """
-    Write a `#c-ignore` element's contents as HTML the browser keeps.
+    Write a `#c-ignore` or `v-pre` element's contents as the HTML the server renders.
 
-    The contents are rendered once, like the static serializer writes them.
-    Anything that needs Vue to render or run is rejected, because the browser
-    never builds Vue nodes for these contents. The template parser already
-    rejects what the template spells directly; this check catches what a
-    Python value or a `c-bind` spread brings in at render time.
+    The contents are written like the static serializer writes them, and
+    Vue inserts them as HTML without building nodes for them, so anything
+    that needs Vue to render or run is rejected. The template parser already
+    rejects what a `#c-ignore` template spells directly; this check catches
+    what a Python value or a `c-bind` spread brings in at render time. Inside
+    `v-pre`, Vue keeps an authored Vue attribute such as `:title` as a plain
+    attribute, as the server writes it, so `keep_vue_attributes` allows those.
     """
-    label = _ignored_element_label(opening)
+    from citry._simple_runtime import SimpleRender  # noqa: PLC0415
+
+    label = _ignored_element_label(opening) if label is None else label
     out: list[str] = []
+
+    # `v-pre` tells Vue not to compile the contents; `#c-ignore` keeps them
+    # as first rendered. Either way Vue never builds nodes for them.
+    kept = (
+        "tells Vue not to compile the element's contents"
+        if keep_vue_attributes
+        else "keeps the element's contents exactly as the server first rendered them"
+    )
 
     def reject(what: str) -> UnsupportedPreparedView:
         return UnsupportedPreparedView(
-            f"{label} keeps the element's contents exactly as the server first rendered them, so they cannot"
-            f" hold {what}. {_IGNORED_CONTENTS_ALLOWED} Move it outside the <{opening.tag}> element."
+            f"{label} {kept}, so they cannot hold {what}. {allowed} Move it outside the <{opening.tag}> element."
         )
 
+    # The transparent components being written. Their own `<c-slot />`
+    # outlets hold content written inside these contents, so it is written too.
+    transparent_receivers: set[str] = set()
+
     def visit(items: Sequence[RenderPart]) -> None:
-        for part in items:
+        # Nested bodies are walked with a stack of part iterators rather than
+        # a call per level, so this walk uses the same number of Python
+        # frames however deep the template nests.
+        pending = [iter(items)]
+        while pending:
+            part = next(pending[-1], _END_OF_PARTS)
+            if part is _END_OF_PARTS:
+                pending.pop()
+                continue
             if type(part) is str and part == "":
                 continue
             if isinstance(part, PreparedSourceText):
@@ -3833,7 +4876,8 @@ def _ignored_contents_html(
                 out.append(part.html)
             elif isinstance(part, PreparedTextValue):
                 if part.browser_binding is not None:
-                    raise reject(f"the browser value {part.browser_binding.helper}()")
+                    # The helper is an internal name, so describe what it does.
+                    raise reject("a value that the browser fills in")
                 out.append(escape_to_str(part.value))
             elif isinstance(part, PreparedTrustedHtmlValue):
                 out.append(part.html)
@@ -3842,8 +4886,15 @@ def _ignored_contents_html(
             elif isinstance(part, PreparedVerbatimHtml):
                 out.append(part.html)
             elif isinstance(part, PreparedElementOpen):
+                if keep_vue_attributes and is_ignored_element_open(part):
+                    # The `v-pre` block is replaced on a later render, which
+                    # would replace what '#c-ignore' must keep.
+                    raise reject(f"a '#c-ignore' element (<{part.tag}>)")
                 if (
-                    any(attr.origin == "source" and is_vue_directive_name(attr.name) for attr in part.attrs)
+                    (
+                        not keep_vue_attributes
+                        and any(attr.origin == "source" and is_vue_directive_name(attr.name) for attr in part.attrs)
+                    )
                     or part.event_bindings
                     or part.poll_bindings
                     or part.control_bindings
@@ -3853,7 +4904,11 @@ def _ignored_contents_html(
                 ):
                     # A `c-bind` spread in an Events component only may add a
                     # server event; the resolved bindings above say whether it did.
-                    raise reject(f"a Vue or Events binding on <{part.tag}>")
+                    raise reject(
+                        f"an Events or browser binding on <{part.tag}>"
+                        if keep_vue_attributes
+                        else f"a Vue or Events binding on <{part.tag}>"
+                    )
                 rendered = format_prepared_element_attrs(part)
                 suffix = "" if not rendered else " " + " ".join(rendered)
                 ending = "/>" if part.is_void and part.is_self_closing else ">"
@@ -3861,14 +4916,50 @@ def _ignored_contents_html(
             elif isinstance(part, (PreparedElementClose, PreparedDynamicElementClose)):
                 out.append(f"</{part.tag}>")
             elif isinstance(part, PreparedDynamicElementOpen):
+                if keep_vue_attributes and (
+                    part.event_bindings
+                    or part.poll_bindings
+                    or part.control_bindings
+                    or part.runtime_event_bindings
+                    or part.runtime_poll_bindings
+                ):
+                    raise reject(f"an Events binding on <{part.tag}>")
+                # Under `v-pre`, Vue writes the attributes the template gives
+                # the element, such as `:x`, as plain attributes.
+                written = [str(attr.value) for attr in part.authored_attrs] if keep_vue_attributes else []
                 formatted = str(format_attrs(part.attrs))
+                written.extend([formatted] if formatted else [])
                 # Match the page serializer: a selected void tag stays compact.
                 ending = "/>" if part.is_void else ">"
-                out.append(f"<{part.tag}{' ' + formatted if formatted else ''}{ending}")
-            elif type(part) is CitryRender and not part.frame.is_component_root and not part.frame.is_transparent_root:
+                out.append(f"<{part.tag}{' ' + ' '.join(written) if written else ''}{ending}")
+            elif (
+                type(part) is CitryRender
+                and not part.frame.is_component_root
+                and (keep_vue_attributes or not part.frame.is_transparent_root)
+            ):
                 # A `<c-if>` or `<c-for>` body renders as a nested part of the
-                # same component, so its markup belongs to these contents.
-                visit(part.parts)
+                # same component, so its markup belongs to these contents. So
+                # does a transparent component's body, such as `<c-element>`,
+                # which the template parser refuses inside `#c-ignore`.
+                if part.frame.is_transparent_root and part.frame.render_id is not None:
+                    transparent_receivers.add(part.frame.render_id)
+                pending.append(iter(part.parts))
+            elif isinstance(part, DirectProjectionRender) and part.receiver_render_id in transparent_receivers:
+                pending.append(iter(part.parts))
+            elif isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
+                # `<c-js />` and `<c-css />` write nothing inside a component.
+                continue
+            elif isinstance(part, DirectProjectionRender):
+                # Checked before the component case below, which a slot
+                # outlet would otherwise reach under its receiver's name.
+                raise reject("a <c-slot> outlet")
+            elif isinstance(part, SimpleRender):
+                # A `simple = True` component writes its body in place, so
+                # its markup belongs to these contents too, and so does the
+                # content its `<c-slot />` outlets show.
+                if part.frame.render_id is not None:
+                    transparent_receivers.add(part.frame.render_id)
+                pending.append(iter(part.parts))
             elif isinstance(part, CitryRender) and part.frame.class_id:
                 raise reject(f"the component {component_name(part.frame.class_id)}")
             else:
@@ -3906,6 +4997,8 @@ def _append_element_open(
     browser_attrs: list[str] | None = None,
     browser_binding_keys: list[str] | None = None,
     runtime_events_key: str | None = None,
+    *,
+    under_v_pre: bool = False,
 ) -> None:
     start = output.byte_length
     attrs = list(part.authored_attrs)
@@ -3914,7 +5007,7 @@ def _append_element_open(
         vue_owned_native_marker(
             vue_owned_native_properties(part.tag, part.attrs, part.data_attrs, has_spread=part.has_spread)
         )
-        if is_native_state_tag(part.tag)
+        if writes_vue_owned_marker(part.tag, under_v_pre=under_v_pre)
         else ""
     )
     if native_marker:

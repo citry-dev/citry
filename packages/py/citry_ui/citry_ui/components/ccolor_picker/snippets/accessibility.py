@@ -11,7 +11,14 @@ class AccessibleColorPicker(Component):
     def template_data(self, _kwargs, _slots):
         return {"swatches": [CColorSwatch("#005ea8", "Accessible blue"), CColorSwatch("#00703c", "Accessible green")]}
 
-    template = '<c-CColorPicker label="Published theme color" value="#005ea8" c-swatches="swatches" readonly />'
+    template = """
+      <c-CColorPicker
+        label="Published theme color"
+        value="#005ea8"
+        c-swatches="swatches"
+        readonly
+      />
+    """
 
 
 preview = AccessibleColorPicker()

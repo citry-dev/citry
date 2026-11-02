@@ -13,7 +13,8 @@ class InfiniteScrollServerAction(Component):
           action_name="result_action"
           action_value="next:2"
           c-auto="False"
-          :loading="loading" :hasMore="hasMore"
+          :loading="loading"
+          :hasMore="hasMore"
         >
           <ol>
             <li>Camera body comparison</li>

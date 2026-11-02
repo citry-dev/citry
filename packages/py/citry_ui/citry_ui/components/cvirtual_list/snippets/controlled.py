@@ -17,7 +17,9 @@ class VirtualWindowControlled(Component):
           c-total_count="12"
           c-item_size="56"
           c-viewport_size="280"
-          :itemSize="itemSize" :overscan="overscan" :onRangeChange="(detail)=>last=`${detail.reason}: ${detail.startIndex}-${detail.endIndex - 1}`"
+          :itemSize="itemSize"
+          :overscan="overscan"
+          :onRangeChange="(detail)=>last=`${detail.reason}: ${detail.startIndex}-${detail.endIndex - 1}`"
         >
           <c-for each="index in indexes">
             <c-CVirtualListItem #c-key="f'controlled-{index}'" c-item_key="f'controlled-{index}'">Record {{ index + 1 }}</c-CVirtualListItem>

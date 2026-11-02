@@ -24,7 +24,11 @@ class NativeTextareaText(Component):
         <c-CField>
           <c-fill name="label">Preserved blank lines</c-fill>
           <c-fill name="default">
-            <c-CTextarea name="preserved" c-value="preserved_text" rows="6" />
+            <c-CTextarea
+              name="preserved"
+              c-value="preserved_text"
+              rows="6"
+            />
           </c-fill>
         </c-CField>
         <c-CField>

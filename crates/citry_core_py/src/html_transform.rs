@@ -1,4 +1,11 @@
 /// Python interface for the citry_html_transform crate.
+// Each entry point below that parses HTML runs its Rust work through the
+// template parser's stack guard first, so the work's frames run on a stack
+// segment taken from the heap when Python has left little stack. The work
+// reads only Rust data. All of them use the variant that skips the guard on
+// wasm32, because several run on every render, where it would allocate on
+// every call.
+use citry_template_parser::stack::with_enough_stack_where_measurable;
 use std::collections::HashSet;
 
 use pyo3::exceptions::PyValueError;
@@ -17,8 +24,9 @@ use citry_html_transform::{
 };
 use citry_html_transform::{
     JAVASCRIPT_MIME_TYPES, JavascriptMode, OutputPolicyOptions, PolicyEvent, PolicyPass,
-    check_output_html as check_output_html_rust, is_activation_attribute, is_javascript_url,
-    is_native_event_attribute, is_url_attribute,
+    check_output_html as check_output_html_rust,
+    csp_attribute_problem as csp_attribute_problem_rust, is_activation_attribute,
+    is_javascript_url, is_native_event_attribute, is_url_attribute,
     script_type_is_executable as script_type_is_executable_rust,
 };
 
@@ -36,7 +44,9 @@ pub fn browser_fragment_matches_elements(
             attributes,
         })
         .collect::<Vec<_>>();
-    browser_fragment_matches_elements_rust(html, context, &expected)
+    with_enough_stack_where_measurable(|| {
+        browser_fragment_matches_elements_rust(html, context, &expected)
+    })
 }
 
 /// Check that the browser builds the expected nodes from an HTML fragment.
@@ -99,9 +109,9 @@ pub fn browser_fragment_matches_nodes(
             Ok(event)
         })
         .collect::<PyResult<Vec<_>>>()?;
-    Ok(browser_fragment_matches_nodes_rust(
-        html, context, &expected,
-    ))
+    Ok(with_enough_stack_where_measurable(|| {
+        browser_fragment_matches_nodes_rust(html, context, &expected)
+    }))
 }
 
 /// Count the top-level nodes (elements, texts and comments) the browser
@@ -112,17 +122,18 @@ pub fn browser_fragment_matches_nodes(
 /// block's nodes when the server already wrote them into the page.
 #[pyfunction]
 pub fn static_html_node_count(html: &str) -> usize {
-    static_html_node_count_rust(html)
+    with_enough_stack_where_measurable(|| static_html_node_count_rust(html))
 }
 
 #[pyfunction]
 pub fn validate_html_fragment_boundary(html: &str) -> PyResult<()> {
-    validate_html_fragment_boundary_rust(html).map_err(PyValueError::new_err)
+    with_enough_stack_where_measurable(|| validate_html_fragment_boundary_rust(html))
+        .map_err(PyValueError::new_err)
 }
 
 #[pyfunction]
 pub fn scan_output_html(py: Python, html: &str) -> PyResult<Py<PyAny>> {
-    let output = scan_output_html_rust(html)
+    let output = with_enough_stack_where_measurable(|| scan_output_html_rust(html))
         .into_iter()
         .map(|tag| {
             let item = PyDict::new(py);
@@ -207,7 +218,9 @@ pub fn mark_html(
     root_attributes: Vec<String>,
     placeholder_attr: &str,
 ) -> PyResult<Py<PyTuple>> {
-    let result = mark_html_rust(html, &root_attributes, placeholder_attr);
+    let result = with_enough_stack_where_measurable(|| {
+        mark_html_rust(html, &root_attributes, placeholder_attr)
+    });
 
     let segments = result.segments;
     let placeholders: Vec<(String, String, Vec<String>)> = result
@@ -292,7 +305,7 @@ pub fn transform_html(
         track_added_attributes_for_tags_with_this_attribute,
     );
 
-    match transform_html_rust(&config, html) {
+    match with_enough_stack_where_measurable(|| transform_html_rust(&config, html)) {
         Ok((html, captured)) => {
             // Convert captured attributes to a Python dictionary
             let captured_dict = PyDict::new(py);
@@ -370,8 +383,10 @@ pub fn check_output_html(
     // A panic becomes an ordinary ValueError, so the validators report the
     // page as unreadable (and warn modes still serve it) instead of
     // `serialize()` aborting with PyO3's BaseException-derived error.
-    let report = catch_panic(|| check_output_html_rust(html, &options))
-        .map_err(|detail| PyValueError::new_err(format!("citry output check failed: {detail}")))?;
+    let report = catch_panic(|| {
+        with_enough_stack_where_measurable(|| check_output_html_rust(html, &options))
+    })
+    .map_err(|detail| PyValueError::new_err(format!("citry output check failed: {detail}")))?;
     let events = PyList::empty(py);
     for event in report.events {
         let item = match event {
@@ -447,6 +462,32 @@ pub fn classify_dependency_attribute(
         flags |= JAVASCRIPT_URL;
     }
     flags
+}
+
+/// What a strict Content Security Policy would block in one attribute
+/// written literally in a template, by the rules `_check_output_html` uses.
+///
+/// `raw_value` is the value as written, with its character references still
+/// in it, or `None` for an attribute written without a value. Returns
+/// `"native-event"` for an inline event handler such as `onclick`,
+/// `"javascript-url"` for a `javascript:` URL in a URL attribute, or `None`.
+/// A lone surrogate in any argument reads as U+FFFD. It never makes a match
+/// on its own, but the rest of the text is still checked, so `on\ud800` is
+/// an event handler. Unlike `_check_output_html`, this never raises for one.
+#[pyfunction(name = "_csp_attribute_problem")]
+#[pyo3(signature = (tag, name, raw_value))]
+pub fn csp_attribute_problem(
+    tag: &Bound<'_, PyString>,
+    name: &Bound<'_, PyString>,
+    raw_value: Option<&Bound<'_, PyString>>,
+) -> Option<&'static str> {
+    let raw_value = raw_value.map(|value| value.to_string_lossy());
+    csp_attribute_problem_rust(
+        &tag.to_string_lossy(),
+        &name.to_string_lossy(),
+        raw_value.as_deref(),
+    )
+    .map(|problem| problem.code())
 }
 
 /// Whether a URL starts with `javascript:`, read without entity decoding.

@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -14,7 +12,11 @@ class ConfigureDialog(Component):
         <p>Observation archive</p>
         <h2>Configure the Dialog</h2>
         <c-CDialog
-          :size="size" :scroll="scroll" :dismissible="dismissible" :closeOnEscape="close_on_escape" :closeOnOutside="close_on_outside"
+          :size="size"
+          :scroll="scroll"
+          :dismissible="dismissible"
+          :closeOnEscape="close_on_escape"
+          :closeOnOutside="close_on_outside"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">

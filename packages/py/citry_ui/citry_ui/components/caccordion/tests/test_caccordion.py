@@ -110,6 +110,14 @@ def test_accordion_renders_native_anatomy_and_conditional_region_pair():
     assert "aria-labelledby=" not in neutral
 
 
+@pytest.mark.parametrize("level_input", ['heading_level="4"', 'c-heading_level="4"'])
+def test_accordion_accepts_the_heading_level_as_text_or_number(level_input: str):
+    # A template attribute passes text and a `c-` attribute passes the number;
+    # both must name the same heading element.
+    html = _render_template(_basic_template(f'value="canopy" {level_input}'))
+    assert html.count("<h4") == 2
+
+
 def test_multiple_mode_normalizes_by_item_membership_and_accepts_disabled_open_item():
     html = _render_template(
         _basic_template(
@@ -129,6 +137,11 @@ def test_multiple_mode_normalizes_by_item_membership_and_accepts_disabled_open_i
         ('multiple c-collapsible="False"', "must remain true"),
         ('variant="loud"', "variant must be one of"),
         ('heading_level="1"', "heading_level must be one of"),
+        ('heading_level="7"', "heading_level must be one of"),
+        ('c-heading_level="True"', "heading_level must be one of"),
+        # Only the exact numbers and their text name a level.
+        ('heading_level="02"', "heading_level must be one of"),
+        ('c-heading_level="2.0"', "heading_level must be one of"),
     ],
 )
 def test_accordion_rejects_invalid_root_configuration(root_inputs: str, message: str):
@@ -178,6 +191,23 @@ def test_accordion_rejects_duplicate_items_and_stray_direct_output():
               </c-CAccordion>
             """
         )
+
+
+def test_a_self_closed_element_in_an_item_renders_like_its_open_form():
+    # A template `<span/>` is written as `<span></span>`, so the accordion's
+    # check of its direct content reads it the same way.
+    for title in ("Canopy <span/>", "Canopy <span></span>"):
+        html = _render_template(
+            f"""
+              <c-CAccordion>
+                <c-CAccordionItem value="canopy">
+                  <c-fill name="title">{title}</c-fill>
+                  <c-fill name="default">High leaves</c-fill>
+                </c-CAccordionItem>
+              </c-CAccordion>
+            """
+        )
+        assert "Canopy <span></span>" in html, title
 
 
 def test_transparent_component_may_produce_direct_items_without_a_wrapper():

@@ -140,7 +140,7 @@ def _embedded_corpus_results(plan, raw_results) -> list[EmbeddedFormatResult]:
 
 
 def test_python_expression_provider_identity_is_pinned() -> None:
-    assert python_expression_provider() == "ruff@0.16.6+22f65a2ab5"
+    assert python_expression_provider() == "ruff@0.17.3+ba65abf8ba"
 
 
 def test_format_error_preserves_structured_syntax_details() -> None:
@@ -182,7 +182,9 @@ def test_non_string_input_remains_a_type_error() -> None:
 
 
 def test_embedded_plan_and_outcome_are_typed_and_immutable() -> None:
-    plan = prepare_embedded_format("<main><script>const  answer=41+1;</script><style>.card{color:red}</style></main>")
+    plan = prepare_embedded_format(
+        "<main> <script>const  answer=41+1;</script> <style>.card{color:red}</style> </main>",
+    )
 
     assert plan.formatted_source.startswith("<main>\n")
     assert [request.language for request in plan.requests] == [

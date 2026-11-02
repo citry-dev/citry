@@ -42,7 +42,7 @@ directly.
 2. **Rendering core first, node implementations after.** The node
    implementations (ExprNode, IfNode, etc.) depend on knowing what
    the render output looks like. That answer is not "just a string" -
-   features like `Const()` marking, expression caching, and
+   features like `Const()` marking and
    `CitryElement` (see DJC issues) mean the render pipeline shapes
    what nodes produce. So: establish the rendering pipeline, then
    implement nodes to fit it.
@@ -95,7 +95,7 @@ designed. Grouped by which part of the architecture they impact.
 |---|---|---|
 | [#1650](https://github.com/django-components/django-components/issues/1650) | `Component()` returns a `CitryElement`, not a string | Three-phase pipeline: `Component()` composes a `CitryElement`; `.render()` produces a live `CitryRender` (rendered parts + collected metadata); `.serialize()` produces the HTML string. JS/CSS dependencies travel as structured data. Cross-request output caching stores a detached `CachedRenderArtifact` and replays it with current-call identity. See [`component_rendering.md`](component_rendering.md) and [`caching.md`](caching.md). |
 | [#1083](https://github.com/django-components/django-components/issues/1083) | `Const()` marker for 50% perf gain | Nodes detect constant inputs and replace themselves with static text. Rendering context must track constness. |
-| [#1473](https://github.com/django-components/django-components/issues/1473) | Expression caching | Variable tracking (already in AST) enables memoizing expression results across renders when inputs are unchanged. Tracked in citry [#18](https://github.com/citry-dev/citry/issues/18). |
+| [#1473](https://github.com/django-components/django-components/issues/1473) | Expression caching | Partly covered by `Const` precomputing, `pure = True` within one page, and output caching (`Component.Cache`, `<c-cache>`); Citry does not store expression results between renders, and citry [#20](https://github.com/citry-dev/citry/issues/20) tracks values derived from `Const` inputs. |
 | [#1337](https://github.com/django-components/django-components/issues/1337) | Lazy/streaming rendering | Rendering may be deferred; components produce futures or generators instead of synchronous strings. Tracked in citry [#19](https://github.com/citry-dev/citry/issues/19). |
 | [#1326](https://github.com/django-components/django-components/issues/1326) | Avoid double-parsing component body | Template parsing should be cached at the class level, not re-parsed per render. |
 
@@ -116,8 +116,7 @@ design (and its many edge cases) is captured separately in
 body cache keyed by const signature) and the *precompute pass* are built: precomputing
 pre-computes const expressions and attributes, drops untaken `<c-if>`
 branches, and unrolls small const `<c-for>` loops. Phase-2 taint tracking is
-parked (citry [#20](https://github.com/citry-dev/citry/issues/20)), as is
-across-render expression caching (citry [#18](https://github.com/citry-dev/citry/issues/18)).
+parked (citry [#20](https://github.com/citry-dev/citry/issues/20)).
 
 ### Component class
 

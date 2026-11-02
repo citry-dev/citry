@@ -17,16 +17,11 @@ from email.parser import BytesParser
 from pathlib import Path
 from typing import Any
 
+import tomllib
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name, parse_wheel_filename
 from packaging.version import Version
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10 is part of the package test matrix.
-    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
-
 
 from scripts.verify_playground_release import (
     PlaygroundReleaseError,

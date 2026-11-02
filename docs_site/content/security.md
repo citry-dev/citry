@@ -116,6 +116,52 @@ framework's own request object.
 
 [Event routes](/events/routes/) covers the HTTP side of event calls.
 
+## Check redirect URLs { #check-redirect-urls }
+
+A handler that redirects to a URL from the request, such as a `next`
+parameter after a login, can send the visitor to another site if someone
+puts that site's address in the link. Check the URL before you return
+[`actions.Redirect`](/events/actions/#redirect-to-a-page), and redirect to
+a fixed page when the check fails.
+
+A prefix check is not enough. Browsers load both `//other.example/` and
+`/\other.example/` from `other.example`, and both start with `/`:
+
+```python
+# Not enough: "//other.example/" passes
+if data.next.startswith("/"):
+    return actions.Redirect(data.next)
+```
+
+Use a check that parses the URL the way a browser does. Under Django, use
+`url_has_allowed_host_and_scheme`. In this example the login page copies
+its `next` query parameter into a hidden `<input name="next">`, so the
+handler receives it as `data.next`:
+
+```python
+from django.utils.http import (
+    url_has_allowed_host_and_scheme,
+)
+
+
+class Events:
+    def login(self, data: LoginIn, request):
+        # log_in is your own code that checks the password
+        log_in(request, data)
+        host = request.native.get_host()
+        is_safe = url_has_allowed_host_and_scheme(
+            data.next,
+            allowed_hosts={host},
+            require_https=request.native.is_secure(),
+        )
+        target = data.next if is_safe else "/"
+        return actions.Redirect(target)
+```
+
+Outside Django, follow the cases Django's function rejects when you write
+your own check. Citry plans a built-in check
+([#568](https://github.com/citry-dev/citry/issues/568)).
+
 ## Protect against CSRF { #protect-event-posts-from-csrf }
 
 A cross-site request forgery (CSRF) is another site making the user's
@@ -132,7 +178,9 @@ Every event call that is not a `GET` must pass these checks:
 - A call with a JSON body must send the `X-Citry-Events` header. Citry's
   browser code adds it for you.
 - When the browser sends an `Origin` header, its host must match the
-  request's `Host` header.
+  request's `Host` header. Behind a reverse proxy, the proxy must pass the
+  browser's `Host` header on; see
+  [Run behind a proxy](/advanced/web-frameworks/#run-behind-a-proxy).
 - When the browser sends a `Sec-Fetch-Site` header, it must be
   `same-origin` or `none`.
 
@@ -250,12 +298,70 @@ data. Citry makes sure the call uses the declared HTTP method, but it cannot
 tell whether your Python code changes anything. Declare a handler as `GET`
 only when calling it twice has the same effect as calling it once.
 
+## Limit request sizes { #limit-event-request-sizes }
+
+Anyone can post to Citry's event endpoints, so Citry stops reading a
+request that is too large and rejects it before it parses it:
+
+| Setting | What it limits | Default |
+| --- | --- | --- |
+| `_max_body_bytes` | the request body, in bytes | 1 MiB (1,048,576) |
+| `_max_form_fields` | the fields of one form post (the kind a plain HTML form sends) | 1,000 |
+
+One request also carries at most 16 event calls, and more fail the same
+way. You cannot change that limit.
+
+Citry stops reading a body once it passes `_max_body_bytes`, even when the
+request's `Content-Length` is wrong or missing. A request over either
+limit fails with the error code `payload_too_large`: an event call made
+from the page fails with that code, and a plain HTML form post gets HTTP
+status 413. Both limits apply to the whole app, so set them in
+`Citry(extensions_defaults=...)`, not on a component's `Events` class:
+
+```python
+citry = Citry(
+    extensions_defaults={
+        "events": {
+            "_max_body_bytes": 4 * 1024 * 1024,
+            "_max_form_fields": 2000,
+        },
+    },
+)
+```
+
+`Citry(...)` raises `ValueError` when either value is not a positive whole
+number, and setting either one on a component's `Events` class raises
+`ValueError` when the class is defined.
+
+On Django, Citry reads event requests itself, so `_max_body_bytes`
+applies to them in place of `DATA_UPLOAD_MAX_MEMORY_SIZE`. A few setups
+read the body before Citry sees it:
+
+- **Django middleware.** A form post or upload that middleware such as
+  `CsrfViewMiddleware` parses first has already been read whole; Citry
+  still rejects it when its declared size is over `_max_body_bytes`.
+- **Servers and frameworks that buffer the body.** Some read the whole
+  body before Citry sees it (Django's ASGI handler writes it to a
+  temporary file), so also set a limit in your server or proxy.
+- **Chunked bodies on WSGI.** On a WSGI server that does not mark where a
+  chunked body ends, Citry reads such a body as empty.
+
+Citry does not accept file uploads by default. If you add your own code
+that turns the request into
+[`UploadedFile`][citry.ext.events.UploadedFile] values, the files come
+from the same body, so `_max_body_bytes` limits them too.
+
 ## Sandbox template code { #sandbox-python-template-expressions }
 
 Anything inside `{{ }}` or a `c-*` attribute is a Python expression. Citry
 runs it in a sandbox that blocks the known ways an expression could reach
 dangerous parts of Python. The sandbox is on by default and modeled on
 Jinja's sandbox.
+
+Only the template author writes expressions. Never build a template, or
+any part of an expression, from request data or from text a site
+visitor saved. Pass that data to the template as values in the render
+context, where an expression can read them.
 
 ### What is blocked { #what-the-sandbox-blocks }
 
@@ -323,6 +429,9 @@ not guaranteed to block every way out:
   allowed until you block it, as shown next.
 - **The blocked list covers known dangers.** It is a list of specific
   functions, not a guarantee.
+- **Time and memory are not limited.** An expression can run as long
+  and use as much memory as the server process allows. To cap them, set
+  limits on the worker process that renders pages.
 
 Put only objects and functions in the render context that you are
 comfortable letting template authors use.
@@ -356,9 +465,14 @@ from citry import Citry
 app = Citry(sandbox_expressions=False)
 ```
 
-A successful render gives the same output either way. Builtins are still
-missing, and a walrus assignment (`:=`) still writes into the template's
-variables. Only the blocked accesses behave differently.
+A successful render gives the same output either way, and a walrus
+assignment (`:=`) still writes into the template's variables. On CPython,
+builtins are still missing, so only the blocked accesses behave
+differently. On PyPy, every builtin is available with the sandbox off,
+including `open` and `__import__`, so `{{ len(items) }}` renders there
+while CPython and the sandbox reject it. This does not change who you can
+trust: with the sandbox off, a template can already reach any Python
+object.
 
 ## Keep secrets server-side { #keep-secrets-on-the-server }
 
@@ -386,6 +500,31 @@ shows as `***`.
 Citry detects only the values you wrap. A secret kept in a plain string
 is sent like any other text. See [Secrets](/advanced/secrets/) for a
 full example.
+
+## Keep debug logs off { #keep-debug-logs-off-in-production }
+
+When an event handler, or its guard, raises an unexpected exception, the
+call fails with status 500 and the browser gets the message "The event handler
+raised an unexpected error." With debug logs on, the message also
+includes the exception's type and text, such as
+`RuntimeError: connection to db-internal:5432 refused`. That text can
+reveal internal details to anyone who triggers the error.
+
+Citry adds the exception text when the `citry` logger's level is `DEBUG`
+or lower, including Citry's `TRACE` level (5). It makes no
+difference whether you set that level on the `citry` logger or it comes
+from the root logger, as with `logging.basicConfig(level=logging.DEBUG)`. Django's `DEBUG` setting
+and Flask's debug mode do not affect it. In production, set the `citry`
+logger to `INFO` or `WARNING`:
+
+```python
+import logging
+
+logging.getLogger("citry").setLevel(logging.INFO)
+```
+
+With debug logs on or off, Citry logs the full traceback on the server
+at `ERROR` level, and the browser never receives it.
 
 ## Use a CSP nonce { #apply-a-request-csp-nonce-centrally }
 
@@ -507,8 +646,15 @@ You can pass `security_csp` to `serialize()` to override the mode for one
 render. Any other value raises `ValueError`, both in `Citry(...)` and in
 `serialize()`.
 
-Citry finds these problems only when it serializes a page, so render the
-pages you serve with `"warn"` before you switch to `"strict"`.
+With `"warn"` or `"strict"`, the editor and `citry check` report these
+problems where a template writes them directly, such as
+`onclick="..."`; see
+[Strict CSP problems](/ide/template-linting/#find-csp-problems). Both
+need your app loaded, so `citry check --static` reports none of them.
+Values from Citry bindings and the nonce checks above appear only when
+Citry serializes a page, so render the pages you serve with `"warn"`
+before you switch to `"strict"`. Neither check sees what Vue builds in
+the browser from a binding such as `:href`.
 
 Citry checks only what it renders. Your app owns the response header, the
 nonce, layouts, third-party resources, and every other CSP directive.

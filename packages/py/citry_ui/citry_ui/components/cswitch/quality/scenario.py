@@ -29,7 +29,11 @@ def switch_states_component(app: Citry) -> type[Component]:
               <c-CSwitch checked disabled>Locked ventilation</c-CSwitch>
               <c-CSwitch invalid>Faulted irrigation</c-CSwitch>
               <c-for each="size in sizes">
-                <c-CSwitch #c-key="size" c-size="size" checked>{{ size }} size</c-CSwitch>
+                <c-CSwitch
+                  #c-key="size"
+                  c-size="size"
+                  checked
+                >{{ size }} size</c-CSwitch>
               </c-for>
               <c-CSwitch label_pos="start" checked>Label first</c-CSwitch>
             </div>
@@ -41,7 +45,11 @@ def switch_states_component(app: Citry) -> type[Component]:
               <button type="button" @click="checked = !checked">Change setting</button>
             </div>
             <form data-quality-state="formdata">
-              <c-CSwitch name="quiet" value="enabled" required>Quiet hours</c-CSwitch>
+              <c-CSwitch
+                name="quiet"
+                value="enabled"
+                required
+              >Quiet hours</c-CSwitch>
               <button type="reset">Reset</button>
             </form>
             <c-CField control_id="quality-switch-field" required>

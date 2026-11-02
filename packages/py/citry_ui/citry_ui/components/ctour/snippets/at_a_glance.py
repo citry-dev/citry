@@ -17,7 +17,11 @@ class TourAtAGlance(Component):
               <c-fill name="title">Welcome to the workspace</c-fill>
               <c-fill name="default">This short tour explains the primary workflow.</c-fill>
             </c-CTourStep>
-            <c-CTourStep value="save" target_id="tour-save" placement="bottom-end">
+            <c-CTourStep
+              value="save"
+              target_id="tour-save"
+              placement="bottom-end"
+            >
               <c-fill name="title">Save your work</c-fill>
               <c-fill name="default">Use this action when the project is ready.</c-fill>
             </c-CTourStep>

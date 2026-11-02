@@ -6,6 +6,9 @@ import textwrap
 
 import pytest
 
+from citry import _template_python as template_python_module
+from citry._symbol_table import symtable
+from citry._template_python import _method_bound_names, _renamable_method_locals
 from citry.analysis import (
     TemplatePythonControl,
     TemplatePythonQuery,
@@ -19,6 +22,8 @@ from citry.analysis import (
     template_static_input_queries,
 )
 from citry_core.template_parser import parse_template
+
+requires_symtable = pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
 
 
 def _query(source: str, marker: str):
@@ -288,6 +293,58 @@ def test_query_enumeration_covers_nested_and_structural_hosts_once() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        """<c-card c-if="visible" c-body='<><span c-title="user.name">{{ user.label }}</span></>' />""",
+        '<c-if cond="a">{{ x }}</c-if><c-elif cond="b">{{ y }}</c-elif><c-else>{{ z }}</c-else>',
+        '<li c-for="item in items" c-title="item.name">{{ item.label }}</li>',
+        '<li c-if="ready" c-for="row in rows">{{ row }}</li>',
+        '<c-card><c-fill name="body" data="row">{{ row.title }}</c-fill></c-card>',
+        '<c-for each="(key, value) in pairs.items()"><p c-title="key">{{ value }}</p></c-for>',
+    ],
+)
+def test_each_enumerated_query_is_the_query_at_its_start(source: str) -> None:
+    # `template_python_queries` walks the template once for all hosts,
+    # while `template_python_query_at` searches from the root for one
+    # position, so the two must agree on every host's lexical context.
+    template = parse_template(source)
+
+    queries = template_python_queries(template)
+
+    assert queries
+    for query in queries:
+        assert template_python_query_at(template, query.start_index) == query
+
+
+def _condition_reads(monkeypatch: pytest.MonkeyPatch, depth: int) -> int:
+    """Count how many times one enumeration reads a node's condition, on a template nested ``depth`` levels deep."""
+    source = '<div c-title="t">' * depth + "{{ x }}" + "</div>" * depth
+    template = parse_template(source)
+    reads: list[object] = []
+    read_condition = template_python_module._condition_control
+
+    def counting(node: object) -> object:
+        reads.append(node)
+        return read_condition(node)
+
+    monkeypatch.setattr(template_python_module, "_condition_control", counting)
+    queries = template_python_queries(template)
+    monkeypatch.setattr(template_python_module, "_condition_control", read_condition)
+    assert len(queries) == depth + 1
+    return len(reads)
+
+
+def test_query_enumeration_reads_grow_linearly_with_depth(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The walk reads each node's controls a fixed number of times, so the
+    # reads grow with the depth of the template, not with its square.
+    shallow = _condition_reads(monkeypatch, 64)
+    deep = _condition_reads(monkeypatch, 128)
+
+    assert shallow <= 2 * 64
+    assert deep <= 2 * shallow + 2
+
+
 def test_schema_shadow_keeps_an_exact_query_copy() -> None:
     module_source = textwrap.dedent(
         """
@@ -336,6 +393,7 @@ def test_template_python_root_rejects_executable_type_displays(display: str) -> 
         TemplatePythonRoot("request", "always", "analysis", type_display=display)
 
 
+@requires_symtable
 def test_inferred_shadow_evaluates_query_at_each_method_return() -> None:
     module_source = textwrap.dedent(
         """
@@ -364,6 +422,76 @@ def test_inferred_shadow_evaluates_query_at_each_method_return() -> None:
     assert len(shadow.copies) == 2
     assert all(shadow.source[item.shadow_start : item.shadow_end] == query.source for item in shadow.copies)
     assert shadow.source.count("__citry_data['method']") == 2
+
+
+def _shadow_source_without_symtable(
+    monkeypatch: pytest.MonkeyPatch,
+    module_source: str,
+    query: TemplatePythonQuery,
+) -> str | None:
+    """Build the shadow as an interpreter with no symbol table (PyPy) would."""
+    # Both helpers cache by source text, so clear them before and after the
+    # patch to keep each answer tied to the symtable state that produced it.
+    _renamable_method_locals.cache_clear()
+    _method_bound_names.cache_clear()
+    monkeypatch.setattr("citry._template_python.symtable", None)
+    try:
+        shadow = build_inferred_template_shadow(module_source, "Card", (TemplatePythonRoot("value", "always"),), query)
+    finally:
+        monkeypatch.undo()
+        _renamable_method_locals.cache_clear()
+        _method_bound_names.cache_clear()
+    return None if shadow is None else shadow.source
+
+
+@requires_symtable
+@pytest.mark.parametrize(
+    "module_source",
+    [
+        # The method binds no template name.
+        "class Card:\n    def template_data(self, kwargs):\n        other = 'a'\n        return {'value': other}\n",
+        # The method only reads `len`, which the template also reads; a read is never a local.
+        "class Card:\n    def template_data(self, kwargs):\n        return {'value': str(len([1]))}\n",
+    ],
+)
+def test_shadow_without_symtable_matches_cpython_when_the_method_binds_no_template_name(
+    monkeypatch: pytest.MonkeyPatch,
+    module_source: str,
+) -> None:
+    query = TemplatePythonQuery("len(value)", 0, 10, "interpolation")
+    with_table = build_inferred_template_shadow(module_source, "Card", (TemplatePythonRoot("value", "always"),), query)
+
+    assert with_table is not None
+    assert _shadow_source_without_symtable(monkeypatch, module_source, query) == with_table.source
+
+
+@requires_symtable
+@pytest.mark.parametrize(
+    "module_source",
+    [
+        "class Card:\n    def template_data(self, kwargs):\n        value = 'a'\n        return {'value': value}\n",
+        # A function named like the class must not be read in the class's place.
+        (
+            "def Card():\n"
+            "    def template_data():\n"
+            "        pass\n"
+            "class Card:\n"
+            "    def template_data(self, kwargs):\n"
+            "        value = 'a'\n"
+            "        return {'value': value}\n"
+        ),
+    ],
+)
+def test_shadow_without_symtable_gives_no_answer_when_the_method_binds_a_template_name(
+    monkeypatch: pytest.MonkeyPatch,
+    module_source: str,
+) -> None:
+    query = TemplatePythonQuery("value.lower()", 0, 13, "interpolation")
+
+    # CPython renames the clashing local and answers; without the table the
+    # local cannot be renamed safely, so there is no answer at all.
+    assert build_inferred_template_shadow(module_source, "Card", (TemplatePythonRoot("value", "always"),), query)
+    assert _shadow_source_without_symtable(monkeypatch, module_source, query) is None
 
 
 def test_inferred_shadow_ignores_a_return_after_an_unconditional_return() -> None:
@@ -898,6 +1026,7 @@ def test_value_check_is_added_at_each_inferred_template_data_return() -> None:
     ast.parse(shadow.source)
 
 
+@requires_symtable
 def test_inferred_shadow_renames_method_locals_that_template_names_reuse() -> None:
     module_source = textwrap.dedent(
         """
@@ -941,6 +1070,43 @@ def test_inferred_shadow_renames_method_locals_that_template_names_reuse() -> No
     assert "for resolved in [resolved for resolved in items]:" in method
 
 
+@pytest.fixture
+def _fresh_renamable_locals():
+    # The function caches by source text, so a stale answer from another
+    # symtable state would hide what these tests check.
+    _renamable_method_locals.cache_clear()
+    yield
+    _renamable_method_locals.cache_clear()
+
+
+_RENAMABLE_LOCALS_SOURCE = textwrap.dedent(
+    """
+    class Board:
+        def template_data(self, kwargs, slots):
+            resolved = [1]
+            label = "x"
+            return {"items": resolved, "label": label}
+    """
+)
+
+
+@requires_symtable
+@pytest.mark.usefixtures("_fresh_renamable_locals")
+def test_renamable_method_locals_lists_the_locals_when_symtable_is_present() -> None:
+    names = _renamable_method_locals(_RENAMABLE_LOCALS_SOURCE, "Board")
+
+    assert names == {"self", "kwargs", "slots", "resolved", "label"}
+
+
+@pytest.mark.usefixtures("_fresh_renamable_locals")
+def test_renamable_method_locals_has_no_answer_when_symtable_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # PyPy has no `_symtable`, so the module global is None there.
+    monkeypatch.setattr("citry._template_python.symtable", None)
+
+    assert _renamable_method_locals(_RENAMABLE_LOCALS_SOURCE, "Board") is None
+
+
+@requires_symtable
 def test_inferred_shadow_keeps_locals_that_cannot_be_renamed_safely() -> None:
     module_source = textwrap.dedent(
         """
@@ -995,6 +1161,7 @@ def test_inferred_shadow_reads_present_optional_keys_by_subscript() -> None:
     assert "extra = __citry_data.get('extra')" in shadow.source
 
 
+@requires_symtable
 @pytest.mark.parametrize(
     ("method_body", "kept"),
     [
@@ -1031,6 +1198,7 @@ def test_inferred_shadow_keeps_a_local_that_nested_code_binds_or_reads_globally(
 
 
 @pytest.mark.skipif(sys.version_info < (3, 12), reason="generic class syntax needs Python 3.12")
+@requires_symtable
 def test_inferred_shadow_renames_locals_in_a_generic_class() -> None:
     module_source = (
         "class Board[T]:\n"
@@ -1052,6 +1220,7 @@ def test_inferred_shadow_renames_locals_in_a_generic_class() -> None:
     assert "__citry_local_item: list[int] = [1]" in shadow.source
 
 
+@requires_symtable
 def test_inferred_shadow_reads_a_returned_root_through_the_copy() -> None:
     # `data` is both the returned variable and a template root, and a nested
     # `nonlocal` keeps it from being renamed, so reading the other roots from
@@ -1113,11 +1282,12 @@ def test_static_input_queries_cover_quoted_component_attributes() -> None:
     queries = template_static_input_queries(parse_template(source))
 
     # Each source is the quoted text, a Python literal of the string the
-    # child receives. A value-less, empty, unquoted, or backslash value and
-    # an HTML element's attribute are left out.
+    # child receives, an empty one included. A value-less, unquoted, or
+    # backslash value and an HTML element's attribute are left out.
     assert [(query.source, query.attribute_target) for query in queries] == [
         ('"todo"', ("c-Card", "lane")),
         ("'a&amp;b'", ("c-Card", "mark")),
+        ('""', ("c-Card", "empty")),
         ('"5"', ("c-Inner", "n")),
     ]
     assert all(source.encode()[query.start_index : query.end_index].decode() == query.source for query in queries)

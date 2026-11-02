@@ -367,15 +367,44 @@ def test_every_production_component_is_in_the_manifest_and_installed():
     assert frozenset(installation.definitions) == discovered
 
 
-def test_check_project_loads_the_whole_library():
-    """`citry check` must be able to analyze every Citry UI component without failing to load the app."""
+def test_an_app_that_only_registers_citry_ui_checks_clean():
+    """`citry check` loads every Citry UI component and reports nothing an app could fix (GitHub #149)."""
     engine = Citry(autodiscover=False)
     engine.register_library(citry_ui)
 
     report = check_project(CheckAppSelection(spec="citry-ui-check", engine=engine), Path.cwd())
 
-    # Findings may include errors; this test only proves the registry loads.
+    # An app's author cannot change Citry UI, so its findings are left out
+    # and counted, and the app passes.
     assert report.app_failure is None
+    assert report.findings == ()
+    assert report.exit_code == 0
+    assert any("registered library 'citry-ui'" in note for note in report.all_notes)
+
+
+def test_citry_ui_templates_check_clean_against_their_declared_keys():
+    """Each Citry UI template reads only names its `Lint.template_data_keys` lists, and each list is complete."""
+    engine = Citry(autodiscover=False)
+    engine.register_library(citry_ui)
+
+    report = check_project(CheckAppSelection(spec="citry-ui-check", engine=engine), Path.cwd(), include_libraries=True)
+
+    # A template reading a name its list leaves out, or a literal key its
+    # template_data() returns that the list leaves out, shows up here.
+    codes = {"citry.template.unknown-variable", "citry.template.undeclared-template-data-key"}
+    assert [(finding.origin, finding.message) for finding in report.findings if finding.code in codes] == []
+
+
+def test_a_subclass_of_a_citry_ui_component_may_describe_its_data_with_a_schema():
+    installed = Citry(autodiscover=False).register_library(citry_ui)
+
+    # CButton lists its template data keys; the subclass's schema names them
+    # instead, without the app touching CButton's Lint class.
+    class MyButton(installed[CButton]):  # type: ignore[misc,valid-type]
+        class TemplateData:
+            variant: str
+
+    assert MyButton.TemplateData is not None
 
 
 def test_library_publication_rejects_invalid_invocations_and_manifests():
@@ -785,23 +814,187 @@ def test_data_method_signatures_use_component_specific_input_types():
         assert signature.parameters["slots"].default is inspect.Parameter.empty
 
 
-def test_installed_components_skip_the_general_input_type_check():
-    # Citry UI checks its public inputs itself with errors that list the
-    # accepted values, and accepts values its annotations do not name, so
-    # every installed class must have Citry's general check off.
+def test_internal_components_keep_the_general_input_type_check():
+    # Internal components get their inputs only from Citry UI's own
+    # templates, so Citry's general check catches Citry UI's own mistakes
+    # there, and none of them turns it off.
     app = Citry(autodiscover=False)
     installation = app.register_library(citry_ui)
-    checked = [
-        definition.__name__
-        for definition in installation.definitions
-        if installation[definition]._citry_input_types is not False
-    ]
-    assert checked == []
+    internal = [definition for definition in installation.definitions if definition.__name__.startswith("CInternal")]
+    assert internal
+    assert [d.__name__ for d in internal if installation[d]._citry_input_types is False] == []
+
+
+# Each entry names a public component that keeps Citry's general input type
+# check on, the inputs it needs, one input, and a wrong value for it. Citry's
+# check must reject the value with a TypeError that names the field.
+_GENERALLY_CHECKED = [
+    ("CBreadcrumbs", {"items": []}, "wrap", "yes"),
+    ("CCarousel", {"label": "Stories"}, "loop", "yes"),
+    ("CCarouselSlide", {"value": "one"}, "label", 3),
+    ("CCommandPalette", {"entries": [], "label": "Commands"}, "disabled", "yes"),
+    ("CDataGrid", {"columns": [], "rows": [], "label": "Grid"}, "multi_sort", "yes"),
+    ("CDrawer", {}, "dismissible", "yes"),
+    ("CField", {}, "required", "yes"),
+    ("CFormCollection", {"label": "Items"}, "allow_add", "yes"),
+    ("CFormCollectionItem", {"value": "one", "label": "One"}, "removable", "yes"),
+    ("CList", {}, "ordered", "yes"),
+    ("CListItem", {}, "disabled", "yes"),
+    ("CNativeSelect", {"options": []}, "disabled", "yes"),
+    ("CNavigationMenu", {"label": "Site"}, "loop", "yes"),
+    ("CNavigationMenuLink", {"href": "/"}, "current", "yes"),
+    ("CNavigationMenuItem", {"value": "more"}, "disabled", "yes"),
+    ("CPagination", {"pages": 3}, "show_controls", "yes"),
+    # A value outside a listed choice, and template text for an int.
+    ("CPagination", {"pages": 3}, "variant", "bogus"),
+    ("CPagination", {}, "pages", "3"),
+    ("CScrollArea", {}, "aria_label", 3),
+    ("CTable", {"columns": [], "rows": []}, "striped", "yes"),
+    ("CTagGroup", {"label": "Tags"}, "mandatory", "yes"),
+    ("CTag", {"value": "one"}, "disabled", "yes"),
+    ("CToastRegion", {}, "pause_on_hover", "yes"),
+    ("CToggleGroup", {"label": "View"}, "multiple", "yes"),
+    ("CToggle", {}, "pressed", "yes"),
+    ("CTreeGrid", {"columns": [], "rows": [], "label": "Tree"}, "disabled", "yes"),
+    # Classes that keep the check on while another class in their family
+    # turns it off.
+    ("CAccordionItem", {"value": "one"}, "disabled", "yes"),
+    ("CCascaderOption", {"value": "one", "label": "One"}, "disabled", "yes"),
+    ("CDropTarget", {"label": "Files"}, "multiple", "yes"),
+    ("CListboxGroup", {}, "label", 3),
+    ("CListboxOption", {"value": "one"}, "disabled", "yes"),
+    ("CMenuGroup", {}, "class_", 3),
+    ("CMenuItem", {}, "disabled", "yes"),
+    ("CMenuRadioGroup", {}, "value", 3),
+    ("CMenuRadioItem", {"value": "one"}, "disabled", "yes"),
+    ("CMenuSeparator", {}, "class_", 3),
+    ("CRadio", {"value": "one"}, "disabled", "yes"),
+    ("CSortableItem", {"value": "one", "label": "One"}, "disabled", "yes"),
+    ("CSplitterPanel", {"id": "one", "label": "One"}, "min_size", "wide"),
+    ("CStep", {}, "optional", "yes"),
+    ("CTabPanel", {}, "value", 3),
+    ("CTransferListItem", {"value": "one", "label": "One"}, "disabled", "yes"),
+    ("CTreeItem", {"value": "one", "label": "One"}, "disabled", "yes"),
+    ("CVirtualListItem", {}, "item_key", 3),
+    ("CVirtualWindow", {"total_count": 3}, "focusable", "yes"),
+    # Classes whose own messages said no more than Citry's (#212).
+    ("CAlertDialog", {}, "open", "yes"),
+    ("CAvatar", {}, "src", 3),
+    ("CBadge", {}, "class_", 3),
+    ("CButton", {}, "disabled", "yes"),
+    ("CButtonGroup", {"label": "label"}, "attached", "yes"),
+    ("CCard", {}, "class_", 3),
+    ("CCascader", {}, "change_on_select", "yes"),
+    ("CCheckbox", {}, "checked", "yes"),
+    ("CCol", {}, "reverse", "yes"),
+    ("CColorPicker", {"label": "label"}, "open", "yes"),
+    ("CCombobox", {}, "open", "yes"),
+    ("CContainer", {}, "fluid", "yes"),
+    ("CContextMenu", {"aria_label": "x"}, "open", "yes"),
+    ("CDateInput", {}, "name", 3),
+    ("CDialog", {}, "open", "yes"),
+    ("CDivider", {}, "decorative", "yes"),
+    ("CEditable", {}, "editing", "yes"),
+    ("CFileInput", {}, "multiple", "yes"),
+    ("CForm", {}, "disabled", "yes"),
+    ("CGrid", {}, "min_col", 3),
+    ("CGridItem", {}, "class_", 3),
+    ("CHoverCard", {}, "open", "yes"),
+    ("CImage", {"src": "x", "alt": "x", "width": 1, "height": 1}, "draggable", "yes"),
+    ("CInfiniteScroll", {}, "has_more", "yes"),
+    ("CInput", {}, "name", 3),
+    ("CListbox", {"label": "label"}, "multiple", "yes"),
+    ("CMenu", {}, "open", "yes"),
+    ("CMenuCheckboxItem", {"value": "value"}, "disabled", "yes"),
+    ("CMenuSubmenu", {"value": "value"}, "disabled", "yes"),
+    ("CMultiSelect", {"options": [], "placeholder": "x"}, "open", "yes"),
+    ("CNumberInput", {}, "show_controls", "yes"),
+    ("CPinInput", {}, "mask", "yes"),
+    ("CPopover", {}, "open", "yes"),
+    ("CProgress", {"label": "label"}, "value_text", 3),
+    ("CRadioGroup", {"name": "name"}, "value", 3),
+    ("CRangeSlider", {}, "name", 3),
+    ("CRating", {}, "allow_clear", "yes"),
+    ("CRow", {}, "reverse", "yes"),
+    ("CSelect", {"options": [], "placeholder": "x"}, "open", "yes"),
+    ("CSidebar", {}, "collapsed", "yes"),
+    ("CSkeleton", {}, "width", 3),
+    ("CSlider", {}, "name", 3),
+    ("CSortable", {}, "disabled", "yes"),
+    ("CSpinner", {"label": "label"}, "class_", 3),
+    ("CSplitButton", {}, "disabled", "yes"),
+    ("CSplitter", {}, "disabled", "yes"),
+    ("CStepper", {"label": "label"}, "interactive", "yes"),
+    ("CSwitch", {}, "checked", "yes"),
+    ("CTab", {"value": "value"}, "disabled", "yes"),
+    ("CTabs", {"default_value": "x"}, "loop", "yes"),
+    ("CTagsInput", {}, "name", 3),
+    ("CTextarea", {}, "name", 3),
+    ("CTimeInput", {}, "name", 3),
+    ("CTimePicker", {}, "clearable", "yes"),
+    ("CTimeline", {}, "label", 3),
+    ("CTimelineItem", {}, "class_", 3),
+    ("CToolbar", {"label": "label"}, "loop", "yes"),
+    ("CTooltip", {}, "open", "yes"),
+    ("CTour", {}, "open", "yes"),
+    ("CTourStep", {"value": "value"}, "arrow", "yes"),
+    ("CTransferList", {}, "required", "yes"),
+    ("CTree", {"label": "label"}, "disabled", "yes"),
+    ("CVirtualList", {}, "focusable", "yes"),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "kwargs", "field", "value"), _GENERALLY_CHECKED, ids=[f"{c[0]}-{c[2]}" for c in _GENERALLY_CHECKED]
+)
+def test_public_components_with_the_general_check_reject_a_wrong_type(name, kwargs, field, value):
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    component = next(installation[d] for d in installation.definitions if d.__name__ == name)
+    assert component._citry_input_types is not False
+
+    with pytest.raises(TypeError, match=rf"{name}\.Kwargs\.{field} expects"):
+        component(**kwargs, **{field: value}).render().serialize(deps_strategy="ignore")
+
+
+def test_every_public_component_with_the_general_check_has_an_invalid_input_case():
+    # Removing another opt-out must come with a case in `_GENERALLY_CHECKED`.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    checked = {
+        d.__name__
+        for d in installation.definitions
+        if not d.__name__.startswith("CInternal") and installation[d]._citry_input_types is not False
+    }
+    assert checked == {case[0] for case in _GENERALLY_CHECKED}
+
+
+def test_every_public_kwargs_annotation_resolves_at_run_time():
+    # Citry's input check and the editor read the Kwargs annotations from the
+    # live class, and leave a field unchecked when its annotation names a type
+    # imported only for type checkers.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    unresolved = []
+    for definition in installation.definitions:
+        try:
+            get_type_hints(installation[definition].Kwargs)
+        except NameError as error:
+            unresolved.append(f"{definition.__name__}: {error}")
+    assert unresolved == []
+
+
+def test_cdisclosure_keeps_its_own_heading_level_check():
+    # CDisclosure keeps Citry's general check off so that a wrong
+    # heading_level gets Citry UI's one-line message, and its own check still
+    # accepts `heading_level="2"`.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    disclosure = next(installation[d] for d in installation.definitions if d.__name__ == "CDisclosure")
+    assert disclosure._citry_input_types is False
 
     class Page(Component):
         citry = app
-        # A plain attribute passes text, which the heading_level annotation
-        # (an int Literal) does not name.
         template = """
           <c-CDisclosure heading_level="2">
             <c-fill name="title">Title</c-fill>
@@ -811,6 +1004,52 @@ def test_installed_components_skip_the_general_input_type_check():
 
     html = Page().render().serialize(deps_strategy="ignore")
     assert '<h2 class="cui-disclosure__heading"' in html
+
+
+_FILLS = '<c-fill name="title">T</c-fill><c-fill name="default">B</c-fill>'
+_DISCLOSURE = f"<c-CDisclosure {{}}>{_FILLS}</c-CDisclosure>"
+_ACCORDION = f'<c-CAccordion {{}}><c-CAccordionItem value="a">{_FILLS}</c-CAccordionItem></c-CAccordion>'
+_CALENDAR = "<c-CCalendar {} />"
+
+
+@pytest.mark.parametrize(
+    ("name", "tag", "inputs", "valid"),
+    [
+        ("CDisclosure", _DISCLOSURE, 'heading_level="2"', True),
+        ("CDisclosure", _DISCLOSURE, 'c-heading_level="2"', True),
+        ("CDisclosure", _DISCLOSURE, 'heading_level="7"', False),
+        ("CAccordion", _ACCORDION, 'heading_level="2"', True),
+        ("CAccordion", _ACCORDION, 'c-heading_level="2"', True),
+        ("CAccordion", _ACCORDION, 'heading_level="7"', False),
+        ("CCalendar", _CALENDAR, 'first_day_of_week="1"', True),
+        ("CCalendar", _CALENDAR, 'c-first_day_of_week="1"', True),
+        ("CCalendar", _CALENDAR, 'first_day_of_week="8"', False),
+        ("CDatePicker", "<c-CDatePicker {} />", 'first_day_of_week="1"', True),
+        ("CDatePicker", "<c-CDatePicker {} />", 'first_day_of_week="8"', False),
+        ("CDateRange", "<c-CDateRange {} />", 'first_day_of_week="1"', True),
+        ("CDateRange", "<c-CDateRange {} />", 'first_day_of_week="8"', False),
+    ],
+)
+def test_digit_inputs_pass_citrys_general_input_check(name, tag, inputs, valid):
+    # These inputs are annotated with both the numbers and their text, so
+    # with Citry's general check on, both spellings render and a value
+    # outside the list fails that check before the component's own.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    component = next(installation[d] for d in installation.definitions if d.__name__ == name)
+    # Registration sets this flag with `type.__setattr__`, so the test does
+    # the same. Each case registers its own app, so no other test sees it.
+    type.__setattr__(component, "_citry_input_types", True)
+
+    class Page(Component):
+        citry = app
+        template = tag.format(inputs)
+
+    if valid:
+        Page().render().serialize(deps_strategy="ignore")
+    else:
+        with pytest.raises(TypeError, match=r"heading_level|first_day_of_week"):
+            Page().render()
 
 
 def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():

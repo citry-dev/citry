@@ -7,7 +7,11 @@ citry.register_library(citry_ui)
 class CustomizedSplitter(Component):
     template = """
       <div class="brand-splitter">
-        <c-CSplitter c-sizes="[38, 62]" variant="outline" size="lg">
+        <c-CSplitter
+          c-sizes="[38, 62]"
+          variant="outline"
+          size="lg"
+        >
           <c-CSplitterPanel id="index" label="Index">Branded index</c-CSplitterPanel>
           <c-CSplitterPanel id="article" label="Article">Branded article</c-CSplitterPanel>
         </c-CSplitter>

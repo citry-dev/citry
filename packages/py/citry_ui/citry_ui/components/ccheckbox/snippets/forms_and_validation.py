@@ -18,22 +18,38 @@ class CheckboxForms(Component):
         >
           <fieldset>
             <legend>Habitats observed</legend>
-            <c-CCheckbox name="habitat" value="meadow" checked>
+            <c-CCheckbox
+              name="habitat"
+              value="meadow"
+              checked
+            >
               Meadow edge
             </c-CCheckbox>
-            <c-CCheckbox name="habitat" value="woodland" checked>
+            <c-CCheckbox
+              name="habitat"
+              value="woodland"
+              checked
+            >
               Ancient woodland
             </c-CCheckbox>
             <c-CCheckbox name="habitat" value="wetland">
               Wetland margin
             </c-CCheckbox>
           </fieldset>
-          <c-CCheckbox name="confirmed" value="yes" required>
+          <c-CCheckbox
+            name="confirmed"
+            value="yes"
+            required
+          >
             I checked the location against the field map
           </c-CCheckbox>
           <div class="checkbox-form-demo__actions">
             <c-CButton type="submit">Record survey</c-CButton>
-            <c-CButton type="reset" variant="outline" intent="neutral">Reset</c-CButton>
+            <c-CButton
+              type="reset"
+              variant="outline"
+              intent="neutral"
+            >Reset</c-CButton>
           </div>
         </c-CForm>
         <output v-text="result" aria-live="polite"></output>

@@ -193,6 +193,19 @@ components, but nothing from an application. If the manifest lists
 `required_extensions`, point `citry.app` at a configured `Citry` instance
 that installs the library instead.
 
+## Check the library { #check-a-library }
+
+`citry check` leaves out findings in a registered library's components,
+because an app that installs the library cannot change them. To check
+the library itself, for example in its own tests, register it in a small
+app and ask for those findings:
+
+```bash
+citry --app tests.app:engine check --include-libraries
+```
+
+See [Library components](/advanced/cli/#check-library-components).
+
 ## Publishing rules
 
 ### Edit classes first

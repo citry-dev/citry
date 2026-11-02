@@ -96,7 +96,10 @@ Only places that deliberately carry application data remain open:
 
 All wire values are standard JSON. `NaN`, infinities, executable expressions,
 revivable objects, and other language-specific values are not part of the
-protocol. Servers produce deterministic JSON apart from values that are
+protocol. A server accepts request JSON nested up to 200 levels deep,
+counting each array and object as one level. It answers a deeper body with
+an error of status 400 and code `protocol_mismatch`, the same answer it
+gives a body that is not JSON. Servers produce deterministic JSON apart from values that are
 naturally minted per render, such as render IDs, state tokens, and HTML that
 contains them. Optional fields at their default value are omitted.
 
@@ -347,6 +350,7 @@ interface EventHandlerOptions {
   throttleMilliseconds?: number;
   latestCallWins?: true;
   allowBatching?: false;
+  detached?: true;
 }
 
 interface EventComponentClass {
@@ -486,11 +490,60 @@ still receive its own `data` value, and actions aimed elsewhere keep their
 normal meaning. Some internal variables still call the counter an epoch; the
 wire name is always `sendSequence`.
 
+### Detached calls
+
+Calls from one Vue app normally go out one at a time, in order. Two calls in
+flight would conflict: a render is built on the page the browser showed when
+it sent the call, and each call sends the State token the previous call
+returned. So a call that skipped ahead could come back built on a page or a
+State that no longer exists.
+
+A handler that never renders and never changes State has neither problem.
+The app author declares it detached (in Python,
+`@event(detached=True)`), and the manifest marks it with
+`detached: true` (see [Component classes](#component-classes)). Browser code
+may then send a call to it at once, outside the queue:
+
+```js
+const typos = await this.$sendEvent("spell_check", {}, {wait: false});
+```
+
+The browser still gives the call the next `sendSequence` value, and the call
+carries the State token the browser holds when it sends it. The server may
+read State from that token. In this document, a **detached call** is any
+call to a detached handler, whether the browser sent it at once or queued
+it. These rules hold for every detached call:
+
+- The result never contains a `render` or a `state` action. A server answers
+  `handler_error` instead when the result would hold one, or when the
+  handler changes State. The browser rejects the whole result, before any
+  action runs, if one arrives anyway.
+- The call carries no `stateUpdates`, not even an empty object. A server
+  answers `invalid_args` when a call carries them, because the result
+  returns no token, so the changes would be lost. The browser keeps unsent
+  State changes for the next call to a handler that is not detached.
+- Its result never counts as a newer result for the caller (see [Order and
+  timing](#order-and-timing)), because it cannot replace the caller's HTML
+  or State.
+
+The server keeps no order between a detached call and the caller's other
+calls: it may run them at the same time. Only `wait: false` takes a call out
+of the queue; a call to a detached handler sent without it waits its turn
+like any other. The browser refuses `wait: false` for a handler that is not
+detached, before anything is sent.
+
+The browser trusts the `detached` mark in the manifest it holds. If a deploy
+removes `detached=True` from a handler while a page still shows the old
+manifest, that page may send the handler a call outside the queue. The
+server then runs it as an ordinary call, so it may render or change State;
+the browser rejects such a result whole, and the call's promise rejects.
+
 ### Envelope limits
 
 One envelope carries at most 16 calls. More than 16 rejects the whole
-envelope with `payload_too_large`. A transport may also enforce a configured
-HTTP body limit before parsing, using the same error code. A client that wants
+envelope with `payload_too_large`. A transport may also enforce configured
+limits on the HTTP body size or the number of form fields before parsing,
+using the same error code. A client that wants
 to send more calls splits them into successive envelopes.
 
 ## The result envelope
@@ -717,7 +770,7 @@ client accepted this call's result:
 | What happened | The delayed action |
 |---|---|
 | Nothing: the caller is still mounted and no newer result for it was accepted. | Runs. |
-| A newer result for the caller was accepted. | A `redirect` runs. Every other type is skipped (`epoch`). |
+| A newer result for the caller was accepted. A result for a [detached handler](#detached-calls) never counts as newer. | A `redirect` runs. Every other type is skipped (`epoch`). |
 | The caller was removed, or replaced by anything except this call's own `render`. | Skipped (`retired`). |
 | This call's own `render` replaced the caller, and no newer result was accepted for the component now at that place. | Runs, for an action listed after that `render`. An `event` goes out from the component that replaced the caller. |
 | This call's own `render` replaced the caller, and a newer result was accepted for the component now at that place. | A `redirect` listed after that `render` runs. Every other type is skipped (`epoch`). |
@@ -736,9 +789,16 @@ Details:
 - When the superseded row applies, it wins over every other row. A call
   from the component that replaced the caller never supersedes a call
   from the replaced one.
-- The client sends the next call only after this call's blocking actions
-  finish, so a newer result can arrive during a blocking delay only from
-  page code that calls `Citry.events.applyActions`.
+- The client sends the next queued call only after this call's blocking
+  actions finish, so a newer result can arrive during a blocking delay only
+  from page code that calls `Citry.events.applyActions`. A detached call
+  sent with `wait: false` does not wait for the queue.
+- A detached call's own delayed actions follow the same rows: a newer
+  result from a queued call skips them, except a `redirect`. A skipped
+  blocking action rejects the call's promise, as for any call. A newer
+  result never skips a detached call's actions that have no delay, even one
+  accepted while the actions before them ran. The `retired`, `superseded`
+  and `disposed` rows still apply to them.
 - A result that holds an action type the client does not know is rejected
   whole, before any of its actions runs, so no row applies to it.
 - Actions that page code applies with `Citry.events.applyActions` follow
@@ -765,8 +825,13 @@ an older call changes nothing more on the page:
   when the older call has already finished and only its `wait: false`
   actions are still waiting on their delays.
 
-Supersession takes effect when the newer call is queued, so the older
-call's actions are dropped even if the newer call then fails.
+On a [detached handler](#detached-calls) that also has `latestCallWins`,
+the same rules cover calls sent with `wait: false`: a newer call, queued or
+not, supersedes them, and one in flight is abandoned.
+
+Supersession takes effect when the newer call is queued or, with
+`wait: false`, sent, so the older call's actions are dropped even if the
+newer call then fails.
 
 If the older call has not finished, its promise rejects with reason
 `superseded`, Citry's browser client reports no success for it, and the
@@ -804,7 +869,7 @@ Every wire error has exactly `status`, `code`, and `message`, plus optional
 | `conflict` | 409 | Application code reported a domain conflict. |
 | `error` | 400 to 599 | A deliberately raised application error with another status. |
 | `csrf_failed` | 403 | The transport's CSRF check rejected the request. |
-| `payload_too_large` | 413 | A call-count or configured transport-size limit rejected the envelope. |
+| `payload_too_large` | 413 | A call-count limit, or a configured transport limit on body size or form fields, rejected the request. |
 | `protocol_mismatch` | 400 | The envelope names an unsupported protocol, or a fixed protocol record is malformed. |
 | `handler_error` | 500 | Unexpected handler failure or a result that cannot be represented as strict JSON. |
 
@@ -1004,9 +1069,10 @@ object:
 | `throttleMilliseconds` | Optional non-negative integer. | Default throttle for compiled browser bindings. |
 | `latestCallWins` | Optional; when present it is exactly `true`. | A newer call supersedes older calls to this handler in the client queue. See [Superseded calls](#superseded-calls). |
 | `allowBatching` | Optional; when present it is exactly `false`. | Calls to this handler must travel alone. |
+| `detached` | Optional; when present it is exactly `true`. | The handler never renders or changes State, so the browser may send a call to it outside the queue. See [Detached calls](#detached-calls). |
 
 The defaults are omitted: State is unused, timing is absent, older calls are
-not superseded, and batching is allowed.
+not superseded, batching is allowed, and every call waits in the queue.
 
 `writableStateFields` narrows which public State fields `$state` and two-way
 bindings may change. Omission means every public field is writable. An empty
@@ -1190,6 +1256,10 @@ class Counter(Component):
                 status=data.status,
             )
 
+        @event(detached=True)
+        def peek(self, state: CounterState):
+            return {"count": state.count}
+
     def template_data(self, kwargs, slots):
         return {
             "count": kwargs.count,
@@ -1210,7 +1280,8 @@ The examples use `increment` for rendering and capability downgrade,
 `rename` for event and data actions plus a State refresh, `crash` for an
 unexpected handler failure, `square` for stateless data over GET and for
 form text that binds to an `int` field, `history`
-for the two URL modes, and `fail` for deliberate application errors.
+for the two URL modes, `fail` for deliberate application errors, and
+`peek` for a detached handler that reads State and returns data.
 
 ## Conformance
 

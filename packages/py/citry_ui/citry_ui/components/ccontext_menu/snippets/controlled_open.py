@@ -14,18 +14,7 @@ class ControlledContextMenu(Component):
           aria_label="Diagram actions"
           v-bind="{
             open:controlled ? open : null,
-            onOpenChange:(nextOpen,detail)=>{
-              lastReason=detail.reason;
-              candidate=`${Math.round(detail.clientX)}, ${Math.round(detail.clientY)}`;
-              if (!controlled) return;
-              if (!nextOpen) {
-                open=false;
-                return;
-              }
-              if (!accept) return false;
-              if (!breakClaim) open=true;
-              return true;
-            },
+            onOpenChange:claimOpenRequest,
           }"
         >
           <c-fill name="target" data="{ target_attrs }">
@@ -70,14 +59,37 @@ class ControlledContextMenu(Component):
     """
 
     js = r"""
-      $component({data(){return {
+      $component({
+        data(){return {
           open:false,
           controlled:true,
           accept:true,
           breakClaim:false,
           lastReason:'none',
           candidate:'none',
-        };}});
+        };},
+        methods: {
+          // Returning true tells the menu that the owner opened it, so the
+          // menu blocks the browser's own menu. Any other return lets the
+          // browser's menu show. "Break the claim" returns true without
+          // opening, which the menu reports as a broken claim.
+          claimOpenRequest(nextOpen, detail) {
+            this.lastReason = detail.reason;
+            this.candidate = `${Math.round(detail.clientX)}, ${Math.round(detail.clientY)}`;
+            // After release the menu opens and closes by itself and ignores
+            // what this returns.
+            if (!this.controlled) return;
+            // The owner always accepts a close.
+            if (!nextOpen) {
+              this.open = false;
+              return;
+            }
+            if (!this.accept) return false;
+            if (!this.breakClaim) this.open = true;
+            return true;
+          },
+        },
+      });
     """
 
     css = """

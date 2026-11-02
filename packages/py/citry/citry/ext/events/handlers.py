@@ -36,11 +36,12 @@ INJECTABLE_PARAMS = ("data", "state", "context", "request", "event")
 # ``extensions_defaults["events"]``. Any other underscore attribute that is
 # not a ``def`` fails at declaration time (``EventsExtension.
 # validate_config_fields``), which is what makes config typos loud.
-# ``_max_envelope_bytes`` (the transport byte cap, design 3.5) and
+# ``_max_body_bytes`` (the largest request body, design 3.5),
+# ``_max_form_fields`` (the most fields in one form post), and
 # ``_csrf_field_names`` (the host CSRF fields the server drops from an event
-# call's arguments, design 3.5 and security_csrf.md 4.4) are the engine-wide names: both apply before any
-# component's config is read, so they are settings-only and a component
-# declaring one fails at class definition.
+# call's arguments, design 3.5 and security_csrf.md 4.4) are the engine-wide
+# names: they apply before any component's config is read, so they are
+# settings-only and a component declaring one fails at class definition.
 CONFIG_NAMES = (
     "_guard",
     "_context",
@@ -49,13 +50,14 @@ CONFIG_NAMES = (
     "_debounce",
     "_throttle",
     "_topics",
-    "_max_envelope_bytes",
+    "_max_body_bytes",
+    "_max_form_fields",
     "_csrf_field_names",
 )
 
 # The engine-wide config names, which only ``extensions_defaults["events"]``
 # may set.
-ENGINE_CONFIG_NAMES = frozenset({"_max_envelope_bytes", "_csrf_field_names"})
+ENGINE_CONFIG_NAMES = frozenset({"_max_body_bytes", "_max_form_fields", "_csrf_field_names"})
 
 # The hidden field Django's ``{% csrf_token %}`` and its own forms write. A
 # page that keeps it inside a form sending a server event would otherwise
@@ -100,8 +102,8 @@ class EventOptions:
 
     ``None`` means the key was not given, so the component-level config (and
     below it, the engine and factory defaults) applies. The queue knobs
-    ``latest_wins`` and ``bundle`` have no component level (they are
-    per-handler on purpose, design 3.5), so they hold plain booleans whose
+    ``latest_wins``, ``bundle`` and ``detached`` have no component level (they
+    are per-handler on purpose, design 3.5), so they hold plain booleans whose
     defaults match an undecorated handler.
     """
 
@@ -113,6 +115,7 @@ class EventOptions:
     throttle: int | None = None
     latest_wins: bool = False
     bundle: bool = True
+    detached: bool = False
 
 
 def event_options(func: Callable[..., Any]) -> EventOptions | None:
@@ -197,7 +200,7 @@ def validate_timing_value(source: str, value: Any) -> int | None:
 
 def validate_bool_value(source: str, value: Any) -> bool:
     """
-    Check a ``latest_wins`` / ``bundle`` value: a plain bool.
+    Check a ``latest_wins`` / ``bundle`` / ``detached`` value: a plain bool.
 
     The queue knobs exist at the handler level only (design 3.5), so unlike
     the validators above, only the ``@event`` decorator calls this.
@@ -281,6 +284,7 @@ def event(
     throttle: int | None = None,
     latest_wins: bool = False,
     bundle: bool = True,
+    detached: bool = False,
 ) -> Callable[[_F], _F]: ...
 
 
@@ -296,6 +300,7 @@ def event(
     throttle: int | None = None,
     latest_wins: bool = False,
     bundle: bool = True,
+    detached: bool = False,
 ) -> _F | Callable[[_F], _F]:
     """
     Per-handler configuration for one event handler.
@@ -305,9 +310,11 @@ def event(
     to the component's underscore config
     (``_methods``, ``_guard``, ``_csrf``, ``_debounce``, ``_throttle``),
     which itself falls back to ``extensions_defaults["events"]`` and then the
-    built-in defaults. The queue knobs ``latest_wins`` and ``bundle`` are the
-    exception: they exist per handler only, so a call site that needs
-    different queue semantics names a different handler.
+    built-in defaults. The queue knobs ``latest_wins``, ``bundle`` and
+    ``detached`` are the exception: they exist per handler only, so a call
+    site that needs different queue semantics names a different handler. A
+    detached handler also needs the call site to pass ``wait: false``; a
+    call without it waits its turn.
 
     Args:
         func: The handler, when used as a bare ``@event`` (no arguments).
@@ -336,6 +343,19 @@ def event(
             same moment. Pass ``False`` for a handler that should always
             travel alone, e.g. a slow export that fast toggles should not
             wait on.
+        detached: Let browser code call this handler without waiting for
+            the app's other calls, with
+            ``$sendEvent(name, args, {wait: false})``. In exchange, the
+            handler must not render or change State: it may return data,
+            dispatch an event, redirect, update the URL, or return a
+            ``Download``, and it may read State. A detached handler that
+            renders or changes State fails with a ``handler_error``. It
+            reads State from the token the browser sends with the call:
+            browser State changes not yet sent stay in the browser for the
+            next call to a handler that is not detached, so pass values the
+            user is still editing as arguments. Its calls can run on
+            the server at the same time as the app's other calls, so do not
+            rely on what those calls write. Off by default.
 
     Returns:
         The handler itself (the decorator only attaches the configuration).
@@ -353,6 +373,10 @@ def event(
                 @event(methods=("GET",))
                 def word_count(self, data: WordCountIn) -> dict:
                     return {"words": count_words(data.doc_id)}
+
+                @event(detached=True)
+                def spell_check(self, data: SpellCheckIn) -> dict:
+                    return {"typos": find_typos(data.text)}
         ```
 
     Raises:
@@ -375,6 +399,7 @@ def event(
         throttle=validate_timing_value("@event(throttle=...)", throttle),
         latest_wins=validate_bool_value("@event(latest_wins=...)", latest_wins),
         bundle=validate_bool_value("@event(bundle=...)", bundle),
+        detached=validate_bool_value("@event(detached=...)", detached),
     )
 
     def wrap(handler: _F) -> _F:

@@ -55,9 +55,8 @@ class TagsInputMorphAndCleanup(Component):
               c-value="baseline"
               input_value="unfinished"
               c-input_attrs="{'aria-label':'Morph labels'}"
-              :value="controlled ? tags : null" :onValueChange="(next)=>{
-                  if (controlled) tags=next;
-                }"
+              :value="controlled ? tags : null"
+              :onValueChange="applyControlledTags"
             />
           </div>
         </template>
@@ -77,6 +76,12 @@ class TagsInputMorphAndCleanup(Component):
             tags:['owner-one'],
             mounted:true,
           };
+        },
+        methods: {
+          // Store the requested tags only while the page owns them.
+          applyControlledTags(next) {
+            if (this.controlled) this.tags = next;
+          },
         },
       });
     """

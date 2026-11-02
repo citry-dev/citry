@@ -219,7 +219,10 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'configuration controlled release invalid repair smooth-owned disabled-axis reflections'
                 }"
-                :axis="axis" :scrollbarWidth="width" :scrollbarGutter="gutter" :overscroll="overscroll"
+                :axis="axis"
+                :scrollbarWidth="width"
+                :scrollbarGutter="gutter"
+                :overscroll="overscroll"
               >
                 <div class="scroll-area-quality__large-content">
                   Reactive configuration subject
@@ -238,12 +241,7 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'callback native-scroll native-scrollend coalesced absolute-content resize-content'
                 }"
-                :onScrollChange="(detail)=>{
-                    callbackCount += 1;
-                    nativeScrolls += 1;
-                    lastInline = Math.round(detail.inlineOffset);
-                    lastBlock = Math.round(detail.blockOffset);
-                  }"
+                :onScrollChange="recordCallbackScroll"
               >
                 <div class="scroll-area-quality__callback-content">
                   <p>Content changes do not synthesize a callback.</p>
@@ -379,6 +377,17 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
                 lastBlock:0,
                 lifecycleCallbacks:0,
               };
+            },
+            methods: {
+              // ScrollArea calls this only after a real native scroll, so
+              // each call counts as one callback and one native scroll, and
+              // the log shows the offsets ScrollArea reported.
+              recordCallbackScroll(detail) {
+                this.callbackCount += 1;
+                this.nativeScrolls += 1;
+                this.lastInline = Math.round(detail.inlineOffset);
+                this.lastBlock = Math.round(detail.blockOffset);
+              },
             },
           });
         """

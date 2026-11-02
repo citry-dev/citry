@@ -9,7 +9,10 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 from citry import Citry, Component, ComponentLibrary
+from citry import citry as default_citry
 from citry_ui.components.cmenu import (
     CMenu,
     CMenuCheckboxItem,
@@ -25,6 +28,8 @@ from citry_ui.components.cmenu.cmenu import (
     CInternalMenuContent,
     CInternalMenuSurface,
 )
+from citry_ui.components.cmenu.snippets import item_content
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -908,6 +913,125 @@ def test_submenu_keyboard_navigation_closes_one_logical_level_at_a_time(page):
     assert errors == []
 
 
+def test_an_open_menu_does_not_scroll_the_page_back_to_itself(page):
+    errors = _load(page)
+    # A page long enough to scroll the open menu out of view.
+    page.evaluate("document.body.append(Object.assign(document.createElement('div'), {style: 'height: 5000px'}))")
+    _open_deepest_submenu(page)
+    assert _focused_text(page) == "EPUB"
+    page.evaluate("window.scrollTo(0, 3000)")
+
+    # A change of the menu's settings makes it check its items again and
+    # give the current one focus back. That must not scroll the page to it.
+    page.evaluate("window.__menuState.menuSize = 'lg'")
+    page.wait_for_function("document.querySelector('#library-menu').dataset.size === 'lg'")
+    page.evaluate("new Promise(resolve => setTimeout(() => requestAnimationFrame(resolve), 50))")
+    assert page.evaluate("window.scrollY") == 3000
+    assert _focused_text(page) == "EPUB"
+    assert errors == []
+
+
+def test_scrolling_the_page_while_a_submenu_is_open_keeps_its_position(page):
+    errors = _load(page)
+    page.evaluate("document.body.append(Object.assign(document.createElement('div'), {style: 'height: 5000px'}))")
+    _trigger(page).click()
+    # The pointer opens the submenu and rests on its trigger, so a page
+    # scroll moves the trigger out from under the pointer.
+    page.get_by_role("menuitem", name="Export", exact=True).hover()
+    page.wait_for_function(
+        "document.querySelector('[data-citry-menu-submenu] > [role=menu]').matches(':popover-open')"
+    )
+    # A wheel over the menu scrolls only the menu, so the test scrolls the
+    # page directly, as a reader does by scrolling elsewhere on the page.
+    for step in range(1, 4):
+        page.evaluate(f"window.scrollTo(0, {step * 300})")
+        page.evaluate("new Promise(resolve => setTimeout(() => requestAnimationFrame(resolve), 50))")
+        assert page.evaluate("window.scrollY") == step * 300
+    assert errors == []
+
+
+@pytest.mark.parametrize("keys", [("Enter", "End"), ("ArrowUp",)], ids=["end", "open-on-last"])
+def test_a_key_shows_an_item_that_starts_below_the_screen(page, keys):
+    errors = _load(page)
+    # At high zoom the menu is taller than the space around its trigger,
+    # so its last item can sit below the bottom of the screen.
+    page.set_viewport_size({"width": 320, "height": 256})
+    page.add_style_tag(content="body { padding-block: 120px 2000px; }")
+    _trigger(page).focus()
+    # ArrowUp opens the menu on its last item, which it focuses only after
+    # the key has been handled.
+    for key in keys:
+        page.keyboard.press(key)
+        page.wait_for_function("document.querySelector('#library-menu').matches(':popover-open')")
+    page.wait_for_function("document.activeElement.closest('#library-menu') !== null")
+
+    # Browsers place a menu that does not fit below its trigger in different
+    # ways. Chromium keeps it below the trigger and lets it overflow the
+    # screen, so the page has to scroll to show the item. Firefox shifts the
+    # menu up so it fits inside the screen, overlapping the trigger, so the
+    # item is already shown and no scroll is needed. Record which placement
+    # this browser chose as soon as the key has focused the item.
+    menu_sits_below_trigger = page.evaluate(
+        """() => {
+          const menu = document.querySelector('#library-menu').getBoundingClientRect();
+          const trigger = document.querySelector('[aria-controls="library-menu"]').getBoundingClientRect();
+          return menu.top >= trigger.bottom - 0.5;
+        }"""
+    )
+
+    # The menu takes the keys a reader would scroll with, so a menu that
+    # overflows the screen makes the page scroll to show the item the key
+    # moved to. A menu that fits needs no scroll, but must be shown whole.
+    if menu_sits_below_trigger:
+        page.wait_for_function("window.scrollY > 0")
+    else:
+        page.wait_for_function(
+            """() => {
+              const menu = document.querySelector('#library-menu').getBoundingClientRect();
+              return menu.top >= -0.5 && menu.bottom <= innerHeight + 0.5;
+            }"""
+        )
+    # Either way the focused item ends inside the screen. The menu follows
+    # its trigger to the new place on the next frame.
+    page.wait_for_function(
+        """() => {
+          const item = document.activeElement.getBoundingClientRect();
+          return item.top >= -0.5 && item.bottom <= innerHeight + 0.5;
+        }"""
+    )
+    assert errors == []
+
+
+def test_keyboard_moves_reveal_items_inside_a_menu_that_scrolls(page):
+    errors = _load(page)
+    # A page long enough to scroll, so a page scroll would show.
+    page.evaluate("document.body.append(Object.assign(document.createElement('div'), {style: 'height: 5000px'}))")
+    # A short menu that has to scroll to show its last item.
+    page.add_style_tag(content="#library-menu { --cui-menu-max-block-size: 5rem; }")
+    _trigger(page).click()
+    surface = _surface(page)
+    page.wait_for_function("(menu => menu.scrollHeight > menu.clientHeight)(document.querySelector('#library-menu'))")
+    # The item must sit inside the menu's border, where it can be seen. WebKit
+    # drops the fraction from scroll offsets, so the item can stick out past
+    # the edge by up to 1 px.
+    focused_item_is_shown = """() => {
+      const menu = document.querySelector('#library-menu');
+      const outer = menu.getBoundingClientRect();
+      const top = outer.top + menu.clientTop;
+      const item = document.activeElement.getBoundingClientRect();
+      return item.top >= top - 1 && item.bottom <= top + menu.clientHeight + 1;
+    }"""
+    page.keyboard.press("End")
+
+    # The last item is shown by scrolling the menu, and the page stays put.
+    assert surface.evaluate("element => element.scrollTop") > 0
+    assert page.evaluate(focused_item_is_shown)
+    page.keyboard.press("Home")
+    assert page.evaluate(focused_item_is_shown)
+    assert page.evaluate("window.scrollY") == 0
+    assert errors == []
+
+
 def test_grouped_and_radio_grouped_submenu_items_share_navigation_and_escape(page):
     errors = _load(page)
     page.get_by_role("button", name="Library actions").click()
@@ -1322,6 +1446,7 @@ def test_open_nested_menu_has_no_serious_or_critical_axe_findings(page):
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file(), "run `pnpm install` at the repository root before Citry UI axe tests"
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => {
           const result = await axe.run(document, { resultTypes: ['violations'] });
@@ -2155,6 +2280,78 @@ def test_correlated_rerender_distinguishes_retained_anonymous_commands_and_recov
     assert errors == []
 
 
+def test_open_menu_with_a_focused_submenu_item_is_idle(page: Any) -> None:
+    errors = _load(page)
+    _open_deepest_submenu(page)
+    # Let the open animation and the first geometry samples finish.
+    page.wait_for_timeout(700)
+    page.evaluate(
+        """() => {
+          // An idle open menu must not call focus() or write attributes. A
+          // write that changes nothing still reports a change, and the
+          // observer would reconcile and refocus. A spy is the only way to
+          // see that: the menu looks and works the same.
+          const spy = window.__menuIdle = { focus: 0, attributes: {} };
+          const focus = HTMLElement.prototype.focus;
+          HTMLElement.prototype.focus = function (...args) {
+            spy.focus += 1;
+            return focus.apply(this, args);
+          };
+          new MutationObserver((records) => {
+            for (const record of records) {
+              if (record.target.closest?.('#library-menu')) {
+                spy.attributes[record.attributeName] = (spy.attributes[record.attributeName] || 0) + 1;
+              }
+            }
+          }).observe(document, { subtree: true, attributes: true });
+        }"""
+    )
+    page.wait_for_timeout(1000)
+    spy = page.evaluate("window.__menuIdle")
+
+    assert spy["focus"] == 0
+    assert spy["attributes"] == {}
+    assert errors == []
+
+
+def test_correlated_rerender_does_not_blur_the_focused_item_a_second_time(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    app, html = _events_menu_page()
+    base = serve_citry_ui_live(app, html)
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(f"[pageerror] {error}"))
+    page.goto(base + "/")
+    page.wait_for_function("document.querySelector('#events-menu')?.hasAttribute('data-citry-menu-initialized')")
+    page.get_by_role("button", name="Library workspace").click()
+    archive = page.get_by_role("menuitem", name="Archive shelf")
+    archive.focus()
+    # Count blurs of the focused item. Chromium blurs it once when Vue moves
+    # it ("Delete shelf" is inserted before it) and Firefox not at all.
+    # Making the surface inert during setup would blur the item a second time.
+    archive.evaluate(
+        """element => {
+          window.__archiveBlurs = 0;
+          element.addEventListener('focusout', () => { window.__archiveBlurs += 1; });
+        }"""
+    )
+
+    page.locator(".advance-menu").evaluate("element => element.click()")
+    page.wait_for_function(
+        "document.querySelector('#events-menu [role=menuitem]').textContent.includes('Delete shelf')"
+    )
+    # Give a late second blur time to happen: two frames plus one task.
+    page.evaluate(
+        "() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))"
+    )
+
+    assert archive.evaluate("element => element === document.activeElement")
+    assert page.evaluate("window.__archiveBlurs") <= 1
+    assert errors == []
+
+
 def _close_animation_page() -> str:
     app = Citry(autodiscover=False)
     app.register_library(ComponentLibrary("citry-ui-menu-close-animation-e2e", _MENU_COMPONENTS))
@@ -2460,4 +2657,49 @@ def test_server_rerender_keeps_the_authors_trigger_disabled(
             )
         observed.append(disabled_after_settle())
     assert observed == expected
+    assert errors == []
+
+
+class MenuSnippetDocument(Component):
+    citry = default_citry
+
+    class Kwargs:
+        content: object
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
+        return {"content": kwargs.content}
+
+    template = """
+      <!doctype html>
+      <html lang="en">
+        <head><meta charset="utf-8" /><title>Menu snippet</title><c-css /></head>
+        <body><main>{{ content }}</main><c-js /></body>
+      </html>
+    """
+
+
+def test_item_content_snippet_shortcut_hints_run_the_items_they_name(page, serve_citry_ui_live):
+    errors = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    html = MenuSnippetDocument(content=item_content.preview).render().serialize()
+    page.goto(serve_citry_ui_live(default_citry, html) + "/", wait_until="networkidle")
+    output = page.locator("output")
+
+    # Each hint's key works even while the menu is closed.
+    page.keyboard.press("Alt+Shift+KeyF")
+    expect(output).to_have_text("Last command: search")
+    page.keyboard.press("Alt+Shift+KeyP")
+    expect(output).to_have_text("Last command: bookmark")
+
+    # Choosing the item reports the same value as its key.
+    page.get_by_role("button", name="Catalog tools").click()
+    page.get_by_role("menuitem", name="Mark this passage").click()
+    expect(output).to_have_text("Last command: bookmark")
+    page.get_by_role("button", name="Catalog tools").click()
+    page.get_by_role("menuitem", name="Search illuminated texts").click()
+    expect(output).to_have_text("Last command: search")
     assert errors == []

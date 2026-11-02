@@ -43,6 +43,7 @@ from citry._serialization_security import _ScriptSecurityMaterializer
 from citry.attrs import format_attrs
 from citry.citry_render import (
     _AFTER_RENDER_HOOKS_RENDER_ID,
+    _PRINT_IN_MANY_PLACES_ADVICE,
     CitryRender,
     DepsPosition,
     DepsStrategy,
@@ -74,6 +75,8 @@ if TYPE_CHECKING:
 # The attribute name the placeholders carry, and that mark_html splits the
 # HTML around.
 _RENDER_ID_ATTR = "c-render-id"
+
+
 # A root marker written as a full `name="value"` attribute. The marking scan
 # (mark_html) only splices bare `name=""` attributes, so valued markers are
 # recognized here and spliced by this module instead; see _apply_valued_markers.
@@ -169,6 +172,23 @@ class _PreparedMarkupTracker(LongReferenceSafeParser):
 
     def handle_charref(self, name: str) -> None:  # noqa: ARG002
         self.mark_content("&")
+
+
+def _marked_without_children(html: str, markers: list[str]) -> list[str]:
+    """
+    Mark a leaf's root tags, keeping any `<template c-render-id>` text in place.
+
+    A leaf renders no child components, so a placeholder ``mark_html`` finds
+    in it is text an author wrote, such as one inside a ``<textarea>``. Its
+    text goes back between the segments, as ``join_frames`` does for an id it
+    does not know.
+    """
+    segments, placeholders = mark_html(html, markers, _RENDER_ID_ATTR)
+    parts = [segments[0]]
+    for (_child_id, placeholder_html, _added), segment in zip(placeholders, segments[1:], strict=True):
+        parts.append(placeholder_html)
+        parts.append(segment)
+    return parts
 
 
 def _looks_like_document(html: str) -> bool:
@@ -421,10 +441,93 @@ def _simple_vue_record_frame(record: SimpleVueRecord) -> CitryRender:
 _Frame = tuple[list[str], list[tuple[str, str, list[str]]]]
 
 # One render waiting for its frame: (render, plain markers inherited from the
-# parent, valued markers inherited from the parent, key). Valued markers are
-# the `name="value"` form, threaded separately because mark_html cannot
-# splice them (see _apply_valued_markers).
-_FrameStackItem = tuple[CitryRender, list[str], list[str], str]
+# parent, valued markers inherited from the parent, key, the frames around
+# it). Valued markers are the `name="value"` form, threaded separately
+# because mark_html cannot splice them (see _apply_valued_markers).
+_FrameStackItem = tuple[CitryRender, list[str], list[str], str, "_EnclosingFrames | None"]
+
+
+_REPEATED_RENDER_MESSAGE = (
+    "One rendered output is printed in more than one place on the page, so the components in it would "
+    f"appear more than once. {_PRINT_IN_MANY_PLACES_ADVICE}"
+)
+_SELF_CONTAINING_RENDER_MESSAGE = (
+    "This rendered output contains itself, so writing the page would never finish. "
+    "Remove the output from its own parts."
+)
+
+
+class _EnclosingFrames:
+    """
+    One frame and every frame around it, for naming its child frames.
+
+    A component's output can sit inside that same component's output when a
+    hook places it there: an ``on_render`` hook that returns
+    ``Frame(body=result)``, or an ``on_component_rendered`` hook that wraps
+    ``ctx.render`` the same way. The output the hook received and the output
+    that replaced it then carry the same render id, so the inner one gets a
+    placeholder key of its own, numbered by how many frames around it have
+    that id. That output is the component's content passed to the other
+    component, as a nested template written in its template would be, so it
+    carries no root markers of its own; the replacement around it, which is
+    the component's output root, does. Two frames with one render id at the
+    same level are the same output placed twice, so their keys collide and
+    serialization rejects them.
+    """
+
+    __slots__ = ("_built_ids", "_parent", "_render", "_render_id")
+
+    def __init__(self, render: CitryRender, parent: _EnclosingFrames | None, built_ids: set[str]) -> None:
+        self._render = render
+        self._render_id = render.frame.render_id
+        self._parent = parent
+        # Render ids of every frame this build pass has reached so far. An id
+        # that is not here cannot belong to an enclosing frame, so most
+        # children skip the walk up the chain.
+        self._built_ids = built_ids
+        if self._render_id is not None:
+            built_ids.add(self._render_id)
+
+    def encloses(self, render_id: str) -> bool:
+        """Whether this frame or one around it has ``render_id``."""
+        if render_id not in self._built_ids:
+            return False
+        frames: _EnclosingFrames | None = self
+        while frames is not None:
+            if frames._render_id == render_id:
+                return True
+            frames = frames._parent
+        return False
+
+    def child(self, render: CitryRender) -> _EnclosingFrames:
+        """Return the chain for the child frame ``render``, inside this one."""
+        return _EnclosingFrames(render, self, self._built_ids)
+
+    def child_key(self, render_id: str, part: CitryRender) -> str:
+        """
+        Return the placeholder key for ``part``, a child frame with ``render_id``.
+
+        The key is the render id, followed by a level number when frames
+        around ``part`` already have that id.
+
+        Raises:
+            RuntimeError: ``part`` is one of the frames around it, so its
+                output contains itself and would never finish.
+
+        """
+        if render_id not in self._built_ids:
+            return render_id
+        level = 0
+        frames: _EnclosingFrames | None = self
+        while frames is not None:
+            if frames._render is part:
+                # Each trip round the loop would add a level, so the keys
+                # would never collide and serialization would never stop.
+                raise RuntimeError(_SELF_CONTAINING_RENDER_MESSAGE)
+            if frames._render_id == render_id:
+                level += 1
+            frames = frames._parent
+        return f"{render_id}:inside-itself:{level}" if level else render_id
 
 
 @dataclass(slots=True)
@@ -682,10 +785,11 @@ def _serialize_render_result(
     # inherits. An explicit stack keeps depth off the Python call stack.
     #
     # `frame_by_key` holds each component's scanned frame (children still
-    # placeholders), keyed by the component's render id. `order` records the
-    # order components were reached, so pass 2 can walk it in reverse (children
-    # before parents). The root has no parent and may have no component, so it
-    # uses the key "".
+    # placeholders), keyed by the component's render id, made unique for
+    # output a hook placed inside its own component (see _EnclosingFrames).
+    # `order` records the order components were reached, so pass 2 can walk
+    # it in reverse (children before parents). The root has no parent and
+    # may have no component, so it uses the key "".
     frame_by_key: dict[str, _Frame] = {}
     decorations: dict[str, RenderDecoration] = {}
     order: list[str] = []
@@ -717,10 +821,21 @@ def _serialize_render_result(
 
     def build_frames(stack: list[_FrameStackItem], *, skip_root_body: bool) -> None:
         nonlocal root_body_skipped
+        built_ids: set[str] = set()
         while stack:
-            render, inherited, inherited_valued, key = stack.pop()
+            render, inherited, inherited_valued, key, outer_frames = stack.pop()
             component = render.context.component
             render_frame = render.frame
+            # Output a hook placed inside its own component's output is that
+            # component's content passed to another component, as a nested
+            # template is, so it carries no markers of its own (see
+            # _EnclosingFrames). Checked before this frame joins the chain.
+            inside_itself = (
+                render_frame.render_id is not None
+                and outer_frames is not None
+                and outer_frames.encloses(render_frame.render_id)
+            )
+            frames = _EnclosingFrames(render, None, built_ids) if outer_frames is None else outer_frames.child(render)
             if render_frame.render_id is not None:
                 component_classes[render_frame.render_id] = (
                     render_frame.class_name or render_frame.class_id or "component"
@@ -760,6 +875,7 @@ def _serialize_render_result(
                 placeholder_map,
                 placeholder_nonce,
                 omit_handler_marker,
+                frames,
                 compensate_textarea_lf=not vue_runtime_installed,
                 parts=frame_parts,
             )
@@ -778,6 +894,7 @@ def _serialize_render_result(
             if (
                 render_frame.render_id is not None
                 and render_frame.is_component_root
+                and not inside_itself
                 and render_frame.render_id != _AFTER_RENDER_HOOKS_RENDER_ID.get()
             ):
                 extension_markers = list(render_frame.root_markers)
@@ -811,11 +928,7 @@ def _serialize_render_result(
                 segments, placeholders = _apply_valued_markers(segments, placeholders, root_markers, valued_markers)
 
             if key in frame_by_key:
-                msg = (
-                    "The same rendered component id was encountered more than once during serialization; "
-                    "render a fresh occurrence for each physical position."
-                )
-                raise RuntimeError(msg)
+                raise RuntimeError(_REPEATED_RENDER_MESSAGE)
             frame_by_key[key] = (segments, placeholders)
             if isinstance(render, RenderDecoration):
                 decorations[key] = render
@@ -825,7 +938,7 @@ def _serialize_render_result(
                 added = added_by_child.get(child_id, [])
                 # Valued markers reach a child exactly when the plain markers did:
                 # the child's placeholder sat at this component's root.
-                stack.append((child_render, added, valued_markers if added else [], child_id))
+                stack.append((child_render, added, valued_markers if added else [], child_id, frames))
             # mark_html may have spliced markers onto a Placeholder's template
             # tag (when it sits at a component root); record the exact final
             # text, since that is what the on_serialize hook must find in the
@@ -860,7 +973,7 @@ def _serialize_render_result(
 
     # The id check needs every id the body writes, so a development page
     # builds the whole body; only production skips it.
-    build_frames([(root, [], [], root_key)], skip_root_body=id_check is None)
+    build_frames([(root, [], [], root_key, None)], skip_root_body=id_check is None)
     html = join_frames()
     # server_html reads this copy, because `html` is replaced once the
     # on_serialize hooks have run.
@@ -881,7 +994,7 @@ def _serialize_render_result(
                 frame_by_key.clear()
                 decorations.clear()
                 order.clear()
-                build_frames([(root, [], [], root_key)], skip_root_body=False)
+                build_frames([(root, [], [], root_key, None)], skip_root_body=False)
                 full_html.append(join_frames())
             else:
                 full_html.append(first_html)
@@ -918,42 +1031,48 @@ def _serialize_render_result(
     # nothing was collected for it either.
     vue_plan = None
     if root_citry is not None:
+        from citry._vue.events import hold_page_assets  # noqa: PLC0415
         from citry._vue.serialization import prepare_vue_serialization  # noqa: PLC0415
         from citry.extension import OnSerializeContext  # noqa: PLC0415
 
-        vue_plan = prepare_vue_serialization(
-            OnSerializeContext(
-                citry=root_citry,
+        # Every file this page publishes (its compiled Vue code and styles,
+        # its css_data() stylesheets) stays in memory until the page is
+        # written, so a later step's publish cannot drop an earlier one the
+        # page links or inlines.
+        with hold_page_assets(root_citry, root, publish_css_data=deps_strategy != "ignore"):
+            vue_plan = prepare_vue_serialization(
+                OnSerializeContext(
+                    citry=root_citry,
+                    context=root.context,
+                    selected_render=root,
+                    html=html,
+                    placeholders=placeholder_map,
+                    deps_strategy=deps_strategy,
+                    deps_position=deps_position,
+                ),
+                session._script_security,
+                session.security_csp,
+                javascript_policy,
+                session.security_javascript,
+                vue_analysis,
+                early_selected_tree=early_selected_tree,
+                hydration_candidate=hydration_candidate,
+                server_html=server_html,
+            )
+            html = root_citry.extensions.on_serialize(
                 context=root.context,
                 selected_render=root,
-                html=html,
+                html=vue_plan.shell_html if vue_plan is not None else html,
                 placeholders=placeholder_map,
                 deps_strategy=deps_strategy,
                 deps_position=deps_position,
-            ),
-            session._script_security,
-            session.security_csp,
-            javascript_policy,
-            session.security_javascript,
-            vue_analysis,
-            early_selected_tree=early_selected_tree,
-            hydration_candidate=hydration_candidate,
-            server_html=server_html,
-        )
-        html = root_citry.extensions.on_serialize(
-            context=root.context,
-            selected_render=root,
-            html=vue_plan.shell_html if vue_plan is not None else html,
-            placeholders=placeholder_map,
-            deps_strategy=deps_strategy,
-            deps_position=deps_position,
-            _script_security=session._script_security,
-            _security_csp=session.security_csp,
-            _javascript_policy=javascript_policy,
-            _security_javascript=session.security_javascript,
-        )
-        if vue_plan is not None:
-            html = vue_plan.finalize(html)
+                _script_security=session._script_security,
+                _security_csp=session.security_csp,
+                _javascript_policy=javascript_policy,
+                _security_javascript=session.security_javascript,
+            )
+            if vue_plan is not None:
+                html = vue_plan.finalize(html)
 
     # A Placeholder is an optional serialize-time insertion point. Extensions
     # replace the exact placeholder text they own; anything left after every
@@ -1083,6 +1202,7 @@ def _append_frame_parts(
     placeholder_map: dict[str, str],
     placeholder_nonce: str,
     omit_handler_marker: str | None,
+    frames: _EnclosingFrames,
     compensate_textarea_lf: bool,
     out: list[str],
 ) -> None:
@@ -1097,6 +1217,7 @@ def _append_frame_parts(
             placeholder_map=placeholder_map,
             placeholder_nonce=placeholder_nonce,
             omit_handler_marker=omit_handler_marker,
+            frames=frames,
             out=out,
         )
         return
@@ -1112,7 +1233,7 @@ def _append_frame_parts(
         elif isinstance(part, RenderDecoration):
             part_frame = part.frame
             decoration_id = (
-                part_frame.render_id
+                frames.child_key(part_frame.render_id, part)
                 if part_frame.is_component_root
                 and part_frame.render_id is not None
                 and part_frame.render_id != render.frame.render_id
@@ -1128,8 +1249,9 @@ def _append_frame_parts(
                 and part_frame.render_id != render.frame.render_id
             ):
                 # Another component's whole output: leave a placeholder for pass 2.
-                out.append(f'<template c-render-id="{part_frame.render_id}"></template>')
-                children.append((part, part_frame.render_id))
+                child_key = frames.child_key(part_frame.render_id, part)
+                out.append(f'<template c-render-id="{child_key}"></template>')
+                children.append((part, child_key))
             else:
                 # Interior content joins this frame and may be nested beyond
                 # Python's recursion limit.
@@ -1161,12 +1283,7 @@ def _append_frame_parts(
 
             rendered_parts = static_leaf_parts(part.leaf)
             markers = [f"data-cid-{part.render_id}", *part.root_markers]
-            marked_parts, _ = mark_html(
-                "".join(rendered_parts),
-                markers,
-                _RENDER_ID_ATTR,
-            )
-            out.extend(marked_parts)
+            out.extend(_marked_without_children("".join(rendered_parts), markers))
         elif isinstance(part, Placeholder):
             # Each occurrence needs its own identity for serialization hooks.
             placeholder_id = f"{part.key}:{len(placeholder_map) + 1}:{placeholder_nonce}"
@@ -1261,6 +1378,7 @@ def _append_frame_parts_with_fallback_tracking(
     placeholder_map: dict[str, str],
     placeholder_nonce: str,
     omit_handler_marker: str | None,
+    frames: _EnclosingFrames,
     out: list[str],
 ) -> None:
     """
@@ -1306,7 +1424,7 @@ def _append_frame_parts_with_fallback_tracking(
         elif isinstance(part, RenderDecoration):
             part_frame = part.frame
             decoration_id = (
-                part_frame.render_id
+                frames.child_key(part_frame.render_id, part)
                 if part_frame.is_component_root
                 and part_frame.render_id is not None
                 and part_frame.render_id != render.frame.render_id
@@ -1322,8 +1440,9 @@ def _append_frame_parts_with_fallback_tracking(
                 and part_frame.render_id != render.frame.render_id
             ):
                 # Another component's whole output: leave a placeholder for pass 2.
-                out.append(f'<template c-render-id="{part_frame.render_id}"></template>')
-                children.append((part, part_frame.render_id))
+                child_key = frames.child_key(part_frame.render_id, part)
+                out.append(f'<template c-render-id="{child_key}"></template>')
+                children.append((part, child_key))
             else:
                 # Interior content joins this frame and may be nested beyond
                 # Python's recursion limit.
@@ -1357,11 +1476,7 @@ def _append_frame_parts_with_fallback_tracking(
 
             rendered_parts = static_leaf_parts(part.leaf)
             markers = [f"data-cid-{part.render_id}", *part.root_markers]
-            marked_parts, _ = mark_html(
-                "".join(rendered_parts),
-                markers,
-                _RENDER_ID_ATTR,
-            )
+            marked_parts = _marked_without_children("".join(rendered_parts), markers)
             out.extend(marked_parts)
             for marked in marked_parts:
                 consume_markup(marked)
@@ -1516,6 +1631,7 @@ def _build_frame(
     placeholder_map: dict[str, str],
     placeholder_nonce: str,
     omit_handler_marker: str | None,
+    frames: _EnclosingFrames,
     *,
     compensate_textarea_lf: bool,
     parts: list[RenderPart] | None = None,
@@ -1547,6 +1663,7 @@ def _build_frame(
         placeholder_map=placeholder_map,
         placeholder_nonce=placeholder_nonce,
         omit_handler_marker=omit_handler_marker,
+        frames=frames,
         compensate_textarea_lf=compensate_textarea_lf,
         out=out,
     )

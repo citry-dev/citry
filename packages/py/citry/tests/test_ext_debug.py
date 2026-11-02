@@ -393,7 +393,7 @@ class TestSerialization:
 
         rendered = Card().render()
         repeated = CitryRender(parts=[rendered, rendered], context=CitryContext())
-        with pytest.raises(RuntimeError, match="same rendered component id"):
+        with pytest.raises(RuntimeError, match="printed in more than one place on the page"):
             repeated.serialize(deps_strategy="ignore")
 
     def test_python_composed_decorated_child_keeps_prepared_identity(self):

@@ -12,7 +12,7 @@ The slot value and fill types.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L194" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L194" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -49,7 +49,7 @@ Slot(Card(title="Hi"))                        # composed element
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L242" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L242" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -76,7 +76,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L244" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L244" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -103,7 +103,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L246" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L246" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -130,7 +130,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L248" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L248" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -157,7 +157,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L250" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L250" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -188,7 +188,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L260" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L260" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -228,7 +228,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L135" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L135" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -259,7 +259,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L148" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L148" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -293,7 +293,7 @@ more precise component-specific field shape.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L156" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L156" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -327,7 +327,7 @@ fallback.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L165" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L165" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -371,7 +371,7 @@ it to inspect provided data.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L53" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L53" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -426,7 +426,7 @@ changes to the input mapping do not change a retained slot call.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L175" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L175" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -464,7 +464,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L377" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L377" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -504,7 +504,7 @@ raises an error only if Citry renders that tag without content.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/slots.py#L122" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/slots.py#L122" target="_blank" rel="noopener">
 View source
 </a>
 

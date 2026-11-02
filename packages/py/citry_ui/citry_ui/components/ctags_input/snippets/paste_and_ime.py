@@ -25,7 +25,8 @@ class TagsInputPasteAndIme(Component):
               @compositionend="composing=false;last='Composition ended'"
               @paste="last='Paste received'"
               :onValueChange="(next,detail)=>
-                  last=`${detail.source}: ${JSON.stringify(next)}`" :onValueInvalid="(reason,detail)=>
+                  last=`${detail.source}: ${JSON.stringify(next)}`"
+              :onValueInvalid="(reason,detail)=>
                   last=`Rejected ${reason}: ${detail.candidate || 'batch'}`"
             />
           </c-fill>

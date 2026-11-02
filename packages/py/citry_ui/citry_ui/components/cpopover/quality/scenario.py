@@ -37,11 +37,19 @@ def popover_states_component(app: Citry) -> type[Component]:
                 <c-fill name="default">
                   <form id="quality-popover-form">
                     <label for="quality-depth">Ocean depth</label>
-                    <input id="quality-depth" name="depth" value="100 km" />
+                    <input
+                      id="quality-depth"
+                      name="depth"
+                      value="100 km"
+                    />
                   </form>
                   <c-CPopover id="quality-nested-popover" placement="bottom-end">
                     <c-fill name="activator" data="{ activator_attrs }">
-                      <c-CButton size="sm" variant="outline" c-attrs="activator_attrs">
+                      <c-CButton
+                        size="sm"
+                        variant="outline"
+                        c-attrs="activator_attrs"
+                      >
                         Inspect plume
                       </c-CButton>
                     </c-fill>
@@ -58,7 +66,8 @@ def popover_states_component(app: Citry) -> type[Component]:
                 c-dismissible="False"
                 placement="top"
                 match_width
-                :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
+                :open="controlledOpen"
+                :onOpenChange="(open) => controlledOpen = open"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <c-CButton variant="outline" c-attrs="activator_attrs">

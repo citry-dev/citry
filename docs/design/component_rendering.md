@@ -273,8 +273,9 @@ extension system is a prerequisite for building it (see the ordering in
   still mint a fresh render id and re-merge its deps into the parent. So a folded
   placeholder is a recipe that produces a child `CitryRender` each render, not a
   baked string. The two designs agree.
-- **Expression caching (#1473) is a separate, value-keyed layer.** It must not be
-  entangled with `CitryRender` or `CitryContext`; see
+- **Non-const expressions evaluate on every render.** Reuse across renders
+  comes from const precomputing, `pure = True` and output caching, each of
+  which keeps its stored work outside `CitryRender` and `CitryContext`; see
   [`component_constness.md`](component_constness.md) section 10.
 - **Class-level body caching (#1326) is unaffected.** The parsed+compiled
   body-generating function is cached per component class; `CitryRender` is

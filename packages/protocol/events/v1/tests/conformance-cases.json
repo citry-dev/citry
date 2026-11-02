@@ -138,6 +138,15 @@
       "implementations": ["python", "javascript"]
     },
     {
+      "id": "descriptor-detached-default-value",
+      "schema": "descriptor.schema.json",
+      "constraint": "/$defs/eventHandler/properties/detached/const",
+      "seed": "descriptors/complete.valid.json",
+      "operations": [{"op": "replace", "path": "/eventHandlers/preview/detached", "value": false}],
+      "expected": {"path": "/eventHandlers/preview/detached", "category": "enum"},
+      "implementations": ["python", "javascript"]
+    },
+    {
       "id": "manifest-public-state-must-be-object",
       "schema": "manifest.schema.json",
       "constraint": "/$defs/componentInstance/properties/publicState/type",

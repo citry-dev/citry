@@ -284,6 +284,11 @@ class DependenciesExtension(Extension):
         writes: list[RenderCacheWrite] = []
         markers: list[tuple[int, tuple[str, ...]]] = []
         seen_instances: set[int] = set()
+        # _vue.events imports this package at load time, so a top-level
+        # import here would be circular.
+        from citry._vue.events import keeps_assets_in_process_only  # noqa: PLC0415
+
+        write_stylesheets = not keeps_assets_in_process_only(ctx.citry)
         for index, raw in enumerate(ctx.payload["records"]):
             path = f"dependencies.records[{index}]"
             if type(raw) is not dict or set(raw) != {"class_id", "css", "instance"}:
@@ -306,12 +311,18 @@ class DependenciesExtension(Extension):
             if css_capture is not None and not has_component_asset("css", component_class):
                 raise CacheArtifactError(f"{path}.css is incompatible with the current component CSS.")
             if css_capture is not None:
-                writes.append(
-                    RenderCacheWrite(
-                        key=gen_cache_key(class_id, "css", css_capture.variables_hash),
-                        value=css_capture.cache_value,
+                # Without a configured cache, the replayed page publishes the
+                # stylesheet when the page is written, into this process's
+                # store of page files (limited by vue_asset_max_bytes); a
+                # write to the default cache would keep a second copy that
+                # never shrinks.
+                if write_stylesheets:
+                    writes.append(
+                        RenderCacheWrite(
+                            key=gen_cache_key(class_id, "css", css_capture.variables_hash),
+                            value=css_capture.cache_value,
+                        )
                     )
-                )
                 markers.append((instance, (f"data-ccss-{css_capture.variables_hash}",)))
             record = DependencyRecord(
                 class_id=class_id,

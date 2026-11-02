@@ -189,10 +189,6 @@ class CTimeline(LibraryComponent):
     class Slots:
         default: SlotInput[CTimelineDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_TIMELINE_CONTEXT, None) is not None:
             raise ValueError(
@@ -245,10 +241,6 @@ class CTimelineItem(LibraryComponent):
         opposite: SlotInput[CTimelineItemOppositeSlotData] | None = None
         indicator: SlotInput[CTimelineItemIndicatorSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "default" not in self.raw_slots:
             raise ValueError("CTimelineItem requires a default content slot.")
@@ -281,10 +273,6 @@ class CInternalTimelineDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTimelineDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -313,10 +301,6 @@ class CInternalTimeline(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if not kwargs.registry.items:
@@ -358,7 +342,11 @@ class CInternalTimeline(LibraryComponent):
         }
 
     template = """
-      <ol class="cui-timeline" c-bind="attrs" data-citry-ui-part="timeline">
+      <ol
+        class="cui-timeline"
+        c-bind="attrs"
+        data-citry-ui-part="timeline"
+      >
         <c-for each="item in items">
           <c-CInternalTimelineItem
             #c-key="item['index']"
@@ -385,10 +373,6 @@ class CInternalTimelineItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declaration = kwargs.declaration
@@ -424,11 +408,20 @@ class CInternalTimelineItem(LibraryComponent):
         }
 
     template = """
-      <li class="cui-timeline__item" #c-key="morph_key" c-bind="attrs" data-citry-ui-part="item">
+      <li
+        class="cui-timeline__item"
+        #c-key="morph_key"
+        c-bind="attrs"
+        data-citry-ui-part="item"
+      >
         <c-if cond="opposite is not None">
           <div class="cui-timeline__opposite" data-citry-ui-part="opposite">{{ opposite }}</div>
         </c-if>
-        <div class="cui-timeline__track" aria-hidden="true" data-citry-ui-part="track">
+        <div
+          class="cui-timeline__track"
+          aria-hidden="true"
+          data-citry-ui-part="track"
+        >
           <span class="cui-timeline__before" data-citry-ui-part="before"></span>
           <span class="cui-timeline__indicator" data-citry-ui-part="indicator">
             <c-if cond="indicator is not None">{{ indicator }}</c-if>

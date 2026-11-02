@@ -162,7 +162,7 @@ def _enrich_unexpected_schema_key(error: TypeError, schema: type, supplied: dict
         error.args = (f"{message} Did you mean {close[0]!r}?", *error.args[1:])
 
 
-def _build_component_data_schema(component_class: type, name: str) -> object:
+def _build_component_data_schema(component_class: type, name: str, *, framework_owned: bool = False) -> object:
     """
     Return the effective data-shape class for one component class.
 
@@ -181,7 +181,22 @@ def _build_component_data_schema(component_class: type, name: str) -> object:
     if ancestor is not None:
         return _static_class_dict(ancestor)[name]
 
-    schema = _effective_data_schema(component_class, name, cast("type", nearest.value))
+    # A library's schema keeps the kind its author wrote and tested, whatever
+    # `model_base` the installing application sets.
+    from citry.library_component import LibraryComponent  # noqa: PLC0415 - library_component imports this module
+
+    # Citry's own built-in components keep theirs too.
+    declaring_class = nearest.declaring_class
+    # A library definition is not itself a Component; an application's own
+    # subclass of an installed library component is, and follows the setting.
+    from_library = (
+        isinstance(declaring_class, type)
+        and issubclass(declaring_class, LibraryComponent)
+        and not issubclass(declaring_class, Component)
+    )
+    schema = _effective_data_schema(
+        component_class, name, cast("type", nearest.value), use_model_base=not (from_library or framework_owned)
+    )
     _warn_if_fields_dropped(component_class, name, nearest, schema)
     return schema
 
@@ -435,6 +450,9 @@ class ComponentMeta(LibraryComponentMeta):
 
         if _citry_builtin is not None:
             type.__setattr__(cls, "_citry_builtin_token", _citry_builtin)
+        # Citry's own components keep the schemas they declare, whatever
+        # `model_base` the application sets.
+        type.__setattr__(cls, "_citry_framework_component", _citry_builtin is not None or _citry_internal is not None)
 
         # Resolve the Citry instance from the explicit or inherited binding,
         # then stamp it onto this concrete class. The own immutable binding
@@ -486,7 +504,15 @@ class ComponentMeta(LibraryComponentMeta):
         # NamedTuple keep their own construction model.
         for data_class_name in _DATA_SCHEMA_NAMES:
             if _get_nested_class_declarations(cls, data_class_name):
-                type.__setattr__(cls, data_class_name, _build_component_data_schema(cls, data_class_name))
+                type.__setattr__(
+                    cls,
+                    data_class_name,
+                    _build_component_data_schema(
+                        cls,
+                        data_class_name,
+                        framework_owned=cls.__dict__["_citry_framework_component"],
+                    ),
+                )
 
         # Class-created hooks may define more components, so they and the final
         # registration share one lifecycle owner. Another thread can never see
@@ -699,7 +725,8 @@ class Component(metaclass=ComponentMeta):
     """Inline template string (Citry template syntax).
 
     Mutually exclusive with ``template_file``. Read the loaded template with
-    ``get_template()``.
+    ``get_template()``. Only the component's author writes the template;
+    never build it from request data. Pass that data in as values instead.
     """
 
     template_file: ClassVar[str | None] = None
@@ -719,13 +746,16 @@ class Component(metaclass=ComponentMeta):
     ``I18n.messages_locale``. A registered message asset activates server
     source-mode translation for the complete engine catalog, even without
     engine i18n settings. Read the loaded source with ``get_messages()``.
+    Only the component's author writes the messages; never build them from
+    request data. Pass that data as message variables instead.
     """
 
     messages_file: ClassVar[str | None] = None
     """Path to source-locale Fluent messages, resolved like ``template_file``.
 
     This has the same source-mode and ``I18n.messages_locale`` contract as
-    ``messages``.
+    ``messages``. Like ``messages``, the file is written by the component's
+    author, never generated from request data.
     """
 
     js: ClassVar[str | None] = None
@@ -825,14 +855,18 @@ class Component(metaclass=ComponentMeta):
     """Optional typed values that survive between server event calls.
 
     Define ``State`` as a plain nested class with type annotations. The Events
-    extension converts it to a mutable, slotted dataclass automatically::
+    extension turns it into a mutable dataclass, or into a Pydantic model
+    when ``model_base`` names one::
 
         class Search(Component):
             class State:
                 query: str = ""
                 page: int = 1
 
-    State must contain only JSON-serializable values. By default, every field
+    ``State`` can also be a Pydantic v2 or v1 model written by hand, which
+    Pydantic then checks; see "Pydantic State" in the Events
+    State guide. State must contain only JSON-serializable values, or, for a
+    model State, values Pydantic can write as JSON. By default, every field
     is readable and writable in the browser. Use ``_public`` to choose which
     fields the browser may read and ``_model`` to choose which public fields
     it may change. ``_storage`` is ``"signed"`` by default and may be set to
@@ -883,7 +917,9 @@ class Component(metaclass=ComponentMeta):
 
     Define a nested ``Lint`` class with any of the rule severities
     (``rule_*``), variable mappings, and ``check_input_types`` that
-    [`LintSettings`][citry.LintSettings] accepts. Nested declarations
+    [`LintSettings`][citry.LintSettings] accepts, plus
+    ``template_data_keys``, which only a component's ``Lint`` class takes.
+    Nested declarations
     compose in the same order Python uses to resolve methods across base
     classes. Assign ``None`` to return to the Citry instance's application
     lint settings, including its ``check_input_types``. When the class is
@@ -902,11 +938,39 @@ class Component(metaclass=ComponentMeta):
     component, when its library is registered), so changing the ``Lint``
     class's attribute afterwards has no effect.
 
+    ``template_data_keys`` lists every key that ``template_data()``
+    returns. Use it when the method builds its result in a way Citry
+    cannot read, such as by calling a helper function. ``citry check``
+    and the editor then accept the listed names and report any other
+    name. Rendering ignores the list.
+
+    ``citry check`` warns about a key the method writes as a literal but
+    the list leaves out.
+
+    The value must be a tuple, list, or frozenset of strings, or
+    ``TypeError`` is raised. A name that cannot be a Python variable name,
+    such as ``"class"``, or a name listed twice, raises ``ValueError``. A
+    component that declares both the list and a
+    [`TemplateData`][citry.Component.TemplateData] schema raises
+    ``TypeError``, because the schema already names every key. A schema on
+    a subclass replaces an inherited list, and ``template_data_keys = None``
+    clears one.
+
     Example:
         ```python
         class LegacyCard(Component):
             class Lint:
                 check_input_types = False
+        ```
+
+        ```python
+        class Avatar(Component):
+            class Lint:
+                template_data_keys = ("src", "alt", "img_attrs")
+
+            def template_data(self, kwargs, slots):
+                # Returns {"src": ..., "alt": ..., "img_attrs": ...}.
+                return build_avatar_data(kwargs)
         ```
     """
 

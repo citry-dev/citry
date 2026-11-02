@@ -8,7 +8,11 @@ class ControlledProgress(Component):
     template = """
       <section class="progress-controlled" >
         <c-CRow justify="between"><h2>Transect upload</h2><output v-text="`${value}%`"></output></c-CRow>
-        <c-CProgress label="Transect upload" :value="value" shape="pill" />
+        <c-CProgress
+          label="Transect upload"
+          :value="value"
+          shape="pill"
+        />
         <label>Completion <input type="range" min="0" max="100" v-model.number="value" /></label>
       </section>
     """

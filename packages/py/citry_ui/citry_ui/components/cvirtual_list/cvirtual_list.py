@@ -171,9 +171,21 @@ class CVirtualList(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "aria_label",
+            "attrs",
+            "estimated_item_size",
+            "focusable",
+            "initial_index",
+            "item_size",
+            "overscan",
+            "registry",
+            "start_index",
+            "strategy",
+            "total_count",
+            "viewport_size",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_virtual_list_snapshot", None)
@@ -254,10 +266,6 @@ class CVirtualListItem(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListItemDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "default" not in self.raw_slots:
             raise ValueError("CVirtualListItem requires a default content slot.")
@@ -286,10 +294,6 @@ class CInternalVirtualListDeclarations(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def on_render(self) -> Any:
         result, error = yield
@@ -324,10 +328,6 @@ class CInternalVirtualList(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declarations = kwargs.registry.items
@@ -387,7 +387,11 @@ class CInternalVirtualList(LibraryComponent):
         />
       </c-if>
       <c-else>
-        <c-CInternalVirtualListStatic c-attrs="attrs" c-items="items" c-total_count="total_count" />
+        <c-CInternalVirtualListStatic
+          c-attrs="attrs"
+          c-items="items"
+          c-total_count="total_count"
+        />
       </c-else>
     """
 
@@ -405,15 +409,16 @@ class CInternalVirtualListStatic(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return {"attrs": kwargs.attrs, "items": kwargs.items, "total_count": kwargs.total_count}
 
     template = """
-      <div class="cui-virtual-list" c-bind="attrs" role="list" data-citry-ui-part="virtual-list">
+      <div
+        class="cui-virtual-list"
+        c-bind="attrs"
+        role="list"
+        data-citry-ui-part="virtual-list"
+      >
         <div class="cui-virtual-list__track" data-citry-ui-part="track">
           <c-for each="item in items">
             <c-CInternalVirtualListItem
@@ -448,10 +453,6 @@ class CInternalVirtualListWindow(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return {
             "attrs": kwargs.attrs,
@@ -462,7 +463,12 @@ class CInternalVirtualListWindow(LibraryComponent):
         }
 
     template = """
-      <div class="cui-virtual-list" c-bind="attrs" role="list" data-citry-ui-part="virtual-list">
+      <div
+        class="cui-virtual-list"
+        c-bind="attrs"
+        role="list"
+        data-citry-ui-part="virtual-list"
+      >
         <div class="cui-virtual-list__track" data-citry-ui-part="track">
           <div
             aria-hidden="true"
@@ -511,9 +517,21 @@ class CVirtualWindow(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "aria_label",
+            "attrs",
+            "estimated_item_size",
+            "focusable",
+            "initial_index",
+            "item_size",
+            "overscan",
+            "registry",
+            "start_index",
+            "strategy",
+            "total_count",
+            "viewport_size",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_virtual_window_snapshot", None)
@@ -616,10 +634,6 @@ class CInternalVirtualListItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declaration = kwargs.declaration

@@ -10,7 +10,11 @@ class LocalizedTimePicker(Component):
         <div style="display:flex;gap:.5rem;margin-block-end:1rem">
           <c-CButton type="button">English source locale</c-CButton>
         </div>
-        <c-CTimePicker value="14:30" min="13:00" max="16:00" />
+        <c-CTimePicker
+          value="14:30"
+          min="13:00"
+          max="16:00"
+        />
       </c-i18n>
     """
 

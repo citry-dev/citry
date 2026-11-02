@@ -13,7 +13,8 @@ class ControlledMultiSelect(Component):
           placeholder="Choose channels"
           c-value="['email']"
           c-trigger_attrs="{'aria-label':'Notification channels'}"
-          :value="value" :onValueChange="(next) => value = next"
+          :value="value"
+          :onValueChange="(next) => value = next"
         />
         <p>Current: <strong v-text="value.join(', ')"></strong></p>
       </div>

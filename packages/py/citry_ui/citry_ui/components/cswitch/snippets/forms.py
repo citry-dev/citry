@@ -11,7 +11,11 @@ class SwitchForm(Component):
 
         @submit.prevent="save($event.target)"
       >
-        <c-CSwitch name="quiet_hours" value="enabled" required>Quiet hours</c-CSwitch>
+        <c-CSwitch
+          name="quiet_hours"
+          value="enabled"
+          required
+        >Quiet hours</c-CSwitch>
         <c-CRow>
           <c-CButton type="submit">Save home settings</c-CButton>
           <button type="reset">Reset</button>

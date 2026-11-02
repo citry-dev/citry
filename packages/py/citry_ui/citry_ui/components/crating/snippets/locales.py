@@ -10,8 +10,16 @@ class RatingLocales(Component):
 
     template = """
       <section class="rating-demo-stack">
-        <c-CRating label="Catalog-backed value names" value="3.5" precision="0.5" />
-        <c-CRating label="Application-owned value names" value="4" value_label="Score {value} / {max}" />
+        <c-CRating
+          label="Catalog-backed value names"
+          value="3.5"
+          precision="0.5"
+        />
+        <c-CRating
+          label="Application-owned value names"
+          value="4"
+          value_label="Score {value} / {max}"
+        />
         <p>The first Rating follows its nearest client-enabled i18n provider; the explicit pattern stays fixed.</p>
       </section>
     """

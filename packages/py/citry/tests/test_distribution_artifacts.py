@@ -89,7 +89,7 @@ def test_wheel_size_gate_reports_and_rejects_the_exact_compressed_size(tmp_path:
 def _write_wheel(path: Path, *, extra: str | None = None) -> None:
     dist_info = "citry-0.4.3.dist-info"
     metadata = (
-        "Metadata-Version: 2.4\nName: citry\nVersion: 0.4.3\nRequires-Python: <4.0,>=3.10\n"
+        "Metadata-Version: 2.4\nName: citry\nVersion: 0.4.3\nRequires-Python: <4.0,>=3.11\n"
         + "".join(
             f"Requires-Dist: {requirement}\n" for requirement in sorted(distribution_verifier.EXPECTED_REQUIRES_DIST)
         )

@@ -195,10 +195,6 @@ class CContainer(LibraryComponent):
     class Slots:
         default: SlotInput[CContainerDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(
         self,
         kwargs: Kwargs,
@@ -257,10 +253,6 @@ class CGrid(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CGridDefaultSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,
@@ -336,10 +328,6 @@ class CGridItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CGridItemDefaultSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,

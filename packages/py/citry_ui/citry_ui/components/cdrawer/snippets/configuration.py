@@ -8,7 +8,11 @@ class ConfigureDrawer(Component):
     template = """
       <section
         >
-        <c-CDrawer :placement="placement" :size="size" :scroll="scroll">
+        <c-CDrawer
+          :placement="placement"
+          :size="size"
+          :scroll="scroll"
+        >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Preview geometry</c-CButton>
           </c-fill>

@@ -156,7 +156,7 @@ def test_switch_validates_exact_strings_booleans_and_choices():
         _render("<c-CSwitch c-value=\"'a\\0b'\">Irrigation</c-CSwitch>")
     with pytest.raises(TypeError, match="checked"):
         _render('<c-CSwitch checked="yes">Irrigation</c-CSwitch>')
-    with pytest.raises(ValueError, match="size"):
+    with pytest.raises(TypeError, match=r"CSwitch\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"):
         _render('<c-CSwitch size="xl">Irrigation</c-CSwitch>')
 
 

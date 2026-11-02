@@ -26,8 +26,8 @@ another version of the same package. When the
 variable is unset (pull-request CI and local runs) they compare the files
 unchanged.
 
-This module uses only the standard library because the verifiers import it
-on every supported Python, including 3.10.
+This module uses only the standard library, because the verifiers import it
+in a Python that has no other packages installed.
 """
 
 from __future__ import annotations
@@ -38,15 +38,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Final
 
-_tomllib: Any
-try:
-    import tomllib as _stdlib_tomllib
-except ModuleNotFoundError:  # Python 3.10, where the verifiers also run.
-    _tomllib = None
-else:
-    _tomllib = _stdlib_tomllib
+import tomllib
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -87,9 +81,6 @@ _TAG_LINK_RE: Final = re.compile(
 _TRAILING_PUNCTUATION: Final = ".,;:!"
 _TAG_PREFIX_RE: Final = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*@")
 _VERSION_RE: Final = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*")
-# The first `version = "..."` line, which is the `[project]` version in every
-# package manifest here; the publish workflows read it the same way.
-_PYPROJECT_VERSION_RE: Final = re.compile(r'^version\s*=\s*"([^"]+)"', re.MULTILINE)
 
 
 class ReleaseLinkError(ValueError):
@@ -113,14 +104,8 @@ def package_version(package_dir: Path) -> str:
     try:
         if pyproject.is_file():
             text = pyproject.read_text(encoding="utf-8")
-            # Read `[project].version` the way scripts/release.py does when
-            # tomllib exists; the first `version =` line is the 3.10 fallback,
-            # the same line the publish workflows read.
-            if _tomllib is not None:
-                version: object = _tomllib.loads(text).get("project", {}).get("version", "")
-            else:
-                match = _PYPROJECT_VERSION_RE.search(text)
-                version = match.group(1) if match else ""
+            # Read `[project].version` the way scripts/release.py does.
+            version: object = tomllib.loads(text).get("project", {}).get("version", "")
         else:
             payload = json.loads((package_dir / "package.json").read_text(encoding="utf-8"))
             version = payload.get("version", "") if isinstance(payload, dict) else ""

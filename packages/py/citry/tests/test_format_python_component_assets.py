@@ -449,3 +449,14 @@ def test_public_asset_api_is_exported_from_citry() -> None:
     assert citry.prepare_python_component_assets is prepare_python_component_assets
     assert citry.finish_python_component_assets is finish_python_component_assets
     assert citry.format_python_component_assets is format_python_component_assets
+
+
+def test_blank_lines_in_a_formatted_js_string_stay_empty() -> None:
+    # The JS and CSS strings are written back with the same indentation step
+    # as templates, so a blank line there must not gain trailing spaces either.
+    source = _component_source('    js = """\n      const  a = 1;\n\n      const b = 2;\n    """\n')
+
+    result = format_python_component_assets(source, provider=_format_request)
+
+    assert 'js = """\n      const a = 1;\n\n      const b = 2;\n    """' in result.source
+    assert format_python_component_assets(result.source, provider=_format_request).source == result.source

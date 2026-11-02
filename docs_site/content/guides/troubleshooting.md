@@ -199,9 +199,9 @@ with a check mark. To fix it:
 
 1. Install `citry-lsp` in the Python environment the workspace uses:
 
-   ```console
-   python -m pip install citry-lsp
-   ```
+    ```console
+    python -m pip install citry-lsp
+    ```
 
 2. Set `citry.app` to the Citry instance your app starts, written as
    `module:attribute`, for example `myproject.app:engine`. A component
@@ -240,6 +240,11 @@ logs through the standard Python logger named `citry`, at two levels:
   component modules;
 - `TRACE`: each component, slot, and template part as it starts and
   finishes rendering, and which content each slot received.
+
+At `DEBUG` or `TRACE`, an event call that fails with an unexpected
+exception also sends the exception's type and text to the browser, so
+keep both levels off in production (see
+[Keep debug logs off](/security/#keep-debug-logs-off-in-production)).
 
 `TRACE` is a level that Citry adds below `DEBUG`, with the number `5`.
 Python's `logging` module has no name for it, so set the level to `5`:

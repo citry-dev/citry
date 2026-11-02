@@ -186,8 +186,7 @@ class TestProvideComponent:
 
         class Page(Component):
             citry = c
-            # `key=""` normalizes to a boolean attribute (True), which is not
-            # a usable key, same as any other non-string value.
+            # `key=""` passes an empty string, which is not a usable key.
             template = '<c-provide key="">x</c-provide>'
 
         with pytest.raises(ValueError, match="non-empty string"):

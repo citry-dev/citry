@@ -690,7 +690,13 @@ def _apply_statement(
             if mapping is None:
                 if value is not None:
                     _taint_referenced_mappings(value, state)
-                state.names.pop(target, None)
+                if isinstance(value, ast.Call):
+                    # A helper's result has keys Citry cannot see, but the
+                    # literal keys the method then sets on it are still known,
+                    # so `data = build(kwargs); data["x"] = ...` proves `x`.
+                    state.names[target] = state.store(_Mapping(open_reasons={"value from a function call"}))
+                else:
+                    state.names.pop(target, None)
             else:
                 state.names[target] = state.store(mapping)
             return

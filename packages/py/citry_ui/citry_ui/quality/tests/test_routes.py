@@ -489,36 +489,39 @@ def test_unknown_scenario_fails_instead_of_silently_skipping():
 
 
 @pytest.mark.parametrize(
-    ("scenario_id", "physical_type_prefix"),
+    ("scenario_id", "item_type_prefix"),
     [("accordion.states", "CAccordionItem_"), ("disclosure.states", "CDisclosure_")],
 )
-def test_flattened_state_projection_binds_lexical_text_but_not_the_indicator_glyph(
+def test_projected_title_is_text_in_its_author_and_the_indicator_glyph_is_not(
     scenario_id: str,
-    physical_type_prefix: str,
+    item_type_prefix: str,
 ) -> None:
     """
-    The projected title is a text binding, and the indicator glyph is SVG markup, not text.
+    The scenario's title reaches Vue as text, and the indicator glyph as SVG markup, not text.
 
-    A glyph sent as a text binding is escaped by both the server and Vue, so
-    the page shows `<path ...>` where the chevron should be. The general rule
-    that projected text never reuses a physical text key is covered by
-    `test_flattened_projection_namespaces_lexical_text_after_physical_key` in
-    the citry package.
+    The title is written by the scenario page and passed into each item's
+    slot, so it is compiled in the page's template and its text value sits
+    in the page's data. A glyph sent as a text binding would be escaped by
+    both the server and Vue, so the page would show `<path ...>` where the
+    chevron should be.
     """
     prepared = _prepared_configuration(render_scenario(scenario_id))
     assert prepared is not None
-    physical_occurrences = [
-        occurrence
-        for occurrence in prepared["manifest"]["occurrences"]
-        if occurrence["typeKey"].startswith(physical_type_prefix)
+    occurrences = prepared["manifest"]["occurrences"]
+    author_texts = [
+        value
+        for occurrence in occurrences
+        for key, value in occurrence["preparedData"].items()
+        if key.startswith("citryText") and not occurrence["typeKey"].startswith(item_type_prefix)
     ]
-    projected_text_occurrences = [
-        occurrence for occurrence in physical_occurrences if "outline" in occurrence["preparedData"].values()
+    assert "outline" in author_texts
+    item_texts = [
+        value
+        for occurrence in occurrences
+        if occurrence["typeKey"].startswith(item_type_prefix)
+        for key, value in occurrence["preparedData"].items()
+        if key.startswith("citryText")
     ]
-    assert projected_text_occurrences
-    for occurrence in projected_text_occurrences:
-        text_values = [value for key, value in occurrence["preparedData"].items() if key.startswith("citryText")]
-        assert "outline" in text_values
-        # The chevron must reach Vue as elements; as a text value it would
-        # be escaped into visible markup.
-        assert not any("<path" in str(value) for value in text_values)
+    # The chevron must reach Vue as elements; as a text value it would be
+    # escaped into visible markup.
+    assert not any("<path" in str(value) for value in [*author_texts, *item_texts])

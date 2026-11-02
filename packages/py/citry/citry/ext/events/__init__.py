@@ -30,7 +30,8 @@ This extension owns that contract:
 - The handler signature: parameters come from the fixed vocabulary
   ``data``, ``state``, ``context``, ``request``, ``event``, and anything
   else fails at class definition.
-- The State treatment: the class is rebuilt as a mutable dataclass, its
+- The State treatment: the class is rebuilt as a mutable dataclass (or kept,
+  or generated, as a Pydantic model), its
   underscore meta (``_public``, ``_model``, ``_storage``, ``_max_bytes``,
   ``_max_age``) is validated, and at render time the State instance is
   captured from the component's kwargs (or its ``state_data()`` method).

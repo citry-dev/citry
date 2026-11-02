@@ -11,7 +11,11 @@ class SelectForm(Component):
         <c-CField required>
           <c-fill name="label">Review status</c-fill>
           <c-fill name="default">
-            <c-CSelect c-options="options" placeholder="Choose a status" name="status" />
+            <c-CSelect
+              c-options="options"
+              placeholder="Choose a status"
+              name="status"
+            />
           </c-fill>
         </c-CField>
         <c-CButton type="submit">Save</c-CButton>

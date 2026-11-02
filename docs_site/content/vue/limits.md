@@ -15,13 +15,14 @@ browser, start with [Diagnose failures](#diagnose-failures).
 
 The Vue features in this section fail when the template loads, and the
 error says what to write instead. `citry check` and the editor report them
-too.
+too. Inside an element with `v-pre`, Vue reads them as plain HTML, so
+they are written as plain elements and attributes there.
 
 ### Vue built-in components { #vue-built-in-components }
 
 `<Transition>`, `<TransitionGroup>`, `<KeepAlive>`, `<Teleport>`, and
-`<Suspense>` fail on every page, in any spelling, such as `<KeepAlive>` or
-`<keep-alive>`. Use these instead:
+`<Suspense>` fail on every page outside `v-pre`, in any spelling, such as
+`<KeepAlive>` or `<keep-alive>`. Use these instead:
 
 | Vue component | Use instead |
 | --- | --- |
@@ -32,54 +33,32 @@ too.
 
 ### `v-once` and `v-memo` { #v-once-and-v-memo }
 
-Both fail on elements and component tags alike. To compute a fixed value
-once, do it in `data()`. To keep an element's contents as the server
-first rendered them, use
+Both fail on elements and component tags alike, outside `v-pre`. To
+compute a fixed value once, do it in `data()`. To keep an element's
+contents as the server first rendered them, use
 [`#c-ignore`](/syntax/attributes/#c-ignore-keep-contents-that-a-library-manages).
 
-### Alpine modifiers { #unknown-modifiers }
+### Alpine-only modifiers { #unknown-modifiers }
 
-`.outside`, `.window`, `.document`, `.debounce`, and `.throttle` are
-Alpine modifiers. Citry 0.6.0 moved from Alpine to Vue, which has none of
-these modifiers, so Citry rejects them on a Vue listener, and the error
-says how to write the same behavior in Vue:
+Citry 0.6.0 moved from Alpine to Vue. Citry supports Alpine's `.outside`,
+`.window`, `.document`, `.debounce`, and `.throttle` on Vue listeners on
+HTML elements; see
+[Extra listener modifiers](/syntax/vue/#listener-modifiers). It rejects
+these other Alpine modifiers on a Vue listener, and the error says what
+to write instead:
 
-```citry-html
-{# Fails: .outside is an Alpine modifier #}
-<div @click.outside="open = false;">...</div>
-```
+- `.away`: use `.outside`.
+- `.camel` and `.dot`: add the listener for the exact event name with
+  `addEventListener(...)` in `mounted()`, on an element you reach through
+  a `ref`, and remove it in `unmounted()`.
+- `.cmd` and `.super`: use Vue's `.meta`.
+- `.spacebar`: use Vue's `.space`.
+- `.period`, `.comma`, `.slash`, `.equal`, `.minus`, and `.underscore`:
+  check `$event.key` in the listener, as in
+  `@keydown="if ($event.key === '.') go();"`.
 
-For a click outside, listen for `click` on `document` in `mounted()`,
-skip clicks inside the component, and remove the listener in
-`unmounted()`:
-
-```js
-$component({
-  data() {
-    return { open: false };
-  },
-  methods: {
-    closeOnOutsideClick(event) {
-      // A click inside the component keeps it open.
-      if (!this.$refs.root?.contains(event.target)) {
-        this.open = false;
-      }
-    },
-  },
-  mounted() {
-    document.addEventListener("click", this.closeOnOutsideClick);
-  },
-  unmounted() {
-    document.removeEventListener("click", this.closeOnOutsideClick);
-  },
-});
-```
-
-Mark the element that counts as inside with `ref="root"` in the
-template.
-
-To call a Python event handler, use an `@c-*` attribute: it accepts
-`.debounce` and `.throttle`; see
+To call a Python event handler, use an `@c-*` attribute, which accepts
+`.debounce` and `.throttle` too; see
 [Bind events in templates](/events/bindings/). The
 [0.6.0 upgrade guide](/guides/upgrading-to-0-6-0/#rewrite-alpine-modifiers)
 covers the rest of the move from Alpine.
@@ -174,8 +153,10 @@ A built-in tag that renders only its content, such as `<c-provide>`,
 accepts no Vue syntax. The render fails, and the error says to put the
 binding on an element inside the tag.
 
-`<c-slot>` accepts no Vue syntax either; see
-[`v-if` around a slot](/vue/slots/#v-if-around-a-slot).
+`<c-slot>` accepts no Vue syntax except `:` slot props such as
+`:row="row"`; see
+[`v-if` around a slot](/vue/slots/#v-if-around-a-slot) and
+[Pass Vue data](/vue/slots/#scoped-slots).
 
 ### `<template #name>` in a component tag { #vue-slot-syntax }
 

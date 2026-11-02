@@ -138,11 +138,14 @@ def test_class_style_and_allowed_attrs_merge_on_landmark() -> None:
     ("source", "message"),
     [
         ("<c-CSidebar c-label=\"''\">A</c-CSidebar>", "label must be a non-empty string"),
-        ('<c-CSidebar label="A" tag="section">A</c-CSidebar>', "tag must be one of"),
-        ('<c-CSidebar label="A" collapsible="drawer">A</c-CSidebar>', "collapsible must be one of"),
-        ('<c-CSidebar label="A" side="left">A</c-CSidebar>', "side must be one of"),
-        ('<c-CSidebar label="A" variant="raised">A</c-CSidebar>', "variant must be one of"),
-        ('<c-CSidebar label="A" size="xl">A</c-CSidebar>', "size must be one of"),
+        ('<c-CSidebar label="A" tag="section">A</c-CSidebar>', r"CSidebar\.Kwargs\.tag expects Literal"),
+        (
+            '<c-CSidebar label="A" collapsible="drawer">A</c-CSidebar>',
+            r"CSidebar\.Kwargs\.collapsible expects Literal",
+        ),
+        ('<c-CSidebar label="A" side="left">A</c-CSidebar>', r"CSidebar\.Kwargs\.side expects Literal"),
+        ('<c-CSidebar label="A" variant="raised">A</c-CSidebar>', r"CSidebar\.Kwargs\.variant expects Literal"),
+        ('<c-CSidebar label="A" size="xl">A</c-CSidebar>', r"CSidebar\.Kwargs\.size expects Literal"),
         (
             '<c-CSidebar label="A" c-collapsed="True" collapsible="none">A</c-CSidebar>',
             "collapsed=True cannot be used",

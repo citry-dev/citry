@@ -41,7 +41,7 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CCommandPaletteSize]}, omitted: Uses the immutable server input., effect: Controls coordinated surface width and density.}
       - {id: on-open-change, name: onOpenChange, type: function, omitted: Omission selects no visibility callback; null clears the last valid callback., effect: Receives user-authored and forced visibility requests.}
       - {id: on-query-change, name: onQueryChange, type: function, omitted: Omission selects no query callback; null clears the last valid callback., effect: Receives committed user input and accepted-close reset requests.}
-      - {id: on-action, name: onAction, type: function, omitted: Omission selects no command callback; null clears the last valid callback., effect: Receives one eligible command activation before optional close.}
+      - {id: on-action, name: onAction, type: function, omitted: Omission selects no command callback; null clears the last valid callback., effect: "Called with the chosen command's value. For a command that closes the palette, the palette calls it after the palette closes, when the owner accepts the close in onOpenChange."}
 
 slots:
   - id: ccommand-palette-slots
@@ -73,7 +73,7 @@ events:
         signature: {display: '(value: string, detail: CCommandPaletteActionDetail) => void', interfaces: [CCommandPaletteActionDetail]}
         trigger: An enabled visible active command receives unmodified Enter or an eligible option receives a plain click.
         detail: {display: '{query, source, item, event, closeOnAction}', interfaces: [CCommandPaletteActionDetail]}
-        behavior: Runs synchronously before optional close; return values are ignored and an exception stops the close transaction.
+        behavior: 'For a command that keeps the palette open, the palette calls it right away. For a command that closes the palette, the palette calls it after the close, after onOpenChange and onQueryChange. If you pass open and keep it true, or set it to false only later, it is called with the palette open. Return values are ignored. A thrown error is reported like an uncaught error.'
 
 methods: []
 
@@ -128,6 +128,7 @@ attributes:
       - {id: option-role, name: role, element: Command row, type: '"option"', meaning: Exposes one callback-only command candidate.}
       - {id: aria-selected, name: aria-selected, element: Command row, type: '"true" | "false"', meaning: Mirrors transient active-descendant state rather than an application value.}
       - {id: aria-disabled, name: aria-disabled, element: Command row, type: '"true" | absent', meaning: Exposes an unavailable command.}
+      - {id: aria-keyshortcuts, name: aria-keyshortcuts, element: Command row, type: 'ARIA key combination | absent', meaning: 'Exposes the `shortcut` hint to assistive technology, such as `Control+,` for `Ctrl ,`; absent when the hint is not one key combination or the command is disabled.'}
       - {id: data-active, name: data-active, element: Command row, type: present | absent, meaning: Mirrors internal active state.}
       - {id: data-disabled, name: data-disabled, element: Command row, type: present | absent, meaning: Mirrors immutable command disabledness.}
       - {id: data-intent, name: data-intent, element: Command row, type: {display: '"default" | "danger"', interfaces: [CCommandPaletteIntent]}, meaning: Mirrors immutable visual intent.}
@@ -178,7 +179,7 @@ interfaces:
       - {id: label, name: label, type: non-whitespace str, meaning: Visible owned command label and accessible name.}
       - {id: description, name: description, type: 'str | None', meaning: Optional visible owned supporting description.}
       - {id: keywords, name: keywords, type: 'tuple[str, ...]', meaning: Immutable search-only aliases; default is empty.}
-      - {id: shortcut, name: shortcut, type: 'str | None', meaning: Optional accessibility-hidden visual hint with no listener; default is null.}
+      - {id: shortcut, name: shortcut, type: 'str | None', meaning: 'Optional visual hint, hidden from assistive technology and exposed as `aria-keyshortcuts` instead; the component adds no listener, so set it only for a combination the application handles; default is null.'}
       - {id: disabled, name: disabled, type: bool, meaning: Immutable unavailable state; default is false.}
       - {id: close-on-action, name: close_on_action, type: 'bool | None', meaning: Optional per-command close override; null uses the root policy.}
       - {id: intent, name: intent, type: {display: CCommandPaletteIntent, interfaces: [CCommandPaletteIntent]}, meaning: Visual default or danger emphasis; default is default.}

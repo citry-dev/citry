@@ -21,13 +21,7 @@ from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Final
 
-_tomllib: Any
-try:
-    import tomllib as _stdlib_tomllib
-except ModuleNotFoundError:  # Python 3.10 qualification runner
-    _tomllib = None
-else:
-    _tomllib = _stdlib_tomllib
+import tomllib
 
 try:
     from scripts import build_constraints, release_links
@@ -55,36 +49,46 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # development-mode browser check (`_vue/dev_checks.min.js`), and the check of
 # `inject()` keys against the keys provided above a component, and the Python
 # side of the native render levels (`_vue/native_render.py`,
-# `_vue/native_walk.py`, `_vue/native_leaf_json.py`). The wheel measured
-# 1,396,226 bytes, about 12.8 KB under this cap.
-# A sizeable addition should raise the cap on purpose rather than use up the
-# headroom unnoticed.
-MAX_WHEEL_BYTES: Final = 1_376 * 1024
+# `_vue/native_walk.py`, `_vue/native_leaf_json.py`). It also carries the
+# driver that runs recursive template walks without one Python call per level
+# (`_walk.py`), and the helper that copies deeply nested js_data() without a
+# Python call per level (`util/deep_json.py`). Between #439 (2026-10-27) and
+# 2026-10-28 the merged fixes and features added about 63 KB of compressed
+# source and no data files, almost all Python plus 2.2 KB in the bundled
+# `_vue/runtime.js`. The largest additions are the base classes that
+# `CitrySettings.model_base` picks for plain schemas, with Pydantic `State`
+# support (`_model_base.py`, #455, #461), Vue data passed to fills (#445,
+# across `nodes/__init__.py`, `_vue/static_template.py` and
+# `_vue/direct_capture.py`), scoped slot props for `citry check`
+# (`_slot_props.py`, #521), sub-path URLs (`_sub_path.py`, #479), and the
+# v-pre fixes (#514, #525, #526). The CI wheel measured 1,526,915 bytes on
+# main at f67bb05a5. #455 alone used up the previous 19 KB of headroom, so
+# this cap leaves about 45 KB above that, as a backstop rather than a tight
+# budget. A sizeable addition should still raise the cap on purpose rather
+# than use up the headroom unnoticed.
+MAX_WHEEL_BYTES: Final = 1_536 * 1024
 
 
 def _citry_core_version() -> str:
     """Read the citry-core release this checkout builds, from its own manifest."""
     manifest = (REPO_ROOT / "packages" / "py" / "citry_core" / "pyproject.toml").read_text(encoding="utf-8")
-    # A plain match keeps this working on the Python 3.10 runner, which has no tomllib.
-    project = manifest.split("[project]", 1)[1].split("\n[", 1)[0]
-    match = re.search(r'^version = "([^"]+)"$', project, re.MULTILINE)
-    if match is None:
+    version = tomllib.loads(manifest).get("project", {}).get("version")
+    if not isinstance(version, str) or not version:
         raise RuntimeError("packages/py/citry_core/pyproject.toml has no [project] version")
-    return match.group(1)
+    return version
 
 
 # Citry pins the citry-core release built from the same commit, so the expected
 # pin follows citry-core's own version instead of repeating it here.
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
-    'playwright>=1.62.0; extra == "ext-preview"',
+    'playwright>=1.64.1; extra == "ext-preview"',
     f"citry-core=={_citry_core_version()}",
     "wrapt>=1.16",
     "markupsafe>=2.1",
     "typing-extensions>=4.10",
-    'tomli>=2.0; python_version < "3.11"',
     "tzdata>=2026.3",
-    'ty==0.0.89; extra == "analysis-ty"',
+    'ty==0.0.94; extra == "analysis-ty"',
     'watchfiles>=1.0; extra == "watcher-watchfiles"',
     'watchdog>=4.0; extra == "watcher-watchdog"',
 }
@@ -108,19 +112,7 @@ def record_sha256(value: bytes) -> str:
 def package_version() -> str:
     """Read the package version from the release manifest."""
     content = (PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    if _tomllib is not None:
-        version: Any = _tomllib.loads(content)["project"].get("version")
-    else:
-        project = re.search(r"(?ms)^\[project\][ \t]*\n(?P<body>.*?)(?=^\[|\Z)", content)
-        version_line = (
-            None
-            if project is None
-            else re.search(
-                r"""(?m)^version\s*=\s*["'](?P<version>[^"']+)["']\s*(?:#.*)?$""",
-                project.group("body"),
-            )
-        )
-        version = None if version_line is None else version_line.group("version")
+    version: Any = tomllib.loads(content)["project"].get("version")
     if not isinstance(version, str) or not version:
         raise DistributionVerificationError("citry has no project version")
     return version
@@ -160,7 +152,7 @@ def _require_metadata(metadata: Message, *, artifact: Path, version: str) -> Non
         raise DistributionVerificationError(f"{artifact.name} has unexpected Name metadata")
     if metadata.get("Version") != version:
         raise DistributionVerificationError(f"{artifact.name} has unexpected Version metadata")
-    if metadata.get("Requires-Python") not in {">=3.10, <4.0", "<4.0,>=3.10"}:
+    if metadata.get("Requires-Python") not in {">=3.11, <4.0", "<4.0,>=3.11"}:
         raise DistributionVerificationError(f"{artifact.name} has unexpected Requires-Python metadata")
     if set(metadata.get_all("Requires-Dist", [])) != EXPECTED_REQUIRES_DIST:  # type: ignore[attr-defined]
         raise DistributionVerificationError(f"{artifact.name} has unexpected runtime dependencies")

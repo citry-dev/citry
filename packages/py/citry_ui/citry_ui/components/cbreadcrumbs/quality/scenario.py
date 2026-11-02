@@ -52,23 +52,39 @@ def breadcrumbs_states_component(app: Citry) -> type[Component]:
             <h1 id="breadcrumbs-states-title">Breadcrumbs states</h1>
             <c-CBreadcrumbs c-items="short" label="Book location" />
             <c-CBreadcrumbs c-items="linked_current" label="Collection location" />
-            <c-CBreadcrumbs c-items="short" label="Custom separator location" separator="»" />
+            <c-CBreadcrumbs
+              c-items="short"
+              label="Custom separator location"
+              separator="»"
+            />
             <c-CBreadcrumbs c-items="short" label="Scoped separator location">
               <c-fill name="separator" data="{ index }">
                 →
               </c-fill>
             </c-CBreadcrumbs>
             <c-for each="size in sizes">
-              <c-CBreadcrumbs c-items="short" c-size="size" c-label="f'{size} location'" />
+              <c-CBreadcrumbs
+                c-items="short"
+                c-size="size"
+                c-label="f'{size} location'"
+              />
             </c-for>
             <div class="breadcrumbs-quality-narrow">
               <c-CBreadcrumbs c-items="long" label="Wrapping location" />
             </div>
             <div class="breadcrumbs-quality-narrow">
-              <c-CBreadcrumbs c-items="long" label="Scrolling location" c-wrap="False" />
+              <c-CBreadcrumbs
+                c-items="long"
+                label="Scrolling location"
+                c-wrap="False"
+              />
             </div>
             <div dir="rtl">
-              <c-CBreadcrumbs c-items="short" label="موقع الكتاب" separator="←" />
+              <c-CBreadcrumbs
+                c-items="short"
+                label="موقع الكتاب"
+                separator="←"
+              />
             </div>
             <div class="breadcrumbs-quality-dark">
               <c-CBreadcrumbs c-items="short" label="Nested dark location" />

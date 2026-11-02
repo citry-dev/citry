@@ -16,7 +16,10 @@ class CustomizeAccordion(Component):
         <c-CAccordion
           value="watershed"
           class_="accordion-configurator__group"
-          :variant="variant" :size="size" :indicator="indicator" :indicatorPosition="indicator_position"
+          :variant="variant"
+          :size="size"
+          :indicator="indicator"
+          :indicatorPosition="indicator_position"
         >
           <c-CAccordionItem value="watershed">
             <c-fill name="title">Watershed</c-fill>

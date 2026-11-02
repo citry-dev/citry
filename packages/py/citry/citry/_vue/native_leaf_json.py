@@ -21,10 +21,6 @@ nested at most 200 deep and with no container inside itself. For anything
 else ``take`` returns a reason, and assembly converts the leaf in Python as
 it does without Rust, so Python raises its own errors, such as its refusal
 of a ``citry.Secret``. ``docs/design/native_render.md`` lists every case.
-
-One accepted difference: when the interpreter's recursion limit is set so
-low that Python's conversion of data up to 200 levels deep raises
-``RecursionError``, Rust still writes that data.
 """
 
 from __future__ import annotations

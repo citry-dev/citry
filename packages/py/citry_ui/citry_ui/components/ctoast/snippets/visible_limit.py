@@ -10,7 +10,11 @@ class ToastVisibleLimit(Component):
     template = """
       <section class="toast-example">
         <p>Dismiss a visible message to promote the queued third item.</p>
-        <c-CToastRegion c-items="items" c-limit="2" c-duration_ms="0" />
+        <c-CToastRegion
+          c-items="items"
+          c-limit="2"
+          c-duration_ms="0"
+        />
       </section>
     """
 

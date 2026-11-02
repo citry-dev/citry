@@ -60,7 +60,9 @@
 //! - Consecutive static text/HTML items are coalesced into a single string.
 //! - Component names are lowercased: `<c-Card>` -> `"""card"""`.
 //!   Kebab-case names are preserved: `<c-my-card>` -> `"""my-card"""`.
-//! - `key=""` normalizes to boolean `True` (at compile time, not parse time).
+//! - On an HTML element, `key=""` normalizes to boolean `True` (at compile
+//!   time, not parse time). On a component tag and on `<c-slot>` data,
+//!   `key=""` compiles to `""` and only a bare `key` is `True`.
 //! - Void elements render compact (`<br/>`); non-void self-closing expand
 //!   (`<div></div>`).
 //! - `<c-raw>` compiles its body to a single literal text part in ordinary
@@ -99,7 +101,7 @@ use std::vec::IntoIter;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::ast::{
-    ForeignSourcePart, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template,
+    ForeignSourcePart, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Shared, Template,
     TemplateElement, Text, Token,
 };
 use crate::constants::{
@@ -167,8 +169,27 @@ pub fn compile_prepared_template(
         ));
     }
     let lang_impl = selected.to_lang_impl();
+    check_template_depth(&template)?;
     let body_items = compile_template_body_with_mode(template, CompileMode::Prepared)?;
     lang_impl.compile(body_items).map_err(CompileError::Generic)
+}
+
+/// Reject a tree that nests past the parser's limits before the compiler
+/// walks it.
+///
+/// The parser already stops at those limits, so this matters only for a
+/// tree built by hand. It walks the tree on its own stack, so it is safe at
+/// any depth, and it uses the parser's own counting and wording.
+pub fn check_template_depth(template: &Template) -> Result<(), CompileError> {
+    match crate::nesting::first_too_deep_tag(template) {
+        Some((token, message)) => {
+            let (line, column) = token.line_col;
+            Err(CompileError::Syntax(format!(
+                "{message} The tag starts at line {line}, column {column}."
+            )))
+        }
+        None => Ok(()),
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -210,6 +231,7 @@ pub fn compile_template_with_custom_lang(
 }
 
 pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>, CompileError> {
+    check_template_depth(&template)?;
     compile_template_body_with_mode(template, CompileMode::Html)
 }
 
@@ -217,158 +239,193 @@ pub(crate) fn compile_template_body_with_mode(
     template: Template,
     mode: CompileMode,
 ) -> Result<Vec<LangSpecArgument>, CompileError> {
-    // First, process elements to convert control flow attributes (`c-if="..."`)
-    // into control flow nodes (`<c-if cond="...">...</c-if>`).
-    let processed_elements = wrap_nodes_with_control_flow_attrs(template.elements)?;
+    // Every compiler cycle passes through here: a control-flow tag or a
+    // component compiles its body by calling this again.
+    crate::stack::with_enough_stack(|| {
+        // First, process elements to convert control flow attributes (`c-if="..."`)
+        // into control flow nodes (`<c-if cond="...">...</c-if>`).
+        // Rust does not allow moving a field out of a type that has its own
+        // `Drop`, as `Template` does, so the elements are taken out instead.
+        let mut template = template;
+        let processed_elements = wrap_nodes_with_control_flow_attrs(Shared::into_inner(
+            std::mem::take(&mut template.elements),
+        ))?;
 
-    let mut body_items = Vec::new();
-    let mut elements_iter = processed_elements.into_iter().peekable();
+        let mut body_items = Vec::new();
+        let mut elements_iter = processed_elements.into_iter().peekable();
 
-    // Instead of normally looping over the elements, we'll use an iterator and `.next()`.
-    // This is so that we can consume more elements in a single loop, as <c-if> and <c-for>
-    // will consume the following <c-elif>/<c-else>/<c-empty> nodes.
-    while let Some(element) = elements_iter.next() {
-        match element {
-            // Plain text
-            // Plain text doesn't need any runtime processing.
-            // It uses no variables, and can never raise an error.
-            // Hence, we don't have to wrap the text in any Node class.
-            // We just escape double quotes, and wrap the text in `""""`,
-            // so it's safe even if it spans multiple lines.
-            TemplateElement::Text(text) => {
-                body_items.push(if mode == CompileMode::Prepared {
-                    prepared_source_text(&text.token)
-                } else {
-                    LangSpecArgument::UnsafeString(text.token.content)
-                });
-            }
-
-            TemplateElement::Foreign(part) => {
-                if mode == CompileMode::Prepared {
-                    return Err(CompileError::Generic(
-                        "prepared template compilation does not yet support foreign source"
-                            .to_string(),
-                    ));
-                }
-                body_items.push(compile_foreign_node(&part));
-            }
-
-            // {{ ... }} expression
-            // When we come across a `{{ ... }}` expression, we want to evaluate the Python expression inside.
-            // To do that, we generate code like this:
-            // `ExprNode(source, (start, end), """expr""", ("var1", "var2"))`
-            // Where:
-            // - `source` is the original template source string,
-            // - `(start, end)` is the position of the expression in the source string,
-            // - `"""expr"""` is the Python expression,
-            // - `("var1", "var2")` is a tuple of variable names that are used in the expression.
-            //
-            // `source` and `(start, end)` are used for error handling / diagnostics. When an error
-            // happens inside the `{{ ... }}` expression, we'll be able to print to the user the location
-            // in the template where the error occurred:
-            // ```
-            // <div>
-            //   {{ 3 > "a" }}
-            //   ^^^^^^^^^^^^^
-            // </div>
-            // TypeError: '>' not supported between instances of 'int' and 'str'
-            // ```
-            //
-            // The Python expression `"""expr"""` is wrapped in triple quotes, so it's safe to use
-            // even if it contains double quotes, backslashes, or newlines.
-            // The actual implementation of how the expression is executed will be provided
-            // by the `ExprNode` class in the Python code. E.g. `ExprNode` should call `safe_eval()`
-            // at initialization to generate a function that can be called.
-            //
-            // Last argument is a tuple of used variables, e.g. `("var1", "var2")`.
-            // This will be used for a run-time optimization:
-            // If, at first render, we detect that
-            // 1) the expression uses NO variables, or
-            // 2) all used variables are "constants"
-            // Then, we know the output will never change, and we can replace `ExprNode` with its result as text.
-            // Thus, on subsequent renders, we won't have to re-evaluate the expression.
-            TemplateElement::Expr(expr) => {
-                let expr_node = format_expr_node(
-                    if mode == CompileMode::Prepared {
-                        "PreparedExprNode"
+        // Instead of normally looping over the elements, we'll use an iterator and `.next()`.
+        // This is so that we can consume more elements in a single loop, as <c-if> and <c-for>
+        // will consume the following <c-elif>/<c-else>/<c-empty> nodes.
+        while let Some(element) = elements_iter.next() {
+            match element {
+                // Plain text
+                // Plain text doesn't need any runtime processing.
+                // It uses no variables, and can never raise an error.
+                // Hence, we don't have to wrap the text in any Node class.
+                // We just escape double quotes, and wrap the text in `""""`,
+                // so it's safe even if it spans multiple lines.
+                TemplateElement::Text(text) => {
+                    body_items.push(if mode == CompileMode::Prepared {
+                        prepared_source_text(&text.token)
                     } else {
-                        EXPR_NODE
-                    },
-                    &expr.token,
-                    &expr.value.content,
-                    &expr.used_variables,
-                );
-                body_items.push(expr_node);
-            }
+                        LangSpecArgument::UnsafeString(text.token.content)
+                    });
+                }
 
-            TemplateElement::Node(mut node) => {
-                // Determine which Node class to use based on tag name
-                match node.tag_name() {
-                    // Control flow nodes
-                    C_FOR_TAG => {
-                        // Collect c-for and c-empty nodes into a group
-                        let mut for_group = vec![node];
-                        let (for_empty_nodes, trailing_whitespace) =
-                            consume_nodes_into_group(&mut elements_iter, &[C_EMPTY_TAG]);
-                        for_group.extend(for_empty_nodes);
-
-                        let for_node =
-                            compile_control_flow_node(for_group, FOR_NODE, C_FOR_TAG, mode)?;
-                        body_items.push(for_node);
-                        // Whitespace read past the end of the group is content
-                        // after it, so every text node is emitted in place.
-                        for text in trailing_whitespace {
-                            body_items.push(if mode == CompileMode::Prepared {
-                                prepared_source_text(&text.token)
-                            } else {
-                                LangSpecArgument::UnsafeString(text.token.content)
-                            });
-                        }
+                TemplateElement::Foreign(part) => {
+                    if mode == CompileMode::Prepared {
+                        return Err(CompileError::Generic(
+                            "prepared template compilation does not yet support foreign source"
+                                .to_string(),
+                        ));
                     }
-                    C_IF_TAG => {
-                        // Collect c-if, c-elif, and c-else nodes into a group
-                        let mut if_group = vec![node];
-                        let (elif_and_else_nodes, trailing_whitespace) =
-                            consume_nodes_into_group(&mut elements_iter, &[C_ELIF_TAG, C_ELSE_TAG]);
-                        if_group.extend(elif_and_else_nodes);
+                    body_items.push(compile_foreign_node(&part));
+                }
 
-                        let if_node = compile_control_flow_node(if_group, IF_NODE, C_IF_TAG, mode)?;
-                        body_items.push(if_node);
-                        // Whitespace read past the end of the group is content
-                        // after it, so every text node is emitted in place.
-                        for text in trailing_whitespace {
-                            body_items.push(if mode == CompileMode::Prepared {
-                                prepared_source_text(&text.token)
-                            } else {
-                                LangSpecArgument::UnsafeString(text.token.content)
-                            });
-                        }
-                    }
-
-                    // Special c-* tags
-                    C_SLOT_TAG => {
-                        let slot_node = compile_simple_node(node, SLOT_NODE, mode)?;
-                        body_items.push(slot_node);
-                    }
-                    C_FILL_TAG => {
-                        let fill_node = compile_simple_node(node, FILL_NODE, mode)?;
-                        body_items.push(fill_node);
-                    }
-                    // NOTE: `<c-provide>`, `<c-js>`, and `<c-css>` are not included here
-                    // because they can be implemented as user-side components.
-
-                    // `<c-raw>` is a verbatim block, not a component: emit its
-                    // body as literal text. The parser stored the unparsed
-                    // content as a single Text element (process_html_raw), so
-                    // nothing inside is template-processed.
-                    C_RAW_TAG => {
+                // {{ ... }} expression
+                // When we come across a `{{ ... }}` expression, we want to evaluate the Python expression inside.
+                // To do that, we generate code like this:
+                // `ExprNode(source, (start, end), """expr""", ("var1", "var2"))`
+                // Where:
+                // - `source` is the original template source string,
+                // - `(start, end)` is the position of the expression in the source string,
+                // - `"""expr"""` is the Python expression,
+                // - `("var1", "var2")` is a tuple of variable names that are used in the expression.
+                //
+                // `source` and `(start, end)` are used for error handling / diagnostics. When an error
+                // happens inside the `{{ ... }}` expression, we'll be able to print to the user the location
+                // in the template where the error occurred:
+                // ```
+                // <div>
+                //   {{ 3 > "a" }}
+                //   ^^^^^^^^^^^^^
+                // </div>
+                // TypeError: '>' not supported between instances of 'int' and 'str'
+                // ```
+                //
+                // The Python expression `"""expr"""` is wrapped in triple quotes, so it's safe to use
+                // even if it contains double quotes, backslashes, or newlines.
+                // The actual implementation of how the expression is executed will be provided
+                // by the `ExprNode` class in the Python code. E.g. `ExprNode` should call `safe_eval()`
+                // at initialization to generate a function that can be called.
+                //
+                // Last argument is a tuple of used variables, e.g. `("var1", "var2")`.
+                // This will be used for a run-time optimization:
+                // If, at first render, we detect that
+                // 1) the expression uses NO variables, or
+                // 2) all used variables are "constants"
+                // Then, we know the output will never change, and we can replace `ExprNode` with its result as text.
+                // Thus, on subsequent renders, we won't have to re-evaluate the expression.
+                TemplateElement::Expr(expr) => {
+                    let expr_node = format_expr_node(
                         if mode == CompileMode::Prepared {
-                            if let Node::WithBody { body, .. } = node {
-                                for element in body.elements {
-                                    match element {
-                                        TemplateElement::Text(text) => {
-                                            body_items.push(prepared_verbatim_html(&text.token));
+                            "PreparedExprNode"
+                        } else {
+                            EXPR_NODE
+                        },
+                        &expr.token,
+                        &expr.value.content,
+                        &expr.used_variables,
+                    );
+                    body_items.push(expr_node);
+                }
+
+                TemplateElement::Node(mut node) => {
+                    // Determine which Node class to use based on tag name
+                    match node.tag_name() {
+                        // Control flow nodes
+                        C_FOR_TAG => {
+                            // Collect c-for and c-empty nodes into a group
+                            let mut for_group = vec![node];
+                            let (for_empty_nodes, trailing_whitespace) =
+                                consume_nodes_into_group(&mut elements_iter, &[C_EMPTY_TAG]);
+                            for_group.extend(for_empty_nodes);
+
+                            let for_node =
+                                compile_control_flow_node(for_group, FOR_NODE, C_FOR_TAG, mode)?;
+                            body_items.push(for_node);
+                            // Whitespace read past the end of the group is content
+                            // after it, so every text node is emitted in place.
+                            for text in trailing_whitespace {
+                                body_items.push(if mode == CompileMode::Prepared {
+                                    prepared_source_text(&text.token)
+                                } else {
+                                    LangSpecArgument::UnsafeString(text.token.content)
+                                });
+                            }
+                        }
+                        C_IF_TAG => {
+                            // Collect c-if, c-elif, and c-else nodes into a group
+                            let mut if_group = vec![node];
+                            let (elif_and_else_nodes, trailing_whitespace) =
+                                consume_nodes_into_group(
+                                    &mut elements_iter,
+                                    &[C_ELIF_TAG, C_ELSE_TAG],
+                                );
+                            if_group.extend(elif_and_else_nodes);
+
+                            let if_node =
+                                compile_control_flow_node(if_group, IF_NODE, C_IF_TAG, mode)?;
+                            body_items.push(if_node);
+                            // Whitespace read past the end of the group is content
+                            // after it, so every text node is emitted in place.
+                            for text in trailing_whitespace {
+                                body_items.push(if mode == CompileMode::Prepared {
+                                    prepared_source_text(&text.token)
+                                } else {
+                                    LangSpecArgument::UnsafeString(text.token.content)
+                                });
+                            }
+                        }
+
+                        // Special c-* tags
+                        C_SLOT_TAG => {
+                            let slot_node = compile_simple_node(node, SLOT_NODE, mode)?;
+                            body_items.push(slot_node);
+                        }
+                        C_FILL_TAG => {
+                            let fill_node = compile_simple_node(node, FILL_NODE, mode)?;
+                            body_items.push(fill_node);
+                        }
+                        // NOTE: `<c-provide>`, `<c-js>`, and `<c-css>` are not included here
+                        // because they can be implemented as user-side components.
+
+                        // `<c-raw>` is a verbatim block, not a component: emit its
+                        // body as literal text. The parser stored the unparsed
+                        // content as a single Text element (process_html_raw), so
+                        // nothing inside is template-processed.
+                        C_RAW_TAG => {
+                            if mode == CompileMode::Prepared {
+                                if let Node::WithBody { mut body, .. } = node {
+                                    for element in
+                                        Shared::into_inner(std::mem::take(&mut body.elements))
+                                    {
+                                        match element {
+                                            TemplateElement::Text(text) => {
+                                                body_items
+                                                    .push(prepared_verbatim_html(&text.token));
+                                            }
+                                            TemplateElement::Foreign(part) => {
+                                                body_items.push(compile_foreign_node(&part));
+                                            }
+                                            TemplateElement::Node(_) | TemplateElement::Expr(_) => {
+                                                return Err(CompileError::Generic(
+                                                    "Internal error: parsed Citry syntax reached a <c-raw> body"
+                                                        .to_string(),
+                                                ));
+                                            }
                                         }
+                                    }
+                                }
+                            } else if let Node::WithBody { mut body, .. } = node {
+                                for element in
+                                    Shared::into_inner(std::mem::take(&mut body.elements))
+                                {
+                                    match element {
+                                        TemplateElement::Text(text) => body_items.push(
+                                            LangSpecArgument::UnsafeString(text.token.content),
+                                        ),
                                         TemplateElement::Foreign(part) => {
                                             body_items.push(compile_foreign_node(&part));
                                         }
@@ -381,95 +438,79 @@ pub(crate) fn compile_template_body_with_mode(
                                     }
                                 }
                             }
-                        } else if let Node::WithBody { body, .. } = node {
-                            for element in body.elements {
-                                match element {
-                                    TemplateElement::Text(text) => body_items
-                                        .push(LangSpecArgument::UnsafeString(text.token.content)),
-                                    TemplateElement::Foreign(part) => {
-                                        body_items.push(compile_foreign_node(&part));
-                                    }
-                                    TemplateElement::Node(_) | TemplateElement::Expr(_) => {
-                                        return Err(CompileError::Generic(
-                                            "Internal error: parsed Citry syntax reached a <c-raw> body"
-                                                .to_string(),
-                                        ));
+                        }
+
+                        // Component nodes (render user-defined components)
+                        tag_name if citry_component_tag_eq(tag_name, C_COMPONENT_TAG) => {
+                            reject_is_attr_conflict(&node)?;
+
+                            // A static `is` can bypass the dynamic component only when no
+                            // `c-bind` is present. A spread may also supply `is`, so mixed
+                            // forms stay at runtime where source order selects the target.
+                            // Without a spread, the known static value can render the named
+                            // component directly.
+                            // For example:
+                            // ```html
+                            // <c-component is="XyzComp" ...>
+                            // ```
+                            // should be rendered as:
+                            // ```html
+                            // <c-XyzComp ...>
+                            // ```
+                            if let Some(comp_name) = find_static_is_rewrite_value(&node) {
+                                // We have found a static `is` attribute with the component name.
+                                // Now mutate node to `<c-{comp_name}>` and drop the `is` attribute
+                                match &mut node {
+                                    Node::WithBody { start_tag, .. }
+                                    | Node::SelfClosing { start_tag, .. } => {
+                                        // Update tag name
+                                        start_tag.name.content = format!("c-{}", comp_name);
+                                        // Remove `is` attribute
+                                        start_tag.attrs.retain(|attr| attr.key.content != "is");
                                     }
                                 }
                             }
-                        }
-                    }
 
-                    // Component nodes (render user-defined components)
-                    tag_name if citry_component_tag_eq(tag_name, C_COMPONENT_TAG) => {
-                        reject_is_attr_conflict(&node)?;
-
-                        // A static `is` can bypass the dynamic component only when no
-                        // `c-bind` is present. A spread may also supply `is`, so mixed
-                        // forms stay at runtime where source order selects the target.
-                        // Without a spread, the known static value can render the named
-                        // component directly.
-                        // For example:
-                        // ```html
-                        // <c-component is="XyzComp" ...>
-                        // ```
-                        // should be rendered as:
-                        // ```html
-                        // <c-XyzComp ...>
-                        // ```
-                        if let Some(comp_name) = find_static_is_rewrite_value(&node) {
-                            // We have found a static `is` attribute with the component name.
-                            // Now mutate node to `<c-{comp_name}>` and drop the `is` attribute
-                            match &mut node {
-                                Node::WithBody { start_tag, .. }
-                                | Node::SelfClosing { start_tag, .. } => {
-                                    // Update tag name
-                                    start_tag.name.content = format!("c-{}", comp_name);
-                                    // Remove `is` attribute
-                                    start_tag.attrs.retain(|attr| attr.key.content != "is");
-                                }
-                            }
+                            // Finally, create a ComponentNode, whether we've got `<c-component>` or `<c-MyComp>`
+                            let comp_node =
+                                compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE, mode)?;
+                            body_items.push(comp_node);
                         }
 
-                        // Finally, create a ComponentNode, whether we've got `<c-component>` or `<c-MyComp>`
-                        let comp_node =
-                            compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE, mode)?;
-                        body_items.push(comp_node);
-                    }
+                        // Dynamic HTML elements (render a plain element whose tag
+                        // name is decided at render time), e.g.
+                        // `<c-element c-is="form_content_tag" class="x">...</c-element>`.
+                        tag_name if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) => {
+                            let element_items = compile_element_node(node, mode)?;
+                            body_items.extend(element_items);
+                        }
+                        // Unknown c-* tag => user-defined component
+                        // This contains also c-provide, c-js, c-css
+                        tag_name if has_citry_component_prefix(tag_name) => {
+                            let comp_node =
+                                compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE, mode)?;
+                            body_items.push(comp_node);
+                        }
 
-                    // Dynamic HTML elements (render a plain element whose tag
-                    // name is decided at render time), e.g.
-                    // `<c-element c-is="form_content_tag" class="x">...</c-element>`.
-                    tag_name if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) => {
-                        let element_items = compile_element_node(node, mode)?;
-                        body_items.extend(element_items);
-                    }
-                    // Unknown c-* tag => user-defined component
-                    // This contains also c-provide, c-js, c-css
-                    tag_name if has_citry_component_prefix(tag_name) => {
-                        let comp_node =
-                            compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE, mode)?;
-                        body_items.push(comp_node);
-                    }
-
-                    // Regular HTML tags e.g. `<div>`, `<a>`, etc.
-                    _ => {
-                        let html_items = compile_html_node(node, mode)?;
-                        body_items.extend(html_items);
+                        // Regular HTML tags e.g. `<div>`, `<a>`, etc.
+                        _ => {
+                            let html_items = compile_html_node(node, mode)?;
+                            body_items.extend(html_items);
+                        }
                     }
                 }
             }
         }
-    }
 
-    // Coalesce consecutive string items into single strings.
-    let body_items = if mode == CompileMode::Html {
-        coalesce_strings(body_items)
-    } else {
-        body_items
-    };
+        // Coalesce consecutive string items into single strings.
+        let body_items = if mode == CompileMode::Html {
+            coalesce_strings(body_items)
+        } else {
+            body_items
+        };
 
-    Ok(body_items)
+        Ok(body_items)
+    })
 }
 
 /// Compile a regular HTML node, e.g. `<div>`, into a flat list of body items (LangSpecArguments).
@@ -656,7 +697,7 @@ fn compile_html_node(node: Node, mode: CompileMode) -> Result<Vec<LangSpecArgume
         let start_tag = node.start_tag();
         let attr_args: Vec<LangSpecArgument> = ordinary_attrs
             .iter()
-            .map(|attr| compile_html_attr(attr))
+            .map(|attr| compile_html_attr(attr, EmptyValue::Boolean))
             .collect::<Result<Vec<_>, _>>()?;
         // Used variables for the node are those of its attributes (the tag's
         // body is compiled separately below). Deduped in first-seen order.
@@ -695,7 +736,7 @@ fn compile_html_node(node: Node, mode: CompileMode) -> Result<Vec<LangSpecArgume
         // Note: HTML escaping of quotes in values will be handled at runtime
         for attr in ordinary_attrs {
             // Note: Use `HtmlAttr.value` so we format also quotes around the value.
-            // In HTML, `key=""` and `key=''` are boolean attributes (same as bare `key`),
+            // On an HTML element, `key=""` and `key=''` mean the same as bare `key`,
             // so we normalize empty values to boolean form.
             let has_nonempty_value = attr
                 .inner_value
@@ -802,7 +843,7 @@ fn compile_prepared_html_node(node: Node) -> Result<Vec<LangSpecArgument>, Compi
         .partition(|attr| attr.kind == HtmlAttrKind::Meta);
     let attr_args = ordinary_attrs
         .iter()
-        .map(|attr| compile_html_attr(attr))
+        .map(|attr| compile_html_attr(attr, EmptyValue::Boolean))
         .collect::<Result<Vec<_>, _>>()?;
     let attr_vars = ordinary_attrs
         .iter()
@@ -815,7 +856,7 @@ fn compile_prepared_html_node(node: Node) -> Result<Vec<LangSpecArgument>, Compi
         match attr.key.content.as_str() {
             META_ATTR_KEY => metadata.push(LangSpecArgument::Tuple(vec![
                 LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_KEY.to_string()),
-                build_attr_struct(EXPR_ATTR_NODE, attr),
+                build_attr_struct(EXPR_ATTR_NODE, attr, EmptyValue::Boolean),
             ])),
             META_ATTR_IGNORE => metadata.push(LangSpecArgument::Tuple(vec![
                 LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_MORPH.to_string()),
@@ -922,7 +963,7 @@ fn compile_meta_attr_on_element(
             }
             items.push(LangSpecArgument::Struct(LangSpecStruct {
                 name: ELEMENT_KEY_NODE.to_string(),
-                arguments: vec![build_attr_struct(EXPR_ATTR_NODE, attr)],
+                arguments: vec![build_attr_struct(EXPR_ATTR_NODE, attr, EmptyValue::Boolean)],
             }));
         }
         META_ATTR_IGNORE => {
@@ -1111,9 +1152,21 @@ fn compile_simple_node(
 
     // Compile all attributes as HtmlAttr calls:
     // `(HtmlAttr(...), HtmlAttr(...), ...)`
+    // `<c-slot>` data reaches the fill as written, so a written empty value
+    // stays a string, as on a component. The slot's own `name` and
+    // `required`, and every `<c-fill>` attribute (`name`, `data`,
+    // `fallback`, `v-slot`), configure the tag rather than pass data, so
+    // they keep `True`: `required=""` still makes the slot required.
     let mut attr_args = Vec::new();
     for attr in node.attrs() {
-        attr_args.push(compile_html_attr(attr)?);
+        let configures_tag = node_class_name != SLOT_NODE
+            || matches!(attr.key.content.as_str(), "name" | "required");
+        let empty = if configures_tag {
+            EmptyValue::Boolean
+        } else {
+            EmptyValue::String
+        };
+        attr_args.push(compile_html_attr(attr, empty)?);
     }
 
     // Get used variables from the node. The AST tracks one token per
@@ -1281,9 +1334,17 @@ fn compile_component_node(
 
     // Compile the ordinary attributes as HtmlAttr calls:
     // `(HtmlAttr(...), HtmlAttr(...), ...)`
+    // A component's attributes are its inputs, where a written empty value
+    // stays `""`. A dynamic `<c-element>` renders them onto an HTML element,
+    // where `True` is the empty value its attribute merging expects.
+    let empty = if metadata_locus == COMPONENT_METADATA_LOCUS_ELEMENT {
+        EmptyValue::Boolean
+    } else {
+        EmptyValue::String
+    };
     let mut attr_args = Vec::new();
     for attr in &ordinary_attrs {
-        attr_args.push(compile_html_attr(attr)?);
+        attr_args.push(compile_html_attr(attr, empty)?);
     }
 
     // Get used variables from the node, deduped while preserving first-seen
@@ -1363,7 +1424,7 @@ fn compile_component_node(
         if let Some(attr) = key_attr {
             metadata.push(LangSpecArgument::Tuple(vec![
                 LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_KEY.to_string()),
-                build_attr_struct(EXPR_ATTR_NODE, attr),
+                build_attr_struct(EXPR_ATTR_NODE, attr, EmptyValue::Boolean),
             ]));
         }
         if let Some(mode) = morph_mode {
@@ -1553,9 +1614,10 @@ fn compile_control_flow_node(
         };
 
         // Compile attributes as HtmlAttr calls
+        // `c-if cond=""` keeps the documented `True`.
         let mut attr_args = Vec::new();
         for attr in node.attrs() {
-            attr_args.push(compile_html_attr(attr)?);
+            attr_args.push(compile_html_attr(attr, EmptyValue::Boolean)?);
         }
 
         // Collect unique variable names from this branch (first-seen order)
@@ -1636,6 +1698,22 @@ fn compile_control_flow_node(
     }))
 }
 
+/// What a written empty value, such as `key=""`, compiles to.
+///
+/// On an HTML element `key` and `key=""` mean the same thing (an empty
+/// value), and the runtime treats `True` as that empty value. A component
+/// input is different: a bare `key` passes `True`, while a written value is
+/// always a string, so `key=""` passes `""`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EmptyValue {
+    /// `key=""` compiles to `True`, like a bare `key` (HTML elements,
+    /// dynamic `<c-element>`, `c-if cond=""`).
+    Boolean,
+    /// `key=""` compiles to `""`; only a bare `key` is `True` (component
+    /// inputs and `<c-slot>` data).
+    String,
+}
+
 /// Convert a Rust `HtmlAttr` into a LangSpecArgument.
 ///
 /// Returns different classes based on `HtmlAttrKind`:
@@ -1682,7 +1760,7 @@ fn compile_control_flow_node(
 /// Then, we know the output will never change, and we can replace `HtmlAttr` instance
 /// with its result as text. Thus, on subsequent renders, we won't have to re-evaluate the expression
 /// or template.
-fn compile_html_attr(attr: &HtmlAttr) -> Result<LangSpecArgument, CompileError> {
+fn compile_html_attr(attr: &HtmlAttr, empty: EmptyValue) -> Result<LangSpecArgument, CompileError> {
     if attr.kind == HtmlAttrKind::Static && !attr.foreign_parts.is_empty() {
         let inner_value = attr.inner_value.as_ref().ok_or_else(|| {
             CompileError::Generic(format!(
@@ -1729,7 +1807,7 @@ fn compile_html_attr(attr: &HtmlAttr) -> Result<LangSpecArgument, CompileError> 
             )));
         }
     };
-    Ok(build_attr_struct(class_name, attr))
+    Ok(build_attr_struct(class_name, attr, empty))
 }
 
 /// Lower one provider-owned source claim to a fail-closed runtime node.
@@ -1797,7 +1875,7 @@ fn compile_source_with_foreign(
 /// Build the `<Class>(source, (start, end), key, value, (vars,))` call for one
 /// attribute. Shared by `compile_html_attr` (which picks the class from the
 /// attribute kind) and the component `#c-key` emission (which pins the class).
-fn build_attr_struct(class_name: &str, attr: &HtmlAttr) -> LangSpecArgument {
+fn build_attr_struct(class_name: &str, attr: &HtmlAttr, empty: EmptyValue) -> LangSpecArgument {
     let start_pos = attr.token.start_index;
     let end_pos = attr.token.end_index;
 
@@ -1824,14 +1902,23 @@ fn build_attr_struct(class_name: &str, attr: &HtmlAttr) -> LangSpecArgument {
         });
         LangSpecArgument::UnsafeString(template.to_string())
     } else {
-        // In HTML, `key`, `key=""`, and `key=''` are all treated as boolean
-        // attributes, so static/expression empty values use `True`.
+        // A bare `key` is always `True`. A written empty value is `True` on
+        // an HTML element, where `key` and `key=""` mean the same, and `""`
+        // on a component input, where a written value is always a string.
+        // An expression is never written empty (the parser rejects `c-x=""`),
+        // so only a hand-built AST reaches the empty expression case, which
+        // keeps `True`.
         match &attr.inner_value {
             // Non-empty string, e.g. `key="value"`
             Some(inner_value) if !inner_value.content.is_empty() => {
                 LangSpecArgument::UnsafeString(inner_value.content.clone())
             }
-            // Empty or missing value, e.g. `key=""`, `key=''`, or `key`
+            // A written empty value, e.g. `key=""` or `key=''`, on a component
+            // or as `<c-slot>` data
+            Some(_) if empty == EmptyValue::String && attr.kind == HtmlAttrKind::Static => {
+                LangSpecArgument::UnsafeString(String::new())
+            }
+            // Otherwise empty or missing, e.g. `key=""` on an element, or `key`
             Some(_) | None => LangSpecArgument::Bool(true),
         }
     };
@@ -1970,19 +2057,21 @@ fn coalesce_strings(items: Vec<LangSpecArgument>) -> Vec<LangSpecArgument> {
         });
     }
 
-    for item in items {
-        match item {
+    // Rust does not allow moving a field out of a type that has its own
+    // `Drop`, as `LangSpecArgument` does, so each string is taken out.
+    for mut item in items {
+        match &mut item {
             LangSpecArgument::SafeString(content) => {
                 // If we were collecting UnsafeString, flush it first
                 flush_unsafe_strings(&mut current_unsafe_string_parts, &mut result);
                 // Add to SafeString buffer
-                current_safe_string_parts.push(content);
+                current_safe_string_parts.push(std::mem::take(content));
             }
             LangSpecArgument::UnsafeString(content) => {
                 // If we were collecting SafeString, flush it first
                 flush_safe_strings(&mut current_safe_string_parts, &mut result);
                 // Add to UnsafeString buffer
-                current_unsafe_string_parts.push(content);
+                current_unsafe_string_parts.push(std::mem::take(content));
             }
             _ => {
                 // Not a string - flush both types and add this item
@@ -2250,7 +2339,7 @@ fn _remove_attr_and_wrap_in_control_flow(
     let lifted_used_variables = attr.used_variables.clone();
     match &mut node {
         Node::WithBody { used_variables, .. } | Node::SelfClosing { used_variables, .. } => {
-            used_variables.retain(|token| !lifted_used_variables.contains(token));
+            Shared::make_mut(used_variables).retain(|token| !lifted_used_variables.contains(token));
         }
     }
 
@@ -2346,12 +2435,12 @@ fn _wrap_node_in_control_flow(
             } => std::mem::take(introduced_variables),
         }
     } else {
-        Vec::new()
+        Shared::default()
     };
     // Get slots from the inner node's body if it exists (WithBody), otherwise empty vec
     let inner_slots = match &inner_node {
         Node::WithBody { body, .. } => body.slots.clone(),
-        Node::SelfClosing { .. } => vec![],
+        Node::SelfClosing { .. } => Shared::default(),
     };
 
     // The control flow attribute may contain comments, e.g. `<div c-if="1 # my comment">`.
@@ -2436,9 +2525,9 @@ fn _wrap_node_in_control_flow(
 
     // Create the body containing just the inner node
     let body = Template {
-        elements: vec![TemplateElement::Node(inner_node)],
-        comments: inner_comments.clone(),
-        used_variables: inner_used_vars,
+        elements: vec![TemplateElement::Node(inner_node)].into(),
+        comments: inner_comments.clone().into(),
+        used_variables: inner_used_vars.into(),
         slots: inner_slots,
     };
 
@@ -2457,9 +2546,9 @@ fn _wrap_node_in_control_flow(
         start_tag: cf_start_tag,
         end_tag: cf_end_tag,
         body,
-        used_variables: wrapper_used_vars,
+        used_variables: wrapper_used_vars.into(),
         introduced_variables: wrapper_introduced_vars,
-        comments,
+        comments: comments.into(),
         contains_fills: false,
     })
 }

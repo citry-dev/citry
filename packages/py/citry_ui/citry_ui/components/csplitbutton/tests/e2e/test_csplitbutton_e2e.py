@@ -439,3 +439,36 @@ def test_full_group_is_anchor_and_inside_element_for_layer_dismissal(page):
     assert values["positionAnchor"] == values["anchorName"]
     assert values["open"] is True
     assert errors == []
+
+
+def _record_mutations_for_one_second(page) -> dict[str, int]:
+    # A split button that repairs its own markup from an observer must skip
+    # writes that change nothing: such a write still queues a record, which
+    # triggers the observer again. The page looks the same either way, so only
+    # the records of a mutation observer show it.
+    page.evaluate(
+        """() => {
+          const seen = window.__idleMutations = {};
+          new MutationObserver((records) => {
+            for (const record of records) {
+              const part = record.target.getAttribute?.('data-citry-ui-part') ?? record.target.nodeName;
+              const key = `${record.type} ${record.attributeName ?? ''} ${part}`;
+              seen[key] = (seen[key] || 0) + 1;
+            }
+          }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+        }"""
+    )
+    page.wait_for_timeout(1000)
+    return page.evaluate("window.__idleMutations")
+
+
+@pytest.mark.parametrize("menu_open", [False, True], ids=["closed", "open"])
+def test_idle_split_button_makes_no_dom_changes(page, menu_open):
+    errors = _load(page)
+    if menu_open:
+        _open(page, "submit-split")
+    # Let the open animation and the first positioning frames finish.
+    page.wait_for_timeout(700)
+
+    assert _record_mutations_for_one_second(page) == {}
+    assert errors == []

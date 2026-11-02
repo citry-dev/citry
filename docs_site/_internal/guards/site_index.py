@@ -9,6 +9,7 @@ site, so the whole suite pays the parse cost a single time.
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 from dataclasses import dataclass, field
@@ -20,7 +21,10 @@ from urllib.parse import unquote, urlparse
 import lxml.html  # type: ignore[import-untyped]
 from lxml.etree import LxmlError  # type: ignore[import-untyped]
 
+from docs_site._internal.release_notes import release_line_ranges
+
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from pathlib import Path
 
 # URL schemes / prefixes that mark a link or asset as external (not a local path
@@ -59,6 +63,28 @@ _STRAY_MARKUP_PATTERNS = (
     re.compile(r"<p>\s*</(?:div|section|template)>"),
 )
 _SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.DOTALL | re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]*>")
+# Tags that end a line of visible text. Inline tags, such as the spans inside
+# highlighted code, are dropped so the text they split stays on one line.
+_BLOCK_TAG_RE = re.compile(
+    r"</?(?:p|div|section|template|li|ul|ol|pre|table|tr|td|th|h[1-6]|br|hr|blockquote)\b[^>]*>",
+    re.IGNORECASE,
+)
+# How much of the page after a stray tag to read for the text that follows it.
+_STRAY_CONTEXT_CHARS = 2000
+# Built pages generated from the changelog rather than from a content page.
+_RELEASES_DIR = "releases"
+_CHANGELOG = "CHANGELOG.md"
+
+
+@dataclass(frozen=True)
+class StrayMarkup:
+    """One stray tag, with the first line of text after it."""
+
+    markup: str
+    # The tags themselves never appear in the source, but this text usually
+    # does, so it locates the source line.
+    following_text: str
 
 
 @dataclass(frozen=True)
@@ -134,8 +160,8 @@ class PageRecord:
     # Inline CSS where a custom property lost the space before the next value,
     # which makes the browser discard the whole declaration.
     glued_css_vars: list[str] = field(default_factory=list)
-    # Markup that the markdown pass wrapped in paragraphs or left unconsumed.
-    stray_markup: list[str] = field(default_factory=list)
+    # Markup that the markdown pass wrapped in paragraphs, in page order.
+    stray_markup: list[StrayMarkup] = field(default_factory=list)
     # Static HTML fragments shipped inside a prepared Vue app's start script.
     prepared_html: list[str] = field(default_factory=list)
 
@@ -215,8 +241,17 @@ class SiteIndex:
     @staticmethod
     def _find_stray_markup(html: str, record: PageRecord) -> None:
         """Collect markup that the markdown pass wrapped in stray paragraphs."""
-        for pattern in _STRAY_MARKUP_PATTERNS:
-            record.stray_markup.extend(match.group().strip() for match in pattern.finditer(html))
+        # Sorted by position, so the first one reported is the first on the page.
+        matches = sorted(
+            (match for pattern in _STRAY_MARKUP_PATTERNS for match in pattern.finditer(html)),
+            key=lambda match: match.start(),
+        )
+        for match in matches:
+            # A match that ends on a tag name stops partway through that tag.
+            inside_tag = not match.group().endswith(">")
+            record.stray_markup.append(
+                StrayMarkup(match.group().strip(), _text_after(html, match.end(), inside_tag=inside_tag))
+            )
 
     @staticmethod
     def _find_glued_css_vars(dom: lxml.html.HtmlElement, record: PageRecord) -> None:
@@ -465,8 +500,24 @@ def _prepared_html(dom: lxml.html.HtmlElement) -> list[str]:
     return fragments
 
 
-def source_markdown(page: PageRecord, content_dir: Path) -> Path | None:
-    """Return the Markdown file a built page came from, when one exists."""
+def _text_after(html: str, start: int, *, inside_tag: bool) -> str:
+    """Return the first non-empty line of visible text in ``html`` after ``start``."""
+    rest = html[start : start + _STRAY_CONTEXT_CHARS]
+    # Skip the rest of a tag the match stopped inside before reading text.
+    if inside_tag:
+        rest = rest.partition(">")[2]
+    text = html_lib.unescape(_TAG_RE.sub("", _BLOCK_TAG_RE.sub("\n", rest)))
+    return next((line.strip() for line in text.splitlines() if line.strip()), "")
+
+
+def source_markdown(page: PageRecord, content_dir: Path, repo_root: Path | None = None) -> Path | None:
+    """
+    Return the Markdown file a built page came from, when one exists.
+
+    A page under ``releases/`` with no content page of its own is generated
+    from the repository's CHANGELOG.md, so with ``repo_root`` given it maps to
+    that file.
+    """
     parts = page.rel_path.parts
     if not parts or not parts[-1].endswith(".html"):
         return None
@@ -477,15 +528,44 @@ def source_markdown(page: PageRecord, content_dir: Path) -> Path | None:
             candidates.append(content_dir.joinpath(*stem[:-1], f"{stem[-1]}.md"))
     else:
         candidates = [content_dir.joinpath(*parts[:-1], parts[-1].removesuffix(".html") + ".md")]
-    return next((candidate for candidate in candidates if candidate.is_file()), None)
+    found = next((candidate for candidate in candidates if candidate.is_file()), None)
+    # A content page wins, so only a generated release page reaches the changelog.
+    if found is None and repo_root is not None and parts[0] == _RELEASES_DIR:
+        changelog = repo_root / _CHANGELOG
+        return changelog if changelog.is_file() else None
+    return found
 
 
-def source_line(path: Path, text: str) -> int | None:
-    """Return the 1-based line of the first source line that contains ``text``."""
+def source_line(
+    path: Path, text: str, page: PageRecord | None = None, excluded_releases: Collection[str] = ()
+) -> int | None:
+    """
+    Return the 1-based line in ``path`` that holds ``text``, or None when no searched line holds it.
+
+    A line equal to ``text`` wins over one that only contains it. For a release
+    page, pass ``page`` so only that release's section of CHANGELOG.md is
+    searched; the same phrase often appears under several versions. Pass the
+    project's ``excluded_releases`` too, so the sections are numbered the way
+    the build numbers them.
+    """
     needle = text.strip()
     if not needle:
         return None
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if needle in line:
-            return number
-    return None
+    source = path.read_text(encoding="utf-8")
+    first, last = _release_section(page, path, source, excluded_releases) or (1, None)
+    # The ranges count lines the way the release-notes parser splits them.
+    numbered = list(enumerate(source.split("\n"), start=1))[first - 1 : last]
+    exact = next((number for number, line in numbered if line.strip() == needle), None)
+    return exact or next((number for number, line in numbered if needle in line), None)
+
+
+def _release_section(
+    page: PageRecord | None, path: Path, source: str, excluded_releases: Collection[str]
+) -> tuple[int, int] | None:
+    """Return the line range of the release a ``releases/<slug>/`` page shows."""
+    parts = page.rel_path.parts if page is not None else ()
+    # A release page is built as `releases/<slug>/index.html`, three parts.
+    if path.name != _CHANGELOG or len(parts) != 3 or parts[0] != _RELEASES_DIR:
+        return None
+    # The page's folder is the release slug, as the release-notes builder writes it.
+    return release_line_ranges(source, exclude=excluded_releases).get(parts[1])

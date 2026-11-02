@@ -53,7 +53,11 @@ def flow_states_component(app: Citry) -> type[Component]:
               </c-CRow>
             </c-CCol>
 
-            <c-CRow tag="nav" reverse c-attrs="{'aria-label': 'Studio sections'}">
+            <c-CRow
+              tag="nav"
+              reverse
+              c-attrs="{'aria-label': 'Studio sections'}"
+            >
               <a href="#clay">Clay</a>
               <a href="#glaze">Glaze</a>
             </c-CRow>

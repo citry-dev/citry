@@ -11,7 +11,11 @@ class MultiSelectForm(Component):
         <c-CField required>
           <c-fill name="label">Reviewers</c-fill>
           <c-fill name="default">
-            <c-CMultiSelect c-options="options" placeholder="Choose reviewers" name="reviewer" />
+            <c-CMultiSelect
+              c-options="options"
+              placeholder="Choose reviewers"
+              name="reviewer"
+            />
           </c-fill>
         </c-CField>
         <c-CButton type="submit">Save</c-CButton>

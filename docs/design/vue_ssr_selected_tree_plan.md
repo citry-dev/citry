@@ -203,8 +203,9 @@ render is a single text node (Vue steps over one DOM node per component, so
 merged or empty text would shift its siblings), a component called with
 extra attributes, listeners, `v-model` (a `modelValue` prop and its update
 listener), `v-show`, or a custom directive (the server does not apply the
-caller's directives to the child's root element), scoped and dynamically
-built slots, HTML Python hands over as a finished string (`<c-raw>` contents
+caller's directives to the child's root element), slots built
+conditionally or in a loop, fills whose `v-slot` pattern nests a pattern or
+gives a default, HTML Python hands over as a finished string (`<c-raw>` contents
 or trusted `Markup` with tags) when one of the cases in "Raw HTML blocks"
 declines it, style values the browser could read differently from the server's text (see
 "Attributes" below), custom directives on elements, text with a carriage return or NUL, `<textarea>` or
@@ -433,9 +434,19 @@ skipped, and these vnode shapes run:
 | `_withDirectives(vnode, [[_vShow, value]])` | the element, with `style="display: none;"` only when the value is known to be false; an element that also has its own `style` and a false value is declined |
 | a `textContent` prop (what `v-text` compiles to) on a non-void element with no children | the value as the element's text, escaped, when `toDisplayString` of it is known (see the expression rules below). Hydration neither reads nor compares that text (`hydrateElement` in runtime-core 3.5.42 checks children only when the vnode has some) and sets the prop itself when the render lists it as dynamic, so an unknown value, or text the parser would change (a carriage return, text in a table part, a leading newline in `<pre>`), is written as an empty element with no decline. A `textContent` key from a `v-bind` object is not dynamic, so hydration keeps the server's text: it is written exactly, and text the parser would change is declined (`text-value`), which makes the parent the shell. With authored children, the children are written: hydration either compares the DOM with them (text children, or an empty value) or skips them (element children with a non-empty value), then sets the prop |
 
-Slot fills must be an object literal of `name: _withCtx(() => [...])`
-entries; `createSlots` (conditional or looped slots) is not run, and a fill
-with slot parameters (a scoped slot) is declined when it renders.
+Slot fills must be an object literal of `name: _withCtx(params => [...])`
+entries; `createSlots` (conditional or looped slots) is not run. A fill's
+slot function takes no parameter, one name, or one flat object pattern such
+as `{ $i18n, row, row: item, key: citrySlotKey, ...rest }`. The renderer
+evaluates the outlet's `renderSlot` props with the outlet component's data
+and binds them as the fill's locals: a props object passed on with
+`v-bind` arrives through `_normalizeProps(_guardReactiveProps(x))`, a prop
+the outlet does not pass is `undefined`, and a prop the server cannot read
+binds as unknown, so only the parts that read it become shells. Props built
+with `_mergeProps`, or a value that is not an object, make every prop
+unknown. A nested pattern or a default is declined (`slot-props`) when the
+fill renders; its names still bind, as unknown, so the fill never reads an
+outer value of the same name.
 
 Props are an object literal with fixed keys, `_mergeProps(...)`,
 `_normalizeProps(x)`, `_guardReactiveProps(x)`, or a spread value
@@ -446,7 +457,11 @@ them, and hydration attaches them.
 Expressions are limited to what JSON data can answer:
 
 - string, number, `true`/`false`, `null`, `undefined` and `void` literals,
-  and a negated number literal;
+  and a negated number literal. A string literal holding an unpaired
+  surrogate, such as `'\ud800'`, is left to the browser, because neither
+  the server nor the page's UTF-8 HTML can hold its value: printed, it is
+  declined as `text-value`; read as a key or tested, it is a browser-only
+  value;
 - array literals and object literals with fixed keys, such as the
   `["card", { open: x }]` a static `class` beside a `:class` compiles to.
   An object's keys are listed in JavaScript's order: array-index keys
@@ -476,7 +491,17 @@ printing it as text or as an attribute is declined.
 
 Attributes follow Vue's `runtime-dom` `patchProp`, not its server renderer:
 the server writes what the element holds after Vue's first render in the
-browser. `class` is normalized and a null class is removed; `style` is
+browser. Boolean attributes and `hidden` are the exception: for these
+names the server writes what Vue's server renderer writes. Vue keeps that
+attribute on a key it does not patch while hydrating (a `v-bind` spread,
+which is how `c-*` attributes reach Vue), and its dev hydration check
+compares every key with it. A name in Vue's `isBooleanAttr` list
+(`disabled`, `checked`, `readonly`, `open`, ...) is written with no value
+for a truthy value or `""` and left out otherwise, even on an element
+without that property (`disabled` on a `div`). `hidden` keeps a string as
+written (`"until-found"`, `"false"`), is written like a boolean name for a
+boolean or number, and is left out for an object or array. `class` is
+normalized and a null class is removed; `style` is
 written as authored from a string and as Vue's server renderer writes a
 style object (`name:value;`, camelCase names hyphenated), which the browser
 reads as the same declarations the client sets. A style object is declined
@@ -493,8 +518,9 @@ or two styles meeting in `mergeProps` are joined as Vue joins them. Inside
 a shell's contents, a class or style with a browser-only part is written
 from the parts the server knows; `value` on `input`, `button`, `option` and
 `data`, `checked` on `input` and `selected` on `option` are written as
-attributes; `hidden` is written for `true`, `false`, `null` or `""`; names
-containing `-`, `:` or `_`, a fixed list of attribute-only names (`for`,
+attributes; `hidden` and the boolean names are written as described
+above; names containing `-`, `:` or `_`, a fixed list of attribute-only
+names (`for`,
 `tabindex`, `colspan`, ...), the names Vue always sets as attributes
 (`spellcheck`, `draggable`, `translate`, `form`, and `width`/`height` on
 media elements) and a fixed table of reflected DOM properties per tag are
@@ -522,10 +548,21 @@ component's whole render, and when it is the page's root.
 A declined part becomes a shell as described above: the error travels up
 to the nearest element whose own attributes were written, and that element
 is written as a shell. With no such element, the page mounts in the browser
-(`host-root`). Render code nested deeper than 200 vnode or expression
-levels is not read, and
-output nested deeper than 256 levels is not written; both are declined
-like any other part.
+(`host-root`). Render code nested deeper than 2,048 vnode or expression
+levels is not read, and output nested deeper than 2,048 levels is not
+written; both are declined like any other part. A template at the nesting
+limits from #272 (512 nested tags, 256 of them Citry logic) reads
+about 770 levels and writes about 1,300. Each level of reading and writing
+runs through a stack guard (`citry_vue_compiler/src/stack.rs`), so these
+caps stop much deeper input rather than protecting the stack. A page whose
+data nests deeper than 2,048 levels mounts in the browser (`manifest`).
+
+The writer also declines an element nested more than 400 elements deep
+inside the host. Chrome's HTML parser nests at most 513 elements, counting
+`<html>`, and writes deeper ones as siblings. html5ever, which the checks
+use, follows the HTML standard, which sets no such limit, so the page would
+not have the structure Vue hydrates. The 400 leaves about 110 levels for
+the page's own elements around the host.
 
 ## Checking the server's HTML against Vue
 
@@ -636,7 +673,11 @@ The hydrated page equals a page Vue mounted in the browser, except that
 shells keep their marker, a static `style` attribute keeps its authored text
 where client mount leaves the browser's normalized form, and Fragment
 boundaries (raw HTML blocks included) are the server's comment nodes where
-client mount uses empty text nodes. The host also lacks `data-v-app`, which Vue's runtime-dom adds
+client mount uses empty text nodes. On a key Vue does not patch while
+hydrating, a boolean attribute or `hidden` keeps the text Vue's server
+renderer writes (`hidden="foo"` where client mount leaves `hidden=""`, no
+`disabled` on a `div` where client mount leaves `disabled="false"`). The
+host also lacks `data-v-app`, which Vue's runtime-dom adds
 only in `createApp().mount`; tests wait for `citry:ready` instead. Before
 Vue starts, parts hidden by browser state are visible and
 typed input is replaced when Vue sets `value`; `vue-runtime.md` documents

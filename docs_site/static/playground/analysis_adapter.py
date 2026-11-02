@@ -5,12 +5,11 @@ from __future__ import annotations
 import json
 import re
 
-from citry_core.template_parser import RESERVED_TAG_NAMES, parse_template
+# The Worker installs the generated `portable_ide.py` under this name before
+# it runs this file, and the docs tests load the same generated copy.
+from citry_portable_ide import component_name_match, template_tag_uses, unknown_component_uses
 
-try:
-    from citry_portable_ide import component_name_match, template_tag_uses, unknown_component_uses
-except ImportError:
-    from citry._portable_ide import component_name_match, template_tag_uses, unknown_component_uses
+from citry_core.template_parser import RESERVED_TAG_NAMES, parse_template
 
 _LEGACY_POSITION = re.compile(r"-->\s+(\d+):(\d+)")
 _TAG_PREFIX = re.compile(r"</?(c-[A-Za-z0-9-]*)$")

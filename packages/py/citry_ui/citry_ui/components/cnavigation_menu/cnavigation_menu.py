@@ -244,9 +244,20 @@ class CNavigationMenu(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "close_delay",
+            "delay",
+            "disabled",
+            "label",
+            "loop",
+            "orientation",
+            "root_id",
+            "size",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_navigation_menu_snapshot", None)
@@ -790,10 +801,6 @@ class CNavigationMenuLink(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuLinkDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self)
         context.count += 1
@@ -814,7 +821,11 @@ class CNavigationMenuLink(LibraryComponent):
         }
 
     template = """
-      <li class="cui-navigation-menu__link-item" c-bind="attrs" data-citry-ui-part="link-item">
+      <li
+        class="cui-navigation-menu__link-item"
+        c-bind="attrs"
+        data-citry-ui-part="link-item"
+      >
         <a
           c-bind="link_attrs"
           c-href="href"
@@ -844,10 +855,6 @@ class CNavigationMenuItem(LibraryComponent):
     class Slots:
         label: SlotInput[CNavigationMenuItemLabelSlotData]
         default: SlotInput[CNavigationMenuItemDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self)

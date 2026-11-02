@@ -144,6 +144,12 @@ pub(crate) fn classify_gap(context: GapContext) -> WhitespaceClass {
     if context.protected || context.container == ContainerKind::Verbatim {
         return WhitespaceClass::Verbatim;
     }
+    // Two items written with nothing between them render with nothing between
+    // them. A newline added there would be a new text node in the output, so
+    // the formatter may only reshape whitespace the author already wrote.
+    if !context.authored_whitespace {
+        return WhitespaceClass::Sensitive;
+    }
 
     match context.container {
         ContainerKind::Sensitive => WhitespaceClass::Sensitive,
@@ -173,12 +179,9 @@ pub(crate) fn merge_branch_edges(edges: &[Option<EdgeKind>]) -> EdgeKind {
 
 fn classify_root_gap(context: GapContext) -> WhitespaceClass {
     match (context.left, context.right) {
-        (Some(EdgeKind::BlockLike), Some(EdgeKind::BlockLike)) => WhitespaceClass::Structural,
-        (None, Some(EdgeKind::BlockLike)) | (Some(EdgeKind::BlockLike), None)
-            if context.authored_whitespace =>
-        {
-            WhitespaceClass::Structural
-        }
+        (Some(EdgeKind::BlockLike), Some(EdgeKind::BlockLike))
+        | (None, Some(EdgeKind::BlockLike))
+        | (Some(EdgeKind::BlockLike), None) => WhitespaceClass::Structural,
         _ => WhitespaceClass::Sensitive,
     }
 }
@@ -294,7 +297,7 @@ mod tests {
             container: ContainerKind::Structural,
             left: Some(EdgeKind::BlockLike),
             right: Some(EdgeKind::BlockLike),
-            authored_whitespace: false,
+            authored_whitespace: true,
             protected: false,
         };
         assert_eq!(classify_gap(facts), WhitespaceClass::Structural);
@@ -320,7 +323,7 @@ mod tests {
             container: ContainerKind::Structural,
             left: None,
             right: Some(EdgeKind::BlockLike),
-            authored_whitespace: false,
+            authored_whitespace: true,
             protected: false,
         };
         assert_eq!(classify_gap(start), WhitespaceClass::Structural);
@@ -340,6 +343,33 @@ mod tests {
             }),
             WhitespaceClass::Sensitive
         );
+    }
+
+    #[test]
+    fn a_gap_with_no_whitespace_is_never_structural() {
+        for container in [ContainerKind::Root, ContainerKind::Structural] {
+            for (left, right) in [
+                (Some(EdgeKind::BlockLike), Some(EdgeKind::BlockLike)),
+                (None, Some(EdgeKind::BlockLike)),
+                (Some(EdgeKind::BlockLike), None),
+            ] {
+                let gap = GapContext {
+                    container,
+                    left,
+                    right,
+                    authored_whitespace: false,
+                    protected: false,
+                };
+                assert_eq!(classify_gap(gap), WhitespaceClass::Sensitive);
+                assert_eq!(
+                    classify_gap(GapContext {
+                        authored_whitespace: true,
+                        ..gap
+                    }),
+                    WhitespaceClass::Structural
+                );
+            }
+        }
     }
 
     #[test]

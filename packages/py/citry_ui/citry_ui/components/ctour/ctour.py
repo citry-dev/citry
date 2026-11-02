@@ -24,7 +24,17 @@ CTourPlacement = Literal[
 CTourScroll = Literal["auto", "smooth", "none"]
 CTourMissingTarget = Literal["skip", "close"]
 CTourSize = Literal["sm", "md", "lg"]
-CTourOpenReason = Literal["activator", "close", "escape", "outside", "skip", "finish", "missing-target", "native"]
+CTourOpenReason = Literal[
+    "activator",
+    "close",
+    "escape",
+    "outside",
+    "skip",
+    "finish",
+    "missing-target",
+    "native",
+    "ancestor",
+]
 CTourActiveReason = Literal["next", "previous", "client", "missing-target"]
 
 _PLACEMENTS = (
@@ -254,9 +264,27 @@ class CTour(LibraryComponent):
         activator: SlotInput[CTourActivatorSlotData] | None = None
         close: SlotInput[CTourCloseSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "activator",
+            "activator_attrs",
+            "active",
+            "attrs",
+            "catalog",
+            "close",
+            "close_on_escape",
+            "close_on_outside",
+            "dialog_id",
+            "dismissible",
+            "labels",
+            "missing_target",
+            "open",
+            "registry",
+            "root_id",
+            "scroll",
+            "size",
+            "skippable",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tour_snapshot", None)
@@ -415,10 +443,6 @@ class CTourStep(LibraryComponent):
         default: SlotInput[CTourStepDefaultSlotData]
         media: SlotInput[CTourStepMediaSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "title" not in self.raw_slots or "default" not in self.raw_slots:
             raise ValueError("CTourStep requires title and default content slots.")
@@ -461,10 +485,6 @@ class CInternalTourDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTourDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -499,10 +519,6 @@ class CInternalTour(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if not kwargs.registry.steps:
@@ -593,8 +609,18 @@ class CInternalTour(LibraryComponent):
           data-citry-tour-dialog
           data-citry-ui-part="dialog"
         >
-          <div class="cui-tour__spotlight" hidden aria-hidden="true" data-citry-ui-part="spotlight"></div>
-          <div class="cui-tour__surface" c-data-size="size" data-placement="center" data-citry-ui-part="surface">
+          <div
+            class="cui-tour__spotlight"
+            hidden
+            aria-hidden="true"
+            data-citry-ui-part="spotlight"
+          ></div>
+          <div
+            class="cui-tour__surface"
+            c-data-size="size"
+            data-placement="center"
+            data-citry-ui-part="surface"
+          >
             <button
               c-if="catalog['close']"
               type="button"
@@ -647,9 +673,33 @@ class CInternalTourStep(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "active",
+            "arrow",
+            "attrs",
+            "catalog",
+            "content",
+            "declaration",
+            "describe",
+            "description_id",
+            "index",
+            "is_first",
+            "is_last",
+            "labels",
+            "media",
+            "morph_key",
+            "placement",
+            "progress",
+            "progress_current",
+            "progress_total",
+            "skippable",
+            "step_positions",
+            "target_id",
+            "title",
+            "title_id",
+            "total",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item
@@ -690,10 +740,18 @@ class CInternalTourStep(LibraryComponent):
       >
         <c-if cond="media is not None"><div data-citry-ui-part="media">{{ media }}</div></c-if>
         <header data-citry-ui-part="header">
-          <h2 c-id="title_id" tabindex="-1" data-citry-ui-part="title">{{ title }}</h2>
+          <h2
+            c-id="title_id"
+            tabindex="-1"
+            data-citry-ui-part="title"
+          >{{ title }}</h2>
         </header>
         <div c-id="description_id" data-citry-ui-part="description">{{ content }}</div>
-        <span c-hidden="not arrow" aria-hidden="true" data-citry-ui-part="arrow"></span>
+        <span
+          c-hidden="not arrow"
+          aria-hidden="true"
+          data-citry-ui-part="arrow"
+        ></span>
         <footer data-citry-ui-part="footer">
           <div data-citry-ui-part="progress-group">
             <c-if cond="catalog['progress']">

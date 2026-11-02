@@ -11,7 +11,7 @@ pytest.importorskip("pytest_playwright")
 
 from playwright.sync_api import expect
 
-from citry_ui.quality.accessibility import AXE_INCOMPLETE_DISPOSITIONS
+from citry_ui.quality.accessibility import AXE_INCOMPLETE_DISPOSITIONS, axe_rule_exclusions_script
 from citry_ui.quality.routes import build_scenario
 from citry_ui.quality.scenarios import SCENARIOS, QualityTool
 
@@ -37,19 +37,64 @@ def _axe_findings(
         """async testEmbeddedFrames => {
           const options = {
             resultTypes: ['violations', 'incomplete'],
+            // The element of each node lets this function recompute the
+            // label-in-name rule's name and visible text below.
+            elementRef: true,
           };
           if (!testEmbeddedFrames) {
             options.rules = {'frame-tested': {enabled: false}};
           }
           const result = await axe.run(document, options);
+          const checksOf = (node) => [...node.any, ...node.all, ...node.none];
+
+          // axe.run tears its tree down when it finishes, so build it again
+          // to ask axe how it reads an element. The rule's own visible-text
+          // options are repeated so the comparison matches the rule.
+          const textOptions = {ignoreIconLigature: true, pixelThreshold: 0.1, occurrenceThreshold: 3};
+          const text = axe.commons.text;
+          const unreadableNames = [];
+          axe.setup(document);
+          try {
+            for (const finding of result.incomplete) {
+              if (finding.id !== 'label-content-name-mismatch') continue;
+              for (const node of finding.nodes) {
+                // A node inside a frame has no element here. The frame's own
+                // run checks it with its element, so skip it rather than
+                // report a missing name.
+                if (node.target.length > 1) continue;
+                if (!node.element) {
+                  unreadableNames.push({target: node.target.join(' '), name: null, visibleText: null});
+                  continue;
+                }
+                const name = text.sanitize(text.accessibleText(node.element)).toLowerCase();
+                const visibleText = text.sanitize(
+                  text.visibleVirtual(node.element, false, false, textOptions),
+                ).toLowerCase();
+                if (!text.isHumanInterpretable(name) && name !== visibleText) {
+                  unreadableNames.push({target: node.target.join(' '), name, visibleText});
+                }
+              }
+            }
+          } finally {
+            axe.teardown();
+          }
+
+          // Drop the element references, which Playwright would print as
+          // `ref: <Node>`, so a failure shows only axe's own fields.
+          const plain = (node) => ({...node, element: undefined});
           return {
-            violations: result.violations.filter(
-              (finding) => finding.impact === 'serious' || finding.impact === 'critical',
-            ),
+            violations: result.violations
+              .filter((finding) => finding.impact === 'serious' || finding.impact === 'critical')
+              .map((finding) => ({...finding, nodes: finding.nodes.map(plain)})),
             incomplete: result.incomplete.map((finding) => ({
               id: finding.id,
               impact: finding.impact,
               nodes: finding.nodes.length,
+              messages: [...new Set(finding.nodes.flatMap((node) => checksOf(node).map((check) => check.message)))],
+              messageKeys: [
+                ...new Set(finding.nodes.flatMap((node) => checksOf(node).map((check) => check.data?.messageKey))),
+              ].filter((key) => key),
+              unreadableNames: finding.id === 'label-content-name-mismatch' ? unreadableNames : [],
             })),
           };
         }""",
@@ -274,11 +319,13 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file(), "run `pnpm install` before Citry UI axe tests"
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     embedded_findings = []
     if len(page.frames) > 1:
         assert page.locator("iframe").evaluate_all("frames => frames.every(frame => Boolean(frame.title.trim()))")
     for child_frame in page.frames[1:]:
         child_frame.add_script_tag(path=str(axe_path))
+        child_frame.evaluate(axe_rule_exclusions_script())
         embedded_findings.append(_axe_findings(child_frame))
     for findings in embedded_findings:
         assert findings["violations"] == []
@@ -316,6 +363,20 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
     incomplete_groups.extend(findings["incomplete"] for findings in embedded_findings)
     incomplete_rules = {finding["id"] for group in incomplete_groups for finding in group}
     assert incomplete_rules <= AXE_INCOMPLETE_DISPOSITIONS.keys()
+    # The label-in-name disposition covers symbols and single letters only.
+    # axe treats the text of a switch, checkbox, radio, menuitemcheckbox, or
+    # menuitemradio as a possible value, which needs a person to check it.
+    label_in_name_findings = [
+        finding for group in incomplete_groups for finding in group if finding["id"] == "label-content-name-mismatch"
+    ]
+    value_text_findings = [finding for finding in label_in_name_findings if "valueText" in finding["messageKeys"]]
+    assert value_text_findings == []
+    # The disposition also applies only when the name is the visible text or
+    # a name axe can read as words. A control named by a symbol while it
+    # shows a word is a real mismatch that axe cannot judge, so it must not
+    # pass as symbol text.
+    unreadable_names = [name for finding in label_in_name_findings for name in finding["unreadableNames"]]
+    assert unreadable_names == []
 
     # The compact record makes axe's manual-review surface visible in test
     # output without pretending automation can resolve it.

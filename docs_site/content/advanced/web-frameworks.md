@@ -107,6 +107,18 @@ app = FastAPI(lifespan=lifespan)
 mount(app, citry)
 ```
 
+`mount()` also adds a middleware to `app`. It reads each request's
+`root_path`, so Citry's URLs include the sub-path your app is served
+below (see [Serve below a sub-path](#serve-below-a-sub-path)). Call
+`mount()` before the server starts the app, for example at module level
+as above, not inside `lifespan`. Starlette accepts middleware only until
+then, so a later `mount()` skips the middleware, and Citry's URLs use
+`app.root_path` only.
+
+Your middleware runs for Citry's routes, but `dependencies=` on the app
+does not, so a login check written as a dependency does not protect
+Citry's events. See [Protect Citry's routes](#protect-citrys-routes).
+
 ## Flask
 
 `mount()` sends requests under the prefix to Citry and every other request
@@ -129,6 +141,10 @@ def create_app():
 
 Flask's `mount()` rejects the root prefix `"/"` with `ValueError`, because
 every request would then go to Citry and none to your Flask routes.
+
+Requests under the prefix go to Citry before Flask sees them, so your
+`before_request` hooks, and extensions built on them, do not run for
+Citry's routes. See [Protect Citry's routes](#protect-citrys-routes).
 
 ## Django
 
@@ -176,7 +192,8 @@ restart (see [Hot reload](/guides/hot-reload/#enable-in-django)).
 On any other ASGI or WSGI stack, mount Citry's sub-app yourself. These
 sub-apps do not know where you mounted them, so also call
 `set_mounted_prefix()` with the same path. Without it, building fragment
-URLs fails.
+URLs fails. Below a sub-path, include it in that path, as
+[Serve below a sub-path](#serve-below-a-sub-path) shows.
 
 ```python
 # Any ASGI app, here Starlette
@@ -218,6 +235,104 @@ Both sub-apps answer `404 Not Found` for a path they do not serve and
 sub-app knows your app's routes, so with only these mounted, `citry check`
 checks no links and prints one note saying so.
 
+## Protect Citry's routes { #protect-citrys-routes }
+
+Check who may call an event in the component: a `_guard` method on its
+`Events` class runs before every handler, and `@event(guard=...)` runs
+before one handler. These checks run under every framework; see
+[Authorize every event](/security/#authorize-every-event).
+
+Do not rely on a login check that your framework runs only for its own
+routes. On FastAPI, Starlette, and Flask, requests under the prefix go to
+Citry before your framework's own routing, so some of the code you attach
+to your app does not run for them. Citry's own
+CSRF checks still run (see
+[What Citry always checks](/security/#what-citry-always-checks)), but a
+token check you add yourself may not:
+
+| Framework | Runs for Citry's routes | Does not run for them |
+|---|---|---|
+| FastAPI, Starlette | Middleware, such as `@app.middleware("http")` | `dependencies=` on the app |
+| Flask | WSGI middleware that wraps `app.wsgi_app` after `mount()`, or wraps the Flask app object | `before_request`, `after_request`, other request hooks, and extensions that use them, such as Flask-WTF's `CSRFProtect` |
+| Django | Everything in `MIDDLEWARE`; Citry's routes are ordinary views | Nothing |
+| Bare ASGI, WSGI | Middleware that wraps the app you serve (on WSGI, after you add the `DispatcherMiddleware`) | Nothing |
+
+Use middleware for code that must run on every request, such as rate
+limits or response headers. With the bare sub-apps, you can also wrap
+only Citry's routes, as in `MyMiddleware(asgi_app(citry))` or
+`{"/citry": MyMiddleware(wsgi_app(citry))}`.
+
+On Django, middleware that requires a login for every view, such as
+`LoginRequiredMiddleware` (Django 5.1 and later), also applies to Citry's
+routes. Visitors who are not logged in then get a redirect instead of
+Citry's scripts, and the interactive parts of a public page do not start.
+Mark Citry's views as open to everyone, and check the login in a guard:
+
+```python
+from django.contrib.auth.decorators import login_not_required
+
+citry_patterns = citry_urls(citry_instance, prefix="/citry")
+for pattern in citry_patterns:
+    pattern.callback = login_not_required(pattern.callback)
+```
+
+### Read the Flask session
+
+A guard that checks the logged-in user needs the session. Using
+`flask.request`, `session`, or `g` in an event handler or guard raises
+`RuntimeError: Working outside of request context`, because Flask never
+handled the call. To read the session, give Flask the request back:
+`request.native` holds the raw WSGI request data (the `environ` dict the
+server passes to the app), and `app.request_context()` turns it into a
+Flask request:
+
+```citry
+from citry import Component
+from citry.ext.events import EventError
+from flask import session
+
+from myapp import app  # the Flask app you passed to mount()
+
+
+class Profile(Component):
+    class Events:
+        def save(self, data: ProfileIn, request):
+            with app.request_context(request.native):
+                user_id = session.get("user_id")
+            if user_id is None:
+                raise EventError("Log in first.", status=403)
+            update_profile(user_id, data)
+```
+
+In a guard, pass `self.request.native` instead.
+
+Changes to the session inside this block are not saved, because Flask
+writes the session cookie only on its own responses. Set session values
+in a Flask route instead. With an app factory such as `create_app()`,
+there is no module-level `app` to import. Store the app that
+`create_app()` returns in a module, such as `myapp/wsgi.py`, and import
+it from there.
+
+### Order WSGI middleware
+
+`mount()` replaces `app.wsgi_app` with a function that sends Citry's
+paths to Citry and everything else to the `app.wsgi_app` it found. A
+middleware that wraps `app.wsgi_app` before `mount()` ends up on the
+Flask side only, so it never sees Citry's routes:
+
+```python
+# Wrong: Citry's routes skip this middleware
+app.wsgi_app = MyMiddleware(app.wsgi_app)
+mount(app, citry)
+
+# Right: the middleware sees every request
+mount(app, citry)
+app.wsgi_app = MyMiddleware(app.wsgi_app)
+```
+
+The same goes for the bare WSGI sub-app: wrap `app.wsgi_app` after you
+add the `DispatcherMiddleware`.
+
 ## Share the cache { #share-the-cache-between-worker-processes }
 
 With several worker processes, an interactive page can show its HTML but
@@ -225,10 +340,9 @@ never start: the browser console shows 404 responses for component code or
 stylesheets.
 
 This happens because the worker that renders a page stores that page's
-compiled component code, stylesheets, and CSS variables in the Citry
-cache. The browser then downloads them by URL, and another worker may
-answer. If each worker keeps its own cache in memory, that worker has
-nothing stored.
+compiled component code, stylesheets, and CSS variables. The browser
+then downloads them by URL, and another worker may answer. If each
+worker keeps them in its own memory, that worker has nothing stored.
 
 Point every worker at one shared cache backend: DiskCache, Redis, or your
 Django cache through `DjangoCache` (see
@@ -237,8 +351,9 @@ without an expiry time, because a page that is already open may ask for
 them at any later time. Give the backend enough room that it does not drop
 them while such pages are still in use.
 
-A single process without a configured cache keeps this code in memory, up
-to the `vue_asset_max_bytes` setting; see
+A single process without a configured cache keeps the compiled code,
+stylesheets, and `css_data()` stylesheets in memory, up to the
+`vue_asset_max_bytes` setting; see
 [Limit asset memory](/performance/cache-backends/#limit-memory-for-interactive-page-assets).
 
 ## Render-only workers
@@ -253,6 +368,104 @@ from citry import citry
 # The same prefix the web app mounts at.
 citry.set_mounted_prefix("/citry")
 ```
+
+## Serve below a sub-path
+
+When a proxy or your server serves the app below a sub-path, such as
+`/shop`, Citry starts every URL it writes with that sub-path. The browser
+then loads Citry's scripts and styles, and sends event calls, under
+`/shop/citry/`. The adapters above read the sub-path for you, so most
+apps need no change. At the site root, the URLs stay as they are.
+
+Inside a request, each adapter reads the sub-path from the request.
+Outside one, such as a page rendered in a script or a test, it reads the
+app's setting:
+
+| Framework | Inside a request | Outside a request |
+| --- | --- | --- |
+| FastAPI | the request's `root_path`, set by `uvicorn --root-path`, `FastAPI(root_path=...)`, or your middleware | `app.root_path` |
+| Starlette | the request's `root_path` | the site root |
+| Flask | the request's `script_root`, from the server's `SCRIPT_NAME` or `ProxyFix` | `APPLICATION_ROOT` |
+| Django | `FORCE_SCRIPT_NAME` when set, otherwise the request's `SCRIPT_NAME` (WSGI) or `root_path` (ASGI) | the script prefix Django last set, `FORCE_SCRIPT_NAME` after `django.setup()` |
+
+The sub-path decides where the page loads Citry's scripts from, so it
+must come from your own deployment, never from a visitor. Set it with
+`uvicorn --root-path`, `FastAPI(root_path=...)`, your server's
+`SCRIPT_NAME`, or Django's `FORCE_SCRIPT_NAME`. If a proxy passes it in a
+header such as `X-Forwarded-Prefix`, read that header only from the proxy
+you run, for example with Werkzeug's `ProxyFix(x_prefix=1)` behind exactly
+one trusted proxy, and make sure the proxy sets or removes that header on
+every request, replacing any value the visitor sent. On Flask, wrap
+`ProxyFix` after `mount()`, as
+[Order WSGI middleware](#order-wsgi-middleware) shows. Otherwise a visitor
+can make the page load scripts from another path on your site, and a
+shared HTTP cache that ignores the header can serve that page to others.
+With [`security_script_integrity="citry"`](/security/#pin-citry-managed-scripts-with-sri),
+the browser also refuses a Citry script whose content does not match.
+
+A trailing `/` is ignored, and `/` (Flask's default `APPLICATION_ROOT`)
+means the site root. Citry ignores a sub-path that does not start with a
+single `/`, such as `shop` or `//shop`, and writes its URLs from the site
+root. A value such as `//shop` would otherwise point the page's scripts
+at another site.
+
+Some setups need care:
+
+- **Your own threads.** A page rendered in a thread you start with
+  `loop.run_in_executor()` or `threading.Thread` cannot see the request,
+  so its URLs use the app's setting. Use `asyncio.to_thread()` or
+  Starlette's `run_in_threadpool()`, which pass the request along.
+- **Flask streamed responses.** A generator response sees the sub-path
+  only when you wrap it with `stream_with_context()`. Without it, the
+  streamed page's URLs use `APPLICATION_ROOT`, and its scripts fail to
+  load.
+- **The render cache** keeps separate entries for each sub-path. To
+  delete one entry from a background job when only your server sets the
+  sub-path, pass `sub_path=` to `component_cache_key()` or
+  `fragment_cache_key()`, as [Caching](/performance/caching/) shows.
+- **Render-only workers and the bare sub-apps.** A
+  [render-only worker](#render-only-workers) and the bare ASGI and WSGI
+  sub-apps cannot see the sub-path, so give `set_mounted_prefix()` the
+  full path: `citry.set_mounted_prefix("/shop/citry")`. Do this only in
+  a process that never calls `mount()` or `urlpatterns()`. Those already
+  add the sub-path from the app's setting, so the URLs would start with
+  `/shop/shop`.
+
+## Run behind a proxy
+
+**Symptom:** pages load, but every event call that is not a `GET` fails
+with status 403 and the message "The call failed the CSRF check; reload
+the page and try again."
+
+On each such call, the browser sends an `Origin` header with the site's
+address, and Citry checks that its host and port match the request's
+`Host` header (see
+[What Citry always checks](/security/#what-citry-always-checks)). A
+reverse proxy that replaces `Host` with your app server's address, such
+as `127.0.0.1:8000`, makes every call fail that check. To confirm the
+cause, turn on the `citry` logger's `DEBUG` level locally: it logs
+`Origin '...' does not match the request host '127.0.0.1:8000'`.
+
+Have the proxy pass the `Host` header the browser sent. Caddy and Traefik
+do this by default. nginx does not, so set it. Use `$http_host`, not
+`$host`, which drops the port:
+
+```text
+location / {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $http_host;
+}
+```
+
+With Apache, turn on `ProxyPreserveHost On`.
+
+Citry reads only the `Host` header, not `X-Forwarded-Host`, and Django's
+`USE_X_FORWARDED_HOST` setting does not change that. If the proxy already
+sends the browser's host in `X-Forwarded-Host` and you cannot change its
+`Host`, a WSGI middleware that copies `X-Forwarded-Host` into `Host`, such as
+Werkzeug's `ProxyFix(x_host=1)`, also works. Use it only behind a proxy
+you run, and on Flask, wrap it after `mount()`
+([Order WSGI middleware](#order-wsgi-middleware)).
 
 ## URLs Citry serves
 
@@ -275,3 +488,31 @@ the browser posts event calls to, and one URL per event handler. See
 [Server events](/events/), and read
 [Security](/security/#protect-event-posts-from-csrf) before you deploy
 those routes.
+
+### How browsers cache files
+
+A component's script or stylesheet named by a hash of its content
+(`{prefix}/cache/{class_id}.{hash}.js`), a file served from
+`{prefix}/asset/` (its name is a hash of the file), and the Events
+definitions and stylesheets never change at their URL. Citry sends them
+with `Cache-Control: public, max-age=31536000, immutable`, so the browser
+keeps them for a year without asking again. When the content changes, the
+page links a new URL.
+
+`{prefix}/cache/{class_id}.{script_type}` and the stylesheet built from
+one render's `css_data()` can change at the same URL, for example when
+you upgrade Citry. Citry sends them with `Cache-Control: no-cache` and an
+`ETag`. The browser keeps a copy but asks before each use, and Citry
+answers `304 Not Modified`, with no body, while the copy is current.
+
+The browser runtimes, `{prefix}/citry.js`,
+`{prefix}/ext/events/runtime.js`, and `{prefix}/ext/i18n/runtime.js`, are
+sent with `Cache-Control: no-store`, so the browser downloads them on each
+page load and a page always runs with the runtime the server has now.
+
+A missing file gets `404` with `no-store`, because another worker may
+store it a moment later.
+
+A CDN or proxy in front of your app should pass these headers through
+unchanged. If it stores a runtime anyway, visitors keep the old one after
+you upgrade Citry.

@@ -8,7 +8,11 @@ class AvatarCustomization(Component):
     template = """
       <div class="avatar-moonlit">
         <c-CAvatar alt="Moonlit ranger" size="lg">MR</c-CAvatar>
-        <c-CAvatar alt="Reed oracle" size="lg" variant="outline">RO</c-CAvatar>
+        <c-CAvatar
+          alt="Reed oracle"
+          size="lg"
+          variant="outline"
+        >RO</c-CAvatar>
       </div>
     """
     css = """

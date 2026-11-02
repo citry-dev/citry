@@ -33,13 +33,26 @@ class CheckboxVariantsAndSizes(Component):
                 {{ size }} preserved specimen
               </c-CCheckbox>
             </c-for>
-            <c-CCheckbox #c-key="f'{variant.value}-indeterminate'" c-variant="variant.value" indeterminate>
+            <c-CCheckbox
+              #c-key="f'{variant.value}-indeterminate'"
+              c-variant="variant.value"
+              indeterminate
+            >
               Partly cataloged collection
             </c-CCheckbox>
-            <c-CCheckbox #c-key="f'{variant.value}-disabled'" c-variant="variant.value" disabled checked>
+            <c-CCheckbox
+              #c-key="f'{variant.value}-disabled'"
+              c-variant="variant.value"
+              disabled
+              checked
+            >
               Locked archive record
             </c-CCheckbox>
-            <c-CCheckbox #c-key="f'{variant.value}-invalid'" c-variant="variant.value" invalid>
+            <c-CCheckbox
+              #c-key="f'{variant.value}-invalid'"
+              c-variant="variant.value"
+              invalid
+            >
               Provenance needs review
             </c-CCheckbox>
           </article>

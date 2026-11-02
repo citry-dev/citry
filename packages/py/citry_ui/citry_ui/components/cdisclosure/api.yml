@@ -30,9 +30,9 @@ inputs:
         effect: Places the chevron at the logical start or end of the trigger.
       - id: heading-level
         name: heading_level
-        type: {display: 'Literal[2, 3, 4, 5, 6]', interfaces: [CDisclosureHeadingLevel]}
+        type: {display: CDisclosureHeadingLevel, interfaces: [CDisclosureHeadingLevel]}
         default: {kind: literal, value: 3}
-        effect: Chooses the native heading tag.
+        effect: 'Chooses the heading element, from `<h2>` to `<h6>`. Pass the number, or the same number as text such as "2".'
       - {id: region, name: region, type: bool, default: {kind: literal, value: false}, effect: Adds one trigger-named region landmark to the panel. Use selectively.}
       - {id: actions-label, name: actions_label, type: 'non-whitespace str | None', default: {kind: literal, value: null}, effect: Names the optional actions group and requires the actions slot.}
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the root ID and stable trigger/panel ID pair.}
@@ -146,7 +146,7 @@ interfaces:
       - {id: variant, name: CDisclosureVariant, definition: 'Literal["outline", "soft", "plain"]'}
       - {id: size, name: CDisclosureSize, definition: 'Literal["sm", "md", "lg"]'}
       - {id: indicator-pos, name: CDisclosureIndicatorPos, definition: 'Literal["start", "end"]'}
-      - {id: heading-level, name: CDisclosureHeadingLevel, definition: 'Literal[2, 3, 4, 5, 6]'}
+      - {id: heading-level, name: CDisclosureHeadingLevel, definition: 'Literal[2, 3, 4, 5, 6, "2", "3", "4", "5", "6"]'}
   - {id: cdisclosure-title-slot-data, kind: record, name: CDisclosureTitleSlotData, entries: []}
   - {id: cdisclosure-default-slot-data, kind: record, name: CDisclosureDefaultSlotData, entries: []}
   - {id: cdisclosure-actions-slot-data, kind: record, name: CDisclosureActionsSlotData, entries: []}

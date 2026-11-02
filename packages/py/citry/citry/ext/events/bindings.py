@@ -14,7 +14,7 @@ Design: ``docs/design/events.md`` section 5.1.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, NoReturn, cast
 
@@ -29,9 +29,11 @@ from citry._state_binding_targets import (
 from citry._state_binding_targets import (
     _validate_binding_target as _classify_state_binding_target,
 )
+from citry._walk import Call, run
+from citry.ext.events.state import state_field_names
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Generator, Mapping
 
     from citry.ext.events.extension import EventsInfo
 
@@ -661,7 +663,7 @@ def _resolve_state_field(info: EventsInfo, field: str, attr_name: str, location:
             f" Declare a State class with that field",
         )
         return
-    state_fields = {member.name for member in fields(info.state_cls)}
+    state_fields = set(state_field_names(info.state_cls))
     if field not in state_fields:
         declared = ", ".join(sorted(state_fields)) or "(none)"
         _fail(
@@ -840,11 +842,15 @@ def compile_template_bindings(
 
     """
     two_way_fields: set[str] = set()
-    transformed = _transform_compiled_body(
-        nodes,
-        info=info,
-        comp_name=comp_name,
-        two_way_fields=two_way_fields,
+    # The walk runs as generators on one driver loop, so Python's call
+    # depth does not grow with how deeply the template nests.
+    transformed = run(
+        _transform_compiled_body(
+            nodes,
+            info=info,
+            comp_name=comp_name,
+            two_way_fields=two_way_fields,
+        )
     )
     return CompiledTemplateBindings(nodes=transformed, two_way_fields=frozenset(two_way_fields))
 
@@ -855,8 +861,8 @@ def _transform_compiled_body(
     info: EventsInfo,
     comp_name: str,
     two_way_fields: set[str],
-) -> list[Any]:
-    """Recursively transform every compiled body owned by the same component."""
+) -> Generator[Call, Any, list[Any]]:
+    """Transform every compiled body owned by the same component, as a walk generator."""
     from citry.nodes import (  # noqa: PLC0415
         ComponentNode,
         ElementAttrsNode,
@@ -914,7 +920,8 @@ def _transform_compiled_body(
                     info=info,
                     comp_name=comp_name,
                 )
-            item.body = _transform_compiled_body(
+            item.body = yield Call(
+                _transform_compiled_body,
                 item.body,
                 info=info,
                 comp_name=comp_name,
@@ -925,7 +932,8 @@ def _transform_compiled_body(
 
         if isinstance(item, (SlotNode, FillNode)):
             _reject_structural_attrs(item, comp_name=comp_name)
-            item.body = _transform_compiled_body(
+            item.body = yield Call(
+                _transform_compiled_body,
                 item.body,
                 info=info,
                 comp_name=comp_name,
@@ -947,11 +955,14 @@ def _transform_compiled_body(
                     (
                         branch[0],
                         branch[1],
-                        _transform_compiled_body(
-                            branch[2],
-                            info=info,
-                            comp_name=comp_name,
-                            two_way_fields=two_way_fields,
+                        (
+                            yield Call(
+                                _transform_compiled_body,
+                                branch[2],
+                                info=info,
+                                comp_name=comp_name,
+                                two_way_fields=two_way_fields,
+                            )
                         ),
                         branch[3],
                     )

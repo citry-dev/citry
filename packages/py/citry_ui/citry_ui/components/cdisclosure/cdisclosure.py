@@ -10,7 +10,6 @@ from citry import CitryRender, LibraryComponent, SlotInput, const_value
 from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
-    ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._attrs import (
     CClassValue,
@@ -20,13 +19,14 @@ from citry_ui.components._attrs import (
     merge_root_attrs,
 )
 from citry_ui.components._context import FORM_CONTEXT_KEY
+from citry_ui.components._heading import CHeadingLevel, resolve_heading_level
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
 
 CDisclosureVariant = Literal["outline", "soft", "plain"]
 CDisclosureSize = Literal["sm", "md", "lg"]
 CDisclosureIndicatorPos = Literal["start", "end"]
-CDisclosureHeadingLevel = Literal[2, 3, 4, 5, 6]
+CDisclosureHeadingLevel = CHeadingLevel
 
 
 class CDisclosureOpenChangeDetail(TypedDict):
@@ -51,7 +51,6 @@ class CDisclosureActionsSlotData:
 _VARIANTS = ("outline", "soft", "plain")
 _SIZES = ("sm", "md", "lg")
 _INDICATOR_POSITIONS = ("start", "end")
-_HEADING_LEVELS = (2, 3, 4, 5, 6)
 _DISCLOSURE_CONTEXT_KEY = "citry_ui_disclosure"
 _ACCORDION_ITEM_CONTEXT_KEY = "citry_ui_accordion_item"
 _ACCORDION_PANEL_CONTEXT_KEY = "citry_ui_accordion_panel"
@@ -304,16 +303,6 @@ def _plain_id(value: object) -> str | None:
     return plain
 
 
-def _heading_level(value: object) -> int:
-    raw = const_value(value)
-    if isinstance(raw, str) and raw.isdecimal():
-        raw = int(raw)
-    if isinstance(raw, bool) or raw not in _HEADING_LEVELS:
-        msg = "CDisclosure heading_level must be one of 2, 3, 4, 5, or 6."
-        raise ValueError(msg)
-    return int(raw)
-
-
 def _actions_label(value: object) -> str | None:
     plain = _plain_optional_string("actions_label", value)
     if plain is None:
@@ -510,9 +499,33 @@ class CDisclosure(LibraryComponent):
         default: SlotInput[CDisclosureDefaultSlotData]
         actions: SlotInput[CDisclosureActionsSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # heading_level allows 2 to 6 as a number or as text. Citry's error would
+    # print all 10 values twice; Citry UI's says it in one line. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
+        template_data_keys = (
+            "actions_attrs",
+            "actions_label",
+            "attrs",
+            "disabled",
+            "has_actions",
+            "heading_attrs",
+            "heading_tag",
+            "icon",
+            "indicator",
+            "indicator_pos",
+            "open",
+            "own_disabled",
+            "panel_attrs",
+            "panel_id",
+            "region",
+            "root_id",
+            "size",
+            "trigger_attrs",
+            "trigger_id",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_disclosure_snapshot", None)
@@ -538,7 +551,7 @@ class CDisclosure(LibraryComponent):
             kwargs.indicator_pos,
             _INDICATOR_POSITIONS,
         )
-        heading_level = _heading_level(kwargs.heading_level)
+        heading_level = resolve_heading_level("CDisclosure", kwargs.heading_level)
         actions_label = _actions_label(kwargs.actions_label)
         has_actions = "actions" in self.raw_slots
         if actions_label is not None and not has_actions:
@@ -728,9 +741,14 @@ class CDisclosure(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       $component({
         props: {
           open: {},
@@ -744,7 +762,13 @@ class CDisclosure(LibraryComponent):
         inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
         onServerRender: ({component}) => {
           if (!anchoredLayerRuntimeCompatible) return;
-          const root = component.$el;
+          // The disclosure keeps its browser-side state on its root element, so a
+          // later server render that reruns this callback on the same element restores it.
+          /** @typedef {{logicalOpen?: boolean, baselineOpen?: boolean, serverFingerprint?: string | null}}
+           *   DisclosureRuntime */
+          const root = /** @type {HTMLDivElement & {__citryUiDisclosureRuntime?: DisclosureRuntime}} */ (
+            component.$el
+          );
           const data = component;
           const defaults = data.serverDefaults;
           const props = component.$props;
@@ -1508,7 +1532,6 @@ class CDisclosure(LibraryComponent):
         },
       });
     """
-    )
 
     css_file = "runtime.min.css"
 
@@ -1523,10 +1546,6 @@ class CInternalDisclosureTitleContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CDisclosureTitleSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def on_render(self) -> Any:
         result, error = yield
@@ -1552,10 +1571,6 @@ class CInternalDisclosureActionsContent(LibraryComponent):
     class Slots:
         default: SlotInput[CDisclosureActionsSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -1579,10 +1594,6 @@ class CInternalDisclosurePanelContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CDisclosureDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,

@@ -29,7 +29,7 @@ The design uses these existing contracts:
 - The parser exposes opening tags, ordered attributes, nested bodies, and
   exact UTF-8 byte ranges. `template_tag_uses()` already walks nested template
   attributes, but it returns tag names only and suppresses nested parse
-  failures (`citry/_portable_ide.py:110`).
+  failures (`template_tag_uses` in `citry/_portable_ide.py`).
 - `<c-component is="name">` selects a static target only when no exact
   `c-bind` is present. `c-is`, empty selectors, and spread-selected targets
   stay dynamic (`citry_template_parser/src/compiler.rs:315`, `:711`).

@@ -2,6 +2,22 @@
 
 ## v1 - Unreleased
 
+- Added `citry.vue.unknown-slot-prop`, reported by `citry check` and the
+  language server when a `<c-fill v-slot="{ ... }">` names a Vue slot prop
+  that the component's `<c-slot>` does not pass.
+- Added the message variants `slot-prop` and `browser-slot-prop` to
+  `citry.vue.python-variable`, and `python-slot-prop` to
+  `citry.vue.unknown-variable`. They are used when the value of a `:`
+  attribute on `<c-slot>`, such as `:row`, reads a Python variable.
+- Added `citry.template.csp-incompatible`, reported by `citry check` and the
+  language server when the application's `security_csp` is `"warn"` (a
+  warning) or `"strict"` (an error). It is off by default, because
+  `security_csp` is.
+- Added `citry.template.undeclared-template-data-key`, the `citry check`
+  warning for a key that `template_data()` writes as a literal but the
+  component's `Lint.template_data_keys` leaves out.
+- Added `citry.parse.too-deep` for a template that nests tags more than 512
+  levels deep, or more than 256 Citry logic levels deep.
 - Added the schema-validated source catalog for Citry-owned diagnostic codes,
   message variants, trigger conditions, examples, severities, reporting
   surfaces, and documentation links.

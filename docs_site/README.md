@@ -143,8 +143,9 @@ root-owned. During assembly, mounted snapshot pages are rewritten to load that
 root Pagefind bundle, so changing its configured directory does not strand
 historical versions on an old asset URL.
 Mounted snapshots load every `/static/` file, images included, from the
-current `static/`, so removing a file from `static/` also removes it from
-every older snapshot that used it.
+current `static/`, so keep a file that an older snapshot still loads, even
+after the current pages stop using it. `versions-check` fails when one is
+missing; see [Keep old static files](#keep-old-static-files).
 Content assets inherit the unanimous scope of their first route segment. Keep a
 content-asset directory within one scope; put site-global assets under
 `static/`. An unknown or mixed asset namespace defaults to `versioned` so the
@@ -448,15 +449,17 @@ flag.
 
 Do not add an `h1` to the post body because the Blog layout supplies it. Start
 with the opening paragraph or an `h2`. Link durable instructions to their
-current Docs, Examples, or Reference owner. A root build publishes the index,
-stable post routes, Markdown companions, search and LLM entries, sitemap data,
-social metadata, and `/blog/feed.xml`. Documentation snapshots produced by the
+current Docs, Examples, or Reference owner. Link to files in this repository
+through a commit SHA or a release tag, never `main`, so the post keeps showing
+what it described; `build-check` fails on a post that links to `main`. A root
+build publishes the index, stable post routes, Markdown companions, search and
+LLM entries, sitemap data, social metadata, and `/blog/feed.xml`. Documentation snapshots produced by the
 current builder keep a root `/blog/` header link but do not copy Blog content.
 Older committed snapshots keep their historical header unchanged.
 
 ## Set up the environment
 
-The docs require Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), the
+The docs require Python 3.11 or newer, [uv](https://docs.astral.sh/uv/), the
 repository's pinned nightly Rust toolchain, and the recursive Git submodules.
 CI currently uses Python 3.14.
 
@@ -595,6 +598,12 @@ Run the strict build and guard suite:
 
 ```bash
 uv run --no-sync python -m docs_site build-check --strict
+```
+
+Check the committed version snapshots, as CI does:
+
+```bash
+uv run --no-sync python -m docs_site versions-check --strict
 ```
 
 Run the docs unit, render, and example tests using the same explicit roots as
@@ -819,8 +828,9 @@ published snapshot markup. Snapshots keep their baked page metadata, including
 the discovery relations emitted by their historical builder; only new
 snapshots receive the current Markdown `alternate` and `llms.txt`
 `describedby` contract. They do not receive a per-version generated social-card
-set. Per-version search and version-pinned shared assets remain deliberate
-deferrals.
+set. Per-version search remains a deliberate deferral. See
+[Keep old static files](#keep-old-static-files) for what shared `/static/`
+files require.
 
 Each new snapshot stores its accepted site-route patterns in
 `_build_info.json`, so later scope changes do not reinterpret its intentional
@@ -865,6 +875,79 @@ uv run --no-sync python -m docs_site versions-check --strict
 It walks selected release tags in temporary Git worktrees and modifies the
 committed version tree. Tags that predate the docs builder are skipped. Selection
 and the publication window are defined in `docs_versions.yml`.
+
+### Pin snapshot links
+
+A snapshot stays published for as long as the site exists, so its links into
+the Citry repository on GitHub must not follow `main`. Before a build moves a
+snapshot into place, it rewrites every link that opens a file, a folder, or a
+raw file download on `main` to the release the snapshot was built from. An API
+reference "source" link becomes `.../blob/citry@X.Y.Z/...#L42`, and a GIF on
+raw.githubusercontent.com loads from `citry@X.Y.Z`.
+
+- `build-tag` and `build-all` run this rewrite from your current checkout after
+  the tagged build finishes, so it also happens when the tag's own docs builder
+  has no rewrite. The links name the tag.
+- Running `build --docs-version X.Y.Z` yourself links to `citry@X.Y.Z` when your
+  checkout is that tag's commit, and to your checkout's commit otherwise. It
+  does not wait for the tag to exist, so a build made from the release commit
+  before tagging links to the commit. A detached build (`-o` with
+  `--no-update-versions-manifest`) is left as built, because that is the form
+  `build-tag` uses before it rewrites the result itself.
+- "Edit this page" links stay on `main`, because an edit is always made there.
+  On an old snapshot they can open a file that has since changed or moved.
+- 0.3.0 and 0.3.1 were built from commits other than their tags, so their links
+  name those commits.
+
+If a snapshot still links to `main`, `versions-check` fails, even without
+`--strict`, with an error naming the file, the line, and the link. It reads
+every text file in the snapshot, so it also finds a link the rewrite does not
+change, such as `commits/main` or one in a script or stylesheet. Change the
+source page to link to a file, folder, or tag, rebuild the version with
+`build-tag`, or fix the link in the snapshot by hand. To change which links
+count, edit `scripts/release_links.py`; the package publish workflows use the
+same patterns.
+
+### Keep old static files
+
+A snapshot has no static files of its own. Its pages load images,
+stylesheets, scripts, and icons from the root site's `/static/` folder, which
+is built from `docs_site/static/`. Sharing these files is on purpose: a fix to
+a stylesheet or script reaches every old version. You can change what a
+shared stylesheet or script contains, but every file an old page loads must
+stay at its path in `docs_site/static/` while that version is committed under
+`docs_site/versions/`.
+
+`versions-check` fails, even without `--strict`, when a `src`, `href`, or
+`srcset` attribute in any committed snapshot page points to a `/static/` file
+that is missing from `docs_site/static/`. It reads only real attributes, so a
+path that a code example shows as text does not count. A path that only a
+script, a Vue or Alpine expression, or a full `https://` URL names is not
+checked. The error names the snapshot page and the missing path (wrapped here
+to fit):
+
+```text
+[snapshot_static_files] 0.4.0/about/benchmarks/index.html:12
+    loads /static/img/benchmark.png, which is missing from
+    docs_site/static/; restore the file under this name. To
+    change what it shows, save the changed file under a new name
+```
+
+To fix it, restore the file. To change an image that old versions show, save
+the new image under a new file name, point the current pages at it, and keep
+the old file. Old versions keep loading the old name, and `versions-check`
+fails if you delete it. The check only sees whether a file exists, so it
+cannot tell when you overwrite an image in place; do not overwrite an image
+that old versions show.
+
+If a demo points at a missing file on purpose, to show its error state, add
+that path to `_MISSING_ON_PURPOSE` in
+`docs_site/_internal/guards/snapshot_static_files.py`.
+
+The Docs check workflow runs this guard alone (`versions-check --strict
+--guard snapshot_static_files`) on every pull request that touches
+`docs_site/`, so deleting a file that a snapshot loads fails the Docs check on
+that pull request. The docs release workflow runs every version guard.
 
 ## Maintenance workflows
 

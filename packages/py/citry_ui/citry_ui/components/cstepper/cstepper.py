@@ -195,9 +195,19 @@ class CStepper(LibraryComponent):
     class Slots:
         default: SlotInput[CStepperDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "active",
+            "attrs",
+            "disabled",
+            "interactive",
+            "label",
+            "linear",
+            "orientation",
+            "registry",
+            "size",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_STEPPER_CONTEXT, None) is not None:
@@ -466,10 +476,6 @@ class CStep(LibraryComponent):
         description: SlotInput[CStepDescriptionSlotData] | None = None
         indicator: SlotInput[CStepIndicatorSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         for name in ("disabled", "optional", "error"):
             validate_boolean("CStep", name, getattr(kwargs, name))
@@ -505,10 +511,6 @@ class CInternalStepperDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CStepperDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -540,10 +542,6 @@ class CInternalStepper(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if len(kwargs.registry.steps) < 2:
@@ -580,7 +578,11 @@ class CInternalStepper(LibraryComponent):
         }
 
     template = """
-      <nav class="cui-stepper" c-bind="attrs" data-citry-ui-part="stepper">
+      <nav
+        class="cui-stepper"
+        c-bind="attrs"
+        data-citry-ui-part="stepper"
+      >
         <ol class="cui-stepper__list" data-citry-ui-part="list">
           <c-for each="step in steps">
             <c-CInternalStep
@@ -614,10 +616,6 @@ class CInternalStep(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declaration = kwargs.declaration
@@ -664,7 +662,12 @@ class CInternalStep(LibraryComponent):
         }
 
     template = """
-      <li class="cui-stepper__step" #c-key="morph_key" c-bind="attrs" data-citry-ui-part="step">
+      <li
+        class="cui-stepper__step"
+        #c-key="morph_key"
+        c-bind="attrs"
+        data-citry-ui-part="step"
+      >
         <c-if cond="interactive">
           <button
             class="cui-stepper__trigger"
@@ -674,7 +677,11 @@ class CInternalStep(LibraryComponent):
             c-aria-describedby="description_id"
             data-citry-ui-part="trigger"
           >
-            <span class="cui-stepper__indicator" aria-hidden="true" data-citry-ui-part="indicator">
+            <span
+              class="cui-stepper__indicator"
+              aria-hidden="true"
+              data-citry-ui-part="indicator"
+            >
               <c-if cond="indicator is not None">{{ indicator }}</c-if><c-else>{{ index + 1 }}</c-else>
             </span>
             <span class="cui-stepper__copy" data-citry-ui-part="copy">
@@ -696,7 +703,11 @@ class CInternalStep(LibraryComponent):
             c-aria-describedby="description_id"
             data-citry-ui-part="trigger"
           >
-            <span class="cui-stepper__indicator" aria-hidden="true" data-citry-ui-part="indicator">
+            <span
+              class="cui-stepper__indicator"
+              aria-hidden="true"
+              data-citry-ui-part="indicator"
+            >
               <c-if cond="indicator is not None">{{ indicator }}</c-if><c-else>{{ index + 1 }}</c-else>
             </span>
             <span class="cui-stepper__copy" data-citry-ui-part="copy">

@@ -2278,14 +2278,12 @@ class TestErrorReporting:
     def test_error_fstring(self):
         compiled = safe_eval("1 + f'{a + 2}' + 1")
         context = {"a": "a"}
-        with pytest.raises(
-            TypeError,
-            match=re.escape(
-                'can only concatenate str (not "int") to str\n\n'
-                "     1 | 1 + f'{a + 2}' + 1\n"
-                "         ^^^^^^^^^^^^^^^^^^"
-            ),
-        ):
+        # The sandbox passes on the interpreter's own TypeError text, which
+        # CPython and PyPy word differently, so ask the interpreter for it.
+        with pytest.raises(TypeError) as native:
+            context["a"] + 2
+        source = "     1 | 1 + f'{a + 2}' + 1\n         ^^^^^^^^^^^^^^^^^^"
+        with pytest.raises(TypeError, match=re.escape(f"{native.value}\n\n{source}")):
             compiled(context)
 
     def test_error_multi_line(self):

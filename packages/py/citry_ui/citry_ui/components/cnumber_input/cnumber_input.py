@@ -240,9 +240,36 @@ class CNumberInput(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "autocomplete",
+            "catalog_decrement_label",
+            "catalog_increment_label",
+            "decrement_label",
+            "disabled",
+            "field_control",
+            "form",
+            "formatted_value",
+            "increment_label",
+            "input_attrs",
+            "invalid",
+            "maximum",
+            "minimum",
+            "name",
+            "placeholder",
+            "public_id",
+            "readonly",
+            "required",
+            "root_attrs",
+            "show_controls",
+            "size",
+            "step",
+            "transport_id",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_number_input_snapshot", None)
@@ -513,7 +540,11 @@ class CNumberInput(LibraryComponent):
             data-citry-ui-part="increment"
           ><span aria-hidden="true">+</span></button>
         </div>
-        <input c-id="transport_id" type="hidden" disabled />
+        <input
+          c-id="transport_id"
+          type="hidden"
+          disabled
+        />
       </div>
     """
 
@@ -570,7 +601,11 @@ class CNumberInput(LibraryComponent):
             let unsigned = negative ? value.slice(1) : value;
             let [integer, fraction = ''] = unsigned.split('.');
             integer = integer.replace(/^0+(?=\d)/, '') || '0';
-            fraction = fraction.replace(/0+$/, '');
+            // Strip trailing zeros with a plain loop, so the time grows only in step with the length,
+            // even for a long run of zeros before the last digit.
+            let fractionEnd = fraction.length;
+            while (fractionEnd > 0 && fraction[fractionEnd - 1] === '0') fractionEnd -= 1;
+            fraction = fraction.slice(0, fractionEnd);
             let result = integer + (fraction ? `.${fraction}` : '');
             if (negative && result !== '0') result = `-${result}`;
             return result.replace('-', '').replace('.', '').length <= 128 ? result : undefined;

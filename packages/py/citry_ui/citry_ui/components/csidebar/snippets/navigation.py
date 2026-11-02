@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class SidebarNavigation(Component):
     template = """
-      <c-CSidebar tag="nav" label="Project navigation" c-collapsed="True">
+      <c-CSidebar
+        tag="nav"
+        label="Project navigation"
+        c-collapsed="True"
+      >
         <c-fill name="header"><span data-citry-sidebar-expanded-only><strong>Atlas</strong></span></c-fill>
         <c-fill name="default">
           <c-CList>

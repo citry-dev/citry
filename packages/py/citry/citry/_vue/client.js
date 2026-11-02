@@ -1410,6 +1410,226 @@
   const eventTimingDirectives = new WeakMap();
   const runtimeEventTimingDirectives = new WeakMap();
   const MAX_TIMER_DELAY = 2_147_483_647;
+  // Listeners with Citry's own modifiers: `.outside`, `.window`, `.document`,
+  // `.debounce` and `.throttle`. Vue's modifiers are a fixed set inside its
+  // template compiler, so Citry's compiler rewrites `@event.mods="handler"`
+  // into a plain listener that Vue compiles and stores in the vnode's props
+  // as `onCitryOn<n>`, and `v-citry-on:event.mods="'<n>'"`, the directive
+  // below. The directive attaches the real listener where and when the
+  // modifiers say, and calls whatever handler the vnode holds at that moment.
+  const citryListeners = new WeakMap();
+  const CITRY_EVENT_OPTION_MODIFIERS = new Set(["capture", "once", "passive"]);
+  const CITRY_NON_KEY_MODIFIERS = new Set(["stop", "prevent", "self", "ctrl", "shift", "alt", "meta",
+    "exact", "middle"]);
+  const CITRY_PLACE_MODIFIERS = new Set(["outside", "window", "document"]);
+  // Vue's `ErrorCodes.NATIVE_EVENT_HANDLER`, so errors are reported as they
+  // are for Vue's own listeners.
+  const NATIVE_EVENT_HANDLER = 5;
+  const citryTiming = (modifiers, name) => {
+    const token = modifiers.find(item => item.startsWith(name + "-") && item.endsWith("ms"));
+    return token === undefined ? null : Number(token.slice(name.length + 1, -2));
+  };
+  // Whether the element shows: `checkVisibility()` with its default options,
+  // or, in browsers before it existed, whether the element has a box.
+  const citryElementVisible = element =>
+    typeof element.checkVisibility === "function" ? element.checkVisibility() : element.getClientRects().length > 0;
+  // The order in which events of each type started, so a listener can tell an
+  // event that began before it was attached, such as the click that mounted a
+  // popup, from a later one. Event times would do this, but browsers round
+  // them and test clocks replace them, so each event is numbered instead, in
+  // the capture phase, before any handler runs. The numbering listeners sit on
+  // `window`, on `document` (for events such as `load`, which never reach
+  // `window`), and on the root of each element that has a listener, such as a
+  // shadow root, whose own events may never leave it.
+  const citryEventOrder = new WeakMap();
+  const citryNumberedTypes = new WeakMap();
+  let citryEventCount = 0;
+  const numberCitryEvent = domEvent => {
+    if (!citryEventOrder.has(domEvent)) citryEventOrder.set(domEvent, ++citryEventCount);
+  };
+  function numberCitryEventsOn(target, type) {
+    let types = citryNumberedTypes.get(target);
+    if (!types) { types = new Set(); citryNumberedTypes.set(target, types); }
+    if (types.has(type)) return;
+    types.add(type);
+    // Passive, so a page-wide touch or wheel listener never delays scrolling.
+    target.addEventListener(type, numberCitryEvent, {capture: true, passive: true});
+  }
+  function numberCitryEvents(state) {
+    const type = state.spec.event;
+    numberCitryEventsOn(window, type);
+    numberCitryEventsOn(document, type);
+    state.root = state.element.getRootNode();
+    if (state.root !== document) numberCitryEventsOn(state.root, type);
+  }
+  // Whether an event started before the listener was attached.
+  function citryEventPredatesListener(state, domEvent) {
+    // The event that was being sent while Vue mounted or updated the element.
+    // Another script's capture listener on `window` can start that update
+    // before Citry's numbering listener there has run, so the event gets its
+    // number later, on `document`, and only this comparison catches it.
+    if (state.attachEvent !== undefined) {
+      if (domEvent === state.attachEvent) return true;
+      // Once that event has finished, it need not be kept alive.
+      if (state.attachEvent.eventPhase === 0) state.attachEvent = undefined;
+    }
+    const order = citryEventOrder.get(domEvent);
+    if (order !== undefined) return order <= state.attachedOrder;
+    // An element that moved to another root, such as by a `<Teleport>` whose
+    // target changed, gets numbering there. Its event came after the attach.
+    if (state.target === state.element && state.element.getRootNode() !== state.root) {
+      numberCitryEvents(state);
+      return false;
+    }
+    // Every event that reaches the listener passed a numbering listener,
+    // unless it started before that one was added.
+    return true;
+  }
+  function citryListenerSpec(binding) {
+    let event = binding.arg;
+    const modifiers = Object.keys(binding.modifiers || {}).sort();
+    if (typeof event !== "string" || event === "") return null;
+    // The compiler writes only event names authored in the template, and it
+    // has already applied Vue's renaming of these two; the runtime repeats it,
+    // and accepts any `binding.arg`, so a directive written another way still
+    // listens for what Vue would.
+    if (event === "click" && modifiers.includes("right")) event = "contextmenu";
+    else if (event === "click" && modifiers.includes("middle")) event = "mouseup";
+    return {event, modifiers, signature: event + "\0" + modifiers.join(".")};
+  }
+  function citryListenerHandler(state, event) {
+    const handler = state.vnode.props?.["onCitryOn" + state.id];
+    const instance = state.binding.instance?.$ ?? null;
+    if (typeof handler !== "function" && !Array.isArray(handler)) {
+      // The compiler always writes the handler, so this means something else
+      // was put under its key. Vue's own reporting
+      // reaches the app's error handler when there is one and logs otherwise.
+      const error = new TypeError("Citry listener 'onCitryOn" + state.id + "' is not a function");
+      V.handleError(error, instance, NATIVE_EVENT_HANDLER);
+      return;
+    }
+    V.callWithAsyncErrorHandling(handler, instance, NATIVE_EVENT_HANDLER, [event]);
+  }
+  function attachCitryListener(element, binding, vnode) {
+    const spec = citryListenerSpec(binding);
+    let byId = citryListeners.get(element);
+    if (!byId) { byId = new Map(); citryListeners.set(element, byId); }
+    const state = {id: String(binding.value), binding, vnode, spec, element, timer: 0, last: -Infinity,
+      pending: null, target: null, listener: null, options: undefined, attachedOrder: 0, attachEvent: undefined,
+      root: null,
+      startListener: null, startVisible: new WeakMap()};
+    byId.set(state.id, state);
+    // A missing event name attaches nothing, as Vue does for `@[name]`.
+    if (spec === null) return;
+    const {event, modifiers} = spec;
+    const has = name => modifiers.includes(name);
+    const keyboard = /^key(down|up|press)$/.test(event);
+    const nonKey = [];
+    const keys = [];
+    for (const modifier of modifiers) {
+      if (CITRY_PLACE_MODIFIERS.has(modifier) || CITRY_EVENT_OPTION_MODIFIERS.has(modifier) ||
+          modifier.startsWith("debounce-") || modifier.startsWith("throttle-")) continue;
+      // `.left` and `.right` are keys on a keyboard event and mouse buttons
+      // on any other, as Vue's `resolveModifiers` decides.
+      if (CITRY_NON_KEY_MODIFIERS.has(modifier) || ((modifier === "left" || modifier === "right") && !keyboard))
+        nonKey.push(modifier);
+      else if (keyboard) keys.push(modifier);
+    }
+    const debounce = citryTiming(modifiers, "debounce");
+    const throttle = citryTiming(modifiers, "throttle");
+    // The timing follows `@c-*`: throttle runs the first event and drops the
+    // ones within its interval; debounce runs once, after the last event.
+    let call = domEvent => citryListenerHandler(state, domEvent);
+    if (throttle !== null || debounce !== null) {
+      const run = call;
+      call = domEvent => {
+        if (throttle !== null) {
+          const now = performance.now();
+          if (now - state.last < throttle) return;
+          state.last = now;
+        }
+        if (debounce === null) { run(domEvent); return; }
+        if (state.timer) clearTimeout(state.timer);
+        state.pending = domEvent;
+        scheduleDelay(state, debounce, () => {
+          const pending = state.pending;
+          state.pending = null;
+          run(pending);
+        });
+      };
+    }
+    // Vue's own helpers act on the event at once (`.stop`, `.prevent`, key
+    // and button checks), even when the handler runs later.
+    let listener = call;
+    if (nonKey.length) listener = V.withModifiers(listener, nonKey);
+    if (keys.length) listener = V.withKeys(listener, keys);
+    const outside = has("outside");
+    state.target = has("window") ? window : has("document") || outside ? document : element;
+    if (outside) {
+      // Vue applies a state change between two listeners of one click, so a
+      // toggle button outside a panel would show the panel before the
+      // outside listener runs, and the listener would close it again. The
+      // panel's visibility is therefore read when the event starts, in the
+      // capture phase, before any handler has run.
+      // The snapshot is kept per event, so an event dispatched from inside
+      // another one's handler does not replace the outer event's snapshot.
+      state.startListener = domEvent => {
+        // An event inside the element never runs the listener, so it needs
+        // no visibility check, which would make the browser recompute styles.
+        if (domEvent.composedPath().includes(element)) return;
+        state.startVisible.set(domEvent, citryElementVisible(element));
+      };
+      // Passive, because it only reads the page.
+      document.addEventListener(event, state.startListener, {capture: true, passive: true});
+    }
+    state.listener = domEvent => {
+      // Like Vue, ignore an event that started before the listener existed,
+      // so a popup that a click mounts does not see that same click.
+      if (citryEventPredatesListener(state, domEvent)) return;
+      if (outside) {
+        if (!element.isConnected || domEvent.composedPath().includes(element)) return;
+        // An event the capture listener missed, such as one that started
+        // before the listener was attached, falls back to a check now.
+        const snapshot = state.startVisible.get(domEvent);
+        state.startVisible.delete(domEvent);
+        if (!(snapshot ?? citryElementVisible(element))) return;
+      }
+      if (has("once")) {
+        // Removed by hand rather than with the browser's `once` option, so
+        // the click that mounted a window or document listener, which the
+        // check above ignores, does not use it up. The state stays, so an
+        // update does not attach it again.
+        removeCitryListener(state);
+      }
+      listener(domEvent);
+    };
+    // Browsers make touch and wheel listeners on window and document passive
+    // by default, which would make `.prevent` do nothing there.
+    const passive = has("passive") ? true : has("prevent") && state.target !== element ? false : undefined;
+    state.options = {capture: has("capture"), ...(passive === undefined ? {} : {passive})};
+    numberCitryEvents(state);
+    state.attachedOrder = citryEventCount;
+    // `window.event` is the event being sent right now, if any; browsers
+    // leave it unset for a listener inside a shadow root. Only an event of
+    // this type can reach the listener, so no other is kept alive.
+    state.attachEvent = window.event?.type === event ? window.event : undefined;
+    state.target.addEventListener(event, state.listener, state.options);
+  }
+  function removeCitryListener(state) {
+    if (state.target) state.target.removeEventListener(state.spec.event, state.listener, state.options);
+    if (state.startListener) document.removeEventListener(state.spec.event, state.startListener, {capture: true});
+  }
+  function detachCitryListener(element, id) {
+    const byId = citryListeners.get(element);
+    const state = byId?.get(id);
+    if (!state) return;
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = 0;
+    state.pending = null;
+    removeCitryListener(state);
+    byId.delete(id);
+    if (byId.size === 0) citryListeners.delete(element);
+  }
   function scheduleDelay(lifetime, milliseconds, callback) {
     let remaining = milliseconds;
     const schedule = () => {
@@ -2495,25 +2715,47 @@
     // A mounted document links its initial stylesheets in <head>, so the served HTML paints with
     // them. The browser runs no inline script before those links finish, so a served link is done
     // here. It is adopted unless it failed: an integrity failure leaves no sheet, and an error
-    // status shows in its resource timing entry where the browser reports one (Safari does not).
+    // status shows in its resource timing entry where the browser reports one.
     // A failed link is replaced by a new request below, which reports the failure.
     const served = knownInitial ? [...document.querySelectorAll('link[rel="stylesheet"][data-citry-vue-style-app]')]
       .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
         element.getAttribute("href") === asset.source.url) || null : null;
-    const servedFailed = served !== null && (!served.sheet ||
-      performance.getEntriesByName(served.href).some(entry => entry.responseStatus >= 400));
-    if (served && !servedFailed) {
-      const adopted = {element: served, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
-        identity: assetIdentity(asset), promise: Promise.resolve()};
-      loadedStyleUrls.set(key, adopted);
-      admittedStyles.set(key, {appId, identity: adopted.identity});
-      return adopted.promise;
-    }
-    served?.remove();
-    const link = document.createElement("link");
-    const record = {element: link, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
+    const timings = served ? performance.getEntriesByName(served.href) : [];
+    const servedFailed = served !== null && (!served.sheet || timings.some(entry => entry.responseStatus >= 400));
+    const record = {element: served, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
       identity: assetIdentity(asset)};
-    record.promise = new Promise((resolve, reject) => {
+    if (served && !servedFailed) {
+      // Safari's resource timing has no status, and it gives a link whose response failed an
+      // empty sheet, so there a failed link looks loaded. Other browsers also leave the status
+      // out when the timing entry is missing or the response was cross-origin without CORS.
+      // Without a status, a link whose sheet has rules loaded, and one whose rules are hidden
+      // from this page cannot be checked. A link with an empty sheet is checked: load the same
+      // URL again in a probe link, and request the stylesheet again if the probe fails. Its sheet
+      // is empty, so removing it first takes no styles off the page.
+      const statusKnown = timings.some(entry => entry.responseStatus > 0);
+      record.promise = statusKnown || !styleSheetIsEmpty(served.sheet) ? Promise.resolve() :
+        confirmServedStyle(served, asset, nonce).then(loaded => {
+          // If a stage retired this record while the probe ran, it already removed the link, and
+          // a new request here would add a link that nothing owns.
+          if (loaded || loadedStyleUrls.get(key) !== record) return;
+          served.remove();
+          return linkStyle(appId, asset, nonce, key, record);
+        });
+    } else {
+      served?.remove();
+      record.promise = linkStyle(appId, asset, nonce, key, record);
+    }
+    loadedStyleUrls.set(key, record);
+    admittedStyles.set(key, {appId, identity: record.identity});
+    return record.promise;
+  }
+  // Request the stylesheet in a new link and make it the record's element. The promise rejects
+  // when the load fails and, if the record is still current, drops it so a later render requests
+  // the stylesheet again.
+  function linkStyle(appId, asset, nonce, key, record) {
+    const link = document.createElement("link");
+    record.element = link;
+    return new Promise((resolve, reject) => {
       link.rel = "stylesheet";
       link.href = asset.source.url;
       link.setAttribute("data-citry-vue-style-app", appId);
@@ -2529,9 +2771,42 @@
       };
       document.head.append(link);
     });
-    loadedStyleUrls.set(key, record);
-    admittedStyles.set(key, {appId, identity: record.identity});
-    return record.promise;
+  }
+  // A sheet whose rules this page cannot read came from another origin without CORS. Nothing here
+  // can tell whether it loaded, so it counts as loaded, as a served link with a status does.
+  function styleSheetIsEmpty(sheet) {
+    try {
+      return sheet.cssRules.length === 0;
+    } catch {
+      return false;
+    }
+  }
+  // The probe waits this long for an answer before it counts the served link as loaded, which is
+  // how the runtime treats a served link everywhere else, so a stalled request cannot hold the
+  // mount forever.
+  const STYLE_PROBE_TIMEOUT_MS = 3000;
+  // Load the served link's URL again in a link whose media matches nothing (`not all`), so its
+  // load or error event says whether the response succeeded without changing the page's styles.
+  // The browser usually answers it from memory; otherwise the mount waits for that request, up to
+  // the timeout above.
+  function confirmServedStyle(served, asset, nonce) {
+    return new Promise(resolve => {
+      const probe = document.createElement("link");
+      applyAssetSource(probe, asset.source, nonce);
+      // Set after the source attributes, which may carry their own rel or media.
+      probe.rel = "stylesheet";
+      probe.media = "not all";
+      probe.href = served.href;
+      const finish = loaded => {
+        clearTimeout(timer);
+        probe.remove();
+        resolve(loaded);
+      };
+      const timer = setTimeout(() => finish(true), STYLE_PROBE_TIMEOUT_MS);
+      probe.onload = () => finish(true);
+      probe.onerror = () => finish(false);
+      document.head.append(probe);
+    });
   }
   function loadTypeScript(appId, asset, nonce, knownInitial = false) {
     normalizeScriptAsset(asset);
@@ -3799,7 +4074,8 @@
       plain(checkedArgs, "Citry Events arguments");
       const source = sources.get(record.occurrenceId);
       if (!source) throw new Error("Citry Events call has no mounted Vue owner");
-      // The bridge checks the options (an unknown key or `wait: false` rejects) and copies them.
+      // The bridge checks the options and copies them. An unknown key rejects, and so does
+      // `wait: false` unless the handler is declared detached.
       return ensureEventsBridge().send({source, handler, args: checkedArgs, options: opts});
     };
     ownedApp.resolvePublicTarget = sourceForTarget;
@@ -3810,7 +4086,8 @@
       requireEventHandler(mounted.record, handler);
       const checkedArgs = args === undefined ? {} : args;
       plain(checkedArgs, "Citry Events arguments");
-      // The bridge checks the options (an unknown key or `wait: false` rejects) and copies them.
+      // The bridge checks the options and copies them. An unknown key rejects, and so does
+      // `wait: false` unless the handler is declared detached.
       return ensureEventsBridge().send({source, handler, args: checkedArgs, options: opts});
     };
     ownedApp.publicApplyActions = (actions, source) => ensureEventsBridge().applyActions(actions, source);
@@ -3971,6 +4248,31 @@
       mounted(element, binding) { installRuntimeEvents(element, binding.value); },
       updated(element, binding) { installRuntimeEvents(element, binding.value); },
       beforeUnmount(element) { disposeRuntimeEvents(element); },
+    });
+    vueApp.directive("citry-on", {
+      mounted(element, binding, vnode) { attachCitryListener(element, binding, vnode); },
+      // The newest vnode is recorded before the patch, so an event during the
+      // update already calls the new handler.
+      beforeUpdate(element, binding, vnode) {
+        const id = String(binding.value);
+        // A listener whose number changed is a different listener, so the
+        // old one goes now, before any directive on this element attaches
+        // under that number in `updated`.
+        if (String(binding.oldValue) !== id) { detachCitryListener(element, String(binding.oldValue)); return; }
+        const state = citryListeners.get(element)?.get(id);
+        if (state) { state.vnode = vnode; state.binding = binding; }
+      },
+      updated(element, binding, vnode) {
+        const id = String(binding.value);
+        const state = citryListeners.get(element)?.get(id);
+        const spec = citryListenerSpec(binding);
+        // A pending debounced call survives an update; only a new event name
+        // or set of modifiers moves the listener and drops what was pending.
+        if (state && (state.spec?.signature ?? null) === (spec?.signature ?? null)) return;
+        detachCitryListener(element, id);
+        attachCitryListener(element, binding, vnode);
+      },
+      beforeUnmount(element, binding) { detachCitryListener(element, String(binding.value)); },
     });
     vueApp.directive("citry-event-timing", {
       mounted(element, binding) { reconcileEventTimings(element, binding.value); },
@@ -4613,6 +4915,21 @@
     }
   }
 
+  // An input method composes text in the focused field between compositionstart and
+  // compositionend, and `composingTarget` holds that field meanwhile. Chromium keeps a composition
+  // when a script sets the range, but other browsers or input methods may end it, so the restore
+  // below leaves the range alone while one is active. A field that loses focus (Chromium blurs a
+  // field Vue moves) can end the composition without a compositionend, so a focusout on that field
+  // clears `composingTarget` too.
+  let composingTarget = null;
+  if (typeof global.document?.addEventListener === "function") {
+    global.document.addEventListener("compositionstart", event => { composingTarget = event.target; }, true);
+    global.document.addEventListener("compositionend", () => { composingTarget = null; }, true);
+    global.document.addEventListener("focusout", event => {
+      if (event.target === composingTarget) composingTarget = null;
+    }, true);
+  }
+
   // Vue moves a keyed element with insertBefore, and the browser drops focus from an element that
   // leaves the document even for that instant. A server revision that reorders rows would then
   // take the focus and caret away from the field the user is typing in, so remember them here.
@@ -4626,9 +4943,13 @@
     } catch {
       // Inputs such as email or number have no selection API; focus alone is restored for them.
     }
-    return {element, selection};
+    // The text is kept so the restore can tell whether the field was rewritten during the patch.
+    return {element, selection, value: element.value};
   }
   function restoreFocus(focus) {
+    // A composing field removed from the document gets no compositionend in some browsers, so
+    // forget it here rather than keep the removed node alive.
+    if (composingTarget && !composingTarget.isConnected) composingTarget = null;
     // Only an element Vue kept, and only when nothing else took the focus: the page may have moved
     // it on purpose, and an element Vue replaced is a new field.
     if (!focus || !focus.element.isConnected) return;
@@ -4637,9 +4958,14 @@
       if (current && current !== global.document.body) return;
       focus.element.focus({preventScroll: true});
     }
-    // Reapply the range even when the field kept focus: restoring a dirty native value after the
-    // publication writes `.value`, which moves the caret to the end.
-    if (focus.selection) {
+    // Reapply the range even when the field kept focus: when the server changed a typed field's
+    // text, the native-control restore that runs just before this writes `.value`, which moves the
+    // caret to the end. Skip this while an input method composes in the field, because it owns
+    // the range until compositionend. A write that changed the text ends the composition without
+    // a compositionend in Chromium, so the runtime treats the field as no longer composing and sets
+    // the range.
+    if (composingTarget === focus.element && focus.element.value !== focus.value) composingTarget = null;
+    if (focus.selection && composingTarget !== focus.element) {
       try {
         focus.element.setSelectionRange(...focus.selection);
       } catch {
@@ -4724,7 +5050,11 @@
       const owned = nativeOwnedProperties(element);
       if (owned.has(snapshot.kind)) continue;
       if (snapshot.kind === "value" && "value" in element) {
-        element.value = element.defaultValue === snapshot.baseline ? snapshot.value : element.defaultValue;
+        // Skip the write when the field already shows this text: there is nothing to restore, and
+        // an extra write could disturb an input method in some browsers. A write that changes the
+        // text moves the caret to the end; restoreFocus puts it back.
+        const value = element.defaultValue === snapshot.baseline ? snapshot.value : element.defaultValue;
+        if (element.value !== value) element.value = value;
       }
       else if (snapshot.kind === "checked" && "checked" in element) {
         element.checked = element.defaultChecked === snapshot.baseline ? snapshot.value : element.defaultChecked;

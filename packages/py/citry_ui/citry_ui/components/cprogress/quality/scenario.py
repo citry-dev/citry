@@ -24,7 +24,12 @@ def progress_states_component(app: Citry) -> type[Component]:
               <c-for each="intent in intents">
                 <div>
                   <span>{{ intent }}</span>
-                  <c-CProgress #c-key="intent" c-label="intent" c-value="62" c-intent="intent" />
+                  <c-CProgress
+                    #c-key="intent"
+                    c-label="intent"
+                    c-value="62"
+                    c-intent="intent"
+                  />
                 </div>
               </c-for>
             </div>
@@ -38,7 +43,12 @@ def progress_states_component(app: Citry) -> type[Component]:
             />
             <c-CRow>
               <c-for each="size in sizes">
-                  <c-CProgress #c-key="size" c-label="f'{size} progress'" c-value="48" c-size="size" />
+                  <c-CProgress
+                    #c-key="size"
+                    c-label="f'{size} progress'"
+                    c-value="48"
+                    c-size="size"
+                  />
               </c-for>
             </c-CRow>
             <div data-quality-state="controlled">
@@ -56,10 +66,18 @@ def progress_states_component(app: Citry) -> type[Component]:
             <div dir="rtl"><c-CProgress label="مسح قاع البحر" c-value="44" /></div>
             <div style="color-scheme: dark"><c-CProgress label="Nested dark" c-value="52" /></div>
             <div class="progress-quality-brand progress-quality-brand--coral">
-              <c-CProgress label="Coral brand" c-value="58" shape="pill" />
+              <c-CProgress
+                label="Coral brand"
+                c-value="58"
+                shape="pill"
+              />
             </div>
             <div class="progress-quality-brand progress-quality-brand--abyss">
-              <c-CProgress label="Abyss brand" c-value="58" shape="pill" />
+              <c-CProgress
+                label="Abyss brand"
+                c-value="58"
+                shape="pill"
+              />
             </div>
           </section>
         """

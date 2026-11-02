@@ -73,10 +73,7 @@ class ResponsiveImageSources(Component):
               c-srcset="responsive_srcset"
               sizes="(max-width: 48rem) 100vw, 48rem"
               c-sources="sources"
-              :onStatusChange="(detail)=>{
-                  const value=detail.current_src || detail.src;
-                  selected=value.split('/').pop().split('?')[0];
-                }"
+              :onStatusChange="showSelectedSource"
             />
           </article>
           <article>
@@ -95,6 +92,14 @@ class ResponsiveImageSources(Component):
           return {
             selected:'Waiting for native selection'
           };
+        },
+        methods: {
+          // The browser picks the candidate, so show the filename it
+          // settled on, which changes across the 48rem and 64rem widths.
+          showSelectedSource(detail) {
+            const value = detail.current_src || detail.src;
+            this.selected = value.split('/').pop().split('?')[0];
+          },
         },
       });
     """

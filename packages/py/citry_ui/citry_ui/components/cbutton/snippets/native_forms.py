@@ -38,13 +38,21 @@ class ButtonNativeForms(Component):
             >
               Record sighting
             </c-CButton>
-            <c-CButton type="reset" variant="ghost" intent="neutral">
+            <c-CButton
+              type="reset"
+              variant="ghost"
+              intent="neutral"
+            >
               Reset journal
             </c-CButton>
           </div>
         </form>
 
-        <p class="button-form__result" aria-live="polite" v-text="result">
+        <p
+          class="button-form__result"
+          aria-live="polite"
+          v-text="result"
+        >
           No sighting recorded yet.
         </p>
       </section>

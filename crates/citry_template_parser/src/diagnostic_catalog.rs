@@ -3,3 +3,4 @@
 
 pub(crate) const PARSE_SYNTAX: &str = "citry.parse.syntax";
 pub(crate) const PARSE_VALUE: &str = "citry.parse.value";
+pub(crate) const PARSE_TOO_DEEP: &str = "citry.parse.too-deep";

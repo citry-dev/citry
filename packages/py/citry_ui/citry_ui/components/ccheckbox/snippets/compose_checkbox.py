@@ -28,7 +28,11 @@ class ComposeCheckbox(Component):
       <section class="checkbox-compose" aria-label="Checkbox authoring forms">
         <div>
           <p class="checkbox-compose__eyebrow">Template</p>
-          <c-CCheckbox name="archive" value="notes" checked>
+          <c-CCheckbox
+            name="archive"
+            value="notes"
+            checked
+          >
             Archive handwritten field notes
           </c-CCheckbox>
         </div>

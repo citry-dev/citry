@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from typing import Any
 
 import citry_ui
@@ -35,7 +33,7 @@ class CommandActions(Component):
       <section
         class="command-palette-actions"
       >
-        <h2>Action transaction</h2>
+        <h2>Run a command</h2>
         <div role="group" aria-label="Action behavior">
           <label><input type="checkbox" v-model="throwNext" /> Throw in next action</label>
           <label><input type="checkbox" v-model="moveFocus" /> Move owner focus</label>
@@ -48,14 +46,10 @@ class CommandActions(Component):
         <c-CCommandPalette
           label="Draft commands"
           c-entries="commands"
-          :open="open" :onOpenChange="(value,detail)=>{
-              events.push(`open:${value}:${detail.reason}`);
-              open=value;
-            }" :onQueryChange="(value,detail)=>events.push(`query:${value}:${detail.reason}`)" :onAction="(value,detail)=>{
-              events.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
-              if (moveFocus) $refs.focusTarget.focus();
-              if (throwNext) { throwNext=false; throw new Error('Application action failed'); }
-            }"
+          :open="open"
+          :onOpenChange="logOpenChange"
+          :onQueryChange="(value,detail)=>events.push(`query:${value}:${detail.reason}`)"
+          :onAction="runAction"
         />
         <output aria-live="polite" v-text="events.slice(-4).join(' | ') || 'No actions yet'">
           No actions yet
@@ -68,6 +62,21 @@ class CommandActions(Component):
           return {
             open:true,events:[],throwNext:false,moveFocus:false
           };
+        },
+        methods: {
+          logOpenChange(value, detail) {
+            this.events.push(`open:${value}:${detail.reason}`);
+            this.open = value;
+          },
+          runAction(value, detail) {
+            this.events.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
+            if (this.moveFocus) this.$refs.focusTarget.focus();
+            // Throw once, so the console shows the reported error.
+            if (this.throwNext) {
+              this.throwNext = false;
+              throw new Error('Application action failed');
+            }
+          },
         },
       });
     """

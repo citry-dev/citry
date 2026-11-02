@@ -112,25 +112,27 @@ def test_empty_roots_are_valid_static_layout_destinations():
 
 @pytest.mark.parametrize("component", [CCol, CRow])
 @pytest.mark.parametrize(
-    ("input_name", "bad_value", "error", "match"),
+    ("input_name", "bad_value", "expected_type"),
     [
-        ("tag", 2, TypeError, "tag must be a string"),
-        ("tag", "main", ValueError, "tag must be one of"),
-        ("gap", "xxl", ValueError, "gap must be one of"),
-        ("align", "left", ValueError, "align must be one of"),
-        ("justify", "space-between", ValueError, "justify must be one of"),
-        ("reverse", 1, TypeError, "reverse must be a bool"),
-        ("attrs", [], TypeError, "attrs must be a mapping"),
+        ("tag", 2, r"Literal\["),
+        ("tag", "main", r"Literal\["),
+        ("gap", "xxl", r"Literal\["),
+        ("align", "left", r"Literal\["),
+        ("justify", "space-between", r"Literal\["),
+        ("reverse", 1, "bool"),
+        ("attrs", [], r"Mapping\[str, object\] \| None"),
     ],
 )
-def test_invalid_shared_inputs_fail_deterministically(component, input_name, bad_value, error, match):
-    with pytest.raises(error, match=match):
+def test_invalid_shared_inputs_fail_deterministically(component, input_name, bad_value, expected_type):
+    # Citry's input type check names the class, the input, and the type it expects.
+    match = rf"{component.__name__}\.Kwargs\.{input_name} expects {expected_type}"
+    with pytest.raises(TypeError, match=match):
         _render(component(**{input_name: bad_value}))
 
 
 @pytest.mark.parametrize("bad_value", [1, "yes", None])
 def test_group_wrap_requires_a_boolean(bad_value):
-    with pytest.raises(TypeError, match="wrap must be a bool"):
+    with pytest.raises(TypeError, match=r"CRow\.Kwargs\.wrap expects bool"):
         _render(CRow(wrap=bad_value))
 
 

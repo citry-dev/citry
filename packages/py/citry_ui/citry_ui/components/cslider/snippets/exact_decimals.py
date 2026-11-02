@@ -16,7 +16,14 @@ class ExactDecimalSlider(Component):
         <c-fill name="label">Opacity</c-fill>
         <c-fill name="description">Exact 0.05 steps avoid binary floating-point drift.</c-fill>
         <c-fill name="default">
-          <c-CSlider c-value="value" min="0.1" max="0.5" step="0.05" c-marks="marks" show_value="always" />
+          <c-CSlider
+            c-value="value"
+            min="0.1"
+            max="0.5"
+            step="0.05"
+            c-marks="marks"
+            show_value="always"
+          />
         </c-fill>
       </c-CField>
     """

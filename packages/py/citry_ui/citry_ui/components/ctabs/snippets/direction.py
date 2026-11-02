@@ -7,7 +7,11 @@ citry.register_library(citry_ui)
 class TabsDirection(Component):
     template = """
       <section class="tabs-direction">
-        <article class="tabs-direction__card" dir="ltr" lang="en">
+        <article
+          class="tabs-direction__card"
+          dir="ltr"
+          lang="en"
+        >
           <header>
             <p class="tabs-eyebrow">Left to right</p>
             <h2>Inner planets</h2>
@@ -40,7 +44,11 @@ class TabsDirection(Component):
           </c-CTabs>
         </article>
 
-        <article class="tabs-direction__card tabs-direction__card--rtl" dir="rtl" lang="ar">
+        <article
+          class="tabs-direction__card tabs-direction__card--rtl"
+          dir="rtl"
+          lang="ar"
+        >
           <header>
             <p class="tabs-eyebrow">من اليمين إلى اليسار</p>
             <h2>الكواكب الداخلية</h2>

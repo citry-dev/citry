@@ -1,7 +1,5 @@
 """Shared CommandPalette scenario used by repository quality tools."""
 
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from __future__ import annotations
 
 from typing import Any
@@ -24,7 +22,7 @@ def _baseline_entries() -> tuple[object, ...]:
                     value="open-settings",
                     label="Open settings",
                     keywords=("preferences", "configuration"),
-                    shortcut="Ctrl ,",
+                    shortcut="Alt Shift O",
                 ),
                 CCommandPaletteCommand(value="create-project", label="Create project"),
                 CCommandPaletteCommand(
@@ -47,7 +45,9 @@ def _baseline_entries() -> tuple[object, ...]:
                     value="managed-command",
                     label="Managed command",
                     disabled=True,
-                    shortcut="Ctrl M",
+                    # Alt+Shift+G is deliberately not handled: a disabled
+                    # command's hint must not run it.
+                    shortcut="Alt Shift G",
                 ),
                 CCommandPaletteCommand(
                     value="delete-draft",
@@ -70,7 +70,7 @@ def _changed_entries() -> tuple[object, ...]:
                     value="open-settings",
                     label="Open workspace settings",
                     keywords=("preferences", "appearance"),
-                    shortcut="Ctrl ,",
+                    shortcut="Alt Shift O",
                 ),
                 CCommandPaletteCommand(
                     value="archive-project",
@@ -137,13 +137,11 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'lifecycle retained-equal changed-records replacement-root removal restore owner-token',
                 }"
-                :open="lifecycleOpen" :query="lifecycleQuery" :onOpenChange="(value)=>{
-                    lifecycleOpens++;
-                    lifecycleOpen=value;
-                  }" :onQueryChange="(value)=>{
-                    lifecycleQueries++;
-                    lifecycleQuery=value;
-                  }" :onAction="()=>lifecycleActions++"
+                :open="lifecycleOpen"
+                :query="lifecycleQuery"
+                :onOpenChange="recordLifecycleOpen"
+                :onQueryChange="recordLifecycleQuery"
+                :onAction="()=>lifecycleActions++"
               />
             </c-if>
             <output id="quality-command-palette-lifecycle-output">
@@ -165,6 +163,18 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                 lifecycleQueries:0,
                 lifecycleOpens:0
               };
+            },
+            methods: {
+              // These counters let a browser test check that every open and
+              // query request reaches the owner.
+              recordLifecycleOpen(value) {
+                this.lifecycleOpens++;
+                this.lifecycleOpen = value;
+              },
+              recordLifecycleQuery(value) {
+                this.lifecycleQueries++;
+                this.lifecycleQuery = value;
+              },
             },
           });
         """
@@ -199,7 +209,11 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                       + 'start-adornment end-adornment accepted-close app-shortcut '
                       + 'sm md lg rtl narrow zoom-200 zoom-400 reduced-motion forced-colors print',
                   }"
-                  :open="basicOpen" :query="basicQuery" :onOpenChange="(value)=>basicOpen=value" :onQueryChange="(value)=>basicQuery=value" :onAction="(value)=>basicAction=value"
+                  :open="basicOpen"
+                  :query="basicQuery"
+                  :onOpenChange="(value)=>basicOpen=value"
+                  :onQueryChange="(value)=>basicQuery=value"
+                  :onAction="(value)=>basicAction=value"
                 >
                   <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                     <c-CButton
@@ -242,11 +256,10 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                     'data-quality-states':
                       'controlled-open controlled-query declined-close accepted-close null-release',
                   }"
-                  :open="controlledOpen" :query="controlledQuery" :onOpenChange="(value)=>{
-                      if (value || acceptClose) controlledOpen=value;
-                    }" :onQueryChange="(value,detail)=>{
-                      if (acceptQuery || detail.reason==='close') controlledQuery=value;
-                    }"
+                  :open="controlledOpen"
+                  :query="controlledQuery"
+                  :onOpenChange="applyControlledOpen"
+                  :onQueryChange="applyControlledQuery"
                 />
                 <output id="quality-command-palette-controlled-output">
                   <span v-text="controlledOpen ? 'open' : 'closed'">closed</span>|
@@ -269,13 +282,9 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                     'data-quality-states':
                       'action-once stay-open focus-winner',
                   }"
-                  :open="actionOpen" :onOpenChange="(value,detail)=>{
-                      actionLog.push(`open:${value}:${detail.reason}`);
-                      actionOpen=value;
-                    }" :onAction="(value,detail)=>{
-                      actionLog.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
-                      if (value==='copy-id') focusOwnerTarget();
-                    }"
+                  :open="actionOpen"
+                  :onOpenChange="logActionPaletteOpen"
+                  :onAction="logActionAndMoveFocus"
                 />
                 <button type="button" @click="actionOpen=true">Restore action palette</button>
                 <output id="quality-command-palette-action-output" v-text="actionLog.slice(-4).join('|')">
@@ -301,9 +310,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                       'data-quality-states':
                         'form implicit-submit ime composition',
                     }"
-                    :onAction="(value)=>{
-                        if (value==='copy-id') submitProfileForm();
-                      }"
+                    :onAction="submitProfileOnCopy"
                   >
                     <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                       <c-CButton
@@ -314,7 +321,11 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                     </c-fill>
                   </c-CCommandPalette>
                   <button type="submit">Save profile</button>
-                  <button type="submit" name="intent" value="publish">Publish profile</button>
+                  <button
+                    type="submit"
+                    name="intent"
+                    value="publish"
+                  >Publish profile</button>
                 </form>
                 <output id="quality-command-palette-submit-output" v-text="submits">0</output>
               </article>
@@ -389,13 +400,31 @@ def command_palette_states_component(app: Citry) -> type[Component]:
               };
             },
             methods: {
-              // Template expressions cannot reach document, so actions that
-              // move focus or submit the native form go through refs here.
-              focusOwnerTarget() {
-                this.$refs.ownerFocus.focus();
+              // The controlled palette opens on request but closes only once
+              // the owner ticks Accept close.
+              applyControlledOpen(value) {
+                if (value || this.acceptClose) this.controlledOpen = value;
               },
-              submitProfileForm() {
-                this.$refs.profileForm.requestSubmit();
+              // Query edits wait for Accept query, but the reset that comes
+              // with a close is always taken so the next open starts empty.
+              applyControlledQuery(value, detail) {
+                if (this.acceptQuery || detail.reason === 'close') this.controlledQuery = value;
+              },
+              logActionPaletteOpen(value, detail) {
+                this.actionLog.push(`open:${value}:${detail.reason}`);
+                this.actionOpen = value;
+              },
+              // Copy keeps the palette open, so this asks the owner's button
+              // for focus while the modal palette is still showing.
+              logActionAndMoveFocus(value, detail) {
+                this.actionLog.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
+                if (value === 'copy-id') this.$refs.ownerFocus.focus();
+              },
+              // Copy submits the surrounding form on purpose, so a test can
+              // tell this submit from an Enter key the palette must keep
+              // away from the form.
+              submitProfileOnCopy(value) {
+                if (value === 'copy-id') this.$refs.profileForm.requestSubmit();
               },
               handleShortcut(event) {
                 if (
@@ -409,9 +438,44 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                 this.shortcutOpens++;
                 this.basicOpen = true;
               },
+              // Every palette here shows this hint; the key reports to
+              // the Workspace commands output. The palette shows the
+              // hint but never listens for the key, so the page handles
+              // it and records the same action as choosing "Open
+              // settings". The disabled command's hint has no case here
+              // on purpose. Few browsers use Alt+Shift+letter. On macOS,
+              // Option+Shift types a character such as Ø, so the code
+              // falls back to the key's position. In the search box this
+              // also stops macOS Option+Shift from typing that
+              // character, so an application should pick keys its users
+              // do not need to type there.
+              handleCommandShortcut(event) {
+                const target = event.target;
+                const letter = /^[a-z]$/i.test(event.key)
+                  ? event.key.toUpperCase()
+                  : event.code.replace(/^Key/, '');
+                // Leave text fields alone (input, textarea, select and
+                // contenteditable), except a combobox such as the
+                // palette's search box. A checkbox takes no typing and
+                // keeps focus after a click, so the key still works
+                // while one is focused.
+                const typing = target.matches(
+                  'textarea, select, input:not([type=checkbox])'
+                ) || target.isContentEditable;
+                if (
+                  letter !== 'O'
+                  || !event.altKey || !event.shiftKey
+                  || event.ctrlKey || event.metaKey
+                  || event.isComposing
+                  || (typing && target.getAttribute('role') !== 'combobox')
+                ) return;
+                event.preventDefault();
+                this.basicAction = 'open-settings';
+              },
             },
             mounted() {
               window.addEventListener("keydown", this.handleShortcut);
+              window.addEventListener("keydown", this.handleCommandShortcut);
               this.$nextTick(() => {
                 const host = this.$refs.shadowHost;
                 const fixture = this.$refs.shadowFixture;
@@ -422,6 +486,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
             },
             beforeUnmount() {
               window.removeEventListener("keydown", this.handleShortcut);
+              window.removeEventListener("keydown", this.handleCommandShortcut);
             },
           });
         """

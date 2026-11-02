@@ -219,10 +219,6 @@ class CTagGroup(LibraryComponent):
         label: SlotInput[CTagGroupLabelSlotData] | None = None
         description: SlotInput[CTagGroupDescriptionSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         label = _plain("CTagGroup label", kwargs.label)
         group_id = _plain("CTagGroup id", kwargs.id, optional=True)
@@ -332,7 +328,11 @@ class CTagGroup(LibraryComponent):
         c-data-variant="variant"
         c-data-size="size"
       >
-        <div class="cui-tag-group__label" c-id="label_id" data-citry-ui-part="group-label">
+        <div
+          class="cui-tag-group__label"
+          c-id="label_id"
+          data-citry-ui-part="group-label"
+        >
           <c-if cond="has_label_slot"><c-slot name="label" /></c-if>
           <c-else>{{ label }}</c-else>
         </div>
@@ -508,8 +508,10 @@ class CTagGroup(LibraryComponent):
             let current = enabled.find((entry) => entry.value === runtime.focusedValue) ?? enabled[0] ?? null;
             if (runtime.focusedValue && !entries().some((entry) => entry.value === runtime.focusedValue)) {
               current = nearest(runtime.order, runtime.focusedValue, enabled);
-              if (focusWithin && current) queueMicrotask(() => current.root.focus());
-              else if (focusWithin && !current) queueMicrotask(() => list.focus());
+              // Focus moves because a re-render removed the focused tag, not
+              // because the reader moved it, so the page stays where it is.
+              if (focusWithin && current) queueMicrotask(() => current.root.focus({ preventScroll: true }));
+              else if (focusWithin && !current) queueMicrotask(() => list.focus({ preventScroll: true }));
             }
             runtime.focusedValue = current?.value ?? null;
             entries().forEach((entry) => { entry.root.tabIndex = entry === current ? 0 : -1; });
@@ -561,7 +563,7 @@ class CTagGroup(LibraryComponent):
             }
             applyRoving(groupDisabled);
             runtime.order = currentOrder;
-            if (groupDisabled && focusWithin) queueMicrotask(() => list.focus());
+            if (groupDisabled && focusWithin) queueMicrotask(() => list.focus({ preventScroll: true }));
             root.setAttribute("data-citry-tag-group-initialized", "");
           };
           const schedule = () => {
@@ -783,10 +785,6 @@ class CTag(LibraryComponent):
         default: SlotInput[CTagDefaultSlotData]
         start: SlotInput[CTagStartSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         provided = self.inject(_TAG_CONTEXT_KEY, None)
         if provided is None:
@@ -867,9 +865,17 @@ class CTag(LibraryComponent):
             aria-hidden="true"
           >&#10003;</span>
           <c-if cond="has_start">
-            <span class="cui-tag__start" data-citry-ui-part="start" aria-hidden="true"><c-slot name="start" /></span>
+            <span
+              class="cui-tag__start"
+              data-citry-ui-part="start"
+              aria-hidden="true"
+            ><c-slot name="start" /></span>
           </c-if>
-          <span class="cui-tag__label" c-id="label_id" data-citry-ui-part="tag-label"><c-slot required /></span>
+          <span
+            class="cui-tag__label"
+            c-id="label_id"
+            data-citry-ui-part="tag-label"
+          ><c-slot required /></span>
           <c-if cond="removable">
             <button
               class="cui-tag__remove"

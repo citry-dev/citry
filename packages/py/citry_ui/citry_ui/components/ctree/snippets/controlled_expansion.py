@@ -9,7 +9,8 @@ class ControlledExpansion(Component):
       <section >
         <c-CTree
           label="Knowledge base"
-          :expanded="expanded" :onExpandedChange="(next) => expanded = next"
+          :expanded="expanded"
+          :onExpandedChange="(next) => expanded = next"
         >
           <c-CTreeItem value="docs" label="Documentation">
             <c-CTreeItem value="guides" label="Guides" />

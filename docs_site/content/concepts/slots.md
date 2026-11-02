@@ -136,7 +136,9 @@ Sometimes the component holds data that the fill should format. A list
 component can hand each item and its position to the fill, and let the page
 decide how a row looks.
 
-Extra attributes on `<c-slot>` become data for the fill. Use the `c-` prefix
+Extra attributes on `<c-slot>` become data for the fill, except `:` slot
+props such as `:row="row"`, which pass Vue data (see
+[Scoped slots](/vue/slots/#scoped-slots)). Use the `c-` prefix
 to pass the value of a Python expression:
 
 ```citry
@@ -246,6 +248,41 @@ insert that variable in the fill:
 ```
 
 `{{ original }}` renders the slot's fallback content at that point.
+
+!!! note "Limits with Vue"
+
+    A page uses Vue when any component on it has component JavaScript,
+    `js_data()` that returns data, an `Events` class, or a Vue attribute
+    such as `:title` in its template. On such a page, Citry builds the
+    fallback that `{{ original }}` shows as part of your template, not
+    Card's. That fallback can hold components, including `<c-provide>` and
+    components marked `transparent = True`, and `c-` bindings such as
+    `c-title` work in it. Your template cannot reach Card's slots, Vue
+    data, or event handlers, so Card's fallback cannot hold:
+
+    - a `<c-slot>`, or a `Slot` that the fallback prints as a value, such
+      as `{{ icon }}` where `template_data()` returns `slots["icon"]`;
+    - a component, other than `<c-provide>` or a transparent one, with
+      content between its tags;
+    - a Vue attribute that uses Vue data, such as `:title="message"`,
+      `@click="open = true"`, or `ref`;
+    - a `@c-` event handler.
+
+    Rendering then fails with a `TypeError` that names what the fallback
+    holds. Move that content into the fill itself, or leave the slot
+    unfilled so Card shows its own fallback.
+
+    Rendering also fails, even when the fallback is plain HTML, in two
+    more cases:
+
+    - Card puts the `<c-slot>` itself inside content it passes to another
+      component, such as
+      `<c-Panel><c-slot name="title">...</c-slot></c-Panel>`. Move that
+      `<c-slot>` out of the content Card passes to Panel.
+    - Your fill puts `{{ original }}` inside a component that is not
+      transparent, such as `<c-Box>{{ original }}</c-Box>`. Put an HTML
+      element such as `<div>` in place of Box, or mark Box with
+      `transparent = True` if it only wraps content.
 
 ## `Slots` default fills
 
@@ -377,6 +414,63 @@ later in the tag wins.
     does not accept, raises an error.
     [`c-bind`](/syntax/attributes/#c-bind-spread) describes how
     mappings are applied on other tags.
+
+## Show a fill twice { #show-a-fill-in-two-places }
+
+To show the same fill in two places, such as a header and a child
+component, pass the slot rather than its result. In `template_data()`,
+`slots.title` is a [`Slot`][citry.Slot]. Calling it renders the fill and
+returns the result. Printing that result in two places works for text, but
+fails once the fill holds a component:
+
+```citry-html
+<c-Panel>
+  <c-fill name="title">Orders <c-Badge /></c-fill>
+</c-Panel>
+```
+
+```citry
+from citry import Component, SlotInput
+
+
+class Panel(Component):
+    class Slots:
+        title: SlotInput
+
+    def template_data(self, kwargs, slots):
+        # Wrong: calling the slot renders the fill once, and
+        # the template places that one result twice.
+        return {"title": slots.title()}
+
+    template = """
+      <h2>{{ title }}</h2>
+      <c-Summary c-title="title" />
+    """
+```
+
+Rendering the page raises `RuntimeError`: "This content is printed in
+more than one place". `<c-Badge />` rendered once, and one rendered
+component can appear on the page only once.
+
+Pass the `Slot` itself, without calling it. Each place that prints it
+renders the fill again, with its own copy of `<c-Badge />`, and each
+component in the fill runs its `template_data()` once for each place:
+
+```python
+def template_data(self, kwargs, slots):
+    # Right: the header and Summary each render the fill.
+    return {"title": slots.title}
+```
+
+Without a `Slots` class, `slots` is a dict: write `slots["title"]`. If
+`Summary` declares `Kwargs`, type `title` as [`Slot`][citry.Slot], not
+`str`.
+
+The same holds for a component you pass as a value. Pass the
+[element](/concepts/components/#build-now-render-later) `Badge()`, which
+renders again in each place. `Badge().render()` renders once, so writing
+the page raises `RuntimeError`: "One rendered output is printed in more
+than one place on the page".
 
 ## Next steps
 

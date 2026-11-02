@@ -3,6 +3,7 @@ from __future__ import annotations
 import gc
 import subprocess
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from weakref import ref
 
@@ -344,14 +345,30 @@ def test_prepared_const_cache_does_not_retain_unregistered_class() -> None:
     assert len(app._const_body_cache) == 0
 
 
-def test_prepared_const_equal_concurrent_build_runs_once(monkeypatch) -> None:
+def test_prepared_const_equal_concurrent_builds_all_render_the_first_stored_body(monkeypatch) -> None:
+    # Citry prepares a Const body with no lock held, so threads that render
+    # the same new Const values at once may each prepare it; the cache keeps
+    # the first body stored and hands that one to every thread.
     app = Citry(autodiscover=False)
+    threads = 4
     calls = 0
+    calls_lock = threading.Lock()
+    # Every build waits here until all threads are building, so the overlap
+    # happens on every run instead of only when the scheduler allows it.
+    all_building = threading.Barrier(threads, timeout=30)
     original = PreparedExprNode.evaluate
 
     def counted(self, variables, *, sandboxed):
         nonlocal calls
-        calls += 1
+        with calls_lock:
+            calls += 1
+            call = calls
+        if call <= threads:
+            all_building.wait()
+            # Each build's expression returns a different value, so a thread
+            # that rendered its own body instead of the stored one shows in
+            # the output.
+            return call
         return original(self, variables, sandboxed=sandboxed)
 
     monkeypatch.setattr(PreparedExprNode, "evaluate", counted)
@@ -368,11 +385,15 @@ def test_prepared_const_equal_concurrent_build_runs_once(monkeypatch) -> None:
     def render() -> str:
         return render_prepared_direct(Value(value=Const(1))).serialize(deps_strategy="ignore")
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        outputs = list(executor.map(lambda _: render(), range(8)))
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        outputs = list(executor.map(lambda _: render(), range(threads)))
 
-    assert outputs == ["1"] * 8
-    assert calls == 1
+    assert calls == threads
+    assert len(set(outputs)) == 1
+    assert len(app._const_body_cache) == 1
+    # A later render reuses the stored body without preparing it again.
+    assert render() == outputs[0]
+    assert calls == threads
 
 
 def test_prepared_const_standalone_cache_belongs_to_template_record(monkeypatch) -> None:

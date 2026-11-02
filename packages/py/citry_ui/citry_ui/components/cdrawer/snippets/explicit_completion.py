@@ -7,7 +7,11 @@ citry.register_library(citry_ui)
 class ExplicitCompletion(Component):
     template = """
       <section>
-        <c-CDrawer c-dismissible="False" placement="block-start" size="sm">
+        <c-CDrawer
+          c-dismissible="False"
+          placement="block-start"
+          size="sm"
+        >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Review coordinates</c-CButton>
           </c-fill>

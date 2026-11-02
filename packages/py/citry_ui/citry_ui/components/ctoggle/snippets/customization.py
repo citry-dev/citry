@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class ToggleCustomization(Component):
     template = """
-      <c-CToggleGroup class_="nebula-toggle" label="Nebula filter" value="oxygen">
+      <c-CToggleGroup
+        class_="nebula-toggle"
+        label="Nebula filter"
+        value="oxygen"
+      >
         <c-CToggle value="oxygen">Oxygen</c-CToggle>
         <c-CToggle value="hydrogen">Hydrogen</c-CToggle>
       </c-CToggleGroup>

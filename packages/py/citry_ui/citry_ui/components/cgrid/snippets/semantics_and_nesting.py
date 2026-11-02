@@ -13,16 +13,28 @@ class GridSemanticsAndNesting(Component):
         c-attrs="{'aria-labelledby': 'mineral-catalog-title'}"
       >
         <h2 id="mineral-catalog-title">Mineral families</h2>
-        <c-CGrid tag="ul" sm="2" class_="mineral-catalog__list">
+        <c-CGrid
+          tag="ul"
+          sm="2"
+          class_="mineral-catalog__list"
+        >
           <c-CGridItem tag="li">
             <strong>Silicates</strong>
-            <c-CGrid cols="2" gap="xs" class_="mineral-catalog__nested">
+            <c-CGrid
+              cols="2"
+              gap="xs"
+              class_="mineral-catalog__nested"
+            >
               <span>Quartz</span><span>Feldspar</span>
             </c-CGrid>
           </c-CGridItem>
           <c-CGridItem tag="li">
             <strong>Carbonates</strong>
-            <c-CGrid cols="2" gap="xs" class_="mineral-catalog__nested">
+            <c-CGrid
+              cols="2"
+              gap="xs"
+              class_="mineral-catalog__nested"
+            >
               <span>Calcite</span><span>Dolomite</span>
             </c-CGrid>
           </c-CGridItem>

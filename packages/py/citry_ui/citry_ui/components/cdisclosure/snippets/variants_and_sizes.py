@@ -19,7 +19,10 @@ class DisclosureVariantsAndSizes(Component):
           <c-CDisclosure
             open
             class_="disclosure-variants__subject"
-            :variant="variant" :size="size" :indicator="indicator" :indicatorPosition="indicator_position"
+            :variant="variant"
+            :size="size"
+            :indicator="indicator"
+            :indicatorPosition="indicator_position"
           >
             <c-fill name="title">Deployment requirements for the observability gateway in restricted networks</c-fill>
             <c-fill name="default">The live subject reflects every external control.</c-fill>
@@ -27,13 +30,21 @@ class DisclosureVariantsAndSizes(Component):
         </div>
         <div class="disclosure-variants__matrix">
           <c-for each="variant in variants">
-            <c-CDisclosure #c-key="variant" c-variant="variant" open>
+            <c-CDisclosure
+              #c-key="variant"
+              c-variant="variant"
+              open
+            >
               <c-fill name="title">{{ variant }} treatment</c-fill>
               <c-fill name="default">A concise operations handbook note.</c-fill>
             </c-CDisclosure>
           </c-for>
           <c-for each="size in sizes">
-            <c-CDisclosure #c-key="size" c-size="size" indicator_pos="start">
+            <c-CDisclosure
+              #c-key="size"
+              c-size="size"
+              indicator_pos="start"
+            >
               <c-fill name="title">{{ size }} geometry</c-fill>
               <c-fill name="default">Size changes the complete component geometry.</c-fill>
             </c-CDisclosure>

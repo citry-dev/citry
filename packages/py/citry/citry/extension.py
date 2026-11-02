@@ -39,12 +39,13 @@ from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 from weakref import ReferenceType, WeakSet, ref
 
-from citry._class_introspection import _static_class_namespace_copy
+from citry._class_introspection import _is_abc_bookkeeping, _static_class_namespace_copy
 from citry._nested_declarations import (
     NestedClassDeclaration,
     _compose_nested_declaration_class,
     _get_nested_class_declarations,
 )
+from citry._walk import Call, run
 from citry.attrs import (
     hide_template_empty_values,
     is_vue_code_attr_name,
@@ -64,7 +65,7 @@ from citry.util.exception import set_component_error_message
 from citry.util.misc import snake_to_pascal
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
@@ -1991,8 +1992,9 @@ class ExtensionManager:
         the nearest declaration's value wins (mirroring attribute lookup).
 
         Excluded, so only what the user wrote counts as a field: dunder names,
-        the extension's ``Config`` base and everything above it, and the
-        classes ``_init_component_class`` itself synthesizes (recognized by the
+        the caches ABCMeta stores on a config class that is an ABC, the
+        extension's ``Config`` base and everything above it, and the classes
+        ``_init_component_class`` itself synthesizes (recognized by the
         ``_SYNTHESIZED_CONFIG_ATTR`` stamp), which subclassing a parent
         component's rebuilt config pulls into the MRO.
         """
@@ -2003,6 +2005,10 @@ class ExtensionManager:
                 continue
             for name, value in _static_class_namespace_copy(klass).items():
                 if name.startswith("__") and name.endswith("__"):
+                    continue
+                # A config class that is an ABC carries the caches ABCMeta keeps
+                # for `isinstance()` and `issubclass()`, which the author never wrote.
+                if _is_abc_bookkeeping(klass, name):
                     continue
                 fields[name] = value
         return fields
@@ -2394,7 +2400,7 @@ class ExtensionManager:
         # Hooks may change the dict in place, so keep the names and values
         # they were given. Any Vue-named key in it was written in the template,
         # because c-bind and c-* keys with those names already failed.
-        # A written empty class or style reaches hooks as the parser's True,
+        # A written empty class or style reaches hooks as the compiler's True,
         # never as the renderer's private marker (hide_template_empty_values).
         hidden = hide_template_empty_values(attrs)
         before = dict(attrs)
@@ -2533,6 +2539,31 @@ class ExtensionManager:
         origin: str,
         template_kind: Literal["primary", "standalone", "nested"],
     ) -> list[BodyItem]:
+        # The walk runs as generators on one driver loop, so Python's call
+        # depth does not grow with how deeply the template nests. Child bodies
+        # are resolved, completely and in order, before their parent.
+        return run(
+            self._resolve_foreign_body_walk(
+                component_class,
+                nodes,
+                provider_metadata=provider_metadata,
+                template_id=template_id,
+                origin=origin,
+                template_kind=template_kind,
+            )
+        )
+
+    def _resolve_foreign_body_walk(
+        self,
+        component_class: type[Component],
+        nodes: list[BodyItem],
+        *,
+        provider_metadata: Mapping[str, object | None],
+        template_id: str,
+        origin: str,
+        template_kind: Literal["primary", "standalone", "nested"],
+    ) -> Generator[Call, Any, list[BodyItem]]:
+        """The walk generator behind ``_resolve_foreign_body``."""
         from citry.nodes import (  # noqa: PLC0415
             ComponentNode,
             FillNode,
@@ -2555,7 +2586,8 @@ class ExtensionManager:
             elif isinstance(item, (IfNode, ForNode)):
                 child_bodies.extend(branch[2] for branch in item.branches)
             for child in child_bodies:
-                resolved = self._resolve_foreign_body(
+                resolved = yield Call(
+                    self._resolve_foreign_body_walk,
                     component_class,
                     child,
                     provider_metadata=provider_metadata,

@@ -9,8 +9,11 @@ def timeline_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack timeline-quality" data-quality-timeline-ready>
             <h1>Timeline states</h1>
-            <c-CTimeline label="Deployment history" side="alternate"
-              c-attrs="{'data-quality-states':'vertical alternate complete current error custom-indicator md'}">
+            <c-CTimeline
+              label="Deployment history"
+              side="alternate"
+              c-attrs="{'data-quality-states':'vertical alternate complete current error custom-indicator md'}"
+            >
               <c-CTimelineItem state="complete">
                 <c-fill name="opposite"><time datetime="2026-08-20">Yesterday</time></c-fill>
                 <c-fill name="indicator"><span>1</span></c-fill>
@@ -30,14 +33,24 @@ def timeline_states_component(app: Citry) -> type[Component]:
               <c-CTimelineItem><strong>Audit retained</strong><p>Neutral event metadata.</p></c-CTimelineItem>
             </c-CTimeline>
             <div dir="rtl" style="color-scheme:dark">
-              <c-CTimeline label="RTL compact history" density="compact" line_style="dashed" size="sm"
-                c-attrs="{'data-quality-states':'rtl dark compact dashed sm'}">
+              <c-CTimeline
+                label="RTL compact history"
+                density="compact"
+                line_style="dashed"
+                size="sm"
+                c-attrs="{'data-quality-states':'rtl dark compact dashed sm'}"
+              >
                 <c-CTimelineItem state="complete">اكتمل البناء</c-CTimelineItem>
                 <c-CTimelineItem state="current">المراجعة الحالية</c-CTimelineItem>
               </c-CTimeline>
             </div>
-            <c-CTimeline label="Horizontal roadmap" orientation="horizontal" side="alternate" size="lg"
-              c-attrs="{'data-quality-states':'horizontal overflow alternate lg touch'}">
+            <c-CTimeline
+              label="Horizontal roadmap"
+              orientation="horizontal"
+              side="alternate"
+              size="lg"
+              c-attrs="{'data-quality-states':'horizontal overflow alternate lg touch'}"
+            >
               <c-CTimelineItem state="complete">Research</c-CTimelineItem>
               <c-CTimelineItem state="current">Build</c-CTimelineItem>
               <c-CTimelineItem state="pending">Qualify</c-CTimelineItem>

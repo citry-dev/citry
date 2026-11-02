@@ -6,7 +6,12 @@ citry.register_library(citry_ui)
 
 class StepperStates(Component):
     template = """
-      <c-CStepper label="Checkout" c-active="1" orientation="vertical" variant="outline">
+      <c-CStepper
+        label="Checkout"
+        c-active="1"
+        orientation="vertical"
+        variant="outline"
+      >
         <c-CStep>
           <c-fill name="default">Delivery address</c-fill>
           <c-fill name="description">Saved</c-fill>

@@ -168,8 +168,13 @@ fn _add_attributes(
 
     // If we're watching for a specific attribute, check if this element has it
     if let Some(watch_attr) = &config.track_added_attributes_for_tags_with_this_attribute {
+        // Only one key is looked up, so the duplicate-name check that
+        // `attributes()` runs by default would only add work. (quick-xml
+        // before 0.41 ran that check in time that grew with the square of
+        // the attribute count.)
         if let Some(attr_value) = element
             .attributes()
+            .with_checks(false)
             .find(|a| {
                 if let Ok(attr) = a {
                     attr.key.as_ref() == watch_attr.as_bytes()

@@ -122,7 +122,7 @@ that could break the native Button, dialog name, Calendar grid, or Form owner.
 | `dismissible` | `bool` | `True` | reactive overlay configuration | controls passive close |
 | `placement` | `CPopoverPlacement` | `"bottom-start"` | reactive presentation | six logical placements |
 | `match_width` | `bool` | `True` | reactive presentation | popup at least activator width |
-| `first_day_of_week` | `int | None` | `None` | reactive Calendar configuration | ISO 1–7 or locale default |
+| `first_day_of_week` | `CCalendarFirstDayOfWeek | None`: `1` to `7`, as a number or as text such as `"1"` | `None` | reactive Calendar configuration | ISO 1–7 or locale default |
 | `show_adjacent_days`, `fixed_weeks` | `bool` | `True` | reactive Calendar configuration | forwards to Calendar |
 | `variant` | `outline | filled | plain` | `outline` | reactive presentation | reflected root styling |
 | `size` | `sm | md | lg` | `md` | reactive presentation | reflected root sizing |

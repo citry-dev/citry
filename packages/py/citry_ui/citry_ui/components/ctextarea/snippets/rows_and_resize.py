@@ -26,7 +26,8 @@ class RowsAndResize(Component):
             <c-CTextarea
               name="understory"
               c-value="survey_note"
-              :rows="rows" :resize="resize"
+              :rows="rows"
+              :resize="resize"
             />
           </c-fill>
           <c-fill name="description">

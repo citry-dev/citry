@@ -122,7 +122,7 @@ uv run --no-sync python -m docs_site serve
 
 
 How to embed a live example is described in the
-[docs site README](https://github.com/citry-dev/citry/blob/main/docs_site/README.md#add-a-citry-ui-component-preview){: target="_blank" rel="noopener"}.
+[docs site README](https://github.com/citry-dev/citry/blob/citry@0.6.0/docs_site/README.md#add-a-citry-ui-component-preview){: target="_blank" rel="noopener"}.
 
 ## Run the tests
 
@@ -224,7 +224,7 @@ uv run --no-sync python -m citry_ui.quality.asset_report
 
 
 The
-[quality README](https://github.com/citry-dev/citry/blob/main/packages/py/citry_ui/citry_ui/quality/README.md){: target="_blank" rel="noopener"}
+[quality README](https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry_ui/citry_ui/quality/README.md){: target="_blank" rel="noopener"}
 lists the rest, including HTML validation, screenshots, and checks of the
 built package.
 
@@ -251,5 +251,5 @@ instead.
 
 Citry UI components follow stricter rules than ordinary components, for
 example on how a family is designed, named, and translated. Read the
-[Citry UI component policy](https://github.com/citry-dev/citry/blob/main/packages/py/citry_ui/docs/component-authoring.md){: target="_blank" rel="noopener"}
+[Citry UI component policy](https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry_ui/docs/component-authoring.md){: target="_blank" rel="noopener"}
 before you add a component or change a component's inputs.

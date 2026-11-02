@@ -245,6 +245,13 @@ app.cache.delete(fragment_key)
 `component_cache_key()` takes the key values you pass. It does not call
 the component's `Cache.vary()` for you.
 
+An app [served below a sub-path](/advanced/web-frameworks/#serve-below-a-sub-path),
+such as `/shop`, keeps separate entries for each sub-path, because a
+cached render can hold URLs that start with it. Inside a request, both
+functions use the request's sub-path. Outside one, they use the app's
+own setting, such as FastAPI's `root_path`. When only your server sets
+the sub-path, pass it from a background job: `sub_path="/shop"`.
+
 [`Citry.clear`][citry.Citry.clear] stops this `Citry` instance from
 finding its existing entries, and empties stores that have a `clear()` method, such as the
 default in-memory one. The shared adapters do not clear the whole store.

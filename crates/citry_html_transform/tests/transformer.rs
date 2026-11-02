@@ -243,3 +243,42 @@ fn test_watch_attribute() {
         .iter()
         .any(|(id, attrs)| id == "789" && attrs.contains(&"data-v-123".to_string())));
 }
+
+#[test]
+fn test_watch_attribute_scales_linearly_with_attribute_count() {
+    // The watched attribute is looked up on every tag. On a tag with many
+    // attributes that lookup must stay proportional to their number, so a
+    // tag with 8 times as many attributes may take about 8 times as long.
+    // The limit of 30 leaves room for timing noise and still catches the
+    // 64 times a lookup that grows with the square of the count would take.
+    let config = HtmlTransformerConfig::new(
+        vec![],
+        vec!["data-v".to_string()],
+        false,
+        Some("data-id".to_string()),
+    );
+    let tag = |count: usize| -> String {
+        let attributes: Vec<String> = (0..count).map(|index| format!("a{index}=\"x\"")).collect();
+        format!("<div {} data-id=\"last\"></div>", attributes.join(" "))
+    };
+    let fastest = |html: &str| -> std::time::Duration {
+        (0..5)
+            .map(|_| {
+                let start = std::time::Instant::now();
+                let (_, captured) = transform_html(&config, html).unwrap();
+                let elapsed = start.elapsed();
+                // The watched attribute comes last and is still found.
+                assert_eq!(
+                    captured,
+                    vec![("last".to_string(), vec!["data-v".to_string()])]
+                );
+                elapsed
+            })
+            .min()
+            .unwrap()
+    };
+    let narrow = fastest(&tag(2_000));
+    let wide = fastest(&tag(16_000));
+    let ratio = wide.as_secs_f64() / narrow.as_secs_f64();
+    assert!(ratio < 30.0, "8x the attributes took {ratio:.1}x the time");
+}

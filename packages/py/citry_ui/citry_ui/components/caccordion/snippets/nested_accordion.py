@@ -11,7 +11,11 @@ class NestedAccordion(Component):
           <c-fill name="title">Trees</c-fill>
           <c-fill name="default">
             <p>Compare two trees found along the valley trail.</p>
-            <c-CAccordion value="cedar" variant="plain" size="sm">
+            <c-CAccordion
+              value="cedar"
+              variant="plain"
+              size="sm"
+            >
               <c-CAccordionItem value="cedar">
                 <c-fill name="title">Western red cedar</c-fill>
                 <c-fill name="default">A long-lived tree of moist lowland forests.</c-fill>

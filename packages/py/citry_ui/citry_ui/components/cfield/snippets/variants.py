@@ -12,7 +12,11 @@ class InputVariants(Component):
             Outline
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="outline" value="Rocky shelf" variant="outline" />
+            <c-CInput
+              name="outline"
+              value="Rocky shelf"
+              variant="outline"
+            />
           </c-fill>
         </c-CField>
         <c-CField>
@@ -20,7 +24,11 @@ class InputVariants(Component):
             Filled
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="filled" value="Kelp channel" variant="filled" />
+            <c-CInput
+              name="filled"
+              value="Kelp channel"
+              variant="filled"
+            />
           </c-fill>
         </c-CField>
         <c-CField>
@@ -28,7 +36,11 @@ class InputVariants(Component):
             Plain
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="plain" value="Sand basin" variant="plain" />
+            <c-CInput
+              name="plain"
+              value="Sand basin"
+              variant="plain"
+            />
           </c-fill>
         </c-CField>
       </section>

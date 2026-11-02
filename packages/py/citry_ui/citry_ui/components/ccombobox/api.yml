@@ -124,7 +124,7 @@ events:
         name: onOpenChange
         signature: {display: '(open: boolean, detail: CComboboxOpenChangeDetail) => void', interfaces: [CComboboxOpenChangeDetail]}
         trigger: Input, focus, trigger, keyboard, selection, Escape, outside press, blur, reset, or threshold requests different visibility, or disabling closes an open popup.
-        detail: {display: '{reason: "input" | "focus" | "trigger" | "keyboard" | "selection" | "escape" | "outside" | "blur" | "reset" | "minimum-characters" | "disabled", controlled: boolean, source: EventTarget | null}', interfaces: [CComboboxOpenChangeDetail]}
+        detail: {display: '{reason: "input" | "focus" | "trigger" | "keyboard" | "selection" | "escape" | "outside" | "blur" | "reset" | "minimum-characters" | "disabled" | "ancestor", controlled: boolean, source: EventTarget | null}', interfaces: [CComboboxOpenChangeDetail]}
         behavior: Uncontrolled visibility and ARIA commit before notification. Controlled requests wait for the owner. Owner commits do not notify.
       - id: on-load-error
         name: onLoadError
@@ -255,7 +255,7 @@ interfaces:
     kind: record
     name: CComboboxOpenChangeDetail
     entries:
-      - {id: reason, name: reason, type: '"input" | "focus" | "trigger" | "keyboard" | "selection" | "escape" | "outside" | "blur" | "reset" | "minimum-characters" | "disabled"', meaning: Popup request source.}
+      - {id: reason, name: reason, type: '"input" | "focus" | "trigger" | "keyboard" | "selection" | "escape" | "outside" | "blur" | "reset" | "minimum-characters" | "disabled" | "ancestor"', meaning: Popup request source.}
       - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client `open` currently owns requested visibility.}
       - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source associated with the request.}
   - id: ccombobox-load-error-detail

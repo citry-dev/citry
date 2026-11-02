@@ -50,7 +50,10 @@ class SearchAndEmpty(Component):
           label="Appearance commands"
           c-entries="commands"
           empty_label="No appearance commands match"
-          :open="open" :query="query" :onOpenChange="(value)=>open=value" :onQueryChange="(value)=>query=value"
+          :open="open"
+          :query="query"
+          :onOpenChange="(value)=>open=value"
+          :onQueryChange="(value)=>query=value"
         />
         <output>Owner query: <span v-text="query || 'empty'">theme</span></output>
       </section>

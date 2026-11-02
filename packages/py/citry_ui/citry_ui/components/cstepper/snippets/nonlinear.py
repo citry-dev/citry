@@ -11,7 +11,8 @@ class NonlinearStepper(Component):
           label="Profile sections"
           interactive
           c-linear="False"
-          :active="active" :onActiveChange="(next) => active = next"
+          :active="active"
+          :onActiveChange="(next) => active = next"
         >
           <c-CStep>Identity</c-CStep>
           <c-CStep>Preferences</c-CStep>

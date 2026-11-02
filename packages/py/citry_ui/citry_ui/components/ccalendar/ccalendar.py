@@ -18,7 +18,7 @@ from citry_ui.components._attrs import (
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
-from citry_ui.components._date import canonical_date
+from citry_ui.components._date import CFirstDayOfWeek, canonical_date, first_day_of_week
 from citry_ui.components._form_control_runtime import FORM_CONTROL_RUNTIME_DEPENDENCY
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -34,6 +34,8 @@ CCalendarDate: TypeAlias = date | str
 CCalendarVariant = Literal["outline", "plain"]
 CCalendarSize = Literal["sm", "md", "lg"]
 CCalendarChangeSource = Literal["pointer", "keyboard", "button", "value", "reset"]
+# 1 is Monday and 7 is Sunday; the text form is what a plain template attribute passes.
+CCalendarFirstDayOfWeek = CFirstDayOfWeek
 
 
 class CCalendarValueChangeDetail(TypedDict):
@@ -113,17 +115,6 @@ def _dates(value: object) -> tuple[str, ...]:
     return tuple(sorted(normalized))
 
 
-def _first_day(value: object) -> int | None:
-    value = const_value(value)
-    if value is None:
-        return None
-    if type(value) is not int:
-        raise TypeError("CCalendar first_day_of_week must be an exact integer from 1 through 7 or None.")
-    if not 1 <= value <= 7:
-        raise ValueError("CCalendar first_day_of_week must be from 1 through 7.")
-    return cast("int", value)
-
-
 class CCalendar(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
@@ -146,7 +137,7 @@ class CCalendar(LibraryComponent):
         disabled: bool | None = None
         readonly: bool | None = None
         invalid: bool | None = None
-        first_day_of_week: Literal[1, 2, 3, 4, 5, 6, 7] | None = None
+        first_day_of_week: CCalendarFirstDayOfWeek | None = None
         show_adjacent_days: bool = True
         fixed_weeks: bool = True
         label: str = "Calendar"
@@ -163,9 +154,38 @@ class CCalendar(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # Citry's error for first_day_of_week would print all 14 values twice;
+    # Citry UI's says "from 1 through 7, where 1 is Monday" in one line. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "catalog_label",
+            "catalog_next_label",
+            "catalog_previous_label",
+            "described_by",
+            "disabled",
+            "error_message",
+            "field_control",
+            "form",
+            "heading_id",
+            "invalid",
+            "label",
+            "labelled_by",
+            "maximum",
+            "minimum",
+            "name",
+            "next_label",
+            "previous_label",
+            "public_id",
+            "readonly",
+            "required",
+            "root_id",
+            "size",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_calendar_snapshot", None)
@@ -201,7 +221,7 @@ class CCalendar(LibraryComponent):
             validate_optional_boolean("CCalendar", input_name, getattr(kwargs, input_name))
         for input_name in ("show_adjacent_days", "fixed_weeks"):
             validate_boolean("CCalendar", input_name, getattr(kwargs, input_name))
-        first_day = _first_day(kwargs.first_day_of_week)
+        first_day = first_day_of_week("CCalendar", kwargs.first_day_of_week)
         validate_choice("CCalendar", "variant", kwargs.variant, _VARIANTS)
         validate_choice("CCalendar", "size", kwargs.size, _SIZES)
         for input_name in ("label", "previous_label", "next_label", "unavailable_message"):
@@ -491,6 +511,7 @@ __all__ = [
     "CCalendar",
     "CCalendarChangeSource",
     "CCalendarDate",
+    "CCalendarFirstDayOfWeek",
     "CCalendarSize",
     "CCalendarValueChangeDetail",
     "CCalendarVariant",

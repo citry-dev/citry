@@ -9,7 +9,6 @@ from typing import Any, Literal, TypedDict
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
-    ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -36,6 +35,7 @@ class CTooltipOpenChangeDetail(TypedDict):
         "native",
         "ancestor",
         "modal",
+        "disabled",
     ]
     controlled: bool
     forced: bool
@@ -182,9 +182,19 @@ class CTooltip(LibraryComponent):
         activator: SlotInput[CTooltipActivatorSlotData]
         default: SlotInput[CTooltipDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "activator_attrs",
+            "attrs",
+            "close_delay",
+            "delay",
+            "disabled",
+            "open",
+            "placement",
+            "tooltip_id",
+            "tooltip_text",
+            "uses_text",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tooltip_snapshot", None)
@@ -286,9 +296,14 @@ class CTooltip(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       const handoffKey = Symbol.for("citry-ui:tooltip-handoff");
 
       $component({
@@ -399,7 +414,55 @@ class CTooltip(LibraryComponent):
           let active = true;
           let controlled = false;
           let logicalOpen = false;
-          let internalOpen = initialHandoff?.open ?? defaults.open;
+          // Set once this run's first update is done, so a blocked open on the
+          // first render can be told apart from one the owner asked for later.
+          let settled = false;
+          // A blocked-open episode tells the owner once while an ancestor
+          // keeps the tooltip hidden, so an owner that asks again after every
+          // report cannot loop. It ends once the trigger can be seen again,
+          // however that happens (a dialog reopened in the browser, a
+          // collapsed region expanded), which a ResizeObserver notices; it
+          // watches only while an episode lasts.
+          let shownWatch = null;
+          const startBlockedEpisode = () => {
+            invalidEpisodes.add("blocked-open");
+            if (shownWatch || typeof ResizeObserver !== "function") {
+              return;
+            }
+            shownWatch = new ResizeObserver(() => {
+              if (trigger.getClientRects().length === 0) {
+                return;
+              }
+              shownWatch.disconnect();
+              shownWatch = null;
+              invalidEpisodes.delete("blocked-open");
+            });
+            // A ResizeObserver reports nothing for an inline element such as a
+            // link, so watch the nearest ancestor that has a box of its own,
+            // stepping out of a shadow root. If that box keeps a fixed size
+            // while only an inline wrapper inside it hides the trigger, the
+            // episode lasts until the trigger next opens.
+            // TypeScript types a shadow root's host as `Element`, so `box` is typed that wide.
+            /** @type {Element} */
+            let box = trigger;
+            while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
+              // Step out of a shadow root to its host; a document has no host.
+              const boxRoot = box.getRootNode();
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
+              if (!next) {
+                break;
+              }
+              box = next;
+            }
+            shownWatch.observe(box);
+          };
+          // A server re-render hands the previous run's open state to this one,
+          // so a tooltip that was open before the re-render is still open after
+          // it, and one the reader closed stays closed. When the server's `open`
+          // input changed, the tooltip follows the server instead.
+          const sameServerOpen = Boolean(initialHandoff) && initialHandoff.serverOpen === defaults.open;
+          let internalOpen = sameServerOpen ? initialHandoff.open : defaults.open;
+          let updated = false;
           let onOpenChange = null;
           let animation = null;
           let generation = 0;
@@ -575,6 +638,13 @@ class CTooltip(LibraryComponent):
               if (reason === "escape") {
                 requestOpen(false, "escape", source);
               } else if (reason === "focus-outside") {
+                // Focus leaves when a dialog around the tooltip closes or a
+                // region collapses and hides it, so close it here as
+                // "ancestor" rather than reporting a blur.
+                if (trigger.getClientRects().length === 0) {
+                  forceCloseLayer("ancestor", source);
+                  return;
+                }
                 requestOpen(false, "blur", source);
               } else {
                 requestOpen(false, "pointer-leave", source);
@@ -617,8 +687,24 @@ class CTooltip(LibraryComponent):
                 if (!controlled) {
                   internalOpen = false;
                 }
+                // The owner believes the tooltip is open while an ancestor
+                // such as a closed dialog keeps it closed: a server re-render
+                // handed over a tooltip that was showing, or the owner asked
+                // for it to open after the first render. Tell the owner once
+                // while the tooltip stays hidden (see startBlockedEpisode), as
+                // CMenu does. A tooltip the server rendered open inside a
+                // closed dialog was never shown, so the first render reports
+                // nothing.
+                if (
+                  (settled || Boolean(initialHandoff?.open))
+                  && !invalidEpisodes.has("blocked-open")
+                ) {
+                  startBlockedEpisode();
+                  notify(false, layerCoordinator.blockedReason(layer) ?? "ancestor", surface, true);
+                }
                 return;
               }
+              invalidEpisodes.delete("blocked-open");
               try {
                 if (!surface.matches(":popover-open")) {
                   surface.showPopover();
@@ -671,6 +757,11 @@ class CTooltip(LibraryComponent):
             }
             internalOpen = nextOpen;
             applyOpen(nextOpen, { reason, source });
+            if (nextOpen && !logicalOpen) {
+              // An ancestor kept the tooltip closed, and applyOpen already
+              // told the owner why.
+              return;
+            }
             notify(nextOpen, reason, source);
           };
           const forceCloseLayer = (reason, source) => {
@@ -689,6 +780,9 @@ class CTooltip(LibraryComponent):
             internalOpen = false;
             applyOpen(false, { reason, source });
             notify(false, reason, source, true);
+            if (reason === "ancestor" || reason === "modal") {
+              startBlockedEpisode();
+            }
           };
           layer.requestPeerClose = (source) => {
             dismissedWhileActive = true;
@@ -782,6 +876,13 @@ class CTooltip(LibraryComponent):
               return;
             }
             maybeClearLatch();
+            // Focus leaves when a dialog around the tooltip closes or a
+            // region collapses and hides it, so close it here as "ancestor"
+            // rather than reporting a blur.
+            if (trigger.getClientRects().length === 0) {
+              forceCloseLayer("ancestor", event.target);
+              return;
+            }
             scheduleClose("blur", event.target, { immediate: true });
           };
           const onTriggerPointerDown = (event) => {
@@ -919,17 +1020,40 @@ class CTooltip(LibraryComponent):
             if (!nextOpen) {
               layerCoordinator.clearSuppression(layer);
             }
+            // On this run's first update the tooltip was showing only if the
+            // previous run left it open. A render that disables a showing
+            // tooltip closes it because of the disable, even when it also
+            // changes the server's `open` input, so that first update reports
+            // the close either way.
+            const firstUpdate = !updated;
+            const wasShowing = firstUpdate ? Boolean(initialHandoff?.open) : logicalOpen;
+            updated = true;
+            if (configuration.disabled && wasShowing && (nextOpen || firstUpdate)) {
+              // Disabling an open tooltip hides it, as CHoverCard does. The owner
+              // did not ask for that close, so tell it once, and stop an
+              // uncontrolled tooltip from coming back on its own when it is
+              // enabled again.
+              if (!controlled) {
+                internalOpen = false;
+              }
+              applyOpen(false, null);
+              notify(false, "disabled", null, true);
+              pendingRequest = null;
+              return;
+            }
             const context = pendingRequest?.nextOpen === nextOpen ? pendingRequest : null;
             applyOpen(nextOpen, context);
             if (context || nextOpen === logicalOpen) {
               pendingRequest = null;
             }
+            settled = true;
           });
           host.setAttribute("data-citry-tooltip-initialized", "");
 
           return () => {
             active = false;
-            surface[handoffKey] = { open: logicalOpen };
+            surface[handoffKey] = { open: logicalOpen, serverOpen: defaults.open };
+            shownWatch?.disconnect();
             trigger.removeEventListener("pointerenter", onTriggerPointerEnter);
             trigger.removeEventListener("pointerleave", onTriggerPointerLeave);
             trigger.removeEventListener("pointerdown", onTriggerPointerDown, true);
@@ -953,7 +1077,6 @@ class CTooltip(LibraryComponent):
         },
       });
     """
-    )
 
     css_file = "runtime.min.css"
 

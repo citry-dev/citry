@@ -679,21 +679,22 @@ class TestHydratedCalls:
 
 
 class TestSlotDirectives:
-    """`<c-slot>` attributes are Python slot data, so no Vue directive fits there."""
+    """`<c-slot>` attributes are Python slot data, so the only Vue form allowed there is a `:row` slot prop."""
 
-    _SLOT_DATA = "Its attributes other than 'name' and 'required' become Python slot data"
+    _SLOT_DATA = "Its attributes other than 'name', 'required', and ':' slot props become Python slot data"
+    _SLOT_PROP_HINT = "To pass Vue data, write ':row=\"row\"' or 'v-bind:row=\"row\"' (lowercase 'v-bind')"
 
     @pytest.mark.parametrize(
         ("attribute", "hint"),
         [
             ('v-if="open"', "use '<c-if>' when Python decides"),
             ('v-show="open"', "Wrap the slot in an element that carries 'v-show'."),
-            (':item="row"', "Vue slot props are not supported."),
+            ('v-bind="props"', _SLOT_PROP_HINT),
             ('@click="go()"', "Put the listener on an element around the slot or inside the fill."),
             ("#header", "Name the slot with 'name=\"...\"'"),
             ('c-v-for="row in rows"', "Repeat the slot with '<c-for>'."),
             ('V-IF="open"', "use '<c-if>' when Python decides"),
-            ('^title="x"', "Vue slot props are not supported."),
+            ('^title="x"', _SLOT_PROP_HINT),
         ],
     )
     def test_directly_authored_directive_fails_to_compile(self, attribute, hint):
@@ -708,6 +709,8 @@ class TestSlotDirectives:
         assert self._SLOT_DATA in message
         assert hint in message
 
+    # A `:item` slot prop from a spread fails too: Python data must not choose
+    # the Vue code the browser runs.
     @pytest.mark.parametrize("key", ["v-if", ":item", "@click", "#header", "v-custom:arg.mod", "V-IF", "^title"])
     def test_directive_from_a_python_spread_fails_at_render(self, key):
         registry = Citry(autodiscover=False)

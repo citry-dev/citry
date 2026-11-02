@@ -58,7 +58,7 @@ These are relative numbers from a single machine, not absolute guarantees.
 
 The full methodology, the exact engine versions, and step-by-step instructions
 to run the comparison yourself live in the benchmarks README:
-[benchmarks/README.md](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md).
+[benchmarks/README.md](https://github.com/citry-dev/citry/blob/41ae9c7865595fb07419eeedc68ef6ec30408455/benchmarks/README.md).
 
 One trap worth repeating from there: the Rust extension must be built in
 release mode before measuring. A debug build makes citry's Rust-backed paths

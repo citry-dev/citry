@@ -1,4 +1,4 @@
-# ruff: noqa: ANN001, ANN201, E501 - public template stays readable
+# ruff: noqa: ANN001, ANN201 - public template stays readable
 
 import citry_ui
 from citry import Component, citry
@@ -17,7 +17,18 @@ class TreeGridSelection(Component):
             ],
         }
 
-    template = '<form><c-CTreeGrid c-columns="columns" c-rows="rows" label="Teams" selection="multiple" c-selected="[\'product\']" name="team" /></form>'
+    template = """
+      <form>
+        <c-CTreeGrid
+          c-columns="columns"
+          c-rows="rows"
+          label="Teams"
+          selection="multiple"
+          c-selected="['product']"
+          name="team"
+        />
+      </form>
+    """
 
 
 preview = TreeGridSelection()

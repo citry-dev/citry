@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -12,7 +10,10 @@ class TourControlled(Component):
         <c-CButton @click="open=true">Open controlled tour</c-CButton>
         <output v-text="last">No request</output>
         <c-CTour
-          :open="open" :active="active" :onOpenChange="(next,detail)=>{last=`Open: ${detail.reason}`;open=next}" :onActiveChange="(next,detail)=>{last=`Step: ${detail.reason}`;active=next}"
+          :open="open"
+          :active="active"
+          :onOpenChange="(next,detail)=>{last=`Open: ${detail.reason}`;open=next}"
+          :onActiveChange="(next,detail)=>{last=`Step: ${detail.reason}`;active=next}"
         >
           <c-CTourStep value="first">
             <c-fill name="title">First controlled step</c-fill>

@@ -217,9 +217,38 @@ class CPinInput(LibraryComponent):
     class Slots:
         separator: SlotInput[CPinInputSeparatorSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "aria_label",
+            "aria_labelledby",
+            "attached",
+            "autocomplete",
+            "cells",
+            "complete",
+            "disabled",
+            "field_control",
+            "filled",
+            "form",
+            "input_attrs",
+            "input_dir",
+            "inputmode",
+            "invalid",
+            "length",
+            "mask",
+            "name",
+            "native_placeholder",
+            "pattern",
+            "public_id",
+            "readonly",
+            "required",
+            "root_attrs",
+            "root_id",
+            "size",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         cached = getattr(self, "_cui_pin_input_snapshot", None)
@@ -458,7 +487,13 @@ class CPinInput(LibraryComponent):
           data-citry-ui-part="input"
         />
         <span aria-hidden="true" data-citry-ui-part="cells">
-          <span c-for="cell in cells" c-data-index="cell['index']" c-data-filled="'' if cell['filled'] else None" c-data-masked="'' if cell['filled'] and mask else None" data-citry-ui-part="cell">
+          <span
+            c-for="cell in cells"
+            c-data-index="cell['index']"
+            c-data-filled="'' if cell['filled'] else None"
+            c-data-masked="'' if cell['filled'] and mask else None"
+            data-citry-ui-part="cell"
+          >
             <span data-citry-ui-part="character">{{ cell['character'] }}</span>
             <span data-citry-ui-part="caret"></span>
             <span c-if="cell['separator']" data-citry-ui-part="separator">

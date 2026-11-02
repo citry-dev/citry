@@ -133,6 +133,10 @@ def _pin_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def run_on_path(run: Callable[[], object], monkeypatch: pytest.MonkeyPatch, *, rust: bool) -> PathRun:
     """Call ``run`` on one render path and count how much of the Rust path it used."""
+    # Forcing ACTIVE on without the Rust module would fail inside Citry with an
+    # AttributeError on None, which says nothing about the case under test.
+    if rust and not native_render.SUPPORTED:
+        pytest.skip("this interpreter takes the Python render path")
     counts = {"read": 0, "rebuilt": 0, "walks": 0, "leaves": 0}
     walk_declines: list[str] = []
     leaf_declines: list[str] = []

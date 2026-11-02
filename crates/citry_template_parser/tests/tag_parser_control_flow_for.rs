@@ -163,7 +163,10 @@ mod tests {
 
     #[test]
     fn test_c_empty_without_c_for() {
-        assert_parse_error("<c-empty><p>No items</p></c-empty>", "must follow one of");
+        assert_parse_error(
+            "<c-empty><p>No items</p></c-empty>",
+            "Tag '<c-empty>' must follow one of: <c-for>. No previous tag found.",
+        );
     }
 
     #[test]
@@ -531,6 +534,24 @@ mod tests {
             .map(|t| t.content.as_str())
             .collect();
         assert_eq!(used, vec!["sources"]);
+    }
+
+    #[test]
+    fn test_c_for_shorthand_accepts_a_filter_like_the_tag() {
+        // A shorthand value is a loop clause, as on `<c-for each>`, so an
+        // `if` filter is allowed although `x in a if x` alone is not an
+        // expression.
+        let template = parse_template(r#"<li c-for="x in items if x">{{ x }}</li>"#, None, None)
+            .unwrap_or_else(|e| panic!("a filtered shorthand loop should parse: {e:?}"));
+        let TemplateElement::Node(node) = &template.elements[0] else {
+            panic!("expected a node");
+        };
+        let used: Vec<&str> = node
+            .used_variables()
+            .iter()
+            .map(|t| t.content.as_str())
+            .collect();
+        assert_eq!(used, vec!["items"]);
     }
 
     #[test]

@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -16,7 +14,14 @@ class CheckboxConfiguration(Component):
           <h2>Configure the record marker</h2>
         </header>
         <c-CCheckbox
-          :variant="variant" :size="size" :label_pos="label_pos" :checked="checked" :indeterminate="indeterminate" :required="required" :disabled="disabled" :invalid="invalid"
+          :variant="variant"
+          :size="size"
+          :label_pos="label_pos"
+          :checked="checked"
+          :indeterminate="indeterminate"
+          :required="required"
+          :disabled="disabled"
+          :invalid="invalid"
           @input="checked = $event.target.checked; indeterminate = false"
         >
           <c-fill name="default">Verified against the herbarium sheet</c-fill>

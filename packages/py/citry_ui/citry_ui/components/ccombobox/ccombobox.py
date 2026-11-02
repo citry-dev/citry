@@ -14,6 +14,7 @@ from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -103,9 +104,57 @@ class CCombobox(LibraryComponent):
         empty: SlotInput[CComboboxEmptySlotData] | None = None
         error: SlotInput[CComboboxErrorSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "aria_expanded",
+            "aria_invalid",
+            "aria_required",
+            "attrs",
+            "autocomplete",
+            "catalog_clear_label",
+            "catalog_close_label",
+            "catalog_empty_label",
+            "catalog_error_label",
+            "catalog_loading_label",
+            "catalog_open_label",
+            "catalog_required_message",
+            "clear_label",
+            "clearable",
+            "close_label",
+            "disabled",
+            "empty",
+            "empty_label",
+            "error_label",
+            "field_control",
+            "has_empty_slot",
+            "has_error_slot",
+            "has_loading_slot",
+            "input_attrs",
+            "input_id",
+            "input_value",
+            "inputmode",
+            "invalid",
+            "listbox_id",
+            "loading",
+            "loading_label",
+            "name",
+            "native_required",
+            "open",
+            "open_label",
+            "options",
+            "placeholder",
+            "readonly",
+            "required",
+            "root_id",
+            "show_clear",
+            "size",
+            "trigger_disabled",
+            "trigger_label",
+            "value",
+            "variant",
+        )
 
     def _localized_messages(self, kwargs: Kwargs) -> dict[str, object]:
         specs = (
@@ -878,7 +927,7 @@ class CCombobox(LibraryComponent):
 
 
 class _CComboboxDependencies:
-    js: ClassVar = [ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY]
+    js: ClassVar = [ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY, REVEAL_RUNTIME_DEPENDENCY]
 
 
 CCombobox.Dependencies = _CComboboxDependencies

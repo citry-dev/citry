@@ -18,6 +18,10 @@ name: Docs lighthouse
 
 on:
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "docs_site/**"
       - "CHANGELOG.md"
@@ -48,21 +52,25 @@ on:
       - ".github/lighthouserc.citry-ui.json"
   workflow_dispatch:
 
+# A newer run cancels an older one for the same pull request, or for the same
+# branch when both come from a push. Any other run gets a group named after
+# its own run ID, so no newer run cancels it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'push' }}
 permissions:
   contents: read
 
 env:
   # Lighthouse only needs the workspace MSRV. Keep the compiler stable so its
   # citry-core build can reuse the common Ubuntu docs cache.
-  RUSTUP_TOOLCHAIN: "1.96.0"
+  RUSTUP_TOOLCHAIN: "1.97.0"
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"
 
 jobs:
   lighthouse:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:
@@ -75,7 +83,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"

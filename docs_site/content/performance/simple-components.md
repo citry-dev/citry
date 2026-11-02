@@ -370,6 +370,13 @@ inside a larger page.
 keeps its own instance and hooks, and the chosen class still follows its
 simple rules.
 
+### Deeply nested templates
+
+A `simple = "vue"` template uses one level of Python's stack for each
+level of `c-if` or `c-for` nesting, while other components use a fixed
+amount at any depth. See [Nesting limits](/syntax/#nesting-limits) for
+how much room that leaves.
+
 ### Translations
 
 A simple template cannot use `$c-tr`, even when its caller has a

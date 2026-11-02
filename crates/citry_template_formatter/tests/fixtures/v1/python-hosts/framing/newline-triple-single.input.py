@@ -2,5 +2,5 @@ from citry import Component
 
 class Card(Component):
     template = '''
-    <main><section></section></main>
+    <main> <section></section> </main>
     '''

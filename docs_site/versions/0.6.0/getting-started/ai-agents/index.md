@@ -52,7 +52,7 @@ also exercise the affected interaction in a browser.
 Then add what is specific to your project, such as where components live
 and the commands that run and test the app.
 
-The [Citry starter projects](https://github.com/citry-dev/citry/tree/main/examples/starters){: target="_blank" rel="noopener"}
+The [Citry starter projects](https://github.com/citry-dev/citry/tree/citry@0.6.0/examples/starters){: target="_blank" rel="noopener"}
 already include an `AGENTS.md` with these pointers, project paths, and test
 commands, plus a `CLAUDE.md` that imports it.
 

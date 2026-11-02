@@ -216,7 +216,7 @@ def test_field_owns_state_label_relationships_and_public_id() -> None:
             {"label": {"aria-label": "Labels"}, "value": "a\nb"},
             "cannot contain",
         ),
-        ('variant="soft"', {"label": {"aria-label": "Labels"}}, "must be one of"),
+        ('variant="soft"', {"label": {"aria-label": "Labels"}}, r"CTagsInput\.Kwargs\.variant expects Literal\["),
     ],
 )
 def test_structural_input_validation_is_fail_fast(extra: str, data: dict[str, object], message: str) -> None:

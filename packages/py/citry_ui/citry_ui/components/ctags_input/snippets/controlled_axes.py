@@ -22,10 +22,8 @@ class ControlledTagsInputAxes(Component):
           <c-CTagsInput
             c-value="['alpine']"
             c-input_attrs="{'aria-label':'Draft-owned labels'}"
-            :inputValue="draft" :onInputValueChange="(next)=>{
-                draft=next;
-                draftLast=`Draft: ${next}`;
-              }"
+            :inputValue="draft"
+            :onInputValueChange="updateDraft"
           />
           <output v-text="draftLast">Draft owned</output>
         </article>
@@ -35,10 +33,8 @@ class ControlledTagsInputAxes(Component):
           <h3>Controlled tags, uncontrolled draft</h3>
           <c-CTagsInput
             c-input_attrs="{'aria-label':'Value-owned labels'}"
-            :value="valueTags" :onValueChange="(next,detail)=>{
-                valueLast=`Requested ${JSON.stringify(next)}`;
-                if (accept) valueTags=next;
-              }"
+            :value="valueTags"
+            :onValueChange="applyValueRequest"
           />
           <label>
             <input type="checkbox" v-model="accept" />
@@ -52,11 +48,10 @@ class ControlledTagsInputAxes(Component):
           <h3>Controlled tags and draft</h3>
           <c-CTagsInput
             c-input_attrs="{'aria-label':'Fully controlled labels'}"
-            :value="fullyControlledTags" :inputValue="fullyControlledDraft" :onValueChange="(next,detail)=>{
-                fullyControlledTags=next;
-                fullyControlledDraft=detail.nextInputValue || 'owner note';
-                fullyControlledLast=`Accepted ${JSON.stringify(next)}`;
-              }" :onInputValueChange="(next)=>fullyControlledDraft=next"
+            :value="fullyControlledTags"
+            :inputValue="fullyControlledDraft"
+            :onValueChange="acceptFullyControlledTags"
+            :onInputValueChange="(next)=>fullyControlledDraft=next"
           />
           <button type="button" @click="fullyControlledTags=['owner','ordered']">
             Replace tags from the owner
@@ -78,6 +73,26 @@ class ControlledTagsInputAxes(Component):
             fullyControlledDraft:'harbor',
             fullyControlledLast:'Both axes owned',
           };
+        },
+        methods: {
+          updateDraft(next) {
+            this.draft = next;
+            this.draftLast = `Draft: ${next}`;
+          },
+          // Log every request, and change the tags only while
+          // "Accept the next value request" is checked.
+          applyValueRequest(next) {
+            this.valueLast = `Requested ${JSON.stringify(next)}`;
+            if (this.accept) this.valueTags = next;
+          },
+          // The owner accepts every request and fills an empty draft.
+          acceptFullyControlledTags(next, detail) {
+            this.fullyControlledTags = next;
+            this.fullyControlledDraft =
+              detail.nextInputValue || 'owner note';
+            this.fullyControlledLast =
+              `Accepted ${JSON.stringify(next)}`;
+          },
         },
       });
     """

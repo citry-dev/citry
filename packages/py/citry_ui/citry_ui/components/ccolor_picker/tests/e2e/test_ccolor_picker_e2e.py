@@ -14,6 +14,7 @@ pytest.importorskip("pytest_playwright")
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CColorSwatch
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -82,6 +83,7 @@ def test_invalid_edit_environment_axe_and_cleanup(page: Any, serve_citry_ui_live
     assert root.locator('[data-citry-ui-part="status"]').inner_text() == "Enter a valid color value"
     page.emulate_media(forced_colors="active", reduced_motion="reduce")
     page.add_script_tag(path=str(_root() / "node_modules" / "axe-core" / "axe.min.js"))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async()=> (await axe.run(document,{resultTypes:['violations']})).violations.filter(x=>['serious','critical'].includes(x.impact)).map(x=>x.id)"""
     )

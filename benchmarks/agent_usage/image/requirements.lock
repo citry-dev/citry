@@ -1,7 +1,9 @@
 # Resolved from public PyPI on Linux with Python 3.12.14 on 2026-09-08.
 # Citry 0.4.6 has no FastAPI extra, so FastAPI and Uvicorn are explicit.
 # certifi is pinned to 2026.10.19, which drops the affected eMudhra (emSign) root
-# and keeps the unaffected ones; the other pins come from the 2026-09-08 resolve.
+# and keeps the unaffected ones. Playwright is pinned to 1.64.1, whose bundled
+# Node.js 24.22.1 drops that root too. The other pins come from the 2026-09-08
+# resolve.
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
@@ -18,7 +20,7 @@ idna==3.19
 iniconfig==2.3.0
 MarkupSafe==3.0.3
 packaging==26.3
-playwright==1.62.0
+playwright==1.64.1
 pluggy==1.6.0
 pydantic==2.13.5
 pydantic_core==2.46.5

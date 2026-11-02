@@ -10,7 +10,11 @@ class CascaderDisabled(Component):
     template = """
       <c-CCascader>
         <c-CCascaderOption value="available" label="Available"><c-CCascaderOption value="one" label="Warehouse one" /></c-CCascaderOption>
-        <c-CCascaderOption value="maintenance" label="Under maintenance" c-disabled="True"><c-CCascaderOption value="two" label="Warehouse two" /></c-CCascaderOption>
+        <c-CCascaderOption
+          value="maintenance"
+          label="Under maintenance"
+          c-disabled="True"
+        ><c-CCascaderOption value="two" label="Warehouse two" /></c-CCascaderOption>
       </c-CCascader>
     """
 

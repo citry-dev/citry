@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias, TypedDict, cast
+from typing import Any, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
@@ -20,7 +20,7 @@ from citry_ui.components._attrs import (
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
-from citry_ui.components._date import canonical_date
+from citry_ui.components._date import canonical_date, first_day_of_week
 from citry_ui.components._form_control_runtime import (
     FORM_CONTROL_RUNTIME_DEPENDENCY,
     FORM_CONTROL_STYLE_DEPENDENCY,
@@ -34,9 +34,12 @@ from citry_ui.components._validation import (
     validate_non_empty_string,
     validate_optional_boolean,
 )
-
-if TYPE_CHECKING:
-    from citry_ui.components.cpopover import CPopoverPlacement
+from citry_ui.components.ccalendar import (
+    CCalendarFirstDayOfWeek,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
+)
+from citry_ui.components.cpopover import (
+    CPopoverPlacement,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
+)
 
 CDatePickerDate: TypeAlias = date | str
 CDatePickerVariant = Literal["outline", "filled", "plain"]
@@ -142,17 +145,6 @@ def _dates(value: object) -> tuple[str, ...]:
     return tuple(sorted(normalized))
 
 
-def _first_day(value: object) -> int | None:
-    value = const_value(value)
-    if value is None:
-        return None
-    if type(value) is not int:
-        raise TypeError(f"CDatePicker first_day_of_week must be an exact integer or None, got {value!r}.")
-    if value < 1 or value > 7:
-        raise ValueError(f"CDatePicker first_day_of_week must be from 1 through 7, got {value!r}.")
-    return value
-
-
 def _source_display_date(value: str) -> str:
     parsed = date.fromisoformat(value)
     return f"{_SOURCE_MONTHS[parsed.month]} {parsed.day}, {parsed.year:04d}"
@@ -188,7 +180,7 @@ class CDatePicker(LibraryComponent):
         dismissible: bool = True
         placement: CPopoverPlacement = "bottom-start"
         match_width: bool = True
-        first_day_of_week: int | None = None
+        first_day_of_week: CCalendarFirstDayOfWeek | None = None
         show_adjacent_days: bool = True
         fixed_weeks: bool = True
         placeholder: str = "Choose a date"
@@ -206,9 +198,49 @@ class CDatePicker(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # Citry's error for first_day_of_week would print all 14 values twice;
+    # Citry UI's says "from 1 through 7, where 1 is Monday" in one line. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "calendar_id",
+            "catalog_clear_label",
+            "catalog_picker_label",
+            "clear_label",
+            "clearable",
+            "described_by",
+            "disabled",
+            "dismissible",
+            "display_value",
+            "error_message",
+            "field_control",
+            "first_day",
+            "fixed_weeks",
+            "form",
+            "invalid",
+            "match_width",
+            "maximum",
+            "minimum",
+            "name",
+            "native_id",
+            "picker_label",
+            "placeholder",
+            "placement",
+            "popover_id",
+            "public_id",
+            "readonly",
+            "required",
+            "root_id",
+            "show_adjacent_days",
+            "size",
+            "trigger_label",
+            "unavailable_dates",
+            "value",
+            "variant",
+            "visible_id",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_date_picker_snapshot", None)
@@ -239,7 +271,7 @@ class CDatePicker(LibraryComponent):
             validate_optional_boolean("CDatePicker", input_name, getattr(kwargs, input_name))
         for input_name in ("clearable", "dismissible", "match_width", "show_adjacent_days", "fixed_weeks"):
             validate_boolean("CDatePicker", input_name, getattr(kwargs, input_name))
-        first_day = _first_day(kwargs.first_day_of_week)
+        first_day = first_day_of_week("CDatePicker", kwargs.first_day_of_week)
         validate_choice("CDatePicker", "placement", kwargs.placement, _PLACEMENTS)
         validate_choice("CDatePicker", "variant", kwargs.variant, _VARIANTS)
         validate_choice("CDatePicker", "size", kwargs.size, _SIZES)

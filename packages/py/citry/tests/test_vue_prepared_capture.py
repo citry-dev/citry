@@ -1056,6 +1056,97 @@ def test_i18n_attribute_wrapper_forces_prepared_spread_fallback() -> None:
     )
 
 
+_TRANSPARENT_SHAPES = {
+    "i18n": """
+        <c-i18n tag="main">
+          <c-raw><i>raw body</i></c-raw>
+        </c-i18n>
+    """,
+    "client_i18n": """
+        <c-i18n c-client="True" tag="main">
+          <c-raw><i>raw body</i></c-raw>
+        </c-i18n>
+    """,
+    "transparent_inside_i18n": """
+        <c-i18n tag="main">
+          <c-Pass><c-raw><i>raw body</i></c-raw></c-Pass>
+        </c-i18n>
+    """,
+    "provide_inside_i18n": """
+        <c-i18n tag="main">
+          <c-provide key="k" value="v"><c-raw><i>raw body</i></c-raw></c-provide>
+        </c-i18n>
+    """,
+    "transparent_into_a_component": """
+        <c-Forward><c-raw><i>raw body</i></c-raw></c-Forward>
+    """,
+    "markup_inside_a_transparent_component": """
+        <c-i18n tag="main">
+          <c-Pass>{{ markup }}</c-Pass>
+        </c-i18n>
+    """,
+    "ignored_contents_inside_a_transparent_component": """
+        <c-i18n tag="main">
+          <c-Pass><div #c-ignore><i>raw body</i></div></c-Pass>
+        </c-i18n>
+    """,
+}
+
+
+@pytest.mark.parametrize("shape", sorted(_TRANSPARENT_SHAPES))
+def test_raw_html_inside_a_transparent_component_stays_in_its_author(shape: str) -> None:
+    # A transparent component (<c-i18n>'s inner parts, <c-provide>, or one of
+    # the app's own) passes the page's fill on to a component as a Vue slot.
+    # The fill is compiled in the page's definition, so only the page's
+    # prepared data may carry the <c-raw> block's HTML.
+    registry = Citry(
+        autodiscover=False,
+        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
+    )
+
+    class Pass(Component):
+        citry = registry
+        transparent = True
+        template = """
+            <c-slot />
+        """
+
+    class Box(Component):
+        citry = registry
+        template = """
+            <section><c-slot /></section>
+        """
+
+    class Forward(Component):
+        citry = registry
+        transparent = True
+        template = """
+            <c-Box><c-slot /></c-Box>
+        """
+
+    class Page(Component):
+        citry = registry
+
+        def template_data(self, kwargs, slots):
+            return {"markup": Markup("<i>raw body</i>")}
+
+        template = _TRANSPARENT_SHAPES[shape]
+        js = """
+            $component({});
+        """
+
+    assert "<i>raw body</i>" in str(Page())
+    assembly = assemble_typed_render(
+        render_prepared(Page()),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    holders = [item for item in assembly.view.occurrences if "opaqueHtml" in item.prepared_data]
+    assert [item.type_key for item in holders] == [Page.class_id]
+    # The page's own definition is the one that reads it.
+    assert "$citryPrepared.opaqueHtml." in assembly.compile_inputs[holders[0].definition_id].template
+
+
 def test_spread_with_resolved_attribute_extension_keeps_prepared_open() -> None:
     calls = 0
 

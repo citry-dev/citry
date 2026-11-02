@@ -4,16 +4,11 @@ import json
 import re
 from pathlib import Path
 
+import tomllib
 import yaml  # type: ignore[import-untyped]
-
-try:
-    import tomllib
-except ImportError:  # Python < 3.11
-    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOLCHAIN_FILE = REPO_ROOT / "rust-toolchain.toml"
-_WORKFLOW_FILE = REPO_ROOT / ".github" / "workflows" / "rust--tests.yml"
 _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-core--publish.yml"
 _CITRY_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry--publish.yml"
 _CITRY_LSP_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-lsp--publish.yml"
@@ -54,21 +49,15 @@ _CORE_CRATES = (
 _MATURIN_ACTION = "PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
 _RUST_ACTION = "dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8"
 _PYPI_ACTION = "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086"
-_UV_ACTION = "astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e"
+_UV_ACTION = "astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2"
 _SCCACHE_ACTION = "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
 _RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
 _PNPM_ACTION = "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86"
-# The composite action that makes sure the runner's system certificate list
-# no longer holds emSign ECC Root CA - G3, and the file in that list Node.js is
-# pointed at.
-_DROP_G3_ACTION = ".github/actions/drop-emsign-g3"
-_SYSTEM_CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
 
 
 def check() -> list[str]:
     required = (
         _TOOLCHAIN_FILE,
-        _WORKFLOW_FILE,
         _PUBLISH_WORKFLOW,
         _CITRY_PUBLISH_WORKFLOW,
         _CITRY_LSP_PUBLISH_WORKFLOW,
@@ -95,52 +84,37 @@ def check() -> list[str]:
 
     errors: list[str] = []
 
-    # Each event owns its path list, so a duplicate in one list cannot hide an omission in the other.
-    python_test_workflow = _PYTHON_TEST_WORKFLOW.read_text(encoding="utf-8")
-    _, pull_request_marker, after_push = python_test_workflow.partition("  pull_request:\n")
-    pull_request_section, workflow_dispatch_marker, _ = after_push.partition("  workflow_dispatch:\n")
-    event_sections = {
-        "push": python_test_workflow.partition("  push:\n")[2].partition("  pull_request:\n")[0],
-        "pull_request": pull_request_section if pull_request_marker and workflow_dispatch_marker else "",
-    }
+    # A push is filtered by the trigger's path list, and a pull request by the
+    # `changes` job's PYTHON_INPUTS list, so each list is checked on its own:
+    # a duplicate in one cannot hide an omission in the other.
+    python_test_workflow = yaml.safe_load(_PYTHON_TEST_WORKFLOW.read_text(encoding="utf-8"))
+    # PyYAML reads the Actions key `on` as the boolean True.
+    triggers = python_test_workflow.get(True) or python_test_workflow.get("on") or {}
+    changes_steps = python_test_workflow.get("jobs", {}).get("changes", {}).get("steps", [])
     event_path_lists = {
-        event: (
-            match.group(1).splitlines()
-            if (match := re.search(r"(?m)^    paths:\n((?:      - .*\n)+)", section))
-            else []
-        )
-        for event, section in event_sections.items()
+        "on.push.paths": (triggers.get("push") or {}).get("paths", []),
+        "jobs.changes PYTHON_INPUTS": [
+            line.strip()
+            for step in changes_steps
+            for line in step.get("env", {}).get("PYTHON_INPUTS", "").splitlines()
+            if line.strip()
+        ],
     }
     for path in (
         "scripts/verify_citry_ui_distribution.py",
         ".github/workflows/py--citry-ui--publish.yml",
     ):
-        marker = f'      - "{path}"'
-        for event, path_list in event_path_lists.items():
-            if marker not in path_list:
-                errors.append(f"py--tests.yml {event} path filters must include {path!r}")
+        for label, path_list in event_path_lists.items():
+            if path not in path_list:
+                errors.append(f"py--tests.yml {label} must include {path!r}")
 
-    channel = tomllib.loads(_TOOLCHAIN_FILE.read_text(encoding="utf-8")).get("toolchain", {}).get("channel", "")
-
-    content = _WORKFLOW_FILE.read_text(encoding="utf-8")
-    action = re.search(r"dtolnay/rust-toolchain", content)
-    if action is None:
-        errors.append("could not find 'dtolnay/rust-toolchain' in rust--tests.yml")
-    else:
-        pinned = re.search(r"toolchain:\s*(\S+)", content[action.end() :])
-        if pinned is None:
-            errors.append("could not find a 'toolchain:' value after 'dtolnay/rust-toolchain' in rust--tests.yml")
-        else:
-            workflow_toolchain = pinned.group(1).strip("\"'")
-            if channel != workflow_toolchain:
-                errors.append(
-                    f"toolchain mismatch: rust-toolchain.toml='{channel}', rust--tests.yml='{workflow_toolchain}'"
-                )
+    errors.extend(nightly_pin_errors(REPO_ROOT))
+    errors.extend(selected_toolchain_errors(REPO_ROOT))
 
     root_manifest = tomllib.loads(_ROOT_CARGO.read_text(encoding="utf-8"))
     minimum = root_manifest.get("workspace", {}).get("package", {}).get("rust-version")
-    if minimum != "1.96":
-        errors.append(f"Cargo workspace rust-version must be '1.96', found {minimum!r}")
+    if minimum != "1.97":
+        errors.append(f"Cargo workspace rust-version must be '1.97', found {minimum!r}")
     for crate in _CORE_CRATES:
         manifest_path = REPO_ROOT / "crates" / crate / "Cargo.toml"
         manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
@@ -156,9 +130,9 @@ def check() -> list[str]:
     if wheel_profile != expected_wheel_profile:
         errors.append(f"Cargo release-wheel profile must be {expected_wheel_profile!r}, found {wheel_profile!r}")
     binding_manifest = tomllib.loads(_CORE_BINDING_CARGO.read_text(encoding="utf-8"))
-    abi3_feature = binding_manifest.get("features", {}).get("abi3-py310")
-    if abi3_feature != ["pyo3/abi3-py310", "pyo3/extension-module"]:
-        errors.append("citry_core_py abi3-py310 feature must enable PyO3's stable ABI and extension module")
+    abi3_feature = binding_manifest.get("features", {}).get("abi3-py311")
+    if abi3_feature != ["pyo3/abi3-py311", "pyo3/extension-module"]:
+        errors.append("citry_core_py abi3-py311 feature must enable PyO3's stable ABI and extension module")
 
     docs_toolchain = f"{minimum}.0"
     docs_cache_settings = (
@@ -219,8 +193,10 @@ def check() -> list[str]:
     examples_rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", examples_workflow))
     if examples_workflow.count(f"uses: {_RUST_ACTION}") != examples_rust_actions:
         errors.append("every examples evidence Rust setup must use the reviewed immutable action commit")
-    if examples_workflow.count('toolchain: "1.96.0"') != examples_rust_actions:
-        errors.append("every examples evidence Rust setup must pin the workspace MSRV")
+    if not re.search(rf'^  RUSTUP_TOOLCHAIN: ["\']{re.escape(docs_toolchain)}["\']$', examples_workflow, re.MULTILINE):
+        errors.append(f"{_EXAMPLES_TEST_WORKFLOW.name} must pin examples Rust to the workspace MSRV {docs_toolchain}")
+    if examples_workflow.count("toolchain: ${{ env.RUSTUP_TOOLCHAIN }}") != examples_rust_actions:
+        errors.append("every examples evidence Rust setup must select the pinned RUSTUP_TOOLCHAIN")
     examples_rust_caches = len(re.findall(r"uses:\s+Swatinem/rust-cache@", examples_workflow))
     if examples_workflow.count(f"uses: {_RUST_CACHE_ACTION}") != examples_rust_caches:
         errors.append("every examples evidence Rust cache must use the reviewed immutable action commit")
@@ -288,7 +264,7 @@ def check() -> list[str]:
         errors.append("every citry-core wheel action must pass --locked")
     if publish.count("--profile release-wheel") != action_count - 1:
         errors.append("every native citry-core wheel action must use the release-wheel Cargo profile")
-    if publish.count("--features abi3-py310") != action_count - 1:
+    if publish.count("--features abi3-py311") != action_count - 1:
         errors.append("every native citry-core wheel action must select the reviewed ABI3 release feature")
     if "--find-interpreter" in publish:
         errors.append("citry-core release builders must select the closed interpreter families explicitly")
@@ -298,8 +274,8 @@ def check() -> list[str]:
             "versioned command name, not architecture-specific /opt/python paths"
         )
     for interpreter_args in (
-        "--features abi3-py310 --interpreter python3.10",
-        "--features abi3-py310 --interpreter python3.14t pypy3.11",
+        "--features abi3-py311 --interpreter python3.11",
+        "--features abi3-py311 --interpreter python3.14t python3.15t pypy3.11",
     ):
         if publish.count(interpreter_args) != 2:
             errors.append(f"Linux and musllinux citry-core builders must each select {interpreter_args!r}")
@@ -423,28 +399,137 @@ def check() -> list[str]:
     return errors
 
 
+# A dated nightly such as `nightly-2026-10-27`. An undated `nightly` would
+# give every build a new compiler each time a nightly is published.
+_DATED_NIGHTLY = re.compile(r"nightly-\d{4}-\d{2}-\d{2}")
+# Any mention of a nightly in CI configuration: an action input
+# (`toolchain: nightly`), an action ref (`dtolnay/rust-toolchain@nightly`),
+# `RUSTUP_TOOLCHAIN`, `cargo +nightly`, or a rustup command. Each one would
+# pick a compiler other than the one rust-toolchain.toml names.
+_NIGHTLY_WORD = re.compile(r"(?<![\w-])nightly(?![\w])")
+
+
+def nightly_pin_errors(root: Path) -> list[str]:
+    """
+    Report an undated development nightly, or CI configuration that picks its own nightly.
+
+    `rust-toolchain.toml` must name a dated nightly, so every machine and CI
+    job builds with the same compiler until the date is moved on purpose. CI
+    installs that toolchain through the `install-rust` composite action,
+    which reads the file, so no workflow, composite action or example
+    workflow may name a nightly itself. YAML comments are skipped, and jobs
+    that pin a stable release on purpose, such as the docs and release
+    builds, pass.
+    """
+    errors: list[str] = []
+    toolchain_file = root / "rust-toolchain.toml"
+    channel = tomllib.loads(toolchain_file.read_text(encoding="utf-8")).get("toolchain", {}).get("channel", "")
+    if not _DATED_NIGHTLY.fullmatch(str(channel)):
+        errors.append(
+            f"rust-toolchain.toml channel must be a dated nightly such as 'nightly-YYYY-MM-DD', found {channel!r}"
+        )
+    paths = sorted((root / ".github" / "workflows").glob("*.y*ml"))
+    paths += sorted((root / ".github" / "actions").glob("*/action.y*ml"))
+    # Users copy the example workflows, so they follow the same rule.
+    paths += sorted(root.glob("examples/*/*/.github/workflows/*.y*ml"))
+    for path in paths:
+        label = path.relative_to(root).as_posix()
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            # A comment may mention nightly freely; only the YAML before it counts.
+            code = line.split(" #", 1)[0] if not line.lstrip().startswith("#") else ""
+            if _NIGHTLY_WORD.search(code):
+                errors.append(
+                    f"{label}:{number} names its own nightly ({code.strip()!r}); install Rust with "
+                    "the ./.github/actions/install-rust action, which reads rust-toolchain.toml"
+                )
+    return errors
+
+
+def selected_toolchain_errors(root: Path) -> list[str]:
+    """
+    Report a job that installs a specific Rust toolchain but would build with another.
+
+    Installing a toolchain with `dtolnay/rust-toolchain` does not select it
+    inside the checkout: there, `rust-toolchain.toml` wins and every cargo
+    run uses the development nightly. So a job that installs a toolchain,
+    such as the workspace minimum, must also set `RUSTUP_TOOLCHAIN` to the
+    same value in its workflow or job env. Only those two count: a step's
+    env reaches that step alone, not the cargo steps after it. A
+    `${{ env.NAME }}` setup input is resolved against the workflow and job
+    env, with the job env winning, as GitHub does. A setup with no
+    `toolchain` input takes the toolchain from its ref (`@1.97.0`), unless
+    the ref is a commit SHA, which then installs nothing specific.
+    """
+    errors: list[str] = []
+    paths = sorted((root / ".github" / "workflows").glob("*.y*ml"))
+    paths += sorted(root.glob("examples/*/*/.github/workflows/*.y*ml"))
+    for path in paths:
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        label = path.relative_to(root).as_posix()
+        workflow_env = _env_mapping(workflow.get("env"))
+        for job_name, job in (workflow.get("jobs") or {}).items():
+            job_env = _env_mapping(job.get("env"))
+            env = {**workflow_env, **job_env}
+            for step in job.get("steps") or []:
+                uses = str(step.get("uses", ""))
+                if not uses.lower().startswith("dtolnay/rust-toolchain@"):
+                    continue
+                settings = step.get("with")
+                requested = str((settings if isinstance(settings, dict) else {}).get("toolchain", "")).strip()
+                ref = uses.partition("@")[2]
+                # Without an input, the action installs the toolchain its ref names.
+                if not requested and not re.fullmatch(r"[0-9a-f]{40}", ref):
+                    requested = ref
+                installed = _resolve_env(requested, env)
+                selected = _resolve_env(env.get("RUSTUP_TOOLCHAIN", ""), workflow_env)
+                # An input that names an unset variable installs nothing the job can rely on.
+                if requested and not installed:
+                    errors.append(f"{label} job {job_name} installs Rust {requested!r}, which is not set")
+                    continue
+                # nightly_pin_errors already reports a setup that names a nightly, so skip it here.
+                if not installed or _NIGHTLY_WORD.search(installed):
+                    continue
+                if not selected:
+                    errors.append(
+                        f"{label} job {job_name} installs Rust {installed!r} but does not set "
+                        "RUSTUP_TOOLCHAIN, so cargo in the checkout would use rust-toolchain.toml; "
+                        "set it in the workflow or job env"
+                    )
+                elif selected != installed:
+                    errors.append(
+                        f"{label} job {job_name} installs Rust {installed!r} but sets "
+                        f"RUSTUP_TOOLCHAIN={selected!r}, so cargo in the checkout would build with "
+                        f"{selected!r} instead"
+                    )
+    return errors
+
+
+def _env_mapping(value: object) -> dict[str, str]:
+    """Read an `env:` block as strings; an expression such as `${{ fromJSON(...) }}` reads as empty."""
+    return {str(key): str(item) for key, item in value.items()} if isinstance(value, dict) else {}
+
+
+def _resolve_env(value: str, env: dict[str, str]) -> str:
+    """Resolve a whole-value `${{ env.NAME }}` reference, as GitHub does for workflow env."""
+    reference = re.fullmatch(r"\$\{\{\s*env\.(\w+)\s*\}\}", value.strip())
+    return env.get(reference.group(1), "") if reference else value.strip().strip("\"'")
+
+
 def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
     """
-    Report steps that leave the reviewed setup-uv, PyPI upload, or Playwright download setup.
+    Report steps that leave the reviewed setup-uv or PyPI upload setup.
 
     Every workflow, example workflow, and composite action under
     `.github/actions/` is read as YAML. Each setup-uv step must use the
     reviewed commit, install exactly `uv_pin` (resolved through
     ``${{ env.NAME }}`` references at workflow, job, and step level), and set
-    `prune-cache: true`. Each `playwright install` in a workflow must set
-    NODE_OPTIONS and SSL_CERT_FILE so Node.js reads the system certificate
-    list, and must run after a step that drops emSign ECC Root CA - G3 from
-    that list: the drop action itself, or, in a job without a checkout, an
-    inline copy whose commands match the action's run commands exactly
-    (comments and blank lines aside).
+    `prune-cache: true`.
     """
     errors: list[str] = []
     # GitHub runs both spellings of the YAML extension.
     paths = sorted(path for path in (root / ".github" / "workflows").glob("*.y*ml"))
     # Users copy the example workflows, so they follow the same pins.
     paths += sorted(root.glob("examples/*/*/.github/workflows/*.y*ml"))
-    # The drop action's own commands are the one copy every inline check must match.
-    g3_check = _g3_check(root / _DROP_G3_ACTION / "action.yml")
     for path in paths:
         workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         # Messages name files with forward slashes on every OS, as the repository does.
@@ -453,32 +538,10 @@ def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
         for job_name, job in (workflow.get("jobs") or {}).items():
             env = {**workflow_env, **(job.get("env") or {})}
             where = f"{label} job {job_name}"
-            # Set once a step in this job has removed G3 from the system list.
-            dropped_g3 = False
             for step in job.get("steps") or []:
                 errors.extend(_action_pin_errors(where, step, env, uv_pin))
-                run = str(step.get("run", ""))
-                # A `g3=` line marks an inline copy of the drop check. One that
-                # drifted from the action could pass while the system list
-                # still trusts the root, so it must match command for command.
-                inline_copy = any(line.strip().startswith("g3=") for line in run.splitlines())
-                matches_action = g3_check is not None and _command_lines(run) == g3_check
-                if inline_copy and g3_check is not None and not matches_action:
-                    errors.append(
-                        f"{where} has an inline emSign ECC Root CA - G3 check that differs from "
-                        f"{_DROP_G3_ACTION}/action.yml; copy the action's run commands exactly"
-                    )
-                if _playwright_install_lines(run):
-                    errors.extend(
-                        _playwright_errors(
-                            where, step, env, run, dropped_g3=dropped_g3, have_check=g3_check is not None
-                        )
-                    )
-                if str(step.get("uses", "")) == f"./{_DROP_G3_ACTION}" or (inline_copy and matches_action):
-                    dropped_g3 = True
     # A composite action can install uv or upload to PyPI on behalf of any
-    # job that uses it, so its steps follow the same pins. The Playwright rule
-    # stays with workflow jobs, where the earlier drop step can be seen.
+    # job that uses it, so its steps follow the same pins.
     for path in sorted((root / ".github" / "actions").glob("*/action.y*ml")):
         action = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         where = f"{path.relative_to(root).as_posix()} composite action"
@@ -517,100 +580,4 @@ def _action_pin_errors(where: str, step: dict[str, object], env: dict[str, objec
     # saved cache small and pruned, as it was before that release.
     if str(settings.get("prune-cache")).lower() != "true":
         errors.append(f"{where} must set prune-cache: true on {_UV_ACTION}")
-    return errors
-
-
-def _command_lines(run: str) -> tuple[str, ...]:
-    """Return the shell lines of `run` without comments, blank lines, or indentation."""
-    stripped = (line.strip() for line in run.splitlines())
-    return tuple(line for line in stripped if line and not line.startswith("#"))
-
-
-def _g3_check(action_path: Path) -> tuple[str, ...] | None:
-    """Return the drop action's command lines, or None when the action or its `g3=` line is missing."""
-    if not action_path.is_file():
-        return None
-    action = yaml.safe_load(action_path.read_text(encoding="utf-8")) or {}
-    for step in (action.get("runs") or {}).get("steps") or []:
-        lines = _command_lines(str(step.get("run", "")))
-        if any(line.startswith("g3=") for line in lines):
-            return lines
-    return None
-
-
-# `playwright install`, allowing any run of spaces between the two words.
-_PLAYWRIGHT_INSTALL = re.compile(r"\bplaywright\s+install\b")
-# Shell operators that end one simple command and start the next.
-_COMMAND_SEPARATOR = re.compile(r"&&|\|\||[;|&]")
-# One `NAME=value` assignment at the start of a simple command.
-_ASSIGNMENT = re.compile(r"""([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s"']*)\s+""")
-
-
-def _playwright_install_lines(run: str) -> list[str]:
-    """Return each simple shell command in `run` that calls `playwright install`."""
-    # A trailing backslash continues the command, so the env assignments
-    # before it and the install after it count as one line.
-    joined = run.replace("\\\n", " ")
-    commands: list[str] = []
-    for line in joined.splitlines():
-        if line.strip().startswith("#"):
-            continue
-        # An assignment only reaches the command it prefixes, so split at the
-        # shell operators and keep the command that runs the install.
-        commands.extend(
-            command.strip() for command in _COMMAND_SEPARATOR.split(line) if _PLAYWRIGHT_INSTALL.search(command)
-        )
-    return commands
-
-
-def _prefix_assignments(command: str) -> dict[str, str]:
-    """Return the `NAME=value` assignments that prefix `command`, with quotes removed."""
-    assignments: dict[str, str] = {}
-    position = 0
-    while match := _ASSIGNMENT.match(command, position):
-        assignments[match.group(1)] = match.group(2).strip("\"'")
-        position = match.end()
-    return assignments
-
-
-def _playwright_errors(
-    where: str,
-    step: dict[str, object],
-    env: dict[str, object],
-    run: str,
-    *,
-    dropped_g3: bool,
-    have_check: bool,
-) -> list[str]:
-    """Report a `playwright install` step that could still trust emSign ECC Root CA - G3."""
-    errors: list[str] = []
-    name = f"step {str(step.get('name') or 'without a name')!r}"
-    step_env = step.get("env")
-    merged_env = {**env, **(step_env if isinstance(step_env, dict) else {})}
-    for command in _playwright_install_lines(run):
-        # Playwright downloads browsers with its own bundled Node.js, which
-        # trusts G3 unless it reads the system list the drop step cleaned. An
-        # assignment prefixing the install command overrides the step env.
-        values = {key: str(value) for key, value in merged_env.items()} | _prefix_assignments(command)
-        if "--use-openssl-ca" not in values.get("NODE_OPTIONS", "").split():
-            errors.append(
-                f"{where} {name} runs `playwright install` without NODE_OPTIONS=--use-openssl-ca; "
-                "set it in the step's env: or as a prefix of the install command"
-            )
-        if values.get("SSL_CERT_FILE") != _SYSTEM_CA_FILE:
-            errors.append(
-                f"{where} {name} runs `playwright install` without SSL_CERT_FILE={_SYSTEM_CA_FILE}; "
-                "set it in the step's env: or as a prefix of the install command"
-            )
-    if not have_check:
-        errors.append(
-            f"{where} {name} runs `playwright install`, but {_DROP_G3_ACTION}/action.yml is missing "
-            "or has no g3= line, so no step can drop emSign ECC Root CA - G3"
-        )
-    elif not dropped_g3:
-        errors.append(
-            f"{where} {name} runs `playwright install` before any step drops emSign ECC Root CA - G3; "
-            f"add `uses: ./{_DROP_G3_ACTION}` as an earlier step, or, in a job without a checkout, "
-            "an earlier inline copy of the action's run commands"
-        )
     return errors

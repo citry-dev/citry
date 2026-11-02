@@ -178,6 +178,11 @@ def test_native_anatomy_ids_states_region_and_actions_are_exact():
         ('size="xl"', "size must be one of"),
         ('indicator_pos="middle"', "indicator_pos must be one of"),
         ('heading_level="1"', "heading_level must be one of"),
+        ('heading_level="7"', "heading_level must be one of"),
+        ('c-heading_level="True"', "heading_level must be one of"),
+        # Only the exact numbers and their text name a level.
+        ('heading_level="02"', "heading_level must be one of"),
+        ('c-heading_level="2.0"', "heading_level must be one of"),
         ('id="two words"', "cannot contain ASCII whitespace"),
         ('actions_label="   "', "must contain non-whitespace text"),
     ],

@@ -164,7 +164,7 @@ same HTMX file you deploy, and check that:
 - the browser console and network log show no unexpected errors.
 
 The
-[HTMX patterns demo](https://github.com/citry-dev/citry/tree/main/examples/demos/htmx){: target="_blank" rel="noopener"}
+[HTMX patterns demo](https://github.com/citry-dev/citry/tree/citry@0.6.0/examples/demos/htmx){: target="_blank" rel="noopener"}
 has search-as-you-type, an editable contact form, and a department picker
 that refreshes the team list, with FastAPI routes, a pinned HTMX file, and
 browser tests. [HTML fragments](/v/0.6.0/advanced/html-fragments/) explains

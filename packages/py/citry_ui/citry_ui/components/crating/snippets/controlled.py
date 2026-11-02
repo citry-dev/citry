@@ -14,7 +14,8 @@ class ControlledRating(Component):
           label="Controlled conversation rating"
           value="3"
           allow_clear
-          :value="score" :onValueChange="(next,detail)=>{score=next;last=`${detail.source}: ${next ?? 'unrated'}`}"
+          :value="score"
+          :onValueChange="(next,detail)=>{score=next;last=`${detail.source}: ${next ?? 'unrated'}`}"
         />
         <output v-text="last">No request yet</output>
         <button type="button" @click="score='5'">Set five stars</button>

@@ -41,8 +41,15 @@ export const collectFormArgs = (
   const output: Record<string, string | string[]> = {};
   // One value is sent as itself and a repeated name as the list of its
   // values, the same shape the server's no-JavaScript form reader builds.
+  // Each name is defined as the result's own key: assigning `__proto__`
+  // would try to set the object's prototype and drop the field.
   entries.forEach((values, name) => {
-    output[name] = values.length === 1 ? values[0] : values.slice();
+    Object.defineProperty(output, name, {
+      configurable: true,
+      enumerable: true,
+      value: values.length === 1 ? values[0] : values.slice(),
+      writable: true,
+    });
   });
   return output;
 };

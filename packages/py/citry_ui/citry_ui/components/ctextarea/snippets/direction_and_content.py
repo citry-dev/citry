@@ -26,7 +26,11 @@ class TextareaDirection(Component):
         <c-CField>
           <c-fill name="label">English trail note</c-fill>
           <c-fill name="default">
-            <c-CTextarea name="english" c-value="english_note" c-attrs="{'dir': 'ltr'}" />
+            <c-CTextarea
+              name="english"
+              c-value="english_note"
+              c-attrs="{'dir': 'ltr'}"
+            />
           </c-fill>
         </c-CField>
         <div dir="rtl">

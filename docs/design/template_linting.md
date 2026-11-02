@@ -129,7 +129,15 @@ NamespacePolicy = Literal["closed", "allow-extra", "unknown"]
 - `allow-extra` means the schema explicitly preserves undeclared fields.
   Pydantic v1 or v2 `extra="allow"` has this policy.
 - `unknown` means Citry cannot prove either contract. Opaque schemas, an absent
-  schema, and unsupported source shapes retain this fact.
+  schema, and unsupported source shapes retain this fact. A component that
+  lists its keys in `Lint.template_data_keys` turns an `unknown` namespace
+  into `closed` for the lint rule: the template may use the listed keys, the
+  keys Citry can read from `template_data()`, and the declared variables.
+  `citry check` warns about a literal key the method sets that the list
+  leaves out (`citry.template.undeclared-template-data-key`). A list that is
+  not a tuple, list, or frozenset of strings, a name that cannot be a Python
+  variable name, a repeated name, or a list beside a `TemplateData` schema
+  on the same or a farther class is rejected when the class is defined.
 
 The lint rule deliberately treats `unknown` and absent schemas strictly.
 Authors who depend on dynamic values declare them or override the rule. The
@@ -169,7 +177,8 @@ For each parser-reported free root, analysis accounts for:
 
 1. `c-for` and `c-fill` lexical bindings;
 2. declared `TemplateData` fields;
-3. conservative `template_data()` roots and inherited `Kwargs` roots;
+3. conservative `template_data()` roots and inherited `Kwargs` roots, plus
+   the names in `Lint.template_data_keys`;
 4. live runtime `Citry.template_globals` keys;
 5. application lint-only variables;
 6. component lint-only variables;

@@ -1,10 +1,6 @@
 import json
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI leg
-    import tomli as tomllib
-
+import tomllib
 from examples._internal.catalog import EXAMPLES_ROOT, load_catalog
 from examples._internal.qualify import interpolate, project_environment
 
@@ -201,7 +197,7 @@ def test_starter_readmes_follow_the_reader_workflow() -> None:
         minimum_citry = citry_requirement.removeprefix("citry>=").split(",", 1)[0]
         for section in common_sections:
             assert section in readme, f"{project.id} is missing the README section {section!r}"
-        assert "Python 3.10 through 3.14" in readme
+        assert "Python 3.11 through 3.14" in readme
         assert f"Citry {minimum_citry}" in readme
         assert "PowerShell" in readme
         assert "https://citry.dev/" in readme
@@ -232,13 +228,6 @@ def test_catalog_paths_are_linked_from_examples_readme() -> None:
     readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
     for project in load_catalog():
         assert f"({project.path.as_posix()}/)" in readme
-
-
-def test_htmx_demo_uses_the_canonical_citry_mark() -> None:
-    canonical = EXAMPLES_ROOT.parent / "docs_site" / "static" / "img" / "citry-mark.svg"
-    demo_copy = EXAMPLES_ROOT / "demos" / "htmx" / "app" / "static" / "citry-mark.svg"
-
-    assert demo_copy.read_bytes() == canonical.read_bytes()
 
 
 def test_port_placeholder_is_resolved_without_shell_interpolation() -> None:

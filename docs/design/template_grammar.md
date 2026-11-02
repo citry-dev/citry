@@ -427,10 +427,17 @@ derived from their declared inputs. The built-in rules are:
 | `c-for` | `each` | `each` |
 | `c-empty` | (none) | (none) |
 | `c-raw` | (none) | (none) |
-| `c-fill` | `name`; `c-name`; `data`; `fallback`; `c-bind` | one of `name` / `c-name` / `c-bind` |
-| `c-slot` | any (no name means the `default` slot) | (none) |
+| `c-fill` | `name`; `c-name`; `data`; `fallback`; `v-slot`; `c-bind` | one of `name` / `c-name` / `c-bind` |
+| `c-slot` | any (no name means the `default` slot); Vue syntax only as static slot props such as `:row` / `v-bind:row` | (none) |
 | `c-component` | any | one of `is` / `c-is` / `c-bind` |
 | `c-element` | any (only the `default` slot) | one of `is` / `c-is` / `c-bind` |
+
+The parser also checks the Vue slot props on `<c-slot>` and the `v-slot`
+pattern on `<c-fill>` when the template loads. A slot prop needs a fixed
+name without modifiers. The names `name` and `key` are rejected, as are
+names that start with `c-`, `$`, `_`, or `citry`. A `v-slot` value must be
+one object pattern or one name. The rejected forms are listed in
+`docs_site/content/vue/slots.md` ("Slot syntax errors").
 
 For a user component, its `Component.Kwargs` become the allowed and required
 attributes, so `<c-Table bogus="1">` (unknown input) or `<c-Table>` (missing a
@@ -521,6 +528,103 @@ The isolated Pest rules are `fill_data_pattern` through
 `fill_data_ws_required`. They are compound atomic so the accepted whitespace
 positions are explicit and cannot change with the general grammar's implicit
 whitespace behavior.
+
+### 12. Expressions and braces that nest too deeply
+
+Two checks stop a deep input before code that calls itself once per level
+can overflow the stack:
+
+- **Braces.** The grammar calls `python_expr` again for every `{` it opens
+  inside an expression. Where it skips a `}` (inside a Python string or `#`
+  comment) depends on parsing context, so the parser counts every `{` in the
+  source, in text as well as in expressions. The grammar can never open more
+  levels than that. A template with more than 100,000 `{` raises
+  `SyntaxError` ("This template holds more than 100000 `{` characters"),
+  pointing at the first `{` too many. Below that, the grammar runs with a
+  stack sized for the count, so a small thread is safe too. Braces in text
+  count toward the limit but are otherwise ordinary text.
+- **Expressions.** `python_safe_eval` (the crate that checks and compiles
+  each Python expression) reads the expression's tokens before it parses it,
+  and computes a depth bound: a number meant never to be smaller than the
+  depth of the syntax tree. Tests check this on 2,000 random expressions and
+  on a pure chain of each of 26 common constructs. The count works like this:
+  - The whole expression counts as one outer bracket.
+  - Inside a bracket, each comma-separated part scores 2 for each operator,
+    keyword, `.`, `:` or `=`, and for each call or subscript bracket (as in
+    `f()` or `a[0]`). It adds the score of its deepest inner bracket, plus 2.
+    A comma between a `lambda`'s parameters does not start a new part.
+  - A bracket scores 1 more than its highest-scoring part.
+
+  An expression whose depth bound is above 200 raises `SyntaxError`
+  ("expression is nested too deeply"). This covers chains with no brackets,
+  such as `1+1+...` or `a.b.c...`, as well as brackets. Each expression is
+  checked wrapped in `(`...`)`, which adds 3, so the largest accepted chain
+  is 97 `+`, and the deepest accepted list nests 65 levels. Typical
+  expressions stay far below the limit: `a.b(c[d] + 1)` has a depth bound of
+  16.
+
+Both errors are ordinary `SyntaxError`s, and the expression error covers the
+whole expression. `format_template()` reports either one as
+`TemplateFormatError`.
+
+The template formatter keeps an expression as the author wrote it when its
+formatted version, with any parentheses Ruff adds, would go past the depth
+limit. So the formatter never writes an expression the depth check would
+refuse.
+
+### 13. Nesting limits
+
+A template can nest at most **512 tags of any kind** and at most **256 of
+Citry's logic levels**. The parser counts both while it builds its tag
+stack, and stops at the first tag that goes past either one, before any
+other pass walks the tree. Both are fixed constants in
+`crates/citry_template_parser/src/nesting.rs` (`MAX_TAG_NESTING` and
+`MAX_LOGIC_NESTING`), not settings, so a template that is valid in one
+process is valid in every process.
+
+What counts:
+
+- Every open tag adds one level, HTML or Citry.
+- Each control-flow shorthand attribute on a tag (`c-if=`, `c-elif=`,
+  `c-else`, `c-for=`, `c-empty`) adds one more level, because the compiler
+  wraps the tag in one control-flow node for it. So
+  `<div c-if="x" c-for="y in z">` is three levels.
+- Logic levels are those shorthand wrappers, plus one for each Citry tag
+  other than `<c-raw>`: `<c-if>`, `<c-elif>`, `<c-else>`, `<c-for>`,
+  `<c-empty>`, `<c-slot>`, `<c-fill>`, and every component tag,
+  `<c-component>` and `<c-element>` included. So the `<div>` above is two
+  logic levels.
+- `<c-elif>` and `<c-else>` are siblings of their `<c-if>`, so they add
+  nothing to it.
+- Void and self-closing tags count too, with their shorthands
+  (`<br c-if="x">` is two levels).
+- A template written in an attribute (`c-body="<div>...</div>"`) continues
+  from the depth of the tag that holds it, counting that tag. When the
+  runtime later parses that attribute's template on its own, it starts from
+  zero, but the parent's parse has already checked the combined depth.
+- A component's own template starts from zero, because each component is
+  rendered on its own.
+
+The parser and the compiler count with the same function, `tag_levels`,
+so they agree exactly at the limit.
+
+**Errors.** One level past either limit is a `SyntaxError` with the
+diagnostic code `citry.parse.too-deep`, pointing at the tag that goes too
+deep:
+
+- The logic message names the logic tags and attributes, the depth, and
+  both limits. The total message names the depth and both limits. Both end
+  with "To go deeper, move the inner part into its own component."
+- When that tag's line is very long, as in a template written on one line,
+  the error frame shows only the part of the line around the tag, with the
+  tag's real line and column in its header.
+- A tree built by hand rather than parsed is checked again by the compiler,
+  and by the Python binding before it copies the tree. Past the limits it is
+  a `SyntaxError` naming the tag's line and column. That compile error has no
+  diagnostic code.
+- If the tag's position does not fit the source, which should not happen,
+  the error falls back to `ParseError::Value`, as other positioned errors
+  do.
 
 ## Control-flow shortcuts
 

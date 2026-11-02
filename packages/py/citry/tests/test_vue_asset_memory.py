@@ -1,23 +1,26 @@
 """
-How an engine without a configured cache keeps compiled Vue assets in memory.
+How an engine without a configured cache keeps page files in memory.
 
-Such an engine keeps its definition bundles and stylesheets only in this
-process, up to ``vue_asset_max_bytes``, and drops the ones used longest ago
-beyond that. An engine given a cache backend is covered by
-``test_vue_asset_sharing.py``.
+Such an engine keeps its compiled Vue definition bundles and stylesheets,
+and the stylesheets that ``css_data()`` produces, only in this process, up
+to ``vue_asset_max_bytes``, and drops the ones used longest ago beyond that.
+An engine given a cache backend is covered by ``test_vue_asset_sharing.py``.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import threading
 
 import pytest
 
-from citry import Citry, CitrySettings, Component
+from citry import Citry, CitrySettings, Component, Extension, InMemoryCache
 from citry._vue import events as vue_events
+from citry._vue.capture import render_prepared_direct
 from citry._vue.events import default_events_producer
+from citry.ext.dependencies.scripts import gen_cache_key, get_script
 from citry.settings import DEFAULT_VUE_ASSET_MAX_BYTES
 
 
@@ -158,3 +161,218 @@ def test_a_render_in_progress_keeps_its_files_while_another_render_publishes() -
     producer._publish_bundle(_digest(latest), latest)
     assert vue_events.definition_bundle(app, _digest(held)) is None
     assert local.total_bytes == 60
+
+
+def _swatch(app: Citry) -> type[Component]:
+    """A component whose ``css_data()`` makes one stylesheet per ``accent`` value."""
+
+    class Swatch(Component):
+        citry = app
+        template = """
+          <span class="swatch">x</span>
+        """
+        css = """
+          .swatch { color: var(--accent); }
+        """
+
+        def css_data(self, kwargs, slots):
+            return {"accent": kwargs["accent"]}
+
+    return Swatch
+
+
+def _css_data_hashes(html: str) -> list[str]:
+    return re.findall(r'data-ccss-([0-9a-f]+)=""', html)
+
+
+def test_css_data_stylesheets_stay_within_the_byte_limit() -> None:
+    app = Citry(autodiscover=False, vue_asset_max_bytes=2000)
+    swatch = _swatch(app)
+    hashes = [_css_data_hashes(swatch(accent=f"#{index:06x}").render().serialize())[0] for index in range(200)]
+
+    # Each value made its own stylesheet, but the store kept only as many as
+    # fit in 2000 bytes, and the default cache holds none of them.
+    local = vue_events._LOCAL_ASSETS[app]
+    kept = [key for key in local.entries if key[0] == "css-data"]
+    assert 1 < len(kept) < 20
+    assert local.total_bytes <= 2000
+    assert not any(app.cache.has(gen_cache_key(swatch.class_id, "css", digest)) for digest in hashes)
+    # The oldest was dropped, so its URL now answers 404; the newest is kept.
+    assert get_script("css", swatch, hashes[0]) is None
+    assert get_script("css", swatch, hashes[-1]) is not None
+
+
+def test_a_page_keeps_its_css_data_stylesheets_while_other_renders_publish() -> None:
+    app = Citry(autodiscover=False, vue_asset_max_bytes=1)
+    app.set_mounted_prefix("/citry")
+    swatch = _swatch(app)
+
+    class Page(Component):
+        citry = app
+        template = """
+          <html><head></head><body>
+            <c-swatch accent="teal" />
+            <c-swatch accent="navy" />
+          </body></html>
+        """
+
+    page = Page().render()
+    fragment = swatch(accent="olive").render()
+    # Renders that finish between this page's render and its serialization
+    # fill the 1-byte store with their own stylesheets.
+    for index in range(5):
+        swatch(accent=f"#{index:06x}").render().serialize()
+
+    # The page still inlines both of its stylesheets ...
+    html = page.serialize()
+    assert "--accent: teal;" in html
+    assert "--accent: navy;" in html
+    # ... and a fragment's linked stylesheet is there for the browser's
+    # first request, although the limit is far smaller than one stylesheet.
+    linked = fragment.serialize(deps_strategy="fragment")
+    digest = _css_data_hashes(linked)[0]
+    assert f"/citry/cache/{swatch.class_id}.{digest}.css" in linked
+    served = get_script("css", swatch, digest)
+    assert served is not None
+    assert "--accent: olive;" in (served.content or "")
+
+
+def test_a_configured_cache_receives_every_css_data_stylesheet() -> None:
+    backend = InMemoryCache()
+    app = Citry(autodiscover=False, cache=backend, vue_asset_max_bytes=1)
+    swatch = _swatch(app)
+    hashes = [_css_data_hashes(swatch(accent=f"#{index:06x}").render().serialize())[0] for index in range(20)]
+
+    # The backend's own capacity applies, so vue_asset_max_bytes drops none.
+    assert all(backend.has(gen_cache_key(swatch.class_id, "css", digest)) for digest in hashes)
+    assert all(get_script("css", swatch, digest) is not None for digest in hashes)
+    # The backend is the only copy; this process keeps none.
+    local = vue_events._LOCAL_ASSETS.get(app)
+    assert local is None or not any(key[0] == "css-data" for key in local.entries)
+
+
+def _panel(app: Citry, *, cached: bool = False, calls: list[str] | None = None) -> type[Component]:
+    """An interactive component whose ``css_data()`` makes one stylesheet per ``accent`` value."""
+
+    class Panel(Component):
+        citry = app
+
+        class Cache:
+            enabled = cached
+
+        template = """
+          <button @click="count++" v-text="count"></button>
+        """
+        css = """
+          button { color: var(--accent); }
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"count": 0}
+
+        def css_data(self, kwargs, slots):
+            if calls is not None:
+                calls.append(kwargs["accent"])
+            return {"accent": kwargs["accent"]}
+
+    return Panel
+
+
+def _linked_css_data(panel: type[Component], text: str) -> list[str]:
+    """The ``css_data()`` stylesheet hashes ``text`` links, each checked to be served now."""
+    hashes = re.findall(rf"/citry/cache/{panel.class_id}\.([0-9a-f]{{32}})\.css", text)
+    assert hashes
+    assert all(get_script("css", panel, digest) is not None for digest in hashes)
+    return hashes
+
+
+def test_a_vue_page_links_every_css_data_stylesheet_under_a_tiny_limit() -> None:
+    app = Citry(autodiscover=False, vue_asset_max_bytes=1)
+    app.set_mounted_prefix("/citry")
+    panel = _panel(app)
+
+    class Page(Component):
+        citry = app
+        template = """
+          <main>
+            <c-panel accent="teal" />
+            <c-panel accent="navy" />
+          </main>
+        """
+
+    # Each stylesheet alone exceeds the limit, yet both stay linked and
+    # served, because the page holds them while it is written.
+    assert len(set(_linked_css_data(panel, Page().render().serialize()))) == 2
+
+
+def test_a_vue_page_keeps_its_css_data_stylesheets_while_other_renders_publish() -> None:
+    app = Citry(autodiscover=False, vue_asset_max_bytes=1)
+    app.set_mounted_prefix("/citry")
+    panel = _panel(app)
+    page = panel(accent="teal").render()
+    for index in range(3):
+        panel(accent=f"#{index:06x}").render().serialize()
+
+    # The Vue preparation reads the stylesheet before the dependencies
+    # step runs, so the page publishes it before either one runs.
+    html = page.serialize()
+    (digest,) = set(_linked_css_data(panel, html))
+    served = get_script("css", panel, digest)
+    assert served is not None
+    assert "--accent: teal;" in (served.content or "")
+
+
+def test_an_event_response_publishes_its_css_data_stylesheets() -> None:
+    app = Citry(autodiscover=False, vue_asset_max_bytes=1)
+    app.set_mounted_prefix("/citry")
+    panel = _panel(app)
+    render = render_prepared_direct(panel(accent="teal"))
+    for index in range(3):
+        panel(accent=f"#{index:06x}").render().serialize()
+
+    # An event response is prepared without serializing a page.
+    payload = default_events_producer(app).prepare_from_render(render, citry=app, app_id="a" * 32, revision=0)
+    _linked_css_data(panel, json.dumps(payload))
+
+
+def test_a_replayed_vue_page_still_links_its_css_data_stylesheet() -> None:
+    app = Citry(autodiscover=False, vue_asset_max_bytes=1)
+    app.set_mounted_prefix("/citry")
+    calls: list[str] = []
+    panel = _panel(app, cached=True, calls=calls)
+    (first,) = set(_linked_css_data(panel, panel(accent="teal").render().serialize()))
+    for index in range(3):
+        panel(accent=f"#{index:06x}").render().serialize()
+    assert get_script("css", panel, first) is None
+
+    # The replay renders nothing, so its stylesheet comes from the stored
+    # render and is published again when the replayed page is written.
+    assert set(_linked_css_data(panel, panel(accent="teal").render().serialize())) == {first}
+    assert calls.count("teal") == 1
+
+
+def test_a_page_serialized_inside_another_page_publishes_its_css_data_stylesheets() -> None:
+    holder: dict[str, type[Component]] = {}
+
+    class AppendSwatch(Extension):
+        name = "append_swatch"
+
+        def on_serialize(self, ctx):
+            swatch = holder["swatch"]
+            if type(ctx.selected_render.context.component) is swatch:
+                return None
+            # A render serialized inside the outer page's serialization.
+            return ctx.html + swatch(accent="olive").render().serialize()
+
+    app = Citry(autodiscover=False, extensions=[AppendSwatch])
+    holder["swatch"] = _swatch(app)
+
+    class Page(Component):
+        citry = app
+        template = """
+          <html><head></head><body><c-swatch accent="teal" /></body></html>
+        """
+
+    html = Page().render().serialize()
+    assert "--accent: teal;" in html
+    assert "--accent: olive;" in html

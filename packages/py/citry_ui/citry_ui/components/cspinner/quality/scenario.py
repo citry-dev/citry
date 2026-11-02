@@ -23,14 +23,22 @@ def spinner_states_component(app: Citry) -> type[Component]:
             <div class="citry-ui-quality-grid">
               <c-for each="intent in intents">
                 <c-CRow #c-key="intent">
-                  <c-CSpinner #c-key="intent" c-label="f'{intent} observatory task'" c-intent="intent" />
+                  <c-CSpinner
+                    #c-key="intent"
+                    c-label="f'{intent} observatory task'"
+                    c-intent="intent"
+                  />
                   <span>{{ intent }}</span>
                 </c-CRow>
               </c-for>
             </div>
             <c-CRow align="center">
               <c-for each="size in sizes">
-                  <c-CSpinner #c-key="size" c-label="f'{size} catalog task'" c-size="size" />
+                  <c-CSpinner
+                    #c-key="size"
+                    c-label="f'{size} catalog task'"
+                    c-size="size"
+                  />
               </c-for>
             </c-CRow>
             <div

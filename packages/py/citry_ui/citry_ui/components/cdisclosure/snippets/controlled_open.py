@@ -10,10 +10,8 @@ class ControlledDisclosure(Component):
         class="controlled-disclosure"
       >
         <c-CDisclosure
-          :open="controlled ? open : null" :onOpenChange="(next, detail) => {
-              last = `${detail.source}: ${next ? 'open' : 'closed'}`;
-              if (controlled && accept) open = next;
-            }"
+          :open="controlled ? open : null"
+          :onOpenChange="applyOpenRequest"
         >
           <c-fill name="title">Advanced logging</c-fill>
           <c-fill name="default">
@@ -24,7 +22,11 @@ class ControlledDisclosure(Component):
           <input type="checkbox" v-model="accept" />
           Accept trigger requests
         </label>
-        <div class="controlled-disclosure__controls" role="group" aria-label="Disclosure owner controls">
+        <div
+          class="controlled-disclosure__controls"
+          role="group"
+          aria-label="Disclosure owner controls"
+        >
           <button type="button" @click="controlled=true; open=true">Show</button>
           <button type="button" @click="controlled=true; open=false">Hide</button>
           <button type="button" @click="controlled=false">Release control</button>
@@ -42,6 +44,15 @@ class ControlledDisclosure(Component):
           return {
             open:false, controlled:true, accept:true, last:'none'
           };
+        },
+        methods: {
+          // Show every request. Change `open` only while this owner controls
+          // the Disclosure and accepts requests; after release the
+          // Disclosure applies requests itself.
+          applyOpenRequest(next, detail) {
+            this.last = `${detail.source}: ${next ? 'open' : 'closed'}`;
+            if (this.controlled && this.accept) this.open = next;
+          },
         },
       });
     """

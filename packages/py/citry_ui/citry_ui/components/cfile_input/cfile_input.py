@@ -215,9 +215,25 @@ class CFileInput(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "accept",
+            "aria_describedby",
+            "aria_errormessage",
+            "aria_invalid",
+            "attrs",
+            "capture",
+            "disabled",
+            "element_id",
+            "field_control",
+            "id",
+            "invalid",
+            "multiple",
+            "name",
+            "required",
+            "size",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         normalized = _normalize_common(
@@ -580,9 +596,25 @@ class CDropTarget(LibraryComponent):
     class Slots:
         default: SlotInput[CDropTargetDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "accept",
+            "aria_invalid",
+            "attrs",
+            "capture",
+            "disabled",
+            "element_id",
+            "has_default",
+            "id",
+            "input_attrs",
+            "invalid",
+            "label",
+            "multiple",
+            "name",
+            "required",
+            "size",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(FIELD_CONTEXT_KEY, None) is not None:

@@ -172,7 +172,8 @@ def test_large_catalog_browser_payload_contains_only_the_requested_roots() -> No
     # Both selectable locales, the complete small profile registry, parser
     # records, and the three exact message roots stay comfortably bounded.
     payload = json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode()
-    assert len(gzip.compress(payload, mtime=0)) <= 3_500
+    # Name the level: Python 3.15 lowered gzip's default from 9 to 6.
+    assert len(gzip.compress(payload, compresslevel=9, mtime=0)) <= 3_500
 
 
 def test_one_hundred_message_partition_stays_within_the_release_budget() -> None:
@@ -193,10 +194,10 @@ def test_one_hundred_message_partition_stays_within_the_release_budget() -> None
     )
     payload = json.dumps(artifact, ensure_ascii=False, separators=(",", ":")).encode()
 
-    assert len(gzip.compress(payload, mtime=0)) <= 15 * 1024
+    assert len(gzip.compress(payload, compresslevel=9, mtime=0)) <= 15 * 1024
     runtime = Path(__file__).parents[1] / "citry/ext/i18n/client/vue-plugin.source.js"
     combined = runtime.read_bytes() + b"\n" + payload
-    assert len(gzip.compress(combined, mtime=0)) <= 35 * 1024
+    assert len(gzip.compress(combined, compresslevel=9, mtime=0)) <= 35 * 1024
 
 
 def test_mounted_i18n_runtime_integrity_matches_route_body() -> None:
@@ -476,3 +477,30 @@ def test_message_route_returns_an_exact_partition_and_rejects_stale_requests() -
     stale = matched.route.handler(request("stale"))
     assert stale.status == 400
     assert json.loads(stale.content)["error"]["code"] == "I18N_BROWSER_REQUEST_INVALID"
+
+
+@pytest.mark.parametrize("depth", [201, 30_000])
+def test_message_route_rejects_json_nested_beyond_the_depth_limit(depth: int) -> None:
+    app = _app()
+    matched = match_route(app.urls, "ext/i18n/messages")
+    assert matched is not None
+    # Raw text, because json.dumps would hit Python's own recursion limit
+    # first; 30,000 levels fit the route's 64 KiB body limit and stop
+    # Python's JSON parser with RecursionError.
+    body = ("[" * depth + "]" * depth).encode()
+    assert len(body) <= 64 * 1024
+
+    response = matched.route.handler(
+        RouteRequest(
+            method="POST",
+            body=body,
+            content_type="application/json",
+            headers=RouteHeaders((("Content-Type", "application/json"),)),
+        )
+    )
+
+    assert response.status == 400
+    assert json.loads(response.content)["error"] == {
+        "code": "I18N_BROWSER_REQUEST_INVALID",
+        "message": "i18n browser request nests JSON more than 200 levels deep",
+    }

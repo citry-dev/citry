@@ -13,7 +13,11 @@ class CustomizedDisclosure(Component):
             <c-fill name="default">Warm surfaces for the harvest handbook.</c-fill>
           </c-CDisclosure>
         </div>
-        <div class="disclosure-brand disclosure-brand--harbor" dir="rtl" style="color-scheme:dark">
+        <div
+          class="disclosure-brand disclosure-brand--harbor"
+          dir="rtl"
+          style="color-scheme:dark"
+        >
           <c-CDisclosure variant="soft">
             <c-fill name="title">Harbor operations</c-fill>
             <c-fill name="default">A cool scheme with logical indicator placement.</c-fill>

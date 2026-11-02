@@ -65,6 +65,31 @@ def _page_html(integrity: str) -> str:
     return str(Page()), app
 
 
+def _rule_free_page_html() -> str:
+    # A stylesheet that holds only a comment loads with no rules, so its sheet
+    # looks the same as the empty sheet Safari gives a link whose load failed.
+    app = Citry(secret="asset-cors-e2e-secret", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix(PREFIX)
+    dispatcher_for(app)
+
+    class RuleFreePage(Component):
+        citry = app
+        template = """
+            <html>
+              <head><title>probe</title></head>
+              <body><output class="probe" v-text="label">fallback</output></body>
+            </html>
+        """
+        css = """
+            /* This page sets no styles. */
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"label": "mounted"}
+
+    return str(RuleFreePage()), app
+
+
 @pytest.fixture
 def serve() -> Iterator[Callable[..., str]]:
     """Serve ``/page`` (a Citry document), ``/frame`` (the page in a sandbox), and Citry's routes."""
@@ -133,8 +158,20 @@ def test_page_mounts_with_styles_inside_an_opaque_origin_sandbox(
     assert errors == []
 
 
+# Safari's resource timing entries have no `responseStatus`. Removing it in
+# Chromium and Firefox makes their timing entries look like Safari's, so the
+# runtime takes the path it takes in Safari.
+_HIDE_RESPONSE_STATUS = "delete PerformanceResourceTiming.prototype.responseStatus;"
+_TIMINGS = pytest.mark.parametrize("timing", ["with-status", "without-status"])
+
+
+@_TIMINGS
 @pytest.mark.parametrize("integrity", ["off", "citry"])
-def test_top_level_page_downloads_each_asset_once(page: Any, serve: Callable[..., str], integrity: str) -> None:
+def test_top_level_page_downloads_each_asset_once(
+    page: Any, serve: Callable[..., str], integrity: str, timing: str
+) -> None:
+    if timing == "without-status":
+        page.add_init_script(_HIDE_RESPONSE_STATUS)
     html, app = _page_html(integrity)
     requests: list[str] = []
     page.on("request", lambda request: requests.append(request.url))
@@ -149,9 +186,12 @@ def test_top_level_page_downloads_each_asset_once(page: Any, serve: Callable[...
     assert set(assets.values()) == {1}
 
 
+@_TIMINGS
 def test_served_page_paints_with_its_component_styles_before_the_runtime_runs(
-    page: Any, serve: Callable[..., str]
+    page: Any, serve: Callable[..., str], timing: str
 ) -> None:
+    if timing == "without-status":
+        page.add_init_script(_HIDE_RESPONSE_STATUS)
     html, app = _page_html("off")
     # Read the style while the browser parses the page, before any Citry
     # script has run.
@@ -164,12 +204,16 @@ def test_served_page_paints_with_its_component_styles_before_the_runtime_runs(
     assert page.evaluate("window.__firstPaint") == {"color": "rgb(12, 34, 56)", "runtime": False}
     page.wait_for_function("document.querySelector('.probe')?.textContent === 'mounted'")
     # The runtime adopted the stylesheet the page linked instead of adding
-    # a second one.
+    # a second one, and left no other stylesheet link behind.
     assert page.locator("link[data-citry-css-url]").count() == 1
+    assert page.locator('link[rel="stylesheet"]').count() == 1
     assert _probe(page.main_frame) == {"text": "mounted", "color": "rgb(12, 34, 56)"}
 
 
-def test_a_served_stylesheet_that_fails_to_load_is_reported(page: Any, serve: Callable[..., str]) -> None:
+@_TIMINGS
+def test_a_served_stylesheet_that_fails_to_load_is_reported(page: Any, serve: Callable[..., str], timing: str) -> None:
+    if timing == "without-status":
+        page.add_init_script(_HIDE_RESPONSE_STATUS)
     html, app = _page_html("off")
     base = serve(html, app)
     # The stylesheet's route answers with an error status, which still gives
@@ -181,6 +225,23 @@ def test_a_served_stylesheet_that_fails_to_load_is_reported(page: Any, serve: Ca
     page.wait_for_timeout(200)
     assert any("stylesheet failed to load" in error for error in errors), errors
     assert _probe(page.main_frame)["text"] != "mounted"
+
+
+@_TIMINGS
+def test_a_served_stylesheet_with_no_rules_is_adopted(page: Any, serve: Callable[..., str], timing: str) -> None:
+    if timing == "without-status":
+        page.add_init_script(_HIDE_RESPONSE_STATUS)
+    html, app = _rule_free_page_html()
+    # Without a status, the runtime loads the URL again to check the empty
+    # sheet, and finds that it loaded.
+    assert "data-citry-css-url" in html  # the page links its stylesheet
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(serve(html, app) + "/page", wait_until="networkidle")
+    page.wait_for_function("document.querySelector('.probe')?.textContent === 'mounted'")
+    assert errors == []
+    assert page.locator("link[data-citry-css-url]").count() == 1
+    assert page.locator('link[rel="stylesheet"]').count() == 1
 
 
 def test_sandboxed_page_does_not_mount_when_a_proxy_strips_the_cors_header(

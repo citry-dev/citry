@@ -26,7 +26,7 @@ class PythonCommandRecords(Component):
             CCommandPaletteGroup(
                 label="Draft actions",
                 commands=(
-                    CCommandPaletteCommand(value="save-draft", label="Save draft", shortcut="Ctrl S"),
+                    CCommandPaletteCommand(value="save-draft", label="Save draft"),
                     CCommandPaletteCommand(
                         value="delete-draft",
                         label="Delete draft",

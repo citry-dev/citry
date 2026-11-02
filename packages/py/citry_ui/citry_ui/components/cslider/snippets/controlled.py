@@ -6,7 +6,8 @@ class ControlledRangeSlider(Component):
       <section class="slider-example-stack">
         <c-CRangeSlider
           c-value="(20, 80)"
-          :value="range" :onValueChange="(next)=>range=next"
+          :value="range"
+          :onValueChange="(next)=>range=next"
         />
         <output v-text="`Selected ${range[0]} through ${range[1]}`">Selected 20 through 80</output>
       </section>

@@ -9,7 +9,11 @@ class MenuSizes(Component):
       <section class="archive-size-demo">
         <c-CMenu size="sm">
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
-            <c-CButton size="sm" c-disabled="activator_disabled" c-attrs="activator_attrs">Small</c-CButton>
+            <c-CButton
+              size="sm"
+              c-disabled="activator_disabled"
+              c-attrs="activator_attrs"
+            >Small</c-CButton>
           </c-fill>
           <c-fill name="default">
             <c-CMenuItem value="index">Pocket index</c-CMenuItem>
@@ -27,7 +31,11 @@ class MenuSizes(Component):
         </c-CMenu>
         <c-CMenu size="lg">
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
-            <c-CButton size="lg" c-disabled="activator_disabled" c-attrs="activator_attrs">Large</c-CButton>
+            <c-CButton
+              size="lg"
+              c-disabled="activator_disabled"
+              c-attrs="activator_attrs"
+            >Large</c-CButton>
           </c-fill>
           <c-fill name="default">
             <c-CMenuItem value="index">Grand index</c-CMenuItem>

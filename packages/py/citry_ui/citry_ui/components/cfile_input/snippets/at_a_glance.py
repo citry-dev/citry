@@ -11,7 +11,11 @@ class FileInputAtAGlance(Component):
           <c-fill name="label">Profile photo</c-fill>
           <c-fill name="default"><c-CFileInput name="photo" accept="image/*" /></c-fill>
         </c-CField>
-        <c-CDropTarget label="Project files" name="project_files" multiple>
+        <c-CDropTarget
+          label="Project files"
+          name="project_files"
+          multiple
+        >
           Drop files here or browse from this device
         </c-CDropTarget>
       </c-CCol>

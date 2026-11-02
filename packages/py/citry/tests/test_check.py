@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import textwrap
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
@@ -22,11 +23,15 @@ from citry._checker import (
     check_project,
 )
 from citry._diagnostic_catalog import I18N_CATALOG_INVALID, I18N_MISSING_PARAM_TYPE, TEMPLATE_MARKER_NAME_INVALID
+from citry._symbol_table import CHECK_NOTE, symtable
 from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
 from citry.ext.i18n.extension import I18nExtension
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+requires_symtable = pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
 
 
 @pytest.fixture(autouse=True)
@@ -107,6 +112,65 @@ class TestModeSelection:
         output = capsys.readouterr().out
         assert "--static" in output
         assert "limited inline template candidates" in output
+
+
+class TestReducedAnalysisNote:
+    """On an interpreter without the `symtable` module a loaded app's report says it checks less."""
+
+    @staticmethod
+    def _write_clean_app(tmp_path: Path) -> str:
+        # A loaded app is what runs the analyses that read the symbol table.
+        return _write_app(
+            tmp_path,
+            "from citry import Citry, Component\n"
+            "engine = Citry(autodiscover=False)\n"
+            "class Fine(Component):\n"
+            "    citry = engine\n"
+            "    template = '<div></div>'\n",
+        )
+
+    @staticmethod
+    def _hide_symtable(monkeypatch: pytest.MonkeyPatch) -> None:
+        # Each module imported the name, so each holds its own binding.
+        for module in ("citry._symbol_table", "citry._checker", "citry._template_python"):
+            monkeypatch.setattr(f"{module}.symtable", None)
+
+    def test_text_output_carries_the_note_when_symtable_is_missing(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = self._write_clean_app(tmp_path)
+        self._hide_symtable(monkeypatch)
+
+        assert _run_main(["--app", spec, "check"]) == 0
+        assert f"citry check: note: {CHECK_NOTE}\n" in capsys.readouterr().err
+
+    def test_json_notes_carry_the_note_when_symtable_is_missing(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = self._write_clean_app(tmp_path)
+        self._hide_symtable(monkeypatch)
+
+        assert _run_main(["--app", spec, "check", "--format", "json"]) == 0
+        assert CHECK_NOTE in json.loads(capsys.readouterr().out)["notes"]
+
+    def test_static_output_has_no_note_when_symtable_is_missing(self, tmp_path, monkeypatch, capsys):
+        # Static mode loads no app, so neither symbol-table analysis runs.
+        monkeypatch.chdir(tmp_path)
+        self._write_clean_app(tmp_path)
+        self._hide_symtable(monkeypatch)
+
+        assert _run_main(["check", "--static", "--format", "json"]) == 0
+        captured = capsys.readouterr()
+        assert CHECK_NOTE not in json.loads(captured.out)["notes"]
+        assert "_symtable" not in captured.err
+
+    @requires_symtable
+    def test_no_note_when_symtable_is_present(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = self._write_clean_app(tmp_path)
+
+        assert _run_main(["--app", spec, "check", "--format", "json"]) == 0
+        captured = capsys.readouterr()
+        assert CHECK_NOTE not in json.loads(captured.out)["notes"]
+        assert "_symtable" not in captured.err
 
 
 class TestStaticMode:
@@ -457,6 +521,40 @@ class TestRegistryMode:
         assert "missing values: name" in report.findings[1].message
         assert "unknown fills: wrong" in report.findings[1].message
         assert "missing fills: link" in report.findings[1].message
+
+    def test_literal_trans_values_on_an_indented_line_are_checked(self, tmp_path):
+        # A multi-line `c-values` starts on an indented line, which Citry
+        # accepts. The check must read it, not skip the `<c-trans>`.
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+                # @param {str} $name
+                greeting = Hello { $name }
+            """
+            template = """
+                <c-trans
+                  message="greeting"
+                  c-values="
+                    {'extra': 'Ada'}
+                  "
+                />
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == ["citry.i18n.argument-invalid"]
+        assert "unknown values: extra" in report.findings[0].message
+        assert "missing values: name" in report.findings[0].message
 
     def test_missing_i18n_param_type_is_a_configurable_warning(self, tmp_path):
         engine = Citry(
@@ -1684,6 +1782,24 @@ def test_byte_offsets_map_to_lines_and_columns_as_editors_count_them():
     assert at("f") == (3, 2)
 
 
+def test_byte_offsets_between_cr_and_lf_or_past_the_end_keep_their_positions():
+    # These are the edge cases of the line-start lookup. An offset between
+    # the CR and LF of a CR LF counts the CR as a line break, a lone CR ends
+    # a line too, and offsets outside the source count as its nearest end.
+    source = "ab\r\ncd"
+
+    assert _byte_offset_coordinates(source, 2) == (0, 2)
+    assert _byte_offset_coordinates(source, 3) == (1, 0)
+    assert _byte_offset_coordinates(source, 4) == (1, 0)
+    assert _byte_offset_coordinates(source, 6) == (1, 2)
+    assert _byte_offset_coordinates(source, 99) == (1, 2)
+    assert _byte_offset_coordinates(source, -5) == (0, 0)
+    assert _byte_offset_coordinates("a\rb", 3) == (1, 1)
+    # An offset inside a character has no column.
+    with pytest.raises(UnicodeDecodeError):
+        _byte_offset_coordinates("é", 1)
+
+
 def test_type_checker_ranges_count_bytes_as_python_reads_the_file():
     # ty and TypeScript read a file's raw text, CR LF included. Their range
     # keeps its lines and columns, and its byte offsets count each line
@@ -1841,6 +1957,50 @@ def test_registry_check_accepts_known_send_event_and_keeps_dynamic_and_on_event_
     assert not [finding for finding in report.findings if finding.code == "citry.browser.unknown-server-event"]
 
 
+def test_registry_check_reads_no_vue_variables_under_v_pre_but_reports_its_duplicate_id(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = """
+        <div v-pre>
+          <p v-if="a" id="same"></p>
+          <p v-else id="same"></p>
+        </div>
+        """
+        js = """
+        $component({});
+        """
+
+    class Plain(Component):
+        citry = engine
+        template = """
+        <div>
+          <p v-if="a"></p>
+        </div>
+        """
+        js = """
+        $component({});
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # Vue leaves `v-if` under `v-pre` as written, so only the component
+    # without `v-pre` reads `a`. Both `<p>` elements are on the page, so the
+    # repeated id is real.
+    assert sorted((item.origin.rsplit(".", 2)[-2], item.code) for item in report.findings) == [
+        ("Card", "citry.template.duplicate-id"),
+        ("Plain", "citry.vue.unknown-variable"),
+    ]
+    messages = {item.code: item.message for item in report.findings}
+    assert messages == {
+        "citry.template.duplicate-id": (
+            "Another element in this template already has id 'same'. An id must be unique in the page."
+        ),
+        "citry.vue.unknown-variable": "Vue variable 'a' is not available in this component.",
+    }
+
+
 def test_registry_check_reports_unknown_alpine_roots_and_respects_component_policy(tmp_path):
     engine = Citry(autodiscover=False)
 
@@ -1927,6 +2087,214 @@ def test_registry_check_reports_a_vue_read_of_a_python_loop_variable_once(tmp_pa
             'Use c-title="entry" to pass the Python value.',
         ),
     ]
+
+
+_TABLE_SLOT_TEMPLATE = """
+  <ul>
+    <li v-for="row in rows"><c-slot name="item" :row="row" /></li>
+  </ul>
+"""
+_PAGE_SCOPED_FILL_TEMPLATE = """
+  <c-Table>
+    <c-fill name="item" v-slot="{ row, missing }"><b>cell</b></c-fill>
+  </c-Table>
+"""
+
+
+def _unknown_slot_prop_findings(tmp_path: Path, engine: Citry) -> list[CheckFinding]:
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    return [item for item in report.findings if item.code == "citry.vue.unknown-slot-prop"]
+
+
+def test_registry_check_reports_a_v_slot_key_the_receiving_slot_does_not_pass(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = _TABLE_SLOT_TEMPLATE
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE
+
+    (finding,) = _unknown_slot_prop_findings(tmp_path, engine)
+
+    assert finding.severity == "warning"
+    assert finding.message == (
+        "Slot 'item' on <c-Table> passes no Vue prop named 'missing', so it is undefined in this fill. "
+        "The slot passes: row."
+    )
+    assert "Page" in finding.origin
+    # The range is the key `missing` itself, in the Page template after its shared indentation is removed.
+    assert (finding.line, finding.column, finding.end_line, finding.end_column) == (2, 37, 2, 44)
+    assert finding.source_kind == "inline"
+    assert finding.start_index is not None
+    assert finding.end_index is not None
+    text = textwrap.dedent(_PAGE_SCOPED_FILL_TEMPLATE).encode()
+    assert text[finding.start_index : finding.end_index] == b"missing"
+
+
+def test_registry_check_reports_a_key_the_slot_cannot_pass_because_it_passes_no_props(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = '<ul><c-slot name="item" /></ul>'
+
+    class Page(Component):
+        citry = engine
+        template = '<c-Table><c-fill name="item" v-slot="{ x }"><b>cell</b></c-fill></c-Table>'
+
+    (finding,) = _unknown_slot_prop_findings(tmp_path, engine)
+
+    assert finding.severity == "warning"
+    assert finding.message == (
+        "Slot 'item' on <c-Table> passes no Vue props, so 'x' is undefined in this fill. "
+        "If the slot passes Python data, read it with data= instead. Otherwise add it to its "
+        '<c-slot> as a Vue prop, such as :row="row".'
+    )
+    assert (finding.line, finding.column, finding.end_line, finding.end_column) == (0, 39, 0, 40)
+
+
+def test_registry_check_skips_the_v_slot_check_when_the_receiving_template_has_a_dynamic_slot_name(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = """
+          <ul>
+            <li v-for="row in rows"><c-slot name="item" :row="row" /></li>
+            <c-slot c-name="other" />
+          </ul>
+        """
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE
+
+    # A slot with a computed name may be the one `item` targets, so nothing
+    # proves which props the fill receives.
+    assert _unknown_slot_prop_findings(tmp_path, engine) == []
+
+
+def test_registry_check_counts_a_slot_prop_passed_from_inside_a_forwarded_fill(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Inner(Component):
+        citry = engine
+        template = '<div><c-slot name="x" /></div>'
+
+    class Table(Component):
+        citry = engine
+        # The `<c-slot name="item">` sits in a fill of `Inner`, so it is nested
+        # in a `<c-fill>` body, and it still decides what `item` passes.
+        template = """
+          <ul>
+            <li v-for="row in rows">
+              <c-Inner><c-fill name="x"><c-slot name="item" :row="row" /></c-fill></c-Inner>
+            </li>
+          </ul>
+        """
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE
+
+    (finding,) = _unknown_slot_prop_findings(tmp_path, engine)
+
+    # `row` is found inside the forwarded fill, so only `missing` is unknown.
+    # Had the walk skipped the fill body, the slot would look absent and
+    # nothing would be reported.
+    assert finding.message == (
+        "Slot 'item' on <c-Table> passes no Vue prop named 'missing', so it is undefined in this fill. "
+        "The slot passes: row."
+    )
+
+
+def test_registry_check_reads_the_template_a_receiving_subclass_inherits(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Base(Component):
+        citry = engine
+        template = _TABLE_SLOT_TEMPLATE
+
+        class JsData:
+            rows: list[str]
+
+    class Child(Base):
+        pass
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE.replace("Table", "Child")
+
+    (finding,) = _unknown_slot_prop_findings(tmp_path, engine)
+
+    # `Child` declares no template of its own, so it is checked against the
+    # `item` slot it inherits from `Base`.
+    assert finding.message == (
+        "Slot 'item' on <c-Child> passes no Vue prop named 'missing', so it is undefined in this fill. "
+        "The slot passes: row."
+    )
+
+
+def test_registry_check_skips_the_v_slot_check_for_an_unregistered_tag(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = _TABLE_SLOT_TEMPLATE
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = _PAGE_SCOPED_FILL_TEMPLATE.replace("Table", "Missing")
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # The unknown tag is reported by its own rule; the slot check adds nothing on top.
+    assert any(item.code == "citry.template.unknown-component" for item in report.findings)
+    assert not any(item.code == "citry.vue.unknown-slot-prop" for item in report.findings)
+
+
+def test_registry_check_skips_the_v_slot_check_when_every_key_is_passed_or_the_pattern_is_one_name(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = engine
+        template = """
+          <ul>
+            <li v-for="row in rows"><c-slot name="item" :row-data="row" /></li>
+          </ul>
+        """
+
+        class JsData:
+            rows: list[str]
+
+    class Page(Component):
+        citry = engine
+        template = """
+          <c-Table>
+            <c-fill name="item" v-slot="{ rowData }"><b>cell</b></c-fill>
+          </c-Table>
+          <c-Table>
+            <c-fill name="item" v-slot="props"><b>cell</b></c-fill>
+          </c-Table>
+        """
+
+    # `:row-data` reaches the fill as `rowData`, and a single name reads no key by name.
+    assert _unknown_slot_prop_findings(tmp_path, engine) == []
 
 
 def test_registry_check_defaults_unknown_alpine_roots_to_error(tmp_path):
@@ -2731,6 +3099,92 @@ def test_registry_check_reports_the_template_only_rules_with_the_application_set
         if code != "citry.template.invalid-nesting"
     ]
     assert findings == sorted(expected, key=lambda item: (item[2], item[0]))
+
+
+def _csp_findings(report) -> list[tuple[str, int | None, int | None, int | None, int | None]]:
+    return sorted(
+        (item.severity, item.line, item.column, item.end_line, item.end_column)
+        for item in report.findings
+        if item.code == "citry.template.csp-incompatible"
+    )
+
+
+def _csp_engine_components(engine: Citry) -> None:
+    """Define the two components whose templates the CSP tests check."""
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <button onclick="save()">Save</button>
+          <a href="javascript:go()">Go</a>
+          <script>run()</script>
+          <c-raw><b onclick="x">c</b></c-raw>
+        """
+
+    class Plain(Component):
+        citry = engine
+        # The non-ASCII letter shows that columns count characters, not bytes.
+        template = '<p>é <i onclick="y"></i></p>'
+
+
+@pytest.mark.parametrize(
+    ("mode", "severity"),
+    [("warn", "warning"), ("strict", "error")],
+)
+def test_registry_check_reports_strict_csp_problems_with_the_engines_severity(tmp_path, mode, severity):
+    engine = Citry(autodiscover=False, security_csp=mode)
+    _csp_engine_components(engine)
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # Each finding spans the attribute name, the javascript: value, or the tag
+    # name; <c-raw> content is read as the HTML that comes out.
+    assert _csp_findings(report) == [
+        (severity, 0, 8, 0, 15),
+        (severity, 1, 8, 1, 15),
+        (severity, 2, 9, 2, 24),
+        (severity, 3, 1, 3, 7),
+        (severity, 4, 10, 4, 17),
+    ]
+
+
+def test_registry_check_reports_nothing_about_csp_while_the_engine_has_it_off(tmp_path):
+    engine = Citry(autodiscover=False)
+    _csp_engine_components(engine)
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    assert _csp_findings(report) == []
+
+
+def test_registry_check_leaves_a_registered_components_attributes_out_of_the_csp_check(tmp_path):
+    engine = Citry(autodiscover=False, security_csp="strict")
+
+    class Inner(Component):
+        citry = engine
+        template = "<b>inner</b>"
+
+    class Outer(Component):
+        citry = engine
+        template = '<c-inner onclick="x" href="javascript:y" /><c-unknown onclick="x" />'
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    assert _csp_findings(report) == []
+
+
+def test_static_check_reports_nothing_about_csp_because_it_has_no_engine_settings(tmp_path):
+    (tmp_path / "card.py").write_text(
+        "from citry import Component\n"
+        "class Card(Component):\n"
+        '    template = \'<div titel="x" onclick="y"></div><script>z()</script>\'\n',
+        encoding="utf-8",
+    )
+
+    report = check_project(CheckAppSelection(), tmp_path)
+
+    # The misspelled attribute shows that the template was read.
+    assert [item.code for item in report.findings] == ["citry.template.misspelled-attribute"]
 
 
 def test_registry_check_reports_only_an_ordinary_component_inside_a_vue_v_for(tmp_path):

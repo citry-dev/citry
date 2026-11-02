@@ -41,23 +41,44 @@ def tag_states_component(app: Citry) -> type[Component]:
               <c-CTag value="closed" c-disabled="True">Closed</c-CTag>
             </c-CTagGroup>
             <div class="citry-ui-quality-grid" data-quality-state="variants">
-              <c-CTagGroup label="Soft" variant="soft" selection_mode="single" value="one">
+              <c-CTagGroup
+                label="Soft"
+                variant="soft"
+                selection_mode="single"
+                value="one"
+              >
                 <c-CTag value="one">One</c-CTag><c-CTag value="two">Two</c-CTag>
               </c-CTagGroup>
-              <c-CTagGroup label="Solid" variant="solid" size="sm">
+              <c-CTagGroup
+                label="Solid"
+                variant="solid"
+                size="sm"
+              >
                 <c-CTag value="one">Small</c-CTag>
               </c-CTagGroup>
-              <c-CTagGroup label="Outline" variant="outline" size="lg">
+              <c-CTagGroup
+                label="Outline"
+                variant="outline"
+                size="lg"
+              >
                 <c-CTag value="one">Large</c-CTag>
               </c-CTagGroup>
             </div>
             <div dir="rtl" data-quality-state="rtl">
-              <c-CTagGroup label="RTL topics" selection_mode="single" value="end">
+              <c-CTagGroup
+                label="RTL topics"
+                selection_mode="single"
+                value="end"
+              >
                 <c-CTag value="start">Start</c-CTag><c-CTag value="end">End</c-CTag>
               </c-CTagGroup>
             </div>
             <div style="color-scheme: dark; background: Canvas; color: CanvasText" data-quality-state="nested-dark">
-              <c-CTagGroup label="Dark topics" selection_mode="single" value="moon">
+              <c-CTagGroup
+                label="Dark topics"
+                selection_mode="single"
+                value="moon"
+              >
                 <c-CTag value="moon">Moon</c-CTag><c-CTag value="stars">Stars</c-CTag>
               </c-CTagGroup>
             </div>

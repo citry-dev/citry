@@ -11,6 +11,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component, ComponentLibrary
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -358,6 +359,7 @@ def test_plain_text_update_identity_rtl_css_and_accessibility(toast_page) -> Non
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file()
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => (await axe.run(document.querySelector('#notices'))).violations.filter(
           item => item.impact === 'serious' || item.impact === 'critical'

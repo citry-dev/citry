@@ -369,9 +369,22 @@ class CListbox(LibraryComponent):
     class Slots:
         default: SlotInput[CListboxDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "disabled",
+            "label",
+            "label_id",
+            "listbox_attrs",
+            "loop",
+            "mandatory",
+            "multiple",
+            "root_id",
+            "size",
+            "surface_id",
+            "value",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_CONTEXT, None) is not None:
@@ -656,7 +669,8 @@ class CListbox(LibraryComponent):
             activeValue = valueOf(option);
             options().forEach((entry) => {
               const active = entry === option;
-              entry.tabIndex = active && !rootDisabled() ? 0 : -1;
+              const tabIndex = active && !rootDisabled() ? 0 : -1;
+              if (entry.tabIndex !== tabIndex) entry.tabIndex = tabIndex;
               entry.toggleAttribute('data-active', active);
             });
             if (moveFocus) option.focus({preventScroll:false});
@@ -676,21 +690,28 @@ class CListbox(LibraryComponent):
               callbackDetail(next, previous, option, selected, source, sourceEvent),
             );
           };
+          // A write of the value already there still reports a change to
+          // observers, so each write below is skipped when nothing changes;
+          // otherwise a component that re-renders on such a change never
+          // goes idle.
+          const setAttr = (element, name, value) => {
+            if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+          };
           const applyState = () => {
             const disabled = rootDisabled();
-            root.dataset.variant = configuration.variant;
-            root.dataset.size = configuration.size;
+            if (root.dataset.variant !== configuration.variant) root.dataset.variant = configuration.variant;
+            if (root.dataset.size !== configuration.size) root.dataset.size = configuration.size;
             root.toggleAttribute('data-multiple', data.multiple);
             root.toggleAttribute('data-mandatory', configuration.mandatory);
             root.toggleAttribute('data-disabled', disabled);
-            surface.setAttribute('aria-disabled', disabled ? 'true' : 'false');
-            if (data.multiple) surface.setAttribute('aria-multiselectable', 'true');
+            setAttr(surface, 'aria-disabled', disabled ? 'true' : 'false');
+            if (data.multiple) setAttr(surface, 'aria-multiselectable', 'true');
             else surface.removeAttribute('aria-multiselectable');
             options().forEach((option) => {
               const selected = current.includes(valueOf(option));
               const itemDisabled = optionDisabled(option);
-              option.setAttribute('aria-selected', selected ? 'true' : 'false');
-              option.setAttribute('aria-disabled', itemDisabled ? 'true' : 'false');
+              setAttr(option, 'aria-selected', selected ? 'true' : 'false');
+              setAttr(option, 'aria-disabled', itemDisabled ? 'true' : 'false');
               option.toggleAttribute('data-selected', selected);
               option.toggleAttribute('data-disabled', itemDisabled);
             });
@@ -702,7 +723,8 @@ class CListbox(LibraryComponent):
             }
             options().forEach((option) => {
               const isActive = option === active;
-              option.tabIndex = isActive && !disabled ? 0 : -1;
+              const tabIndex = isActive && !disabled ? 0 : -1;
+              if (option.tabIndex !== tabIndex) option.tabIndex = tabIndex;
               option.toggleAttribute('data-active', isActive);
             });
             activeValue = active ? valueOf(active) : null;
@@ -1006,9 +1028,26 @@ class CListboxOption(LibraryComponent):
         description: SlotInput[CListboxOptionDescriptionSlotData] | None = None
         end: SlotInput[CListboxOptionStateSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "active",
+            "attrs",
+            "default_slot_data",
+            "described_by",
+            "description_id",
+            "description_slot_data",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "label_id",
+            "morph_key",
+            "option_id",
+            "selected",
+            "state_slot_data",
+            "text_value",
+            "value",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_listbox_option_snapshot", None)
@@ -1203,10 +1242,6 @@ class CListboxGroup(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CListboxGroupDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         provided = self.inject(_CONTEXT, None)

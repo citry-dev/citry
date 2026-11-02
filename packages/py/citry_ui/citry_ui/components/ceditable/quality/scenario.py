@@ -20,18 +20,41 @@ def editable_states_component(app: Citry) -> type[Component]:
                 </c-fill>
               </c-CField>
             </form>
-            <c-CEditable value="Inside actions" editing c-input_attrs="{'aria-label':'Inside actions'}" />
             <c-CEditable
-              value="Outside actions" editing action_position="outside" variant="filled"
+              value="Inside actions"
+              editing
+              c-input_attrs="{'aria-label':'Inside actions'}"
+            />
+            <c-CEditable
+              value="Outside actions"
+              editing
+              action_position="outside"
+              variant="filled"
               c-input_attrs="{'aria-label':'Outside actions'}"
             />
-            <c-CEditable value="Read only" readonly c-input_attrs="{'aria-label':'Read only'}" />
-            <c-CEditable value="Disabled" disabled c-input_attrs="{'aria-label':'Disabled'}" />
+            <c-CEditable
+              value="Read only"
+              readonly
+              c-input_attrs="{'aria-label':'Read only'}"
+            />
+            <c-CEditable
+              value="Disabled"
+              disabled
+              c-input_attrs="{'aria-label':'Disabled'}"
+            />
             <div dir="rtl" style="inline-size:16rem">
-              <c-CEditable value="عنوان المشروع" editing c-input_attrs="{'aria-label':'عنوان المشروع'}" />
+              <c-CEditable
+                value="عنوان المشروع"
+                editing
+                c-input_attrs="{'aria-label':'عنوان المشروع'}"
+              />
             </div>
             <div style="color-scheme:dark; background:Canvas; color:CanvasText; padding:1rem">
-              <c-CEditable value="Night title" variant="plain" size="lg" />
+              <c-CEditable
+                value="Night title"
+                variant="plain"
+                size="lg"
+              />
             </div>
           </section>
         """

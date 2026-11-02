@@ -10,7 +10,11 @@ class ToastAtAGlance(Component):
     template = """
       <section class="toast-sampler">
         <p>These initial messages demonstrate presentation intent separately from urgency.</p>
-        <c-CToastRegion c-items="items" c-duration_ms="0" c-limit="5" />
+        <c-CToastRegion
+          c-items="items"
+          c-duration_ms="0"
+          c-limit="5"
+        />
       </section>
     """
 

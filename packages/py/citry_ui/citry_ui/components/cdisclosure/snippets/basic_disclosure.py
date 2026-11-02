@@ -7,7 +7,11 @@ citry.register_library(citry_ui)
 class BasicDisclosure(Component):
     template = """
       <c-CCol gap="md">
-        <c-CDisclosure open heading_level="2" region>
+        <c-CDisclosure
+          open
+          heading_level="2"
+          region
+        >
           <c-fill name="title">Install prerequisites</c-fill>
           <c-fill name="default">
             Install Python, create a virtual environment, then add Citry.

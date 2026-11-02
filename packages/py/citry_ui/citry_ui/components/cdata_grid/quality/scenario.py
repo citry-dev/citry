@@ -28,7 +28,12 @@ def data_grid_states_component(app: Citry) -> type[Component]:
                 c-selected="['grace']"
                 striped
                 column_borders
-                :sort="sort" :selected="selected" :onSortChange="(next)=>{sort=next;notice='Sort accepted'}" :onSelectionChange="(next)=>{selected=next;notice='Selection accepted'}" :onCellActivate="(detail)=>notice=`Activated ${detail.rowKey}/${detail.columnKey}`" :onCellEditCommit="(value,detail)=>notice=`Edit requested ${detail.rowKey}/${detail.columnKey}: ${value}`"
+                :sort="sort"
+                :selected="selected"
+                :onSortChange="(next)=>{sort=next;notice='Sort accepted'}"
+                :onSelectionChange="(next)=>{selected=next;notice='Selection accepted'}"
+                :onCellActivate="(detail)=>notice=`Activated ${detail.rowKey}/${detail.columnKey}`"
+                :onCellEditCommit="(value,detail)=>notice=`Edit requested ${detail.rowKey}/${detail.columnKey}: ${value}`"
               >
                 <c-fill name="caption">Keyboard-navigable project members</c-fill>
               </c-CDataGrid>
@@ -47,9 +52,23 @@ def data_grid_states_component(app: Citry) -> type[Component]:
               />
             </div>
             <div class="citry-ui-quality-grid">
-              <c-CDataGrid c-columns="columns" c-rows="[]" label="Empty members" />
-              <c-CDataGrid c-columns="columns" c-rows="rows" label="Loading members" state="loading" />
-              <c-CDataGrid c-columns="columns" c-rows="rows" label="Failed members" state="error" />
+              <c-CDataGrid
+                c-columns="columns"
+                c-rows="[]"
+                label="Empty members"
+              />
+              <c-CDataGrid
+                c-columns="columns"
+                c-rows="rows"
+                label="Loading members"
+                state="loading"
+              />
+              <c-CDataGrid
+                c-columns="columns"
+                c-rows="rows"
+                label="Failed members"
+                state="error"
+              />
             </div>
           </section>
         """

@@ -1217,7 +1217,7 @@ mod tests {
             // Vue slot props point at the fill's `data` attribute.
             (
                 r#"<c-card><template #item="{ row }">x</template></c-card>"#,
-                r#"use '<c-fill name="item">' instead. Read the slot's data with the fill's 'data="..."' attribute."#,
+                r#"use '<c-fill name="item">' instead. Read Vue slot props with the fill's 'v-slot="{ ... }"', or Python slot data with its 'data="..."'."#,
             ),
             (
                 r#"<c-card><template c-v-slot:title="x">x</template></c-card>"#,
@@ -1285,7 +1285,7 @@ mod tests {
         )
         .unwrap_err()
         .to_string();
-        assert!(!error.contains("Read the slot's data"), "{error}");
+        assert!(!error.contains("Read Vue slot props"), "{error}");
     }
 
     #[test]

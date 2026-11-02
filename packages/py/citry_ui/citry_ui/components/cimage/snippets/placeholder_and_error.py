@@ -32,7 +32,8 @@ class ImagePlaceholderAndError(Component):
               alt="Horsehead Nebula behind a dark dust cloud"
               c-width="1280"
               c-height="720"
-              :src="source" :onStatusChange="(detail)=>status=detail.status"
+              :src="source"
+              :onStatusChange="(detail)=>status=detail.status"
             >
               <c-fill name="placeholder">
                 <div class="image-feedback__placeholder">

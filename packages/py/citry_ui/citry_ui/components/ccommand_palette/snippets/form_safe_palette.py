@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from typing import Any
 
 import citry_ui
@@ -32,7 +30,11 @@ class FormSafePalette(Component):
         <c-CCommandPalette
           label="Profile commands"
           c-entries="commands"
-          :open="open" :query="query" :onOpenChange="(value)=>open=value" :onQueryChange="(value)=>query=value" :onAction="runAction"
+          :open="open"
+          :query="query"
+          :onOpenChange="(value)=>open=value"
+          :onQueryChange="(value)=>query=value"
+          :onAction="runAction"
         >
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
             <c-CButton

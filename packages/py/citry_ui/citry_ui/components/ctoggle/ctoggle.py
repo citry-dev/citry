@@ -171,10 +171,6 @@ class CToggleGroup(LibraryComponent):
     class Slots:
         default: SlotInput[CToggleGroupDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         label = _plain("CToggleGroup label", kwargs.label)
         validate_boolean("CToggleGroup", "multiple", kwargs.multiple)
@@ -257,8 +253,7 @@ class CToggleGroup(LibraryComponent):
       </div>
     """
 
-    js = (
-        r"""
+    js = r"""
       $component({
         props: {value: {}, disabled: {}, orientation: {}, variant: {}, size: {}, onValueChange: {}},
         inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
@@ -317,10 +312,8 @@ class CToggleGroup(LibraryComponent):
             const localDisabled = typeof disabled === "boolean" ? disabled : data.serverDisabled;
             const effectiveDisabled = Boolean(form?.disabled) || localDisabled;
             root.toggleAttribute("data-disabled", effectiveDisabled);
-"""
-        '            root.dataset.orientation = resolveChoice("orientation", data.serverOrienta'
-        'tion, ["horizontal", "vertical"]);\n'
-        r"""            const variant = resolveChoice("variant", data.serverVariant, ["soft", "outline", "plain"]);
+            root.dataset.orientation = resolveChoice("orientation", data.serverOrientation, ["horizontal", "vertical"]);
+            const variant = resolveChoice("variant", data.serverVariant, ["soft", "outline", "plain"]);
             const size = resolveChoice("size", data.serverSize, ["sm", "md", "lg"]);
             root.dataset.variant = variant;
             root.dataset.size = size;
@@ -365,8 +358,7 @@ class CToggleGroup(LibraryComponent):
           };
         },
       })
-    """
-    )
+    """  # noqa: E501
 
 
 class CToggle(LibraryComponent):
@@ -384,10 +376,6 @@ class CToggle(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CToggleDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context_value = self.inject(_TOGGLE_CONTEXT_KEY, None)

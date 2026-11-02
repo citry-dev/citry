@@ -12,7 +12,7 @@ The JS/CSS dependency types collected and placed at serialize time, and the buil
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L139" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L139" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -82,7 +82,7 @@ Citry's asset routes.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L158" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L158" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -113,7 +113,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L159" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L159" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -144,7 +144,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L160" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L160" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -175,7 +175,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L161" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L161" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -215,7 +215,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L58" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L58" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -274,7 +274,7 @@ ordering per list.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L83" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L83" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -305,7 +305,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L84" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L84" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -345,7 +345,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L116" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L116" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -372,7 +372,7 @@ raises when neither or both are set.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L125" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L125" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -404,7 +404,7 @@ url-based dependencies.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L128" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L128" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -436,7 +436,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L131" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L131" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -467,7 +467,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L133" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L133" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -503,7 +503,7 @@ generated stylesheet carrying <code>css_data()</code> values), or <code>"extra"<
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L140" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L140" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -535,7 +535,7 @@ known. Used in error messages and for per-component hooks.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L148" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L148" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -566,7 +566,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L161" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L161" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -608,7 +608,7 @@ the element in the browser.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L48" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L48" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -642,7 +642,7 @@ cache.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L61" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L61" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -673,7 +673,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L63" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L63" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -704,7 +704,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L65" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L65" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -735,7 +735,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L67" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L67" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -766,7 +766,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L69" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L69" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -806,7 +806,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L212" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L212" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -842,7 +842,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L229" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L229" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -880,7 +880,7 @@ type); <code>module</code>/<code>importmap</code>/other types are never wrapped.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L244" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L244" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -911,7 +911,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L255" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L255" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -951,7 +951,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L280" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L280" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -984,7 +984,7 @@ otherwise renders the <code>content</code> inline as <code>&lt;style&gt;...&lt;/
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L294" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L294" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1015,7 +1015,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L304" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L304" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1046,7 +1046,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/types.py#L327" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/types.py#L327" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1086,7 +1086,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L164" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L164" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1124,7 +1124,7 @@ serialized (<code>on_serialize</code>), it turns the records into
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L182" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L182" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1151,7 +1151,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L183" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L183" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1178,7 +1178,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L184" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L184" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1205,7 +1205,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L185" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L185" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1232,7 +1232,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L187" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L187" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1263,7 +1263,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L195" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L195" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1294,7 +1294,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L204" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L204" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1325,7 +1325,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L241" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L241" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1356,7 +1356,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L254" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L254" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1387,7 +1387,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L270" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L270" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1418,7 +1418,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L327" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L327" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1449,7 +1449,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L352" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L352" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1480,7 +1480,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L361" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L361" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1531,7 +1531,7 @@ to win.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/emission.py#L71" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/emission.py#L71" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1561,7 +1561,7 @@ place to add, remove, or reorder entries.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/emission.py#L83" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/emission.py#L83" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1592,7 +1592,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/emission.py#L85" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/emission.py#L85" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1623,7 +1623,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/emission.py#L87" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/emission.py#L87" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1654,7 +1654,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/emission.py#L89" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/emission.py#L89" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1687,7 +1687,7 @@ render-time hooks collected.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/emission.py#L93" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/emission.py#L93" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1718,7 +1718,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/emission.py#L95" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/emission.py#L95" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1750,7 +1750,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/emission.py#L98" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/emission.py#L98" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -1797,7 +1797,7 @@ install a Vue plugin for that app.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/ext/dependencies/extension.py#L125" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/ext/dependencies/extension.py#L125" target="_blank" rel="noopener">
 View source
 </a>
 

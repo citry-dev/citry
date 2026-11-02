@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 import pytest
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 _ADAPTER = Path(__file__).parents[1] / "static" / "playground" / "analysis_adapter.py"
+_PORTABLE_IDE = Path(__file__).parents[1] / "static" / "playground" / "portable_ide.py"
 
 
 def _catalog_snapshot() -> dict[str, object]:
@@ -44,13 +51,24 @@ def _catalog_snapshot() -> dict[str, object]:
 
 
 @pytest.fixture(scope="module")
-def adapter() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("citry_playground_analysis_adapter", _ADAPTER)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def adapter() -> Iterator[ModuleType]:
+    # The adapter imports the generated `portable_ide.py`, as in the Worker,
+    # so every test here runs that copy rather than its source.
+    portable_spec = importlib.util.spec_from_file_location("citry_portable_ide", _PORTABLE_IDE)
+    assert portable_spec is not None
+    assert portable_spec.loader is not None
+    portable = importlib.util.module_from_spec(portable_spec)
+    sys.modules["citry_portable_ide"] = portable
+    try:
+        portable_spec.loader.exec_module(portable)
+        spec = importlib.util.spec_from_file_location("citry_playground_analysis_adapter", _ADAPTER)
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        yield module
+    finally:
+        sys.modules.pop("citry_portable_ide", None)
 
 
 def test_analysis_reports_and_clears_real_parser_diagnostics(adapter: ModuleType) -> None:
@@ -207,3 +225,38 @@ def test_runtime_catalog_requires_an_exact_integer_schema(adapter: ModuleType) -
 
     with pytest.raises(ValueError, match="unsupported"):
         adapter.update_catalog_json(json.dumps(snapshot))
+
+
+# Loads the generated `portable_ide.py` the way `analysis_worker.js` does: as the
+# top-level module `citry_portable_ide`, with `citry-core` installed and the
+# `citry` package absent, then runs the adapter beside it.
+_WORKER_LOAD = """
+import importlib.util, json, sys
+sys.modules["citry"] = None  # the playground Worker installs only citry-core
+portable_path, adapter_path = sys.argv[1], sys.argv[2]
+spec = importlib.util.spec_from_file_location("citry_portable_ide", portable_path)
+portable = importlib.util.module_from_spec(spec)
+sys.modules["citry_portable_ide"] = portable
+spec.loader.exec_module(portable)
+from citry_core.template_parser import parse_template
+uses = portable.template_tag_uses(parse_template('<c-if cond="x"><div><c-card /></div></c-if>'))
+print(json.dumps([use.tag for use in uses]))
+adapter = {"__name__": "citry_playground_analysis_adapter"}
+exec(compile(open(adapter_path).read(), adapter_path, "exec"), adapter)
+print(adapter["analyze_regions_json"](json.dumps([{"id": "card", "source": "<c-if>"}])))
+"""
+
+
+def test_generated_portable_rules_load_without_the_citry_package() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", _WORKER_LOAD, str(_PORTABLE_IDE), str(_ADAPTER)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    tags, analysis = result.stdout.splitlines()
+    # Opening and closing tags, in source order.
+    assert json.loads(tags) == ["c-if", "div", "c-card", "div", "c-if"]
+    assert json.loads(analysis)["diagnostics"][0]["code"].startswith("citry.parse")

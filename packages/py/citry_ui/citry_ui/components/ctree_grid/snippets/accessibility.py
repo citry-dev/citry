@@ -19,9 +19,15 @@ class TreeGridAccessibility(Component):
             ],
         }
 
-    template = (
-        '<c-CTreeGrid c-columns="columns" c-rows="rows" label="Records" selection="multiple" density="spacious" />'
-    )
+    template = """
+      <c-CTreeGrid
+        c-columns="columns"
+        c-rows="rows"
+        label="Records"
+        selection="multiple"
+        density="spacious"
+      />
+    """
 
 
 preview = TreeGridAccessibility()

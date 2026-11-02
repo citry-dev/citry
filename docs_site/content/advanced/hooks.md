@@ -252,9 +252,12 @@ class Counter(Component):
     """
 ```
 
-To put the output inside another component, wrap it where you use it, as
-in `<c-Panel><c-Counter /></c-Panel>`. To read the HTML in a log or a
-test, turn the whole render into a string after it finishes:
+To put the output inside another component, pass `result` to it, as in
+`return Panel(body=result)`, or wrap the component where you use it, as
+in `<c-Panel><c-Counter /></c-Panel>`. Place `result` in one spot on the
+page: placing it in two raises an error when the page is turned into
+HTML. To read the HTML in a log or a test, turn the whole render into a
+string after it finishes:
 
 ```python
 counter = Counter()

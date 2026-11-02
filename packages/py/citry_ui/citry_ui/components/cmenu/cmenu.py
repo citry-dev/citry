@@ -834,9 +834,23 @@ class CMenu(LibraryComponent):
         activator: SlotInput[CMenuActivatorSlotData]
         default: SlotInput[CMenuDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "activator_attrs",
+            "activator_disabled",
+            "attrs",
+            "close_on_select",
+            "declarations",
+            "disabled",
+            "loop",
+            "match_width",
+            "menu_id",
+            "menu_surface",
+            "open",
+            "placement",
+            "registry",
+            "size",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         return _build_menu_root_snapshot(self, kwargs)
@@ -1009,7 +1023,8 @@ class CMenu(LibraryComponent):
           if (element.getAttribute(name) !== value) element.setAttribute(name, value);
         };
         const classes = (element, ...names) => {
-          for (const name of names) element.classList.add(name);
+          // classList.add rewrites the class attribute even when the class is already there.
+          for (const name of names) if (!element.classList.contains(name)) element.classList.add(name);
         };
         const repair = () => {
           for (const [element, values, names] of [
@@ -1157,7 +1172,16 @@ class CMenu(LibraryComponent):
           // Server HTML may advertise an initially open Menu. Until the
           // settled declaration tree and activator are validated, expose no
           // interactive surface to assistive technology or pointer input.
-          surface.inert = true;
+          // An open menu handed over by a server render keeps its focused
+          // item: making it inert would blur that item.
+          const keepsFocusedOpenMenu = Boolean(surface.__citryUiMenuRuntime?.open)
+            && anchoredLayerRuntime.composedContains(
+              surface,
+              anchoredLayerRuntime.coordinatorFor(surface).deepActiveElement(),
+            );
+          if (!keepsFocusedOpenMenu) {
+            surface.inert = true;
+          }
           surface.removeAttribute("data-open");
           surface.removeAttribute("data-citry-menu-exiting");
           surface.removeAttribute("data-citry-menu-initialized");
@@ -1186,6 +1210,8 @@ class CMenu(LibraryComponent):
             .getPropertyValue("--_cui-menu-anchor")
             .trim();
           if (!anchorName.startsWith("--")) {
+            // No controller will drive the open menu, so make it inert.
+            surface.inert = true;
             throw new Error(`[citry-ui] ${componentName} could not resolve its CSS anchor name.`);
           }
           anchor.style.setProperty("anchor-name", anchorName);
@@ -1214,6 +1240,48 @@ class CMenu(LibraryComponent):
           let internalOpen = data.open;
           let controlled = false;
           let structuralSuppressed = false;
+          // Set once this run's first reconcile is done, so a blocked open on
+          // the first render can be told apart from one asked for later.
+          let settled = false;
+          // A blocked-open episode tells the owner once while an ancestor
+          // keeps the menu hidden, so an owner that asks again after every
+          // report cannot loop. It ends once the trigger can be seen again,
+          // however that happens (a dialog reopened in the browser, a
+          // collapsed region expanded), which a ResizeObserver notices; it
+          // watches only while an episode lasts.
+          let shownWatch = null;
+          const startBlockedEpisode = () => {
+            invalidEpisodes.add("ancestor-open");
+            if (shownWatch || typeof ResizeObserver !== "function") {
+              return;
+            }
+            shownWatch = new ResizeObserver(() => {
+              if (trigger.getClientRects().length === 0) {
+                return;
+              }
+              shownWatch.disconnect();
+              shownWatch = null;
+              invalidEpisodes.delete("ancestor-open");
+            });
+            // A ResizeObserver reports nothing for an inline element such as a
+            // link, so watch the nearest ancestor that has a box of its own,
+            // stepping out of a shadow root. If that box keeps a fixed size
+            // while only an inline wrapper inside it hides the trigger, the
+            // episode lasts until the trigger next opens.
+            // TypeScript types a shadow root's host as `Element`, so `box` is typed that wide.
+            /** @type {Element} */
+            let box = trigger;
+            while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
+              // Step out of a shadow root to its host; a document has no host.
+              const boxRoot = box.getRootNode();
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
+              if (!next) {
+                break;
+              }
+              box = next;
+            }
+            shownWatch.observe(box);
+          };
           let previousControlledOpen = null;
           let onOpenChange = null;
           let onAction = null;
@@ -1455,9 +1523,49 @@ class CMenu(LibraryComponent):
               (candidate) => candidate.root,
             );
             for (const candidate of registrations.values()) {
-              if (candidate.element) {
-                candidate.element.tabIndex = candidate === entry ? 0 : -1;
+              const tabIndex = candidate === entry ? 0 : -1;
+              // An unchanged write still reports a change, and the observer
+              // would reconcile and refocus the item in a loop.
+              if (candidate.element && candidate.element.tabIndex !== tabIndex) {
+                candidate.element.tabIndex = tabIndex;
               }
+            }
+          };
+          // Only a key the reader pressed may scroll the page to an item.
+          let keyboardReveal = false;
+          // The least scroll that shows the span start..end in view..viewEnd.
+          const nearest = (start, end, view, viewEnd) => (
+            start < view ? start - view : end > viewEnd ? Math.min(end - viewEnd, start - view) : 0
+          );
+          // Scroll only the boxes between the item and its popup:
+          // `scrollIntoView` also scrolls the page, which would pull a
+          // reader who scrolled away back to the menu on every refocus.
+          const revealInSurface = (element, menuSurface) => {
+            if (!menuSurface?.contains(element)) return;
+            for (let box = element.parentElement; box; box = box === menuSurface ? null : box.parentElement) {
+              const style = getComputedStyle(box);
+              // Measured per box, since scrolling an inner box moves the
+              // item; `client*` is the area inside the border and scrollbar.
+              const item = element.getBoundingClientRect();
+              const outer = box.getBoundingClientRect();
+              const top = outer.top + box.clientTop;
+              const left = outer.left + box.clientLeft;
+              if (box.scrollHeight > box.clientHeight && /auto|scroll/.test(style.overflowY)) {
+                box.scrollTop += nearest(item.top, item.bottom, top, top + box.clientHeight);
+              }
+              if (box.scrollWidth > box.clientWidth && /auto|scroll/.test(style.overflowX)) {
+                box.scrollLeft += nearest(item.left, item.right, left, left + box.clientWidth);
+              }
+            }
+          };
+          // A menu taller than the screen, as at high zoom, takes the keys a
+          // reader would scroll with, so a key press scrolls the page to an
+          // item still off screen (this window only, not a parent page).
+          const revealOnPage = (element) => {
+            const rect = element.getBoundingClientRect();
+            const view = element.ownerDocument.defaultView;
+            if (rect.top < 0 || rect.left < 0 || rect.bottom > view.innerHeight || rect.right > view.innerWidth) {
+              element.scrollIntoView({ block: "nearest", inline: "nearest" });
             }
           };
           const focusEntry = (entry, scroll = true) => {
@@ -1467,7 +1575,10 @@ class CMenu(LibraryComponent):
             updateCurrent(entry);
             entry.element.focus({ preventScroll: true });
             if (scroll) {
-              entry.element.scrollIntoView({ block: "nearest", inline: "nearest" });
+              revealInSurface(entry.element, entry.surface);
+              if (keyboardReveal) {
+                revealOnPage(entry.element);
+              }
             }
           };
           const focusBoundary = (menuSurface, boundary) => {
@@ -1797,8 +1908,17 @@ class CMenu(LibraryComponent):
               }
               if (!layerCoordinator.mayOpen(layer)) {
                 structuralSuppressed = true;
-                if (!invalidEpisodes.has("ancestor-open")) {
-                  invalidEpisodes.add("ancestor-open");
+                // Report the blocked open when the menu was showing before a
+                // server re-render handed it over, or the owner asked for it
+                // after the first render, once while it stays hidden (see
+                // startBlockedEpisode). A menu the server rendered open inside a
+                // closed dialog was never shown, so the first render reports
+                // nothing.
+                if (
+                  (settled || Boolean(retainedRuntimeState && runtimeState.open))
+                  && !invalidEpisodes.has("ancestor-open")
+                ) {
+                  startBlockedEpisode();
                   notifyOpen(false, "ancestor", surface, true);
                 }
                 normalizeRootClosed("ancestor", surface);
@@ -1840,12 +1960,18 @@ class CMenu(LibraryComponent):
               queueMicrotask(() => {
                 if (active && logicalOpen && currentGeneration === generation) {
                   context.restore?.();
-                  if (context.focus === "current") {
-                    if (currentEntry) {
-                      focusEntry(currentEntry);
+                  // The opening key's handler has returned; its request says.
+                  keyboardReveal = Boolean(context.reveal);
+                  try {
+                    if (context.focus === "current") {
+                      if (currentEntry) {
+                        focusEntry(currentEntry);
+                      }
+                    } else if (context.focus) {
+                      focusBoundary(surface, context.focus ?? "first");
                     }
-                  } else if (context.focus) {
-                    focusBoundary(surface, context.focus ?? "first");
+                  } finally {
+                    keyboardReveal = false;
                   }
                 }
               });
@@ -1928,7 +2054,8 @@ class CMenu(LibraryComponent):
                 // the opening commit even before the owner prop settles.
                 generation += 1;
               }
-              pendingOpenRequest = { nextOpen, reason, source, focus };
+              // Focus lands after the key handler returns, so note the key.
+              pendingOpenRequest = { nextOpen, reason, source, focus, reveal: keyboardReveal };
               const request = pendingOpenRequest;
               const repairEntry = currentEntry;
               const callbackResult = notifyOpen(nextOpen, reason, source);
@@ -1962,7 +2089,7 @@ class CMenu(LibraryComponent):
               };
             }
             internalOpen = nextOpen;
-            applyRootOpen(nextOpen, { reason, source, focus });
+            applyRootOpen(nextOpen, { reason, source, focus, reveal: keyboardReveal });
             let callbackResult;
             if (logicalOpen === nextOpen) {
               callbackResult = notifyOpen(nextOpen, reason, source);
@@ -2068,6 +2195,9 @@ class CMenu(LibraryComponent):
                 pendingForcedCloseNotice ??= { reason: publicReason, source };
               } else {
                 notifyOpen(false, publicReason, source, true);
+              }
+              if (publicReason === "ancestor") {
+                startBlockedEpisode();
               }
             } else {
               normalizeRootClosed(publicReason, source);
@@ -2263,6 +2393,14 @@ class CMenu(LibraryComponent):
             activate(entry, event);
           };
           const onKeydown = (event) => {
+            keyboardReveal = true;
+            try {
+              handleKeydown(event);
+            } finally {
+              keyboardReveal = false;
+            }
+          };
+          const handleKeydown = (event) => {
             if (
               !externalActivation
               && (event.target === trigger || trigger.contains(event.target))
@@ -2631,6 +2769,7 @@ class CMenu(LibraryComponent):
               });
             }
             pendingOpenRequest = null;
+            settled = true;
           };
           const scheduleReconcile = () => {
             if (reconciliationTimer !== null) {
@@ -2967,7 +3106,9 @@ class CMenu(LibraryComponent):
               if (record.type !== "attributes") {
                 return true;
               }
-              const entry = registrations.get(record.target);
+              // A submenu's trigger, not its registered wrapper, takes the tabindex.
+              const entry = registrations.get(record.target)
+                ?? [...registrations.values()].find((candidate) => candidate.element === record.target);
               if (entry?.element === record.target) {
                 return !(
                   record.attributeName === "tabindex"
@@ -2994,6 +3135,7 @@ class CMenu(LibraryComponent):
             if (service.controller === context) service.controller = null;
             const handoff = options.handoff === true;
             active = false;
+            shownWatch?.disconnect();
             runtimeState.open = logicalOpen;
             runtimeState.currentKey = currentEntry?.key ?? null;
             runtimeState.currentValue = currentEntry?.value ?? null;
@@ -3956,9 +4098,26 @@ class CMenuItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "checked",
+            "checked_text",
+            "close_on_select",
+            "described_by",
+            "description_id",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "href",
+            "intent",
+            "kind",
+            "label_id",
+            "root_tag",
+            "text_value",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _item_snapshot(self, "CMenuItem", kwargs, kind="item")
@@ -4058,9 +4217,27 @@ class CMenuCheckboxItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "checked",
+            "checked_text",
+            "close_on_select",
+            "described_by",
+            "description_id",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "href",
+            "indicator",
+            "intent",
+            "kind",
+            "label_id",
+            "root_tag",
+            "text_value",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         snapshot = _item_snapshot(self, "CMenuCheckboxItem", kwargs, kind="checkbox")
@@ -4178,9 +4355,26 @@ class CMenuRadioItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "checked",
+            "checked_text",
+            "close_on_select",
+            "described_by",
+            "description_id",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "href",
+            "intent",
+            "kind",
+            "label_id",
+            "root_tag",
+            "text_value",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _item_snapshot(self, "CMenuRadioItem", kwargs, kind="radio")
@@ -4276,10 +4470,6 @@ class CMenuGroup(LibraryComponent):
     class Slots:
         label: SlotInput[CMenuGroupLabelSlotData]
         default: SlotInput[CMenuGroupDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self, "CMenuGroup")
@@ -4402,9 +4592,15 @@ class CMenuRadioGroup(LibraryComponent):
         default: SlotInput[CMenuRadioGroupDefaultSlotData]
         label: SlotInput[CMenuRadioGroupLabelSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "has_label",
+            "key",
+            "label_id",
+            "registry",
+            "value",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_menu_radio_group_snapshot", None)
@@ -4729,10 +4925,6 @@ class CMenuSeparator(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self, "CMenuSeparator")
         if context.registry.kind == "radio":
@@ -4813,9 +5005,28 @@ class CMenuSubmenu(LibraryComponent):
         description: SlotInput[CMenuSubmenuDescriptionSlotData] | None = None
         end: SlotInput[CMenuSubmenuEndSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "anchor_name",
+            "attrs",
+            "described_by",
+            "description_id",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "indicator",
+            "intent",
+            "key",
+            "label_id",
+            "menu_attrs",
+            "menu_id",
+            "registry",
+            "text_value",
+            "trigger_attrs",
+            "trigger_id",
+            "value",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_menu_submenu_snapshot", None)
@@ -5016,9 +5227,14 @@ class CMenuSubmenu(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       $component({
         props: {
           disabled: {},
@@ -5169,7 +5385,8 @@ class CMenuSubmenu(LibraryComponent):
               side = "block-end";
             }
             latestGeometry = { trigger: triggerRect, surface: surfaceRect, side };
-            wrapper.dataset.citryMenuPhysicalSide = side;
+            // Runs every frame, so skip an unchanged write: observers would still see it.
+            if (wrapper.dataset.citryMenuPhysicalSide !== side) wrapper.dataset.citryMenuPhysicalSide = side;
           };
           const geometryRuntime = (() => {
             anchoredLayerRuntime.menuGeometry ??= new WeakMap();
@@ -5426,7 +5643,6 @@ class CMenuSubmenu(LibraryComponent):
         },
       });
     """
-    )
 
 
 class CInternalMenuSurface(LibraryComponent):
@@ -5437,10 +5653,6 @@ class CInternalMenuSurface(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[object]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     template = """
       <div
@@ -5484,10 +5696,6 @@ class CInternalMenuCollection(LibraryComponent):
     class Slots:
         default: SlotInput[object]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -5513,10 +5721,6 @@ class CInternalMenuContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[object]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,

@@ -23,12 +23,43 @@ def date_picker_states_component(app: Citry) -> type[Component]:
               <button type="submit">Submit date</button><button type="reset">Reset date</button>
             </form>
             <div class="citry-ui-quality-grid">
-              <c-CDatePicker value="2026-08-19" :value="selected" :open="open" :onValueChange="(value,detail)=>{last=`value ${value}`;selected=value}" :onOpenChange="(value,detail)=>{last=`open ${value}`;open=value}" c-attrs="{'data-quality-states':'controlled value open refusal acceptance callbacks native-events clearable'}" />
-              <c-CDatePicker value="2026-02-14" size="sm" variant="filled" c-fixed_weeks="False" c-show_adjacent_days="False" c-attrs="{'data-quality-states':'filled sm natural-weeks hidden-adjacent'}" />
-              <c-CDatePicker value="2026-08-21" size="lg" readonly c-attrs="{'data-quality-states':'readonly submitted lg outline inspectable'}" />
-              <c-CDatePicker value="2026-08-22" disabled c-attrs="{'data-quality-states':'disabled omitted md outline'}" />
-              <c-CDatePicker value="2026-08-23" invalid c-attrs="{'data-quality-states':'invalid'}" />
-              <div lang="ar" dir="rtl" style="color-scheme:dark"><c-CDatePicker value="2026-08-24" placement="top-end" c-first_day_of_week="7" c-attrs="{'data-quality-states':'rtl dark locale-week-start placement collision touch long-content'}" /></div>
+              <c-CDatePicker
+                value="2026-08-19"
+                :value="selected"
+                :open="open"
+                :onValueChange="(value,detail)=>{last=`value ${value}`;selected=value}"
+                :onOpenChange="(value,detail)=>{last=`open ${value}`;open=value}"
+                c-attrs="{'data-quality-states':'controlled value open refusal acceptance callbacks native-events clearable'}"
+              />
+              <c-CDatePicker
+                value="2026-02-14"
+                size="sm"
+                variant="filled"
+                c-fixed_weeks="False"
+                c-show_adjacent_days="False"
+                c-attrs="{'data-quality-states':'filled sm natural-weeks hidden-adjacent'}"
+              />
+              <c-CDatePicker
+                value="2026-08-21"
+                size="lg"
+                readonly
+                c-attrs="{'data-quality-states':'readonly submitted lg outline inspectable'}"
+              />
+              <c-CDatePicker
+                value="2026-08-22"
+                disabled
+                c-attrs="{'data-quality-states':'disabled omitted md outline'}"
+              />
+              <c-CDatePicker
+                value="2026-08-23"
+                invalid
+                c-attrs="{'data-quality-states':'invalid'}"
+              />
+              <div
+                lang="ar"
+                dir="rtl"
+                style="color-scheme:dark"
+              ><c-CDatePicker value="2026-08-24" placement="top-end" c-first_day_of_week="7" c-attrs="{'data-quality-states':'rtl dark locale-week-start placement collision touch long-content'}" /></div>
             </div>
             <output v-text="last">No DatePicker action yet</output>
           </section>

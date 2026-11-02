@@ -12,15 +12,30 @@ def infinite_scroll_states_component(app: Citry) -> type[Component]:
           <section class="citry-ui-quality-stack" data-quality-infinite-scroll-ready >
             <h1>Infinite Scroll states</h1>
             <form>
-              <c-CInfiniteScroll aria_label="Localized activity" action_name="activity_action"
-                :loading="loading" :error="error" :hasMore="hasMore" :onLoadMore="()=>{loading=true}" c-attrs="quality_attrs">
+              <c-CInfiniteScroll
+                aria_label="Localized activity"
+                action_name="activity_action"
+                :loading="loading"
+                :error="error"
+                :hasMore="hasMore"
+                :onLoadMore="()=>{loading=true}"
+                c-attrs="quality_attrs"
+              >
                 <ol><li>A long server result that wraps at narrow widths without changing request behavior</li><li dir="rtl">نتيجة متاحة</li></ol>
               </c-CInfiniteScroll>
             </form>
-            <c-CInfiniteScroll aria_label="Failed results" c-error="True" c-auto="False">
+            <c-CInfiniteScroll
+              aria_label="Failed results"
+              c-error="True"
+              c-auto="False"
+            >
               <p>Last retained result</p>
             </c-CInfiniteScroll>
-            <c-CInfiniteScroll aria_label="Disabled results" disabled c-auto="False">
+            <c-CInfiniteScroll
+              aria_label="Disabled results"
+              disabled
+              c-auto="False"
+            >
               <p>Requests are temporarily unavailable</p>
             </c-CInfiniteScroll>
             <c-CInfiniteScroll aria_label="Completed results" c-has_more="False"><p>Final result</p></c-CInfiniteScroll>

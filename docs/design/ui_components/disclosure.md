@@ -346,7 +346,7 @@ without adding composition because every Disclosure owns exactly one of each.
 | `size` | `Literal["sm", "md", "lg"]` | `"md"` | reactive presentation | selects type, trigger, panel, and indicator geometry |
 | `indicator` | `bool` | `True` | reactive presentation | shows the owned decorative chevron |
 | `indicator_pos` | `Literal["start", "end"]` | `"end"` | reactive presentation | places the chevron at logical start or end |
-| `heading_level` | `Literal[2, 3, 4, 5, 6]` | `3` | structural server-only | chooses the native heading tag |
+| `heading_level` | `CDisclosureHeadingLevel`: `2` to `6`, as a number or as text such as `"2"` | `3` | structural server-only | chooses the native heading tag |
 | `region` | `bool` | `False` | structural server-only | adds a named region to this panel; use deliberately |
 | `actions_label` | `str | None` | `None` | structural server-only | names an actions group when supplied; requires the actions slot |
 | `id` | `str | None` | `None` | structural server-only | supplies the root and trigger/panel ID prefix |
@@ -364,7 +364,9 @@ Public type aliases are exact:
 CDisclosureVariant = Literal["outline", "soft", "plain"]
 CDisclosureSize = Literal["sm", "md", "lg"]
 CDisclosureIndicatorPos = Literal["start", "end"]
-CDisclosureHeadingLevel = Literal[2, 3, 4, 5, 6]
+# CAccordion uses the same values. A plain template attribute passes text,
+# so "2" names the same level as 2.
+CDisclosureHeadingLevel = Literal[2, 3, 4, 5, 6, "2", "3", "4", "5", "6"]
 ```
 
 The family module and package root export exactly `CDisclosure`, those four

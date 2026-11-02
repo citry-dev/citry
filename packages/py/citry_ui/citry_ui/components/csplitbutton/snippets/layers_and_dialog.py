@@ -18,10 +18,9 @@ class SplitButtonLayersAndDialog(Component):
             menu_label="More clipped specimen actions"
             placement="bottom-end"
             c-primary_attrs="{'data-open-provenance':''}"
-            v-bind="{onAction:(value)=>{
-              last=value;
-              if (value === 'open-provenance') dialogOpen=true;
-            }}"
+            v-bind="{
+              onAction:applyLayerAction,
+            }"
           >
             <c-fill name="default"><span @click="last='Primary requested provenance'">Record provenance</span></c-fill>
             <c-fill name="menu">
@@ -71,6 +70,14 @@ class SplitButtonLayersAndDialog(Component):
     js = r"""
       $component({
         data(){return {dialogOpen:false,last:'No layer action yet'};},
+        methods: {
+          // Show every chosen value. The provenance command also opens
+          // the Dialog.
+          applyLayerAction(value) {
+            this.last = value;
+            if (value === 'open-provenance') this.dialogOpen = true;
+          },
+        },
         mounted() {
           if (!this.$refs.shadowHost.shadowRoot) {
             this.$refs.shadowHost.attachShadow({mode:'open'}).append(this.$refs.shadowFixture);

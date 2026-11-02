@@ -36,6 +36,29 @@ $component({
     let openCallback = null;
     let activeValue = null;
     let outsideListening = false;
+    let ancestorListening = false;
+    // The owner's last `open` input, to tell a new request from a repeated one.
+    let requestedOpen = null;
+    // Whether the owner was already told that an ancestor hides the cascader.
+    // While it stays hidden, the owner is told once: an owner that asks again
+    // after each report would otherwise loop.
+    let reportedWhileHidden = false;
+    // The owner was told that an ancestor hides the cascader. That holds until
+    // the cascader can be seen again, however that happens (a dialog reopened in
+    // the browser, a collapsed region expanded), which a ResizeObserver
+    // notices; it watches only while the flag is set.
+    let shownWatch = null;
+    function markReportedWhileHidden() {
+      reportedWhileHidden = true;
+      if (shownWatch || typeof ResizeObserver !== 'function') return;
+      shownWatch = new ResizeObserver(() => {
+        if (root.getClientRects().length === 0) return;
+        shownWatch.disconnect();
+        shownWatch = null;
+        reportedWhileHidden = false;
+      });
+      shownWatch.observe(root);
+    }
     let resizeListening = false;
     let typeBuffer = '';
     let typeTimer = null;
@@ -138,6 +161,44 @@ $component({
       }
     };
     const onOutside = event => { if (!root.contains(event.target)) requestOpen(false, 'outside', event); };
+    // A dialog, popover or <details> around the cascader that closes hides
+    // it, so close the popup and report reason "ancestor", as CMenu does.
+    // `close` and `toggle` do not bubble and do not leave a shadow root, so
+    // each root node from the cascader's up to the document listens in the
+    // capture phase, and containment is checked across shadow boundaries.
+    const composedContains = (ancestor, node) => {
+      for (let current = node; current; current = current.getRootNode().host ?? null) {
+        if (ancestor.contains(current)) return true;
+      }
+      return false;
+    };
+    const onAncestorClose = event => {
+      const target = event.target;
+      if (!currentOpen || target === root || !(target instanceof Node) || !composedContains(target, root)) return;
+      if (event.type === 'toggle' && event.newState !== 'closed') return;
+      // A dialog closed and opened again in one task still shows the cascader.
+      if (event.type === 'close' && target.open) return;
+      currentOpen = false;
+      markReportedWhileHidden();
+      try { openCallback?.(false, {open:false, reason:'ancestor', sourceEvent:event}); }
+      catch (error) { console.error('[citry-ui] CCascader onOpenChange callback failed.', error, root); }
+      sync();
+    };
+    let ancestorRoots = [];
+    const listenForAncestorClose = listen => {
+      if (listen === ancestorListening) return;
+      ancestorListening = listen;
+      if (listen) {
+        ancestorRoots = [];
+        for (let node = root.getRootNode(); node; node = node.host?.getRootNode() ?? null) ancestorRoots.push(node);
+      }
+      for (const node of ancestorRoots) {
+        for (const type of ['close', 'toggle']) {
+          if (listen) node.addEventListener(type, onAncestorClose, true);
+          else node.removeEventListener(type, onAncestorClose, true);
+        }
+      }
+    };
     const sync = () => {
       const selected = itemFor(current);
       const selectedLabels = selected ? labels(selected) : [];
@@ -171,6 +232,7 @@ $component({
       if (currentOpen) queueMicrotask(placePopup);
       if (currentOpen && !outsideListening) { document.addEventListener('pointerdown', onOutside, true); outsideListening = true; }
       else if (!currentOpen && outsideListening) { document.removeEventListener('pointerdown', onOutside, true); outsideListening = false; }
+      listenForAncestorClose(currentOpen);
       if (currentOpen && !resizeListening) { window.addEventListener('resize', placePopup); resizeListening = true; }
       else if (!currentOpen && resizeListening) { window.removeEventListener('resize', placePopup); resizeListening = false; }
     };
@@ -280,6 +342,10 @@ $component({
       } else {invalid.delete('value');current=[...accepted];activePath=[...accepted];}
       const nextOpen = props.open;
       controlledOpen = nextOpen !== undefined && nextOpen !== null;
+      // A controlled owner that asks for the popup to open after the first
+      // render is told when an ancestor keeps it closed, once per request.
+      const newlyRequested = reactiveReady && controlledOpen && nextOpen === true && requestedOpen !== true;
+      requestedOpen = controlledOpen ? nextOpen : null;
       if (controlledOpen && typeof nextOpen !== 'boolean') report('open',nextOpen);
       else {invalid.delete('open');currentOpen=controlledOpen?nextOpen:currentOpen;}
       valueCallback = props.onValueChange == null ? null : typeof props.onValueChange === 'function' ? props.onValueChange : (report('onValueChange',props.onValueChange),null);
@@ -297,6 +363,22 @@ $component({
         try { openCallback?.(false, {open:false, reason:'disabled', sourceEvent:null}); }
         catch (error) { console.error('[citry-ui] CCascader onOpenChange callback failed.', error, root); }
       }
+      // An ancestor such as a dialog the server closed hides the cascader, so
+      // its popup cannot stay open either. Close it and report reason
+      // "ancestor", as CMenu does, when the popup was showing before this
+      // update or the owner just asked for it. A popup the server rendered
+      // open inside a closed dialog was never shown, so the first render
+      // reports nothing.
+      const hidden = root.getClientRects().length === 0;
+      if (!hidden) reportedWhileHidden = false;
+      if (!disabled && currentOpen && hidden) {
+        currentOpen = false;
+        if (wasShowing || (newlyRequested && !reportedWhileHidden)) {
+          markReportedWhileHidden();
+          try { openCallback?.(false, {open:false, reason:'ancestor', sourceEvent:null}); }
+          catch (error) { console.error('[citry-ui] CCascader onOpenChange callback failed.', error, root); }
+        }
+      }
       sync();
       if (reactiveReady && !previousOpen && currentOpen) queueMicrotask(() => focus(itemFor(current) ?? visible()[0]));
       if (reactiveReady && controlledValue && !same(previousValue, current)) {
@@ -309,6 +391,8 @@ $component({
       root[openHandoffKey] = {open: currentOpen, serverOpen: data.open};
       if (typeTimer) clearTimeout(typeTimer);
       if (outsideListening) document.removeEventListener('pointerdown', onOutside, true);
+      listenForAncestorClose(false);
+      shownWatch?.disconnect();
       if (resizeListening) window.removeEventListener('resize', placePopup);
       resetForms.forEach(form => form.removeEventListener('reset', onReset, true));
       placeholderBinding?.dispose();

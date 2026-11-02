@@ -21,13 +21,7 @@ from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Final
 
-_tomllib: Any
-try:
-    import tomllib as _stdlib_tomllib
-except ModuleNotFoundError:  # Python 3.10 qualification runner
-    _tomllib = None
-else:
-    _tomllib = _stdlib_tomllib
+import tomllib
 
 try:
     from scripts import build_constraints, release_links
@@ -49,7 +43,7 @@ EXPECTED_REQUIRES_DIST: Final = {
     "packaging>=25.0",
     "pygls==2.1.1",
     "python-dotenv<2,>=1.2.3",
-    "ty==0.0.89",
+    "ty==0.0.94",
 }
 
 
@@ -70,19 +64,7 @@ def record_sha256(value: bytes) -> str:
 def package_version() -> str:
     """Read the package version from the release manifest."""
     content = (PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    if _tomllib is not None:
-        version: Any = _tomllib.loads(content)["project"].get("version")
-    else:
-        project = re.search(r"(?ms)^\[project\][ \t]*\n(?P<body>.*?)(?=^\[|\Z)", content)
-        version_line = (
-            None
-            if project is None
-            else re.search(
-                r"""(?m)^version\s*=\s*["'](?P<version>[^"']+)["']\s*(?:#.*)?$""",
-                project.group("body"),
-            )
-        )
-        version = None if version_line is None else version_line.group("version")
+    version: Any = tomllib.loads(content)["project"].get("version")
     if not isinstance(version, str) or not version:
         raise DistributionVerificationError("citry-lsp has no project version")
     return version
@@ -125,7 +107,7 @@ def _require_metadata(metadata: Message, *, artifact: Path, version: str) -> Non
         raise DistributionVerificationError(f"{artifact.name} has unexpected Name metadata")
     if metadata.get("Version") != version:
         raise DistributionVerificationError(f"{artifact.name} has unexpected Version metadata")
-    if metadata.get("Requires-Python") not in {">=3.10, <4.0", "<4.0,>=3.10"}:
+    if metadata.get("Requires-Python") not in {">=3.11, <4.0", "<4.0,>=3.11"}:
         raise DistributionVerificationError(f"{artifact.name} has unexpected Requires-Python metadata")
     if set(metadata.get_all("Requires-Dist", [])) != EXPECTED_REQUIRES_DIST:  # type: ignore[attr-defined]
         raise DistributionVerificationError(f"{artifact.name} has unexpected runtime dependencies")
@@ -561,7 +543,7 @@ import citry_lsp
 
 assert importlib.metadata.version("citry-lsp") == "__VERSION__"
 assert importlib.metadata.version("pygls") == "2.1.1"
-assert importlib.metadata.version("ty") == "0.0.89"
+assert importlib.metadata.version("ty") == "0.0.94"
 citry_version = tuple(int(part) for part in importlib.metadata.version("citry").split(".")[:3])
 assert citry_lsp.MINIMUM_CITRY_VERSION <= citry_version, citry_version
 assert citry_lsp.SERVER_VERSION == "__VERSION__"

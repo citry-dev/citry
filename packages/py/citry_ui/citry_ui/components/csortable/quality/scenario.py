@@ -9,12 +9,20 @@ def sortable_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack" data-quality-sortable-ready>
             <h1>Sortable states</h1>
-            <c-CSortable id="quality-sortable" name="quality-order" c-attrs="quality_attrs">
+            <c-CSortable
+              id="quality-sortable"
+              name="quality-order"
+              c-attrs="quality_attrs"
+            >
               <c-CSortableItem value="long" label="A very long localized Item that wraps safely">
                 A very long localized Item that wraps safely without covering its handle or leaving the container.
               </c-CSortableItem>
               <c-CSortableItem value="rtl" label="Arabic Item"><span dir="rtl">عنصر عربي طويل</span></c-CSortableItem>
-              <c-CSortableItem value="disabled" label="Fixed disabled Item" c-disabled="True" />
+              <c-CSortableItem
+                value="disabled"
+                label="Fixed disabled Item"
+                c-disabled="True"
+              />
             </c-CSortable>
           </section>
         """

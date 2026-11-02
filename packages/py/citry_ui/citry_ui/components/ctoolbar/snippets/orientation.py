@@ -12,7 +12,11 @@ class ToolbarOrientation(Component):
           <c-CButton>Current</c-CButton>
           <c-CButton>Next</c-CButton>
         </c-CToolbar>
-        <c-CToolbar label="Vertical tools" orientation="vertical" variant="outline">
+        <c-CToolbar
+          label="Vertical tools"
+          orientation="vertical"
+          variant="outline"
+        >
           <c-CButton>Up</c-CButton>
           <c-CButton>Center</c-CButton>
           <c-CButton>Down</c-CButton>

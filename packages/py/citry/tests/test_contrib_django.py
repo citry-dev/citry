@@ -246,6 +246,103 @@ def test_secret_rides_the_citry_constructor(monkeypatch):
     assert engine.settings.secret == ["configured-key"]
 
 
+def test_secret_without_fallbacks_is_the_plain_key(monkeypatch):
+    pytest.importorskip("django")
+    from django.conf import LazySettings
+
+    from citry.contrib.django import secret
+
+    # An empty SECRET_KEY_FALLBACKS (Django's default) keeps the plain string,
+    # so callers that treat the result as one key are unaffected.
+    fresh = LazySettings()
+    fresh.configure(SECRET_KEY="current-key", SECRET_KEY_FALLBACKS=[])  # noqa: S106 - a dummy test secret
+    monkeypatch.setattr("django.conf.settings", fresh)
+
+    assert secret() == "current-key"
+
+
+def test_secret_lists_the_fallback_keys_after_the_current_one(monkeypatch):
+    pytest.importorskip("django")
+    from django.conf import LazySettings
+
+    from citry.contrib.django import secret
+
+    fresh = LazySettings()
+    fresh.configure(SECRET_KEY="current-key", SECRET_KEY_FALLBACKS=["old-key", "older-key"])  # noqa: S106
+    monkeypatch.setattr("django.conf.settings", fresh)
+
+    assert secret() == ["current-key", "old-key", "older-key"]
+
+
+def test_secret_skips_empty_fallbacks_and_reaches_the_citry_settings(monkeypatch):
+    pytest.importorskip("django")
+    from django.conf import LazySettings
+
+    from citry.contrib.django import secret
+
+    # An unset environment variable often turns into "", which is no key.
+    fresh = LazySettings()
+    fresh.configure(SECRET_KEY="current-key", SECRET_KEY_FALLBACKS=("", "old-key"))  # noqa: S106
+    monkeypatch.setattr("django.conf.settings", fresh)
+
+    assert Citry(secret=secret()).settings.secret == ["current-key", "old-key"]
+
+
+@pytest.mark.parametrize("fallbacks", ["old-key", [b"old-key"]], ids=["single-string", "bytes-entry"])
+def test_secret_refuses_fallbacks_that_are_not_a_list_of_strings(monkeypatch, fallbacks):
+    pytest.importorskip("django")
+    from django.conf import LazySettings
+
+    from citry.contrib.django import secret
+
+    # A single string would split into one-character keys, and a bytes key is
+    # not something Citry signs with, so both fail loudly instead.
+    fresh = LazySettings()
+    fresh.configure(SECRET_KEY="current-key", SECRET_KEY_FALLBACKS=fallbacks)  # noqa: S106
+    monkeypatch.setattr("django.conf.settings", fresh)
+
+    with pytest.raises(TypeError, match="SECRET_KEY_FALLBACKS"):
+        secret()
+
+
+def test_secret_signs_with_the_current_key_and_verifies_a_fallback_token(monkeypatch):
+    pytest.importorskip("django")
+    from dataclasses import dataclass
+
+    from django.conf import LazySettings
+
+    from citry.contrib.django import secret
+    from citry.ext.events.tokens import StateTokenError, mint_state_token, verify_state_token
+
+    fresh = LazySettings()
+    fresh.configure(SECRET_KEY="current-key", SECRET_KEY_FALLBACKS=["old-key"])  # noqa: S106
+    monkeypatch.setattr("django.conf.settings", fresh)
+    keys = secret()
+    assert isinstance(keys, list)
+
+    @dataclass
+    class State:
+        count: int = 0
+
+    class Owner:
+        class_id = "app.Counter"
+
+    Owner.State = State  # type: ignore[attr-defined]
+
+    def mint(signing: str | list[str]) -> str:
+        return mint_state_token(State(count=3), class_id=Owner.class_id, secret=signing, max_age=None, max_bytes=8192)
+
+    # A token minted before the rotation, with the key that is now a fallback,
+    # still verifies, and so does a new one signed with the current key.
+    assert verify_state_token(mint("old-key"), cls=Owner, secrets=keys).state_kwargs == {"count": 3}
+    assert verify_state_token(mint(keys), cls=Owner, secrets=keys).state_kwargs == {"count": 3}
+    # New tokens are signed with the current key alone: a list holding only
+    # the current key verifies them, and one holding only the old key does not.
+    assert verify_state_token(mint(keys), cls=Owner, secrets=["current-key"]).state_kwargs == {"count": 3}
+    with pytest.raises(StateTokenError):
+        verify_state_token(mint(keys), cls=Owner, secrets=["old-key"])
+
+
 def test_secret_error_when_django_is_not_configured(monkeypatch):
     pytest.importorskip("django")
     from django.conf import LazySettings

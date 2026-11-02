@@ -18,7 +18,9 @@ class FormConfiguration(Component):
 
         <c-CForm
           class_="form-configurator__form"
-          :disabled="disabled" :readonly="readonly" :submitting="submitting"
+          :disabled="disabled"
+          :readonly="readonly"
+          :submitting="submitting"
           @submit.prevent="void 0"
         >
           <c-CField>

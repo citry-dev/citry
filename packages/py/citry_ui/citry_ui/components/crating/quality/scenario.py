@@ -18,16 +18,49 @@ def rating_states_component(app: Citry) -> type[Component]:
                 <c-fill name="label">Required product rating</c-fill>
                 <c-fill name="description">Choose a half-star score.</c-fill>
                 <c-fill name="default">
-                  <c-CRating name="rating" value="2.5" precision="0.5" allow_clear c-attrs="{'data-quality-states':'required exact fractional form field description keyboard pointer hover clear reset localized'}" :onValueChange="(next,detail)=>last=`${detail.source}: ${next ?? 'unrated'}`" />
+                  <c-CRating
+                    name="rating"
+                    value="2.5"
+                    precision="0.5"
+                    allow_clear
+                    c-attrs="{'data-quality-states':'required exact fractional form field description keyboard pointer hover clear reset localized'}"
+                    :onValueChange="(next,detail)=>last=`${detail.source}: ${next ?? 'unrated'}`"
+                  />
                 </c-fill>
               </c-CField>
               <button type="submit">Submit rating</button><button type="reset">Reset rating</button>
             </form>
             <div class="citry-ui-quality-grid">
-              <c-CRating label="Controlled rating" value="3" c-attrs="{'data-quality-states':'controlled callback refusal acceptance'}" :value="score" :onValueChange="(next)=>{score=next;last=`Accepted ${next}`}" />
-              <c-CRating label="Small subtle rating" value="2" size="sm" variant="subtle" c-attrs="{'data-quality-states':'subtle sm'}" />
-              <c-CRating label="Large readonly rating" value="4.5" precision="0.5" size="lg" readonly name="readonly-rating" c-attrs="{'data-quality-states':'readonly submitted lg'}" />
-              <c-CRating label="Disabled rating" value="1" disabled name="disabled-rating" c-attrs="{'data-quality-states':'disabled omitted md solid'}" />
+              <c-CRating
+                label="Controlled rating"
+                value="3"
+                c-attrs="{'data-quality-states':'controlled callback refusal acceptance'}"
+                :value="score"
+                :onValueChange="(next)=>{score=next;last=`Accepted ${next}`}"
+              />
+              <c-CRating
+                label="Small subtle rating"
+                value="2"
+                size="sm"
+                variant="subtle"
+                c-attrs="{'data-quality-states':'subtle sm'}"
+              />
+              <c-CRating
+                label="Large readonly rating"
+                value="4.5"
+                precision="0.5"
+                size="lg"
+                readonly
+                name="readonly-rating"
+                c-attrs="{'data-quality-states':'readonly submitted lg'}"
+              />
+              <c-CRating
+                label="Disabled rating"
+                value="1"
+                disabled
+                name="disabled-rating"
+                c-attrs="{'data-quality-states':'disabled omitted md solid'}"
+              />
               <div dir="rtl" style="color-scheme:dark"><c-CRating label="RTL localized rating" value="4" c-attrs="{'data-quality-states':'rtl dark localized touch long-content'}" /></div>
             </div>
             <output v-text="last">No Rating action yet</output>

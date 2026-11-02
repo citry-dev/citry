@@ -6,7 +6,12 @@ citry.register_library(citry_ui)
 
 class KeyboardListbox(Component):
     template = """
-      <c-CListbox label="Jump to a city" value="brno" loop variant="outline">
+      <c-CListbox
+        label="Jump to a city"
+        value="brno"
+        loop
+        variant="outline"
+      >
         <c-CListboxOption value="brno">Brno</c-CListboxOption>
         <c-CListboxOption value="budapest">Budapest</c-CListboxOption>
         <c-CListboxOption value="krakow">Kraków</c-CListboxOption>

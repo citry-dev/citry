@@ -22,3 +22,15 @@ Verify changes with:
 cargo test -p citry_template_formatter
 cargo clippy --no-deps -p citry_template_formatter --all-targets -- -D warnings
 ```
+
+## Gotchas
+
+- **Walks over nested elements check the stack at every level.** The parser
+  accepts nesting deeper than a small thread's stack holds, so each walk that
+  calls itself per element goes through
+  `citry_template_parser::stack::with_enough_stack` (see `visit_node`,
+  `project_node` and `analyze_node`). A new walk needs the same.
+- **`BodyProjection` has hand-written `PartialEq`, `Debug` and `Drop`** so that
+  comparing and freeing a deep projection also check the stack. Because it
+  implements `Drop`, code cannot move a field out of it; take the field with
+  `std::mem::take`.

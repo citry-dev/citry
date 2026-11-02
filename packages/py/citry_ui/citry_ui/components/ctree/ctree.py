@@ -236,9 +236,18 @@ class CTree(LibraryComponent):
     class Slots:
         default: SlotInput[CTreeDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "disabled",
+            "expanded",
+            "label",
+            "root_id",
+            "selected",
+            "selectionMode",
+            "size",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_CONTEXT, None) is not None:
@@ -701,10 +710,6 @@ class CTreeItem(LibraryComponent):
     class Slots:
         default: SlotInput[CTreeItemDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         provided = self.inject(_CONTEXT, None)
         if provided is None:
@@ -765,13 +770,28 @@ class CTreeItem(LibraryComponent):
         }
 
     template = """
-      <div class="cui-tree__item" #c-key="morph_key" c-bind="attrs" data-citry-ui-part="item">
+      <div
+        class="cui-tree__item"
+        #c-key="morph_key"
+        c-bind="attrs"
+        data-citry-ui-part="item"
+      >
         <span class="cui-tree__row" data-citry-ui-part="row">
-          <span class="cui-tree__indicator" aria-hidden="true" data-citry-ui-part="indicator"></span>
+          <span
+            class="cui-tree__indicator"
+            aria-hidden="true"
+            data-citry-ui-part="indicator"
+          ></span>
           <span class="cui-tree__label" data-citry-ui-part="label">{{ label }}</span>
         </span>
         <c-if cond="has_children">
-          <div class="cui-tree__group" role="group" c-hidden="hidden" c-inert="hidden" data-citry-ui-part="group">
+          <div
+            class="cui-tree__group"
+            role="group"
+            c-hidden="hidden"
+            c-inert="hidden"
+            data-citry-ui-part="group"
+          >
             <c-slot c-data="slot_data" />
           </div>
         </c-if>

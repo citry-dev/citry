@@ -9,7 +9,8 @@ class ControlledEditable(Component):
       <div >
         <c-CEditable
           value="Atlas"
-          :value="value" :onValueChange="(next) => value = next"
+          :value="value"
+          :onValueChange="(next) => value = next"
         />
         <p>Committed: <strong v-text="value"></strong></p>
       </div>

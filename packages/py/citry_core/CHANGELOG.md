@@ -1,9 +1,134 @@
 # Release notes
 
+## Unreleased
+
+### Changed
+
+- Building from source now requires Rust 1.97 or newer, because the
+  bundled Ruff parser and formatter (now Ruff 0.17.3) need it.
+- The formatter now writes a string inside a nested f-string format
+  field with the other quote character, so `f"{v:{d["n"]}}"` becomes
+  `f"{v:{d['n']}}"`, which also runs on Python 3.10 and 3.11.
+- Syntax errors in template expressions now say "found identifier" where
+  they said "found name", as in ``Expected `)`, found identifier``.
+- **Breaking:** `compile_template()` now compiles a written empty value,
+  such as `alt=""`, to `""` instead of `True` on a component tag and on
+  `<c-slot>` data. A bare attribute such as `compact` still compiles to
+  `True`. HTML elements, `<c-element>`, `<c-if cond="">`, and the
+  attributes that configure `<c-slot>` and `<c-fill>` (such as `name`,
+  `required`, and `fallback`) are unchanged.
+
+### Fixed
+
+- `parse_template()` no longer rejects Vue-only syntax inside `v-pre`, such
+  as `v-once`, `<transition>`, or `@click.bogus`, because Vue reads it as
+  plain HTML there. `<c-*>` tags inside `v-pre` keep their checks.
+- `parse_template()` now rejects `v-pre` written with an argument or
+  modifiers, such as `v-pre.x`, which Vue also reads as `v-pre`.
+- The Vue compiler now writes `<slot>`, `<component>`, `<teleport>`,
+  `<keep-alive>`, and `<transition>` inside `v-pre` as plain elements, as
+  Vue does, and reports `V_PRE_NEEDS_S2_LANE` for a `v-pre` template it
+  could compile only on its older code path, which does not follow that
+  rule.
+- A component's later root tags no longer lose the attribute that scopes
+  its CSS, and tags nested inside them no longer get it, when `Markup` or
+  a `<c-raw>` block holds a self-closed tag such as `<i/>` or `<div/>`,
+  the content of `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>` or
+  `<plaintext>`, or tags the browser closes on its own.
+  `html_transform.mark_html()` now follows more of the browser's rules for
+  where elements end.
+- Citry now writes the HTML of a child component placed inside a
+  `<textarea>` or another element whose content is text, where the page
+  used to get Citry's internal `<template c-render-id>` placeholder.
+- `template_formatter.format_template()` no longer adds a line break where
+  two tags touch, such as between `<td>` cells or `<option>`s. That line
+  break was new text in the rendered HTML. Whitespace in the template is
+  still re-indented.
+
+### Added
+
+- `parse_template()` accepts a Vue slot prop such as `:row="row"` on
+  `<c-slot>`, and a `v-slot="{ row }"` pattern on `<c-fill>`. Other forms,
+  such as `:[key]` or `v-slot="a, b"`, still fail, with a message that
+  names the form to write.
+- In a component that uses Vue, the server now writes a fill that reads
+  Vue slot props, such as `v-slot="{ row }"`, with the values its
+  `<c-slot>` passes when the server knows them. Such a fill used to be left
+  for the browser to build.
+- `parse_template()` and the Vue compiler accept `.outside`, `.window`,
+  `.document`, `.debounce`, and `.throttle` on Vue listeners such as
+  `@click` on HTML elements. The compiled template uses a `citry-on`
+  directive that the `citry` package's browser runtime provides.
+
+### Fixed
+
+- Rendering a `simple='vue'` component whose template nests many `c-for`
+  or `c-if` blocks no longer crashes the process on a thread with a small
+  stack, such as the 128 KiB stack a thread gets by default on Alpine Linux. A template
+  nested more than 62 `c-for` or `c-if` blocks deep, or one that reads a
+  path more than 63 subscripts deep, now renders through Citry's Python
+  path instead, with the same output, only more slowly.
+- `parse_template()` now rejects Alpine's `.minus`, `.underscore`, and
+  `.spacebar` key modifiers on a Vue listener, with a hint, because Vue
+  matches none of these names and the listener would never run.
+
+### Fixed
+
+- `format_template()` now wraps a start tag's attributes when the text after
+  the tag on the same line, such as `{{ label }}</span>`, would make that
+  line longer than 100 columns. It used to measure only the tag.
+- `format_template()` no longer fails on a Python expression with a comment
+  after parentheses, such as `(a + b)  # sum`, or with a string that spans
+  lines. When Ruff would move a comment, or a string spans lines, the
+  formatter leaves that expression as you wrote it.
+- `format_template()` no longer fails with "formatter did not converge" on a
+  very deeply nested expression split across lines.
+- `format_template()` now formats a Python expression that is valid only
+  inside parentheses, such as a `{{ ... }}` split across lines with its
+  `else` parts on their own lines, or `{{ x for x in items }}`. It used to
+  fail with "Citry accepted a Python expression that the formatter provider
+  rejected".
+
+### Fixed
+
+- `parse_template()`, `safe_eval()` and `compile_expr()` now reject an
+  expression with an unmatched `)`, such as `{{ a) or (b }}` or
+  `lambda x: x + 2)(5`, with Python's message, "unmatched ')'". Citry parses
+  each expression inside an extra pair of parentheses, so such text used to
+  run as `(a) or (b)` or `(lambda x: x + 2)(5)`. An expression with nothing
+  in it but spaces or a comment, such as `{{ }}`, is now an error too; it
+  used to render as `()`. `compile_expr(sandboxed=False)` now accepts
+  exactly the text the sandbox accepts, including its nesting limit.
+- `parse_template()` now accepts an `if` filter in a shorthand loop, such as
+  `<li c-for="x in items if x">`, as it does on `<c-for each>`.
+
+### Performance
+
+- Reading a field of a parsed template, such as `Template.elements` or a
+  node's `body`, now copies only that node instead of everything below it,
+  so walking a deeply nested template from Python is much faster.
+
 ## v1.9.0
 
 ### Changed
 
+- **Breaking:** `template_parser.parse_template()` raises `SyntaxError`
+  for a template that nests tags more than 512 levels deep, or more than
+  256 Citry logic levels deep (`c-` tags other than `<c-raw>`, and the
+  `c-if=`, `c-elif=`, `c-else`, `c-for=` and `c-empty` attributes). The
+  error carries the diagnostic code `citry.parse.too-deep` and the
+  position of the tag that goes too deep. `compile_template()` raises
+  `SyntaxError` for a `Template` you build yourself that nests past the
+  same limits.
+- **Breaking:** citry-core now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing citry-core 1.8.0.
+- `safe_eval()`, `parse_template()` and `format_template()` now reject an
+  expression nested deeper than about 97 chained operators or 65 nested
+  brackets, and a template with more than 100,000 `{`. `safe_eval()` and
+  `parse_template()` raise `SyntaxError`, and `format_template()` raises
+  `TemplateFormatError`. Much deeper input used to crash the process; input
+  just past these limits used to be accepted, so split it into smaller
+  expressions or templates.
 - **Breaking:** `template_parser.analyze_browser_source()` and
   `template_parser.analyze_component_source()` return objects with named
   fields, `BrowserAnalysis` and `BrowserComponentAnalysis`, instead of
@@ -21,9 +146,20 @@
 - `analyze_browser_source()` now reports text such as `a); (b` as invalid.
   It used to accept text that closes the function Citry wraps around it,
   which Vue rejects.
+- The variant classes of `template_parser.Node` and
+  `template_parser.TemplateElement` are named after their variant:
+  `type(node).__name__` is `"WithBody"`, where it was `"Node_WithBody"`,
+  and `__qualname__` is `"Node.WithBody"`. They carry their docstrings, and
+  the type stub declares them as `Node.WithBody`, `TemplateElement.Text`
+  and so on.
+- A wrong argument type passed to a `citry_core` function raises a
+  `TypeError` with new wording, such as `'int' object is not an instance of
+  'str'`, and names the argument in a note (`while processing 'input'`).
 
 ### Added
 
+- citry-core now supports Python 3.15. The prebuilt wheels install on it,
+  and Linux also gets a free-threaded CPython 3.15 wheel.
 - For text that does not parse, `analyze_browser_source()` returns the
   JavaScript parser's first error in `error`, with its message and
   position, and each reference's `written` says whether the code assigns
@@ -35,6 +171,38 @@
 
 ### Fixed
 
+- Parsing, compiling and formatting a template, and the `html_transform`
+  functions, no longer crash the process when called with little stack
+  left, for example from deep recursion on a thread with a small stack.
+  `format_template()` also handles templates nested 1,000 elements deep on
+  such threads, where it used to crash the process.
+- `html_transform.transform_html()` stays fast on a tag with thousands of
+  attributes when it tracks added attributes. Such a tag used to take time
+  that grew with the square of the attribute count.
+- The `SyntaxError` for a misplaced `<c-elif>`, `<c-else>` or `<c-empty>`
+  now always lists the tags it may follow in the same order, for example
+  `<c-if>, <c-elif>` for `<c-else>`. The order used to change from one run
+  to the next.
+- In a component that uses Vue, the server now writes an element inside
+  `v-pre` that has an attribute such as `:x="y"`, a `:` followed by a
+  lowercase name. Its parent used to be left for the browser to build, so
+  the page showed the element without that attribute until Vue ran.
+- Rendering a Vue component whose data nests hundreds of levels deep no
+  longer crashes the process on a thread with a small stack, such as a
+  thread on musl Linux or one started after a small
+  `threading.stack_size()`.
+- The Vue compiler and the server renderer that writes a Vue component's
+  HTML handle templates nested hundreds of tags deep on threads with small
+  stacks, where they used to crash the process. The server now writes elements nested up
+  to 400 deep inside a component's host, where it used to leave content
+  past about 130 nested elements for the browser to build. Pages whose data
+  nests up to 2,048 levels are written on the server too, where they used
+  to mount in the browser.
+- `template_parser.parse_template()` and `compile_template()` handle
+  templates nested hundreds of tags deep, and invalid expressions, on threads
+  with small stacks, such as threads started after a small
+  `threading.stack_size()` or threads on musl Linux. They used to crash the
+  process.
 - `html_transform.validate_html_fragment_boundary()` now rejects a
   fragment that self-closes an element whose contents the browser reads
   as text, such as `<iframe/>`, `<textarea/>`, `<style/>`, or
@@ -71,8 +239,15 @@
 
 ### Performance
 
+- `template_formatter.format_template()` is much faster on deeply nested tags
+  that break across lines: 400 nested `<div c-for>` tags took about 42 seconds
+  and now take well under a second. A few templates get a slightly different
+  layout the first time you format them with this version.
 - `template_parser.parse_template()` is much faster on large templates: a
   92 KB template that took more than a second now parses in about 10 ms.
+- `template_parser.parse_template()` now reports an error that covers many
+  lines in well under a second. An invalid 20,000-line expression took more
+  than a minute.
 
 ## v1.8.0
 

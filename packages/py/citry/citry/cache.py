@@ -3,10 +3,11 @@ The pluggable cache backend.
 
 Citry stores derived content in a cache: replayable component and named-fragment
 render artifacts, the dependencies extension's processed JS/CSS scripts and
-served ``Dependencies`` files, optional server-held Events State, and, when
-a backend is configured, the compiled Vue definition bundles and stylesheets
-that interactive pages load. (Without one, each engine keeps those in its
-process, up to ``CitrySettings.vue_asset_max_bytes``.)
+served ``Dependencies`` files, and optional server-held Events State. When a
+backend is configured, it also holds the compiled Vue definition bundles and
+stylesheets that interactive pages load, and the stylesheets that
+``css_data()`` produces; without one, each ``Citry`` instance keeps those in
+its process, up to ``CitrySettings.vue_asset_max_bytes``.
 The backend is pluggable so deployments with multiple processes can point all
 of them at one shared store::
 
@@ -155,9 +156,9 @@ class InMemoryCache:
             self._data.clear()
 
 
-# Content-addressed entries (compiled Vue code and stylesheets) are written
-# once and read many times, but the page that links one is rendered again and
-# again. Asking a shared backend "do you
+# Entries that pages link (compiled Vue code, component JS and CSS, served
+# ``Dependencies`` files) are written once and read many times, but the page
+# that links one is rendered again and again. Asking a shared backend "do you
 # still have it?" on every render costs one network round trip per asset per
 # render, so each process remembers which keys it has already seen stored.
 # The memory is per ``Citry`` instance (the owner below), because two engines
@@ -173,7 +174,9 @@ _STORED_KEY_RECHECK_SECONDS = 60.0
 # check on its next render, so this bounds memory without affecting
 # correctness.
 _STORED_KEY_LIMIT = 4096
-_STORED_KEYS: WeakKeyDictionary[object, OrderedDict[str, float]] = WeakKeyDictionary()
+# Each remembered key maps to when it was last confirmed and, for a key whose
+# value can change (see _store_unless_matched), a mark naming the value seen.
+_STORED_KEYS: WeakKeyDictionary[object, OrderedDict[str, tuple[float, str | None]]] = WeakKeyDictionary()
 # Renders on several threads write through the same engine's record.
 _STORED_KEYS_LOCK = Lock()
 
@@ -193,26 +196,65 @@ def _store_if_missing(owner: object, cache: CitryCache, key: str, value: Callabl
     wrong record lasts.
     """
     now = time.monotonic()
-    with _STORED_KEYS_LOCK:
-        remembered = _STORED_KEYS.get(owner)
-        confirmed_at = None if remembered is None else remembered.get(key)
     # Seen stored recently: trust it and skip the round trip.
-    if confirmed_at is not None and now - confirmed_at < _STORED_KEY_RECHECK_SECONDS:
+    if _recently_confirmed(owner, key, None, now):
         return
     # ``has`` before ``set`` sends the body only when the backend lacks it,
     # including after the backend dropped it.
     if not cache.has(key):
         cache.set(key, value())
+    _remember_confirmed(owner, key, None, now)
+
+
+def _store_unless_matched(owner: object, cache: CitryCache, key: str, value: str, mark: str) -> None:
+    """
+    Make sure ``cache`` holds ``value`` under ``key``, comparing it with the backend at most once per recheck interval.
+
+    This is ``_store_if_missing`` for a key whose value can change while the
+    key stays the same, such as a compatibility key that each class version
+    rewrites, or a key named by its inputs rather than its bytes. ``mark``
+    names ``value`` (a hash of it), so a different value for the same key is
+    compared and written at once, and only a value confirmed recently skips
+    the round trip.
+
+    The comparison reads the stored value back, so when a worker running
+    another version writes its own value under the same key, this process
+    overwrites it at most once per interval. Citry never serves the stored
+    value: each worker returns the object built from its own class.
+    """
+    now = time.monotonic()
+    if _recently_confirmed(owner, key, mark, now):
+        return
+    if cache.get(key) != value:
+        cache.set(key, value)
+    _remember_confirmed(owner, key, mark, now)
+
+
+def _recently_confirmed(owner: object, key: str, mark: str | None, now: float) -> bool:
+    """Whether ``key`` was confirmed holding the value ``mark`` names within the recheck interval."""
+    with _STORED_KEYS_LOCK:
+        remembered = _STORED_KEYS.get(owner)
+        confirmed = None if remembered is None else remembered.get(key)
+        if remembered is None or confirmed is None:
+            return False
+        # A key in use stays at the recent end, so the limit drops the keys
+        # no page links any more.
+        remembered.move_to_end(key)
+    return confirmed[1] == mark and now - confirmed[0] < _STORED_KEY_RECHECK_SECONDS
+
+
+def _remember_confirmed(owner: object, key: str, mark: str | None, now: float) -> None:
+    """Record that ``key`` holds the value ``mark`` names, dropping the oldest records past the limit."""
     with _STORED_KEYS_LOCK:
         remembered = _STORED_KEYS.setdefault(owner, OrderedDict())
-        remembered[key] = now
+        remembered[key] = (now, mark)
         remembered.move_to_end(key)
         while len(remembered) > _STORED_KEY_LIMIT:
             remembered.popitem(last=False)
 
 
 def _forget_stored_key(owner: object, key: str) -> None:
-    """Make the next ``_store_if_missing`` for ``key`` ask the backend again (the entry was removed)."""
+    """Make the next store of ``key`` ask the backend again (the entry was removed)."""
     with _STORED_KEYS_LOCK:
         remembered = _STORED_KEYS.get(owner)
         if remembered is not None:

@@ -10,10 +10,8 @@ class ControlledPopover(Component):
         class="controlled-popover"
       >
         <c-CPopover
-          :open="open" :onOpenChange="(nextOpen, detail) => {
-              lastReason = detail.reason;
-              if (!locked) open = nextOpen;
-            }"
+          :open="open"
+          :onOpenChange="applyOpenRequest"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">
@@ -41,6 +39,15 @@ class ControlledPopover(Component):
           return {
             open: false, locked: false, lastReason: 'none'
           };
+        },
+        methods: {
+          // Show every request's reason, but change `open` only while
+          // requests are not locked, so a declined request leaves the
+          // Popover as is.
+          applyOpenRequest(nextOpen, detail) {
+            this.lastReason = detail.reason;
+            if (!this.locked) this.open = nextOpen;
+          },
         },
       });
     """

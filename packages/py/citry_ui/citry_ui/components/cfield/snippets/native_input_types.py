@@ -12,7 +12,11 @@ class NativeInputTypes(Component):
             Observer email
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="email" type="email" autocomplete="email" />
+            <c-CInput
+              name="email"
+              type="email"
+              autocomplete="email"
+            />
           </c-fill>
         </c-CField>
         <c-CField>
@@ -20,7 +24,11 @@ class NativeInputTypes(Component):
             Ranger telephone
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="telephone" type="tel" inputmode="tel" />
+            <c-CInput
+              name="telephone"
+              type="tel"
+              inputmode="tel"
+            />
           </c-fill>
         </c-CField>
         <c-CField>
@@ -28,7 +36,11 @@ class NativeInputTypes(Component):
             Field guide URL
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="guide" type="url" inputmode="url" />
+            <c-CInput
+              name="guide"
+              type="url"
+              inputmode="url"
+            />
           </c-fill>
         </c-CField>
         <c-CField>
@@ -36,7 +48,11 @@ class NativeInputTypes(Component):
             Survey passphrase
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="passphrase" type="password" autocomplete="current-password" />
+            <c-CInput
+              name="passphrase"
+              type="password"
+              autocomplete="current-password"
+            />
           </c-fill>
         </c-CField>
         <label class="shore-native-grid__standalone">

@@ -90,6 +90,10 @@ mount(web_app, citry_app)
 ```
 
 In Django, pass `citry.contrib.django.secret()` to reuse Django's own secret.
+When you rotate Django's key with `SECRET_KEY_FALLBACKS`, Citry follows the
+rotation: `SECRET_KEY` signs new values, and a value signed with a fallback
+key still verifies, so pages that visitors already have open keep working
+until you remove the old key from the fallbacks.
 [Web frameworks](/advanced/web-frameworks/) shows how to mount Citry in other
 frameworks.
 

@@ -7,7 +7,12 @@ citry.register_library(citry_ui)
 class CustomizedTree(Component):
     template = """
       <div class="brand-tree">
-        <c-CTree label="Branded catalog" c-selected="['ferns']" variant="outline" size="lg">
+        <c-CTree
+          label="Branded catalog"
+          c-selected="['ferns']"
+          variant="outline"
+          size="lg"
+        >
           <c-CTreeItem value="mosses" label="Mosses" />
           <c-CTreeItem value="ferns" label="Ferns" />
           <c-CTreeItem value="orchids" label="Orchids" />

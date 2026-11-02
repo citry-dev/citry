@@ -23,7 +23,11 @@ def transfer_list_states_component(app: Citry) -> type[Component]:
               <c-CTransferListItem value="long" label="A very long rich item that wraps safely">
                 <strong>Long rich item</strong><br />A supporting description that wraps without widening the pane.
               </c-CTransferListItem>
-              <c-CTransferListItem value="locked" label="Locked chosen item" c-disabled="True" />
+              <c-CTransferListItem
+                value="locked"
+                label="Locked chosen item"
+                c-disabled="True"
+              />
             </c-CTransferList>
           </section>
         """

@@ -11,7 +11,11 @@ class GridAtAGlance(Component):
           <p>Field atlas · volcanic collection</p>
           <h2>Minerals born from fire</h2>
         </header>
-        <c-CGrid sm="2" lg="4" gap="lg">
+        <c-CGrid
+          sm="2"
+          lg="4"
+          gap="lg"
+        >
           <article class="mineral-atlas__card mineral-atlas__card--olivine">
             <span class="mineral-atlas__sample"></span>
             <h3>Olivine</h3>

@@ -36,19 +36,39 @@ def button_states_component(app: Citry) -> type[Component]:
           <c-CButton href="/field-guide" variant="outline">
             Open field guide
           </c-CButton>
-          <c-CButton variant="solid" intent="primary" size="sm">
+          <c-CButton
+            variant="solid"
+            intent="primary"
+            size="sm"
+          >
               Solid primary
             </c-CButton>
-            <c-CButton variant="outline" intent="neutral" size="md">
+            <c-CButton
+              variant="outline"
+              intent="neutral"
+              size="md"
+            >
               Outline neutral
             </c-CButton>
-            <c-CButton variant="outline" intent="success" size="md">
+            <c-CButton
+              variant="outline"
+              intent="success"
+              size="md"
+            >
               Outline success
             </c-CButton>
-            <c-CButton variant="solid" intent="warn" size="md">
+            <c-CButton
+              variant="solid"
+              intent="warn"
+              size="md"
+            >
               Solid warn
             </c-CButton>
-            <c-CButton variant="ghost" intent="danger" size="lg">
+            <c-CButton
+              variant="ghost"
+              intent="danger"
+              size="lg"
+            >
               Ghost danger
             </c-CButton>
             <c-CButton disabled>

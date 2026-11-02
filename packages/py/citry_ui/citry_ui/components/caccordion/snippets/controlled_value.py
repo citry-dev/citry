@@ -14,7 +14,8 @@ class ControlledAccordion(Component):
         </p>
         <c-CAccordion
           value="lichen"
-          :value="selected" :onValueChange="(value) => selected = value"
+          :value="selected"
+          :onValueChange="(value) => selected = value"
         >
           <c-CAccordionItem value="lichen">
             <c-fill name="title">Lichen</c-fill>

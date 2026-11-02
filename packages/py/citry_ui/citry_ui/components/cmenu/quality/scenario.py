@@ -81,7 +81,8 @@ def menu_states_component(app: Citry) -> type[Component]:
                 c-loop="False"
                 match_width
                 size="sm"
-                :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
+                :open="controlledOpen"
+                :onOpenChange="(open) => controlledOpen = open"
                 c-attrs="{'data-quality-states': 'controlled loop-false match-width sm'}"
               >
                 <c-fill name="activator" data="{ activator_attrs, activator_disabled }">

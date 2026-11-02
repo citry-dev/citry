@@ -32,8 +32,9 @@ autoreloader::
         def ready(self):
             enable_hot_reload(citry_instance)  # mode="hot" by default
 
-Reusing Django's ``SECRET_KEY`` as citry's signing secret (so values citry
-signs are covered by the key the project already manages)::
+Reusing Django's ``SECRET_KEY`` and ``SECRET_KEY_FALLBACKS`` as citry's
+signing secret (so values citry signs are covered by the keys the project
+already manages)::
 
     from citry.contrib.django import secret
 
@@ -53,6 +54,7 @@ called.
 from __future__ import annotations
 
 import inspect
+import io
 import posixpath
 import re
 from pathlib import Path
@@ -60,8 +62,16 @@ from typing import TYPE_CHECKING, Any, cast
 
 from citry._django_startup import start_django
 from citry._path_checks import PathLookup, register_path_checker
-from citry.contrib._path_lookup import files_beside
-from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes, normalize_mount_prefix
+from citry._sub_path import normalize_sub_path
+from citry.contrib._path_lookup import files_beside, path_below
+from citry.util.routing import (
+    RouteHeaders,
+    RouteRequest,
+    body_read_limit,
+    flatten_routes,
+    normalize_mount_prefix,
+    sent_headers,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -85,7 +95,53 @@ def _to_django_path(path: str) -> str:
     return _PARAM_RE.sub(r"<str:\1>", path)
 
 
-def _build_request(request: Any) -> RouteRequest:
+def _read_body(request: Any, limit: int | None) -> bytes:
+    """
+    Read Django's request body, at most ``limit`` bytes when a limit is set.
+
+    ``request.body`` reads the whole body into memory, and refuses one larger
+    than Django's ``DATA_UPLOAD_MAX_MEMORY_SIZE``. With a route limit, Citry
+    reads from the stream instead and stops one byte past it, so the route's
+    own limit governs the request in place of Django's.
+    """
+    if limit is None:
+        return bytes(request.body)
+    # Something (often middleware reading request.POST) already holds the
+    # body in memory, so take it from there.
+    if hasattr(request, "_body"):
+        return bytes(request.body[:limit])
+    if getattr(request, "_read_started", False):
+        # Middleware (such as CsrfViewMiddleware on a multipart upload) has
+        # already parsed the stream into POST and FILES, so no body bytes are
+        # left to read. Django has no total limit for uploaded files, so check
+        # the size the client declared, and hand the route a body one byte
+        # past its limit when it is over, so the route rejects the request as
+        # it would any oversized body.
+        try:
+            declared = int(request.META.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            declared = 0
+        return bytes(limit) if declared >= limit else b""
+    chunks: list[bytes] = []
+    received = 0
+    # read(n) may return fewer bytes than asked for; Django's stream already
+    # stops at Content-Length.
+    while received < limit:
+        chunk = request.read(limit - received)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        received += len(chunk)
+    data = b"".join(chunks)
+    # Leave the request as Django's own `request.body` would, so a guard, a
+    # handler, or a payload codec can still read `request.native.body`,
+    # `POST`, or `FILES`. For a body over the limit these hold the bytes read.
+    request._body = data
+    request._stream = io.BytesIO(data)
+    return data
+
+
+def _build_request(request: Any, body_limit: int | None = None) -> RouteRequest:
     """Read Django's ``HttpRequest`` into a framework-neutral request."""
     headers = RouteHeaders(request.headers.items())
     return RouteRequest(
@@ -93,7 +149,7 @@ def _build_request(request: Any) -> RouteRequest:
         path=request.path,
         query={key: tuple(values) for key, values in request.GET.lists()},
         headers=headers,
-        body=request.body,
+        body=_read_body(request, body_limit),
         content_type=headers.get("content-type", ""),
         native=request,
     )
@@ -114,19 +170,22 @@ def _make_view(route: URLRoute) -> Any:
 
     def view(request: Any, **kwargs: Any) -> Any:
         if request.method not in route.methods and request.method != "HEAD":
-            return HttpResponseNotAllowed(route.methods)
+            not_allowed = HttpResponseNotAllowed(route.methods)
+            # The same standard header every other Citry response carries.
+            not_allowed["X-Content-Type-Options"] = "nosniff"
+            return not_allowed
         handler = route.handler
         assert handler is not None  # noqa: S101 - flatten_routes only yields handler routes
         # urlpatterns() rejected async handlers up front, so the call returns
         # a concrete RouteResponse.
-        response = cast("RouteResponse", handler(_build_request(request), **kwargs))
+        response = cast("RouteResponse", handler(_build_request(request, body_read_limit(route)), **kwargs))
         http_response = HttpResponse(content=response.body, content_type=response.content_type, status=response.status)
         # Django's response object holds one value per header name, so a
         # repeated name (e.g. two Set-Cookie lines) cannot be represented.
         # Reject it loudly instead of silently keeping only the last value;
         # the ASGI and WSGI adapters send every pair.
         seen_names: set[str] = set()
-        for name, value in response.headers:
+        for name, value in sent_headers(response):
             lowered = name.lower()
             if lowered in seen_names:
                 msg = (
@@ -195,10 +254,21 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
     if prefix is not None:
         citry_instance.set_mounted_prefix(prefix)
+    # Django sets the script prefix for each request (FORCE_SCRIPT_NAME when
+    # set, else SCRIPT_NAME) and once at django.setup(), so Citry's URLs
+    # start with the same sub-path as the project's reverse() URLs.
+    citry_instance._set_sub_path_reader(_django_sub_path)
     # Registered with the patterns, after every route was accepted, so a
     # rejected call leaves the instance without a checker too.
     register_path_checker(citry_instance, _django_path_checker(), host=_DJANGO_PROJECT)
     return patterns
+
+
+def _django_sub_path() -> str:
+    """Return the sub-path the project is served below for the current request, such as ``/shop``."""
+    from django.urls import get_script_prefix  # noqa: PLC0415
+
+    return normalize_sub_path(get_script_prefix())
 
 
 def _django_path_checker() -> PathChecker:
@@ -246,12 +316,18 @@ def _django_path_checker() -> PathChecker:
         static_url = _site_prefix(django_settings.STATIC_URL, script_prefix)
         if static_url is not None and path.startswith(static_url) and apps.is_installed("django.contrib.staticfiles"):
             return _static_file_lookup(path, path[len(static_url) :])
+        # The links start with the sub-path Citry starts its own URLs with,
+        # read the same way; a link to the sub-path alone, such as "/shop",
+        # reaches the project's root too.
+        sub_path = _django_sub_path()
         # Suggestions are written the way a link writes them, with the sub-path.
-        nearby = tuple(sorted({script_prefix.rstrip("/") + route for route in _literal_routes()}))
-        if not path.startswith(script_prefix):
+        nearby = tuple(sorted({sub_path + route for route in _literal_routes()}))
+        below = path_below(path, sub_path)
+        if below is None:
             # A path outside the sub-path never reaches this project.
             return PathLookup(found=False, nearby=nearby)
-        path_info = "/" + path[len(script_prefix) :]
+        # Django serves an empty path as its root.
+        path_info = below or "/"
         if _resolve_match(path_info) is not None or _redirects_to_slash(path_info):
             return PathLookup(found=True)
         return PathLookup(found=False, nearby=nearby)
@@ -499,13 +575,13 @@ def _hot_reload_dispatch_uid(citry_instance: Citry) -> str:
     return f"citry.contrib.django.enable_hot_reload:{id(citry_instance)}"
 
 
-def secret() -> str:
+def secret() -> str | list[str]:
     """
-    Django's ``SECRET_KEY``, for passing as ``Citry(secret=...)``.
+    Django's ``SECRET_KEY`` and ``SECRET_KEY_FALLBACKS``, for passing as ``Citry(secret=...)``.
 
     Citry signs values with the engine-level
     [`secret`][citry.CitrySettings.secret] setting. In a Django project the
-    natural signing key is the one the project already manages, so pass it
+    natural signing keys are the ones the project already manages, so pass them
     through::
 
         from citry import Citry
@@ -513,11 +589,20 @@ def secret() -> str:
 
         app = Citry(secret=secret())
 
-    The key is read when this is called, so Django settings must be configured
-    by then (in a normal Django startup they already are).
+    When the project sets ``SECRET_KEY_FALLBACKS`` to rotate its key, Citry
+    follows the rotation: ``SECRET_KEY`` signs new values, and a value signed
+    with any of the fallback keys still verifies, so values Citry already put
+    in visitors' pages keep verifying until you remove the old key. Empty
+    fallback entries are skipped.
+
+    The keys are read when this is called, so Django settings must be
+    configured by then (in a normal Django startup they already are).
 
     Returns:
-        The ``SECRET_KEY`` of the active Django settings.
+        ``SECRET_KEY`` as a plain string when ``SECRET_KEY_FALLBACKS`` is
+        empty or unset. Otherwise a list that starts with ``SECRET_KEY`` and
+        then holds each fallback key, in Django's order; ``Citry(secret=...)``
+        accepts both forms.
 
     Raises:
         RuntimeError: When Django settings are not configured; the message
@@ -525,6 +610,8 @@ def secret() -> str:
         django.core.exceptions.ImproperlyConfigured: When settings are
             configured but the ``SECRET_KEY`` itself is unusable (for example
             empty); Django's own message explains the problem.
+        TypeError: When ``SECRET_KEY_FALLBACKS`` is a single string instead of
+            a list, or holds an entry that is not a string.
 
     """
     # Imported here, not at module load: this module must be importable
@@ -533,7 +620,7 @@ def secret() -> str:
     from django.core.exceptions import ImproperlyConfigured  # noqa: PLC0415
 
     try:
-        return cast("str", django_settings.SECRET_KEY)
+        current = cast("str", django_settings.SECRET_KEY)
     except ImproperlyConfigured as err:
         if django_settings.configured:
             # Settings are configured but unusable in some other way (for
@@ -547,6 +634,30 @@ def secret() -> str:
             'secret directly: Citry(secret="...").'
         )
         raise RuntimeError(msg) from err
+    # Django added SECRET_KEY_FALLBACKS in 4.1, so an older Django has no such
+    # setting, and None means the same as an empty list.
+    raw_fallbacks = getattr(django_settings, "SECRET_KEY_FALLBACKS", None) or ()
+    # A string here would split into one-character keys, which anyone could
+    # guess to forge a value, so refuse it rather than read it as a list.
+    if isinstance(raw_fallbacks, str):
+        msg = "Django's SECRET_KEY_FALLBACKS must be a list of keys, not a single string."
+        raise TypeError(msg)
+    fallbacks: list[str] = []
+    for index, key in enumerate(raw_fallbacks):
+        if not isinstance(key, str):
+            msg = f"Django's SECRET_KEY_FALLBACKS[{index}] must be a string, got {type(key).__name__}."
+            raise TypeError(msg)
+        # An empty entry, such as an unset environment variable, is no key at
+        # all; Citry refuses empty keys, so skip it rather than fail every render.
+        if key:
+            fallbacks.append(key)
+    # A project without fallbacks gets the same plain string as before, so
+    # code that treats the result as one key keeps working.
+    if not fallbacks:
+        return current
+    # Citry's rotation list signs with its first entry and verifies with every
+    # entry, which is how Django uses SECRET_KEY and its fallbacks.
+    return [current, *fallbacks]
 
 
 class DjangoCache:

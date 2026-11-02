@@ -692,7 +692,11 @@ _SLIDER_JS = r"""
         let unsigned = negative ? value.slice(1) : value;
         let [integer, fraction = ''] = unsigned.split('.');
         integer = integer.replace(/^0+(?=\d)/, '') || '0';
-        fraction = fraction.replace(/0+$/, '');
+        // Strip trailing zeros with a plain loop, so the time grows only in step with the length,
+        // even for a long run of zeros before the last digit.
+        let fractionEnd = fraction.length;
+        while (fractionEnd > 0 && fraction[fractionEnd - 1] === '0') fractionEnd -= 1;
+        fraction = fraction.slice(0, fractionEnd);
         let result = integer + (fraction ? `.${fraction}` : '');
         if (negative && result !== '0') result = `-${result}`;
         return result.replace('-', '').replace('.', '').length <= 128 ? result : undefined;
@@ -1186,9 +1190,51 @@ class CSlider(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "catalog_lower_label",
+            "catalog_upper_label",
+            "disabled",
+            "field_control",
+            "form",
+            "invalid",
+            "is_range",
+            "lower_id",
+            "lower_input_attrs",
+            "lower_label",
+            "lower_label_id",
+            "lower_labelledby",
+            "lower_name",
+            "lower_transport_id",
+            "marks",
+            "maximum",
+            "minimum",
+            "orientation",
+            "part",
+            "public_id",
+            "readonly",
+            "root_attrs",
+            "root_id",
+            "show_marks",
+            "show_value",
+            "single_aria_label",
+            "single_aria_labelledby",
+            "size",
+            "step",
+            "thumbs",
+            "upper_aria_describedby",
+            "upper_aria_errormessage",
+            "upper_id",
+            "upper_input_attrs",
+            "upper_label",
+            "upper_label_id",
+            "upper_labelledby",
+            "upper_name",
+            "upper_transport_id",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _snapshot(self, kwargs, is_range=False)
@@ -1245,9 +1291,51 @@ class CRangeSlider(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "catalog_lower_label",
+            "catalog_upper_label",
+            "disabled",
+            "field_control",
+            "form",
+            "invalid",
+            "is_range",
+            "lower_id",
+            "lower_input_attrs",
+            "lower_label",
+            "lower_label_id",
+            "lower_labelledby",
+            "lower_name",
+            "lower_transport_id",
+            "marks",
+            "maximum",
+            "minimum",
+            "orientation",
+            "part",
+            "public_id",
+            "readonly",
+            "root_attrs",
+            "root_id",
+            "show_marks",
+            "show_value",
+            "single_aria_label",
+            "single_aria_labelledby",
+            "size",
+            "step",
+            "thumbs",
+            "upper_aria_describedby",
+            "upper_aria_errormessage",
+            "upper_id",
+            "upper_input_attrs",
+            "upper_label",
+            "upper_label_id",
+            "upper_labelledby",
+            "upper_name",
+            "upper_transport_id",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _snapshot(self, kwargs, is_range=True)

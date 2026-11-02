@@ -211,7 +211,7 @@ def test_readonly_uses_successful_hidden_form_transports() -> None:
 @pytest.mark.parametrize(
     ("component", "kwargs", "error", "match"),
     [
-        ("CSlider", {"value": 1.5}, TypeError, "int, Decimal"),
+        ("CSlider", {"value": 1.5}, TypeError, r"CSlider\.Kwargs\.value expects int \| Decimal \| str \| None"),
         ("CSlider", {"value": "1e3"}, ValueError, "plain-decimal"),
         ("CSlider", {"min": 10, "max": 10}, ValueError, "less than max"),
         ("CSlider", {"step": 0}, ValueError, "greater than zero"),
@@ -221,7 +221,12 @@ def test_readonly_uses_successful_hidden_form_transports() -> None:
         ("CRangeSlider", {"value": (80, 20)}, ValueError, "min_steps_between"),
         ("CRangeSlider", {"value": (20, 21), "min_steps_between_thumbs": 2}, ValueError, "min_steps_between"),
         ("CRangeSlider", {"lower_name": "lower"}, ValueError, "supplied together"),
-        ("CRangeSlider", {"orientation": "diagonal"}, ValueError, "must be one of"),
+        (
+            "CRangeSlider",
+            {"orientation": "diagonal"},
+            TypeError,
+            r"CRangeSlider\.Kwargs\.orientation expects Literal\[",
+        ),
     ],
 )
 def test_invalid_server_inputs_fail_deterministically(component, kwargs, error, match) -> None:

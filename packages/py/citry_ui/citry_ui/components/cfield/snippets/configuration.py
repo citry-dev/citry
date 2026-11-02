@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -17,7 +15,12 @@ class FieldInputConfiguration(Component):
         </header>
 
         <c-CField
-          :orientation="orientation" :density="density" :required="required" :disabled="disabled" :readonly="readonly" :invalid="invalid"
+          :orientation="orientation"
+          :density="density"
+          :required="required"
+          :disabled="disabled"
+          :readonly="readonly"
+          :invalid="invalid"
         >
           <c-fill name="label">
             Shore condition
@@ -26,7 +29,8 @@ class FieldInputConfiguration(Component):
             <c-CInput
               name="condition"
               value="Calm pools"
-              :variant="variant" :size="size"
+              :variant="variant"
+              :size="size"
             />
           </c-fill>
           <c-fill name="description">

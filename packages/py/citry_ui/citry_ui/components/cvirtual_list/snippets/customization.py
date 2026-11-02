@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class VirtualListCustomization(Component):
     template = """
-      <c-CVirtualList aria_label="Pinned environments" class_="environment-list" c-viewport_size="260">
+      <c-CVirtualList
+        aria_label="Pinned environments"
+        class_="environment-list"
+        c-viewport_size="260"
+      >
         <c-for each="environment in environments">
           <c-CVirtualListItem #c-key="environment['key']" c-item_key="environment['key']">
             <strong>{{ environment['name'] }}</strong>

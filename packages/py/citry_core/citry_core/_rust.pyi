@@ -25,12 +25,23 @@
 #   This matches how typeshed defines modules.
 
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 # Whether this extension was compiled without optimizations ("debug", the
 # plain `maturin develop` build) or with them ("release", `--release` and
 # published wheels). Benchmarks refuse to measure a "debug" build.
 BUILD_PROFILE: Literal["release", "debug"]
+
+# How deep a `simple='vue'` template may nest before the native render path
+# leaves it to the Python evaluator. NATIVE_RENDER_MAX_BODY_DEPTH counts the
+# template's top level as 1, then one for each `c-if` branch or `c-for` body
+# around an operation, one for the operation's expression, and one for each
+# conditional expression inside it. NATIVE_RENDER_MAX_READ_DEPTH counts a
+# path's variable as 1, then one for each subscript of it or loop over it. A
+# "debug" build's limits are lower than a "release" build's, because its
+# stack frames are larger.
+NATIVE_RENDER_MAX_BODY_DEPTH: int
+NATIVE_RENDER_MAX_READ_DEPTH: int
 
 ########################################################
 # Internationalization
@@ -282,6 +293,17 @@ class html_transform:
         inline event attribute, 4 for a `javascript:` URL in a URL attribute.
         """
     @staticmethod
+    def _csp_attribute_problem(
+        tag: str, name: str, raw_value: str | None
+    ) -> Literal["native-event", "javascript-url"] | None:
+        """
+        What a strict CSP would block in one literal template attribute. Private to `citry`.
+
+        `raw_value` is the value as written, before character references are
+        decoded, or `None` for an attribute without a value. Uses the same
+        rules as `_check_output_html`.
+        """
+    @staticmethod
     def _is_javascript_url(value: str) -> bool:
         """Whether a URL starts with `javascript:`, read without entity decoding. Private to `citry`."""
     _JAVASCRIPT_MIME_TYPES: frozenset[str]
@@ -422,7 +444,7 @@ class safe_eval:
 
         **Raises:**
 
-        - SyntaxError: If the input is not valid Python syntax or contains forbidden constructs.
+        - SyntaxError: If the input is not valid Python syntax, contains forbidden constructs, or nests too deeply (more than about 97 chained operators or 65 nested brackets).
 
         **Examples:**
 
@@ -894,6 +916,10 @@ class template_parser:
     def analyze_component_source(
         input: str,
     ) -> template_parser.BrowserComponentAnalysis: ...
+    # The nesting limits, private and read by tests: the most tags of any
+    # kind, and the most Citry logic levels, a template may nest.
+    _MAX_TAG_NESTING: Final[int]
+    _MAX_LOGIC_NESTING: Final[int]
     # Functions
     @staticmethod
     def parse_template(
@@ -1185,66 +1211,61 @@ class template_parser:
         ordinal: int
         may_control_body: bool
 
-    class Node_SelfClosing:
-        """A self-closing HTML/component tag."""
-
-        start_tag: template_parser.HtmlStartTag
-        used_variables: list[template_parser.Token]
-        introduced_variables: list[template_parser.Token]
-        comments: list[template_parser.Comment]
-        contains_fills: bool
-        name: str
-
-    class Node_WithBody:
-        """An HTML/component tag with a body."""
-
-        start_tag: template_parser.HtmlStartTag
-        end_tag: template_parser.HtmlEndTag
-        body: template_parser.Template
-        used_variables: list[template_parser.Token]
-        introduced_variables: list[template_parser.Token]
-        comments: list[template_parser.Comment]
-        contains_fills: bool
-        name: str
-
     class Node:
-        """Enum: SelfClosing or WithBody. Access the variant via `._0`."""
+        """
+        Enum: SelfClosing or WithBody. Each variant is a class nested in this
+        one, such as `Node.WithBody`.
+        """
 
-        SelfClosing: type[template_parser.Node_SelfClosing]
-        WithBody: type[template_parser.Node_WithBody]
+        class SelfClosing:
+            """A self-closing HTML/component tag."""
+
+            start_tag: template_parser.HtmlStartTag
+            used_variables: list[template_parser.Token]
+            introduced_variables: list[template_parser.Token]
+            comments: list[template_parser.Comment]
+            contains_fills: bool
+            name: str
+
+        class WithBody:
+            """An HTML/component tag with a body."""
+
+            start_tag: template_parser.HtmlStartTag
+            end_tag: template_parser.HtmlEndTag
+            body: template_parser.Template
+            used_variables: list[template_parser.Token]
+            introduced_variables: list[template_parser.Token]
+            comments: list[template_parser.Comment]
+            contains_fills: bool
+            name: str
+
         name: str
-
-    class TemplateElement_Text:
-        """A TemplateElement variant wrapping Text. Access via `._0`."""
-
-        _0: template_parser.Text
-
-    class TemplateElement_Expr:
-        """A TemplateElement variant wrapping Expr. Access via `._0`."""
-
-        _0: template_parser.Expr
-
-    class TemplateElement_Node:
-        """A TemplateElement variant wrapping Node. Access via `._0`."""
-
-        _0: template_parser.Node_SelfClosing | template_parser.Node_WithBody
-
-    class TemplateElement_Foreign:
-        """A TemplateElement variant wrapping ForeignSourcePart. Access via `._0`."""
-
-        _0: template_parser.ForeignSourcePart
 
     class TemplateElement:
         """
-        Enum: Text, Expr, Node, or Foreign. The concrete variant type is one of
-        TemplateElement_Text, TemplateElement_Expr, TemplateElement_Node,
-        TemplateElement_Foreign.
+        Enum: Text, Expr, Node, or Foreign. Each variant is a class nested in
+        this one, such as `TemplateElement.Text`, and holds its value in `._0`.
         """
 
-        Text: type[template_parser.TemplateElement_Text]
-        Expr: type[template_parser.TemplateElement_Expr]
-        Node: type[template_parser.TemplateElement_Node]
-        Foreign: type[template_parser.TemplateElement_Foreign]
+        class Text:
+            """A TemplateElement variant wrapping Text."""
+
+            _0: template_parser.Text
+
+        class Expr:
+            """A TemplateElement variant wrapping Expr."""
+
+            _0: template_parser.Expr
+
+        class Node:
+            """A TemplateElement variant wrapping Node."""
+
+            _0: template_parser.Node.SelfClosing | template_parser.Node.WithBody
+
+        class Foreign:
+            """A TemplateElement variant wrapping ForeignSourcePart."""
+
+            _0: template_parser.ForeignSourcePart
 
     class StaticNamedSlot:
         """A slot with a statically-known name."""
@@ -1256,10 +1277,10 @@ class template_parser:
         """The parsed template AST."""
 
         elements: list[
-            template_parser.TemplateElement_Text
-            | template_parser.TemplateElement_Expr
-            | template_parser.TemplateElement_Node
-            | template_parser.TemplateElement_Foreign
+            template_parser.TemplateElement.Text
+            | template_parser.TemplateElement.Expr
+            | template_parser.TemplateElement.Node
+            | template_parser.TemplateElement.Foreign
         ]
         comments: list[template_parser.Comment]
         used_variables: list[template_parser.Token]

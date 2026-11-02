@@ -11,7 +11,11 @@ class SliderForm(Component):
         <c-CField>
           <c-fill name="label">Budget</c-fill>
           <c-fill name="default">
-            <c-CRangeSlider lower_name="minimum" upper_name="maximum" c-value="(25, 75)" />
+            <c-CRangeSlider
+              lower_name="minimum"
+              upper_name="maximum"
+              c-value="(25, 75)"
+            />
           </c-fill>
         </c-CField>
         <div><button type="submit">Submit</button> <button type="reset">Reset</button></div>

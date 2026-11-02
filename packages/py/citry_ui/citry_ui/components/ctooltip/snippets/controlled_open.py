@@ -9,10 +9,8 @@ class ControlledTooltip(Component):
       <section class="controlled-tooltip" >
         <c-CTooltip
           text="Controlled description for the Europa archive"
-          :open="open" :onOpenChange="(nextOpen, detail) => {
-              reason = detail.reason;
-              if (!locked) open = nextOpen;
-            }"
+          :open="open"
+          :onOpenChange="applyOpenRequest"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Europa archive</c-CButton>
@@ -31,6 +29,15 @@ class ControlledTooltip(Component):
           return {
             open: false, locked: false, reason: 'none'
           };
+        },
+        methods: {
+          // Show every request's reason, but change `open` only while
+          // requests are not locked, so a declined request leaves the
+          // Tooltip as is.
+          applyOpenRequest(nextOpen, detail) {
+            this.reason = detail.reason;
+            if (!this.locked) this.open = nextOpen;
+          },
         },
       });
     """

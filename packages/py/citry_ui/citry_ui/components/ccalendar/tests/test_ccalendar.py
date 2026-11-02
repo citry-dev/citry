@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import fields
 from datetime import date, datetime, timezone
@@ -13,6 +14,7 @@ from citry_ui.components.ccalendar import (
     CCalendar,
     CCalendarChangeSource,
     CCalendarDate,
+    CCalendarFirstDayOfWeek,
     CCalendarSize,
     CCalendarValueChangeDetail,
     CCalendarVariant,
@@ -89,6 +91,7 @@ def test_public_schema_and_exports_are_exact() -> None:
         for item in (
             CCalendarDate,
             CCalendarChangeSource,
+            CCalendarFirstDayOfWeek,
             CCalendarSize,
             CCalendarValueChangeDetail,
             CCalendarVariant,
@@ -187,6 +190,20 @@ def test_field_and_form_own_relationships_and_state() -> None:
     assert 'for="arrival"' in html
 
 
+@pytest.mark.parametrize("week_start", ['first_day_of_week="7"', 'c-first_day_of_week="7"'])
+def test_first_day_of_week_accepts_text_or_number(week_start: str) -> None:
+    # A template attribute passes text and a `c-` attribute passes the number;
+    # either way the browser must receive the number.
+    html = _render(f'<c-CCalendar id="week" visible_date="2026-08-01" {week_start} />', css=True)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
+    assert match is not None
+    occurrences = json.loads(match.group(1))["manifest"]["occurrences"]
+    calendar = next(item for item in occurrences if item["typeKey"].startswith("CCalendar_"))
+    assert calendar["serverData"]["serverDefaults"]["firstDayOfWeek"] == 7
+
+
 @pytest.mark.parametrize(
     ("kwargs", "error", "match"),
     [
@@ -199,8 +216,11 @@ def test_field_and_form_own_relationships_and_state() -> None:
         ({"value": "2026-08-19", "unavailable_dates": ["2026-08-19"]}, ValueError, "unavailable"),
         ({"unavailable_dates": "2026-08-19"}, TypeError, "must be a sequence"),
         ({"unavailable_dates": ["2026-08-19", "2026-08-19"]}, ValueError, "duplicates"),
-        ({"first_day_of_week": True}, TypeError, "exact integer"),
+        ({"first_day_of_week": True}, TypeError, "same number as text"),
+        ({"first_day_of_week": 1.0}, TypeError, "same number as text"),
         ({"first_day_of_week": 0}, ValueError, "from 1 through 7"),
+        ({"first_day_of_week": "8"}, ValueError, "from 1 through 7"),
+        ({"first_day_of_week": " 1"}, ValueError, "from 1 through 7"),
         ({"variant": "filled"}, ValueError, "must be one of"),
         ({"size": "xl"}, ValueError, "must be one of"),
         ({"attrs": []}, TypeError, "mapping or None"),

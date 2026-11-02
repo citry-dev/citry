@@ -224,7 +224,9 @@ def _measure(payload: bytes) -> AssetBytes:
         return AssetBytes(raw=0, gzip=0, brotli=0)
     return AssetBytes(
         raw=len(payload),
-        gzip=len(gzip.compress(payload, mtime=0)),
+        # Python 3.15 lowered gzip's default level from 9 to 6, so name the
+        # level the budgets were set with to measure the same bytes everywhere.
+        gzip=len(gzip.compress(payload, compresslevel=9, mtime=0)),
         brotli=len(brotli.compress(payload)),
     )
 

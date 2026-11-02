@@ -29,9 +29,10 @@
 //! once, at its first row's place, and `_encode_occurrences` (in `rows.rs`)
 //! writes all its rows' items through [`write_run`].
 //!
-//! Neither class defines `__traverse__`, so the cyclic garbage collector does
-//! not track them: they hold only strs, `_NativeRow`s (also untracked) and,
-//! for an occurrence, its run, none of which can refer back to them.
+//! Both classes are created untracked ([`super::new_untracked`]), so the
+//! cyclic garbage collector skips them: they hold only strs, `_NativeRow`s
+//! (also untracked) and, for an occurrence, its run, none of which can refer
+//! back to them.
 
 use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::intern;
@@ -239,8 +240,8 @@ impl NativeRun {
     /// shared definition.
     #[staticmethod]
     #[allow(clippy::too_many_arguments)]
-    fn try_new(
-        py: Python<'_>,
+    fn try_new<'py>(
+        py: Python<'py>,
         members: &Bound<'_, PyList>,
         record_type: &Bound<'_, PyType>,
         component_class: &Bound<'_, PyAny>,
@@ -252,7 +253,7 @@ impl NativeRun {
         parent_id: &Bound<'_, PyString>,
         type_key: &Bound<'_, PyString>,
         definition_id: &Bound<'_, PyString>,
-    ) -> PyResult<Option<NativeRun>> {
+    ) -> PyResult<Option<Bound<'py, NativeRun>>> {
         without_panics(|| {
             // The manifest writer writes the parent id and type key as text,
             // and the getters hand all three back to Python as the exact strs
@@ -317,12 +318,13 @@ impl NativeRun {
                     row: member.row,
                 })
                 .collect();
-            Ok(Some(NativeRun {
+            let run = NativeRun {
                 parent_id: parent.unbind(),
                 type_key: type_text.unbind(),
                 definition_id: definition.unbind(),
                 rows,
-            }))
+            };
+            Ok(Some(super::new_untracked(py, run)?))
         })
     }
 
@@ -442,12 +444,15 @@ impl NativeRun {
     }
 
     /// One `_NativeOccurrence` per row, in row order, for the view.
-    fn occurrences(slf: &Bound<'_, Self>) -> Vec<NativeOccurrence> {
+    fn occurrences<'py>(slf: &Bound<'py, Self>) -> PyResult<Vec<Bound<'py, NativeOccurrence>>> {
         let run = slf.clone().unbind();
         (0..slf.get().rows.len())
-            .map(|index| NativeOccurrence {
-                run: run.clone_ref(slf.py()),
-                index,
+            .map(|index| {
+                let occurrence = NativeOccurrence {
+                    run: run.clone_ref(slf.py()),
+                    index,
+                };
+                super::new_untracked(slf.py(), occurrence)
             })
             .collect()
     }

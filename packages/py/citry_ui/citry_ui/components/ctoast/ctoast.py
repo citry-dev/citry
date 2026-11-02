@@ -220,10 +220,6 @@ class CToastRegion(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         validate_html_id("CToastRegion", kwargs.id)
         if kwargs.id is not None and "\0" in kwargs.id:
@@ -383,7 +379,11 @@ class CToastRegion(LibraryComponent):
               data-citry-ui-part="toast"
             >
               <div class="cui-toast__content" data-citry-ui-part="content">
-                <div c-id="message['titleId']" class="cui-toast__title" data-citry-ui-part="title">
+                <div
+                  c-id="message['titleId']"
+                  class="cui-toast__title"
+                  data-citry-ui-part="title"
+                >
                   {{ message['title'] }}
                 </div>
                 <c-if cond="message['description']">
@@ -397,7 +397,11 @@ class CToastRegion(LibraryComponent):
               <c-if cond="message['actionLabel'] or message['dismissible']">
                 <div class="cui-toast__actions" data-citry-ui-part="actions">
                   <c-if cond="message['actionLabel']">
-                    <button type="button" data-citry-toast-action data-citry-ui-part="action">
+                    <button
+                      type="button"
+                      data-citry-toast-action
+                      data-citry-ui-part="action"
+                    >
                       {{ message['actionLabel'] }}
                     </button>
                   </c-if>

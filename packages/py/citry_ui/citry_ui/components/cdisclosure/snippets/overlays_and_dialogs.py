@@ -18,7 +18,11 @@ class DisclosureOverlaysAndDialogs(Component):
               <p>Review token scope before rotating a credential.</p>
               <c-CPopover>
                 <c-fill name="activator" data="{ activator_attrs }">
-                  <c-CButton size="sm" variant="outline" c-attrs="activator_attrs">Scope help</c-CButton>
+                  <c-CButton
+                    size="sm"
+                    variant="outline"
+                    c-attrs="activator_attrs"
+                  >Scope help</c-CButton>
                 </c-fill>
                 <c-fill name="title">Credential scope</c-fill>
                 <c-fill name="default">Grant only the permissions this worker needs.</c-fill>
@@ -34,7 +38,8 @@ class DisclosureOverlaysAndDialogs(Component):
 
         <c-CDialog
           size="sm"
-          :open="dialogOpen" :onOpenChange="(next) => dialogOpen = next"
+          :open="dialogOpen"
+          :onOpenChange="(next) => dialogOpen = next"
         >
           <c-fill name="title">Rotate credential</c-fill>
           <c-fill name="default">The old credential stops working immediately.</c-fill>

@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -27,7 +25,12 @@ class ConfigureCombobox(Component):
             <c-CCombobox
               c-options="objects"
               placeholder="Search the catalog"
-              :variant="variant" :size="size" :filter="filter" :clearable="clearable" :openOnFocus="open_on_focus" :autoHighlight="auto_highlight"
+              :variant="variant"
+              :size="size"
+              :filter="filter"
+              :clearable="clearable"
+              :openOnFocus="open_on_focus"
+              :autoHighlight="auto_highlight"
             />
           </c-fill>
         </c-CField>

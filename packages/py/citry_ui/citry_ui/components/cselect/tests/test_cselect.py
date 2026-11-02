@@ -172,7 +172,7 @@ def test_field_owns_state_and_accessible_relationships() -> None:
             },
             "contiguous",
         ),
-        (_select('placement="left"'), {"options": _options()}, "placement must be one of"),
+        (_select('placement="left"'), {"options": _options()}, r"CSelect\.Kwargs\.placement expects Literal\["),
         (
             '<c-CSelect placeholder="Choose" c-options="options" />',
             {"options": _options()},

@@ -160,7 +160,7 @@ citry-ui-date-range-placeholder = Choose dates
 citry-ui-date-range-label = Choose date range
 # @param {str} $start - Locale-formatted start date.
 # @param {str} $end - Locale-formatted end date.
-citry-ui-date-range-change = Change date range, { $start } to { $end }
+citry-ui-date-range-change = Change date range, { $start } – { $end }
 citry-ui-date-range-start-label = Start date
 citry-ui-date-range-end-label = End date
 citry-ui-date-range-clear = Clear date range

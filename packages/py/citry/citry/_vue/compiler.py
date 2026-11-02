@@ -14,13 +14,19 @@ from typing import TYPE_CHECKING, TypedDict
 
 from typing_extensions import NotRequired, Self
 
+from citry._walk import Call, run
 from citry.client_directives import _ONCE_MEMO_HINT
 from citry_core import _rust
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Mapping
+    from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
 
-from .capture import prepared_spread_index
+from .capture import (
+    prepared_spread_index,
+    vue_owned_native_marker,
+    vue_owned_native_properties,
+    writes_vue_owned_marker,
+)
 from .prepared import (
     ComponentCall,
     ElementClose,
@@ -212,6 +218,9 @@ class CompiledRender:
     # "empty", "fragment", "text", "opaque-html", or "unknown". A caller's `v-show` or custom
     # directive only reaches the page through an element root (see `events.check_directive_roots`).
     root_shape: str = "unknown"
+    # The `<slot>` outlets written inside an authored `v-for`, which Vue calls
+    # once per item. `events.check_fills_in_vue_loops` reads them.
+    looped_slot_outlets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,7 +368,7 @@ class VueCompilerDiagnosticsError(ValueError):
 
 
 ORDINARY_TARGET = "ordinary-vnodes/1"
-_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.6"}
+_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.7"}
 _TEXT_ACTION_RULES = {
     "rewrite": {"condense.whitespace"},
     "drop": {"condense.drop-whitespace", "drop.comment", "drop.branch-gap"},
@@ -434,7 +443,62 @@ _ALLOWED_HELPERS = {
 }
 _ROOT_SHAPES = frozenset({"element", "component", "empty", "fragment", "text", "opaque-html", "unknown"})
 _FORBIDDEN_CODE = ("_cache[", "createStaticVNode", "setBlockTracking", "withMemo")
-_FORBIDDEN_TEMPLATE = re.compile(r"<(?:script|style)(?:\s|>|/)|\bv-(?:once|memo)\b", re.IGNORECASE)
+_FORBIDDEN_TEMPLATE = re.compile(r"<(?:script|style)(?:\s|>|/)", re.IGNORECASE)
+# `v-once` and `v-memo` are refused by their spelling, except in a template
+# that uses `v-pre`, where Vue reads them as plain attributes. There they are
+# refused by what they compile to instead, the constructs below.
+_ONCE_MEMO_SPELLING = re.compile(r"\bv-(?:once|memo)\b", re.IGNORECASE)
+_ONCE_MEMO_CONSTRUCTS = ("setBlockTracking", "withMemo", "_cache[")
+
+
+def _raise_for_once_or_memo(template: str, refused: Sequence[str]) -> None:
+    """
+    Name `v-once` or `v-memo` when the output was refused for the cached constructs they compile to.
+
+    ``refused`` holds the compiler's diagnostic messages, or the constructs
+    found in its code; only one that names `setBlockTracking`, `withMemo`, or
+    `_cache[` counts, so an unrelated refusal keeps its own message. The
+    template parser names the directives with their position; this names
+    them for a template that reached the compiler another way.
+    """
+    if any(construct in message for message in refused for construct in _ONCE_MEMO_CONSTRUCTS):
+        _raise_for_once_or_memo_spelling(template)
+
+
+def _raise_for_once_or_memo_spelling(template: str) -> None:
+    """Raise the error that names `v-once` or `v-memo` when the template spells either."""
+    spelling = _ONCE_MEMO_SPELLING.search(template)
+    if spelling is None:
+        return
+    msg = (
+        f"The Vue template contains '{spelling.group(0)}'. {_ONCE_MEMO_HINT} To keep an element's"
+        " contents as the server first rendered them, put '#c-ignore' on the element."
+    )
+    raise ValueError(msg)
+
+
+def _guard_template_braces(text: str) -> str:
+    """
+    Return static template text in which no two braces can open a Vue interpolation.
+
+    Citry writes the static text on each side of a Citry tag next to each
+    other in the Vue template, and a tag such as a constant `<c-if>` writes
+    nothing there. So `{` before the tag and `{` after it meet as `{{`,
+    either inside one static run that Citry joined or where two chunks of
+    text meet, and Vue would read an interpolation and run it as JavaScript,
+    where the same template without Vue shows the braces as text. In text,
+    Citry reads an authored `{{` as an expression, so a `{{` in static text
+    came from a join. Attribute values and comments can hold `{{`, and
+    rewriting them is harmless, because Vue decodes attribute values and
+    drops comments. Writing the second brace of each `{{`, and a trailing
+    brace, as `&#123;` keeps them text: Vue decodes the reference to `{`.
+    Vue would not decode it inside `<script>` or `<style>`, and
+    `_FORBIDDEN_TEMPLATE` keeps both out of the template.
+    """
+    text = text.replace("{{", "{&#123;")
+    return f"{text[:-1]}&#123;" if text.endswith("{") else text
+
+
 # The descriptor also names the browser globals the definition code writes to and reads from,
 # so a definition built for other global names gets a different contract hash: the artifact
 # cache does not find it, and the browser runtime rejects it.
@@ -488,17 +552,12 @@ class NativeCompiler:
     ) -> CompiledRender:
         if source_map:
             raise ValueError("ordinary target source maps are not implemented by this compiler adapter")
-        forbidden = _FORBIDDEN_TEMPLATE.search(template)
-        if forbidden is not None:
-            # The template parser names `v-once` and `v-memo` with their
-            # position; this names them for a template that reached here another way.
-            if forbidden.group(0).lower().startswith("v-"):
-                msg = (
-                    f"The Vue template contains '{forbidden.group(0)}'. {_ONCE_MEMO_HINT} To keep an element's"
-                    " contents as the server first rendered them, put '#c-ignore' on the element."
-                )
-                raise ValueError(msg)
+        if _FORBIDDEN_TEMPLATE.search(template) is not None:
             raise ValueError("ordinary target template contains an unsupported raw-text or cached construct")
+        if "v-pre" not in template:
+            # Without `v-pre` the spelling is always the directive, so it is
+            # named before anything compiles, as the template parser names it.
+            _raise_for_once_or_memo_spelling(template)
         identity = json.dumps(
             {
                 "binary": self._binary_sha256,
@@ -587,6 +646,7 @@ class NativeCompiler:
                 response.get("elements", []), runtime_event_sites
             )
             if diagnostics:
+                _raise_for_once_or_memo(template, [str(item.get("message", "")) for item in diagnostics])
                 raise VueCompilerDiagnosticsError(diagnostics)
             # Read after diagnostics so a rejected template reports its
             # diagnostics rather than a plan built from rejected output.
@@ -601,6 +661,7 @@ class NativeCompiler:
             if unsupported:
                 raise ValueError(f"ordinary target emitted unsupported helpers: {sorted(unsupported)!r}")
             if any(token in preamble or token in code for token in _FORBIDDEN_CODE):
+                _raise_for_once_or_memo(template, [token for token in _FORBIDDEN_CODE if token in preamble + code])
                 raise ValueError("ordinary target emitted cached or static compiler constructs")
             emits_directives = "withDirectives" in helpers
             if emits_directives != bool(directive_element_count):
@@ -664,6 +725,16 @@ class NativeCompiler:
                 hydration_plan,
                 server_render,
                 str(root_shape),
+                looped_slot_outlets=tuple(
+                    sorted(
+                        {
+                            name
+                            for element in response.get("elements", [])
+                            if any(directive.get("name") == "for" for directive in element.get("directives", []))
+                            for name in element.get("slotOutlets", [])
+                        }
+                    )
+                ),
             )
             self._cache[cache_key] = compiled
             if len(self._cache) > 256:
@@ -1285,14 +1356,12 @@ def definition_templates(view: PreparedView, *, tag_for_type: Callable[[str], st
     if any(re.fullmatch(r"[a-z][a-z0-9.-]*-[a-z0-9.-]+", tag) is None for tag in tags.values()):
         raise ValueError("component tag mapping returned an unsafe custom-element name")
 
-    def render_nodes(nodes: tuple[PreparedNode, ...], owner_id: str) -> str:
+    def render_nodes(nodes: tuple[PreparedNode, ...], owner_id: str) -> Generator[Call, str, str]:
+        # A generator walk (see `citry._walk`): each nested fill is rendered
+        # with `yield Call(...)`, so this walk uses the same number of Python
+        # frames however deep the view nests.
         output: list[str] = []
-
-        def render(current_nodes: tuple[PreparedNode, ...]) -> None:
-            for node in current_nodes:
-                render_one(node)
-
-        def render_one(node: PreparedNode) -> None:
+        for node in nodes:
             if isinstance(node, Html):
                 if node.source != "template":
                     raise ValueError("only explicitly template-authored HTML may be compiled")
@@ -1303,7 +1372,7 @@ def definition_templates(view: PreparedView, *, tag_for_type: Callable[[str], st
                 fill = node.selected
                 if any(isinstance(child, SlotOutlet) for child in fill.children):
                     raise ValueError("nested ownership transitions need the generated fallback bridge")
-                body = render_nodes(fill.children, fill.lexical_owner_id or owner_id)
+                body = yield Call(render_nodes, fill.children, fill.lexical_owner_id or owner_id)
                 if fill.lexical_owner_id == owner_id:
                     output.append(f'<slot name="{node.site_id}">{body}</slot>')
                 else:
@@ -1317,22 +1386,18 @@ def definition_templates(view: PreparedView, *, tag_for_type: Callable[[str], st
                 for candidate in _walk_slots(child_definition.children):
                     fill = candidate.selected
                     if fill.lexical_owner_id == owner_id:
-                        slots.append(
-                            f"<template v-slot:['{candidate.site_id}']>"
-                            f"{render_nodes(fill.children, owner_id)}</template>"
-                        )
+                        fill_html = yield Call(render_nodes, fill.children, owner_id)
+                        slots.append(f"<template v-slot:['{candidate.site_id}']>{fill_html}</template>")
                 output.append(f'<{tag} citry-id="{escaped_id}" key="{escaped_id}">' + "".join(slots) + f"</{tag}>")
             else:
                 # This path composes whole-definition templates, where an element,
                 # a local call, or a forwarded slot has no compiled form yet. Name
                 # the node instead of failing later on a missing attribute.
                 raise TypeError(f"prepared node {type(node).__name__} has no definition-template form")
-
-        render(nodes)
         return "".join(output)
 
     return {
-        definition.id: render_nodes(definition.children, occurrence.id)
+        definition.id: run(render_nodes(definition.children, occurrence.id))
         for occurrence in view.occurrences
         for definition in (definitions[occurrence.definition_id],)
     }
@@ -1343,7 +1408,9 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
     parts: list[str] = []
     local_calls: list[dict[str, object]] = []
     element_bindings: list[dict[str, object]] = []
-    element_stack: list[tuple[str, _SlotKeyScope | None]] = []
+    # Each open element's tag, key scope, and whether it sits under an
+    # authored `v-pre` (its own or an ancestor's).
+    element_stack: list[tuple[str, _SlotKeyScope | None, bool]] = []
     slot_key_scopes: list[_SlotKeyScope] = []
     byte_position = 0
 
@@ -1352,7 +1419,10 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
         parts.append(value)
         byte_position += len(value.encode())
 
-    def render(current_nodes: tuple[PreparedNode, ...]) -> None:
+    def render(current_nodes: tuple[PreparedNode, ...]) -> Generator[Call, None, None]:
+        # A generator walk (see `citry._walk`): each nested fill or fallback is
+        # rendered with `yield Call(...)`, so this walk uses the same number of
+        # Python frames however deep the view nests.
         for node in current_nodes:
             if isinstance(node, Html):
                 if node.source != "template":
@@ -1363,6 +1433,11 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
             elif isinstance(node, ElementOpen):
                 start = byte_position
                 attrs = list(node.authored_attrs)
+                # Vue reads an element under `v-pre` as written, so the
+                # ownership marker below would reach the page as a plain attribute.
+                under_v_pre = (bool(element_stack) and element_stack[-1][2]) or any(
+                    attr.casefold().partition("=")[0] == "v-pre" for attr in node.authored_attrs
+                )
                 if node.attrs_binding_key is not None:
                     spread = f'v-bind="$citryPrepared.{node.attrs_binding_key}"'
                     spread_index = prepared_spread_index(node.authored_attrs)
@@ -1376,12 +1451,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 # contract as the direct assembler.  ``ElementOpen`` predates
                 # the typed ``has_spread`` field, so its generated attrs
                 # binding is the only spread provenance available here.
-                if node.tag.casefold() in {"input", "textarea", "select", "option"}:
-                    from .capture import (  # noqa: PLC0415
-                        vue_owned_native_marker,
-                        vue_owned_native_properties,
-                    )
-
+                if writes_vue_owned_marker(node.tag, under_v_pre=under_v_pre):
                     attrs.append(
                         vue_owned_native_marker(
                             vue_owned_native_properties(
@@ -1421,13 +1491,13 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 element_scope = (
                     None if node.key_binding_key is None else _SlotKeyScope(f"$citryPrepared.{node.key_binding_key}")
                 )
-                element_stack.append((node.tag, element_scope))
+                element_stack.append((node.tag, element_scope, under_v_pre))
                 if element_scope is not None:
                     slot_key_scopes.append(element_scope)
             elif isinstance(node, ElementClose):
                 if not element_stack or element_stack[-1][0].lower() != node.tag.lower():
                     raise ValueError("prepared element close has no matching opening")
-                _, element_scope = element_stack.pop()
+                _, element_scope, _ = element_stack.pop()
                 if element_scope is not None:
                     if not slot_key_scopes or slot_key_scopes[-1] is not element_scope:
                         raise ValueError("prepared element key scope changed before its close")
@@ -1442,7 +1512,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 opening_end = byte_position
                 for fill in node.fills:
                     append(f"<template v-slot:['{fill.site_id}']>")
-                    render(fill.children)
+                    yield Call(render, fill.children)
                     append("</template>")
                 append(f"</{node.component_tag}>")
                 local_calls.append(
@@ -1463,7 +1533,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 )
                 if node.fallback:
                     append(f"<template v-else-if=\"$citryPrepared.selectedSlots[{node.site_id!r}] === 'fallback'\">")
-                    render(node.fallback)
+                    yield Call(render, node.fallback)
                     append("</template>")
             elif isinstance(node, ForwardedSlot):
                 slot_key = _next_slot_key(slot_key_scopes)
@@ -1473,7 +1543,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
             else:
                 raise TypeError(f"unsupported prepared node {type(node).__name__}")
 
-    render(nodes)
+    run(render(nodes))
     return DefinitionCompileInput("".join(parts), tuple(local_calls), tuple(element_bindings))
 
 

@@ -68,6 +68,17 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
             "release"
         },
     )?;
+    // The native render path's depth limits, which differ by build profile
+    // (see `MAX_BODY_DEPTH` in `citry_native_render`). Tests read them here
+    // rather than copying a number that depends on the build.
+    m.add(
+        "NATIVE_RENDER_MAX_BODY_DEPTH",
+        citry_native_render::MAX_BODY_DEPTH,
+    )?;
+    m.add(
+        "NATIVE_RENDER_MAX_READ_DEPTH",
+        citry_native_render::MAX_READ_DEPTH,
+    )?;
     let vue_mod = PyModule::new(m.py(), "vue")?;
     vue::register(&vue_mod)?;
     m.add_submodule(&vue_mod)?;
@@ -94,6 +105,10 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     html_transform_mod.add_function(wrap_pyfunction!(
         html_transform::classify_dependency_attribute,
+        &html_transform_mod
+    )?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(
+        html_transform::csp_attribute_problem,
         &html_transform_mod
     )?)?;
     html_transform_mod.add_function(wrap_pyfunction!(
@@ -167,6 +182,16 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_submodule(&template_parser_mod)?;
     // Functions
     template_parser_mod.add_function(wrap_pyfunction!(parse_template, &template_parser_mod)?)?;
+    // The nesting limits, private and read by Python tests, so the tests and
+    // the parser cannot drift apart.
+    template_parser_mod.add(
+        "_MAX_TAG_NESTING",
+        citry_template_parser::nesting::MAX_TAG_NESTING,
+    )?;
+    template_parser_mod.add(
+        "_MAX_LOGIC_NESTING",
+        citry_template_parser::nesting::MAX_LOGIC_NESTING,
+    )?;
     template_parser_mod.add_function(wrap_pyfunction!(compile_template, &template_parser_mod)?)?;
     template_parser_mod.add_function(wrap_pyfunction!(
         compile_prepared_template,

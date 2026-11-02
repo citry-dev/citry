@@ -16,7 +16,11 @@ class NestedPopovers(Component):
             <p>Its rings contain countless ice-rich particles.</p>
             <c-CPopover placement="bottom-end">
               <c-fill name="activator" data="{ activator_attrs }">
-                <c-CButton size="sm" variant="outline" c-attrs="activator_attrs">
+                <c-CButton
+                  size="sm"
+                  variant="outline"
+                  c-attrs="activator_attrs"
+                >
                   Inspect ring gap
                 </c-CButton>
               </c-fill>

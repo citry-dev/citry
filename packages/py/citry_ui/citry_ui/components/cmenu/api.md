@@ -70,7 +70,8 @@ navigate.
 
 Use `start`, default, `description`, and `end` for icons, the visible label,
 supporting text, and shortcuts. Only the default label names the item; the
-description is exposed separately.
+description is exposed separately. The menu does not listen for a shortcut
+shown in `end`; handle the key in your page, as this example does.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cmenu/snippets/item_content.py"

@@ -193,4 +193,6 @@ assert rendered.serialize() == rendered.serialize()
 
     Inserting the same `CitryRender` in two places in a page raises
     `RuntimeError` when the page is serialized. To show a component twice,
-    keep the `CitryElement` and insert that instead.
+    keep the `CitryElement` and insert that instead. For a slot's fill,
+    pass the `Slot` without calling it
+    ([Show a fill twice](/concepts/slots/#show-a-fill-in-two-places)).

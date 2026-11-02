@@ -16,7 +16,11 @@ class GroupAlignment(Component):
         <c-for each="justify in justifies">
           <c-CCol #c-key="justify" gap="xs">
             <strong>justify={{ justify }}</strong>
-            <c-CRow #c-key="justify" c-justify="justify" class_="flow-alignments__group">
+            <c-CRow
+              #c-key="justify"
+              c-justify="justify"
+              class_="flow-alignments__group"
+            >
               <span>Trim</span><span>Bisque</span><span>Glaze</span>
             </c-CRow>
           </c-CCol>

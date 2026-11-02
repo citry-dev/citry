@@ -39,9 +39,17 @@ def drawer_states_component(app: Citry) -> type[Component]:
                 <c-fill name="default">
                   <form id="quality-drawer-form">
                     <label for="quality-drawer-note">Note</label>
-                    <input id="quality-drawer-note" name="note" value="Clear horizon" />
+                    <input
+                      id="quality-drawer-note"
+                      name="note"
+                      value="Clear horizon"
+                    />
                   </form>
-                  <c-CDrawer id="quality-nested-drawer" size="sm" placement="block-end">
+                  <c-CDrawer
+                    id="quality-nested-drawer"
+                    size="sm"
+                    placement="block-end"
+                  >
                     <c-fill name="activator" data="{ activator_attrs }">
                       <c-CButton variant="outline" c-attrs="activator_attrs">
                         Review coordinates
@@ -63,7 +71,8 @@ def drawer_states_component(app: Citry) -> type[Component]:
                 size="lg"
                 scroll="drawer"
                 c-dismissible="False"
-                :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
+                :open="controlledOpen"
+                :onOpenChange="(open) => controlledOpen = open"
                 c-attrs="{
                   'data-quality-states':
                     'controlled persistent block-end lg drawer-scroll long-content'
