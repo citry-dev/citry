@@ -191,10 +191,35 @@ Each value must be a string, a finite number (not a boolean), or `None`,
 which leaves the property empty. Any other value, such as a `bool` or a
 `list`, raises `ValueError` when the component renders. A key must
 be a string that is valid as the name of a custom property, without the
-leading `--`. Citry quotes a string that contains spaces,
-unless it starts with a CSS function such as `calc(...)` or `rgba(...)`.
-It raises `ValueError` for a value that could break out of the generated
-CSS, such as one with a top-level `;` or a `</style` end tag.
+leading `--`.
+
+A string value with whitespace is sent as one quoted CSS string, unless it
+starts with a CSS function such as `calc(...)` or `rgba(...)`, so it
+cannot hold a font list or a keyword such as `!important`. Any other
+string is used as written, and Citry raises `ValueError` when it has:
+
+- a `;` or `!` that is not inside brackets such as `calc(...)`;
+- a brace, a comment, or a `<` or backslash outside a string or `url()`;
+- an unbalanced bracket;
+- a malformed string or `url()`.
+
+A value containing a null or surrogate character, `</style`, or `<!--`
+always raises. `rgb(...)`, `calc(...)`, and `url(...)` values work,
+including SVG data URLs.
+
+To use data in a stylesheet, pass it through `css_data()`, not through
+`{{ }}` inside a `<style>` element you write in the template. The same
+holds for scripts: send data with `js_data()`, not `{{ }}` inside a
+`<script>` element. Citry escapes `{{ }}` for HTML, which does not make a
+value safe inside script or style text.
+
+Citry checks your value first, then writes each non-ASCII character in it
+as a CSS escape, such as `\8868` for `表` (the escape ends with a space,
+which CSS reads as part of it). Without this, a page declared in an
+encoding such as GBK or Big5 can misread a non-ASCII character in a linked
+stylesheet and end a quoted string early. Styles render the same, but
+script that reads the property with `getComputedStyle()` gets the escape
+text.
 
 !!! warning "Keep secrets out of CSS data"
 

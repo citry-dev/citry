@@ -2955,3 +2955,93 @@ class TestDetachedHandlers:
         bump, peek = asyncio.run(EventsDispatcher().dispatch_async(envelope, _ctx(c)))["results"]
         assert bump["error"]["code"] == "handler_error"
         assert [action["action"] for action in peek["actions"]] == ["event", "data"]
+
+
+class TestPageCspNonce:
+    """The engine-wide ``_csp_nonce`` setting puts the page's nonce on a Render fragment."""
+
+    def _increment(self, c, counter):
+        return _dispatch(
+            c,
+            {
+                "componentClassId": counter.class_id,
+                "handlerName": "increment",
+                "callerRenderId": "c9zk1q00",
+                "args": {},
+                "stateToken": _token(counter),
+            },
+        )["results"][0]
+
+    def test_the_fragment_data_block_carries_the_nonce_the_function_returns(self):
+        seen = []
+
+        def page_nonce(request):
+            seen.append(request)
+            return "cGFnZS1ub25jZQ"
+
+        c = _citry(extensions_defaults={"events": {"_csp_nonce": page_nonce}})
+        [action] = self._increment(c, _counter(c))["actions"]
+        assert re.search(
+            r'<script type="application/json" data-citry-vue-fragment nonce="cGFnZS1ub25jZQ">', action["html"]
+        )
+        # Citry asks once per call and passes the call's EventRequest.
+        [request] = seen
+        assert isinstance(request, EventRequest)
+
+    def test_a_function_that_returns_none_leaves_the_fragment_without_a_nonce(self):
+        c = _citry(extensions_defaults={"events": {"_csp_nonce": lambda _request: None}})
+        [action] = self._increment(c, _counter(c))["actions"]
+        assert "nonce=" not in action["html"]
+
+    @pytest.mark.parametrize("returned", [42, b"bytes", "not a nonce!"], ids=["int", "bytes", "invalid"])
+    def test_a_wrong_return_value_fails_the_call(self, returned, caplog):
+        c = _citry(extensions_defaults={"events": {"_csp_nonce": lambda _request: returned}})
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            result = self._increment(c, _counter(c))
+        assert result["ok"] is False
+        assert result["error"]["code"] == "handler_error"
+
+    @pytest.mark.parametrize("value", ["cGFnZS1ub25jZQ", None, 1])
+    def test_the_setting_must_be_a_function(self, value):
+        with pytest.raises(ValueError, match="'_csp_nonce' must be a plain"):
+            _counter(_citry(extensions_defaults={"events": {"_csp_nonce": value}}))
+
+    def test_a_component_cannot_set_it(self):
+        c = _citry()
+        with pytest.raises(ValueError, match="'_csp_nonce' is engine-wide configuration"):
+
+            class Page(Component):
+                citry = c
+
+                class Events:
+                    _csp_nonce = "cGFnZS1ub25jZQ"
+
+                    def go(self):
+                        return None
+
+    def test_a_call_without_a_render_does_not_ask_for_the_nonce(self):
+        def page_nonce(_request):
+            raise AssertionError("asked for a nonce the answer does not need")
+
+        c = _citry(extensions_defaults={"events": {"_csp_nonce": page_nonce}})
+        counter = _counter(c)
+        [result] = _dispatch(c, {"componentClassId": counter.class_id, "handlerName": "square", "args": {"value": 3}})[
+            "results"
+        ]
+        assert result["ok"] is True
+
+    def test_a_function_that_raises_fails_the_call(self, caplog):
+        def page_nonce(_request):
+            raise RuntimeError("no session")
+
+        c = _citry(extensions_defaults={"events": {"_csp_nonce": page_nonce}})
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            result = self._increment(c, _counter(c))
+        assert result["error"]["code"] == "handler_error"
+
+    def test_an_async_function_is_refused(self):
+        async def page_nonce(_request):
+            return None
+
+        with pytest.raises(ValueError, match="plain \\(not async\\) function"):
+            _counter(_citry(extensions_defaults={"events": {"_csp_nonce": page_nonce}}))

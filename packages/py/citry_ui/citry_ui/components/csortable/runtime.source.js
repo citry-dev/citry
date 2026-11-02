@@ -1,3 +1,5 @@
+// Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
 $component({
   props: {order: {}, layout: {}, disabled: {}, onOrderChange: {}},
   onServerRender: ({component}) => {
@@ -147,7 +149,7 @@ $component({
       if (move || disabled || item.hasAttribute('data-disabled')) return;
       const order = values();
       const rect = item.getBoundingClientRect();
-      const placeholder = document.createElement('li');
+      const placeholder = builtIn(document).createElement('li');
       placeholder.setAttribute('data-placeholder', '');
       placeholder.setAttribute('data-citry-ui-part', 'placeholder');
       placeholder.style.blockSize = `${rect.height}px`;
@@ -296,8 +298,8 @@ $component({
         catch (error) { console.error('[citry-ui] CSortable onOrderChange callback failed.', error, root); }
       }
     }, 0);
-    const form = data.form ? document.getElementById(data.form) : root.closest('form');
-    form?.addEventListener('reset', onReset);
+    const form = data.form ? builtIn(document).getElementById(data.form) : root.closest('form');
+    if (form) builtIn(form).addEventListener('reset', onReset);
     list.addEventListener('pointerdown', onPointerDown);
     list.addEventListener('keydown', onKeyDown);
     root.setAttribute('data-enhanced', '');
@@ -346,7 +348,7 @@ $component({
       alive = false;
       if (pendingTouch) clearTimeout(pendingTouch.timer);
       cancel(null, false);
-      form?.removeEventListener('reset', onReset);
+      if (form) builtIn(form).removeEventListener('reset', onReset);
       list.removeEventListener('pointerdown', onPointerDown);
       list.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('pointermove', pointerMove);

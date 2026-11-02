@@ -367,8 +367,14 @@ inspection, and redirect policy remain required. Native `accept` and browser
 constraints are user feedback, not a security boundary.
 
 Citry UI does not log Form values or copy them into public attributes. `action`
-and target policy remain application-owned. Consumer attributes cannot replace
-component-owned identity, busy state, public parts, or behavior markers.
+goes through Citry UI's shared link check, which accepts a relative URL or an
+`http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL, and any other scheme (such
+as `javascript:`, `vbscript:`, or `data:`) raises `ValueError` at render. It
+reads the scheme the way the browser's URL parser does, so letter case,
+surrounding spaces, and tab or newline characters inside the scheme do not
+change the result. Target policy remains application-owned. Consumer attributes
+cannot replace component-owned identity, busy state, public parts, or behavior
+markers.
 
 ## 16. Assets and performance
 

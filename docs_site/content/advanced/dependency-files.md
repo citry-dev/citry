@@ -37,6 +37,12 @@ A JavaScript URL becomes a `<script src="...">` tag, and a CSS URL becomes
 a `<link rel="stylesheet">` tag. Files load in the order you list them.
 When several components on a page list the same URL, Citry adds it once.
 
+On an interactive page (see [Use plain scripts](#use-plain-scripts)),
+Citry's browser code adds the script tags itself, and it refuses a `data:`
+script URL. A relative URL such as `/static/chart.js` works. A `data:`
+script URL stops the page's Vue app, or the fragment, from starting, and
+the browser console shows an error.
+
 ## Add a project file
 
 A string that does not start with `http://`, `https://`, or `/` can name a

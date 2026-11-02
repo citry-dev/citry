@@ -732,6 +732,10 @@ class CInput(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           value: {},
@@ -956,7 +960,7 @@ class CInput(LibraryComponent):
           input.addEventListener("change", onChange);
           input.addEventListener("compositionstart", onCompositionStart);
           input.addEventListener("compositionend", onCompositionEnd);
-          nativeForm?.addEventListener("reset", onReset);
+          if (nativeForm) builtIn(nativeForm).addEventListener("reset", onReset);
           const unregisterCapabilities = field?.registerCapabilities({required: true, readonly: true});
           Citry.vue.watchEffect(() => {
             applyState();
@@ -989,7 +993,7 @@ class CInput(LibraryComponent):
             input.removeEventListener("change", onChange);
             input.removeEventListener("compositionstart", onCompositionStart);
             input.removeEventListener("compositionend", onCompositionEnd);
-            nativeForm?.removeEventListener("reset", onReset);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("reset", onReset);
             resetTimers.forEach((resetTimer) => clearTimeout(resetTimer));
             resetTimers.clear();
             if (nativeInvalid) {

@@ -1,3 +1,9 @@
+// Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A form's named field can hide the form's own parentNode or getRootNode, so read them from Node.prototype.
+const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+const parentNodeOf = node => nodeParentNode.call(node);
+const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 const toastRegistryKey = Symbol.for("citry-ui:toast-region-runtime");
 const toastRegistry = globalThis[toastRegistryKey] ?? new WeakMap();
 globalThis[toastRegistryKey] = toastRegistry;
@@ -13,7 +19,7 @@ $component({
     const props = component.$props;
     const effect = Citry.vue.watchEffect;
     const i18n = component.$i18n;
-    const scope = region.getRootNode();
+    const scope = rootNodeOf(region);
     const ownerDocument = region.ownerDocument;
     const existing = toastRegistry.get(scope);
     if (existing?.isConnected && existing !== region) {
@@ -95,8 +101,8 @@ $component({
     let nodeCounter = runtimeState.nodeCounter ?? 0;
 
     const composedParent = (node) => {
-      if (node?.parentNode) return node.parentNode;
-      const root = node?.getRootNode?.();
+      if (node && parentNodeOf(node)) return parentNodeOf(node);
+      const root = node instanceof Node ? rootNodeOf(node) : null;
       return root instanceof ShadowRoot ? root.host : null;
     };
     const composedContains = (ancestor, node) => {
@@ -106,7 +112,7 @@ $component({
       return false;
     };
     const deepActiveElement = () => {
-      let active = ownerDocument.activeElement;
+      let active = builtIn(ownerDocument).activeElement;
       while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
       return active;
     };
@@ -117,7 +123,7 @@ $component({
       && !element.closest("[inert]")
       && element.getClientRects().length > 0;
     const focusBody = () => {
-      const body = ownerDocument.body;
+      const body = builtIn(ownerDocument).body;
       if (!body) return;
       const hadTabIndex = body.hasAttribute("tabindex");
       const previousTabIndex = body.getAttribute("tabindex");
@@ -270,7 +276,7 @@ $component({
     const timersPaused = () => modalPaused
       || (config.pauseOnHover && hovering)
       || (config.pauseOnFocus && focusWithin)
-      || (config.pauseOnHidden && ownerDocument.hidden);
+      || (config.pauseOnHidden && builtIn(ownerDocument).hidden);
     const stopTimer = (entry) => {
       const record = timerRecords.get(entry.message.id);
       if (!record) return;
@@ -352,7 +358,7 @@ $component({
     ].filter(Boolean).join(" ");
     const drainAnnouncements = () => {
       if (announcementRunning || disposed || modalPaused
-        || (config.pauseOnHidden && ownerDocument.hidden) || announcementQueue.length === 0) return;
+        || (config.pauseOnHidden && builtIn(ownerDocument).hidden) || announcementQueue.length === 0) return;
       announcementRunning = true;
       const item = announcementQueue.shift();
       const target = item.priority === "assertive" ? assertive : polite;
@@ -367,7 +373,7 @@ $component({
           drainAnnouncements();
           return;
         }
-        if (modalPaused || (config.pauseOnHidden && ownerDocument.hidden)) {
+        if (modalPaused || (config.pauseOnHidden && builtIn(ownerDocument).hidden)) {
           announcementQueue.unshift(item);
           announcementRunning = false;
           return;
@@ -397,13 +403,13 @@ $component({
     };
     const createNode = (entry) => {
       nodeCounter += 1;
-      const root = ownerDocument.createElement("div");
-      const content = ownerDocument.createElement("div");
-      const title = ownerDocument.createElement("div");
-      const description = ownerDocument.createElement("div");
-      const actions = ownerDocument.createElement("div");
-      const action = ownerDocument.createElement("button");
-      const dismissButton = ownerDocument.createElement("button");
+      const root = builtIn(ownerDocument).createElement("div");
+      const content = builtIn(ownerDocument).createElement("div");
+      const title = builtIn(ownerDocument).createElement("div");
+      const description = builtIn(ownerDocument).createElement("div");
+      const actions = builtIn(ownerDocument).createElement("div");
+      const action = builtIn(ownerDocument).createElement("button");
+      const dismissButton = builtIn(ownerDocument).createElement("button");
       const titleId = `${region.id}-title-client-${nodeCounter}`;
       const descriptionId = `${region.id}-description-client-${nodeCounter}`;
       root.className = "cui-toast";
@@ -490,7 +496,7 @@ $component({
         taskHandles.delete(handle);
         if (disposed || token !== generation) return;
         const active = deepActiveElement();
-        if (active !== ownerDocument.body && isFocusable(active)) return;
+        if (active !== builtIn(ownerDocument).body && isFocusable(active)) return;
         const next = nextId ? nodes.get(nextId)?.root : null;
         if (isFocusable(next)) next.focus({ preventScroll: true });
         else if (isFocusable(focusReturn)) focusReturn.focus({ preventScroll: true });
@@ -584,7 +590,7 @@ $component({
     const openRoots = () => {
       const roots = [ownerDocument];
       for (let index = 0; index < roots.length; index += 1) {
-        for (const element of roots[index].querySelectorAll("*")) {
+        for (const element of builtIn(roots[index]).querySelectorAll("*")) {
           if (element.shadowRoot) roots.push(element.shadowRoot);
         }
       }
@@ -600,7 +606,7 @@ $component({
     };
     function refreshModalState() {
       observeModalRoots();
-      const next = openRoots().flatMap((root) => [...root.querySelectorAll("dialog:modal")])
+      const next = openRoots().flatMap((root) => [...builtIn(root).querySelectorAll("dialog:modal")])
         .some((modal) => !composedContains(modal, region));
       if (next === modalPaused) return;
       modalPaused = next;
@@ -625,7 +631,7 @@ $component({
         persistRuntimeState();
       });
     };
-    const onVisibilityChange = () => { syncPausedState(); if (!ownerDocument.hidden) drainAnnouncements(); };
+    const onVisibilityChange = () => { syncPausedState(); if (!builtIn(ownerDocument).hidden) drainAnnouncements(); };
     const onClick = (event) => {
       const toast = event.target.closest?.("[data-citry-toast-id]");
       if (!toast || !composedContains(region, toast)) return;
@@ -666,8 +672,8 @@ $component({
     region.addEventListener("focusin", onFocusIn);
     region.addEventListener("focusout", onFocusOut);
     region.addEventListener("click", onClick);
-    scope.addEventListener("keydown", onKeyDown, true);
-    ownerDocument.addEventListener("visibilitychange", onVisibilityChange);
+    builtIn(scope).addEventListener("keydown", onKeyDown, true);
+    builtIn(ownerDocument).addEventListener("visibilitychange", onVisibilityChange);
     refreshModalState();
 
     effect(() => {
@@ -718,8 +724,8 @@ $component({
       region.removeEventListener("focusin", onFocusIn);
       region.removeEventListener("focusout", onFocusOut);
       region.removeEventListener("click", onClick);
-      scope.removeEventListener("keydown", onKeyDown, true);
-      ownerDocument.removeEventListener("visibilitychange", onVisibilityChange);
+      builtIn(scope).removeEventListener("keydown", onKeyDown, true);
+      builtIn(ownerDocument).removeEventListener("visibilitychange", onVisibilityChange);
       if (toastRegistry.get(scope) === region) toastRegistry.delete(scope);
       region.removeAttribute("data-citry-toast-initialized");
     };

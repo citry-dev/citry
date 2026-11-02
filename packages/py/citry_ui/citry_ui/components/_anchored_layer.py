@@ -3,6 +3,15 @@
 from citry.ext.dependencies import Script
 
 _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
+      // Page markup can hide a document's members behind elements with a name, so
+      // read them through the core runtime's helper; Citry before 0.7.0 have no
+      // helper, so the fallback reads the members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+      const parentNodeOf = (node) => nodeParentNode.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
       const anchoredLayerRuntime = (() => {
         const runtimeKey = Symbol.for("citry-ui:anchored-layer-runtime");
         const compatibilityKey = Symbol.for(
@@ -46,17 +55,17 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
           value instanceof ShadowRoot && value.host.shadowRoot === value
         );
         const actualRoot = (element) => {
-          const root = element?.getRootNode?.() ?? null;
+          const root = element instanceof Node ? rootNodeOf(element) : null;
           if (root instanceof Document || isOpenShadowRoot(root)) {
             return root;
           }
           return null;
         };
         const composedParent = (node) => {
-          if (node?.parentNode) {
-            return node.parentNode;
+          if (node && parentNodeOf(node)) {
+            return parentNodeOf(node);
           }
-          const root = node?.getRootNode?.() ?? null;
+          const root = node instanceof Node ? rootNodeOf(node) : null;
           return root instanceof ShadowRoot ? root.host : null;
         };
         const composedContains = (container, target) => {
@@ -68,7 +77,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             if (current === container || container.contains(current)) {
               return true;
             }
-            const root = current.getRootNode?.() ?? null;
+            const root = current instanceof Node ? rootNodeOf(current) : null;
             if (root instanceof ShadowRoot && root !== container) {
               current = root.host;
               continue;
@@ -82,7 +91,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
           let current = node;
           while (current) {
             ancestors.push(current);
-            const root = current.getRootNode?.() ?? null;
+            const root = current instanceof Node ? rootNodeOf(current) : null;
             if (root instanceof ShadowRoot && current === root) {
               current = root.host;
             } else {
@@ -138,7 +147,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
                 continue;
               }
               visited.add(root);
-              for (const element of root.querySelectorAll?.("*") ?? []) {
+              for (const element of builtIn(root).querySelectorAll?.("*") ?? []) {
                 if (isOpenShadowRoot(element.shadowRoot)) {
                   discoveredRoots.add(element.shadowRoot);
                   pending.push(element.shadowRoot);
@@ -162,7 +171,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             const dialogs = [];
             for (const root of knownRoots()) {
               try {
-                dialogs.push(...root.querySelectorAll("dialog:modal"));
+                dialogs.push(...builtIn(root).querySelectorAll("dialog:modal"));
               } catch {
                 // Current supported browsers implement :modal. Treat an
                 // unavailable selector as no eligible modal rather than
@@ -172,7 +181,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             return [...new Set(dialogs)];
           };
           const deepActiveElement = () => {
-            let active = ownerDocument.activeElement;
+            let active = builtIn(ownerDocument).activeElement;
             while (active?.shadowRoot?.activeElement) {
               active = active.shadowRoot.activeElement;
             }
@@ -393,8 +402,9 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
               }
               if (
                 ancestor !== layer.surface
-                && ancestor.hasAttribute("popover")
-                && !ancestor.matches(":popover-open")
+                // A form field can hide these methods on a form ancestor, so call the built-in ones.
+                && Element.prototype.hasAttribute.call(ancestor, "popover")
+                && !Element.prototype.matches.call(ancestor, ":popover-open")
               ) {
                 return false;
               }
@@ -573,11 +583,11 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
               }
               reconcileModal(event);
             };
-            root.addEventListener("pointerdown", pointerdown, true);
-            root.addEventListener("focusin", focusin, true);
-            root.addEventListener("keydown", keydown, true);
-            root.addEventListener("beforetoggle", beforetoggle, true);
-            root.addEventListener("toggle", toggle, true);
+            builtIn(root).addEventListener("pointerdown", pointerdown, true);
+            builtIn(root).addEventListener("focusin", focusin, true);
+            builtIn(root).addEventListener("keydown", keydown, true);
+            builtIn(root).addEventListener("beforetoggle", beforetoggle, true);
+            builtIn(root).addEventListener("toggle", toggle, true);
             const observer = new MutationObserver((records) => {
               for (const record of records) {
                 if (record.type === "childList") {
@@ -614,11 +624,11 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             stats.activeListenerSets += 1;
           };
           const detachScope = (root, record) => {
-            root.removeEventListener("pointerdown", record.pointerdown, true);
-            root.removeEventListener("focusin", record.focusin, true);
-            root.removeEventListener("keydown", record.keydown, true);
-            root.removeEventListener("beforetoggle", record.beforetoggle, true);
-            root.removeEventListener("toggle", record.toggle, true);
+            builtIn(root).removeEventListener("pointerdown", record.pointerdown, true);
+            builtIn(root).removeEventListener("focusin", record.focusin, true);
+            builtIn(root).removeEventListener("keydown", record.keydown, true);
+            builtIn(root).removeEventListener("beforetoggle", record.beforetoggle, true);
+            builtIn(root).removeEventListener("toggle", record.toggle, true);
             record.observer.disconnect();
             scopes.delete(root);
             stats.activeListenerSets -= 1;

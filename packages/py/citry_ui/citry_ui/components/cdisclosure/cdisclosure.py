@@ -748,6 +748,17 @@ class CDisclosure(LibraryComponent):
       const anchoredLayerRuntime = globalThis[
         Symbol.for("citry-ui:anchored-layer-runtime")
       ];
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode, parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+      const parentNodeOf = (node) => nodeParentNode.call(node);
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 
       $component({
         props: {
@@ -997,14 +1008,14 @@ class CDisclosure(LibraryComponent):
               return "the actions wrapper has the wrong native element";
             }
             if (
-              next.header.parentElement !== root
-              || next.panel.parentElement !== root
-              || next.heading.parentElement !== next.header
-              || next.trigger.parentElement !== next.heading
-              || next.title.parentElement !== next.trigger
-              || next.indicator.parentElement !== next.trigger
-              || next.body.parentElement !== next.panel
-              || (next.actions && next.actions.parentElement !== next.header)
+              parentElementOf(next.header) !== root
+              || parentElementOf(next.panel) !== root
+              || parentElementOf(next.heading) !== next.header
+              || parentElementOf(next.trigger) !== next.heading
+              || parentElementOf(next.title) !== next.trigger
+              || parentElementOf(next.indicator) !== next.trigger
+              || parentElementOf(next.body) !== next.panel
+              || (next.actions && parentElementOf(next.actions) !== next.header)
             ) {
               return "owned anatomy has an invalid parent relationship";
             }
@@ -1111,14 +1122,14 @@ class CDisclosure(LibraryComponent):
             }
           };
           const composedParent = (node) => {
-            if (node?.parentNode) {
-              return node.parentNode;
+            if (node && parentNodeOf(node)) {
+              return parentNodeOf(node);
             }
             if (node instanceof ShadowRoot) {
-              return node.host;
+              return builtIn(node).host;
             }
-            const nodeRoot = node?.getRootNode?.();
-            return nodeRoot instanceof ShadowRoot ? nodeRoot.host : null;
+            const nodeRoot = node instanceof Node ? rootNodeOf(node) : null;
+            return nodeRoot instanceof ShadowRoot ? builtIn(nodeRoot).host : null;
           };
           const containingModal = (start) => {
             let current = start;
@@ -1151,7 +1162,7 @@ class CDisclosure(LibraryComponent):
             if (!anchoredLayerRuntime.composedContains(anatomy.panel, focused)) {
               return;
             }
-            const target = containingModal(root) ?? root.ownerDocument.body;
+            const target = containingModal(root) ?? builtIn(root.ownerDocument).body;
             const prior = target.getAttribute("tabindex");
             if (!target.hasAttribute("tabindex")) {
               target.setAttribute("tabindex", "-1");
@@ -1257,8 +1268,8 @@ class CDisclosure(LibraryComponent):
             fieldsetObserver?.disconnect();
             fieldsetObserver = null;
             const fieldsets = [];
-            for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
-              if (ancestor.matches("fieldset")) {
+            for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
+              if (ancestor instanceof HTMLFieldSetElement) {
                 fieldsets.push(ancestor);
               }
             }

@@ -26,7 +26,7 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from citry._owned_resource import OWNED_ASSET_CROSSORIGIN, _OwnedResource
+from citry._owned_resource import JAVASCRIPT_CONTENT_TYPE, OWNED_ASSET_CROSSORIGIN, _OwnedResource
 from citry.assets import HasHtml
 from citry.citry_render import CitryRender, selected_render_ids
 from citry.ext.dependencies.routes import RUNTIME_PATH, asset_content_type, runtime_url, script_url
@@ -732,7 +732,7 @@ def _runtime_js() -> str:
 
 def _runtime_resource(citry: Citry) -> _OwnedResource:
     url = runtime_url(citry) if citry.mounted_prefix is not None else RUNTIME_PATH
-    return _OwnedResource(url=url, content=_runtime_js(), content_type="text/javascript")
+    return _OwnedResource(url=url, content=_runtime_js(), content_type=JAVASCRIPT_CONTENT_TYPE)
 
 
 def _owned_script(
@@ -762,7 +762,7 @@ def _cached_js_resource(comp_cls: type[Component]) -> _OwnedResource | None:
     return _OwnedResource(
         url=script_url(comp_cls, "js"),
         content=dependency.content,
-        content_type="text/javascript",
+        content_type=JAVASCRIPT_CONTENT_TYPE,
     )
 
 
@@ -798,15 +798,23 @@ def _preloader_script(
     nonce_line = ""
     if script_security is not None and script_security.csp_nonce is not None:
         nonce_line = f"  s.nonce = {json.dumps(script_security.csp_nonce)};\n"
+    # Page markup can take over names this script reads: `<div id="Citry">` is found as
+    # `window.Citry`, and `<form name="createElement">` hides `document.createElement`. So the
+    # script reads `Citry` only as an own property of `window` (an element's id never is one)
+    # and calls the document's members from `Document.prototype`, which markup cannot change.
     content = (
-        "if (!globalThis.Citry || !globalThis.Citry.fragments) {\n"
-        '  var s = document.createElement("script");\n'
+        "var own = Object.prototype.hasOwnProperty, d = Document.prototype;\n"
+        "var member = function (name) { return Object.getOwnPropertyDescriptor(d, name).get.call(document); };\n"
+        'var citry = own.call(window, "Citry") ? window.Citry : undefined;\n'
+        "if (!citry || !citry.fragments) {\n"
+        '  var s = d.createElement.call(document, "script");\n'
         f"  s.src = {url_literal};\n"
         f"{integrity_line}"
         f"{nonce_line}"
-        "  document.head.appendChild(s);\n"
+        '  member("head").appendChild(s);\n'
         "}\n"
-        "if (document.currentScript) document.currentScript.remove();"
+        'var current = member("currentScript");\n'
+        "if (current) current.remove();"
     )
     return Script(kind="core", content=content, wrap=True)
 

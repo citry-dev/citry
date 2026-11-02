@@ -25,6 +25,19 @@
 (function (global) {
   "use strict";
 
+  // A form's named field can hide the form's own members (`<input name="parentElement">`), which
+  // would send the walks below back and forth between the form and its field forever, so they read
+  // `parentElement` from Node.prototype and call `hasAttribute` and `closest` from Element.prototype.
+  // Test harnesses that run this script without a DOM read the member directly.
+  const parentElementGetter = typeof Node === "function"
+    ? Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get : undefined;
+  const parentElementOf = node => parentElementGetter ? parentElementGetter.call(node) : node.parentElement;
+  const elementHasAttribute = typeof Element === "function" ? Element.prototype.hasAttribute : undefined;
+  const elementClosest = typeof Element === "function" ? Element.prototype.closest : undefined;
+  const hasAttributeOf = (element, name) =>
+    elementHasAttribute ? elementHasAttribute.call(element, name) : element.hasAttribute(name);
+  const closestOf = (element, selector) =>
+    elementClosest ? elementClosest.call(element, selector) : element.closest(selector);
   const SHELL_SELECTOR = '[data-allow-mismatch="children"]';
   const ALLOW_ATTRIBUTE = "data-allow-mismatch";
   // Past this many element pairs in one parent the best-match search would be slow, and pairing
@@ -67,7 +80,7 @@
   const allowedHere = (element, kind, boundary) => {
     let current = element;
     if (kind === "text" || kind === "children")
-      while (current && current !== boundary && !current.hasAttribute(ALLOW_ATTRIBUTE)) current = current.parentElement;
+      while (current && current !== boundary && !hasAttributeOf(current, ALLOW_ATTRIBUTE)) current = parentElementOf(current);
     if (!current || current === boundary) return false;
     return allowsKind(current.getAttribute(ALLOW_ATTRIBUTE), kind);
   };
@@ -514,7 +527,7 @@
   };
 
   const ownerName = (element, index, boundary) => {
-    for (let current = element; current; current = current.parentElement) {
+    for (let current = element; current; current = parentElementOf(current)) {
       const vnode = index.get(current);
       if (vnode?.ctx) return componentName(vnode.ctx);
       if (current === boundary) break;
@@ -571,7 +584,8 @@
       for (const shell of Array.from(host.querySelectorAll(SHELL_SELECTOR))) {
         // A shell inside another shell's served contents is rebuilt with the outer one; the
         // server never writes one there, so this is only a guard.
-        if (shell.parentElement?.closest(SHELL_SELECTOR)) continue;
+        const shellParent = parentElementOf(shell);
+        if (shellParent && closestOf(shellParent, SHELL_SELECTOR)) continue;
         const served = Array.from(shell.childNodes);
         // A shell the server sent empty (its contents would run twice, the parser would move
         // them, or they were too large) has nothing to compare.

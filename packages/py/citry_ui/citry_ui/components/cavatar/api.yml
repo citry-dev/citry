@@ -10,7 +10,7 @@ inputs:
     channel: server
     column_widths: [fit, 15rem, 8rem, auto]
     entries:
-      - {id: src, name: src, type: 'str | None', default: {kind: literal, value: null}, effect: 'Sets one escaped image URL. `None` shows the fallback only.'}
+      - {id: src, name: src, type: 'str | None', default: {kind: literal, value: null}, effect: 'Sets one escaped image URL: a relative URL or an `http:`, `https:`, `blob:`, or `data:image/` URL; anything else raises `ValueError`. `None` shows the fallback only.'}
       - {id: alt, name: alt, type: str, default: {kind: literal, value: ''}, effect: 'Names the Avatar as one image semantic. Empty text makes the Avatar decorative.'}
       - {id: variant, name: variant, type: {display: '"soft" | "solid" | "outline"', interfaces: [CAvatarVariant]}, default: {kind: literal, value: soft}, effect: Selects fallback visual emphasis.}
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CAvatarSize]}, default: {kind: literal, value: md}, effect: Selects the size preset.}
@@ -25,7 +25,7 @@ inputs:
     channel: client
     column_widths: [fit, 14rem, 15rem, auto]
     entries:
-      - {id: src, name: src, type: 'string | null', omitted: Uses the server input., effect: Replaces the current image URL or switches to fallback-only output.}
+      - {id: src, name: src, type: 'string | null', omitted: Uses the server input., effect: 'Replaces the current image URL or switches to fallback-only output. If the server would refuse the URL, the component logs an error and keeps the server-rendered image.'}
       - {id: alt, name: alt, type: string, omitted: Uses the server input., effect: Updates the root accessible name; empty text makes it decorative.}
       - {id: variant, name: variant, type: {display: '"soft" | "solid" | "outline"', interfaces: [CAvatarVariant]}, omitted: Uses the server input., effect: Controls fallback visual emphasis.}
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CAvatarSize]}, omitted: Uses the server input., effect: Controls size.}

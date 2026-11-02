@@ -501,6 +501,18 @@ def main() -> int:
     # has no programs to run; the server only writes hydration HTML when
     # that tree exists.
     no_definitions = [page for page in pages if page["missingDefinitions"]]
+    # A definition whose browser JavaScript holds no render code that the
+    # collector could cut out means its markers no longer match
+    # `_vue/compiler.py`. Every such page would be declined, so say so and fail
+    # rather than report a quiet run that compared nothing.
+    uncut = sorted(
+        {
+            definition_id
+            for page in pages
+            for definition_id, definition in page["definitions"].items()
+            if definition["code"] is None and definition["javascript"]
+        }
+    )
     for page in pages:
         if page["missingDefinitions"]:
             continue
@@ -582,9 +594,14 @@ def main() -> int:
     for page in check_disagreements:
         say(f"PARSE CHECKS DISAGREE {page['test']} ({page['digest'][:12]}): token check and full parse differ")
     say(f"  pages where the token check and the full parse disagree: {len(check_disagreements)}")
+    if uncut:
+        say(
+            f"FAIL {len(uncut)} recorded definitions have no render code: the markers in "
+            "scripts/vue_render_parity/collect.py no longer match _vue/compiler.py"
+        )
     if compared == 0:
         say("FAIL no page was compared")
-    failed = mismatches or vue_errors or undetected or unparsed or check_disagreements or compared == 0
+    failed = mismatches or vue_errors or undetected or unparsed or check_disagreements or uncut or compared == 0
     return 1 if failed else 0
 
 

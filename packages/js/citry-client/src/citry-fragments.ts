@@ -1,3 +1,7 @@
+// Page markup can hide the document's members behind a named element, so they are read
+// through `pageDocument`; `observe()` still gets the real document, which it needs as a node.
+import { pageDocument } from "./page-dom";
+
 type VueMount = { protocol: "citry-vue-fragment/1"; appId: string; host: string; prepared: unknown };
 type FragmentManifest = { vue?: VueMount };
 export type FragmentManager = { load(manifest: unknown, tag?: HTMLScriptElement): Promise<void> };
@@ -9,6 +13,7 @@ export function installFragmentManager(
     lifecycle?: { guard: () => void; nonce: string; signal: AbortSignal },
   ) => Promise<{ appId: string; app: { unmount(): void } }>,
   documentNonce = "",
+  carriesPageNonce: (block: HTMLScriptElement) => boolean = (block) => block.nonce === documentNonce,
 ): FragmentManager {
   const processed = new WeakMap<HTMLScriptElement, Promise<void>>();
   const reservedHosts = new Set<Element>();
@@ -59,8 +64,8 @@ export function installFragmentManager(
       (vue.prepared as { manifest?: { appId?: unknown } }).manifest?.appId !== vue.appId
     )
       throw new TypeError("[Citry] fragment manifest has no valid bound Vue mount descriptor.");
-    const hosts = document.querySelectorAll(vue.host);
-    if (hosts.length !== 1 || !document.body.contains(hosts[0]))
+    const hosts = pageDocument.querySelectorAll(vue.host);
+    if (hosts.length !== 1 || !pageDocument.body.contains(hosts[0]))
       throw new TypeError("[Citry] Vue fragment host must resolve once inside the document body.");
     const host = hosts[0];
     const initialParent = host.parentNode;
@@ -69,13 +74,13 @@ export function installFragmentManager(
     if ((tag && isManagedDescendant(tag)) || isManagedDescendant(host))
       throw new TypeError("[Citry] a Vue fragment cannot be inserted inside a managed Vue host.");
     const guard = (): void => {
-      const current = document.querySelectorAll(vue.host);
+      const current = pageDocument.querySelectorAll(vue.host);
       if (
         current.length !== 1 ||
         current[0] !== host ||
-        !document.body.contains(host) ||
+        !pageDocument.body.contains(host) ||
         host.parentNode !== initialParent ||
-        (tag !== undefined && (!document.body.contains(tag) || tag.parentNode !== initialTagParent)) ||
+        (tag !== undefined && (!pageDocument.body.contains(tag) || tag.parentNode !== initialTagParent)) ||
         isManagedDescendant(host, vue.appId)
       )
         throw new TypeError("[Citry] Vue fragment host changed while mounting.");
@@ -109,7 +114,20 @@ export function installFragmentManager(
         const prior = processed.get(tag);
         if (prior) return prior;
         tag.dataset.citryProcessed = "";
-        const promise = load(raw, tag);
+        // A data block found in the page could come from injected markup, and the fragment's
+        // scripts load with the page's nonce. Under a nonce-based CSP the server stamps the
+        // page's nonce on the blocks it writes, and injected markup cannot set it, so a block
+        // without it is refused, as startDocument refuses a configuration block. When the
+        // runtime's own tag has no nonce there is nothing to compare, and every block starts.
+        const promise =
+          documentNonce && !carriesPageNonce(tag)
+            ? Promise.reject(
+                new Error(
+                  "[Citry] the Vue fragment's data block does not carry the page's CSP nonce." +
+                    " Serialize the fragment with csp_nonce set to the page's nonce.",
+                ),
+              )
+            : load(raw, tag);
         processed.set(tag, promise);
         return promise;
       }
@@ -130,10 +148,16 @@ export function installFragmentManager(
   };
   const scan = (node: Node): void => {
     if (!(node instanceof Element)) return;
-    if (node.matches('script[type="application/json"][data-citry-vue-fragment]')) process(node as HTMLScriptElement);
-    node
-      .querySelectorAll<HTMLScriptElement>('script[type="application/json"][data-citry-vue-fragment]')
-      .forEach(process);
+    // The added node can be a form whose field hides `matches` or `querySelectorAll`, so call the
+    // built-in methods.
+    if (Element.prototype.matches.call(node, 'script[type="application/json"][data-citry-vue-fragment]'))
+      process(node as HTMLScriptElement);
+    (
+      Element.prototype.querySelectorAll.call(
+        node,
+        'script[type="application/json"][data-citry-vue-fragment]',
+      ) as NodeListOf<HTMLScriptElement>
+    ).forEach(process);
   };
   let connectivityQueued = false;
   new MutationObserver((records) => {
@@ -157,7 +181,7 @@ export function installFragmentManager(
       });
     }
   }).observe(document, { childList: true, subtree: true });
-  document
+  pageDocument
     .querySelectorAll<HTMLScriptElement>('script[type="application/json"][data-citry-vue-fragment]')
     .forEach(process);
   return manager;

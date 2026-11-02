@@ -127,11 +127,13 @@ remains decorative, while the real image retains its alternative text.
 
 `cross_origin` and `referrer_policy` select native request modes; they do not
 grant canvas access or repair server headers. `img-src` CSP remains
-authoritative. Relative, HTTP, HTTPS, data, blob, raster, and SVG image URLs are
-consumer-owned resource references, not sanitized or fetched by Citry. Active
-`javascript:` and `vbscript:` schemes are rejected. Blob lifetime, data-URL
-size, metadata privacy, origin policy, and remote tracking remain application
-responsibilities.
+authoritative. `src` and every `srcset` candidate must be a relative URL or an
+`http:`, `https:`, `blob:`, or `data:image/` URL; anything else raises
+`ValueError` when the component renders. If a client prop holds a URL the server
+would refuse, the component logs an error and keeps the last valid value.
+Accepted raster and SVG image URLs are consumer-owned resource references, not
+sanitized or fetched by Citry. Blob lifetime, data-URL size, metadata privacy,
+origin policy, and remote tracking remain application responsibilities.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cimage/snippets/delivery_and_security.py"

@@ -533,6 +533,10 @@ class CRating(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: { value: {}, required: {}, disabled: {}, readonly: {}, invalid: {}, allowClear: {}, variant: {}, size: {}, onValueChange: {}, onHoverChange: {} },
         inject: {
@@ -711,7 +715,7 @@ class CRating(LibraryComponent):
             apply();
           });
           if (data.fieldLabelId) {
-            const fieldLabel = root.ownerDocument.getElementById(data.fieldLabelId);
+            const fieldLabel = builtIn(root.ownerDocument).getElementById(data.fieldLabelId);
             if (fieldLabel) listeners.add(fieldLabel, 'click', event => queueMicrotask(() => {
               if (!event.defaultPrevented && root.isConnected && !configuration.disabled) (configuration.readonly ? root : inputs.find(input => input.checked) ?? inputs[0]).focus({ preventScroll: true });
             }));

@@ -38,7 +38,13 @@ from citry.client_directives import ComponentTagClientBindingKind
 from citry.component_registry import BUILTIN_COMPONENT_NAMES
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
 from citry.serialize import _REPEATED_RENDER_MESSAGE
-from citry.util.html import Markup, decode_attribute_entities, decode_character_references, escape_to_str
+from citry.util.html import (
+    _REFUSED_DYNAMIC_ELEMENT_TAGS,
+    Markup,
+    decode_attribute_entities,
+    decode_character_references,
+    escape_to_str,
+)
 from citry_core.template_parser import analyze_browser_source
 
 from . import native_leaf_json as _native_leaf_json
@@ -76,7 +82,7 @@ from .compiler import (
     _DynamicElementDeclaration,
     _ElementBindingDeclaration,
     _generated_event_args,
-    _generated_event_modifiers,
+    _generated_event_listener_name,
     _generated_vue_attr,
     _guard_template_braces,
     _LocalCallBindingDeclaration,
@@ -213,6 +219,22 @@ class _CacheReplayIdentity:
 
 
 _CACHE_REPLAY_IDENTITY_KEY = object()
+
+
+def _refuse_element_in_text_element(element_stack: list[str], what: str) -> None:
+    """Refuse an element or child component inside a `<textarea>` or `<title>` of a component with Vue."""
+    # The browser reads a tag the server writes here as text, but Vue's client render of a
+    # dynamic `<c-element>` creates it as a real child element, so the page would change once
+    # Vue starts. A `<textarea>` or `<title>` written in the template never gets here: the
+    # template parser already reads its body as text. Inside `<svg>` or `<math>` a `<title>`
+    # holds ordinary child elements, so the check does not apply there.
+    parent_tag = element_stack[-1] if element_stack else None
+    if parent_tag in {"textarea", "title"} and not any(tag in {"svg", "math"} for tag in element_stack):
+        msg = (
+            f"{what} cannot sit inside <{parent_tag}> in an interactive component, because"
+            f" <{parent_tag}> holds text, not HTML. Write the text directly inside <{parent_tag}>."
+        )
+        raise UnsupportedPreparedView(msg)
 
 
 def _issue_cache_replay_identity(
@@ -2528,6 +2550,9 @@ def assemble_typed_render(
                     )
                     if not child_type:
                         raise UnsupportedPreparedView("nested component has no stable class id")
+                    # Vue renders a child component's elements as real children, which a
+                    # <textarea> or <title> cannot hold the way the server writes them.
+                    _refuse_element_in_text_element(element_stack, f"The component {child_type}")
                     if python_call:
                         python_ordinal = python_counts_by_route[placement_route]
                         python_counts_by_route[placement_route] += 1
@@ -2781,8 +2806,10 @@ def assemble_typed_render(
                                     "runtime component-boundary Events bindings accept a handler name "
                                     "without arguments"
                                 )
-                            suffix = _generated_event_modifiers(spec)
-                            generated_name = f"v-on:{spec['event']}{suffix}"
+                            try:
+                                generated_name = _generated_event_listener_name(spec)
+                            except ValueError as error:
+                                raise UnsupportedPreparedView(str(error)) from error
                             if generated_name in emitted_listener_names:
                                 raise UnsupportedPreparedView(
                                     f"component call resolves more than one listener named {generated_name!r}"
@@ -2984,6 +3011,7 @@ def assemble_typed_render(
                     if structure is not None:
                         for operation, tag in structure.tag_transitions:
                             if operation == "open":
+                                _refuse_element_in_text_element(element_stack, f"<{tag}>")
                                 element_stack.append(tag)
                                 element_keys.append(None)
                             elif (
@@ -3326,6 +3354,7 @@ def assemble_typed_render(
                         # count again.
                         v_pre_closes.append(_ignored_element_close_index(parts, part_index))
                         authored_v_pre_depth += 1
+                    _refuse_element_in_text_element(element_stack, f"<{part.tag}>")
                     if not part.is_void:
                         element_stack.append(part.tag.lower())
                         element_keys.append(
@@ -3359,10 +3388,10 @@ def assemble_typed_render(
                         raise UnsupportedPreparedView(
                             f"dynamic element opening contains unsafe prepared attributes: {invalid_attrs!r}"
                         )
-                    if part.tag.lower() in {"script", "style", "template"}:
-                        raise UnsupportedPreparedView(
-                            "dynamic script/style/template elements are unsupported in prepared Vue"
-                        )
+                    # `<c-element>` refuses these tags before this point; the same
+                    # list guards any other producer of a dynamic element.
+                    if part.tag.lower() in _REFUSED_DYNAMIC_ELEMENT_TAGS:
+                        raise UnsupportedPreparedView(f"a dynamic <{part.tag}> element is unsupported in prepared Vue")
                     source_targets = {
                         _html_attr_identity(target): attr.name
                         for attr in part.authored_attrs
@@ -3509,6 +3538,7 @@ def assemble_typed_render(
                                 "steps": [],
                             }
                         )
+                    _refuse_element_in_text_element(element_stack, f"<{part.tag}>")
                     if part.is_void:
                         # Balance the parser-level custom alias even though its
                         # validated runtime tag is void, so following siblings
@@ -5044,11 +5074,14 @@ def _event_directive_attrs(part: PreparedElementOpen | PreparedDynamicElementOpe
         if event in seen_events:
             raise UnsupportedPreparedView("prepared Vue target supports one Events binding per DOM event")
         seen_events.add(event)
-        suffix = _generated_event_modifiers(binding)
         authored_args = _generated_event_args(binding["args"])
+        try:
+            listener_name = _generated_event_listener_name(binding)
+        except ValueError as error:
+            raise UnsupportedPreparedView(str(error)) from error
         attrs.append(
             _generated_vue_attr(
-                f"v-on:{event}{suffix}",
+                listener_name,
                 f"$citryEvents.dispatch('{binding['id']}', $event{authored_args})",
             )
         )

@@ -245,7 +245,9 @@ class TestFragmentStrategy:
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
         html = str(page().render().serialize(deps_strategy="fragment"))
         assert 's.src = "/citry/citry.js"' in html
-        assert "document.currentScript.remove()" in html
+        # The loader removes its own tag, read through Document.prototype so a named element
+        # in the page cannot stand in for it.
+        assert 'var current = member("currentScript");\nif (current) current.remove();' in html
 
     def test_fragment_inlines_local_file_entries_as_descriptors(self, tmp_path):
         (tmp_path / "helper.js").write_text("var H = 1;")
@@ -381,7 +383,7 @@ class TestServedLocalFiles:
         response = matched.route.handler(None, **matched.params)
         assert response.status == 200
         assert response.content == ".t { color: teal; }"
-        assert response.content_type == "text/css"
+        assert response.content_type == "text/css; charset=utf-8"
 
     def test_serve_mode_emits_stable_fingerprinted_js_url(self, tmp_path):
         source = "globalThis.vendorLoaded = true;"
@@ -413,7 +415,7 @@ class TestServedLocalFiles:
         response = matched.route.handler(None, **matched.params)
         assert response.status == 200
         assert response.content == source
-        assert response.content_type == "text/javascript"
+        assert response.content_type == "text/javascript; charset=utf-8"
 
     def test_serve_mode_falls_back_to_inline_when_unmounted(self, tmp_path):
         c = Citry(dirs=[tmp_path], extensions_defaults={"dependencies": {"local_files": "serve"}})

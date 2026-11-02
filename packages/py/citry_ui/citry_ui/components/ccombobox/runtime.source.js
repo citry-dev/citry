@@ -1,4 +1,9 @@
 
+      // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
       $component({
         props: {
           items: {},
@@ -314,8 +319,8 @@
             listbox.replaceChildren();
             activeCollection.retain(visibleItems.map((item) => item.value));
             visibleItems.forEach((item) => {
-              const option = document.createElement("li");
-              const label = document.createElement("span");
+              const option = builtIn(document).createElement("li");
+              const label = builtIn(document).createElement("span");
               option.id = optionId(item.value);
               option.setAttribute("role", "option");
               option.dataset.value = item.value;
@@ -328,7 +333,7 @@
               label.textContent = item.label;
               option.append(label);
               if (item.description !== null) {
-                const description = document.createElement("span");
+                const description = builtIn(document).createElement("span");
                 description.dataset.citryUiPart = "option-description";
                 description.textContent = item.description;
                 option.append(description);
@@ -827,7 +832,7 @@
             const skipHandling = skipNextBlurHandling;
             skipNextBlurHandling = false;
             queueMicrotask(() => {
-              if (destroyed || root.contains(document.activeElement)) {
+              if (destroyed || root.contains(builtIn(document).activeElement)) {
                 return;
               }
               if (!skipHandling) {
@@ -870,7 +875,7 @@
           };
           const onListboxPointerDown = (event) => {
             const element = event.target.closest?.('[data-citry-ui-part="option"]');
-            if (element && element.parentElement === listbox) {
+            if (element && parentElementOf(element) === listbox) {
               event.preventDefault();
             }
           };
@@ -878,7 +883,7 @@
             const element = event.target.closest?.('[data-citry-ui-part="option"]');
             if (
               !element
-              || element.parentElement !== listbox
+              || parentElementOf(element) !== listbox
               || element.hasAttribute("data-disabled")
             ) {
               return;
@@ -888,7 +893,7 @@
           };
           const onListboxClick = (event) => {
             const element = event.target.closest?.('[data-citry-ui-part="option"]');
-            if (!element || element.parentElement !== listbox) {
+            if (!element || parentElementOf(element) !== listbox) {
               return;
             }
             const option = visibleItems.find((item) => item.value === element?.dataset.value);
@@ -896,7 +901,7 @@
           };
           const onDocumentPointerDown = (event) => {
             if (open && !root.contains(event.target)) {
-              if (root.contains(document.activeElement)) {
+              if (root.contains(builtIn(document).activeElement)) {
                 suppressNextBlur();
               }
               reconcileSelectedQuery(event.target);
@@ -949,8 +954,8 @@
           listbox.addEventListener("pointerdown", onListboxPointerDown);
           listbox.addEventListener("pointermove", onListboxPointerMove);
           listbox.addEventListener("click", onListboxClick);
-          document.addEventListener("pointerdown", onDocumentPointerDown, true);
-          nativeForm?.addEventListener("reset", onReset);
+          builtIn(document).addEventListener("pointerdown", onDocumentPointerDown, true);
+          nativeForm && builtIn(nativeForm).addEventListener("reset", onReset);
           Citry.vue.watchEffect(() => {
             const firstRun = !effectInitialized;
             let collectionChanged = false;
@@ -1222,8 +1227,8 @@
             listbox.removeEventListener("pointerdown", onListboxPointerDown);
             listbox.removeEventListener("pointermove", onListboxPointerMove);
             listbox.removeEventListener("click", onListboxClick);
-            document.removeEventListener("pointerdown", onDocumentPointerDown, true);
-            nativeForm?.removeEventListener("reset", onReset);
+            builtIn(document).removeEventListener("pointerdown", onDocumentPointerDown, true);
+            nativeForm && builtIn(nativeForm).removeEventListener("reset", onReset);
             for (const timer of deferredTimers) {
               clearTimeout(timer);
             }

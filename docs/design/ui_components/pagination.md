@@ -63,7 +63,7 @@ Server output is complete and link mode works without JS. Client initialization 
 
 ## 15. Security and content trust
 
-Labels and href pattern are de-trusted exact strings. `{page}` substitution does not evaluate format expressions. `attrs` cannot replace nav role/name, children, public fields, focus ownership, or Citry runtime fields. Generated JS uses DOM APIs and `textContent`, never HTML strings.
+Labels and href pattern are de-trusted exact strings. The href pattern, with a page number filled in, goes through the shared link check: a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL renders, and any other scheme raises `ValueError` at render. `{page}` substitution does not evaluate format expressions. `attrs` cannot replace nav role/name, children, public fields, focus ownership, or Citry runtime fields. Generated JS uses DOM APIs and `textContent`, never HTML strings.
 
 ## 16. Assets and performance
 

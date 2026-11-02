@@ -260,6 +260,10 @@ class Events:
 When a plain HTML form posts to the handler's URL, the same action becomes a
 real HTTP redirect. See [Event routes](/events/routes/).
 
+The URL must use `http:` or `https:`, or have no scheme at all, as in
+`/projects/` or `?page=2`. An empty URL, a URL with a control character,
+or any other scheme raises `ValueError` when you create the action.
+
 A relative URL, such as `"?page=2"` or `"next"`, is relative to the page
 the visitor is on, with or without JavaScript. Without JavaScript, the
 server reads that page's address from the `Referer` header, which browsers
@@ -281,6 +285,10 @@ send by default. Use a path that starts with `/` instead when your page:
     `//other.example` and `/\other.example` as addresses on another site.
     Django's `url_has_allowed_host_and_scheme` does a full check; see
     [Check redirect URLs](/security/#check-redirect-urls).
+
+If a redirect with another scheme reaches the browser another way, such
+as through browser code you wrote that calls `Citry.events.applyActions()`,
+the browser logs an error and stays on the page.
 
 ## `PushUrl`, `ReplaceUrl` { #change-the-url }
 

@@ -111,6 +111,30 @@ _KEYBOARD_EVENTS: Final = frozenset({"keydown", "keyup", "keypress"})
 _PREFIX_EVENT: Final = "@c-"
 _PREFIX_STATE: Final = ":c-"
 
+# An `@c-<event>` binding becomes a Vue listener for `<event>`, which Vue
+# stores under a props key. Two families of keys are not browser events:
+# the key Citry's Vue compiler writes for a listener with a Citry modifier
+# (`onCitryOn0`), and the keys Vue runs as an element's lifecycle hooks.
+_CITRY_LISTENER_KEY_RE: Final = re.compile(r"^onCitryOn[0-9]+$")
+
+# The characters an Events binding's event name may use. On a component tag
+# the name goes into the generated Vue template as `v-on:<event>`, and the
+# Vue compiler writes it into the render function's code as a quoted props
+# key without escaping it, so a quote, a backslash or a bracket from a
+# `c-bind` key could change that code. Browser and component event names
+# need none of them.
+_EVENT_NAME_RE: Final = re.compile(r"[A-Za-z][A-Za-z0-9_:-]*")
+_VUE_VNODE_HOOK_KEYS: Final = frozenset(
+    {
+        "onVnodeBeforeMount",
+        "onVnodeMounted",
+        "onVnodeBeforeUpdate",
+        "onVnodeUpdated",
+        "onVnodeBeforeUnmount",
+        "onVnodeUnmounted",
+    }
+)
+
 # The base marker (after the `c-` in `@c-poll`) that means "interval", not a
 # DOM event.
 _POLL: Final = "poll"
@@ -383,12 +407,47 @@ def _two_bindings_for_one_event_error(tag_name: str, event: str, first: _Attr, s
     return f'{message}, or write a Vue listener for each one that calls its handler, such as @{listener}="{call}".'
 
 
+def _vue_handler_key(event: str) -> str:
+    """
+    Return the props key Vue stores a listener for ``event`` under.
+
+    This follows Vue's ``transformOn``: ``vue:mounted`` is its spelling of
+    ``vnode-mounted``, then ``camelize`` and ``toHandlerKey`` give the key, so
+    ``citry-on-0`` becomes ``onCitryOn0``. It always camelizes, as Vue does
+    on a component tag. On an element, Vue keeps an uppercase name as
+    ``on:<name>``, so this refuses more names than Vue turns into hooks.
+    """
+    if event.startswith("vue:"):
+        event = "vnode-" + event.removeprefix("vue:")
+    camel = re.sub(r"-(\w)", lambda match: match.group(1).upper(), event)
+    return "on" + camel[:1].upper() + camel[1:]
+
+
 def _build_event_spec(info: EventsInfo, event: str, attr: _Attr, location: _Location) -> dict[str, Any]:
     """Validate and build one typed event spec from an ``@c-<event>`` attribute."""
     if not event:
         # `@c-="save"` (or `@c-.prevent=...`): the `@c-` names no DOM event, so
         # there is nothing to listen for. Reject it rather than ship event="".
         _fail(location, f"{attr.name!r} needs a DOM event name, e.g. '@c-click'")
+    # Every Events binding reaches these checks, whether the template wrote
+    # it or a `c-bind` mapping supplied it, so one rule covers both.
+    if not _EVENT_NAME_RE.fullmatch(event):
+        _fail(
+            location,
+            f"{attr.name!r} needs an event name of letters, digits, '-', '_' and ':' that starts with a letter,"
+            " such as '@c-click'.",
+        )
+    # A key that is not a browser event would make Vue run the handler on a
+    # listener Citry's compiler wrote, or when the element mounts or updates.
+    props_key = _vue_handler_key(event)
+    if _CITRY_LISTENER_KEY_RE.fullmatch(props_key):
+        _fail(location, f"{attr.name!r} uses a name Citry's compiler writes for itself. Rename the event.")
+    if props_key in _VUE_VNODE_HOOK_KEYS:
+        _fail(
+            location,
+            f"{attr.name!r} names one of Vue's element lifecycle hooks, which is not a browser event."
+            " Bind the handler to a browser event, such as '@c-click'.",
+        )
     if attr.value is None or not attr.value.strip():
         _fail(location, f'{attr.name!r} needs a handler name as its value, e.g. {attr.name}="save"')
     handler, args = _split_handler_args(info, attr.value or "", attr.name, location)

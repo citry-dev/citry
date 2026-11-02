@@ -78,6 +78,10 @@ class RenderEncodingContext:
     renderer: str
     headers: dict[str, str] = field(default_factory=dict)
     response_mode: Literal["wire", "compat"] = "wire"
+    # The CSP nonce of the page that sent the call, from the engine-wide
+    # ``_csp_nonce`` setting. The page's runtime starts a fragment only when
+    # its data block carries this nonce.
+    csp_nonce: str | None = None
 
 
 class RenderEncoder(Protocol):
@@ -106,6 +110,7 @@ class HtmlFragmentRenderEncoder:
             rendered.serialize(
                 deps_strategy="fragment",
                 security_javascript="omit" if context.response_mode == "compat" else None,
+                csp_nonce=context.csp_nonce,
             ),
             delay=action.delay,
             wait=action.wait,

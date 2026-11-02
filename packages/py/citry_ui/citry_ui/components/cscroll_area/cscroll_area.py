@@ -219,6 +219,14 @@ class CScrollArea(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (e=>e);
+      // A form's named field can hide the form's own parentNode or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode=Object.getOwnPropertyDescriptor(Node.prototype,"parentNode").get;
+      const parentNodeOf=node=>nodeParentNode.call(node);
+      const rootNodeOf=(node,options)=>Node.prototype.getRootNode.call(node,options);
       $component({props:{axis:{},scrollbarWidth:{},scrollbarGutter:{},overscroll:{},onScrollChange:{}},onServerRender:({component:Y})=>{const t=Y.$el,n={rootId:Y.rootId,role:Y.role,ariaLabel:Y.ariaLabel,ariaLabelledby:Y.ariaLabelledby,...Y.serverDefaults},j=Y.$props,Z=Citry.vue.watchEffect,
       c=globalThis[Symbol.for("citry-ui:scroll-geometry")];
       if(c?.generation!==1)throw new Error("[citry-ui] CScrollArea scroll geometry dependency did not load.");
@@ -254,12 +262,12 @@ class CScrollArea(LibraryComponent):
       if(s=null,i.revision===x&&F(l,i))return}y=e,O=x,F(l,A())||P(l,!1),w()},H=e=>e==="id"?n.rootId:e==="role"?n.role:e==="aria-label"?n.ariaLabel:e==="aria-labelledby"?n.ariaLabelledby:e==="tabindex"?"0":e==="data-citry-ui-part"?"scroll-area":e==="data-axis"?a.axis:e==="data-scrollbar-width"?a.scrollbarWidth:e==="data-scrollbar-gutter"?a.scrollbarGutter:a.overscroll,
       V="id role aria-label aria-labelledby tabindex data-citry-ui-part data-axis data-scrollbar-width data-scrollbar-gutter data-overscroll".split(" "),K="aria-hidden aria-modal aria-orientation contenteditable hidden inert is name popover slot".split(" "),
       B="aria-describedby aria-details aria-keyshortcuts aria-label aria-labelledby".split(" "),J=e=>e.startsWith("@")||e.startsWith(":")||e.startsWith(".")||e==="c-bind"||e.startsWith("on"),
-      re=()=>/** @type {Document|DocumentFragment|Element} */(t.getRootNode()).querySelectorAll(`#${CSS.escape(n.rootId)}`).length===1,Q=()=>V.every(e=>t.getAttribute(e)===H(e))&&K.every(e=>!t.hasAttribute(e))&&[...t.attributes].every(e=>!e.name.startsWith("aria-")||B.includes(e.name))&&[...t.attributes].every(e=>!J(e.name))&&ge()&&t.style.getPropertyValue("scroll-behavior").trim()==="auto"&&t.style.getPropertyPriority("scroll-behavior")==="important",
+      re=()=>builtIn(/** @type {Document|DocumentFragment|Element} */(rootNodeOf(t))).querySelectorAll(`#${CSS.escape(n.rootId)}`).length===1,Q=()=>V.every(e=>t.getAttribute(e)===H(e))&&K.every(e=>!t.hasAttribute(e))&&[...t.attributes].every(e=>!e.name.startsWith("aria-")||B.includes(e.name))&&[...t.attributes].every(e=>!J(e.name))&&ge()&&t.style.getPropertyValue("scroll-behavior").trim()==="auto"&&t.style.getPropertyPriority("scroll-behavior")==="important",
       U=()=>{const e=[];
-      let r=t.parentNode;
+      let r=parentNodeOf(t);
       for(;
       r;
-      )e.push(r),r=r instanceof ShadowRoot?r.host:r.parentNode;
+      )e.push(r),r=r instanceof ShadowRoot?r.host:parentNodeOf(r);
       return e},ae=()=>{const e=U();
       return e.length!==k.length||e.some((r,l)=>r!==k[l])},$=()=>{g.disconnect(),k=U(),g.observe(t,{attributes:!0}),k.forEach(e=>{const r={childList:!0};
       e instanceof Element&&(r.attributes=!0,r.attributeFilter=["dir","class","style"]),g.observe(e,r)}),o.observedAncestors=k.length},X=e=>{g.disconnect(),

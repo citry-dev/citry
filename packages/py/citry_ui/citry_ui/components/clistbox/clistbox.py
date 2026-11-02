@@ -490,6 +490,18 @@ class CListbox(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode, parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+      const parentNodeOf = (node) => nodeParentNode.call(node);
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
+
       $component({
         props: {
           value: {}, mandatory: {}, disabled: {}, loop: {}, variant: {}, size: {}, onValueChange: {},
@@ -561,19 +573,22 @@ class CListbox(LibraryComponent):
             return fallback;
           };
           const deepActiveElement = (documentRoot) => {
-            let active = documentRoot.activeElement;
+            let active = builtIn(documentRoot).activeElement;
             while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
             return active;
           };
           const composedContains = (ancestor, node) => {
             for (let currentNode = node; currentNode;) {
               if (currentNode === ancestor) return true;
-              currentNode = currentNode.parentNode ?? currentNode.getRootNode?.().host ?? null;
+              // Only a shadow root has a host; a named element can make a document answer `host`.
+              const rootNode = currentNode instanceof Node ? rootNodeOf(currentNode) : null;
+              currentNode = parentNodeOf(currentNode)
+                ?? (rootNode instanceof ShadowRoot ? builtIn(rootNode).host : null);
             }
             return false;
           };
           const focusBody = () => {
-            const body = root.ownerDocument.body;
+            const body = builtIn(root.ownerDocument).body;
             if (!(body instanceof HTMLElement)) return;
             const hadTabIndex = body.hasAttribute('tabindex');
             if (!hadTabIndex) body.tabIndex = -1;
@@ -581,7 +596,7 @@ class CListbox(LibraryComponent):
             if (!hadTabIndex) queueMicrotask(() => body.removeAttribute('tabindex'));
           };
           const fieldsetDisabled = () => {
-            for (let node = root.parentElement; node; node = node.parentElement) {
+            for (let node = parentElementOf(root); node; node = parentElementOf(node)) {
               if (!(node instanceof HTMLFieldSetElement) || !node.disabled) continue;
               const legend = [...node.children].find((child) => child instanceof HTMLLegendElement);
               if (!(legend instanceof Element) || !legend.contains(root)) return true;
@@ -801,10 +816,10 @@ class CListbox(LibraryComponent):
           };
           const sync = () => {
             const focusBefore = deepActiveElement(root.ownerDocument);
-            const focusRoot = root.getRootNode();
+            const focusRoot = rootNodeOf(root);
             const focusWasOwned = composedContains(surface, focusBefore);
-            const focusWasLost = focusBefore === root.ownerDocument.body
-              || (focusRoot instanceof ShadowRoot && focusBefore === focusRoot.host);
+            const focusWasLost = focusBefore === builtIn(root.ownerDocument).body
+              || (focusRoot instanceof ShadowRoot && focusBefore === builtIn(focusRoot).host);
             const priorActive = activeValue;
             const disabled = rootDisabled();
             if (!wasDisabled && disabled) {
@@ -881,7 +896,7 @@ class CListbox(LibraryComponent):
           };
           const localeLower = (value) => {
             const lang = root.closest('[lang]')?.getAttribute('lang')
-              ?? root.ownerDocument.documentElement.lang
+              ?? builtIn(root.ownerDocument).documentElement.lang
               ?? '';
             try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
             catch { return value.toLowerCase(); }
@@ -964,7 +979,7 @@ class CListbox(LibraryComponent):
             ],
           });
           const fieldsets = [];
-          for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
             if (!(ancestor instanceof HTMLFieldSetElement)) continue;
             const fieldsetObserver = new MutationObserver(schedule);
             fieldsetObserver.observe(ancestor, {

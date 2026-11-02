@@ -11,6 +11,7 @@ from typing import Any, Literal, TypedDict
 from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CPaginationVariant = Literal["soft", "outline", "plain"]
@@ -158,6 +159,10 @@ class CPagination(LibraryComponent):
         href = _plain("href", kwargs.href, optional=True)
         if href is not None and "{page}" not in href:
             raise ValueError("CPagination href must contain the literal {page} placeholder.")
+        if href is not None:
+            # Any page number gives the same result as page 1: a digit can sit
+            # in a scheme but cannot start one, and no allowed scheme contains one.
+            check_link_url("CPagination href", href.replace("{page}", "1"))
         validate_boolean("CPagination", "show_controls", kwargs.show_controls)
         validate_boolean("CPagination", "show_edges", kwargs.show_edges)
         validate_boolean("CPagination", "disabled", kwargs.disabled)
@@ -369,6 +374,10 @@ class CPagination(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {page: {}, disabled: {}, variant: {}, size: {}, onPageChange: {}},
         onServerRender: ({component}) => {
@@ -471,9 +480,9 @@ class CPagination(LibraryComponent):
             if (data.showControls) items.push(["next", Math.min(data.pages, current + 1)]);
             if (data.showEdges) items.push(["last", data.pages]);
             list.replaceChildren(...items.map(([kind, page]) => {
-              const li = document.createElement("li");
+              const li = builtIn(document).createElement("li");
               if (kind === "ellipsis") {
-                const span = document.createElement("span");
+                const span = builtIn(document).createElement("span");
                 span.dataset.citryUiPart = "ellipsis";
                 span.setAttribute("aria-hidden", "true");
                 span.textContent = "…";
@@ -487,11 +496,11 @@ class CPagination(LibraryComponent):
               // A control with a URL is a link; any other control is a button, disabled when its page is unavailable.
               let control;
               if (href) {
-                const link = document.createElement("a");
+                const link = builtIn(document).createElement("a");
                 link.href = href;
                 control = link;
               } else {
-                const button = document.createElement("button");
+                const button = builtIn(document).createElement("button");
                 button.type = "button";
                 button.disabled = unavailable;
                 control = button;

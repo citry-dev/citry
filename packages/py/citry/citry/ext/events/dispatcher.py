@@ -325,6 +325,26 @@ class OnEventErrorContext:
 ################################################
 
 
+def _page_csp_nonce(ctx: TransportContext, plan: _CallPlan) -> str | None:
+    """
+    Return the CSP nonce of the page that sent the call, from the ``_csp_nonce`` setting.
+
+    An HTML fragment from a Render starts on a nonce-protected page only when
+    it carries that page's nonce, and only the app knows which nonce the
+    page got, so the app's function answers for each call.
+    """
+    nonce_for = ctx.citry.settings.extensions_defaults.get("events", {}).get("_csp_nonce")
+    if nonce_for is None:
+        return None
+    nonce = nonce_for(plan.events.request)
+    # A wrong type would otherwise surface as a confusing error deep inside
+    # serialize(); the call still answers handler_error either way.
+    if nonce is not None and not isinstance(nonce, str):
+        msg = f"The events '_csp_nonce' function must return a str or None; got {type(nonce).__name__}."
+        raise TypeError(msg)
+    return nonce
+
+
 @dataclass(slots=True)
 class _CallPlan:
     """Everything the pipeline resolved for one call, ready for the handler to run."""
@@ -1089,6 +1109,12 @@ class EventsDispatcher:
                     renderer=renderer,
                     headers=dict(ctx.headers),
                     response_mode=ctx.response_mode,
+                    # Asked only when the answer is HTML with a Render in it, so a nonce
+                    # function that cannot answer for some request never fails a call
+                    # that needs no nonce.
+                    csp_nonce=_page_csp_nonce(ctx, plan)
+                    if renderer == HTML_RENDER_ENCODER.renderer and any(isinstance(a, Render) for a in actions)
+                    else None,
                 ),
             )
         except ProtocolValueError:

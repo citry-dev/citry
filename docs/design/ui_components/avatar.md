@@ -228,10 +228,14 @@ generation. Repeated initialization must not duplicate callbacks.
 
 `src` is an ordinary escaped URL string, not trusted markup. `alt` is converted
 to an exact plain string before rendering. Both reject U+0000; `src` also
-rejects empty strings. Root attrs are a trusted expression boundary but cannot
-replace role/name, public reflections, parts, children, focus semantics, or
-Citry runtime fields. Image attrs cannot replace `src`, `srcset`, `sizes`,
-`alt`, role/ARIA, load/error handlers, part markers, or runtime ownership.
+rejects empty strings. `src` goes through the shared image URL check: a relative
+URL or an `http:`, `https:`, `blob:`, or `data:image/` URL renders, and anything
+else raises `ValueError` at render. If a client `src` prop fails the same
+check, the component logs an error and keeps the server-rendered image. Root attrs are a
+trusted expression boundary but cannot replace role/name, public reflections,
+parts, children, focus semantics, or Citry runtime fields. Image attrs cannot
+replace `src`, `srcset`, `sizes`, `alt`, role/ARIA, load/error handlers, part
+markers, or runtime ownership.
 
 ## 16. Assets and performance
 

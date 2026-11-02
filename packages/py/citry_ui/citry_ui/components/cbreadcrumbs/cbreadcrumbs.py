@@ -9,6 +9,7 @@ from typing import Any, Literal
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CBreadcrumbsSize = Literal["sm", "md", "lg"]
@@ -148,6 +149,10 @@ class CBreadcrumbs(LibraryComponent):
             href = _plain_string(f"items[{index}].href", item.href, allow_none=True)
             if href == "":
                 raise ValueError(f"CBreadcrumbs items[{index}].href must be non-empty when supplied.")
+            if href is not None:
+                # Breadcrumb trails are often built from records or the request
+                # path, so the link must not be able to run script on click.
+                check_link_url(f"CBreadcrumbs items[{index}].href", href)
             item_attrs = _copy_attrs(f"items[{index}].attrs", item.attrs)
             _validate_attrs(f"items[{index}].attrs", item_attrs, _ITEM_OWNED_ATTRS)
             current = index == len(snapshot) - 1

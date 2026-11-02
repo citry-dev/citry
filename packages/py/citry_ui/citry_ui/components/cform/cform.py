@@ -9,6 +9,7 @@ from typing import Any, Literal
 from citry import LibraryComponent, SlotInput
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -61,6 +62,10 @@ class CForm(LibraryComponent):
             raise ValueError(msg)
         validate_html_id("CForm", kwargs.id)
         validate_optional_string("CForm", "action", kwargs.action)
+        if kwargs.action is not None:
+            # A javascript: action runs script on submit, so it gets the same
+            # check as a link.
+            check_link_url("CForm action", kwargs.action)
         if kwargs.method is not None:
             validate_choice("CForm", "method", kwargs.method, ("get", "post", "dialog"))
         if kwargs.enctype is not None:
@@ -169,6 +174,10 @@ class CForm(LibraryComponent):
     """
 
     js = """
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           disabled: {default: undefined},
@@ -192,7 +201,7 @@ class CForm(LibraryComponent):
         onServerRender: ({component}) => {
           const form = component.$refs.root;
           if (!(form instanceof HTMLFormElement)) throw new Error('[citry-ui] CForm settled anatomy is invalid.');
-          const fieldset = form.querySelector('[data-citry-ui-part="fieldset"]');
+          const fieldset = builtIn(form).querySelector('[data-citry-ui-part="fieldset"]');
           if (!(fieldset instanceof HTMLFieldSetElement)) throw new Error('[citry-ui] CForm fieldset is missing.');
           const invalidEpisodes = new Set();
           const resetTimers = new Set();
@@ -238,18 +247,18 @@ class CForm(LibraryComponent):
           const applyConfiguration = (next) => {
             configuration = next;
             fieldset.disabled = next.disabled;
-            form.toggleAttribute("data-disabled", next.disabled);
-            form.toggleAttribute("data-readonly", next.readonly);
-            form.toggleAttribute("data-submitting", next.submitting);
+            builtIn(form).toggleAttribute("data-disabled", next.disabled);
+            builtIn(form).toggleAttribute("data-readonly", next.readonly);
+            builtIn(form).toggleAttribute("data-submitting", next.submitting);
             if (next.submitting) {
-              form.setAttribute("aria-busy", "true");
+              builtIn(form).setAttribute("aria-busy", "true");
             } else {
-              form.removeAttribute("aria-busy");
+              builtIn(form).removeAttribute("aria-busy");
             }
           };
           const onInvalid = () => {
             invalidGeneration += 1;
-            form.setAttribute("data-validation-attempted", "");
+            builtIn(form).setAttribute("data-validation-attempted", "");
           };
           const onReset = (event) => {
             // Reset is cancelable. Wait until every listener has run before
@@ -262,7 +271,7 @@ class CForm(LibraryComponent):
               if (event.defaultPrevented || invalidGeneration !== resetInvalidGeneration) {
                 return;
               }
-              form.removeAttribute("data-validation-attempted");
+              builtIn(form).removeAttribute("data-validation-attempted");
             }, 0);
             resetTimers.add(timer);
           };
@@ -274,9 +283,9 @@ class CForm(LibraryComponent):
             event.stopImmediatePropagation();
           };
 
-          form.addEventListener("invalid", onInvalid, true);
-          form.addEventListener("reset", onReset);
-          form.addEventListener("submit", onSubmit, true);
+          builtIn(form).addEventListener("invalid", onInvalid, true);
+          builtIn(form).addEventListener("reset", onReset);
+          builtIn(form).addEventListener("submit", onSubmit, true);
           Citry.vue.watchEffect(() => {
             applyConfiguration({
               disabled: resolveBoolean("disabled"),
@@ -284,18 +293,18 @@ class CForm(LibraryComponent):
               submitting: resolveBoolean("submitting"),
             });
           });
-          form.setAttribute("data-citry-form-initialized", "");
+          builtIn(form).setAttribute("data-citry-form-initialized", "");
 
           return () => {
-            form.removeEventListener("invalid", onInvalid, true);
-            form.removeEventListener("reset", onReset);
-            form.removeEventListener("submit", onSubmit, true);
+            builtIn(form).removeEventListener("invalid", onInvalid, true);
+            builtIn(form).removeEventListener("reset", onReset);
+            builtIn(form).removeEventListener("submit", onSubmit, true);
             for (const timer of resetTimers) {
               clearTimeout(timer);
             }
             resetTimers.clear();
             component.formService.form = null;
-            form.removeAttribute("data-citry-form-initialized");
+            builtIn(form).removeAttribute("data-citry-form-initialized");
           };
         },
       });

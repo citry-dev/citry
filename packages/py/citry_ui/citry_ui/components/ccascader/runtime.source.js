@@ -1,3 +1,11 @@
+// Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A form's named field can hide the form's own parentElement or getRootNode, so read them from Node.prototype.
+const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+const parentElementOf = node => nodeParentElement.call(node);
+const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
+// A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
+const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
 $component({
   props: {value:{}, open:{}, disabled:{}, onValueChange:{}, onOpenChange:{}},
   onServerRender: ({component}) => {
@@ -70,7 +78,7 @@ $component({
     };
     const all = () => [...popup.querySelectorAll('[role="treeitem"]')];
     const related = id => {
-      const element = id ? document.getElementById(id) : null;
+      const element = id ? builtIn(document).getElementById(id) : null;
       return element && popup.contains(element) ? element : null;
     };
     const parent = item => related(item.dataset.citryCascaderParent);
@@ -98,7 +106,7 @@ $component({
       return item;
     };
     const visible = () => all().filter(item => !item.closest('[data-citry-cascader-column]')?.hidden);
-    const column = item => [...item.parentElement.children].filter(entry => entry.getAttribute?.('role') === 'treeitem');
+    const column = item => [...parentElementOf(item).children].filter(entry => entry.getAttribute?.('role') === 'treeitem');
     const focus = item => {
       if (!(item instanceof HTMLElement)) return;
       activeValue = path(item);
@@ -124,7 +132,7 @@ $component({
       inputs.replaceChildren();
       if (!data.name) return;
       for (const segment of current) {
-        const input = document.createElement('input');
+        const input = builtIn(document).createElement('input');
         input.type = 'hidden'; input.name = data.name; input.value = segment; input.disabled = disabled;
         if (data.form) input.setAttribute('form', data.form);
         inputs.append(input);
@@ -132,7 +140,7 @@ $component({
     };
     const choosePopupLayout = () => {
       const inset = 8;
-      const viewportWidth = document.documentElement.clientWidth;
+      const viewportWidth = builtIn(document).documentElement.clientWidth;
       const columns = [...popup.querySelectorAll(':scope > [data-citry-cascader-column]:not([hidden])')];
       const preferredColumns = columns.slice(0, 3);
       const popupStyle = getComputedStyle(popup);
@@ -150,7 +158,7 @@ $component({
       popup.style.left = '';
       popup.style.right = '';
       const inset = 8;
-      const viewportWidth = document.documentElement.clientWidth;
+      const viewportWidth = builtIn(document).documentElement.clientWidth;
       const box = popup.getBoundingClientRect();
       let shift = 0;
       if (box.right > viewportWidth - inset) shift -= box.right - (viewportWidth - inset);
@@ -167,7 +175,7 @@ $component({
     // each root node from the cascader's up to the document listens in the
     // capture phase, and containment is checked across shadow boundaries.
     const composedContains = (ancestor, node) => {
-      for (let current = node; current; current = current.getRootNode().host ?? null) {
+      for (let current = node; current; current = shadowHost(rootNodeOf(current))) {
         if (ancestor.contains(current)) return true;
       }
       return false;
@@ -190,12 +198,12 @@ $component({
       ancestorListening = listen;
       if (listen) {
         ancestorRoots = [];
-        for (let node = root.getRootNode(); node; node = node.host?.getRootNode() ?? null) ancestorRoots.push(node);
+        for (let node = rootNodeOf(root); node; node = shadowHost(node) ? rootNodeOf(shadowHost(node)) : null) ancestorRoots.push(node);
       }
       for (const node of ancestorRoots) {
         for (const type of ['close', 'toggle']) {
-          if (listen) node.addEventListener(type, onAncestorClose, true);
-          else node.removeEventListener(type, onAncestorClose, true);
+          if (listen) builtIn(node).addEventListener(type, onAncestorClose, true);
+          else builtIn(node).removeEventListener(type, onAncestorClose, true);
         }
       }
     };
@@ -230,8 +238,8 @@ $component({
       activeValue = active ? path(active) : null;
       syncInputs();
       if (currentOpen) queueMicrotask(placePopup);
-      if (currentOpen && !outsideListening) { document.addEventListener('pointerdown', onOutside, true); outsideListening = true; }
-      else if (!currentOpen && outsideListening) { document.removeEventListener('pointerdown', onOutside, true); outsideListening = false; }
+      if (currentOpen && !outsideListening) { builtIn(document).addEventListener('pointerdown', onOutside, true); outsideListening = true; }
+      else if (!currentOpen && outsideListening) { builtIn(document).removeEventListener('pointerdown', onOutside, true); outsideListening = false; }
       listenForAncestorClose(currentOpen);
       if (currentOpen && !resizeListening) { window.addEventListener('resize', placePopup); resizeListening = true; }
       else if (!currentOpen && resizeListening) { window.removeEventListener('resize', placePopup); resizeListening = false; }
@@ -314,18 +322,18 @@ $component({
       event.preventDefault(); if (destination) focus(destination);
     };
     const onReset = event => {
-      if (event.target !== root.closest('form') && event.target !== document.getElementById(data.form)) return;
+      if (event.target !== root.closest('form') && event.target !== builtIn(document).getElementById(data.form)) return;
       queueMicrotask(() => {
         if (controlledValue) valueCallback?.([...data.value], {value:[...data.value],labels:labels(itemFor(data.value)),previousValue:[...current],controlled:true,source:'reset',option:itemFor(data.value),sourceEvent:event});
         else {accepted=[...data.value];current=[...data.value];activePath=[...data.value];sync();}
       });
     };
-    const resetForms = new Set([root.closest('form'), data.form ? document.getElementById(data.form) : null].filter(form => form instanceof HTMLFormElement));
+    const resetForms = new Set([root.closest('form'), data.form ? builtIn(document).getElementById(data.form) : null].filter(form => form instanceof HTMLFormElement));
     trigger.addEventListener('click', onTrigger);
     trigger.addEventListener('keydown', onTriggerKeyDown);
     popup.addEventListener('click', onClick);
     popup.addEventListener('keydown', onKeyDown);
-    resetForms.forEach(form => form.addEventListener('reset', onReset, true));
+    resetForms.forEach(form => builtIn(form).addEventListener('reset', onReset, true));
     root.setAttribute('data-citry-cascader-initialized', '');
     effect(() => {
       const previousOpen = currentOpen;
@@ -390,11 +398,11 @@ $component({
     return () => {
       root[openHandoffKey] = {open: currentOpen, serverOpen: data.open};
       if (typeTimer) clearTimeout(typeTimer);
-      if (outsideListening) document.removeEventListener('pointerdown', onOutside, true);
+      if (outsideListening) builtIn(document).removeEventListener('pointerdown', onOutside, true);
       listenForAncestorClose(false);
       shownWatch?.disconnect();
       if (resizeListening) window.removeEventListener('resize', placePopup);
-      resetForms.forEach(form => form.removeEventListener('reset', onReset, true));
+      resetForms.forEach(form => builtIn(form).removeEventListener('reset', onReset, true));
       placeholderBinding?.dispose();
       trigger.removeEventListener('click', onTrigger);
       trigger.removeEventListener('keydown', onTriggerKeyDown);

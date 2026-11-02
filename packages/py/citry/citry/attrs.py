@@ -56,7 +56,16 @@ StyleValue: TypeAlias = "str | StyleDict | Sequence[StyleValue]"
 """A ``style`` attribute value: inline CSS string, ``StyleDict``, or a list of those."""
 
 _ASCII_LOWER_TRANSLATION = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
-_INVALID_HTML_ATTR_NAME_CHARS = frozenset(" \t\n\r=/><")
+# The HTML spec forbids control characters (C0, DEL, C1), whitespace, quotes,
+# `>`, `/`, `=` and noncharacters in an attribute name. Citry also refuses `<`,
+# the byte-order mark and lone surrogates. The browser splits a name at
+# whitespace (a form feed included), `/`, `=` and `>`, so a name with one of
+# those would arrive as a different name, or as several.
+_INVALID_HTML_ATTR_NAME_CHAR = re.compile(
+    r"[\x00-\x20\x7f-\x9f\"'/<=>\ufeff\ud800-\udfff\ufdd0-\ufdef"
+    + "".join(rf"\U{plane:04x}fffe\U{plane:04x}ffff" for plane in range(17))
+    + "]"
+)
 
 
 # Vue reads a name starting with one of these as a directive or binding:
@@ -206,6 +215,66 @@ def reject_vue_code_attr_name(
         raise vue_code_error(cast("str", name), tag_name=tag_name, origin=origin, hint=hint)
 
 
+# Names whose value the browser reads as HTML or code when Vue or the HTML
+# parser sets them: an inline event handler (any `on*` name), and the DOM
+# properties that insert markup. Vue sets an unknown attribute as a DOM
+# property when the element has one by that name, so `srcdoc` on an
+# `<iframe>` loads its value as a page.
+_MARKUP_PROPERTY_ATTR_NAMES = frozenset({"innerhtml", "outerhtml", "srcdoc"})
+
+
+def is_script_capable_attr_name(name: object) -> bool:
+    """Return whether a browser reads this attribute's value as code or markup."""
+    if not isinstance(name, str):
+        return False
+    # Read the stored text directly, so a str subclass that overrides these
+    # methods gets the same answer.
+    folded = str.lower(name)
+    return folded.startswith("on") or folded in _MARKUP_PROPERTY_ATTR_NAMES
+
+
+SCRIPT_CAPABLE_ATTR_FIX = (
+    "Remove the key from the mapping. To attach a handler, write it in your template instead, "
+    "such as @click (Vue) or @c-click (Events)."
+)
+"""The fix the error names when a mapping sets the attribute: drop the key and write the handler in a template."""
+
+C_ELEMENT_HANDLER_FIX = (
+    "<c-element> cannot tell a name written in the template from one passed in as data, so it refuses both. "
+    "Use a Vue @click in a component with js, or write a plain tag in a c-if branch."
+)
+"""The fix for a `<c-element>` with `c-is` or `c-bind`, which refuses a template-written handler too."""
+
+
+def reject_script_capable_attr_name(
+    name: object, *, tag_name: str, where: str, fix: str = SCRIPT_CAPABLE_ATTR_FIX
+) -> None:
+    """
+    Raise `ValueError` when render-time data sets an attribute the browser reads as code.
+
+    That is an inline event handler such as `onclick`, or `innerHTML`,
+    `outerHTML`, or `srcdoc`. Such a name from data, such as a `c-bind`
+    mapping key or one an `on_attrs_resolved` hook adds, is refused. On a
+    plain element, a name the author wrote in the template, including a
+    `c-on*` or `c-srcdoc` attribute, never reaches this check. A
+    `<c-element>` with `c-is` or `c-bind` cannot tell a name written in the
+    template from one passed in as data, so it checks them all.
+
+    Args:
+        name: The attribute name to check.
+        tag_name: The tag the attribute would be set on, for the message.
+        where: What set the attribute (a `c-bind` mapping, a hook), for the message.
+        fix: The sentence that tells the author what to do instead.
+
+    """
+    if is_script_capable_attr_name(name):
+        msg = (
+            f"{where} sets {name!r} on <{tag_name}>. An attribute name from data may not start with 'on' or be "
+            f"innerHTML, outerHTML, or srcdoc, because the browser reads that value as code or markup. {fix}"
+        )
+        raise ValueError(msg)
+
+
 def _html_attr_identity(name: str) -> str:
     """Return HTML identity without erasing case-sensitive Citry payloads."""
     if type(name) is str and len(name) <= 256:
@@ -311,7 +380,7 @@ def is_unchanged_template_value(value: object, written: object) -> bool:
 @lru_cache(maxsize=512)
 def _is_valid_exact_html_attr_name(name: str) -> bool:
     """Cache validation for ordinary strings without retaining arbitrary objects."""
-    return bool(name) and not any(char in _INVALID_HTML_ATTR_NAME_CHARS for char in name) and "{#" not in name
+    return bool(name) and _INVALID_HTML_ATTR_NAME_CHAR.search(name) is None and "{#" not in name
 
 
 def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str:
@@ -335,7 +404,9 @@ def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str
     if not is_valid:
         msg = (
             f"{where} contains invalid HTML attribute name {name!r}. Attribute names must be non-empty and "
-            "cannot contain whitespace, '=', '/', '>', '<', or the template-comment opener '{#'."
+            "cannot contain whitespace, control characters, quotes, '=', '/', '>', '<', a byte-order mark, "
+            "a lone surrogate, a Unicode noncharacter, or the template-comment opener '{#'. Rename the "
+            "attribute, or remove it from the mapping that sets it."
         )
         raise ValueError(msg)
     return name

@@ -1,3 +1,11 @@
+// Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A form's named field can hide the form's own parentElement or getRootNode, so read them from Node.prototype.
+const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+const parentElementOf = node => nodeParentElement.call(node);
+const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
+// A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
+const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
 const anchoredLayerRuntimeCompatible = globalThis[
   Symbol.for("citry-ui:anchored-layer-runtime-compatible")
 ] === true;
@@ -118,7 +126,7 @@ $component({
       // until the trigger next opens.
       let box = trigger;
       while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
-        const next = box.parentElement ?? box.getRootNode().host;
+        const next = parentElementOf(box) ?? shadowHost(rootNodeOf(box));
         if (!next) break;
         box = next;
       }
@@ -442,7 +450,7 @@ $component({
     };
     const localeLower = (value) => {
       const lang = root.closest('[lang]')?.getAttribute('lang')
-        ?? root.ownerDocument.documentElement.lang
+        ?? builtIn(root.ownerDocument).documentElement.lang
         ?? '';
       try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
       catch { return value.toLowerCase(); }
@@ -690,10 +698,10 @@ $component({
     popup.addEventListener('toggle', onToggle);
     nativeSelect.addEventListener('invalid', onInvalid);
     nativeSelect.addEventListener('focus', onProxyFocus);
-    nativeForm?.addEventListener('reset', onReset);
+    nativeForm && builtIn(nativeForm).addEventListener('reset', onReset);
 
     const fieldsetObservers = [];
-    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
       if (!(ancestor instanceof HTMLFieldSetElement)) continue;
       const observer = new MutationObserver(reconcileControlled);
       observer.observe(ancestor, {attributes:true, childList:true, attributeFilter:['disabled']});
@@ -759,7 +767,7 @@ $component({
       popup.removeEventListener('toggle', onToggle);
       nativeSelect.removeEventListener('invalid', onInvalid);
       nativeSelect.removeEventListener('focus', onProxyFocus);
-      nativeForm?.removeEventListener('reset', onReset);
+      nativeForm && builtIn(nativeForm).removeEventListener('reset', onReset);
       coordinator.unregister(layer, {reason:'ancestor', source:root, cascade:true});
       field?.setNativeInvalid(false);
       root.removeAttribute('data-citry-select-initialized');

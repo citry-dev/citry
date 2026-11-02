@@ -600,6 +600,8 @@ A render action carries its content in one of two forms, selected by its
 - `html-fragment/1` carries `html`, a complete HTML fragment. When the
   content is interactive, the fragment mounts its own Vue app and includes
   the inert JSON and asset tags that app needs, including its Events records.
+  On a page whose runtime script carries a CSP nonce, the browser starts that
+  app only when its JSON tag carries the same nonce.
 - `vue-prepared/1` carries `prepared`, a JSON object that the browser merges
   into the Vue app already on the page. Its Events records are inside that
   object.

@@ -22,6 +22,7 @@ from citry.attrs import (
     format_attrs,
     is_unchanged_template_value,
     merge_attrs,
+    reject_script_capable_attr_name,
     reject_vue_code_attr_name,
     template_attr_value,
     validate_html_attr_name,
@@ -74,7 +75,7 @@ from .capture import (
 from .compiler import (
     _ElementBindingDeclaration,
     _generated_event_args,
-    _generated_event_modifiers,
+    _generated_event_listener_name,
     _generated_vue_attr,
     _guard_template_braces,
     _RuntimeEventDeclaration,
@@ -3243,12 +3244,11 @@ class _Compiler:
         if len(event_names) != len(set(event_names)):
             self.safe_body = False
         for binding in node._event_bindings:
-            suffix = _generated_event_modifiers(binding)
             args = binding["args"]
             authored_args = _generated_event_args(args)
             attrs.append(
                 _generated_vue_attr(
-                    f"v-on:{binding['event']}{suffix}",
+                    _generated_event_listener_name(binding),
                     f"$citryEvents.dispatch('{binding['id']}', $event{authored_args})",
                 )
             )
@@ -4042,6 +4042,7 @@ def _spread_with_source_attrs(
             for key, value in resolved.items():
                 name = validate_html_attr_name(key, where=f"c-bind on <{node.tag}>")
                 reject_vue_code_attr_name(name, tag_name=node.tag, origin="c-bind")
+                reject_script_capable_attr_name(name, tag_name=node.tag, where="c-bind")
                 _reject_dynamic_translation_binding(name, tag_name=node.tag)
                 _reject_reserved_events_attr(name, tag_name=node.tag)
                 items.append((name, const_value(value)))
@@ -4175,6 +4176,7 @@ def _root_spread_plan(node: PreparedElementOpenNode, keys: tuple[str, ...]) -> t
             # here sends the row there so it raises the same error.
             validate_html_attr_name(name, where=f"c-bind on <{node.tag}>")
             reject_vue_code_attr_name(name, tag_name=node.tag, origin="c-bind")
+            reject_script_capable_attr_name(name, tag_name=node.tag, where="c-bind")
             _reject_dynamic_translation_binding(name, tag_name=node.tag)
             _reject_reserved_events_attr(name, tag_name=node.tag)
         if any(is_client_props_key(name, tag_name=node.tag) for name in names):

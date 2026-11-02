@@ -429,7 +429,10 @@ class CDialog(LibraryComponent):
             notify(nextOpen, reason, source, returnValue);
           };
           const onHostClick = (event) => {
-            const trigger = event.target.closest?.("[data-citry-dialog-trigger]");
+            // The click can land on a form whose field hides `closest`, so call the built-in one.
+            const trigger = event.target instanceof Element
+              ? Element.prototype.closest.call(event.target, "[data-citry-dialog-trigger]")
+              : null;
             if (trigger && nearestHost(trigger) === host) {
               requestOpen(true, "trigger", trigger);
               return;

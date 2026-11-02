@@ -287,6 +287,10 @@ class CSplitter(LibraryComponent):
     """
 
     js = r"""
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
       $component({
         props: {
           sizes: {}, orientation: {}, disabled: {}, keyboardStep: {}, variant: {}, size: {},
@@ -355,7 +359,7 @@ class CSplitter(LibraryComponent):
           };
           const effectivelyDisabled = () => {
             if (configuration.disabled) return true;
-            for (let node = root.parentElement; node; node = node.parentElement) {
+            for (let node = parentElementOf(root); node; node = parentElementOf(node)) {
               if (!(node instanceof HTMLFieldSetElement) || !node.disabled) continue;
               const legend = [...node.children].find((child) => child instanceof HTMLLegendElement);
               if (!(legend instanceof Element) || !legend.contains(root)) return true;
@@ -553,7 +557,7 @@ class CSplitter(LibraryComponent):
           const observer = new MutationObserver(schedule);
           observer.observe(root, {childList: true});
           const fieldsets = [];
-          for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
             if (!(ancestor instanceof HTMLFieldSetElement)) continue;
             const item = new MutationObserver(schedule);
             item.observe(ancestor, {childList: true, attributes: true, attributeFilter: ['disabled']});

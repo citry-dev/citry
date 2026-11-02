@@ -1,9 +1,102 @@
 /* Experimental private Citry/Vue runtime. Not a public package API. */
 (function (global) {
   "use strict";
-  const V = global.Vue;
+  // A browser turns some elements into properties of `window` and `document`: an element with an
+  // `id` is found on `window` when `window` has no own property of that name, and a `form`,
+  // `img`, `iframe`, `embed` or `object` with a `name` hides the document's built-in member of that
+  // name (`<form name="createElement">` makes `document.createElement` that form). Data that
+  // chooses such an `id` or `name` would then hand this runtime an element in place of its own
+  // objects and stop it. The helpers below read past those elements. `ownGlobal`,
+  // `builtInMember` and `documentMembers` are a copy of packages/js/citry-client/src/page-dom.ts,
+  // which the bundled scripts import, so keep both in step.
+  //
+  // Read a global that a Citry script defines. Every such script assigns it to `window`, which
+  // makes it an own property, and an element's `id` never is one.
+  const ownGlobal = name => Object.prototype.hasOwnProperty.call(global, name) ? global[name] : undefined;
+  // The built-in member named `key` of `target`, or undefined when no prototype defines it. A
+  // named element shows up as an own data property (on `document`, or a named field on a `form`),
+  // so own data properties are passed over; an own getter or setter can only come from a script
+  // (a test's stub, a polyfill, the real document's `location`), so it is kept.
+  const builtInMember = (target, key) => {
+    const own = Object.getOwnPropertyDescriptor(target, key);
+    if (own !== undefined && (own.get !== undefined || own.set !== undefined)) return own;
+    for (let proto = Object.getPrototypeOf(target); proto !== null; proto = Object.getPrototypeOf(proto)) {
+      const descriptor = Object.getOwnPropertyDescriptor(proto, key);
+      if (descriptor !== undefined) return descriptor;
+    }
+    return undefined;
+  };
+  // Call a built-in method of any DOM object. A form's named field can hide the form's own
+  // `addEventListener`, so a listener Citry attaches to a form goes through here. A name no
+  // prototype defines (a test's plain-object stand-in) falls back to an ordinary read.
+  const callBuiltIn = (target, key, ...args) => {
+    const descriptor = builtInMember(target, key);
+    const method = descriptor === undefined ? Reflect.get(target, key)
+      : descriptor.get !== undefined ? descriptor.get.call(target) : descriptor.value;
+    return method.apply(target, args);
+  };
+  // A stand-in for the document whose members are always the browser's built-in ones: each read
+  // finds the member through `builtInMember`, calls a getter with the real document and binds a
+  // method to it. A name no prototype defines (a test's plain-object document) falls back to an
+  // ordinary read. Use the real `document` where it is passed to a DOM call
+  // (`observer.observe(document)`) or compared (`target === document`): the browser rejects this
+  // proxy as an argument, and it never equals the document.
+  const documentMembers = currentDocument => {
+    // One bound copy per method and document, so a hot path does not build a function per call.
+    const bound = new WeakMap();
+    const bind = (method, target) => {
+      const cached = bound.get(method);
+      if (cached !== undefined && cached.target === target) return cached.method;
+      const boundMethod = method.bind(target);
+      bound.set(method, {target, method: boundMethod});
+      return boundMethod;
+    };
+    return new Proxy({}, {
+      get(_shell, key) {
+        const target = currentDocument();
+        const descriptor = builtInMember(target, key);
+        let value;
+        if (descriptor === undefined) value = Reflect.get(target, key);
+        else if (descriptor.get !== undefined) return descriptor.get.call(target);
+        else if (descriptor.set !== undefined) return undefined;
+        else value = descriptor.value;
+        return typeof value === "function" ? bind(value, target) : value;
+      },
+      set(_shell, key, value) {
+        const target = currentDocument();
+        const descriptor = builtInMember(target, key);
+        // A setter such as `cookie` runs on the real document; anything else is written to it.
+        if (descriptor?.set !== undefined) {
+          descriptor.set.call(target, value);
+          return true;
+        }
+        return Reflect.set(target, key, value);
+      },
+    });
+  };
+  // Read again on every access, because test harnesses swap the document after this script loads.
+  const pageDocument = documentMembers(() => document);
+  // A stand-in for any DOM object (a document, a form, a shadow root) whose members are the
+  // browser's built-in ones, one per object so a caller can keep and compare it. Component scripts
+  // such as Citry UI's reach it through `Symbol.for("citry:built-in-members")` (set at the end of
+  // this script); a symbol key, because page markup can only create string-named properties.
+  const builtInMembersByTarget = new WeakMap();
+  const builtInMembers = target => {
+    // A missing node (`input.form` outside a form) stays as it is, so `?.` still skips it and any
+    // other read fails as it would without the helper.
+    if ((typeof target !== "object" && typeof target !== "function") || target === null) return target;
+    let members = builtInMembersByTarget.get(target);
+    if (members === undefined) {
+      members = documentMembers(() => target);
+      builtInMembersByTarget.set(target, members);
+    }
+    return members;
+  };
+
+  const V = ownGlobal("Vue");
   if (!V) throw new Error("Vue runtime must load before Citry's private Vue client");
-  const citryNamespace = global.Citry === undefined ? {} : global.Citry;
+  const existingCitry = ownGlobal("Citry");
+  const citryNamespace = existingCitry === undefined ? {} : existingCitry;
   if ((typeof citryNamespace !== "object" || citryNamespace === null) && typeof citryNamespace !== "function")
     throw new TypeError("the global Citry namespace must be an object");
   if (Object.prototype.hasOwnProperty.call(citryNamespace, "vue")) {
@@ -11,13 +104,40 @@
   } else {
     Object.defineProperty(citryNamespace, "vue", {value: V, enumerable: true, configurable: false, writable: false});
   }
-  if (global.Citry === undefined) global.Citry = citryNamespace;
+  if (existingCitry === undefined) global.Citry = citryNamespace;
   const HELPER_CONTRACT = "b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5";
-  if (global.__citryRuntime) {
-    if (global.__citryRuntime.compilerRuntime?.helperContract !== HELPER_CONTRACT)
+  if (ownGlobal("__citryRuntime")) {
+    if (ownGlobal("__citryRuntime").compilerRuntime?.helperContract !== HELPER_CONTRACT)
       throw new Error("an incompatible Citry Vue runtime is already loaded");
     return;
   }
+
+  // A redirect navigates the whole page, so only http(s) URLs and URLs with no scheme are
+  // followed. The server checks this when it builds the action (`actions.Redirect`); this
+  // repeats the check for actions that reach the browser another way, such as
+  // `Citry.events.applyActions()`. The scheme is read as the URL parser reads it: leading and
+  // trailing control characters and spaces are stripped and tab, CR, and LF are removed anywhere
+  // first.
+  const redirectScheme = url => {
+    const text = url.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, "");
+    const match = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(text);
+    return match ? match[1].toLowerCase() : null;
+  };
+  const navigateToRedirect = url => {
+    // A non-string has no text to read a scheme from, so it gets its own message instead of
+    // being reported as a URL with an empty scheme.
+    if (typeof url !== "string") {
+      console.error("[Citry] refused a redirect because its URL is not a string.");
+      return;
+    }
+    const scheme = redirectScheme(url);
+    if (scheme !== null && scheme !== "http" && scheme !== "https") {
+      console.error("[Citry] refused a redirect to a URL with the " + JSON.stringify(scheme) +
+        " scheme; a redirect follows only http: and https: URLs and URLs with no scheme.");
+      return;
+    }
+    global.location.assign(url);
+  };
 
   const apps = new Map();
   // Vue plugins the page registered with `Citry.vue.use()`, in registration order. Citry installs
@@ -129,8 +249,8 @@
       if (typeof name !== "string" || name.length === 0) throw new TypeError("Citry.events.on needs a non-empty event name");
       if (typeof callback !== "function") throw new TypeError("Citry.events.on needs a callback function");
       const listener = event => callback(event.detail);
-      document.addEventListener(name, listener);
-      return () => document.removeEventListener(name, listener);
+      pageDocument.addEventListener(name, listener);
+      return () => pageDocument.removeEventListener(name, listener);
     },
     configure(options = {}) {
       plain(options, "Citry.events.configure options");
@@ -287,7 +407,7 @@
     return actions;
   };
   const snapshotPublicActions = actions => {
-    const protocolValidator = global.CitryVueEvents?.assertValidActionList;
+    const protocolValidator = ownGlobal("CitryVueEvents")?.assertValidActionList;
     if (typeof protocolValidator === "function") protocolValidator(actions);
     else assertPublicActionList(actions);
     // The caller keeps its array and may change it while the actions run, so run a private copy.
@@ -301,11 +421,11 @@
       if (typeof action.delay === "number" && action.delay > 0)
         await new Promise(resolve => setTimeout(resolve, action.delay * 1000));
       if (action.action === "data") data = action.value;
-      else if (action.action === "redirect") global.location.assign(action.url);
+      else if (action.action === "redirect") navigateToRedirect(action.url);
       else if (action.action === "url") global.history[action.mode === "push" ? "pushState" : "replaceState"](global.history.state, "", action.url);
       else if (action.action === "event") {
         if (action.target !== undefined) throw new Error("Citry.events.applyActions needs a mounted component for targeted Event actions.");
-        document.dispatchEvent(new CustomEvent(action.eventName, {detail: action.detail, bubbles: true}));
+        pageDocument.dispatchEvent(new CustomEvent(action.eventName, {detail: action.detail, bubbles: true}));
       } else throw new Error("Citry.events.applyActions needs a mounted component for Render and State actions.");
     };
     for (const action of actions) {
@@ -460,10 +580,10 @@
   // the user or the component's own script changes their value, and both must be kept.
   const userEditedFields = new WeakSet();
   // Test harnesses load the runtime with a minimal `document` that has no event support.
-  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+  if (typeof document !== "undefined" && typeof pageDocument.addEventListener === "function") {
     const markEdited = event => { if (event.target?.localName === "select") userEditedFields.add(event.target); };
-    document.addEventListener("input", markEdited, true);
-    document.addEventListener("change", markEdited, true);
+    pageDocument.addEventListener("input", markEdited, true);
+    pageDocument.addEventListener("change", markEdited, true);
   }
   // Runs after Vue patches a `<select>` whose `value` is compared by VNode value.
   function restoreUneditedValue(vnode, oldVnode) {
@@ -873,6 +993,7 @@
         typeof asset.id !== "string" || typeof asset.url !== "string" ||
         asset.target !== ORDINARY_TARGET || asset.helperContract !== HELPER_CONTRACT)
       throw new Error("invalid prepared definition asset");
+    requireWebAssetUrl(asset.url);
     sriFromHex(asset.sha256);
     const directiveSignature = normalizeDirectiveSignature(asset.directiveSignature);
     const runtimeEventSites = normalizeRuntimeEventSites(asset.runtimeEventSites);
@@ -1453,13 +1574,14 @@
     if (types.has(type)) return;
     types.add(type);
     // Passive, so a page-wide touch or wheel listener never delays scrolling.
-    target.addEventListener(type, numberCitryEvent, {capture: true, passive: true});
+    callBuiltIn(target, "addEventListener", type, numberCitryEvent, {capture: true, passive: true});
   }
   function numberCitryEvents(state) {
     const type = state.spec.event;
     numberCitryEventsOn(window, type);
     numberCitryEventsOn(document, type);
-    state.root = state.element.getRootNode();
+    // The element may be a form whose named field hides `getRootNode`, so call the built-in one.
+    state.root = callBuiltIn(state.element, "getRootNode");
     if (state.root !== document) numberCitryEventsOn(state.root, type);
   }
   // Whether an event started before the listener was attached.
@@ -1477,7 +1599,7 @@
     if (order !== undefined) return order <= state.attachedOrder;
     // An element that moved to another root, such as by a `<Teleport>` whose
     // target changed, gets numbering there. Its event came after the attach.
-    if (state.target === state.element && state.element.getRootNode() !== state.root) {
+    if (state.target === state.element && callBuiltIn(state.element, "getRootNode") !== state.root) {
       numberCitryEvents(state);
       return false;
     }
@@ -1580,7 +1702,7 @@
         state.startVisible.set(domEvent, citryElementVisible(element));
       };
       // Passive, because it only reads the page.
-      document.addEventListener(event, state.startListener, {capture: true, passive: true});
+      pageDocument.addEventListener(event, state.startListener, {capture: true, passive: true});
     }
     state.listener = domEvent => {
       // Like Vue, ignore an event that started before the listener existed,
@@ -1613,11 +1735,11 @@
     // leave it unset for a listener inside a shadow root. Only an event of
     // this type can reach the listener, so no other is kept alive.
     state.attachEvent = window.event?.type === event ? window.event : undefined;
-    state.target.addEventListener(event, state.listener, state.options);
+    callBuiltIn(state.target, "addEventListener", event, state.listener, state.options);
   }
   function removeCitryListener(state) {
-    if (state.target) state.target.removeEventListener(state.spec.event, state.listener, state.options);
-    if (state.startListener) document.removeEventListener(state.spec.event, state.startListener, {capture: true});
+    if (state.target) callBuiltIn(state.target, "removeEventListener", state.spec.event, state.listener, state.options);
+    if (state.startListener) pageDocument.removeEventListener(state.spec.event, state.startListener, {capture: true});
   }
   function detachCitryListener(element, id) {
     const byId = citryListeners.get(element);
@@ -1657,7 +1779,7 @@
       const polling = lifetime.record.app.polling;
       polling?.lifetimes.delete(lifetime);
       if (polling?.lifetimes.size === 0) {
-        document.removeEventListener("visibilitychange", polling.onVisibility);
+        pageDocument.removeEventListener("visibilitychange", polling.onVisibility);
         lifetime.record.app.polling = undefined;
       }
     }
@@ -1732,11 +1854,11 @@
   function schedulePoll(lifetime) {
     if (lifetime.timer) clearTimeout(lifetime.timer);
     if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return; }
-    if (document.hidden) return;
+    if (pageDocument.hidden) return;
     lifetime.pending = false;
     scheduleDelay(lifetime, lifetime.binding.interval, () => {
       if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return; }
-      if (document.hidden) return;
+      if (pageDocument.hidden) return;
       // A slow request must not create a chain of already-expired timers. If
       // its deadline passes, restart the interval when the request settles.
       if (lifetime.inFlight) { lifetime.pending = true; return; }
@@ -1753,7 +1875,7 @@
       if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return; }
       lifetime.inFlight = true;
       Promise.resolve().then(() => {
-        if (document.hidden) return undefined;
+        if (pageDocument.hidden) return undefined;
         if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return undefined; }
         return lifetime.record.app.eventPoll(lifetime.record, lifetime.bindingId, args);
       })
@@ -1774,14 +1896,14 @@
       polling = {lifetimes: new Set(), onVisibility: undefined};
       polling.onVisibility = () => {
         for (const current of polling.lifetimes) {
-          if (document.hidden) {
+          if (pageDocument.hidden) {
             if (current.timer) clearTimeout(current.timer);
             current.timer = 0;
           } else schedulePoll(current);
         }
       };
       handle.record.app.polling = polling;
-      document.addEventListener("visibilitychange", polling.onVisibility);
+      pageDocument.addEventListener("visibilitychange", polling.onVisibility);
     }
     polling.lifetimes.add(lifetime);
     schedulePoll(lifetime);
@@ -2431,7 +2553,7 @@
 
   function assetPreloadKey(url, destination, integrity, attrs, nonce) {
     let resolved;
-    try { resolved = new URL(url, document.baseURI); }
+    try { resolved = new URL(url, pageDocument.baseURI); }
     catch { return null; }
     if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
     return JSON.stringify([resolved.href, destination, integrity || null,
@@ -2448,7 +2570,7 @@
       if (!fetchKey || batch.has(fetchKey)) return;
       let entry = preloadedAssetLinks.get(fetchKey);
       if (!entry) {
-        const link = document.createElement("link");
+        const link = pageDocument.createElement("link");
         link.rel = "preload";
         link.as = destination;
         link.href = url;
@@ -2461,7 +2583,7 @@
         if (nonce) link.nonce = nonce;
         entry = {link, refs: 0};
         preloadedAssetLinks.set(fetchKey, entry);
-        document.head.append(link);
+        pageDocument.head.append(link);
       }
       entry.refs++;
       batch.set(fetchKey, entry);
@@ -2471,7 +2593,7 @@
         for (const asset of assets) {
           let url, integrity, attrs = {};
           if (isDefinition) {
-            if (global.__citryRuntimeDefinitions?.[asset.id] || loadedDefinitionUrls.has(asset.url)) continue;
+            if (ownGlobal("__citryRuntimeDefinitions")?.[asset.id] || loadedDefinitionUrls.has(asset.url)) continue;
             url = asset.url;
             integrity = sriFromHex(asset.sha256);
             attrs = ownedFetchAttributes(attrs);
@@ -2517,11 +2639,11 @@
     return "sha256-" + btoa(String.fromCharCode(...value.match(/../g).map(part => parseInt(part, 16))));
   }
   function loadDefinition(asset, nonce) {
-    if (global.__citryRuntimeDefinitions?.[asset.id]) return Promise.resolve();
+    if (ownGlobal("__citryRuntimeDefinitions")?.[asset.id]) return Promise.resolve();
     const prior = loadedDefinitionUrls.get(asset.url);
     if (prior) return prior;
     const promise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
+      const script = pageDocument.createElement("script");
       script.src = asset.url;
       script.integrity = sriFromHex(asset.sha256);
       script.crossOrigin = ownedCrossOrigin;
@@ -2537,7 +2659,7 @@
         loadedDefinitionUrls.delete(asset.url);
         reject(new Error("Citry Vue definition failed to load: " + asset.url));
       });
-      document.head.append(script);
+      pageDocument.head.append(script);
     });
     loadedDefinitionUrls.set(asset.url, promise);
     return promise;
@@ -2576,6 +2698,24 @@
     normalizeAssetSource(asset.source, "script");
     return asset;
   }
+  // Scripts load only over http(s) or from a blob: URL. A data: URL would let a forged manifest
+  // supply the script's text inline, and the element would still get the page's nonce. Only
+  // script already running in the page can create a blob: URL, and the docs playground hands
+  // the runtime blob: URLs for the code it runs. Stylesheets keep data: URLs, which cannot run
+  // script.
+  function requireWebAssetUrl(url) {
+    // A named element such as <img name="baseURI"> replaces document.baseURI, so read the
+    // document's real base URL through `pageDocument`.
+    const base = pageDocument.baseURI;
+    let resolved;
+    // The browser resolves the script's src against that same base URL, so a URL that does
+    // not resolve here, such as a path on an about:blank page, is one it cannot load at all.
+    try { resolved = new URL(url, base); }
+    catch { return; }
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:" && resolved.protocol !== "blob:")
+      throw new Error(`[Citry] refused the script URL ${JSON.stringify(url.slice(0, 80))}: ` +
+        "a component script must load from an http:, https:, or blob: URL.");
+  }
   function normalizeAssetSource(source, elementKind) {
     if (source.kind === "owned") {
       if (typeof source.url !== "string" || typeof source.sha256 !== "string" ||
@@ -2586,6 +2726,7 @@
       if (Object.keys(source).sort().join(",") !== "attrs,kind,url" || typeof source.url !== "string" || !plain(source.attrs, "prepared external asset attrs"))
         throw new Error("invalid prepared asset source");
     } else throw new Error("invalid prepared asset source");
+    if (elementKind === "script") requireWebAssetUrl(source.url);
     const attrs = source.attrs || {};
     const forbidden = elementKind === "script"
       ? new Set(["src", "nonce", "async", "defer", "nomodule"])
@@ -2654,7 +2795,7 @@
     return asset.owner.kind === "extension" ? JSON.stringify([appId, asset.source.url]) : asset.source.url;
   }
   function existingStyleElement(appId, url) {
-    return [...document.querySelectorAll('[data-citry-vue-style-app][data-citry-css-url]')]
+    return [...pageDocument.querySelectorAll('[data-citry-vue-style-app][data-citry-css-url]')]
       .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
         element.getAttribute("data-citry-css-url") === url) || null;
   }
@@ -2717,7 +2858,7 @@
     // here. It is adopted unless it failed: an integrity failure leaves no sheet, and an error
     // status shows in its resource timing entry where the browser reports one.
     // A failed link is replaced by a new request below, which reports the failure.
-    const served = knownInitial ? [...document.querySelectorAll('link[rel="stylesheet"][data-citry-vue-style-app]')]
+    const served = knownInitial ? [...pageDocument.querySelectorAll('link[rel="stylesheet"][data-citry-vue-style-app]')]
       .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
         element.getAttribute("href") === asset.source.url) || null : null;
     const timings = served ? performance.getEntriesByName(served.href) : [];
@@ -2753,7 +2894,7 @@
   // when the load fails and, if the record is still current, drops it so a later render requests
   // the stylesheet again.
   function linkStyle(appId, asset, nonce, key, record) {
-    const link = document.createElement("link");
+    const link = pageDocument.createElement("link");
     record.element = link;
     return new Promise((resolve, reject) => {
       link.rel = "stylesheet";
@@ -2769,7 +2910,7 @@
           link.remove();
         }
       };
-      document.head.append(link);
+      pageDocument.head.append(link);
     });
   }
   // A sheet whose rules this page cannot read came from another origin without CORS. Nothing here
@@ -2791,7 +2932,7 @@
   // the timeout above.
   function confirmServedStyle(served, asset, nonce) {
     return new Promise(resolve => {
-      const probe = document.createElement("link");
+      const probe = pageDocument.createElement("link");
       applyAssetSource(probe, asset.source, nonce);
       // Set after the source attributes, which may carry their own rel or media.
       probe.rel = "stylesheet";
@@ -2805,7 +2946,7 @@
       const timer = setTimeout(() => finish(true), STYLE_PROBE_TIMEOUT_MS);
       probe.onload = () => finish(true);
       probe.onerror = () => finish(false);
-      document.head.append(probe);
+      pageDocument.head.append(probe);
     });
   }
   function loadTypeScript(appId, asset, nonce, knownInitial = false) {
@@ -2820,7 +2961,7 @@
       throw new Error("lazy type script loading is unsupported after custom dependency hooks");
     const record = {appId: asset.owner.kind === "extension" ? appId : null, identity, promise: null};
     record.promise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
+      const script = pageDocument.createElement("script");
       script.src = asset.source.url;
       applyAssetSource(script, asset.source, nonce);
       const finish = callback => {
@@ -2839,7 +2980,7 @@
         if (loadedScriptUrls.get(key) === record) loadedScriptUrls.delete(key);
         reject(new Error("Citry Vue type script failed to load: " + asset.source.url));
       });
-      document.head.append(script);
+      pageDocument.head.append(script);
     });
     loadedScriptUrls.set(key, record);
     return record.promise;
@@ -2991,7 +3132,7 @@
     if (lifecycle) configuration = {...configuration, nonce: lifecycle.nonce};
     plain(configuration, "prepared bootstrap");
     const manifest = plain(configuration.manifest, "prepared manifest");
-    const hostElement = typeof configuration.host === "string" ? document.querySelector(configuration.host) : configuration.host;
+    const hostElement = typeof configuration.host === "string" ? pageDocument.querySelector(configuration.host) : configuration.host;
     if (!(hostElement instanceof Element) || !plain(configuration.tags, "component tags"))
       throw new Error("prepared bootstrap needs one host element and component tags");
     const appId = manifest.appId, registered = new Set(), contexts = new Map(), sources = new Map();
@@ -3029,7 +3170,7 @@
       initialAssetPreloads.cleanup();
     }
     for (const asset of manifest.definitions) {
-      registerDefinition(appId, asset.id, global.__citryRuntimeDefinitions?.[asset.id], declaredDefinitions.get(asset.id));
+      registerDefinition(appId, asset.id, ownGlobal("__citryRuntimeDefinitions")?.[asset.id], declaredDefinitions.get(asset.id));
       registered.add(asset.id);
     }
     const componentTypes = {};
@@ -3688,7 +3829,7 @@
           validateCombinedActions(shadow, envelope);
         }
         const declaredDefinitionIds = new Set(declaredDefinitions.keys());
-        const priorDefinitionKeys = new Set(Object.keys(global.__citryRuntimeDefinitions || {}));
+        const priorDefinitionKeys = new Set(Object.keys(ownGlobal("__citryRuntimeDefinitions") || {}));
         const declaredOptionTypes = new Set(normalizedAssets.scripts.filter(asset => asset.registersOptions).map(asset => asset.owner.typeKey));
         const priorOptionTypes = new Set(registeredTypeOptions.keys());
         const updateAssetPreloads = createAssetPreloadBatch();
@@ -3697,12 +3838,12 @@
           updateAssetPreloads.add(appId, normalizedAssets.scripts, configuration.nonce);
           updateAssetPreloads.addStyles(appId, normalizedAssets.styles, configuration.nonce);
           for (const asset of envelope.definitions) await wait(loadDefinition(asset, configuration.nonce));
-          for (const id of Object.keys(global.__citryRuntimeDefinitions || {}))
+          for (const id of Object.keys(ownGlobal("__citryRuntimeDefinitions") || {}))
             if (!priorDefinitionKeys.has(id) && !declaredDefinitionIds.has(id))
               throw new Error("prepared definition asset registered an undeclared definition");
           for (const asset of envelope.definitions) if (!registered.has(asset.id)) {
             registerDefinition(
-              appId, asset.id, global.__citryRuntimeDefinitions?.[asset.id], declaredDefinitions.get(asset.id));
+              appId, asset.id, ownGlobal("__citryRuntimeDefinitions")?.[asset.id], declaredDefinitions.get(asset.id));
             registered.add(asset.id);
           }
           // Check against the registry before loading type scripts and styles whenever the answer
@@ -3847,7 +3988,7 @@
         dispatchCarrier(effectiveSource).dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
       },
       dispatchEventGlobal(name, detail) {
-        document.dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
+        pageDocument.dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
       },
       lifecycle(kind, source, event, extra = {}) {
         // A committed self-render may retire the sender and mount its
@@ -3876,7 +4017,7 @@
           kind, identity, live ? liveRootElements(mounted.component) : [], event, extra);
       },
       promptReload,
-      redirect(url) { global.location.assign(url); },
+      redirect(url) { navigateToRedirect(url); },
       updateUrl(url, mode) { global.history[mode === "push" ? "pushState" : "replaceState"]({}, "", url); },
       takePendingState(source, handlerName) {
         const mounted = ownedApp.mounted.get(source.stableId);
@@ -3900,7 +4041,7 @@
       },
     };
     const cookieToken = () => {
-      const match = document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("csrftoken="));
+      const match = pageDocument.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("csrftoken="));
       return match ? decodeURIComponent(match.slice("csrftoken=".length)) : "";
     };
     const hasEvents = manifest.occurrences.some(occurrence => occurrence.eventContext);
@@ -3909,9 +4050,10 @@
     const ensureEventsBridge = () => {
       addressSnapshot(true);
       if (bridge) return bridge;
-      if (!global.CitryVueEvents || typeof configuration.endpoint !== "string")
+      const eventsBridge = ownGlobal("CitryVueEvents");
+      if (!eventsBridge || typeof configuration.endpoint !== "string")
         throw new Error("prepared Events components require the Events bridge and endpoint");
-      bridge = global.CitryVueEvents.createVueEventsBridge({
+      bridge = eventsBridge.createVueEventsBridge({
         endpoint: configuration.endpoint,
         eventBaseUrl: configuration.eventBaseUrl,
         host,
@@ -3947,7 +4089,7 @@
         if (!ownedApp.terminal && eventsBridge.isDeclarativeFailureHandled(error)) return undefined;
         throw error;
       }
-      document.dispatchEvent(new CustomEvent("citry:rendered", {detail: {appId, revision: definitionRegistry(appId).revision}}));
+      pageDocument.dispatchEvent(new CustomEvent("citry:rendered", {detail: {appId, revision: definitionRegistry(appId).revision}}));
       return result;
     }
     const resolveDeclarativeEvent = (record, bindingId) => {
@@ -3975,7 +4117,7 @@
         if (form) {
           // `submitter` is the button that submitted the form, which a post
           // without JavaScript sends too.
-          args = global.CitryVueEvents.collectFormArgs(form, new Set(), value.submitter);
+          args = ownGlobal("CitryVueEvents").collectFormArgs(form, new Set(), value.submitter);
           argsSource = "form";
         } else args = {};
       }
@@ -4319,7 +4461,7 @@
       // first render right after the mount.
       // Production pages carry neither that script nor the flag, so for them this reads one property.
       const shellCheck = hydrating && configuration.emptyShells === true && configuration.development === true
-        ? globalThis.CitryVueDevChecks?.captureShells(hostElement) : undefined;
+        ? ownGlobal("CitryVueDevChecks")?.captureShells(hostElement) : undefined;
       if (hydrating && configuration.emptyShells === true)
         for (const shell of hostElement.querySelectorAll('[data-allow-mismatch="children"]')) shell.replaceChildren();
       const hydrationBeforeElements = hydrationDiagnostics ? Array.from(hostElement.querySelectorAll("*")) : null;
@@ -4396,7 +4538,7 @@
       apps.delete(appId);
       throw error;
     }
-    document.dispatchEvent(new CustomEvent("citry:ready", {detail: {appId, revision: definitionRegistry(appId).revision}}));
+    pageDocument.dispatchEvent(new CustomEvent("citry:ready", {detail: {appId, revision: definitionRegistry(appId).revision}}));
     const nativeUnmount = vueApp.unmount.bind(vueApp);
     let disposed = false;
     vueApp.unmount = () => {
@@ -4519,7 +4661,7 @@
       ...extra,
     };
     if (kind === "swapped") detail.els = [...roots];
-    return (roots[0] || document).dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
+    return (roots[0] || pageDocument).dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
       detail,
       bubbles: true,
       // A page cancels `before` to stop a call, and a version-skew `stale` to replace the reload prompt.
@@ -4920,10 +5062,10 @@
   // field Vue moves) can end the composition without a compositionend, so a focusout on that field
   // clears `composingTarget` too.
   let composingTarget = null;
-  if (typeof global.document?.addEventListener === "function") {
-    global.document.addEventListener("compositionstart", event => { composingTarget = event.target; }, true);
-    global.document.addEventListener("compositionend", () => { composingTarget = null; }, true);
-    global.document.addEventListener("focusout", event => {
+  if (typeof document !== "undefined" && typeof pageDocument.addEventListener === "function") {
+    pageDocument.addEventListener("compositionstart", event => { composingTarget = event.target; }, true);
+    pageDocument.addEventListener("compositionend", () => { composingTarget = null; }, true);
+    pageDocument.addEventListener("focusout", event => {
       if (event.target === composingTarget) composingTarget = null;
     }, true);
   }
@@ -4932,8 +5074,9 @@
   // leaves the document even for that instant. A server revision that reorders rows would then
   // take the focus and caret away from the field the user is typing in, so remember them here.
   function captureFocus() {
-    const element = global.document?.activeElement;
-    if (!element || element === global.document.body || element === global.document.documentElement) return null;
+    if (typeof document === "undefined") return null;
+    const element = pageDocument.activeElement;
+    if (!element || element === pageDocument.body || element === pageDocument.documentElement) return null;
     let selection = null;
     try {
       if (typeof element.selectionStart === "number")
@@ -4951,9 +5094,9 @@
     // Only an element Vue kept, and only when nothing else took the focus: the page may have moved
     // it on purpose, and an element Vue replaced is a new field.
     if (!focus || !focus.element.isConnected) return;
-    const current = global.document.activeElement;
+    const current = pageDocument.activeElement;
     if (current !== focus.element) {
-      if (current && current !== global.document.body) return;
+      if (current && current !== pageDocument.body) return;
       focus.element.focus({preventScroll: true});
     }
     // Reapply the range even when the field kept focus: when the server changed a typed field's
@@ -5245,7 +5388,25 @@
 
   // The CSP nonce that authorized this runtime's own script tag. Read it now, while
   // document.currentScript still points at that tag.
-  const documentNonce = document.currentScript?.nonce || document.currentScript?.getAttribute("nonce") || "";
+  const documentNonce = runtimeScriptNonce();
+  // Whether a data block found in the page carries this runtime's nonce. Injected markup
+  // cannot set the nonce, but an injected tag left open can take in the attributes of the
+  // genuine tag after it, its nonce included, so its attributes then contain "<script" or
+  // "<style". Browsers refuse to run such a script for the same reason, so it is refused here.
+  function carriesPageNonce(block) {
+    if (block.nonce !== documentNonce) return false;
+    return !block.getAttributeNames().some(name =>
+      /<(script|style)/i.test(name) || /<(script|style)/i.test(block.getAttribute(name) || ""));
+  }
+  function runtimeScriptNonce() {
+    // A named element in the page, such as <form name="currentScript">, replaces
+    // document.currentScript with itself, and its empty nonce would switch off every nonce
+    // check below. So read it through `pageDocument`, which page markup cannot change, and
+    // accept only a real script element.
+    const script = typeof document === "undefined" ? null : pageDocument.currentScript;
+    if (typeof HTMLScriptElement !== "function" || !(script instanceof HTMLScriptElement)) return "";
+    return script.nonce || script.getAttribute("nonce") || "";
+  }
 
   // Starts a server-rendered document app. The server sends the app's configuration as a
   // JSON data block (<script type="application/json" data-citry-vue-document="appId">),
@@ -5257,13 +5418,13 @@
     // Compare attribute values instead of building a selector from the id, and require
     // exactly one match, so a second block with the same id (for example markup injected
     // into the page) stops the start instead of choosing between them.
-    const blocks = [...document.querySelectorAll('script[type="application/json"][data-citry-vue-document]')]
+    const blocks = [...pageDocument.querySelectorAll('script[type="application/json"][data-citry-vue-document]')]
       .filter(block => block.getAttribute("data-citry-vue-document") === appId);
     if (blocks.length !== 1)
       throw new Error(`[Citry] expected one configuration block for app ${appId}, found ${blocks.length}`);
     // Under a nonce-based CSP the server stamps the data block with the same nonce as this
     // runtime. A block without it did not come from the Citry render, so it is refused.
-    if (documentNonce && blocks[0].nonce !== documentNonce)
+    if (documentNonce && !carriesPageNonce(blocks[0]))
       throw new Error(`[Citry] the configuration block for app ${appId} does not carry the page's CSP nonce`);
     const configuration = JSON.parse(blocks[0].textContent);
     if (configuration?.manifest?.appId !== appId)
@@ -5273,14 +5434,17 @@
     startPrepared(configuration).catch(error => queueMicrotask(() => { throw error; }));
   }
 
+  Object.defineProperty(global, Symbol.for("citry:built-in-members"), {value: builtInMembers});
   global.__citryRuntime = {configure, registerDefinition, registerTypeOptions, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, startDocument, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps, _dispatchLifecycleEvent: dispatchLifecycleEvent};
-  if (!global.CitryVueFragments?.installFragmentManager)
+  const fragmentSupport = ownGlobal("CitryVueFragments");
+  if (!fragmentSupport?.installFragmentManager)
     throw new Error("Citry Vue fragment support is unavailable");
-  global.CitryVueFragments.installFragmentManager(
-    global.Citry ||= {},
+  fragmentSupport.installFragmentManager(
+    citryNamespace,
     (node, exceptAppId) => [...apps.values()].some(app => app.id !== exceptAppId &&
       app.hostElement instanceof Element && app.hostElement.contains(node)),
     startPrepared,
     documentNonce,
+    carriesPageNonce,
   );
 })(window);

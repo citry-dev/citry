@@ -15,6 +15,16 @@
 
 ### Changed
 
+- **Breaking:** link inputs now accept only a relative URL or an
+  `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL, and raise
+  `ValueError` for any other scheme. Link inputs are `href` on
+  `CBreadcrumbItem`, `CButton`, `CListItem`, `CMenuItem`,
+  `CNavigationMenuLink`, and `CPagination`; `CForm`'s `action`; and a
+  `formaction` attribute on `CButton` or `CSplitButton`. Image inputs
+  (`CAvatar`'s `src`, and `CImage`'s `src` and `srcset`, including each
+  source's `srcset`) accept only a relative URL or an `http:`,
+  `https:`, `blob:`, or `data:image/` URL. To link to another scheme,
+  such as an app's own scheme, write the `<a>` in your template.
 - Writing an empty value in a template for a text input, such as
   `<c-CButtonGroup label="">` or `<c-CContextMenu aria_label="">`, raises
   the component's own `ValueError` saying the text is empty, not a
@@ -55,6 +65,18 @@
 
 ### Fixed
 
+- Menus, popovers, dialogs, selects and the other interactive components
+  keep working when data puts a `name` on a `form`, `img`, `iframe`,
+  `embed` or `object` that matches a `document` member they read, such as
+  `<form name="activeElement">`, or when a field inside a form has a `name`
+  that matches a form member. This needs Citry 0.7.0 or later; with an
+  older Citry the fix does not apply.
+
+- `CImage` now checks a long `srcset` in time proportional to its
+  length. A `srcset` with a long run of spaces could keep the server
+  busy for minutes or longer during a render, and a client `srcset`
+  prop with a long run of spaces or commas could freeze the browser
+  tab.
 - `CTagsInput` no longer holds up the page for seconds when a typed or
   pasted tag has a long run of spaces inside it, and `CNumberInput`,
   `CSlider`, and `CImage` no longer slow down in Safari on a value with a

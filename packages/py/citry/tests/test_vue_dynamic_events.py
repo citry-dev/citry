@@ -75,7 +75,7 @@ def test_dynamic_event_and_control_survive_valid_real_tag_changes() -> None:
         )
 
     first = _assembly(Page)
-    tags.update(event="a", control="textarea")
+    tags.update(event="a", control="select")
     second = _assembly(Page)
     [first_compiled] = first.compile_inputs.values()
     [second_compiled] = second.compile_inputs.values()
@@ -86,7 +86,7 @@ def test_dynamic_event_and_control_survive_valid_real_tag_changes() -> None:
     ]
     assert [item["tag"] for item in second_compiled.dynamic_elements] == [
         "a",
-        "textarea",
+        "select",
     ]
 
 

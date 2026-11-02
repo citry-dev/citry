@@ -41,7 +41,7 @@ inputs:
     component: CNavigationMenuLink
     channel: server
     entries:
-      - {id: href, name: href, type: str, default: {kind: required}, effect: Sets the native link destination without URL rewriting.}
+      - {id: href, name: href, type: str, default: {kind: required}, effect: 'Sets the native link destination without URL rewriting: a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL; any other scheme raises `ValueError`.'}
       - {id: current, name: current, type: bool, default: {kind: literal, value: false}, effect: Emits aria-current page.}
       - {id: target, name: target, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native target.}
       - {id: rel, name: rel, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native rel.}

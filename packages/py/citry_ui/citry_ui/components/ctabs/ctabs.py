@@ -308,6 +308,14 @@ class CTabs(LibraryComponent):
     """
 
     js = """
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
+
       $component({
         props: {
           value: {},
@@ -374,8 +382,8 @@ class CTabs(LibraryComponent):
 
           const tabForValue = (value) => tabs().find((tab) => tab.dataset.value === value);
           const hasDocumentFallbackFocus = () => (
-            document.activeElement === document.body
-            || document.activeElement === document.documentElement
+            builtIn(document).activeElement === builtIn(document).body
+            || builtIn(document).activeElement === builtIn(document).documentElement
           );
           const recordTabValues = () => {
             lastTabValues = tabs().map((tab) => tab.dataset.value);
@@ -457,8 +465,9 @@ class CTabs(LibraryComponent):
               return false;
             }
 
-            const focusedTab = isOwned(document.activeElement) && document.activeElement.matches(tabSelector)
-              ? document.activeElement
+            const focusedTab = isOwned(builtIn(document).activeElement)
+              && builtIn(document).activeElement.matches(tabSelector)
+              ? builtIn(document).activeElement
               : null;
             tabs().forEach((tab) => {
               const selected = tab === selectedTab;
@@ -483,8 +492,9 @@ class CTabs(LibraryComponent):
           };
 
           const applyDisabled = (disabled) => {
-            const focusedTab = isOwned(document.activeElement) && document.activeElement.matches(tabSelector)
-              ? document.activeElement
+            const focusedTab = isOwned(builtIn(document).activeElement)
+              && builtIn(document).activeElement.matches(tabSelector)
+              ? builtIn(document).activeElement
               : null;
             root.toggleAttribute("data-disabled", disabled);
             const list = tabList();
@@ -707,9 +717,9 @@ class CTabs(LibraryComponent):
             }
           });
           const list = tabList();
-          const hasInvalidPhysicalStructure = list?.parentElement !== root
-            || tabs().some((tab) => tab.parentElement !== list)
-            || panels().some((panel) => panel.parentElement !== root);
+          const hasInvalidPhysicalStructure = (list && parentElementOf(list)) !== root
+            || tabs().some((tab) => parentElementOf(tab) !== list)
+            || panels().some((panel) => parentElementOf(panel) !== root);
           if (hasInvalidPhysicalStructure) {
             console.error(
               "[citry-ui] CTabs requires its generated tab list and TabPanels to be direct "

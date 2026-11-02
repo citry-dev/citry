@@ -1163,6 +1163,15 @@ class CCommandPalette(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or a form's members behind named
+      // elements, so read them through the core runtime's helper; older Citry
+      // versions have no helper, so the fallback reads the members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
       const readyAttribute = "data-citry-command-palette-initialized";
       const ownerKey = Symbol.for("citry-ui:command-palette-owner");
       const handoffKey = Symbol.for("citry-ui:command-palette-handoff");
@@ -1183,7 +1192,7 @@ class CCommandPalette(LibraryComponent):
           }
         };
         const attach = () => {
-          scope = root.getRootNode();
+          scope = rootNodeOf(root);
           manager = scopeManagers.get(scope);
           if (!manager) {
             const entries = new Map();
@@ -1209,7 +1218,7 @@ class CCommandPalette(LibraryComponent):
                     node === candidate || node.contains?.(candidate)))) registration.notify();
               }
             });
-            observer.observe(scope instanceof Document ? scope.documentElement : scope, {
+            observer.observe(scope instanceof Document ? builtIn(scope).documentElement : scope, {
               subtree: true,
               childList: true,
               attributes: true,
@@ -1222,7 +1231,7 @@ class CCommandPalette(LibraryComponent):
         attach();
         return {
           refresh() {
-            if (active && root.getRootNode() !== scope) {
+            if (active && rootNodeOf(root) !== scope) {
               detach();
               attach();
             }
@@ -1322,7 +1331,7 @@ class CCommandPalette(LibraryComponent):
           // Each child is a group or separator element that the palette hides or shows.
           const regionElements = /** @type {HTMLElement[]} */ ([...listbox.children]);
           const documentOwner = host.ownerDocument;
-          let actualRoot = host.getRootNode();
+          let actualRoot = rootNodeOf(host);
           const activators = [...host.children].filter((element) => element !== dialog);
           const ownedElements = [
             host, dialog, surface, header, title, closeButton, search, input, listbox, empty,
@@ -1381,8 +1390,8 @@ class CCommandPalette(LibraryComponent):
               || empty.localName !== "div"
               || host.ownerDocument !== documentOwner
               || dialog.ownerDocument !== documentOwner
-              || host.getRootNode() !== actualRoot
-              || host.getRootNode() !== dialog.getRootNode()
+              || rootNodeOf(host) !== actualRoot
+              || rootNodeOf(host) !== rootNodeOf(dialog)
               || !markersAbsent()
               || !frameworkMarkersValid()
               || !host.hasAttribute("data-citry-command-palette-host")
@@ -1402,12 +1411,12 @@ class CCommandPalette(LibraryComponent):
                 .every((element) => runtimeAttributesValid(element))
               || !runtimeAttributesValid(closeButton, ["data-citry-command-palette-close"])
               || !runtimeAttributesValid(empty, ["data-citry-command-palette-visual"])
-              || dialog.parentElement !== host
-              || surface.parentElement !== dialog
-              || header.parentElement !== surface
-              || search.parentElement !== surface
-              || listbox.parentElement !== surface
-              || empty.parentElement !== surface
+              || parentElementOf(dialog) !== host
+              || parentElementOf(surface) !== dialog
+              || parentElementOf(header) !== surface
+              || parentElementOf(search) !== surface
+              || parentElementOf(listbox) !== surface
+              || parentElementOf(empty) !== surface
               || title.id !== data.titleId
               || input.id !== data.inputId
               || listbox.id !== data.listboxId
@@ -1610,7 +1619,7 @@ class CCommandPalette(LibraryComponent):
           const removeFormGuard = () => {
             if (!formGuard) return;
             clearTimeout(formGuard.timer);
-            formGuard.form.removeEventListener("submit", formGuard.listener, true);
+            builtIn(formGuard.form).removeEventListener("submit", formGuard.listener, true);
             formGuard = null;
           };
           const armFormGuard = () => {
@@ -1625,7 +1634,7 @@ class CCommandPalette(LibraryComponent):
                 && dialogRuntime.deepActive(input.ownerDocument) === input
               ) event.preventDefault();
             };
-            form.addEventListener("submit", listener, true);
+            builtIn(form).addEventListener("submit", listener, true);
             const timer = setTimeout(removeFormGuard, 0);
             formGuard = { form, listener, timer };
           };
@@ -1941,7 +1950,7 @@ class CCommandPalette(LibraryComponent):
 
           add(host, "click", (event) => {
             const trigger = event.target.closest?.("[data-citry-command-palette-trigger]");
-            if (trigger && trigger.parentElement === host && !configuration.disabled) {
+            if (trigger && parentElementOf(trigger) === host && !configuration.disabled) {
               requestVisibility(true, "trigger", trigger);
               return;
             }
@@ -2058,14 +2067,14 @@ class CCommandPalette(LibraryComponent):
                 teardown(true);
                 return;
               }
-              const nextRoot = host.getRootNode();
+              const nextRoot = rootNodeOf(host);
               if (nextRoot !== actualRoot) {
                 const supported = nextRoot === documentOwner
                   || (nextRoot instanceof ShadowRoot
                     && nextRoot.mode === "open"
                     && nextRoot.host.ownerDocument === documentOwner
                     && nextRoot.host.shadowRoot === nextRoot);
-                if (!supported || dialog.getRootNode() !== nextRoot || !controller.refreshRoot()) {
+                if (!supported || rootNodeOf(dialog) !== nextRoot || !controller.refreshRoot()) {
                   teardown(true);
                   return;
                 }
@@ -2195,10 +2204,10 @@ class CCommandPalette(LibraryComponent):
             const canHandoff = !diagnose
               && host.isConnected
               && host.ownerDocument === documentOwner
-              && host.getRootNode() === actualRoot
+              && rootNodeOf(host) === actualRoot
               && dialog.isConnected
-              && dialog.parentElement === host
-              && surface.parentElement === dialog
+              && parentElementOf(dialog) === host
+              && parentElementOf(surface) === dialog
               && title.isConnected
               && closeButton.isConnected
               && input.isConnected
@@ -2216,7 +2225,7 @@ class CCommandPalette(LibraryComponent):
                 input,
                 listbox,
                 documentOwner: host.ownerDocument,
-                actualRoot: host.getRootNode(),
+                actualRoot: rootNodeOf(host),
                 internalOpen,
                 logicalOpen,
                 serverOpen: defaults.open,
@@ -2253,14 +2262,14 @@ class CCommandPalette(LibraryComponent):
               // A host removed outside a Vue unmount, after the microtask
               // below has run, still releases its handoff as soon as it
               // leaves the DOM. adopt() disconnects this observer.
-              const handoffRoot = host.getRootNode();
+              const handoffRoot = rootNodeOf(host);
               handoffObserver = new MutationObserver(() => {
                 if (host.isConnected || host[handoffKey] !== record) return;
                 record.abort();
                 delete host[handoffKey];
               });
               handoffObserver.observe(
-                handoffRoot instanceof Document ? handoffRoot.documentElement : handoffRoot,
+                handoffRoot instanceof Document ? builtIn(handoffRoot).documentElement : handoffRoot,
                 {childList: true, subtree: true},
               );
               host[handoffKey] = record;

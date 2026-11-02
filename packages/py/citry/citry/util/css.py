@@ -17,7 +17,9 @@ SECRET_IN_CSS_DATA_ADVICE = (
 # A CSS function call: a name followed by an opening parenthesis,
 # e.g. `calc(100% - 20px)`, `var(--color)`, `rgba(255, 0, 0, 0.5)`.
 _CSS_FUNC_RE = re.compile(r"^[a-zA-Z0-9_-]+\(")
-_CSS_BLOCK_PAIRS = {"(": ")", "[": "]", "{": "}"}
+_CSS_NULL_OR_SURROGATE_RE = re.compile(r"[\x00\ud800-\udfff]")
+# `{` and `}` are rejected outright below, so only `(` and `[` group here.
+_CSS_BLOCK_PAIRS = {"(": ")", "[": "]"}
 _CSS_BLOCK_CLOSERS = frozenset(_CSS_BLOCK_PAIRS.values())
 
 
@@ -61,54 +63,113 @@ def _serialize_css_string(value: str) -> str:
     return "".join(parts)
 
 
+_CSS_WHITESPACE = "\n\r\t\f "
+_CSS_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def _consume_css_escape(value: str, index: int) -> int:
+    r"""
+    Return the index after a CSS escape that starts at the backslash ``index``.
+
+    Raise ``ValueError`` for a backslash followed by a newline, which is not a
+    valid escape, or for a backslash at the very end of the input.
+    """
+    if index + 1 >= len(value) or value[index + 1] in "\n\r\f":
+        raise ValueError(f"CSS value has a backslash that does not start a valid escape at offset {index}.")
+    index += 1
+    if value[index] not in _CSS_HEX_DIGITS:
+        return index + 1
+    # A hex escape is up to six hex digits plus one whitespace, which the
+    # browser reads as part of the escape; CRLF counts as one newline.
+    end = index
+    while end < len(value) and end - index < 6 and value[end] in _CSS_HEX_DIGITS:
+        end += 1
+    if value.startswith("\r\n", end):
+        return end + 2
+    if end < len(value) and value[end] in _CSS_WHITESPACE:
+        return end + 1
+    return end
+
+
 def validate_css_var_value(value: str) -> None:
-    """Reject text that can escape or structurally corrupt one CSS declaration."""
-    if "</style" in value.lower():
-        raise ValueError("CSS values cannot contain a '</style' end tag.")
+    """
+    Reject text that can escape or structurally corrupt one CSS declaration.
+
+    This walks ``value`` the way the CSS Syntax Level 3 tokenizer does, so a
+    custom-property value cannot close the generated declaration, start a new
+    rule, or end the ``<style>`` element the browser builds it into. It
+    rejects a malformed string or ``url()`` token (the browser's bad-string
+    and bad-url cases), a comment, an unbalanced bracket, a brace, a ``<`` or
+    backslash outside a string or ``url()``, a null or surrogate character,
+    ``</style``, or ``<!--`` anywhere, and a top-level ``;`` or ``!``. It is
+    not a full property-type validator.
+    """
+    # The HTML parser ends a <style> element only at `</style`, in any letter
+    # case, and `<!--` can start a comment state, so both are refused in every
+    # token, string and url() included. Other markup such as `<svg></svg>`
+    # stays allowed inside a string or url(), where SVG data URLs need it.
+    folded = value.lower()
+    for marker in ("</style", "<!--"):
+        offset = folded.find(marker)
+        if offset != -1:
+            raise ValueError(f"CSS value contains {marker!r} at offset {offset}.")
+
+    # A null character or lone surrogate is refused everywhere, strings and
+    # url() included, so check the whole value once before scanning it.
+    unreadable = _CSS_NULL_OR_SURROGATE_RE.search(value)
+    if unreadable is not None:
+        kind = "a null character" if unreadable.group() == "\0" else "a Unicode surrogate"
+        raise ValueError(f"CSS value contains {kind} at offset {unreadable.start()}.")
 
     blocks: list[tuple[str, int]] = []
-    quote: tuple[str, int] | None = None
     index = 0
+    length = len(value)
 
-    while index < len(value):
+    while index < length:
         char = value[index]
-        codepoint = ord(char)
 
-        if char == "\0":
-            raise ValueError(f"CSS value contains a null character at offset {index}.")
-        if 0xD800 <= codepoint <= 0xDFFF:
-            raise ValueError(f"CSS value contains a Unicode surrogate at offset {index}.")
+        # The browser drops a comment before it reads the value, so a value
+        # with one would not mean what it appears to say.
+        if char == "/" and index + 1 < length and value[index + 1] == "*":
+            raise ValueError(f"CSS value contains a comment at offset {index}.")
 
-        if quote is not None:
-            if char == "\\":
-                if index + 1 >= len(value):
-                    raise ValueError(f"CSS value ends with a dangling escape at offset {index}.")
-                index += 2
-                continue
-            if char == quote[0]:
-                quote = None
-            elif char in "\n\r\f":
-                raise ValueError(f"CSS string contains an unescaped newline at offset {index}.")
-            index += 1
-            continue
-
-        if char == "/" and index + 1 < len(value) and value[index + 1] == "*":
-            comment_end = value.find("*/", index + 2)
-            if comment_end == -1:
-                raise ValueError(f"CSS value contains an unclosed comment at offset {index}.")
-            index = comment_end + 2
-            continue
+        # A value never needs `<` outside a string or url(), so refuse it
+        # here rather than judge what follows it.
+        if char == "<":
+            raise ValueError(f"CSS value contains '<' at offset {index}.")
 
         if char in {'"', "'"}:
-            quote = (char, index)
-            index += 1
+            index = _scan_css_string(value, index)
             continue
 
+        # A `css_data()` value never needs a backslash outside a string, and
+        # refusing it keeps every name in the value readable as written.
         if char == "\\":
-            if index + 1 >= len(value):
-                raise ValueError(f"CSS value ends with a dangling escape at offset {index}.")
-            index += 2
+            raise ValueError(f"CSS value contains a backslash outside a string at offset {index}.")
+
+        # `url(` with no quote reads its own token up to the next `)`, where
+        # a quote, `(`, or whitespace inside makes the browser's bad-url
+        # token. A quoted `url("...")` is an ordinary function plus string,
+        # handled by the bracket and string branches.
+        # `url(` starts a url token only where a new token starts; after a
+        # name character, or a `#`, `@` or `\` that joins the next name, it is
+        # part of that name (`xurl(`, `#url(`), not a url token.
+        previous = value[index - 1] if index else ""
+        # `previous` is empty at the start of the value, which is a token start.
+        at_token_start = previous == "" or not (previous.isalnum() or previous in "-_#@\\" or ord(previous) >= 0x80)
+        if (
+            char in "uU"
+            and at_token_start
+            and value[index : index + 4].lower() == "url("
+            and not _is_quoted_url(value, index)
+        ):
+            index = _scan_css_url(value, index)
             continue
+
+        # A brace never belongs in one custom-property value; it would open or
+        # close a rule block in the stylesheet the browser builds.
+        if char in "{}":
+            raise ValueError(f"CSS value contains {char!r} at offset {index}.")
 
         expected_closer = _CSS_BLOCK_PAIRS.get(char)
         if expected_closer is not None:
@@ -129,16 +190,135 @@ def validate_css_var_value(value: str) -> None:
             index += 1
             continue
 
-        if char == ";" and not blocks:
-            raise ValueError(f"CSS value contains a top-level ';' at offset {index}.")
+        # `;` and `!` at the top level end this declaration or change its
+        # priority, so neither may appear outside a bracketed group such as
+        # `calc(...)`.
+        if char in ";!" and not blocks:
+            raise ValueError(f"CSS value contains a top-level {char!r} at offset {index}.")
 
         index += 1
 
-    if quote is not None:
-        raise ValueError(f"CSS value contains an unclosed {quote[0]!r} string from offset {quote[1]}.")
     if blocks:
         expected, opening_index = blocks[-1]
         raise ValueError(f"CSS value has an unclosed block at offset {opening_index}; expected {expected!r}.")
+
+
+def _scan_css_string(value: str, start: int) -> int:
+    """Return the index after a well-formed CSS string, or reject a bad-string token."""
+    quote = value[start]
+    index = start + 1
+    length = len(value)
+    while index < length:
+        char = value[index]
+        if char == quote:
+            return index + 1
+        if char in "\n\r\f":
+            # A newline inside a string is the browser's bad-string token; it
+            # ends the string early, so the rest would be read as more CSS.
+            raise ValueError(f"CSS string contains an unescaped newline at offset {index}.")
+        if char == "\\":
+            if index + 1 < length and value[index + 1] in "\n\r\f":
+                # A backslash-newline is a line continuation inside a string;
+                # CRLF counts as one newline.
+                index += 3 if value.startswith("\r\n", index + 1) else 2
+                continue
+            index = _consume_css_escape(value, index)
+            continue
+        index += 1
+    raise ValueError(f"CSS value contains an unclosed {quote!r} string from offset {start}.")
+
+
+def _is_quoted_url(value: str, start: int) -> bool:
+    """Whether ``url(`` at ``start`` is followed by a quote, after any whitespace."""
+    index = start + 4
+    while index < len(value) and value[index] in _CSS_WHITESPACE:
+        index += 1
+    return index < len(value) and value[index] in {'"', "'"}
+
+
+def _scan_css_url(value: str, start: int) -> int:
+    """Return the index after an unquoted ``url(...)``, or reject a bad-url token."""
+    index = start + 4
+    length = len(value)
+    # The browser skips whitespace before the address starts.
+    while index < length and value[index] in _CSS_WHITESPACE:
+        index += 1
+    while index < length:
+        char = value[index]
+        if char == ")":
+            return index + 1
+        # A quote, `(`, whitespace in the middle, or a non-printable (DEL, or
+        # a control character other than tab, newline, form feed and carriage
+        # return) makes the browser's bad-url token, which drops the rest of
+        # the value up to the next `)`.
+        code = ord(char)
+        if char in "\"'(" or code <= 0x08 or code in {0x0B, 0x7F} or 0x0E <= code <= 0x1F:
+            # A quote inside the URL still needs a backslash after the URL is quoted.
+            advice = " A quote inside a quoted URL needs a backslash before it." if char in "\"'" else ""
+            msg = (
+                f"CSS url() contains {char!r} at offset {index}, which the browser cannot read in an unquoted URL. "
+                f'Quote the URL, as in url("...").{advice}'
+            )
+            raise ValueError(msg)
+        if char in _CSS_WHITESPACE:
+            whitespace_start = index
+            while index < length and value[index] in _CSS_WHITESPACE:
+                index += 1
+            if index >= length or value[index] != ")":
+                msg = (
+                    f"CSS url() has whitespace inside it at offset {whitespace_start}. "
+                    'Quote the URL, as in url("...").'
+                )
+                raise ValueError(msg)
+            return index + 1
+        if char == "\\":
+            index = _consume_css_escape(value, index)
+            continue
+        index += 1
+    raise ValueError(f"CSS value contains an unclosed url() from offset {start}.")
+
+
+def _escape_beyond_printable_ascii(value: str) -> str:
+    r"""
+    Write every character that is not printable ASCII or CSS whitespace as a CSS hex escape.
+
+    The stylesheet that holds the value is then plain ASCII. A browser that
+    decodes the file with a multi-byte encoding such as GBK or Big5 reads the
+    last byte of a non-ASCII character together with the next ASCII byte as
+    one character, which can hide the backslash of an escaped quote and end a
+    string early. In ISO-2022-JP, the ESC control character changes how the
+    bytes after it are read. Printable ASCII reads the same in every encoding
+    that keeps ASCII bytes as they are. A browser that decodes the file as
+    UTF-16 or one of the replacement encodings drops the whole stylesheet, so
+    Citry also serves it with ``charset=utf-8``.
+
+    The escape ends in a space, which CSS reads as part of the escape, so a hex
+    digit that follows is not taken as one more digit of it. The value is
+    already checked, so escaping changes how each character is written, not
+    which characters the CSS holds. The escaped text is not meant to be checked
+    again: ``validate_css_var_value`` refuses a backslash outside a string.
+    """
+    if all(char in _CSS_WHITESPACE or " " <= char <= "~" for char in value):
+        return value
+    parts: list[str] = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char == "\\" and index + 1 < len(value):
+            following = value[index + 1]
+            if following in _CSS_WHITESPACE or " " <= following <= "~":
+                # Keep a backslash and the character after it together, so the second
+                # backslash in `\\\\` is not read as the start of another escape.
+                parts.append(char + following)
+                index += 2
+                continue
+            # A backslash before a non-ASCII or control character escapes that character. The
+            # hex escape below says the same thing, so the backslash is dropped.
+            index += 1
+            char = following
+        parts.append(char if char in _CSS_WHITESPACE or " " <= char <= "~" else f"\\{ord(char):x} ")
+        index += 1
+    return "".join(parts)
 
 
 def serialize_css_var_value(value: object) -> str:
@@ -150,6 +330,10 @@ def serialize_css_var_value(value: object) -> str:
     quoted and escaped unless it begins with a CSS function. Raw values are
     checked for declaration and style-tag breakout, balanced blocks, strings,
     and comments. This is not a full CSS grammar or property-type validator.
+
+    The text that is returned holds only printable ASCII and CSS whitespace:
+    any other character is written as a CSS hex escape, which means the same
+    thing to the browser.
 
     Booleans and structured values are rejected rather than serialized with
     Python ``str()`` representations.
@@ -178,4 +362,6 @@ def serialize_css_var_value(value: object) -> str:
         raise TypeError(msg)
 
     validate_css_var_value(serialized)
-    return serialized
+    # Check first, escape after: an error message then points into the text the
+    # caller wrote, and the escape cannot change what the check accepted.
+    return _escape_beyond_printable_ascii(serialized)

@@ -1,9 +1,22 @@
 
+      // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement or getRootNode, so read them from Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
+      // A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
+      const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
       const menuKey = Symbol.for("citry-ui:menu-root-runtime"),
         menuRuntime = globalThis[menuKey],
+        // The script's own element carries the CSP nonce; a named element on the
+        // document can hide `currentScript`, so it is read through the helper.
+        currentScript = globalThis.document
+          ? builtIn(globalThis.document).currentScript
+          : undefined,
         contextMenuRuntimeNonce =
-          globalThis.document?.currentScript?.nonce ||
-          globalThis.document?.currentScript?.getAttribute("nonce") ||
+          currentScript?.nonce ||
+          currentScript?.getAttribute("nonce") ||
           null,
         shadowPointStyleText = `:where([data-citry-context-menu-point]){position:fixed;inset:auto;width:1px;height:1px;margin:0;padding:0;border:0;background:transparent;overflow:visible;pointer-events:none}`;
       if (
@@ -28,7 +41,7 @@
             active = !0;
           const entry = { notify: callback };
           const attach = () => {
-            ((scope = root.getRootNode()), (manager = mutationScopes.get(scope)));
+            ((scope = rootNodeOf(root)), (manager = mutationScopes.get(scope)));
             if (!manager) {
               const entries = new Map(),
                 observer = new MutationObserver((allRecords) => {
@@ -64,7 +77,7 @@
                     ) && record.notify(records);
                 });
               (observer.observe(
-                scope instanceof Document ? scope.documentElement : scope,
+                scope instanceof Document ? builtIn(scope).documentElement : scope,
                 { subtree: !0, childList: !0, attributes: !0, attributeOldValue: !0 },
               ),
                 (manager = { entries, observer }),
@@ -82,7 +95,7 @@
           attach();
           return {
             refresh() {
-              if (active && root.getRootNode() !== scope) (detach(), attach());
+              if (active && rootNodeOf(root) !== scope) (detach(), attach());
             },
             cleanup() {
               ((active = !1), detach());
@@ -200,9 +213,9 @@
           const T = new Set(),
             M = new Set(),
             tt = new Set();
-          let z = i.getRootNode();
+          let z = rootNodeOf(i);
           const P = i.ownerDocument,
-            q = P.defaultView,
+            q = builtIn(P).defaultView,
             Zt = () => {
               const e = (e, t) =>
                 e instanceof Element
@@ -265,7 +278,7 @@
             X = Boolean(
               D &&
                 D.fingerprint === F &&
-                D.actualRoot === i.getRootNode() &&
+                D.actualRoot === rootNodeOf(i) &&
                 D.root === i &&
                 D.target === s &&
                 D.point === l &&
@@ -288,7 +301,7 @@
             ? D
             : {
                 fingerprint: F,
-                actualRoot: i.getRootNode(),
+                actualRoot: rootNodeOf(i),
                 root: i,
                 target: s,
                 point: l,
@@ -331,7 +344,7 @@
                 : (V("size", e, "; using the server fallback"), n.size);
             },
             U = () => {
-              let e = P.activeElement;
+              let e = builtIn(P).activeElement;
               for (; e?.shadowRoot?.activeElement; ) e = e.shadowRoot.activeElement;
               return e;
             },
@@ -355,14 +368,14 @@
             },
             J = (e, t) => {
               try {
-                const n = i.getRootNode().querySelectorAll(`#${CSS.escape(e)}`);
+                const n = builtIn(rootNodeOf(i)).querySelectorAll(`#${CSS.escape(e)}`);
                 return 1 === n.length && n[0] === t;
               } catch {
                 return !1;
               }
             },
             At = () => {
-              const e = i.getRootNode();
+              const e = rootNodeOf(i);
               return (
                 i.ownerDocument === P &&
                 (e === P ||
@@ -373,9 +386,9 @@
               );
             },
             ensureShadowStyles = (force = !1) => {
-              const e = i.getRootNode();
+              const e = rootNodeOf(i);
               if (!At() || !(e instanceof ShadowRoot)) return;
-              const t = P.querySelector("style[nonce], script[nonce]"),
+              const t = builtIn(P).querySelector("style[nonce], script[nonce]"),
                 n = contextMenuRuntimeNonce || t?.nonce || t?.getAttribute("nonce") || null,
                 o = shadowStyleRoots.get(e),
                 r = new Set([
@@ -384,7 +397,7 @@
                 ].filter(Boolean)),
                 a = (t) =>
                   t instanceof HTMLStyleElement &&
-                  t.getRootNode() === e &&
+                  rootNodeOf(t) === e &&
                   t.getAttribute("data-citry-context-menu-runtime") === "" &&
                   t.textContent === shadowPointStyleText &&
                   (t.nonce || t.getAttribute("nonce") || null) === n,
@@ -393,11 +406,11 @@
                 return;
               if (s) {
                 for (const t of r)
-                  t !== s && t.getRootNode() === e && t.remove();
+                  t !== s && rootNodeOf(t) === e && t.remove();
                 return void shadowStyleRoots.set(e, s);
               }
-              for (const t of r) t.getRootNode() === e && t.remove();
-              const l = P.createElement("style");
+              for (const t of r) rootNodeOf(t) === e && t.remove();
+              const l = builtIn(P).createElement("style");
               (n && l.setAttribute("nonce", n),
                 l.setAttribute("data-citry-context-menu-runtime", ""),
                 (l.textContent = shadowPointStyleText),
@@ -440,9 +453,9 @@
               !s.localName.includes("-") &&
               !s.hasAttribute("is") &&
               !s.shadowRoot &&
-              s.getRootNode() === i.getRootNode() &&
-              l.getRootNode() === i.getRootNode() &&
-              c.getRootNode() === i.getRootNode()),
+              rootNodeOf(s) === rootNodeOf(i) &&
+              rootNodeOf(l) === rootNodeOf(i) &&
+              rootNodeOf(c) === rootNodeOf(i)),
             Q = () =>
               G() &&
               s.id === n.targetId &&
@@ -533,8 +546,9 @@
                 )
               )
                 return !1;
-              for (let n = e; n; n = n.parentElement ?? n.getRootNode()?.host)
-                if (n.hasAttribute?.("hidden") || n.hasAttribute?.("inert"))
+              for (let n = e; n; n = parentElementOf(n) ?? shadowHost(rootNodeOf(n)))
+                // A form field named `hasAttribute` hides the form's method, so call the built-in one.
+                if (n instanceof Element && (Element.prototype.hasAttribute.call(n, "hidden") || Element.prototype.hasAttribute.call(n, "inert")))
                   return !1;
               return !0;
             },
@@ -560,9 +574,9 @@
                 v = u,
                 h = d;
               for (
-                let e = r.parentElement;
+                let e = parentElementOf(r);
                 e;
-                e = e.parentElement ?? e.getRootNode()?.host
+                e = parentElementOf(e) ?? shadowHost(rootNodeOf(e))
               ) {
                 const t = getComputedStyle(e),
                   n = e.getBoundingClientRect(),
@@ -579,8 +593,8 @@
               }
               if (m <= f || h <= v) return null;
               const y = [],
-                x = r.getRootNode(),
-                w = x.elementsFromPoint?.bind(x) ?? P.elementsFromPoint.bind(P),
+                x = rootNodeOf(r),
+                w = builtIn(x).elementsFromPoint?.bind(x) ?? builtIn(P).elementsFromPoint.bind(P),
                 A =
                   "none" === getComputedStyle(r).pointerEvents
                     ? {
@@ -1028,13 +1042,13 @@
               }
             },
             he = () => {
-              const e = P.getSelection();
+              const e = builtIn(P).getSelection();
               if (!e) return !1;
               if (z instanceof ShadowRoot) {
                 if ("function" == typeof e.getComposedRanges)
                   try {
                     return e.getComposedRanges({ shadowRoots: [z] }).some((e) => {
-                      const t = P.createRange();
+                      const t = builtIn(P).createRange();
                       return (
                         t.setStart(e.startContainer, e.startOffset),
                         t.setEnd(e.endContainer, e.endOffset),
@@ -1404,7 +1418,7 @@
               null === y && (y = requestAnimationFrame(Te));
             },
             ze = () => {
-              P.hidden && je();
+              builtIn(P).hidden && je();
             },
             Ue = () => {
               (Le(), v.isOpen() && Me());
@@ -1424,13 +1438,13 @@
             if (e !== it) {
               it = e;
               const t = e ? "addEventListener" : "removeEventListener";
-              (P[t]("pointermove", Ce, !0),
-                P[t]("pointerup", Se, !0),
-                P[t]("pointercancel", Se, !0),
-                P[t]("contextmenu", Re, !0),
+              (builtIn(P)[t]("pointermove", Ce, !0),
+                builtIn(P)[t]("pointerup", Se, !0),
+                builtIn(P)[t]("pointercancel", Se, !0),
+                builtIn(P)[t]("contextmenu", Re, !0),
                 q[t]("blur", je),
-                P[t]("visibilitychange", ze),
-                P[t]("selectionchange", Gt));
+                builtIn(P)[t]("visibilitychange", ze),
+                builtIn(P)[t]("selectionchange", Gt));
             }
             if (t !== at) {
               ((at = t),
@@ -1443,14 +1457,14 @@
             }
             (St &&
               (!n || St !== z) &&
-              (St.removeEventListener("scroll", Ue, !0), (St = null)),
-              n && !St && ((St = z), St.addEventListener("scroll", Ue, !0)));
+              (builtIn(St).removeEventListener("scroll", Ue, !0), (St = null)),
+              n && !St && ((St = z), builtIn(St).addEventListener("scroll", Ue, !0)));
             const a = [];
             if (n)
               for (
-                let e = s.parentElement;
+                let e = parentElementOf(s);
                 e;
-                e = e.parentElement ?? e.getRootNode()?.host
+                e = parentElementOf(e) ?? shadowHost(rootNodeOf(e))
               )
                 e !== i && a.push(e);
             (a.length !== Xt.length || a.some((e, t) => e !== Xt[t])) &&
@@ -1464,7 +1478,7 @@
             }
             if (r !== pt)
               ((pt = r),
-                P[r ? "addEventListener" : "removeEventListener"](
+                builtIn(P)[r ? "addEventListener" : "removeEventListener"](
                   "pointerdown",
                   Jt,
                   !0,
@@ -1539,7 +1553,7 @@
                   setAttr(c, "role", "menu"),
                   setAttr(c, "aria-label", n.ariaLabel),
                   setData(c, "citryUiPart", "menu"),
-                  (z = i.getRootNode()),
+                  (z = rootNodeOf(i)),
                   v.repairOwned(),
                   v.refreshRootScope(),
                   (g = !1),
@@ -1580,7 +1594,7 @@
                 if (Q() && qe() && ye() && Z())
                   return (
                     needsRepair() && Fe(),
-                    (z = i.getRootNode()),
+                    (z = rootNodeOf(i)),
                     v.refreshRootScope(),
                     Ge(),
                     void He.refresh()
@@ -1657,23 +1671,23 @@
                 i.removeEventListener("contextmenu", Re, !0),
                 i.removeEventListener("keydown", Ae, !0),
                 i.removeEventListener("pointerdown", ke, !0),
-                P.removeEventListener("pointermove", Ce, !0),
-                P.removeEventListener("pointerup", Se, !0),
-                P.removeEventListener("pointercancel", Se, !0),
-                P.removeEventListener("contextmenu", Re, !0),
-                P.removeEventListener("pointerdown", Jt, !0),
+                builtIn(P).removeEventListener("pointermove", Ce, !0),
+                builtIn(P).removeEventListener("pointerup", Se, !0),
+                builtIn(P).removeEventListener("pointercancel", Se, !0),
+                builtIn(P).removeEventListener("contextmenu", Re, !0),
+                builtIn(P).removeEventListener("pointerdown", Jt, !0),
                 i.removeEventListener("click", Ie, !0),
                 i.removeEventListener("focusin", Ne, !0),
                 q.removeEventListener("scroll", Ue, !0),
-                St?.removeEventListener("scroll", Ue, !0),
+                St && builtIn(St).removeEventListener("scroll", Ue, !0),
                 Xt.forEach((e) => e.removeEventListener("scroll", Ue, !0)),
                 (Xt = []),
                 q.removeEventListener("resize", Me),
                 q.removeEventListener("blur", je),
                 q.visualViewport?.removeEventListener("scroll", Ue),
                 q.visualViewport?.removeEventListener("resize", Me),
-                P.removeEventListener("visibilitychange", ze),
-                P.removeEventListener("selectionchange", Gt),
+                builtIn(P).removeEventListener("visibilitychange", ze),
+                builtIn(P).removeEventListener("selectionchange", Gt),
                 l.removeEventListener("toggle", Ye),
                 l.removeEventListener("beforetoggle", Be));
               for (const e of T) clearTimeout(e);

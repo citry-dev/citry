@@ -72,7 +72,7 @@ interfaces:
     name: CBreadcrumbItem
     entries:
       - {id: label, name: label, type: str, meaning: Visible nonempty item text.}
-      - {id: href, name: href, type: 'str | None', meaning: Native destination; None renders plain text.}
+      - {id: href, name: href, type: 'str | None', meaning: 'Native destination: a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL; any other scheme raises `ValueError`. None renders plain text.'}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', meaning: Copied trusted nonconflicting anchor/span attrs.}
   - id: item-slot-data
     kind: record

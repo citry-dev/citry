@@ -300,6 +300,15 @@ class CHoverCard(LibraryComponent):
       const anchoredLayerRuntime = globalThis[
         Symbol.for("citry-ui:anchored-layer-runtime")
       ];
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 
       const handoffKey = Symbol.for("citry-ui:hover-card-handoff");
 
@@ -331,7 +340,7 @@ class CHoverCard(LibraryComponent):
             !surface
             || triggers.length !== 1
             || !(triggers[0] instanceof HTMLElement)
-            || triggers[0].parentElement !== host
+            || parentElementOf(triggers[0]) !== host
           ) {
             throw new Error(
               "[citry-ui] CHoverCard activator must spread activator_attrs onto exactly one HTMLElement.",
@@ -436,8 +445,8 @@ class CHoverCard(LibraryComponent):
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
               // Step out of a shadow root to its host; a document has no host.
-              const boxRoot = box.getRootNode();
-              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
+              const boxRoot = rootNodeOf(box);
+              const next = parentElementOf(box) ?? (boxRoot instanceof ShadowRoot ? builtIn(boxRoot).host : null);
               if (!next) {
                 break;
               }
@@ -569,10 +578,11 @@ class CHoverCard(LibraryComponent):
           const startGeometry = () => {
             if (!geometryListening) {
               geometryListening = true;
-              surface.ownerDocument.defaultView?.addEventListener("resize", scheduleGeometry);
-              surface.ownerDocument.addEventListener("scroll", scheduleGeometry, true);
-              surface.ownerDocument.defaultView?.visualViewport?.addEventListener("resize", scheduleGeometry);
-              surface.ownerDocument.defaultView?.visualViewport?.addEventListener("scroll", scheduleGeometry);
+              builtIn(surface.ownerDocument).defaultView?.addEventListener("resize", scheduleGeometry);
+              builtIn(surface.ownerDocument).addEventListener("scroll", scheduleGeometry, true);
+              const viewport = builtIn(surface.ownerDocument).defaultView?.visualViewport;
+              viewport?.addEventListener("resize", scheduleGeometry);
+              viewport?.addEventListener("scroll", scheduleGeometry);
             }
             scheduleGeometry();
           };
@@ -581,10 +591,11 @@ class CHoverCard(LibraryComponent):
             geometryFrame = null;
             if (!geometryListening) return;
             geometryListening = false;
-            surface.ownerDocument.defaultView?.removeEventListener("resize", scheduleGeometry);
-            surface.ownerDocument.removeEventListener("scroll", scheduleGeometry, true);
-            surface.ownerDocument.defaultView?.visualViewport?.removeEventListener("resize", scheduleGeometry);
-            surface.ownerDocument.defaultView?.visualViewport?.removeEventListener("scroll", scheduleGeometry);
+            builtIn(surface.ownerDocument).defaultView?.removeEventListener("resize", scheduleGeometry);
+            builtIn(surface.ownerDocument).removeEventListener("scroll", scheduleGeometry, true);
+            const viewport = builtIn(surface.ownerDocument).defaultView?.visualViewport;
+            viewport?.removeEventListener("resize", scheduleGeometry);
+            viewport?.removeEventListener("scroll", scheduleGeometry);
           };
           const finishNativeClose = (currentGeneration) => {
             if (!active || logicalOpen || currentGeneration !== generation) {

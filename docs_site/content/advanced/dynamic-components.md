@@ -108,7 +108,9 @@ class Heading(Component):
 Attributes follow the same rules as on a tag you write by hand: `class` and
 `style` values are combined into one string, a `False` or `None` value leaves the attribute out,
 and values are escaped unless they provide trusted HTML through
-`__html__()`.
+`__html__()`. The one difference is an inline event handler, which a
+`<c-element>` with `c-is` or `c-bind` refuses (see
+[`<c-element>` limits](#c-element-limits)).
 
 If the tag never changes, write it directly. `<h2>` is clearer than
 `<c-element is="h2">`.
@@ -168,6 +170,33 @@ such as `clipPath` work. Any other value raises `ValueError`.
 Void elements are recognized in any letter case, so `BR` renders compact
 `<BR/>` and rejects a body, just like `br`.
 
+### Refused tags
+
+A `<c-element>` that has `c-is` or `c-bind` will not render a tag the
+browser handles in a special way, in any letter case. It raises
+`ValueError` for `script`, `style`, `base`, `meta`, `link`, `iframe`,
+`frame`, `frameset`, `object`, `embed`, `applet`, `plaintext`, `xmp`,
+`noembed`, `noframes`, `noscript`, and `template`. Some of them make the
+browser run or load something, some make it read their contents as raw
+text, and some change how it reads the rest of the page. Calling the
+built-in `element` component from Python with one of these tags raises
+too.
+
+Citry escapes an element's body as HTML text, which does not fit these
+tags. When you need one, write it directly in the template, for example in
+a `c-if` branch. A `<c-element>` with a fixed `is` and no `c-bind` renders
+like the same tag written in the template, so this check does not apply to
+it.
+
+A `<c-element>` can render `textarea` and `title`. The browser shows any
+tag inside them as text, and Citry escapes your values. In a component
+without Vue (no `js` and no server events), a tag inside shows as literal
+text. In an interactive component, put only text inside: a tag, a child
+component, `<c-raw>`, or a `Markup` value there raises `TypeError`,
+because Vue would create real elements and the page would change once Vue
+starts. A `title` inside `<svg>` or `<math>` is SVG's or MathML's own
+element and can hold child elements.
+
 ### Letter case of `is`
 
 `<c-element>` treats its selector like an HTML attribute, so `IS`, `c-IS`,
@@ -181,6 +210,13 @@ lowercase.
 ### `<c-element>` limits
 
 - A void element such as `br` or `img` cannot have a body.
+- A `<c-element>` that has `c-is` or `c-bind` refuses an inline event
+  handler: an attribute that starts with `on`, or `innerHTML`,
+  `outerHTML`, or `srcdoc`. It refuses one you wrote in the template as
+  well as one passed in as data, because it cannot tell them apart. Use a
+  Vue `@click` in a component with `js`, or write a plain tag in a `c-if`
+  branch. A plain `<c-element is="div" onclick="...">` with no `c-bind`
+  makes an ordinary element, so it works.
 - It accepts only the default slot. A named `<c-fill>` written in the
   template raises `SyntaxError`. A fill whose name is computed at render
   time, such as `<c-fill c-name="...">`, raises `ValueError`.

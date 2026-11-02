@@ -130,7 +130,9 @@ class RouteResponse:
 
     Attributes:
         content: The response body, as text or raw bytes.
-        content_type: The `Content-Type` header value to send.
+        content_type: The `Content-Type` header value to send. A `text/*`
+            type with a ``str`` body and no ``charset`` is sent with
+            `; charset=utf-8`, because the adapters encode the string as UTF-8.
         status: The HTTP status code.
         headers: Extra response headers, as `(name, value)` pairs; adapters
             send them in addition to `Content-Type`. Adapters also send
@@ -262,6 +264,22 @@ def sent_headers(response: RouteResponse) -> tuple[tuple[str, str], ...]:
     if any(name.lower() == "x-content-type-options" for name, _ in response.headers):
         return response.headers
     return (*response.headers, _NOSNIFF_HEADER)
+
+
+def sent_content_type(response: RouteResponse) -> str:
+    """
+    Return the `Content-Type` an adapter sends for ``response``.
+
+    Every adapter sends a ``str`` body as UTF-8 bytes. A `text/*` type that
+    names no charset would leave the browser to decode those bytes with a guess
+    or with the encoding of the page that links the file, so such a type gets
+    `; charset=utf-8`. A ``bytes`` body, a type that names a charset, and a
+    type that is not `text/*` (such as `application/json`) are sent as given.
+    """
+    lowered = response.content_type.lower()
+    if not isinstance(response.content, str) or not lowered.startswith("text/") or "charset=" in lowered:
+        return response.content_type
+    return f"{response.content_type}; charset=utf-8"
 
 
 def body_read_limit(route: URLRoute) -> int | None:

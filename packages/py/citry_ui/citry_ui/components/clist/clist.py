@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CListMarker = Literal["none", "disc", "decimal"]
@@ -251,6 +252,10 @@ class CListItem(LibraryComponent):
         validate_boolean("CListItem", "disabled", kwargs.disabled)
         validate_boolean("CListItem", "current", kwargs.current)
         href = _plain("CListItem href", kwargs.href, optional=True)
+        if href is not None:
+            # A navigation list is often built from records, so its links must
+            # not be able to run script on click.
+            check_link_url("CListItem href", href)
         if href is not None and kwargs.action:
             raise ValueError("CListItem cannot set both href and action=True.")
         if kwargs.current and (href is None or kwargs.disabled):

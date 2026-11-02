@@ -341,7 +341,7 @@ def test_root_and_image_attribute_destinations_are_distinct_and_copied() -> None
     [
         ({"src": ""}, ValueError, "src must be non-empty"),
         ({"src": 3}, TypeError, r"CImage\.Kwargs\.src expects str"),
-        ({"src": " javaScript:alert(1)"}, ValueError, "active URL scheme"),
+        ({"src": " javaScript:alert(1)"}, ValueError, "src must be a relative URL"),
         ({"alt": None}, TypeError, r"CImage\.Kwargs\.alt expects str"),
         ({"width": True}, TypeError, "width must be a positive integer"),
         ({"width": 0}, ValueError, "width must be greater than zero"),

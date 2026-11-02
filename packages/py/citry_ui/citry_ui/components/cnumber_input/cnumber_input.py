@@ -545,6 +545,10 @@ class CNumberInput(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           value: {}, min: {}, max: {}, step: {}, required: {}, disabled: {}, readonly: {}, invalid: {},
@@ -912,7 +916,7 @@ class CNumberInput(LibraryComponent):
             else if (event.key === 'Enter') commitDraft('enter', event);
           });
           listeners.add(input, 'wheel', event => {
-            if (!configuration.wheel || document.activeElement !== input || event.deltaY === 0) return;
+            if (!configuration.wheel || builtIn(document).activeElement !== input || event.deltaY === 0) return;
             event.preventDefault();
             stepValue(event.deltaY < 0 ? 1 : -1, 'wheel', event);
           }, { passive: false });

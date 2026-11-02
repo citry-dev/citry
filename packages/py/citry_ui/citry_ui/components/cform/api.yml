@@ -11,7 +11,7 @@ inputs:
     column_widths: [fit, 13rem, 7rem, auto]
     entries:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets unique native Form identity and an external control ownership target.}
-      - {id: action, name: action, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native submission destination; omission preserves browser current-URL behavior.}
+      - {id: action, name: action, type: 'str | None', default: {kind: literal, value: null}, effect: 'Sets the native submission destination: a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL; any other scheme raises `ValueError`. Omission preserves browser current-URL behavior.'}
       - id: method
         name: method
         type:

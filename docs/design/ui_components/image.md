@@ -804,11 +804,14 @@ clones, nested roots, and ShadowRoot moves are acceptance cases.
 
 `src`, `srcset`, `sizes`, `media`, `type`, `alt`, and callback details are data,
 not HTML. The server renderer escapes them as attributes. Plain-string
-normalization rejects U+0000 and disallowed ASCII controls. Active
-`javascript:` and `vbscript:` URL schemes are rejected after ASCII whitespace
-normalization. Relative, `http`, `https`, `data`, and `blob` image URLs remain
-application-trusted resource references and browser/CSP inputs, not sanitized
-or fetched by Citry.
+normalization rejects U+0000 and disallowed ASCII controls. `src`, each
+`srcset` candidate, and each source `srcset` candidate go through Citry UI's
+shared image URL check: a relative URL or an `http:`, `https:`, `blob:`, or
+`data:image/` URL renders, and anything else raises `ValueError` at render. The
+check reads the scheme the way the browser's URL parser does. If a client prop
+fails the same check, the component logs an error and keeps the last valid value. Accepted
+image URLs remain application-trusted resource references and browser/CSP
+inputs, not sanitized or fetched by Citry.
 
 The HTML image model does not execute scripted SVG as an image resource, but
 Citry does not parse or sanitize SVG, bitmap metadata, data URLs, or blob
@@ -899,7 +902,7 @@ Release requires the following evidence on the final implementation.
 | Template rendering | Smallest informative and decorative forms render valid native image output with required alt/dimensions. |
 | Python rendering | Direct `CImage(...)` plus tuple `CImageSource` records renders byte-equivalent anatomy and source order. |
 | Picture content model | Zero sources emits no picture; one and many emit ordered sources followed by exactly one image; width descriptors have same-owner sizes; eager/lazy/final-image/source auto-sizes and discriminator arrangements pass the WHATWG HTML validator. |
-| Input validation | Wrong types, bool dimensions, nonpositive dimensions, unpaired source dimensions, width descriptors without sizes, eager image `auto` sizes, source `auto` sizes with absent/non-auto final image sizes, exact/case/whitespace `media=all` as the sole required discriminator, invalid MIME essence, structurally required media/type omissions, invalid enums, NUL/controls, active URL schemes, unsafe position text, image-map attrs, more than 32 sources, and invalid attrs fail with constant redacted errors. |
+| Input validation | Wrong types, bool dimensions, nonpositive dimensions, unpaired source dimensions, width descriptors without sizes, eager image `auto` sizes, source `auto` sizes with absent/non-auto final image sizes, exact/case/whitespace `media=all` as the sole required discriminator, invalid MIME essence, structurally required media/type omissions, invalid enums, NUL/controls, URL schemes outside the image URL check, unsafe position text, image-map attrs, more than 32 sources, and invalid attrs fail with constant redacted errors. |
 | Native media grammar boundary | Controls/empty media fail server validation; a deliberately malformed but plain consumer media query demonstrates documented caller grammar ownership, while every library-authored media query passes the HTML validator and C/F/W `matchMedia`. |
 | Snapshot safety | One-shot/mutable sequences and nested mappings are consumed/copied once; later mutation cannot affect rendered bytes. |
 | Attr destinations | Structured root class/style/attrs and image attrs merge at exact documented nodes; every owned/static/dynamic spelling is rejected. |

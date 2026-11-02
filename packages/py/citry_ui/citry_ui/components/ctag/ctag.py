@@ -357,6 +357,14 @@ class CTagGroup(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
+
       $component({
         props: {
           value: {}, disabled: {}, variant: {}, size: {},
@@ -433,13 +441,13 @@ class CTagGroup(LibraryComponent):
             return fallback;
           };
           const inDisabledFieldset = () => {
-            let node = root.parentElement;
+            let node = parentElementOf(root);
             while (node) {
               if (node instanceof HTMLFieldSetElement && node.disabled) {
                 const firstLegend = [...node.children].find((child) => child instanceof HTMLLegendElement);
                 if (!firstLegend || !firstLegend.contains(root)) return true;
               }
-              node = node.parentElement;
+              node = parentElementOf(node);
             }
             return false;
           };
@@ -640,7 +648,7 @@ class CTagGroup(LibraryComponent):
             return raw.replace(/\s+/g, " ").trim();
           };
           const lower = (value) => {
-            const lang = root.closest("[lang]")?.getAttribute("lang") || document.documentElement.lang;
+            const lang = root.closest("[lang]")?.getAttribute("lang") || builtIn(document).documentElement.lang;
             try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
             catch { return value.toLowerCase(); }
           };
@@ -703,17 +711,17 @@ class CTagGroup(LibraryComponent):
             if (entry) runtime.focusedValue = entry.value;
           };
           const onFocusOut = () => setTimeout(() => {
-            focusWithin = root.contains(root.ownerDocument.activeElement);
+            focusWithin = root.contains(builtIn(root.ownerDocument).activeElement);
           }, 0);
           root.addEventListener("click", onClick, true);
           root.addEventListener("keydown", onKeyDown, true);
           root.addEventListener("focusin", onFocusIn, true);
           root.addEventListener("focusout", onFocusOut);
           const fieldsets = [];
-          let ancestor = root.parentElement;
+          let ancestor = parentElementOf(root);
           while (ancestor) {
             if (ancestor instanceof HTMLFieldSetElement) fieldsets.push(ancestor);
-            ancestor = ancestor.parentElement;
+            ancestor = parentElementOf(ancestor);
           }
           const fieldsetObserver = fieldsets.length ? new MutationObserver(schedule) : null;
           fieldsets.forEach((fieldset) => fieldsetObserver.observe(fieldset, {
@@ -894,6 +902,10 @@ class CTag(LibraryComponent):
     """
 
     js = r"""
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
       $component({
         props: {disabled: {}, textValue: {}},
         onServerRender: ({component}) => {
@@ -905,7 +917,7 @@ class CTag(LibraryComponent):
           const data = component.serverDefaults;
           const props = component.$props;
           const group = root.closest('[data-citry-ui-part="tag-group"]');
-          if (!group || root.parentElement !== group.querySelector(':scope > [data-citry-ui-part="list"]')) {
+          if (!group || parentElementOf(root) !== group.querySelector(':scope > [data-citry-ui-part="list"]')) {
             console.error("[citry-ui] CTag must be a direct child of CTagGroup collection output.");
             root.setAttribute("inert", "");
             return () => {};

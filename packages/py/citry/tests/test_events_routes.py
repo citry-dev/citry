@@ -1415,7 +1415,7 @@ class TestRuntimeRoute:
         client = _mounted(c)
         response = client.get("/citry/ext/events/runtime.js")
         assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/javascript")
+        assert response.headers["content-type"] == "text/javascript; charset=utf-8"
         assert response.headers.get_list("cache-control") == ["no-store"]
         # The bundle's generated-file banner is its identifying marker
         # (observed from the built file; the versions behind it may move).
@@ -1444,11 +1444,11 @@ class TestImmutableAssetRoutes:
         style = client.get(f"/citry/ext/events/assets/{style_digest}.css")
 
         for response, content_type, body in (
-            (definition, "text/javascript", b"globalThis.__definitionLoaded = true;"),
-            (style, "text/css", b".asset { color: red; }"),
+            (definition, "text/javascript; charset=utf-8", b"globalThis.__definitionLoaded = true;"),
+            (style, "text/css; charset=utf-8", b".asset { color: red; }"),
         ):
             assert response.status_code == 200
-            assert response.headers["content-type"].startswith(content_type)
+            assert response.headers["content-type"] == content_type
             assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
             assert response.headers["access-control-allow-origin"] == "*"
             assert response.content == body

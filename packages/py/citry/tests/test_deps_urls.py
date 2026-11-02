@@ -146,10 +146,10 @@ class TestScriptEndpointLogic:
         js_response = self._serve(c, f"cache/{Widget.class_id}.js")
         assert js_response.status == 200
         assert js_response.content == "console.log(1);"
-        assert js_response.content_type == "text/javascript"
+        assert js_response.content_type == "text/javascript; charset=utf-8"
         css_response = self._serve(c, f"cache/{Widget.class_id}.css")
         assert css_response.content == ".w {}"
-        assert css_response.content_type == "text/css"
+        assert css_response.content_type == "text/css; charset=utf-8"
 
     def test_class_script_repopulates_on_cache_miss(self):
         c = Citry()
@@ -223,7 +223,7 @@ class TestScriptEndpointLogic:
 
         response = self._serve(c, f"cache/{Widget.class_id}.{record.css_vars_hash}.css")
         assert response.status == 200
-        assert response.content_type == "text/css"
+        assert response.content_type == "text/css; charset=utf-8"
         assert "--accent: red;" in response.content
 
     def test_unknown_class_or_missing_vars_give_404(self):
@@ -247,7 +247,7 @@ class TestScriptEndpointLogic:
         response = self._serve(c, "citry.js")
         assert response.status == 200
         assert "Citry interactive runtime." in response.content
-        assert response.content_type == "text/javascript"
+        assert response.content_type == "text/javascript; charset=utf-8"
 
     def test_runtime_reader_uses_the_generated_vue_delivery_file(self):
         runtime = Path(emission.__file__).parents[2] / "_vue" / "runtime.js"
@@ -273,7 +273,7 @@ class TestWsgiApp:
         c = Citry()
         status, headers, body = self._get(c, "/citry.js")
         assert status == "200 OK"
-        assert headers["Content-Type"] == "text/javascript"
+        assert headers["Content-Type"] == "text/javascript; charset=utf-8"
         assert b"Citry interactive runtime." in body
 
     def test_unknown_404_and_wrong_method_405(self):

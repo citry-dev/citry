@@ -265,6 +265,67 @@
   `requires-python = ">=3.10"`, raise it to `">=3.11"` before upgrading,
   or uv and other lockfile tools cannot pick this release.
 
+- **Breaking:** Citry now checks more of the values it sends to the
+  browser. Each of these raises an error, a `ValueError` unless the item
+  says otherwise:
+  - `actions.Redirect(url)` with a scheme other than `http:` or `https:`.
+    A URL with no scheme, such as `/projects/`, still works. Use a full
+    `https:` URL or such a URL instead. A URL containing a control
+    character, such as a line break, also raises.
+  - A `c-bind` mapping key, or a name an `on_attrs_resolved` hook adds,
+    that starts with `on`, such as `onclick`, or that is `innerHTML`,
+    `outerHTML`, or `srcdoc`. The same holds for such a name passed to
+    `<c-element>` through `c-bind`, `<c-component c-is>`, or Python code.
+    Write the attribute in the template instead: `@click` on a Vue page,
+    `@c-click` to call a handler of your component, or `onclick="..."`. A
+    hook can still change the value of a handler the template wrote, but
+    it cannot add one. A `<c-element>` with `c-is` or `c-bind` also
+    refuses a handler written in the template, because it cannot tell a
+    name you wrote from one passed in as data. There, use a Vue `@event`
+    in a component with `js`, or write a plain element in a `c-if`
+    branch.
+  - An attribute name that your code supplies, such as a `c-bind` key,
+    and that contains whitespace, a control character, a quote, a
+    byte-order mark, a lone surrogate, or a Unicode noncharacter. Rename
+    the key.
+  - A tag such as `script`, `style`, `iframe`, or `xmp`, whose
+    contents the browser reads as raw text or code, passed to a
+    `<c-element>` that has `c-is` or `c-bind`, or to the built-in
+    `element` component in a Python call. Write such an element directly
+    in the template.
+  - Markup inside a `<c-element>` that renders `textarea` or `title` in
+    an interactive component raises `TypeError`: a tag, a child
+    component, `<c-raw>`, or a `Markup` value. Put only text there.
+  - A `css_data()` value that has a comment, a brace, `<`, or a backslash
+    outside a string or `url()`; a `;` or `!` outside brackets; an
+    unbalanced bracket; or a malformed string or `url()`. A null or
+    surrogate character, `</style`, or `<!--` raises anywhere. Text with
+    whitespace that does not start with a function is quoted for you, so
+    only a null or surrogate character, `</style`, or `<!--` fails there.
+    `rgb()`, `calc()`, and `url()` values, SVG data URLs included, still
+    work.
+  - An Events binding on one of Vue's lifecycle hooks, such as
+    `@c-vnode-mounted` or `@c-vue:mounted`, whether the template writes it
+    (a `SyntaxError` when the template loads) or a `c-bind` mapping key
+    supplies it (a `ValueError` when the page renders). Vue ran such a
+    binding when the element or component mounted, updated, or unmounted,
+    not on a browser event. Bind the handler to a browser event, such as
+    `@c-click`.
+  - An Events binding whose event name starts with something other than a
+    letter, or contains a character other than a letter, digit, `-`, `_`
+    or `:`, such as `@c-1x` or `@c-a;b`. Rename the event.
+- **Breaking:** on a page with a CSP nonce, an HTML fragment whose
+  components use Vue or server events starts only when you serialize it
+  with the page's nonce, as in
+  `serialize(deps_strategy="fragment", csp_nonce=page_nonce)`. Otherwise
+  it does not start, and the browser console shows an error. This closes
+  a security hole. For a `Render` that a server event returns as HTML to
+  a client of your own, set `extensions_defaults["events"]["_csp_nonce"]`
+  to a function that returns the calling page's nonce
+  ([details](https://citry.dev/security/#html-fragments)).
+- **Breaking:** on an interactive page, Citry refuses a `data:` URL for a
+  component script, so the page's Vue app, or the fragment, does not start
+  ([details](https://citry.dev/advanced/dependency-files/#add-a-library-url)).
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old
@@ -357,6 +418,19 @@
 
 ### Fixes
 
+- Citry's Vue runtime and server events keep working when data puts an
+  `id` or `name` on an element that matches a name Citry reads, such as
+  `<div id="Citry">` or `<form name="createElement">`. A form field named after a form method, such
+  as `addEventListener`, can still stop the component that holds the form,
+  so do not take field names from data unchecked
+  ([details](https://citry.dev/security/#check-form-field-names)).
+- Citry now labels the JavaScript and CSS files it serves as UTF-8, and
+  writes each non-ASCII character in a `css_data()` value as a CSS escape
+  (`表` becomes `\8868`). Before, a page declared in an encoding such as
+  GBK or Big5 could misread such a character in a linked stylesheet and end
+  a quoted string early. Styles render the same, but script that reads the
+  custom property with `getComputedStyle()` now gets the escape text instead
+  of the character.
 - A form field named `__proto__` is now sent with the Events call like
   any other field.
 - An Events `actions.Redirect` to a relative URL, such as `"?page=2"` or
@@ -409,6 +483,10 @@
   right against its quotes. That line break was new text in the rendered
   HTML. Whitespace you wrote is still re-indented; to spread compact markup
   over lines, add a line break between the tags once.
+- Citry now sends `charset=utf-8` with every `text/*` response it builds
+  from a string, such as the plain-text and HTML body that a form post
+  without JavaScript gets back, so the browser does not have to guess the
+  encoding.
 - An oversized request to Citry's event endpoints no longer fills the
   server's memory: by default Citry stops reading a body past 1 MiB and
   rejects a form post with more than 1,000 fields, both with

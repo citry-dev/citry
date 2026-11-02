@@ -269,6 +269,10 @@ class CStepper(LibraryComponent):
     """
 
     js = r"""
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
       $component({
         props: {active: {}, linear: {}, disabled: {}, orientation: {}, variant: {}, size: {}, onActiveChange: {}},
         onServerRender: ({component}) => {
@@ -424,7 +428,7 @@ class CStepper(LibraryComponent):
             attributeFilter: ['contenteditable', 'href', 'tabindex', 'type'],
           });
           const fieldsets = [];
-          for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
             if (!(ancestor instanceof HTMLFieldSetElement)) continue;
             const item = new MutationObserver(schedule);
             item.observe(ancestor, {attributes: true, childList: true, attributeFilter: ['disabled']});

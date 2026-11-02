@@ -33,9 +33,12 @@ import pytest
 _OPTION = "--vue-render-parity-corpus"
 
 # The compiled definition's browser JavaScript wraps the render code between
-# the helper preamble and this registration line (see `_vue/compiler.py`).
+# the helper preamble and the line that creates the definitions table (see
+# `_vue/compiler.py`). A test compiles a definition and checks that these
+# still find its render code, because the check would otherwise compare
+# nothing once the wrapper changes.
 _CODE_START = "\nfunction render("
-_CODE_END = "\nwindow.__citryRuntimeDefinitions="
+_CODE_END = '\nObject.prototype.hasOwnProperty.call(window,"__citryRuntimeDefinitions")'
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

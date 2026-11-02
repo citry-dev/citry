@@ -276,12 +276,52 @@ def test_trusted_html_rejects_raw_text_and_rcdata_contexts() -> None:
         def template_data(self, kwargs, slots):
             return {"tag": "textarea"}
 
-    with pytest.raises(UnsupportedPreparedView, match=r"<c-raw> cannot sit inside <\w+>.*holds text, not HTML"):
-        assemble_typed_render(
-            render_prepared(DynamicRcdataRaw()),
-            revision=0,
-            tag_for_type=lambda _key: "x-dynamic-rcdata",
-        )
+    # A dynamic <textarea> holds text like a written one, so trusted HTML inside it is refused the same way.
+    with pytest.raises(UnsupportedPreparedView, match="holds text, not HTML"):
+        assemble_typed_render(render_prepared(DynamicRcdataRaw()), revision=0, tag_for_type=lambda _key: "x-dyn")
+
+    class DynamicRcdataTag(Component):
+        citry = registry
+        template = '<c-element c-is="tag">a<i>b</i></c-element>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": kwargs["tag"]}
+
+    class TextChild(Component):
+        citry = registry
+        template = '<b class="child">{{ v }}</b>'
+
+        def template_data(self, kwargs, slots):
+            return {"v": kwargs["v"]}
+
+    class DynamicRcdataChild(Component):
+        citry = registry
+        template = '<c-element c-is="tag"><c-TextChild c-v="tag" /></c-element>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": kwargs["tag"]}
+
+    # The browser would read the <i>, or the child component's <b>, as text, while Vue would
+    # build it as an element, so both are refused.
+    for tag in ("textarea", "title"):
+        with pytest.raises(UnsupportedPreparedView, match=rf"<i> cannot sit inside <{tag}>.*holds text, not HTML"):
+            assemble_typed_render(
+                render_prepared(DynamicRcdataTag(tag=tag)), revision=0, tag_for_type=lambda _key: "x-dyn-tag"
+            )
+        with pytest.raises(UnsupportedPreparedView, match=rf"The component TextChild_\w+ cannot sit inside <{tag}>"):
+            assemble_typed_render(
+                render_prepared(DynamicRcdataChild(tag=tag)), revision=0, tag_for_type=lambda _key: "x-dyn-child"
+            )
+
+    class SvgTitle(Component):
+        citry = registry
+        template = '<svg><c-element c-is="tag"><tspan>t</tspan></c-element></svg>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": "title"}
+
+    # An SVG <title> holds ordinary child elements, so it is not refused.
+    assemble_typed_render(render_prepared(SvgTitle()), revision=0, tag_for_type=lambda _key: "x-svg-title")
 
 
 def test_opaque_html_rejects_component_and_slot_placement_under_foreign_content() -> None:
@@ -2324,7 +2364,7 @@ def test_repeated_receiver_fills_allocate_distinct_caller_bindings() -> None:
     assert [root.prepared_data[key] for key in sorted(root.prepared_data) if key.startswith("citryText")] == ["A", "B"]
 
 
-@pytest.mark.parametrize("name", ["innerHTML", "outerHTML", "textContent", "innerText", "onClick"])
+@pytest.mark.parametrize("name", ["textContent", "innerText"])
 def test_dynamic_dom_properties_and_listeners_are_rejected_before_compilation(name: str) -> None:
     registry = Citry(autodiscover=False, extensions=[])
 
@@ -2342,6 +2382,23 @@ def test_dynamic_dom_properties_and_listeners_are_rejected_before_compilation(na
             revision=0,
             tag_for_type=lambda type_key: f"citry-component-{type_key.split('_', 1)[0].lower()}",
         )
+
+
+@pytest.mark.parametrize("name", ["onClick", "innerHTML", "outerHTML"])
+def test_inline_event_handler_from_a_mapping_is_rejected_while_rendering(name: str) -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class Page(Component):
+        citry = registry
+        template = '<div c-bind="attrs">safe fallback</div>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {name: '<img src="x" onerror="globalThis.pwned=true">'}}
+
+    # The shared mapping rule refuses the name while the template renders,
+    # before the prepared Vue checks see it.
+    with pytest.raises(ValueError, match=r"An attribute name from data may not start with 'on' or be innerHTML"):
+        render_prepared(Page())
 
 
 @pytest.mark.parametrize("authored_key", ['key="browser"', ':key="browserKey"'])

@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from citry._owned_resource import _OwnedResource
+from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, _OwnedResource
 from citry.cache import _forget_stored_key
 from citry.ext.dependencies.scripts import (
     component_script_hash,
@@ -42,10 +42,15 @@ if TYPE_CHECKING:
     from citry.ext.dependencies.types import ScriptType
     from citry.util.routing import RouteRequest
 
-_CONTENT_TYPES = {"js": "text/javascript", "css": "text/css"}
+_CONTENT_TYPES = {"js": JAVASCRIPT_CONTENT_TYPE, "css": CSS_CONTENT_TYPE}
 # The script spellings a local file may use. The browser checks the type
 # (responses carry X-Content-Type-Options: nosniff), so each must be exact.
-_ASSET_CONTENT_TYPES = {"js": "text/javascript", "mjs": "text/javascript", "cjs": "text/javascript", "css": "text/css"}
+_ASSET_CONTENT_TYPES = {
+    "js": JAVASCRIPT_CONTENT_TYPE,
+    "mjs": JAVASCRIPT_CONTENT_TYPE,
+    "cjs": JAVASCRIPT_CONTENT_TYPE,
+    "css": CSS_CONTENT_TYPE,
+}
 
 
 def asset_content_type(extension: str) -> str:

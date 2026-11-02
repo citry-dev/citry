@@ -10,6 +10,7 @@ everything else reads. Design: ``docs/design/events.md`` section 3.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from difflib import get_close_matches
 from types import FunctionType
@@ -111,6 +112,18 @@ def _validate_engine_config_value(name: str, value: Any) -> None:
             if not isinstance(item, str) or not item:
                 msg = f"'_csrf_field_names' must hold non-empty strings; got {item!r}."
                 raise ValueError(msg)
+    elif name == "_csp_nonce":
+        # Each page gets its own nonce, so Citry asks for it on each call. A
+        # fixed string would put one nonce on every page's fragments, so only
+        # a function is accepted. The dispatcher calls it without awaiting,
+        # so an async function would hand back a coroutine.
+        if not callable(value) or inspect.iscoroutinefunction(value):
+            msg = (
+                "'_csp_nonce' must be a plain (not async) function that takes the call's EventRequest"
+                " and returns the CSP nonce of the page that sent it (None when that page has no"
+                f" nonce); got {value!r}."
+            )
+            raise ValueError(msg)
     else:
         # Each engine-wide name needs its own rule here.
         msg = f"No value check is defined for the engine-wide Events setting {name!r}."

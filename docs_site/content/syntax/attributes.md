@@ -392,9 +392,13 @@ accepts.
     never carries, such as `c-#item`, `c-.prop`, or `c-^title`, fails
     earlier, when the template loads.
 
+    A `v-on` value containing `{{ ... }}` fails too.
+
     Citry's own `@c-` and `:c-` Events bindings are the exception: a
     `c-bind` key may set them. See [Bind events in templates](/events/bindings/).
-    A `v-on` value containing `{{ ... }}` fails too.
+    A `c-bind` key that sets an Events binding chooses which handler runs
+    and on which event, so build that mapping in your own code, never from
+    request data.
 
 To give Vue a value from Python, return it from `js_data()` and read it in
 the binding:

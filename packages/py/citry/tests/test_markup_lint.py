@@ -938,9 +938,6 @@ _CSP_DIFFERENCES = [
     # attributes it leaves as written, so the template check reports them.
     ('<div v-pre onclick="x"></div>', [("native-event", "onclick")], []),
     ('<div v-pre><span onclick="x"></span></div>', [("native-event", "onclick")], []),
-    # A bound `is` is a value from data, so the template check keeps the
-    # c-element name; the page check knows the element that was rendered.
-    ("""<c-element c-is="'script'"></c-element>""", [], [("raw-tag", "script")]),
     # The template check does not read the content of an SVG <title> or <style>
     # as text, as the page check does, so it misses the tags inside. For
     # <style> it still reports the <style> itself.
@@ -1009,6 +1006,16 @@ def test_csp_rule_finds_what_the_page_check_finds_in_literal_markup(template):
 def test_csp_rule_differs_from_the_page_check_in_these_documented_cases(template, from_template, from_page):
     assert _template_csp_findings(template) == from_template
     assert _render_time_csp_findings(template) == from_page
+
+
+def test_a_bound_c_element_name_the_browser_runs_is_refused_while_rendering():
+    # A bound `is` is a value from data, so the template check keeps the
+    # c-element name. Rendering refuses a tag whose contents the browser runs,
+    # so the page check never sees one.
+    template = """<c-element c-is="'script'"></c-element>"""
+    assert _template_csp_findings(template) == []
+    with pytest.raises(ValueError, match="cannot render a <script> element"):
+        _render_time_csp_findings(template)
 
 
 def test_csp_rule_skips_a_capitalized_name_that_is_no_html_element_though_render_time_reports_it():

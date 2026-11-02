@@ -898,6 +898,28 @@ mod tests {
     }
 
     #[test]
+    fn an_events_binding_on_a_vue_lifecycle_hook_is_rejected() {
+        // Vue runs `onVnodeMounted` and the like as the element's lifecycle
+        // hooks, so they are not events an Events binding can listen for.
+        for input in [
+            r#"<div @c-vnode-mounted="save"></div>"#,
+            r#"<div @c-vnodeUpdated="save"></div>"#,
+            // Vue writes `vue:mounted` as `vnode-mounted`.
+            r#"<div @c-vue:mounted="save"></div>"#,
+            r#"<c-card @c-vue:before-unmount="save" />"#,
+        ] {
+            assert_parse_error(input, "names one of Vue's element lifecycle hooks");
+        }
+        // A Vue listener for a lifecycle hook is Vue's own feature and stays.
+        for input in [
+            r#"<div @vnode-mounted="save"></div>"#,
+            r#"<div @vue:mounted="save"></div>"#,
+        ] {
+            assert!(parse_template(input, None, None).is_ok(), "{input}");
+        }
+    }
+
+    #[test]
     fn names_the_compiler_writes_for_a_rewritten_listener_are_reserved() {
         // Vue's `camelize` turns `-0` into `0`, so these all give the props
         // key `onCitryOn0`, which the compiler writes for a listener.

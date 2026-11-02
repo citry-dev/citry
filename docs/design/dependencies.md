@@ -385,7 +385,13 @@ The mechanism ports from DJC conceptually unchanged:
   values are rejected. Quoted strings use CSSOM-style escaping, while raw CSS
   text is checked for declaration and style-tag breakout plus balanced blocks,
   strings, and comments. This is a structural containment check, not a full
-  CSS grammar validator.
+  CSS grammar validator. After the check, the serializer writes each non-ASCII
+  character and each control character other than tab, newline, carriage
+  return, and form feed as a CSS hex escape, so the stylesheet is plain ASCII
+  and does not depend on its `Content-Type`. Citry also serves every
+  JavaScript and CSS file with `charset=utf-8`; a text or JavaScript content
+  type that does not say so raises `ValueError` when Citry builds the served
+  file.
 - **JS variables** travel inside the page's Vue payload: each component
   occurrence carries its own `js_data()` result as a JSON object, and the
   browser runtime hands it to that instance. They are not written to the

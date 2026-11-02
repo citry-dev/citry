@@ -358,6 +358,10 @@ class CSwitch(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+
       $component({
         props: {
           checked: {},
@@ -538,7 +542,7 @@ class CSwitch(LibraryComponent):
           input.addEventListener("input", onInput);
           input.addEventListener("change", onChange);
           input.addEventListener("invalid", onInvalid);
-          nativeForm?.addEventListener("reset", onReset);
+          if (nativeForm) builtIn(nativeForm).addEventListener("reset", onReset);
           const unregisterCapability = field?.registerCapabilities({
             required: true,
             readonly: false,
@@ -553,7 +557,7 @@ class CSwitch(LibraryComponent):
             input.removeEventListener("input", onInput);
             input.removeEventListener("change", onChange);
             input.removeEventListener("invalid", onInvalid);
-            nativeForm?.removeEventListener("reset", onReset);
+            if (nativeForm) builtIn(nativeForm).removeEventListener("reset", onReset);
             if (reconcileTimer !== null) clearTimeout(reconcileTimer);
             resetTimers.forEach((timer) => clearTimeout(timer));
             unregisterCapability?.();

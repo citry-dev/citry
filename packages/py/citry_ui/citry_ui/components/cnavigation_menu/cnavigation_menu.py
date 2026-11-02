@@ -8,6 +8,7 @@ from typing import Any, Literal, TypedDict, overload
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CNavigationMenuOrientation = Literal["horizontal", "vertical"]
@@ -351,6 +352,16 @@ class CNavigationMenu(LibraryComponent):
     """
 
     js = r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+      const parentNodeOf = (node) => nodeParentNode.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
+
       $component({
         props: {
           value: {},
@@ -479,7 +490,7 @@ class CNavigationMenu(LibraryComponent):
           };
           const entryFor = (value) => entries.find((entry) => entry.value === value) ?? null;
           const deepActive = () => {
-            let current = root.ownerDocument.activeElement;
+            let current = builtIn(root.ownerDocument).activeElement;
             while (current?.shadowRoot?.activeElement) current = current.shadowRoot.activeElement;
             return current;
           };
@@ -487,7 +498,9 @@ class CNavigationMenu(LibraryComponent):
             let current = target;
             while (current) {
               if (current === container) return true;
-              current = current.parentNode ?? current.getRootNode?.()?.host ?? null;
+              // Only a shadow root has a host; a named element can make a document answer `host`.
+              const rootNode = current instanceof Node ? rootNodeOf(current) : null;
+              current = parentNodeOf(current) ?? (rootNode instanceof ShadowRoot ? builtIn(rootNode).host : null);
             }
             return false;
           };
@@ -508,7 +521,7 @@ class CNavigationMenu(LibraryComponent):
             if (configuration.orientation !== "horizontal") return;
             const entry = entryFor(effectiveValue);
             if (!entry || entry.panel.hidden) return;
-            const view = root.ownerDocument.defaultView;
+            const view = builtIn(root.ownerDocument).defaultView;
             const viewportWidth = view?.visualViewport?.width ?? view?.innerWidth ?? 0;
             if (!viewportWidth) return;
             const margin = 16;
@@ -531,16 +544,16 @@ class CNavigationMenu(LibraryComponent):
           const startGeometry = () => {
             if (!geometryListening) {
               geometryListening = true;
-              root.ownerDocument.defaultView?.addEventListener("resize", scheduleGeometry);
-              root.ownerDocument.addEventListener("scroll", scheduleGeometry, true);
+              builtIn(root.ownerDocument).defaultView?.addEventListener("resize", scheduleGeometry);
+              builtIn(root.ownerDocument).addEventListener("scroll", scheduleGeometry, true);
             }
             scheduleGeometry();
           };
           const stopGeometry = () => {
             if (geometryListening) {
               geometryListening = false;
-              root.ownerDocument.defaultView?.removeEventListener("resize", scheduleGeometry);
-              root.ownerDocument.removeEventListener("scroll", scheduleGeometry, true);
+              builtIn(root.ownerDocument).defaultView?.removeEventListener("resize", scheduleGeometry);
+              builtIn(root.ownerDocument).removeEventListener("scroll", scheduleGeometry, true);
             }
             cancelAnimationFrame(geometryFrame);
             geometryFrame = null;
@@ -548,14 +561,14 @@ class CNavigationMenu(LibraryComponent):
           const startOutside = () => {
             if (outsideListening || effectiveValue === null) return;
             outsideListening = true;
-            root.ownerDocument.addEventListener("pointerdown", onDocumentPointerDown, true);
-            root.ownerDocument.addEventListener("focusin", onDocumentFocusIn, true);
+            builtIn(root.ownerDocument).addEventListener("pointerdown", onDocumentPointerDown, true);
+            builtIn(root.ownerDocument).addEventListener("focusin", onDocumentFocusIn, true);
           };
           const stopOutside = () => {
             if (!outsideListening) return;
             outsideListening = false;
-            root.ownerDocument.removeEventListener("pointerdown", onDocumentPointerDown, true);
-            root.ownerDocument.removeEventListener("focusin", onDocumentFocusIn, true);
+            builtIn(root.ownerDocument).removeEventListener("pointerdown", onDocumentPointerDown, true);
+            builtIn(root.ownerDocument).removeEventListener("focusin", onDocumentFocusIn, true);
           };
           const apply = (value) => {
             const next = configuration.disabled || invalidStructure || !entryFor(value) ? null : value;
@@ -807,7 +820,9 @@ class CNavigationMenuLink(LibraryComponent):
         self.unprovide(_CONTEXT_KEY)
         validate_boolean("CNavigationMenuLink", "current", kwargs.current)
         return {
-            "href": _plain("CNavigationMenuLink href", kwargs.href),
+            # Site navigation is often built from records, so the link must
+            # not be able to run script on click.
+            "href": check_link_url("CNavigationMenuLink href", _plain("CNavigationMenuLink href", kwargs.href)),
             "current": bool(kwargs.current),
             "target": _plain("CNavigationMenuLink target", kwargs.target, optional=True),
             "rel": _plain("CNavigationMenuLink rel", kwargs.rel, optional=True),

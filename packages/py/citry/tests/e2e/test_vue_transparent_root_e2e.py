@@ -255,7 +255,9 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
         '<main><c-slot name="content" /></main>',
         slots={"content": Slot(lambda ctx: Widget().render(provides=ctx.provides))},
     )
-    fragment = rendered.serialize(deps_strategy="fragment", csp_nonce="response-token")
+    # The fragment carries the page's nonce: under a nonce policy the manager
+    # starts only data blocks that carry it.
+    fragment = rendered.serialize(deps_strategy="fragment", csp_nonce="base-token")
     document = """
         <html><head><script nonce="base-token" src="/citry/citry.js"></script></head><body>
         <div id="target"></div><script nonce="base-token">

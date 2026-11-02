@@ -45,7 +45,7 @@ test("the committed Vue fragment manager exactly matches its TypeScript source",
 
 test("the combined interactive runtime preserves loader order", () => {
   const runtime = readFileSync(new URL("../../../py/citry/citry/_vue/runtime.js", import.meta.url), "utf8");
-  const guard = runtime.indexOf("if (!global.__citryRuntime)");
+  const guard = runtime.indexOf(`if (!ownGlobal("__citryRuntime"))`);
   const vue = runtime.indexOf("Citry Vue runtime");
   const coordinator = runtime.indexOf("global.__citryRuntime", vue);
   const events = runtime.indexOf("Citry Vue Events bridge");

@@ -334,6 +334,10 @@ class CTree(LibraryComponent):
     """
 
     js = r"""
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
       $component({
         props: {
           expanded: {}, selected: {}, selectionMode: {}, disabled: {}, variant: {}, size: {},
@@ -398,7 +402,7 @@ class CTree(LibraryComponent):
           };
           const effectivelyDisabled = () => {
             if (configuration.disabled) return true;
-            for (let node = root.parentElement; node; node = node.parentElement) {
+            for (let node = parentElementOf(root); node; node = parentElementOf(node)) {
               if (!(node instanceof HTMLFieldSetElement) || !node.disabled) continue;
               const legend = [...node.children].find((child) => child instanceof HTMLLegendElement);
               if (!(legend instanceof Element) || !legend.contains(root)) return true;
@@ -419,8 +423,10 @@ class CTree(LibraryComponent):
           const groupFor = (item) => [...item.children]
             .find((child) => child.getAttribute?.('role') === 'group') ?? null;
           const parentItem = (item) => {
-            const group = item.parentElement;
-            return group?.getAttribute('role') === 'group' ? group.parentElement?.closest('[role="treeitem"]') : null;
+            const group = parentElementOf(item);
+            return group?.getAttribute('role') === 'group'
+              ? parentElementOf(group)?.closest('[role="treeitem"]')
+              : null;
           };
           const directChildren = (item) => {
             const group = groupFor(item);
@@ -429,7 +435,7 @@ class CTree(LibraryComponent):
           const isItemDisabled = (item) => effectivelyDisabled()
             || item.hasAttribute('data-cui-tree-item-disabled');
           const visibleItems = () => allItems().filter((item) => {
-            for (let node = item.parentElement; node && node !== root; node = node.parentElement) {
+            for (let node = parentElementOf(item); node && node !== root; node = parentElementOf(node)) {
               if (node.getAttribute?.('role') === 'group' && node.hidden) return false;
             }
             return true;
@@ -656,7 +662,7 @@ class CTree(LibraryComponent):
           const observer = new MutationObserver(schedule);
           observer.observe(root, {childList:true, subtree:true});
           const fieldsets = [];
-          for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
             if (!(ancestor instanceof HTMLFieldSetElement)) continue;
             const item = new MutationObserver(schedule);
             item.observe(ancestor, {childList:true, attributes:true, attributeFilter:['disabled']});

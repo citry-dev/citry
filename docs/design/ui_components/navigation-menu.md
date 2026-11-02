@@ -145,8 +145,13 @@ mutate replacements.
 All attrs maps are copied. Each destination rejects owned semantics, identity,
 focus, visibility, runtime/state/part fields, object binds, and structural
 directives including `x-if`, `x-for`, `x-show`, `x-ignore`, and `x-teleport`.
-`href` is application-trusted navigation data and is not sanitized. Slot markup
-uses Citry’s trusted-template boundary; no raw-HTML API is added.
+`href` goes through Citry UI's shared link check, which accepts a relative URL
+or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL, and any other scheme
+(such as `javascript:`, `vbscript:`, or `data:`) raises `ValueError` at render.
+It reads the scheme the way the browser's URL parser does, so letter case,
+surrounding spaces, and tab or newline characters inside the scheme do not
+change the result. Slot markup uses Citry’s trusted-template boundary; no
+raw-HTML API is added.
 
 ## 16. Assets and performance
 

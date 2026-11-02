@@ -647,6 +647,8 @@ class TestCssVars:
             "red}",
             "calc(100%",
             "red/*",
+            # A comment is refused too, even a complete one.
+            "token/**/value",
             '"unterminated',
             "red\\",
             "([)]",
@@ -666,7 +668,6 @@ class TestCssVars:
             "calc((100% - 20px) / 2)",
             "func(foo;bar)",
             "var(--fallback, rgb(1, 2, 3))",
-            "token/**/value",
         ],
     )
     def test_structurally_complete_complex_css_value_is_allowed(self, value):

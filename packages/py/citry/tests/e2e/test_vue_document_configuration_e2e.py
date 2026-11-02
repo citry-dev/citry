@@ -228,6 +228,32 @@ def test_data_block_needs_no_nonce_but_the_runtime_refuses_one_without_it(page: 
     assert page.evaluate("window.__ready") == []
 
 
+def test_a_named_element_cannot_switch_off_the_data_block_nonce_check(page: Any, serve_document: Any) -> None:
+    html = _page_class(Citry(autodiscover=False, security_csp="strict"))().render().serialize(csp_nonce=NONCE)
+    # Remove the nonce from the data block only, as injected markup would lack it.
+    stripped, count = re.subn(
+        r'(<script type="application/json" data-citry-vue-document="[^"]+") nonce="[^"]+"', r"\1", html
+    )
+    assert count == 1
+    # Injected markup before Citry's first script: the form becomes
+    # document.currentScript, which has no nonce, unless the runtime reads
+    # the real script element.
+    first_script = stripped.index("<script")
+    clobbered = stripped[:first_script] + '<form name="currentScript"></form>' + stripped[first_script:]
+    policy = f"default-src 'self'; script-src 'nonce-{NONCE}'; style-src 'self' 'nonce-{NONCE}'"
+    url = _serve_with_policy(page, serve_document, clobbered, policy)
+
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.add_init_script(_RECORD_SCRIPT)
+    page.goto(url)
+    page.wait_for_function("window.__starts.length === 1")
+    page.wait_for_function("document.readyState === 'complete'")
+    assert page.evaluate("document.currentScript instanceof HTMLFormElement")
+    assert any("does not carry the page's CSP nonce" in fault for fault in faults), faults
+    assert page.evaluate("window.__ready") == []
+
+
 def test_hash_policy_lists_the_start_script_but_not_the_data_block(page: Any, serve_document: Any) -> None:
     engine = Citry(autodiscover=False, security_script_integrity="citry")
     result = _page_class(engine)().render().serialize_result()

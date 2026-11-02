@@ -50,7 +50,7 @@ inputs:
     column_widths: [fit, 12rem, 7rem, auto]
     entries:
       - {id: value, name: value, type: 'str | None', default: {kind: literal, value: null}, effect: Supplies optional canonical command identity for root `onAction`; rejected with `href`.}
-      - {id: href, name: href, type: 'str | None', default: {kind: literal, value: null}, effect: Renders a real anchor and preserves native navigation.}
+      - {id: href, name: href, type: 'str | None', default: {kind: literal, value: null}, effect: 'Renders a real anchor and preserves native navigation: a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL; any other scheme raises `ValueError`.'}
       - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Makes the item focusable but inactive.}
       - {id: close-on-select, name: close_on_select, type: 'bool | None', default: {kind: literal, value: null}, effect: Overrides the root close policy when supplied.}
       - {id: intent, name: intent, type: {display: '"default" | "danger"', interfaces: [CMenuIntent]}, default: {kind: literal, value: default}, effect: Sets visual emphasis.}

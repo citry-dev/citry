@@ -3250,3 +3250,68 @@ def test_prepared_root_markers_and_css_variables_follow_physical_roots_across_re
     failed = snapshot()
     assert set(failed["colors"].values()) == {"rgb(128, 0, 128)"}
     assert failed["variableSheets"] == revised["variableSheets"]
+
+
+@pytest.mark.parametrize("tag", ["textarea", "title"])
+def test_dynamic_text_element_keeps_data_and_authored_markup_as_text(
+    page: Any, serve_document: Any, *, tag: str
+) -> None:
+    # The browser reads tags inside <textarea> and <title> as text but decodes character
+    # references, so data that tries to close the element stays text. Markup the template
+    # author writes inside stays text too, on a page without Vue; an interactive component
+    # refuses it instead (see test_vue_prepared_capture.py), because Vue would build it as
+    # real child elements.
+    engine = Citry(autodiscover=False)
+    closer = f"</{tag}><b id='from-data'>data</b>"
+
+    class Static(Component):
+        citry = engine
+        template = """
+          <c-element
+            c-is="tag"
+            id="static-text"
+          >{{ value }}<i id="from-author">authored</i></c-element>
+          <p id="static-after">after</p>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"tag": tag, "value": closer}
+
+    class Interactive(Component):
+        citry = engine
+        template = """
+          <c-element
+            c-is="tag"
+            id="vue-text"
+          >{{ value }}</c-element>
+          <p id="vue-after">after</p>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"tag": tag, "value": closer}
+
+        def js_data(self, kwargs, slots):
+            return {"mounted": True}
+
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    html = Static().render().serialize() + Interactive().render().serialize()
+    page.goto(serve_document(html))
+    page.wait_for_function("window.__citryRuntime?._apps?.size === 1")
+    result = page.evaluate(
+        """() => Object.fromEntries(['static', 'vue'].map(name => {
+          const element = document.querySelector(`#${name}-text`);
+          return [name, {
+            tag: element?.localName,
+            text: element?.textContent,
+            children: element?.children.length,
+            after: !element?.contains(document.querySelector(`#${name}-after`)),
+          }];
+        }).concat([['injected', document.querySelectorAll('#from-data, #from-author').length]]))"""
+    )
+    assert result == {
+        "static": {"tag": tag, "text": f'{closer}<i id="from-author">authored</i>', "children": 0, "after": True},
+        "vue": {"tag": tag, "text": closer, "children": 0, "after": True},
+        "injected": 0,
+    }
+    assert faults == []

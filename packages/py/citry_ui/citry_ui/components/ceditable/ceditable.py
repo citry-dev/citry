@@ -501,6 +501,14 @@ class CEditable(LibraryComponent):
 
     js = r"""
       const editableHandoffKey = Symbol.for("citry-ui:editable-handoff");
+      // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
+      // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
+
       $component({
         props: {
           value: {}, editing: {}, required: {}, disabled: {}, readonly: {}, invalid: {},
@@ -788,7 +796,7 @@ class CEditable(LibraryComponent):
             const scheduled = generation;
             queueMicrotask(() => {
               if (!active || scheduled !== generation || !editing || actionPressPending) return;
-              const activeElement = root.ownerDocument.activeElement;
+              const activeElement = builtIn(root.ownerDocument).activeElement;
               if (root.contains(activeElement) || event.relatedTarget && root.contains(event.relatedTarget)) return;
               submit("blur", event);
             });
@@ -847,9 +855,9 @@ class CEditable(LibraryComponent):
           input.addEventListener("invalid", onInvalid);
           input.addEventListener("compositionstart", onCompositionStart);
           input.addEventListener("compositionend", onCompositionEnd);
-          input.form?.addEventListener("reset", onReset);
+          if (input.form) builtIn(input.form).addEventListener("reset", onReset);
           const fieldsetObservers = [];
-          for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
             if (!(ancestor instanceof HTMLFieldSetElement)) continue;
             const observer = new MutationObserver(() => {
               if (effectiveDisabled()) forceClosed("disabled", ancestor);
@@ -954,7 +962,7 @@ class CEditable(LibraryComponent):
             input.removeEventListener("invalid", onInvalid);
             input.removeEventListener("compositionstart", onCompositionStart);
             input.removeEventListener("compositionend", onCompositionEnd);
-            input.form?.removeEventListener("reset", onReset);
+            if (input.form) builtIn(input.form).removeEventListener("reset", onReset);
             if (nativeInvalid) field?.setNativeInvalid(false);
             root.removeAttribute("data-citry-editable-initialized");
           };

@@ -130,7 +130,7 @@ class TestDjangoAdapter:
         response = by_name["citry_cached_script"].callback(request, class_id=Widget.class_id, script_type="js")
         assert response.status_code == 200
         assert response.content == b"console.log(1);"
-        assert response["Content-Type"].startswith("text/javascript")
+        assert response["Content-Type"] == "text/javascript; charset=utf-8"
 
         rejected = by_name["citry_cached_script"].callback(
             RequestFactory().post("/x"), class_id=Widget.class_id, script_type="js"

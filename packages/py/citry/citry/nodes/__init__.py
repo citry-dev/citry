@@ -78,6 +78,7 @@ from citry._i18n_directives import looks_like_i18n_binding
 from citry._vue import native_render as _native_render
 from citry._vue import native_walk as _native_walk
 from citry.attrs import (
+    C_ELEMENT_HANDLER_FIX,
     TEMPLATE_EMPTY_VALUE,
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
@@ -86,6 +87,7 @@ from citry.attrs import (
     is_vue_code_attr_name,
     is_vue_directive_name,
     merge_attrs,
+    reject_script_capable_attr_name,
     reject_vue_code_attr_name,
     template_attr_value,
     validate_html_attr_name,
@@ -1388,6 +1390,7 @@ class ElementAttrsNode(Node):
                     # would remove a listener written in the template. A key
                     # that passes is cached below, so repeat renders skip this.
                     reject_vue_code_attr_name(resolved_key, tag_name=self.tag_name, origin="c-bind")
+                    reject_script_capable_attr_name(resolved_key, tag_name=self.tag_name, where="c-bind")
                     if looks_like_i18n_binding(resolved_key):
                         if context._simple_scope is not None:
                             msg = (
@@ -2185,6 +2188,9 @@ class ComponentNode(Node):
                     if self.name == "element":
                         resolved_bound_key = validate_html_attr_name(bound_key, where="c-bind on <c-element>")
                         _reject_reserved_events_attr(resolved_bound_key, tag_name="c-element")
+                        reject_script_capable_attr_name(
+                            resolved_bound_key, tag_name="c-element", where="c-bind", fix=C_ELEMENT_HANDLER_FIX
+                        )
                     elif not isinstance(bound_key, str):
                         msg = (
                             f"c-bind on <c-{self.name}> must use string kwarg names, "

@@ -6,7 +6,7 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from citry._owned_resource import _OwnedResource
+from citry._owned_resource import JAVASCRIPT_CONTENT_TYPE, _OwnedResource
 from citry.citry_render import selected_render_ids
 from citry.ext.dependencies.types import Script
 from citry.util.html import script_json
@@ -53,7 +53,7 @@ def client_runtime_resource(citry: Citry) -> _OwnedResource:
     return _OwnedResource(
         url=url,
         content=client_runtime_js(),
-        content_type="text/javascript",
+        content_type=JAVASCRIPT_CONTENT_TYPE,
         headers=(("Cache-Control", "no-store"),),
     )
 
@@ -93,7 +93,7 @@ def emit_i18n_dependencies(extension: I18nExtension, ctx: OnDependenciesContext)
         "providers": providers,
         "requirements": requirements,
     }
-    manifest_json = script_json(manifest, sort_keys=True, ensure_ascii=False)
+    manifest_json = script_json(manifest, sort_keys=True)
     ctx.early_scripts.append(
         Script(
             kind="core",

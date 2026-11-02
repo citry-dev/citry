@@ -62,6 +62,10 @@
 
 ### Fixed
 
+- `parse_template()` now rejects an Events binding on one of Vue's element
+  lifecycle hooks, such as `@c-vnode-mounted` or `@c-vue:mounted`. Vue ran
+  such a binding when the element mounted or updated, not on a browser
+  event.
 - Rendering a `simple='vue'` component whose template nests many `c-for`
   or `c-if` blocks no longer crashes the process on a thread with a small
   stack, such as the 128 KiB stack a thread gets by default on Alpine Linux. A template

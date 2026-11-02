@@ -235,7 +235,7 @@ and Menu declarations there.
 | Input | Type | Default | Class | Validation and effect |
 |---|---|---|---|---|
 | `value` | `str | None` | `None` | structural identity | optional canonical command callback identity; rejected with `href` |
-| `href` | `str | None` | `None` | structural | trusted URL; selects anchor instead of Button root |
+| `href` | `str | None` | `None` | structural | link URL checked by the shared link check (section 15); selects anchor instead of Button root |
 | `disabled` | `bool` | `False` | reactive configuration | focusable `aria-disabled` activation guard |
 | `close_on_select` | `bool | None` | `None` | reactive configuration | item override; `None` inherits root policy |
 | `intent` | `CMenuIntent` | `"default"` | reactive configuration | default or danger reflection/styling |
@@ -939,9 +939,13 @@ closure while a submenu is open.
 
 Visible slot text is escaped by Citry. Direct strings and identities are
 converted to exact plain strings before rendering; CRLF/CR normalize where
-identity requires it; U+0000 is rejected. `href` is a trusted URL boundary
-like native anchor attributes: Citry does not classify application schemes,
-but disabled links cannot navigate.
+identity requires it; U+0000 is rejected. `href` goes through Citry UI's shared
+link check, which accepts a relative URL or an `http:`, `https:`, `mailto:`,
+`sms:`, or `tel:` URL, and any other scheme (such as `javascript:`, `vbscript:`,
+or `data:`) raises `ValueError` at render. It reads the scheme the way the
+browser's URL parser does, so letter case, surrounding spaces, and tab or
+newline characters inside the scheme do not change the result. Disabled links
+cannot navigate.
 
 All mappings are copied once. Each destination rejects case-insensitive
 duplicates, Citry/Events runtime namespaces, owned identity/role/focus/ARIA/

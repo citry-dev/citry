@@ -1364,16 +1364,16 @@ class TestCacheRoundTrips:
 @pytest.mark.parametrize(
     ("extension", "content_type"),
     [
-        ("js", "text/javascript"),
-        ("mjs", "text/javascript"),
-        ("cjs", "text/javascript"),
-        ("JS", "text/javascript"),
-        ("css", "text/css"),
-        ("CSS", "text/css"),
+        ("js", "text/javascript; charset=utf-8"),
+        ("mjs", "text/javascript; charset=utf-8"),
+        ("cjs", "text/javascript; charset=utf-8"),
+        ("JS", "text/javascript; charset=utf-8"),
+        ("css", "text/css; charset=utf-8"),
+        ("CSS", "text/css; charset=utf-8"),
         ("txt", "application/octet-stream"),
     ],
 )
 def test_served_local_files_get_an_exact_content_type(extension, content_type):
     # Responses carry nosniff, so the browser runs a script only when its
-    # type says JavaScript.
+    # type says JavaScript, and the charset fixes how it decodes the bytes.
     assert asset_content_type(extension) == content_type

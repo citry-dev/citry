@@ -21,7 +21,7 @@ inputs:
         name: href
         type: str | None
         default: {kind: literal, value: null}
-        effect: Renders a native link when set. Omit it to render a native action Button.
+        effect: 'Renders a native link when set: a relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL; any other scheme raises `ValueError`. Omit it to render a native action Button.'
       - id: disabled
         name: disabled
         type: bool

@@ -16,6 +16,7 @@ from citry_ui.components._anchored_layer import (
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._direct_output import feed_typed_direct_output
 from citry_ui.components._shared_component_assets import build_shared_component_assets
+from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -658,6 +659,10 @@ def _item_snapshot(
         if href is not None and "\0" in href:
             msg = "CMenuItem href cannot contain U+0000."
             raise ValueError(msg)
+        if href is not None:
+            # Menu links are often built from app data, and the browser
+            # runtime reuses this snapshot, so one check covers both paths.
+            check_link_url(f"{component_name} href", href)
         if value is not None:
             value = _plain_identity(component_name, "value", value)
         if value is not None and href is not None:
@@ -902,6 +907,17 @@ class CMenu(LibraryComponent):
     _runtime_source = (
         ANCHORED_LAYER_RUNTIME_JS
         + r"""
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode, parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+      const parentNodeOf = (node) => nodeParentNode.call(node);
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
       const hideNativePopover = (element) => {
         if (!element?.matches?.(":popover-open")) return;
         try {
@@ -1273,8 +1289,8 @@ class CMenu(LibraryComponent):
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
               // Step out of a shadow root to its host; a document has no host.
-              const boxRoot = box.getRootNode();
-              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
+              const boxRoot = rootNodeOf(box);
+              const next = parentElementOf(box) ?? (boxRoot instanceof ShadowRoot ? builtIn(boxRoot).host : null);
               if (!next) {
                 break;
               }
@@ -1331,7 +1347,7 @@ class CMenu(LibraryComponent):
           const writeOwnTriggerDisabled = (value) => {
             // Without an observer on the trigger's root no record will arrive,
             // and a queued value would later be matched against an author write.
-            if (recordsAuthorDisabled && anchoredLayerRuntime.menuDisabledObservers?.get(trigger.getRootNode())) {
+            if (recordsAuthorDisabled && anchoredLayerRuntime.menuDisabledObservers?.get(rootNodeOf(trigger))) {
               ownDisabledWrites.push(value);
             }
             trigger.disabled = value;
@@ -1542,7 +1558,7 @@ class CMenu(LibraryComponent):
           // reader who scrolled away back to the menu on every refocus.
           const revealInSurface = (element, menuSurface) => {
             if (!menuSurface?.contains(element)) return;
-            for (let box = element.parentElement; box; box = box === menuSurface ? null : box.parentElement) {
+            for (let box = parentElementOf(element); box; box = box === menuSurface ? null : parentElementOf(box)) {
               const style = getComputedStyle(box);
               // Measured per box, since scrolling an inner box moves the
               // item; `client*` is the area inside the border and scrollbar.
@@ -1563,7 +1579,7 @@ class CMenu(LibraryComponent):
           // item still off screen (this window only, not a parent page).
           const revealOnPage = (element) => {
             const rect = element.getBoundingClientRect();
-            const view = element.ownerDocument.defaultView;
+            const view = builtIn(element.ownerDocument).defaultView;
             if (rect.top < 0 || rect.left < 0 || rect.bottom > view.innerHeight || rect.right > view.innerWidth) {
               element.scrollIntoView({ block: "nearest", inline: "nearest" });
             }
@@ -1664,11 +1680,11 @@ class CMenu(LibraryComponent):
             }
           };
           const composedParent = (node) => {
-            if (node?.parentNode) {
-              return node.parentNode;
+            if (node && parentNodeOf(node)) {
+              return parentNodeOf(node);
             }
-            const root = node?.getRootNode?.();
-            return root instanceof ShadowRoot ? root.host : null;
+            const root = node instanceof Node ? rootNodeOf(node) : null;
+            return root instanceof ShadowRoot ? builtIn(root).host : null;
           };
           const inheritedLanguage = (element) => {
             let current = element;
@@ -1678,7 +1694,7 @@ class CMenu(LibraryComponent):
               }
               current = composedParent(current);
             }
-            return surface.ownerDocument.documentElement.lang || undefined;
+            return builtIn(surface.ownerDocument).documentElement.lang || undefined;
           };
           const normalizeText = (value, element) => {
             const collapsed = String(value ?? "")
@@ -1810,7 +1826,7 @@ class CMenu(LibraryComponent):
             // modal Dialog. Walk the composed ancestors so both a Dialog
             // outside the Menu's shadow and one inside it are eligible.
             const modal = nearestContainingModal(surface) ?? nearestContainingModal(trigger);
-            const target = modal ?? surface.ownerDocument.body;
+            const target = modal ?? builtIn(surface.ownerDocument).body;
             const hadTabIndex = target.hasAttribute("tabindex");
             if (!hadTabIndex) {
               target.tabIndex = -1;
@@ -1850,7 +1866,7 @@ class CMenu(LibraryComponent):
             const activeElement = layerCoordinator.deepActiveElement();
             if (
               !isInsideTree(activeElement)
-              && activeElement !== surface.ownerDocument.body
+              && activeElement !== builtIn(surface.ownerDocument).body
               && activeElement !== trigger
             ) {
               return;
@@ -2066,7 +2082,7 @@ class CMenu(LibraryComponent):
                     && logicalOpen
                     && controlled
                     && repairEntry?.element?.isConnected
-                    && [trigger, surface.ownerDocument.body].includes(
+                    && [trigger, builtIn(surface.ownerDocument).body].includes(
                       layerCoordinator.deepActiveElement(),
                     )
                   ) {
@@ -3037,7 +3053,7 @@ class CMenu(LibraryComponent):
           };
           const registerNativeDisabled = () => {
             anchoredLayerRuntime.menuDisabledObservers ??= new WeakMap();
-            const rootNode = disabledElement.getRootNode();
+            const rootNode = rootNodeOf(disabledElement);
             let manager = anchoredLayerRuntime.menuDisabledObservers.get(rootNode);
             if (!manager) {
               const entries = new Map();
@@ -3085,7 +3101,7 @@ class CMenu(LibraryComponent):
           let nativeDisabledRoot = null;
           let unregisterNativeDisabled = () => {};
           refreshNativeDisabledObserver = () => {
-            const nextRoot = disabledElement.getRootNode();
+            const nextRoot = rootNodeOf(disabledElement);
             if (nextRoot === nativeDisabledRoot) {
               return;
             }
@@ -5234,6 +5250,13 @@ class CMenuSubmenu(LibraryComponent):
       const anchoredLayerRuntime = globalThis[
         Symbol.for("citry-ui:anchored-layer-runtime")
       ];
+      // Page markup can hide a document's members behind named elements. The core runtime's
+      // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
+      // reads members directly.
+      const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode, parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 
       $component({
         props: {
@@ -5348,7 +5371,7 @@ class CMenuSubmenu(LibraryComponent):
           };
           const choosePlacement = () => {
             const rect = trigger.getBoundingClientRect();
-            const viewport = surface.ownerDocument.defaultView?.visualViewport;
+            const viewport = builtIn(surface.ownerDocument).defaultView?.visualViewport;
             const left = viewport?.offsetLeft ?? 0;
             const top = viewport?.offsetTop ?? 0;
             const right = left + (viewport?.width ?? innerWidth);
@@ -5518,7 +5541,7 @@ class CMenuSubmenu(LibraryComponent):
                 return;
               }
               const start = { x: event.clientX, y: event.clientY };
-              const targetRoot = surface.getRootNode();
+              const targetRoot = rootNodeOf(surface);
               const onMove = (moveEvent) => {
                 if (moveEvent.pointerType !== event.pointerType) {
                   cancelIntent();
@@ -5537,7 +5560,7 @@ class CMenuSubmenu(LibraryComponent):
                 cancelIntent();
                 context.closeSubmenu(entry, { restore: false });
               };
-              targetRoot.addEventListener("pointermove", onMove, true);
+              builtIn(targetRoot).addEventListener("pointermove", onMove, true);
               const timeout = setTimeout(() => {
                 cancelIntent();
                 if (!surface.matches(":hover")) {
@@ -5546,7 +5569,7 @@ class CMenuSubmenu(LibraryComponent):
               }, 300);
               intentCleanup = () => {
                 clearTimeout(timeout);
-                targetRoot.removeEventListener("pointermove", onMove, true);
+                builtIn(targetRoot).removeEventListener("pointermove", onMove, true);
               };
             },
             refresh() {

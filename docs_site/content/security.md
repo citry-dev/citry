@@ -162,6 +162,31 @@ Outside Django, follow the cases Django's function rejects when you write
 your own check. Citry plans a built-in check
 ([#568](https://github.com/citry-dev/citry/issues/568)).
 
+## Check URL attributes { #check-url-attributes }
+
+A URL is something the browser acts on, so a value that request data puts in
+an `href`, `src` or `action` can run script when the visitor clicks: a
+`javascript:` URL does. Citry escapes a value for the place it lands, but it
+does not check the scheme of a URL you give to a plain HTML attribute, and
+plain Vue, Jinja and Django behave the same way. Check the scheme before you
+pass a URL from the request to an attribute, and allow only `http:`,
+`https:`, `mailto:`, `tel:` and relative URLs. The Citry UI components that
+take a link or an image URL refuse other schemes themselves.
+
+## Check form field names { #check-form-field-names }
+
+A browser lets a form's fields replace the form's own methods: inside
+`<form>`, `<input name="addEventListener">` replaces the form's
+`addEventListener` method with that input. Vue calls such methods on the
+forms it renders, so a field name that data chooses can stop the component
+that holds the form. Citry's own browser code ignores these fields. It also
+ignores an element whose `id` matches a global it reads, such as
+`<div id="Citry">`, and a `form`, `img`, `iframe`, `embed` or `object`
+whose `name` matches a `document` method, such as
+`<form name="createElement">`. Before you take a field name from request
+or stored data, check it against the fields you expect, or add a fixed
+prefix such as `field-`.
+
 ## Protect against CSRF { #protect-event-posts-from-csrf }
 
 A cross-site request forgery (CSRF) is another site making the user's
@@ -588,12 +613,68 @@ directly in a template, so the browser blocks it. Move that code to
 
 ### Nonces in fragments { #html-fragments }
 
-Citry's browser code reads the page's nonce when the page loads. When an
-[HTML fragment](/advanced/html-fragments/) arrives later, it puts that nonce
-on every script, inline style, and stylesheet link it adds, so the
-fragment response does not need to know the nonce. Under
-`security_csp="strict"`, a fragment does not load Citry's browser code, so
-insert it only into a page that already has it.
+When an [HTML fragment](/advanced/html-fragments/) has components that use
+Vue or server events, serialize it with the nonce of the page that
+receives it:
+
+```python
+html = card.render().serialize(
+    deps_strategy="fragment",
+    csp_nonce=page_nonce,
+)
+```
+
+The fragment request is a new response, so your server must know the
+nonce of the page that sent it. For example, keep the nonce in the user's
+session when you render the page. A session holds one nonce, so when a
+user opens the app in a second tab, fragments sent to the first tab stop
+starting. Store the nonce per page if your users work in several tabs.
+
+A server event can return a [`Render`](/events/actions/) as an HTML
+fragment, to a client of your own that posts the event call and inserts
+the HTML it gets back. Citry serializes that fragment itself, so it needs
+the nonce of the page that sent the call. Set `_csp_nonce` to a function
+that takes the call's [`EventRequest`][citry.ext.events.EventRequest] and
+returns that nonce, or `None` when the page has none:
+
+```python
+def page_nonce(request):
+    # On Django: the nonce your app kept when it rendered the page.
+    return request.native.session.get("csp_nonce")
+
+
+citry = Citry(
+    extensions_defaults={"events": {"_csp_nonce": page_nonce}},
+)
+```
+
+Citry calls the function once for each call it answers with such a
+fragment. `Citry(...)` raises `ValueError` when the setting is not a plain
+function (an `async def` is refused too), and setting it on a component's
+`Events` class raises `ValueError` when the class is defined. When the
+function raises, or returns something other than a valid nonce string or
+`None`, the call fails with the error code `handler_error`; an
+`EventError` it raises answers with its own status instead.
+
+Citry's own Vue runtime does not need the setting: it applies a server
+event's update to the app already on the page. A form or htmx post to a
+handler's own URL gets plain HTML without Vue, so the setting only adds
+the nonce to that HTML's inline styles.
+
+Citry's browser code reads the nonce on its own script tag when it loads.
+It starts a fragment only when the fragment carries that same nonce, so
+injected markup cannot start a fake fragment that loads its own scripts. A
+fragment without the nonce does not start, and the browser console shows
+an error. When a fragment starts, Citry puts the page's nonce on every
+script, inline style, and stylesheet link the fragment adds.
+
+Citry can check only a nonce that its own script tag carries. When that tag
+has none, for example under a hash-based policy, Citry starts every
+fragment in the page. Under `'strict-dynamic'`, the scripts such a fragment
+names then run too, so give pages that receive fragments a nonce policy.
+
+Under `security_csp="strict"`, a fragment does not load Citry's browser
+code, so insert it only into a page that already has it.
 
 ### App data needs the nonce
 
