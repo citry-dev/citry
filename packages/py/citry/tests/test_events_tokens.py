@@ -60,8 +60,8 @@ TESTS_DIR = Path(__file__).resolve().parents[4] / "packages" / "protocol" / "eve
 
 # Locked golden vectors: mint(CounterState(count=3, label="hi"),
 # class_id=CLASS_ID, secret=SIGNING_KEY, _now=FIXED_NOW).
-GOLDEN_NO_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOm51bGx9.v8DpZJ62veLSs3oHRgNwWWKlXnY1xdpLzCIFrE_tVAk"  # noqa: E501
-GOLDEN_WITH_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOjE3MDAwMDM2MDB9.HOmVEm0AuLGjvAurlzdhVh9Q8ZD-2WLFXInzjHXk9EM"  # noqa: E501
+GOLDEN_NO_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOm51bGx9.7jlis78Jj3-eReJNBQ-ZAE6g8875aNn3QdSbDutdndk"  # noqa: E501
+GOLDEN_WITH_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOjE3MDAwMDM2MDB9.Ss0KHdwx1rZqbHsgHrpxHmR8waawjODipotVIeAFzdo"  # noqa: E501
 
 
 @dataclass
@@ -528,6 +528,30 @@ class TestVerifyRoundTrip:
         assert verified.class_id == CLASS_ID
 
 
+class TestSigningKeyLabel:
+    def _signed_with(self, key: bytes) -> str:
+        # The payload of a real token, so only the signature differs.
+        payload_bytes = tokens._b64url_decode(GOLDEN_NO_EXPIRY.split(".")[1])
+        signature = hmac.new(key, payload_bytes, hashlib.sha256).digest()
+        return f"cev1.{tokens._b64url_encode(payload_bytes)}.{tokens._b64url_encode(signature)}"
+
+    def test_a_payload_signed_with_the_raw_secret_is_refused(self):
+        # Other code that signs with the same secret (an app helper that
+        # signs with Django's SECRET_KEY, say) produces exactly this. It
+        # matches no current key, so it is stale, like a token signed by a
+        # removed secret.
+        token = self._signed_with(SIGNING_KEY.encode("utf-8"))
+        with pytest.raises(StaleStateError):
+            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+
+    def test_a_payload_signed_with_the_labelled_key_verifies(self):
+        # The control for the test above: the same payload, signed with the
+        # key derived from the label, is accepted.
+        key = hmac.new(b"citry.events.state-token", SIGNING_KEY.encode("utf-8"), hashlib.sha256).digest()
+        verified = verify_state_token(self._signed_with(key), cls=FakeCounter, secrets=[SIGNING_KEY])
+        assert verified.state_kwargs == {"count": 3, "label": "hi"}
+
+
 class TestRotation:
     def test_old_token_still_verifies_under_rotation_list(self):
         old_token = mint_state_token(
@@ -661,7 +685,7 @@ class TestInvalidState:
         # A validly-signed token whose payload declares v=2 is still rejected.
         payload = {"v": 2, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None}
         payload_bytes = tokens._canonical_json(payload).encode("utf-8")
-        signature = hmac.new(SIGNING_KEY.encode("utf-8"), payload_bytes, hashlib.sha256).digest()
+        signature = hmac.new(tokens._state_token_key(SIGNING_KEY), payload_bytes, hashlib.sha256).digest()
         token = f"cev1.{tokens._b64url_encode(payload_bytes)}.{tokens._b64url_encode(signature)}"
         with pytest.raises(InvalidStateError) as exc_info:
             verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])

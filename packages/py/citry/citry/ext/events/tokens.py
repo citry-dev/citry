@@ -17,6 +17,9 @@ way (it only stores and echoes the string):
   token is ``cev1.<base64url(payload)>.<base64url(hmac_sha256)>``, where the
   payload is the canonical JSON
   ``{"v": 1, "c": class_id, "s": {state}, "t": mint_epoch, "x": expiry|null}``.
+  The HMAC key is HMAC-SHA256 of the secret, keyed with the fixed label
+  ``citry.events.state-token``. A signature that other code makes with the
+  raw secret does not verify as a token.
   The HMAC binds the payload to the class id and the protocol version, so a
   token cannot be tampered with or moved to another component. Nothing lives
   on the server between calls.
@@ -55,6 +58,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
+from functools import lru_cache
 from types import GenericAlias, UnionType
 from typing import (
     TYPE_CHECKING,
@@ -120,6 +124,13 @@ _SERVER_PREFIX = "ces1"
 _STATE_CACHE_PREFIX = STATE_KEY_PREFIX
 
 _PROTOCOL_VERSION = 1
+
+# A fixed label that turns each secret into the key State tokens are signed
+# with. The secret is often shared with other code (Django's `SECRET_KEY`, for
+# one). The label is the HMAC key and the secret is the message, so even code
+# that returns HMAC-SHA256 of any text under the raw secret cannot hand out
+# the State key, and a signature such code makes does not verify here.
+_STATE_TOKEN_KEY_LABEL = b"citry.events.state-token"
 
 # Resolved field types per State class, so a hot dispatch path does not re-run
 # ``get_type_hints`` on every call. Weak keys let a retired State class be
@@ -576,10 +587,18 @@ def server_state_growth_error(
     )
 
 
+@lru_cache(maxsize=16)
+def _state_token_key(secret: str) -> bytes:
+    """Return the key that signs State tokens for ``secret``: HMAC-SHA256 of the secret, keyed with the fixed label."""
+    # Kept per secret, because every mint and every verify needs it and a
+    # deployment has only one secret plus a few rotation entries.
+    return hmac.new(_STATE_TOKEN_KEY_LABEL, secret.encode("utf-8"), hashlib.sha256).digest()
+
+
 def _sign(payload: dict[str, Any], signing_secret: str) -> str:
     """Serialize, HMAC-sign, and armor the payload into a signed token string."""
     payload_bytes = _canonical_json(payload).encode("utf-8")
-    signature = hmac.new(signing_secret.encode("utf-8"), payload_bytes, hashlib.sha256).digest()
+    signature = hmac.new(_state_token_key(signing_secret), payload_bytes, hashlib.sha256).digest()
     return f"{_SIGNED_PREFIX}.{_b64url_encode(payload_bytes)}.{_b64url_encode(signature)}"
 
 
@@ -680,7 +699,7 @@ def _verify_signed(token: str, secrets: list[str]) -> dict[str, Any]:
     secrets_list = [secrets] if isinstance(secrets, str) else list(secrets) if secrets else []
     matched = False
     for candidate in secrets_list:
-        expected_sig = hmac.new(candidate.encode("utf-8"), payload_bytes, hashlib.sha256).digest()
+        expected_sig = hmac.new(_state_token_key(candidate), payload_bytes, hashlib.sha256).digest()
         # No early break: comparing against every rotation secret keeps the time
         # taken from revealing which key (if any) matched.
         if hmac.compare_digest(signature, expected_sig):

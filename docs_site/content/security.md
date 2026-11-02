@@ -54,6 +54,29 @@ class ProjectPanel(Component):
             )
 ```
 
+Citry sends the signed State to the page as a string, the State token,
+and the browser sends it back with each call. The signature shows that
+Citry wrote a State value, not that the value is the latest one. Anyone
+who has a token Citry issued can send it back, and Citry accepts it until
+it expires. A token is not tied to a user or a session either. So keep
+counters, balances, and one-time flags in your database, under an id that
+State holds, as in the example above. With server storage
+(`State._storage = "server"`, below), an older token works until its
+cache entry expires or the cache drops it.
+
+A token expires `State._max_age` (a `timedelta`) after Citry issues it.
+With the default storage and no `_max_age`, it never expires. Setting
+`_max_age` later does not shorten the tokens Citry has already issued.
+
+To stop accepting every signed token issued so far, give
+`Citry(secret=...)` a new secret and drop the one that signed them. A page
+that is already open then gets a `stale_state` error on its next call,
+and Citry's browser code offers to reload the page. If you pass
+`citry.contrib.django.secret()`, that means changing Django's
+`SECRET_KEY` and not keeping the old key in `SECRET_KEY_FALLBACKS`. That
+also ends Django's sessions and signs every user out. Give Citry a secret
+of its own if you want to replace it separately.
+
 Two State settings narrow what the browser sees and changes. Neither one
 replaces the permission check:
 

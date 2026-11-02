@@ -4296,9 +4296,15 @@ per-binding detail and no cross-language canonical-JSON signing problem
 exists. The Python binding's format:
 
 ```
-cev1 . base64url(payload_json) . base64url(hmac_sha256(secret, payload_json))
+cev1 . base64url(payload_json) . base64url(hmac_sha256(key, payload_json))
+key          = hmac_sha256("citry.events.state-token", secret)
 payload_json = {"v": 1, "c": "<class_id>", "s": {<state>}, "t": <mint epoch>, "x": <expiry epoch | null>}
 ```
+
+The signing key is HMAC-SHA256 of the secret, keyed with a fixed label.
+Django projects pass their `SECRET_KEY`, which other code may also sign
+with. A signature that code makes with the raw secret does not verify as
+a State token.
 
 Rules, each closing a named prior-art hole:
 
