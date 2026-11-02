@@ -249,12 +249,30 @@ Every event call that is not a `GET` must pass these checks:
 
 These checks cannot be turned off, not even with `csrf=False`.
 
-### Use Django's token
+### Use Django's token { #use-djangos-token }
 
 Django's `CsrfViewMiddleware` checks Citry's routes like any other view, so
 keep it enabled. Citry's browser code reads Django's `csrftoken` cookie and
-sends it as the `X-CSRFToken` header. Django still creates, rotates, stores,
-and checks the token.
+sends it as the `X-CSRFToken` header on event calls and on the request
+that loads messages when [`$i18n`](/i18n/browser/) switches locale. Django
+still creates, rotates, stores, and checks the token.
+
+Django sets the `csrftoken` cookie only when the view, or a template it
+renders, calls `get_token()`, as `{% csrf_token %}` does. A page built
+only from Citry components does neither, so decorate its view with
+Django's `ensure_csrf_cookie`:
+
+```python
+from django.http import HttpResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
+
+
+@ensure_csrf_cookie
+def profile(request):
+    page = ProfilePage()
+    html = page.render().serialize()
+    return HttpResponse(html)
+```
 
 If Django stores the token in the session, or makes the CSRF cookie
 `HttpOnly`, browser code cannot read the cookie. Render the token into the
@@ -271,7 +289,7 @@ understand Django's `{% csrf_token %}` tag, so pass the value of Django's
 ```
 
 ```javascript
-Citry.events.configure({
+Citry.configure({
   csrf: {
     token: () => document.querySelector(
       '[name="csrfmiddlewaretoken"]',
@@ -280,7 +298,14 @@ Citry.events.configure({
 });
 ```
 
-The same hidden input also works for a normal HTML form post.
+Event calls and the requests that load `$i18n` messages both read the
+token from this setting. See
+[`Citry.configure`](/reference/browser-apis/#citry-configure). The same
+hidden input also works for a normal HTML form post. With this recipe the
+token is part of the rendered HTML, and Django gives a different token
+string on every request. Keep the hidden input in a part of the page that
+is not cached; see
+[Protect private output](/performance/caching/#protect-private-output).
 
 ### Tokens inside forms { #csrf-tokens-in-forms }
 
@@ -338,11 +363,12 @@ class Profile(Component):
 ```
 
 Then tell the browser where to read the token and which header to send it
-in, with [`Citry.events.configure`][Citry.events.configure]. Call it before
-the page makes its first event call:
+in, with [`Citry.configure`][Citry.configure]. Call it before the page
+makes its first event call or switches language. Citry sends this token
+on event calls and on the request that loads `$i18n` messages:
 
 ```javascript
-Citry.events.configure({
+Citry.configure({
   csrf: {
     cookie: "app_csrf",
     header: "X-CSRF-Token",

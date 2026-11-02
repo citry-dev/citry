@@ -6,7 +6,7 @@ import vm from "node:vm";
 const source = await readFile(new URL("../../../py/citry/citry/_vue/client.js", import.meta.url), "utf8");
 const helperContract = source.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
 
-function runtime() {
+function runtime(existingCitry) {
   const document = {
     currentScript: null,
     dispatched: [],
@@ -44,6 +44,7 @@ function runtime() {
   };
   context.globalThis = context;
   context.window = context;
+  if (existingCitry) context.Citry = existingCitry;
   context.structuredClone = (value) => {
     context.__cloneJson = JSON.stringify(value);
     return vm.runInNewContext("JSON.parse(__cloneJson)", context);
@@ -61,6 +62,7 @@ function runtime() {
     realm,
     document,
     publicEvents: context.Citry.events,
+    citry: context.Citry,
     definition() {
       const definition = realm({
         render,
@@ -79,6 +81,45 @@ function runtime() {
     },
   };
 }
+
+test("Citry.configure rejects a CSRF setting it would otherwise ignore or send broken", () => {
+  const { citry, realm } = runtime();
+  // A misspelt name would leave every request without its token, and a bad header name would fail
+  // each request far from the mistake, so both throw at the call.
+  for (const options of [
+    { csrff: {} },
+    { csrf: { tokens: "x" } },
+    { csrf: { header: "bad header" } },
+    // Citry sets these itself, so a token under one of these names would break or vanish.
+    { csrf: { header: "content-type" } },
+    { csrf: { header: "X-Citry-Events" } },
+    // The browser drops these from a fetch, so the token would never arrive.
+    { csrf: { header: "Cookie" } },
+    { csrf: { header: "Sec-Token" } },
+    { csrf: { cookie: "" } },
+    { csrf: { token: 1 } },
+    { csrf: [] },
+  ]) {
+    // The runtime's TypeError comes from the vm realm, so compare its name rather than its class.
+    assert.throws(
+      () => citry.configure(realm(options)),
+      (error) => error.name === "TypeError",
+      JSON.stringify(options),
+    );
+  }
+  citry.configure(realm({ csrf: { cookie: "app_csrf", header: "X-App-Token" } }));
+  citry.configure(realm({}));
+});
+
+test("a page that already defines Citry.configure stops the runtime before it installs anything", () => {
+  const existing = { configure() {} };
+  assert.throws(() => runtime(existing), /Citry\.configure name is already taken/);
+  // Nothing was added, so the page's own object is left as it was.
+  assert.deepEqual(Object.keys(existing), ["configure"]);
+  const events = { events: "not an object" };
+  assert.throws(() => runtime(events), /Citry\.events namespace must be an object/);
+  assert.deepEqual(Object.keys(events), ["events"]);
+});
 
 test("public applyActions validates the complete list before any targetless action runs", async () => {
   const fixture = runtime();

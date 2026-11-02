@@ -472,6 +472,8 @@ export function createProviderTreeCore<
   transport: {
     createMessageRuntime(value: unknown, locale: string): Runtime;
     fetch(input: string, init: RequestInit): Promise<Response>;
+    /** The CSRF headers for a request to `url`; an adapter without a page token omits it. */
+    csrfHeaders?(url: string): Record<string, string>;
   },
 ) {
   function contextForLocale(locale: string): TreeContext {
@@ -558,17 +560,28 @@ export function createProviderTreeCore<
     if (url === null || url === undefined) {
       fail("I18N_MESSAGES_UNAVAILABLE", `static output has no ${locale} artifact for this message set.`);
     }
-    const response = await transport.fetch(url, {
-      body: JSON.stringify({
-        catalog_revision: state.configuration!.catalogRevision,
-        locale,
-        messages: Array.from(requirement.messages),
-        outputs: Array.from(requirement.outputs),
-        schema_version: 1,
-      }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    });
+    let response: Response;
+    try {
+      response = await transport.fetch(url, {
+        body: JSON.stringify({
+          catalog_revision: state.configuration!.catalogRevision,
+          locale,
+          messages: Array.from(requirement.messages),
+          outputs: Array.from(requirement.outputs),
+          schema_version: 1,
+        }),
+        // The CSRF header lets the POST pass a host token check such as Django's middleware; the
+        // route itself still accepts only an application/json body.
+        headers: { ...transport.csrfHeaders?.(url), "Content-Type": "application/json" },
+        method: "POST",
+        // Citry's route does not redirect, so a redirect means the request reached something else; fail it.
+        redirect: "error",
+      });
+    } catch {
+      // A network failure or a refused redirect rejects the fetch; report it with the same code a
+      // refused status gets, so the provider's status is one the page already handles.
+      fail("I18N_MESSAGES_UNAVAILABLE", `the ${locale} message request failed.`);
+    }
     if (!response.ok)
       fail("I18N_MESSAGES_UNAVAILABLE", `the ${locale} message request failed with ${response.status}.`);
     const runtime = transport.createMessageRuntime(await response.json(), locale);

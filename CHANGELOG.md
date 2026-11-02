@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- You can now set the page's CSRF token once with
+  `Citry.configure({csrf: {...}})`. Event calls and `$i18n` message
+  requests both read it.
+
 ### Changed
 
 - State tokens in the default signed storage now use a key that Citry
@@ -11,6 +17,12 @@
   you upgrade: an open page asks the visitor to reload on its next event
   call. During a rolling deploy, old and new processes reject each
   other's signed tokens until every process runs the new version.
+
+### Fixes
+
+- `$i18n.switchLocale()` no longer fails with status 403 on Django: the
+  request that loads the new locale's messages now sends the page's CSRF
+  token, the same way event calls do.
 
 ## v0.7.0
 

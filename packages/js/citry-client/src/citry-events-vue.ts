@@ -805,9 +805,11 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const selectedTransport = options.transport?.() ?? null;
     const csrf = runtimeConfig.csrf ?? options.csrf;
     if (!useGet && csrf) {
-      // A custom transport forwards only a token the page configured. The
-      // playground transport runs inside an opaque sandbox where reading
-      // document.cookie throws, so the cookie fallback is for fetch alone.
+      // A custom transport gets a token only from `csrf.token`; the page-wide
+      // default supplies one that reads the cookie. The playground transport
+      // runs inside an opaque sandbox where reading document.cookie throws, so
+      // the `csrf.cookie` fallback below is for fetch alone, and the
+      // playground sets its own `csrf.token` for that reason.
       const token = csrf.token
         ? typeof csrf.token === "function"
           ? csrf.token()
