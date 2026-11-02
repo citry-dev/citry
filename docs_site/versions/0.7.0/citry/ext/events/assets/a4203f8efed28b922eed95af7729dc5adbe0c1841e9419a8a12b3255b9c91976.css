@@ -1,0 +1,37 @@
+
+:where(.observation-draft) {
+  max-width: 46rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#c7c9e8, #45486f);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.observation-draft header) {
+  margin-block-end: 1rem;
+}
+
+:where(.observation-draft h2, .observation-draft p) {
+  margin-block: 0;
+}
+
+:where(.observation-draft header p) {
+  color: light-dark(#5b4bc4, #a9a2ff);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.observation-draft__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+:where(.observation-draft__status) {
+  margin-block-start: 1rem;
+  color: light-dark(#175c43, #7be0b5);
+}

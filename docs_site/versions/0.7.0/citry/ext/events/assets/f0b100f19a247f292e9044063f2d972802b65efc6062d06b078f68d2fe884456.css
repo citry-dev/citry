@@ -1,0 +1,8 @@
+
+:where(.ocean-sizes) {
+  display: grid;
+  gap: 1rem;
+  max-width: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

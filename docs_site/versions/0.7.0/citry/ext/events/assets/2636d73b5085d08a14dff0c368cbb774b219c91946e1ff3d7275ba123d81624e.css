@@ -1,0 +1,29 @@
+
+:where(.spinner-glance) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 34rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#b8b8dd, #4b4a78);
+  border-radius: 0.9rem;
+  background: light-dark(#f7f6ff, #17172a);
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.spinner-glance__sky) {
+  color: light-dark(#5b4bb7, #c4b5fd);
+  font-size: 1.3rem;
+  letter-spacing: 0.6rem;
+  text-align: center;
+}
+
+:where(.spinner-glance h2, .spinner-glance p) {
+  margin: 0;
+}
+
+:where(.spinner-glance p) {
+  margin-block-start: 0.25rem;
+  color: light-dark(#55546f, #c6c4de);
+  font-size: 0.8rem;
+}

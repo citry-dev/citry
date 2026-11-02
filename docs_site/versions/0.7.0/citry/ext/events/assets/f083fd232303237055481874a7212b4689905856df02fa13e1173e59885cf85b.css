@@ -1,0 +1,10 @@
+
+:where(.forest-resize) {
+  max-width: 34rem;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px dashed light-dark(#789f7f, #698d70);
+  border-radius: 0.75rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

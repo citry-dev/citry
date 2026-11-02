@@ -1,0 +1,22 @@
+
+:where(.archive-lifecycle-demo) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  min-block-size: 20rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.archive-lifecycle-demo dialog) {
+  max-inline-size: min(26rem, calc(100dvi - 2rem));
+  padding: 1.25rem;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+  border-radius: 0.85rem;
+  background: Canvas;
+  color: CanvasText;
+}
+
+:where(.archive-lifecycle-demo dialog::backdrop) {
+  background: rgb(15 23 42 / 45%);
+}

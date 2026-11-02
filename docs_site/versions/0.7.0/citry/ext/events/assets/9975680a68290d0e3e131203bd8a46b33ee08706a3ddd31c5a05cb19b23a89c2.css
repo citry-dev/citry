@@ -1,0 +1,34 @@
+
+:where(.button-basic) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  max-width: 58rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#cbd5d0, #40594b);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.button-basic h2, .button-basic p) {
+  margin-block: 0;
+}
+
+:where(.button-basic__eyebrow) {
+  margin-block-end: 0.35rem;
+  color: light-dark(#19704a, #74d9a3);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.button-basic__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}

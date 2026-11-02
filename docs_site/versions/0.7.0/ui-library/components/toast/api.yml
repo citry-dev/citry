@@ -1,0 +1,169 @@
+schema_version: 1
+family: toast
+
+components:
+  - CToastRegion
+
+inputs:
+  - id: ctoast-region-server-inputs
+    component: CToastRegion
+    channel: server
+    column_widths: [fit, 14rem, 10rem, auto]
+    entries:
+      - {id: items, name: items, type: 'Sequence[CToastMessage]', default: {kind: literal, value: '()'}, effect: Ordered initial queue copied and validated once per render.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets exact Region identity and generated message relationships.}
+      - {id: label, name: label, type: non-empty str, default: {kind: literal, value: Notifications}, effect: Names the Region.}
+      - {id: messages, name: messages, type: {display: 'CToastMessages | None', interfaces: [CToastMessages]}, default: {kind: literal, value: null}, effect: Overrides catalog-backed dismiss and action-announcement patterns per field.}
+      - id: placement
+        name: placement
+        type: {display: '"block-start-start" | "block-start-end" | "block-end-start" | "block-end-end"', interfaces: [CToastPlacement]}
+        default: {kind: literal, value: block-end-end}
+        effect: Selects a logical viewport corner.
+      - {id: limit, name: limit, type: 'int (1..10)', default: {kind: literal, value: 3}, effect: Limits simultaneously presented messages.}
+      - {id: duration-ms, name: duration_ms, type: int, default: {kind: literal, value: 8000}, effect: Sets default lifetime; zero is persistent and nonzero values are 1000..120000 milliseconds.}
+      - {id: pause-on-hover, name: pause_on_hover, type: bool, default: {kind: literal, value: true}, effect: Pauses remaining time while the viewport is hovered.}
+      - {id: pause-on-focus, name: pause_on_focus, type: bool, default: {kind: literal, value: true}, effect: Pauses remaining time while focus is inside.}
+      - {id: pause-on-hidden, name: pause_on_hidden, type: bool, default: {kind: literal, value: true}, effect: Pauses remaining time while the owner document is hidden.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Merges consumer classes onto the Region.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Merges consumer inline styles onto the Region.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native and data attributes without replacing owned semantics, focus, live regions, or structure.'}
+
+  - id: ctoast-region-client-inputs
+    component: CToastRegion
+    channel: client
+    column_widths: [fit, 14rem, 12rem, auto]
+    entries:
+      - {id: items, name: items, type: 'Array<CToastClientMessage>', omitted: Uses the copied server snapshot., effect: Reconciles the complete ordered queue by canonical ID.}
+      - {id: placement, name: placement, type: {display: '"block-start-start" | "block-start-end" | "block-end-start" | "block-end-end"', interfaces: [CToastPlacement]}, omitted: Uses the server fallback., effect: Updates logical viewport placement.}
+      - {id: limit, name: limit, type: 'integer (1..10)', omitted: Uses the server fallback., effect: Changes visible capacity and promotes or queues messages.}
+      - {id: duration-ms, name: durationMs, type: integer, omitted: Uses the server fallback., effect: Sets default lifetime for messages without an override.}
+      - {id: pause-on-hover, name: pauseOnHover, type: boolean, omitted: Uses the server fallback., effect: Controls hover pause.}
+      - {id: pause-on-focus, name: pauseOnFocus, type: boolean, omitted: Uses the server fallback., effect: Controls focus pause.}
+      - {id: pause-on-hidden, name: pauseOnHidden, type: boolean, omitted: Uses the server fallback., effect: Controls document-visibility pause.}
+      - {id: on-dismiss, name: onDismiss, type: function, omitted: Does not notify a component callback., effect: 'Receives timeout, explicit-dismiss, and action-dismiss completion.'}
+      - {id: on-action, name: onAction, type: function, omitted: Does not notify a component callback., effect: Receives the optional action before action-caused dismissal.}
+
+slots: []
+
+events:
+  - id: ctoast-region-events
+    component: CToastRegion
+    entries:
+      - id: on-dismiss
+        name: onDismiss
+        signature: {display: '(id: string, detail: CToastDismissDetail) => void', interfaces: [CToastDismissDetail]}
+        trigger: A presented message expires, is explicitly dismissed, or closes after its action.
+        detail: {display: '{reason: "timeout" | "dismiss" | "action", source: Element, message: CToastClientMessage}', interfaces: [CToastDismissDetail]}
+        behavior: Fires once after runtime removal; a producer should remove the ID to end suppression.
+      - id: on-action
+        name: onAction
+        signature: {display: '(id: string, detail: CToastActionDetail) => void', interfaces: [CToastActionDetail]}
+        trigger: The optional action Button activates.
+        detail: {display: '{source: HTMLButtonElement, message: CToastClientMessage}', interfaces: [CToastActionDetail]}
+        behavior: Fires before an action-caused dismissal; stale work stops if the callback removes the Region.
+
+methods: []
+
+css:
+  - id: ctoast-css-variables
+    component: CToastRegion
+    entries:
+      - {id: inline-offset, name: --cui-toast-inline-offset, type: length, purpose: Logical viewport inline offset., default: 1rem}
+      - {id: block-offset, name: --cui-toast-block-offset, type: length, purpose: Logical viewport block offset., default: 1rem}
+      - {id: gap, name: --cui-toast-gap, type: length, purpose: Visible stack gap., default: 0.75rem}
+      - {id: width, name: --cui-toast-width, type: length, purpose: Preferred visible width., default: 22rem}
+      - {id: background, name: --cui-toast-background, type: color, purpose: Message background., default: Canvas}
+      - {id: foreground, name: --cui-toast-foreground, type: color, purpose: Message foreground and controls., default: CanvasText}
+      - {id: border-color, name: --cui-toast-border-color, type: color, purpose: Message boundary., default: Subtle CanvasText mix.}
+      - {id: shadow, name: --cui-toast-shadow, type: shadow, purpose: Message elevation., default: 0 1rem 3rem rgb(15 23 42 / 22%)}
+      - {id: radius, name: --cui-toast-radius, type: length, purpose: Message corners., default: 0.75rem}
+      - {id: padding, name: --cui-toast-padding, type: length, purpose: Message padding., default: 1rem}
+      - {id: accent, name: --cui-toast-accent, type: color, purpose: Neutral message accent., default: currentColor}
+      - {id: z-index, name: --cui-toast-z-index, type: integer, purpose: Nonmodal application stacking hint., default: '1000'}
+
+attributes:
+  - id: ctoast-attributes
+    component: CToastRegion
+    entries:
+      - {id: data-placement, name: data-placement, element: Region, type: logical placement, meaning: Mirrors the effective viewport corner.}
+      - {id: data-paused, name: data-paused, element: Region, type: present | absent, meaning: 'Present while timers are paused by hover, focus, visibility, or modality.'}
+      - {id: data-intent, name: data-intent, element: Toast, type: neutral | info | success | warn | error, meaning: Mirrors presentation intent.}
+      - {id: data-priority, name: data-priority, element: Toast, type: polite | assertive, meaning: Mirrors announcement urgency.}
+
+selectors:
+  - id: ctoast-selectors
+    component: CToastRegion
+    entries:
+      - {id: region, selector: '[data-citry-ui-part="region"]', element: Region section, purpose: Viewport and attrs destination.}
+      - {id: announcer-polite, selector: '[data-citry-ui-part="announcer-polite"]', element: Hidden live region, purpose: Serialized polite announcements.}
+      - {id: announcer-assertive, selector: '[data-citry-ui-part="announcer-assertive"]', element: Hidden live region, purpose: Serialized assertive announcements.}
+      - {id: toast, selector: '[data-citry-ui-part="toast"]', element: Presented group, purpose: Focusable message surface.}
+      - {id: content, selector: '[data-citry-ui-part="content"]', element: Content wrapper, purpose: Title and optional description.}
+      - {id: title, selector: '[data-citry-ui-part="title"]', element: Title, purpose: Visible accessible name.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Description, purpose: Optional relationship text.}
+      - {id: actions, selector: '[data-citry-ui-part="actions"]', element: Controls wrapper, purpose: Optional action and dismissal layout.}
+      - {id: action, selector: '[data-citry-ui-part="action"]', element: Button, purpose: Optional one-action control.}
+      - {id: dismiss, selector: '[data-citry-ui-part="dismiss"]', element: Button, purpose: Explicit message dismissal.}
+
+interfaces:
+  - id: ctoast-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: intent, name: CToastIntent, definition: 'Literal["neutral", "info", "success", "warn", "error"]'}
+      - {id: placement, name: CToastPlacement, definition: 'Literal["block-start-start", "block-start-end", "block-end-start", "block-end-end"]'}
+      - {id: priority, name: CToastPriority, definition: 'Literal["polite", "assertive"]'}
+  - id: toast-message
+    kind: record
+    name: CToastMessage
+    entries:
+      - {id: id, name: id, type: str, meaning: Unique canonical queue identity.}
+      - {id: title, name: title, type: str, meaning: Visible and accessible plain-text name.}
+      - {id: description, name: description, type: 'str | None', meaning: Optional plain supporting text.}
+      - {id: intent, name: intent, type: CToastIntent, meaning: Presentation intent independent from urgency.}
+      - {id: priority, name: priority, type: CToastPriority, meaning: Polite or assertive announcement channel.}
+      - {id: duration-ms, name: duration_ms, type: 'int | None', meaning: Optional per-message lifetime; zero is persistent.}
+      - {id: action-label, name: action_label, type: 'str | None', meaning: Optional one-action Button label.}
+      - {id: close-on-action, name: close_on_action, type: bool, meaning: Whether action completion dismisses the message.}
+      - {id: dismissible, name: dismissible, type: bool, meaning: Whether explicit dismissal is available.}
+  - id: toast-messages
+    kind: record
+    name: CToastMessages
+    entries:
+      - {id: dismiss-label, name: dismiss_label, type: 'str | None', default: None, meaning: 'Overrides the catalog-backed dismiss pattern and must contain `{title}`.'}
+      - {id: action-announcement, name: action_announcement, type: 'str | None', default: None, meaning: 'Overrides the catalog-backed action announcement and must contain `{action_label}`.'}
+  - id: toast-client-message
+    kind: record
+    name: CToastClientMessage
+    entries:
+      - {id: id, name: id, type: string, meaning: Unique canonical queue identity.}
+      - {id: title, name: title, type: string, meaning: Visible and accessible plain-text name.}
+      - {id: description, name: description, type: 'string | null', meaning: Optional supporting text.}
+      - {id: intent, name: intent, type: CToastIntent, meaning: Presentation intent.}
+      - {id: priority, name: priority, type: CToastPriority, meaning: Announcement channel.}
+      - {id: duration-ms, name: durationMs, type: 'integer | null', meaning: Optional lifetime override.}
+      - {id: action-label, name: actionLabel, type: 'string | null', meaning: Optional one-action label.}
+      - {id: close-on-action, name: closeOnAction, type: boolean, meaning: Whether action dismisses.}
+      - {id: dismissible, name: dismissible, type: boolean, meaning: Whether explicit dismissal is available.}
+  - id: toast-dismiss-detail
+    kind: record
+    name: CToastDismissDetail
+    entries:
+      - {id: reason, name: reason, type: '"timeout" | "dismiss" | "action"', meaning: Runtime removal reason.}
+      - {id: source, name: source, type: 'Element', meaning: Browser source associated with dismissal.}
+      - {id: message, name: message, type: CToastClientMessage, meaning: Canonical public message snapshot.}
+  - id: toast-action-detail
+    kind: record
+    name: CToastActionDetail
+    entries:
+      - {id: source, name: source, type: HTMLButtonElement, meaning: Activated action Button.}
+      - {id: message, name: message, type: CToastClientMessage, meaning: Canonical public message snapshot.}
+
+translations:
+  - id: ctoast-region-translations
+    component: CToastRegion
+    entries:
+      - {id: region, key: citry-ui-toast-region, purpose: Names the notification region., variables: None, override: '`label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: dismiss, key: citry-ui-toast-dismiss, purpose: Names each toast dismiss control., variables: 'title: str', override: '`messages.dismiss_label`', updates: '$c-tr handles initial items; `i18n.bind()` handles browser-created items.'}
+      - {id: action-available, key: citry-ui-toast-action-available, purpose: Announces that the toast exposes an action., variables: 'action_label: str', override: '`messages.action_announcement`', updates: 'One-shot `i18n.tr()` when the toast is added.'}

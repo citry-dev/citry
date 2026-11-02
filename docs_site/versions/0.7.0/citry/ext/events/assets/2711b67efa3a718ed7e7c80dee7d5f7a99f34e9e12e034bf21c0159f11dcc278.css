@@ -1,0 +1,83 @@
+
+:where(.context-menu-customization) {
+  display: grid;
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.context-menu-customization__brands) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+
+:where(.context-menu-customization__controls) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+:where(.context-menu-customization article) {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 1rem;
+}
+
+:where(.context-menu-customization h3,
+  .context-menu-customization p) {
+  margin: 0;
+}
+
+:where(.context-menu-customization__orchard) {
+  background: #f5f0df;
+  color: #203422;
+  --cui-menu-background: #fffdf5;
+  --cui-menu-foreground: #203422;
+  --cui-menu-border-color: #78916d;
+}
+
+:where(.context-menu-customization__harbor) {
+  background: #102b38;
+  color: #eefaff;
+}
+
+:where(.context-menu-customization__file) {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.75rem;
+}
+
+:where(.context-menu-customization__file:focus-visible) {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}
+
+.context-menu-customization
+.brand-context-menu[data-citry-ui-part="context-menu"]
+[data-citry-ui-part="menu"] {
+  border-width: 2px;
+}
+
+@media (forced-colors: active) {
+  :where(.context-menu-customization article) {
+    border: 1px solid CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.context-menu-customization) {
+    scroll-behavior: auto;
+  }
+}
+
+@media print {
+  :where(.context-menu-customization article) {
+    background: transparent;
+    color: black;
+  }
+}

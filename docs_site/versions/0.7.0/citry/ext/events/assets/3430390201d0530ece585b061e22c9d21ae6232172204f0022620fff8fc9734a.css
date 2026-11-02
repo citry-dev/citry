@@ -1,0 +1,6 @@
+
+:where(.nebula-toggle) {
+  --cui-toggle-pressed-background: light-dark(#7c3aed, #a78bfa);
+  --cui-toggle-pressed-foreground: white;
+  --cui-toggle-radius: 999px;
+}

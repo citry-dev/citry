@@ -1,0 +1,20 @@
+
+:where(.command-palette-layers) {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.command-palette-layers h2) { margin: 0; }
+:where(.command-palette-layers__workflow) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+:where(.command-palette-layers__shadow-host) {
+  display: block;
+  padding: 0.75rem;
+  border: 1px solid currentColor;
+}

@@ -1,0 +1,18 @@
+
+:where(.badge-positioning) {
+  min-block-size: 7rem;
+  padding: 1.5rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.badge-positioning [data-citry-ui-part="button"]) {
+  position: relative;
+}
+
+:where(.badge-positioning [data-citry-ui-part="badge"]) {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  translate: 45% -45%;
+}

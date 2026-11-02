@@ -1,0 +1,14 @@
+
+:where(.archive-command-demo) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  min-block-size: 14rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.archive-command-demo output) {
+  color: light-dark(#66451f, #dec08f);
+}

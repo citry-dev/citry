@@ -1,0 +1,8 @@
+
+:where(.sidebar-layout) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1.5rem;
+  min-block-size: 24rem;
+}
+:where(.sidebar-layout main) { padding: 1rem; }

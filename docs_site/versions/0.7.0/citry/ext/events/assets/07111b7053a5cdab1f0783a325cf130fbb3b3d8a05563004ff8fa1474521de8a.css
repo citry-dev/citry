@@ -1,0 +1,26 @@
+
+:where(.accordion-configurator) {
+  display: grid;
+  gap: 1rem;
+  max-width: 48rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.accordion-configurator h2, .accordion-configurator p) {
+  margin: 0;
+}
+
+:where(.accordion-configurator header > p) {
+  color: light-dark(#39724e, #8fd4a6);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.accordion-configurator__group) {
+  --cui-accordion-radius: 1rem;
+  --cui-accordion-trigger-open-color: light-dark(#1f6b3c, #8fe0aa);
+  --cui-accordion-focus-color: light-dark(#2f855a, #70d397);
+}

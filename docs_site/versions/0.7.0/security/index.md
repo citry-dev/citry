@@ -1,0 +1,1019 @@
+---
+title: Security
+url: https://citry.dev/v/0.7.0/security/
+description: "Protect Citry templates and server events with expression sandboxing, explicit State, CSRF checks, and authorization."
+---
+# Security
+
+You are about to put a Citry app in front of real users and want to know
+what you must do to keep it safe. Citry protects some things by default and
+leaves others to you:
+
+| Risk | Citry by default | You |
+|---|---|---|
+| A user edits the values a handler receives | Signs State so it cannot be changed silently | Validate State and check permissions in every handler |
+| Another site posts to your event routes | Rejects cross-site calls | Keep your framework's CSRF check on |
+| A template expression reads or calls something it should not | Runs expressions in a sandbox that refuses known unsafe names and calls | Put in the template context only objects that every template author may read and call |
+| A secret ends up in the page source | Refuses to send a value wrapped in `Secret` | Wrap each secret in `Secret` and read it on the server |
+| Injected scripts on the page | Nothing until you opt in | Send a Content Security Policy with a nonce |
+
+The first two rows apply to every app that uses
+[server events](/v/0.7.0/events/), and the next two to every app. The Content
+Security Policy (CSP) sections later on are optional hardening.
+
+## Treat State as input { #treat-state-as-client-input }
+
+An event handler receives its [State](/v/0.7.0/events/state/) from the browser, so
+treat it like any other form input. With the default storage, every State
+value is visible in the page source. Citry signs the values, so a user
+cannot change them silently, but it does not encrypt them. Fields listed in
+`State._model` (every public field, by default) can also be changed on
+purpose through `$state` and two-way `:c-*` bindings.
+
+Keep secrets out of State. A value wrapped in
+[`Secret`](#keep-secrets-on-the-server) makes the render fail, but a
+secret in a plain string goes into the page like any other value. Store
+a small record id instead, then load the record and check the current
+user's permission in every handler:
+
+
+```citry
+class ProjectPanel(Component):
+    class State:
+        project_id: int
+        page: int = 1
+
+    class Events:
+        def refresh(self, state, request):
+            project = load_project_for_user(
+                project_id=state.project_id,
+                user=current_user(request),
+            )
+            return ProjectPanel(
+                project=project,
+                page=state.page,
+            )
+```
+
+
+Two State settings narrow what the browser sees and changes. Neither one
+replaces the permission check:
+
+- `State._public` lists the fields the browser can read as plain values
+  through `$state` and bindings. The other fields still travel to the
+  browser, inside the signed value.
+- `State._model` lists the public fields the browser may change.
+
+To keep State values out of the page, set `State._storage = "server"`.
+Citry then keeps the values in its configured cache and sends only a lookup
+key. This hides only the fields left out of `_public`: public fields are
+still sent as plain values, so list the fields the browser needs in
+`_public`. With several server processes, the cache must be shared between
+them. Server storage does not replace the permission check either: still
+authorize every use of the restored values.
+
+Server storage adds a cache entry at every render and after every call
+that changes State, and keeps each one until it expires: after
+`State._max_age`, or after 24 hours when you do not set it. With several
+server processes, use a shared backend and set its memory limit and
+eviction policy. A browser write that would make the stored
+State larger than `State._max_bytes` (64 KiB by default) gets a 422
+before the handler runs. The limit covers only browser writes, so when a
+handler copies request data into State, limit its size yourself. The
+default `InMemoryCache` counts such State against a 64 MiB budget and
+drops the entry used longest ago when it is full; see
+[Server-stored State](/v/0.7.0/performance/cache-backends/#server-stored-state).
+One client that sends many calls can push other visitors' State out, and
+those visitors then see a reload prompt, so rate-limit the Events routes
+if that matters for your app.
+
+## Authorize every event
+
+Every public method in `class Events` can be called by anyone who can reach
+the page. Check that the current user may perform the action, in one of
+three places:
+
+- `_guard` on `Events`, which runs before every handler of the component;
+- `@event(guard=...)`, which runs before one handler;
+- a check inside the handler body.
+
+A guard rejects a call by raising `EventError`:
+
+
+```citry
+from citry.ext.events import EventError
+
+
+class DocumentEditor(Component):
+    class State:
+        document_id: int
+
+    class Events:
+        def _context(self):
+            return build_event_context(self.request)
+
+        def _guard(self):
+            document = load_document(self.state.document_id)
+            if not can_edit(self.context.user, document):
+                raise EventError(
+                    "You cannot edit this document.",
+                    status=403,
+                )
+
+        def save(self, data: SaveIn, state):
+            save_document(state.document_id, data.body)
+```
+
+
+Use a guard for a rule every handler shares. Put a check that depends on
+the submitted data in the handler body, where the data has already been
+validated.
+
+Citry does not log users in. Your web framework does, and a handler reads
+the user from the `request` it receives, or from `request.native` for the
+framework's own request object.
+
+[Event routes](/v/0.7.0/events/routes/) covers the HTTP side of event calls.
+
+## Check redirect URLs { #check-redirect-urls }
+
+A handler that redirects to a URL from the request, such as a `next`
+parameter after a login, can send the visitor to another site if someone
+puts that site's address in the link. Check the URL before you return
+[`actions.Redirect`](/v/0.7.0/events/actions/#redirect-to-a-page), and redirect to
+a fixed page when the check fails.
+
+A prefix check is not enough. Browsers load both `//other.example/` and
+`/\other.example/` from `other.example`, and both start with `/`:
+
+
+```python
+# Not enough: "//other.example/" passes
+if data.next.startswith("/"):
+    return actions.Redirect(data.next)
+```
+
+
+Use a check that parses the URL the way a browser does. Under Django, use
+`url_has_allowed_host_and_scheme`. In this example the login page copies
+its `next` query parameter into a hidden `<input name="next">`, so the
+handler receives it as `data.next`:
+
+
+```python
+from django.utils.http import (
+    url_has_allowed_host_and_scheme,
+)
+
+
+class Events:
+    def login(self, data: LoginIn, request):
+        # log_in is your own code that checks the password
+        log_in(request, data)
+        host = request.native.get_host()
+        is_safe = url_has_allowed_host_and_scheme(
+            data.next,
+            allowed_hosts={host},
+            require_https=request.native.is_secure(),
+        )
+        target = data.next if is_safe else "/"
+        return actions.Redirect(target)
+```
+
+
+Outside Django, follow the cases Django's function rejects when you write
+your own check. Citry plans a built-in check
+([#568](https://github.com/citry-dev/citry/issues/568)).
+
+## Check URL attributes { #check-url-attributes }
+
+A URL is something the browser acts on, so a value that request data puts in
+an `href`, `src` or `action` can run script when the visitor clicks: a
+`javascript:` URL does. Citry escapes a value for the place it lands, but it
+does not check the scheme of a URL you give to a plain HTML attribute, and
+plain Vue, Jinja and Django behave the same way. Check the scheme before you
+pass a URL from the request to an attribute, and allow only `http:`,
+`https:`, `mailto:`, `tel:` and relative URLs. The Citry UI components that
+take a link or an image URL refuse other schemes themselves.
+
+## Check form field names { #check-form-field-names }
+
+A browser lets a form's fields replace the form's own methods: inside
+`<form>`, `<input name="addEventListener">` replaces the form's
+`addEventListener` method with that input. Vue calls such methods on the
+forms it renders, so a field name that data chooses can stop the component
+that holds the form. Citry's own browser code ignores these fields. It also
+ignores an element whose `id` matches a global it reads, such as
+`<div id="Citry">`, and a `form`, `img`, `iframe`, `embed` or `object`
+whose `name` matches a `document` method, such as
+`<form name="createElement">`. Before you take a field name from request
+or stored data, check it against the fields you expect, or add a fixed
+prefix such as `field-`.
+
+## Protect against CSRF { #protect-event-posts-from-csrf }
+
+A cross-site request forgery (CSRF) is another site making the user's
+browser call your app with the user's cookies. Citry rejects these calls on
+every event route. Under Django, Django's own CSRF token check also runs.
+
+When Citry's own check rejects a call, it fails with status 403 and the message "The call failed the
+CSRF check; reload the page and try again."
+
+### What Citry always checks
+
+Every event call that is not a `GET` must pass these checks:
+
+- A call with a JSON body must send the `X-Citry-Events` header. Citry's
+  browser code adds it for you.
+- When the browser sends an `Origin` header, its host must match the
+  request's `Host` header. Behind a reverse proxy, the proxy must pass the
+  browser's `Host` header on; see
+  [Run behind a proxy](/v/0.7.0/advanced/web-frameworks/#run-behind-a-proxy).
+- When the browser sends a `Sec-Fetch-Site` header, it must be
+  `same-origin` or `none`.
+
+These checks cannot be turned off, not even with `csrf=False`.
+
+### Use Django's token
+
+Django's `CsrfViewMiddleware` checks Citry's routes like any other view, so
+keep it enabled. Citry's browser code reads Django's `csrftoken` cookie and
+sends it as the `X-CSRFToken` header. Django still creates, rotates, stores,
+and checks the token.
+
+If Django stores the token in the session, or makes the CSRF cookie
+`HttpOnly`, browser code cannot read the cookie. Render the token into the
+page instead, and tell Citry where to find it. Citry templates do not
+understand Django's `{% csrf_token %}` tag, so pass the value of Django's
+`get_token(request)` to the component as a `csrf_token` input:
+
+
+```citry-html
+<input
+  type="hidden"
+  name="csrfmiddlewaretoken"
+  c-value="csrf_token"
+>
+```
+
+
+
+```javascript
+Citry.events.configure({
+  csrf: {
+    token: () => document.querySelector(
+      '[name="csrfmiddlewaretoken"]',
+    ).value,
+  },
+});
+```
+
+
+The same hidden input also works for a normal HTML form post.
+
+### Tokens inside forms { #csrf-tokens-in-forms }
+
+The hidden input can also sit inside a form that calls a server event with
+`@c-submit`. Such a form sends every named control, so the token arrives as
+one more field. Citry removes the `csrfmiddlewaretoken` field before it
+checks the event's data class, so the handler never sees it and the call
+is not rejected for an unknown field. If your framework names its token
+field differently, list the names Citry should remove:
+
+
+```python
+citry = Citry(
+    extensions_defaults={
+        "events": {"_csrf_field_names": ["authenticity_token"]},
+    },
+)
+```
+
+
+The list replaces the default, so keep `"csrfmiddlewaretoken"` in it if
+you still use Django's input. A single string instead of a list fails when
+`Citry(...)` is created. A data class that declares a field with one of
+these names still receives it.
+
+### Use your own token { #other-frameworks }
+
+FastAPI, Starlette, Flask, and plain ASGI or WSGI apps have no standard
+CSRF token. If your app uses one, check it with a function set as `_csrf`
+on `Events` for the whole component, or with `@event(csrf=...)` for one
+handler. The function receives the request and raises `EventError` to
+reject the call:
+
+
+```citry
+from citry.ext.events import EventError, event
+
+
+def check_csrf(request):
+    expected = current_csrf_token(request)
+    if request.headers.get("x-csrf-token") != expected:
+        raise EventError(
+            "The call failed the CSRF check; reload and try again.",
+            status=403,
+        )
+
+
+class Profile(Component):
+    class Events:
+        _csrf = check_csrf
+
+        def save(self, data: ProfileIn):
+            update_profile(data)
+
+        @event(csrf=False)
+        def token_authenticated_callback(self, request):
+            verify_bearer_token(request)
+```
+
+
+Then tell the browser where to read the token and which header to send it
+in, with [`Citry.events.configure`](/v/0.7.0/reference/browser-apis/#citry-events-configure). Call it before
+the page makes its first event call:
+
+
+```javascript
+Citry.events.configure({
+  csrf: {
+    cookie: "app_csrf",
+    header: "X-CSRF-Token",
+  },
+});
+```
+
+
+`csrf=False` turns off only this token function. The checks Citry always
+makes still run, and so does your framework's own CSRF protection: it does
+not exempt a Django route from `CsrfViewMiddleware`.
+
+### `GET` handlers skip CSRF
+
+`GET` event handlers skip every CSRF check, because a `GET` must only read
+data. Citry makes sure the call uses the declared HTTP method, but it cannot
+tell whether your Python code changes anything. Declare a handler as `GET`
+only when calling it twice has the same effect as calling it once.
+
+## Limit request sizes { #limit-event-request-sizes }
+
+Anyone can post to Citry's event endpoints, so Citry stops reading a
+request that is too large and rejects it before it parses it:
+
+| Setting | What it limits | Default |
+| --- | --- | --- |
+| `_max_body_bytes` | the request body, in bytes | 1 MiB (1,048,576) |
+| `_max_form_fields` | the fields of one form post (the kind a plain HTML form sends) | 1,000 |
+
+One request also carries at most 16 event calls, and more fail the same
+way. You cannot change that limit.
+
+Citry also refuses request JSON that nests arrays and objects more than
+200 levels deep, before parsing it: an Events body gets a 400 error, a
+State token gets the 403 for a malformed token, and an i18n request gets
+a 400. Citry also refuses to make a State token from State nested that
+deep. You cannot change this limit.
+
+Citry stops reading a body once it passes `_max_body_bytes`, even when the
+request's `Content-Length` is wrong or missing. A request over either
+limit fails with the error code `payload_too_large`: an event call made
+from the page fails with that code, and a plain HTML form post gets HTTP
+status 413. Both limits apply to the whole app, so set them in
+`Citry(extensions_defaults=...)`, not on a component's `Events` class:
+
+
+```python
+citry = Citry(
+    extensions_defaults={
+        "events": {
+            "_max_body_bytes": 4 * 1024 * 1024,
+            "_max_form_fields": 2000,
+        },
+    },
+)
+```
+
+
+`Citry(...)` raises `ValueError` when either value is not a positive whole
+number, and setting either one on a component's `Events` class raises
+`ValueError` when the class is defined.
+
+On Django, Citry reads event requests itself, so `_max_body_bytes`
+applies to them in place of `DATA_UPLOAD_MAX_MEMORY_SIZE`. A few setups
+read the body before Citry sees it:
+
+- **Django middleware.** A form post or upload that middleware such as
+  `CsrfViewMiddleware` parses first has already been read whole; Citry
+  still rejects it when its declared size is over `_max_body_bytes`.
+- **Servers and frameworks that buffer the body.** Some read the whole
+  body before Citry sees it (Django's ASGI handler writes it to a
+  temporary file), so also set a limit in your server or proxy.
+- **Chunked bodies on WSGI.** On a WSGI server that does not mark where a
+  chunked body ends, Citry reads such a body as empty.
+
+Citry never reads the body of a GET, HEAD or OPTIONS request, on any
+host. A server that buffers bodies (see above) may still read one, so
+keep a limit in the server or proxy.
+
+Citry does not accept file uploads by default. If you add your own code
+that turns the request into
+[`UploadedFile`](/v/0.7.0/reference/events/#citry-ext-events-uploadedfile) values, the files come
+from the same body, so `_max_body_bytes` limits them too.
+
+## Sandbox template code { #sandbox-python-template-expressions }
+
+Anything inside `{{ }}` or a `c-*` attribute is a Python expression. Citry
+runs it in a sandbox that refuses the known ways an expression could reach
+dangerous parts of Python. The sandbox is on by default and modeled on
+Jinja's sandbox.
+
+The sandbox is a second layer of protection, not a promise that a template
+from a stranger is safe to run. It checks the names and calls that the
+expression text writes. It does not check what the objects you pass in can
+do. Two things decide how much you can trust a template with:
+
+- **Who writes the template text.** Only the template author writes
+  expressions. Never build a template, or any part of an expression, from
+  request data or from text a site visitor saved. Pass that data to the
+  template as values in the render context, where an expression can read
+  them.
+- **What you put in the render context.** An expression can read every
+  attribute and call every method of a context object whose name does not
+  start with `_`. If you pass a settings object, a template can read
+  `settings.SECRET_KEY`. If you pass a user model, a template can call its
+  public methods. Pass only what every template author may use.
+
+### What is blocked { #what-the-sandbox-blocks }
+
+- **Names starting with `_`.** An attribute such as `obj.__class__` or
+  `obj._cache`, a variable such as `_x`, and a string dict key such as
+  `data['_key']` are all blocked. This closes the usual path from an
+  object to Python's globals and builtins.
+- **Dangerous functions.** A list of builtins such as `eval`, `exec`,
+  `__import__`, `getattr`, `setattr`, and `open` is blocked. The check
+  compares the function itself, not its name, so passing `eval` into the
+  context under another name, or wrapped in `functools.partial`, does not
+  get around it.
+- **Formatting methods that follow paths.** A format string such as
+  `'{0.name}'` reads attributes by name, and it skips the checks above. So
+  `format` and `format_map` are blocked on every kind of string: `str`,
+  subclasses of `str` such as `Markup`, and `collections.UserString`. Every
+  method of a `string.Formatter` is blocked, and so is building an
+  `operator.attrgetter` or `operator.methodcaller`. Use an f-string
+  instead.
+- **Statements.** Assignments, `del`, `import`, `raise`, `assert`,
+  `async`/`await`, and `yield` are not expressions.
+- **Names the sandbox uses itself.** The sandbox's own helpers have names
+  that start with `_sx_`. A lambda parameter or loop variable with that
+  prefix, including a `<c-for>` loop variable, fails with `SyntaxError`,
+  because it could replace one of the sandbox's checks. Every other name
+  works, such as `source` in `<source c-for="source in sources">`.
+
+A statement fails with `SyntaxError` when Citry compiles the template. A
+blocked access fails with [`SecurityError`](/v/0.7.0/reference/rendering/#citry-securityerror) only when
+the expression runs:
+
+
+```python
+from citry import SecurityError
+from citry_core.safe_eval import safe_eval
+
+compiled = safe_eval("f('1+1')")
+try:
+    # eval is blocked even under another name
+    compiled({"f": eval})
+except SecurityError as e:
+    # The message starts with: Error in call: SecurityError:
+    # function '<built-in function eval>' is unsafe
+    print(e)
+```
+
+
+### Builtins are missing { #why-builtins-are-not-available }
+
+`{{ len(items) }}` fails with `KeyError: 'len'`. Expressions can use only
+the names in the render context, and Python builtins such as `len`, `str`,
+and `range` are not in it.
+
+Compute the value in `template_data`, which is ordinary Python, and pass
+the result to the template:
+
+
+```citry
+class Cart(Component):
+    def template_data(self, kwargs, slots):
+        return {"count": len(kwargs["items"])}
+
+    template = """
+      <p>{{ count }} items</p>
+    """
+```
+
+
+See [Expressions](/v/0.7.0/syntax/expressions/) for more.
+
+### What the sandbox misses { #what-the-sandbox-does-not-protect }
+
+The sandbox checks names. It does not know what your code does, and it is
+not guaranteed to block every way out:
+
+- **Your objects expose every public attribute and method.** An expression
+  can read any attribute and call any method of a context object whose name
+  does not start with `_`. A secret kept in a public attribute is readable.
+  A method that deletes data can be called. A database queryset in the
+  context lets a template filter it with any field lookup.
+- **Your functions can be called.** A function you put in the context is
+  allowed until you block it, as shown next.
+- **Helpers that call other functions or look up names from text run
+  without the checks.** The sandbox checks the calls and lookups that the
+  expression text writes. A function you put in the context that calls its
+  arguments (`map`, `functools.reduce`, the `key=` argument of `sorted`
+  or `list.sort`) or reads an attribute from a string (a `getattr`-style
+  helper, `inspect`, `importlib`, Django's `format_html`) does that work
+  unchecked. Do not put such helpers in the context.
+- **Dict keys that start with `_` are not hidden.** `data['_key']` is
+  blocked, but `data.get('_key')`, looping over `data`, and
+  `'%(_key)s' % data` read the same item.
+- **The blocked list covers known dangers.** It is a list of specific
+  functions and types, not a guarantee.
+- **Time and memory are not limited.** An expression can run as long
+  and use as much memory as the server process allows. To cap them, set
+  limits on the worker process that renders pages.
+
+Put only objects and functions in the render context that you are
+comfortable letting template authors use.
+
+### Block your functions { #marking-your-own-functions-unsafe }
+
+To stop templates from calling one of your functions, decorate it with
+`unsafe`. A method with the Django-style attribute `alters_data = True` is
+blocked the same way:
+
+
+```python
+from citry_core.safe_eval import unsafe
+
+@unsafe
+def delete_account(user):
+    ...
+```
+
+
+A template that calls `delete_account(...)` then fails with
+`SecurityError`.
+
+### Turn the sandbox off { #turning-the-sandbox-off }
+
+If every template on a [`Citry`](/v/0.7.0/reference/citry/#citry-citry) instance comes from a trusted
+source, you can turn the sandbox off with `sandbox_expressions=False`. This
+removes the access checks for that instance only:
+
+
+```python
+from citry import Citry
+
+app = Citry(sandbox_expressions=False)
+```
+
+
+A successful render gives the same output either way, and a walrus
+assignment (`:=`) still writes into the template's variables. On CPython,
+builtins are still missing, so only the blocked accesses behave
+differently. On PyPy, every builtin is available with the sandbox off,
+including `open` and `__import__`, so `{{ len(items) }}` renders there
+while CPython and the sandbox reject it. This does not change who you can
+trust: with the sandbox off, a template can already reach any Python
+object.
+
+## Keep secrets server-side { #keep-secrets-on-the-server }
+
+Visitors can read everything a component returns from `js_data()` or
+`css_data()`, and, with the default storage, its State: it ends up in the
+page or in files the page loads. Wrap an API key, token, or password in
+[`Secret`](/v/0.7.0/reference/rendering/#citry-secret) where you load it:
+
+
+```python
+import os
+
+from citry import Secret
+
+API_TOKEN = Secret(os.environ["API_TOKEN"])
+```
+
+
+Citry then refuses to send it to the browser: rendering fails with an
+error that names the component and the key. `citry check` reports
+such a `Secret` in `js_data()` before the page runs when it can see where
+the value comes from; see
+[Catch secrets early](/v/0.7.0/advanced/secrets/#check-for-secrets). Read the value on
+the server with `get_secret_value()` where you need it. In a template it
+shows as `***`.
+
+Citry detects only the values you wrap. A secret kept in a plain string
+is sent like any other text. See [Secrets](/v/0.7.0/advanced/secrets/) for a
+full example.
+
+## Keep debug logs off { #keep-debug-logs-off-in-production }
+
+When an event handler, or its guard, raises an unexpected exception, the
+call fails with status 500 and the browser gets the message "The event handler
+raised an unexpected error." With debug logs on, the message also
+includes the exception's type and text, such as
+`RuntimeError: connection to db-internal:5432 refused`. That text can
+reveal internal details to anyone who triggers the error.
+
+Citry adds the exception text when the `citry` logger's level is `DEBUG`
+or lower, including Citry's `TRACE` level (5). It makes no
+difference whether you set that level on the `citry` logger or it comes
+from the root logger, as with `logging.basicConfig(level=logging.DEBUG)`. Django's `DEBUG` setting
+and Flask's debug mode do not affect it. In production, set the `citry`
+logger to `INFO` or `WARNING`:
+
+
+```python
+import logging
+
+logging.getLogger("citry").setLevel(logging.INFO)
+```
+
+
+With debug logs on or off, Citry logs the full traceback on the server
+at `ERROR` level, and the browser never receives it.
+
+## Use a CSP nonce { #apply-a-request-csp-nonce-centrally }
+
+A Content Security Policy is a response header that tells the browser
+which scripts and styles it may run. A nonce is a random value, new for
+each response, that you list in the header and put on every trusted
+`<script>` and `<style>` tag. Injected markup does not know the nonce, so
+the browser refuses to run it.
+
+Generate the nonce, pass it to Citry when you serialize the page, and put
+the same value in the header:
+
+
+```python
+from secrets import token_urlsafe
+
+# 128 random bits, as the CSP specification recommends
+nonce = token_urlsafe(16)
+page = Page()
+serialized = page.render().serialize_result(csp_nonce=nonce)
+
+policy = (
+    "default-src 'self'; "
+    f"script-src 'self' 'nonce-{nonce}'; "
+    f"style-src 'self' 'nonce-{nonce}'"
+)
+```
+
+
+Your web framework sends `serialized.html` with `policy` as the
+`Content-Security-Policy` header. Citry checks that the nonce is valid CSP
+base64. You own the rest: how random and how fresh it is, the header, and
+every resource outside the Citry render. See the
+[CSP specification](https://www.w3.org/TR/CSP/#security-nonces).
+
+Citry puts the nonce on every structured
+[`Script`](/v/0.7.0/reference/dependencies/#citry-ext-dependencies-script) and
+[`Style`](/v/0.7.0/reference/dependencies/#citry-ext-dependencies-style), including external scripts and
+stylesheet links. It adds the nonce after dependency hooks have run. A
+dependency that already carries the same nonce is fine. A different or
+malformed nonce raises `ValueError`.
+
+Citry does not change the dependency objects, so you can serialize one
+render several times with different nonces.
+
+Your policy never needs `'unsafe-eval'` for Citry. Citry compiles Vue
+templates on the server, so the browser never evaluates directive strings,
+and you can write any JavaScript in Vue expressions. Under a CSP, Vue
+rebuilds the page in the browser instead of reusing the server HTML, so
+focus and text typed before Vue starts are lost; see
+[Replaced pages](/v/0.7.0/vue/server-rendering/#pages-vue-replaces-instead-of-adopting).
+
+Citry does not add the nonce to a `<script>` or `<style>` tag written
+directly in a template, so the browser blocks it. Move that code to
+`Component.js`, `Component.css`, or a structured
+[`Dependencies`](/v/0.7.0/reference/component/#citry-component-dependencies) entry.
+
+!!! warning "Cache the page and its header together"
+
+    When you cache a full response, cache its HTML and its CSP header as
+    one unit. Cached HTML served with a new header carries the wrong nonce,
+    and the browser blocks its scripts.
+
+### Nonces in fragments { #html-fragments }
+
+When an [HTML fragment](/v/0.7.0/advanced/html-fragments/) has components that use
+Vue or server events, serialize it with the nonce of the page that
+receives it:
+
+
+```python
+html = card.render().serialize(
+    deps_strategy="fragment",
+    csp_nonce=page_nonce,
+)
+```
+
+
+The fragment request is a new response, so your server must know the
+nonce of the page that sent it. For example, keep the nonce in the user's
+session when you render the page. A session holds one nonce, so when a
+user opens the app in a second tab, fragments sent to the first tab stop
+starting. Store the nonce per page if your users work in several tabs.
+
+A server event can return a [`Render`](/v/0.7.0/events/actions/) as an HTML
+fragment, to a client of your own that posts the event call and inserts
+the HTML it gets back. Citry serializes that fragment itself, so it needs
+the nonce of the page that sent the call. Set `_csp_nonce` to a function
+that takes the call's [`EventRequest`](/v/0.7.0/reference/events/#citry-ext-events-eventrequest) and
+returns that nonce, or `None` when the page has none:
+
+
+```python
+def page_nonce(request):
+    # On Django: the nonce your app kept when it rendered the page.
+    return request.native.session.get("csp_nonce")
+
+
+citry = Citry(
+    extensions_defaults={"events": {"_csp_nonce": page_nonce}},
+)
+```
+
+
+Citry calls the function once for each call it answers with such a
+fragment. `Citry(...)` raises `ValueError` when the setting is not a plain
+function (an `async def` is refused too), and setting it on a component's
+`Events` class raises `ValueError` when the class is defined. When the
+function raises, or returns something other than a valid nonce string or
+`None`, the call fails with the error code `handler_error`; an
+`EventError` it raises answers with its own status instead.
+
+Citry's own Vue runtime does not need the setting: it applies a server
+event's update to the app already on the page. A form or htmx post to a
+handler's own URL gets plain HTML without Vue, so the setting only adds
+the nonce to that HTML's inline styles.
+
+Citry's browser code reads the nonce on its own script tag when it loads.
+It starts a fragment only when the fragment carries that same nonce, so
+injected markup cannot start a fake fragment that loads its own scripts. A
+fragment without the nonce does not start, and the browser console shows
+an error. When a fragment starts, Citry puts the page's nonce on every
+script, inline style, and stylesheet link the fragment adds.
+
+Citry can check only a nonce that its own script tag carries. When that tag
+has none, for example under a hash-based policy, Citry starts every
+fragment in the page. Under `'strict-dynamic'`, the scripts such a fragment
+names then run too, so give pages that receive fragments a nonce policy.
+
+Under `security_csp="strict"`, a fragment does not load Citry's browser
+code, so insert it only into a page that already has it.
+
+### App data needs the nonce
+
+An interactive page sends its data, such as the rows of a table, as JSON in
+a script tag. Citry puts the nonce on that tag too. The browser does not
+need it there, but Citry's browser code does: it starts the page only from
+data that carries the same nonce as its own script, so injected markup
+cannot supply fake data.
+
+## Check output for CSP { #choose-a-csp-compatibility-mode }
+
+Once you send a CSP header, markup that the policy blocks fails silently in
+the browser. `security_csp` makes Citry find that markup when it
+serializes the page:
+
+
+```python
+from secrets import token_urlsafe
+
+app = Citry(security_csp="strict")
+
+nonce = token_urlsafe(16)
+page = Page()
+html = page.render().serialize(csp_nonce=nonce)
+```
+
+
+| Mode | What happens |
+|---|---|
+| `"off"` (default) | No check. |
+| `"warn"` | The output is unchanged, with one `RuntimeWarning` listing the problems. Use it while you roll out the policy. |
+| `"strict"` | Raises `ValueError` listing the problems instead of returning HTML. |
+
+The check scans the final HTML, after extensions have changed it. It
+reports:
+
+- `<script>` and `<style>` tags written directly in templates;
+- native event attributes such as `onclick`, in any letter case;
+- `javascript:` URLs.
+
+The URL check reads the attributes that hold a link: `href`, `src`,
+`action`, `formaction`, `xlink:href`, and `data` on `<object>`. An SVG
+`<animate>` or `<set>` whose `attributeName` is `href` counts too,
+because it can write its `to`, `from`, `by`, or `values` into the link
+while the page is open. For `values`, which is a list separated by `;`,
+any item that starts with `javascript:` is reported. The check decodes
+character references and skips the tabs and line breaks that browsers
+remove from a URL, so `java&#9;script:` is reported. It also reports a few
+spellings that Chromium and Firefox did not run when tested, such as
+`xlink:href` and `attributeName="HREF"`, in case another browser reads the
+name more loosely.
+
+Use a Vue binding such as `@click` instead of `onclick`, and move scripts
+and styles to `Component.js`, `Component.css`, or structured
+[`Dependencies`](/v/0.7.0/reference/component/#citry-component-dependencies).
+
+`"strict"` also raises:
+
+- `ValueError` when the output contains a script (inline or loaded by URL)
+  or an inline style, and you did not pass `csp_nonce`;
+- `TypeError` when a dependency is not a structured `Script` or `Style`.
+
+Citry's HTML checks refuse HTML that has a tag with more than 1,024
+attributes, more than 16 start tags of any one of `<html>`, `<head>` and
+`<body>`, more than 512 elements open at once (about 510 nested
+elements), or formatting tags such as `<b>` and `<i>` left open or
+misnested so often that the parser would copy more than 250,000 elements
+and attributes. No ordinary page comes close. Both output checks (`security_csp` and
+`security_javascript`) report such a page as one they could not read:
+the `"warn"` modes warn and still return the page, and the other modes
+raise `ValueError`. In an interactive component, `Markup` HTML or a
+`<c-raw>` block over a limit raises `ValueError`. You cannot change these
+limits. If a page spreads a dict onto an element with `c-bind`, limit how
+many keys the dict can hold when its keys come from request data.
+
+You can pass `security_csp` to `serialize()` to override the mode for one
+render. Any other value raises `ValueError`, both in `Citry(...)` and in
+`serialize()`.
+
+With `"warn"` or `"strict"`, the editor and `citry check` report these
+problems where a template writes them directly, such as
+`onclick="..."`; see
+[Strict CSP problems](/v/0.7.0/ide/template-linting/#find-csp-problems). Both
+need your app loaded, so `citry check --static` reports none of them.
+Values from Citry bindings and the nonce checks above appear only when
+Citry serializes a page, so render the pages you serve with `"warn"`
+before you switch to `"strict"`. Neither check sees what Vue builds in
+the browser from a binding such as `:href`.
+
+Citry checks only what it renders. Your app owns the response header, the
+nonce, layouts, third-party resources, and every other CSP directive.
+
+## Limit page JavaScript { #choose-how-much-javascript-citry-may-deliver }
+
+Some output must not run JavaScript at all, such as an HTML email or a
+static export. `security_javascript` controls how much JavaScript Citry
+sends. It is separate from CSP. Set it on the app, or override it for one
+serialization:
+
+
+```python
+app = Citry(security_javascript="forbid")
+
+page = Page()
+email_html = page.render().serialize(
+    security_javascript="omit",
+)
+```
+
+
+| Mode | What happens |
+|---|---|
+| `"allow"` (default) | Normal interactive output. |
+| `"warn"` | The same output, with one `RuntimeWarning` listing what needs JavaScript in the browser. |
+| `"omit"` | Leaves out the scripts Citry manages: the Vue runtime, the Events client, component JavaScript, and the data that starts Vue. The HTML and CSS stay. |
+| `"forbid"` | Raises `ValueError` when the rendered output needs JavaScript, even when `deps_strategy="simple"` or `"ignore"` would hide the script tags. |
+
+Any other value raises `ValueError`.
+
+Citry looks for these when it decides what needs JavaScript: Vue and Events
+bindings that are in use, executable scripts, native `on*` attributes,
+`javascript:` URLs (including the ones an SVG `<animate>` or `<set>` writes
+into a link, as [described for
+`security_csp`](#choose-a-csp-compatibility-mode)), and HTML that runs
+scripts through `iframe srcdoc` or a data URL. Citry checks every data
+URL the page loads or opens as a document: in an `iframe`, `frame`,
+`object`, or `embed`, in a link or form (`href`, `xlink:href`, `action`,
+`formaction`, and the value of an SVG animation of a link, since any link
+can open in a frame), and in a `<meta http-equiv="refresh">`. It reads an HTML data URL, and counts any
+other type as needing JavaScript, with or without a script, because the
+browser runs the scripts of an SVG or other XML document. A data URL of
+plain text, CSS, CSV, JSON, an image, audio, video, a font, a PDF, or
+`application/octet-stream` does not count. An HTML data URL counts when
+it has a script or when Citry cannot read it, such as invalid base64 or
+UTF-16. A download link (`<a download>`) counts too, so give a file you
+offer for download one of those types, such as
+`application/octet-stream`, or serve it from a URL. It checks dependencies
+and HTML after extensions have changed them. An `Events` method that no
+template calls does not count.
+
+### What `"omit"` leaves
+
+`"omit"` is not an HTML sanitizer. It leaves Vue attributes such as
+`@click` in the HTML, where the browser ignores them. It also leaves
+`<script>` tags written in templates, native event attributes, and
+`javascript:` URLs unchanged, and warns about them. Use `"forbid"` when
+these must make serialization fail.
+
+`"omit"` also warns about parts that will not work without JavaScript,
+such as Vue-only conditions and buttons that only call a handler. Check
+the page with JavaScript off, and use plain links or forms for the
+actions that matter.
+
+### What `"omit"` does to CSS
+
+CSS stays in every mode. An `"omit"` fragment includes its CSS directly,
+so it needs no Citry route and no Citry runtime on the page.
+`deps_strategy="ignore"` still leaves out collected CSS too.
+
+When a structured stylesheet or a data-only script carries an event
+attribute such as `onload`, `"omit"` removes that attribute and keeps the CSS or data. It
+removes a dependency that renders its own HTML, because Citry cannot tell
+what tag it creates.
+
+With `security_csp="strict"`, `"omit"` and `"forbid"` still report script
+markup written in templates, and still put the nonce on the inline styles
+they keep.
+
+## Pin scripts with SRI { #pin-citry-managed-scripts-with-sri }
+
+Subresource Integrity (SRI) makes the browser run a script only when its
+bytes match a hash. With `security_script_integrity="citry"`, Citry
+computes SHA-384 hashes for the scripts it outputs and gives you the
+hashes to put in your CSP header:
+
+
+```python
+app = Citry(security_script_integrity="citry")
+
+page = Page()
+serialized = page.render().serialize_result()
+html = serialized.html
+script_sources = " ".join(
+    serialized.security.csp_script_hashes,
+)
+```
+
+
+Citry adds an `integrity` attribute to external scripts it serves, and
+hashes each inline script in the exact form it is sent. `csp_script_hashes` lists the
+hashes, quoted, ready to add to `script-src`.
+`serialized.security.scripts` holds one record per script. Citry does not
+build the whole CSP header, because your app also owns layouts, analytics,
+and every resource outside the render.
+
+The option works together with `security_csp="strict"` but does not turn
+it on. The default is `"off"`. Any value other than `"off"` or `"citry"`
+raises `ValueError`, both in `Citry(...)` and in `serialize()`.
+
+### Hash each response
+
+The short script that starts an interactive page names an app id that is
+random for each response. Compute the hashes for each response, as for any
+page with inline scripts.
+
+The page's data, such as the rows of a table, is JSON that the browser
+never runs. `csp_script_hashes` leaves it out, because your policy does not
+need to allow it. `serialized.security.scripts` still records it with its
+hash.
+
+### Third-party scripts
+
+For a script from another site, put its published `integrity` value on the
+[`Script`](/v/0.7.0/reference/dependencies/#citry-ext-dependencies-script). Citry checks the value's format
+and keeps it, but reports it as unverified: it never downloads the script.
+Set `crossorigin` on that `Script` yourself, because the browser checks the
+hash only when the other site sends CORS headers.
+
+## Keep the CORS header { #keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files }
+
+**Symptom:** the page shows its server-rendered HTML, but interactive
+components never start, and the browser console shows a CORS or
+Subresource Integrity error.
+
+Citry always adds `integrity` to the scripts and stylesheets it serves for
+interactive components, even without the option above. It loads them with
+`crossorigin="anonymous"`, and its file routes answer with
+`Access-Control-Allow-Origin: *`. These routes are `/citry/citry.js`, the
+component JS and CSS, and the compiled component code.
+
+A same-origin page needs no CORS header. Two setups make these requests
+cross-origin:
+
+- **A sandboxed iframe.** Inside `<iframe sandbox="allow-scripts">`, every
+  request counts as cross-origin.
+- **A CDN or HTML optimizer** that rewrites Citry's file URLs to another
+  host.
+
+In both setups, the browser refuses a file whose response lacks
+`Access-Control-Allow-Origin`. Configure the proxy or CDN to pass the
+header through for Citry's file URLs, or to add it.
+
+The header is safe on these routes: they return the same public files to
+every caller and never read cookies. Citry's event, message, and preview
+routes do not send it.

@@ -1,0 +1,21 @@
+
+:where(.progress-glance) {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 38rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#9fc5d4, #406572);
+  border-radius: 0.85rem;
+  background: light-dark(#f0fbff, #11252c);
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.progress-glance h2, .progress-glance p) {
+  margin: 0;
+}
+
+:where(.progress-glance > p, .progress-glance [data-citry-ui-part="row"] p) {
+  color: light-dark(#416a78, #a7cbd7);
+  font-size: 0.78rem;
+}

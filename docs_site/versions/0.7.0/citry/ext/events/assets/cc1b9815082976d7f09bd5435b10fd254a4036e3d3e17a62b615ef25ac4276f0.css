@@ -1,0 +1,22 @@
+
+:where(.ocean-glance) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  max-width: 54rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.ocean-glance > *) {
+  padding: 1rem;
+  border: 1px solid light-dark(#9ccbd3, #315f6a);
+  border-radius: 0.875rem;
+  background: light-dark(#f1fbfc, #10272d);
+}
+
+:where(.ocean-glance__deep) {
+  --cui-native-select-background: #142f36;
+  --cui-native-select-border-color: #57828c;
+  --cui-native-select-focus-color: #7ddbea;
+}

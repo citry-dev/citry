@@ -1,0 +1,16 @@
+
+:where(.command-palette-disabled) {
+  display: grid;
+  gap: 0.75rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.command-palette-disabled h2) { margin: 0; }
+:where(.command-palette-disabled [role="group"]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+@media (forced-colors: active) {
+  :where(.command-palette-disabled output) { border: 1px solid CanvasText; }
+}

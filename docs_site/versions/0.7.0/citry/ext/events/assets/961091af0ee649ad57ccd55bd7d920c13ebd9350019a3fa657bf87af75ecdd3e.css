@@ -1,0 +1,26 @@
+
+:where(.moon-labels) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  min-block-size: 10rem;
+  padding-block: 2rem;
+}
+
+:where(.moon-link) {
+  color: light-dark(#175cd3, #84adff);
+  font-weight: 700;
+}
+
+:where(.moon-icon) {
+  display: grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+  border-radius: 50%;
+  background: Canvas;
+  color: CanvasText;
+  font-size: 1.5rem;
+}

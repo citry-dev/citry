@@ -1,0 +1,42 @@
+
+:where(.button-glance) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  max-width: 64rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.button-glance__card) {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#bbd6c5, #355e48);
+  border-radius: 0.875rem;
+  background: Canvas;
+  box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 10%);
+}
+
+:where(.button-glance__card header) {
+  margin-block-end: 1rem;
+}
+
+:where(.button-glance__card h2, .button-glance__card p) {
+  margin-block: 0;
+}
+
+:where(.button-glance__card header p) {
+  margin-block-end: 0.35rem;
+  color: light-dark(#19704a, #74d9a3);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.button-glance__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}

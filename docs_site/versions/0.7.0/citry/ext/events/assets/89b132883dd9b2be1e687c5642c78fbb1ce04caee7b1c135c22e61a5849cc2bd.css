@@ -1,0 +1,37 @@
+
+:where(.shore-form-card) {
+  max-width: 38rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#b9d8df, #315967);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.shore-form-card header) {
+  margin-block-end: 1rem;
+}
+
+:where(.shore-form-card h2, .shore-form-card p) {
+  margin-block: 0;
+}
+
+:where(.shore-form-card header p) {
+  color: light-dark(#08758a, #69d4e8);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.shore-form-card__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.shore-form-card__actions button) {
+  min-height: 2.5rem;
+  padding-inline: 0.875rem;
+}

@@ -1,0 +1,3 @@
+
+:where(.nested-disclosure-demo) { inline-size: min(100%, 20rem); }
+:where(.nested-disclosure-demo p) { overflow-wrap: anywhere; }

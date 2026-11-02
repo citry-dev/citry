@@ -1,0 +1,17 @@
+
+:where(.archive-disabled-demo) {
+  display: grid;
+  gap: 0.75rem;
+  min-block-size: 18rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.archive-disabled-demo fieldset) {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  border-radius: 0.75rem;
+}

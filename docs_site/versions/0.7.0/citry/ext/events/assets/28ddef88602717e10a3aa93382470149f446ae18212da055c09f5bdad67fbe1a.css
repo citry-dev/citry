@@ -1,0 +1,11 @@
+
+:where(.progress-values) {
+  max-inline-size: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.progress-values > div) {
+  display: grid;
+  gap: 0.4rem;
+}

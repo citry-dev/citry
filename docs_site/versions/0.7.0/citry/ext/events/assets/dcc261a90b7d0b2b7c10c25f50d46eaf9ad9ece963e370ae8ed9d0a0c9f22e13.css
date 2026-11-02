@@ -1,0 +1,3 @@
+
+:where(.brand-calendar){--cui-calendar-background:#fff8eb;--cui-calendar-border-color:#9a6700;--cui-calendar-focus-color:#6f42c1;--cui-calendar-selected-background:#7c3aed;--cui-calendar-selected-foreground:white;--cui-calendar-today-color:#9a3412;--cui-calendar-radius:1rem}
+@media (prefers-color-scheme:dark){:where(.brand-calendar){--cui-calendar-background:#211a10;--cui-calendar-foreground:#fff7e6}}

@@ -1,0 +1,7 @@
+
+:where(.brand-splitter) {
+  --cui-splitter-radius: 1.25rem;
+  --cui-splitter-handle-active-color: rebeccapurple;
+  --cui-splitter-background: color-mix(in srgb, rebeccapurple 7%, Canvas);
+}
+:where(.brand-splitter [data-citry-ui-part="panel"]) { overflow-wrap: anywhere; }

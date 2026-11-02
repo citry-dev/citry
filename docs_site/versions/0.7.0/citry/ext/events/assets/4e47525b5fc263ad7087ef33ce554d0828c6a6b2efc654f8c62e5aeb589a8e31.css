@@ -1,0 +1,19 @@
+
+:where(.divider-insets) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 38rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.divider-insets > div) {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border-inline: 1px dashed light-dark(#94a3b8, #64748b);
+}
+
+:where(.divider-insets span) {
+  font-size: 0.75rem;
+}

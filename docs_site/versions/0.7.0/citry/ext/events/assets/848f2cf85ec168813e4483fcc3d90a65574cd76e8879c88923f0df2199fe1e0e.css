@@ -1,0 +1,38 @@
+
+:where(.container-sizes) {
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.container-sizes h2) {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+:where(.container-sizes__sample) {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block: 0.5rem;
+  padding-block: 0.65rem;
+  border: 1px solid light-dark(#cbc7bb, #5c5952);
+  border-radius: 0.45rem;
+  font-size: 0.74rem;
+}
+
+:where(.container-sizes__sample span) {
+  color: GrayText;
+  text-align: end;
+}
+
+:where(.container-sizes__sample--sm) {
+  border-inline-start: 0.3rem solid #b56b3f;
+}
+
+:where(.container-sizes__sample--md) {
+  border-inline-start: 0.3rem solid #4c7a6a;
+}
+
+:where(.container-sizes__sample--fluid) {
+  border-inline-start: 0.3rem solid #596fb1;
+}

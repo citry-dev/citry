@@ -1,0 +1,14 @@
+
+:where(.command-palette-controlled) {
+  display: grid;
+  gap: 0.75rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.command-palette-controlled h2) { margin: 0; }
+:where(.command-palette-controlled [role="group"]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  align-items: center;
+}

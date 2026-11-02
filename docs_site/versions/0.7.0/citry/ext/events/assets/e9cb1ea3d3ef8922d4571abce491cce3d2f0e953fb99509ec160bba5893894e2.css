@@ -1,0 +1,25 @@
+
+:where(.tags-input-keyboard) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.tags-input-keyboard article) {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  border-radius: 0.75rem;
+}
+
+:where(.tags-input-keyboard h3, .tags-input-keyboard p) {
+  margin: 0;
+}
+
+:where(.tags-input-keyboard output) {
+  grid-column: 1 / -1;
+}

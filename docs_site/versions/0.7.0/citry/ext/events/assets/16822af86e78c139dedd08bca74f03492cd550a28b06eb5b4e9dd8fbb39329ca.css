@@ -1,0 +1,7 @@
+
+:where(.brand-tree) {
+  --cui-tree-indent: 1.75rem;
+  --cui-tree-radius: 1rem;
+  --cui-tree-selected-background: rebeccapurple;
+  --cui-tree-selected-color: white;
+}

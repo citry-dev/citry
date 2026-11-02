@@ -1,0 +1,6 @@
+
+:where(.skeleton-text) {
+  display: grid;
+  max-inline-size: 30rem;
+  gap: 1rem;
+}

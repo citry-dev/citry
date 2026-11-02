@@ -1,0 +1,4 @@
+
+:where([data-citry-ui-part="item"]) { display:flex;align-items:center;padding-inline:1rem; }
+:where(label) { display:inline-flex;gap:0.5rem;margin-inline-end:1rem; }
+:where(output) { display:block;margin-block:0.5rem; }

@@ -1,0 +1,16 @@
+
+:where(.image-fit-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-fit-grid article) { display: grid; gap: 0.5rem; }
+:where(.image-fit-grid h3) { margin: 0; }
+:where(.image-fit-grid__frame) {
+  inline-size: 100%;
+  --cui-image-aspect-ratio: 4 / 3;
+  --cui-image-background: light-dark(#e7e5e4, #1c1917);
+}
+:where(.image-fit-grid__square) { --cui-image-aspect-ratio: 1 / 1; }

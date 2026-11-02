@@ -1,0 +1,21 @@
+
+:where(.orbit-editor) {
+  min-block-size: 15rem;
+  padding-block: 3rem;
+}
+
+:where(#orbit-form) {
+  display: grid;
+  gap: 0.5rem;
+}
+
+:where(#orbit-form input, #orbit-form textarea) {
+  box-sizing: border-box;
+  inline-size: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  border-radius: 0.5rem;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+}

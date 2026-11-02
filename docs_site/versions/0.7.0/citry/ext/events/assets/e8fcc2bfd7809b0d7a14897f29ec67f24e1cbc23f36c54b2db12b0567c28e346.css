@@ -1,0 +1,18 @@
+
+:where(.tags-input-fields) {
+  display: grid;
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.tags-input-fields__controls, .tags-input-fields__fieldsets) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.tags-input-fields fieldset) {
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+}

@@ -1,0 +1,23 @@
+
+:where(.card-basics) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  max-width: 62rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.card-basics h2, .card-basics p) {
+  margin: 0;
+}
+
+:where(.card-basics h2) {
+  font-size: 1rem;
+}
+
+:where(.card-basics p) {
+  margin-block-start: 0.25rem;
+  color: light-dark(#6b6257, #cfc5b8);
+  font-size: 0.82rem;
+}

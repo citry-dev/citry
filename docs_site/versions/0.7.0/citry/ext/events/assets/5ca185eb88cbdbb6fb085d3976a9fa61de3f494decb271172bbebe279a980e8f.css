@@ -1,0 +1,6 @@
+
+:where(.formatted-tooltip) {
+  display: grid;
+  place-items: center;
+  min-block-size: 12rem;
+}

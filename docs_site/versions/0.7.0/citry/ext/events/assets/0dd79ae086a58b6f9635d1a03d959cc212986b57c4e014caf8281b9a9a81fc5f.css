@@ -1,0 +1,10 @@
+
+:where(.skeleton-list) {
+  display: grid;
+  max-inline-size: 30rem;
+  gap: 1rem;
+}
+
+:where(.skeleton-list [data-citry-ui-part="row"] > :nth-child(2)) {
+  flex: 1 1 auto;
+}
