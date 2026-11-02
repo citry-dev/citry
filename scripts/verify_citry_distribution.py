@@ -65,8 +65,10 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # main at f67bb05a5. #455 alone used up the previous 19 KB of headroom, so
 # this cap leaves about 45 KB above that, as a backstop rather than a tight
 # budget. A sizeable addition should still raise the cap on purpose rather
-# than use up the headroom unnoticed.
-MAX_WHEEL_BYTES: Final = 1_536 * 1024
+# than use up the headroom unnoticed. The 0.7.0 output checks and sandbox
+# work put the CI wheel at 1,571,459 bytes at 03c4db7af, 1.4 KB under the
+# old 1,536 KiB cap, so the cap moves to 1,792 KiB to restore that margin.
+MAX_WHEEL_BYTES: Final = 1_792 * 1024
 
 
 def _citry_core_version() -> str:

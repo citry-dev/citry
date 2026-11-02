@@ -34,7 +34,8 @@ if TYPE_CHECKING:
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry_ui"
 QUALIFIER: Final = PACKAGE_ROOT / "citry_ui" / "quality" / "qualify_wheel.py"
-MAX_SDIST_BYTES: Final = 768 * 1024
+# The 0.4.0 sdist is about 778 KiB; 1 MiB leaves room for normal growth.
+MAX_SDIST_BYTES: Final = 1024 * 1024
 EXPECTED_REQUIRES_DIST: Final = {"citry>=0.7.0"}
 
 
