@@ -536,6 +536,10 @@ class CNativeSelect(LibraryComponent):
       // Page markup can hide a document's or form's members behind named elements. The core runtime's helper
       // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
 
       $component({
         props: {
@@ -581,7 +585,7 @@ class CNativeSelect(LibraryComponent):
           const optionEnabled = (option) => Boolean(
             option
               && !option.disabled
-              && !(option.parentElement instanceof HTMLOptGroupElement && option.parentElement.disabled)
+              && !(parentElementOf(option) instanceof HTMLOptGroupElement && parentElementOf(option).disabled)
           );
           const describeValue = (value) => {
             try {

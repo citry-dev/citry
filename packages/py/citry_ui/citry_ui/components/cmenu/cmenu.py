@@ -911,6 +911,13 @@ class CMenu(LibraryComponent):
       // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
       // reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode, parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+      const parentNodeOf = (node) => nodeParentNode.call(node);
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
       const hideNativePopover = (element) => {
         if (!element?.matches?.(":popover-open")) return;
         try {
@@ -1282,8 +1289,8 @@ class CMenu(LibraryComponent):
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
               // Step out of a shadow root to its host; a document has no host.
-              const boxRoot = box.getRootNode();
-              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? builtIn(boxRoot).host : null);
+              const boxRoot = rootNodeOf(box);
+              const next = parentElementOf(box) ?? (boxRoot instanceof ShadowRoot ? builtIn(boxRoot).host : null);
               if (!next) {
                 break;
               }
@@ -1340,7 +1347,7 @@ class CMenu(LibraryComponent):
           const writeOwnTriggerDisabled = (value) => {
             // Without an observer on the trigger's root no record will arrive,
             // and a queued value would later be matched against an author write.
-            if (recordsAuthorDisabled && anchoredLayerRuntime.menuDisabledObservers?.get(trigger.getRootNode())) {
+            if (recordsAuthorDisabled && anchoredLayerRuntime.menuDisabledObservers?.get(rootNodeOf(trigger))) {
               ownDisabledWrites.push(value);
             }
             trigger.disabled = value;
@@ -1551,7 +1558,7 @@ class CMenu(LibraryComponent):
           // reader who scrolled away back to the menu on every refocus.
           const revealInSurface = (element, menuSurface) => {
             if (!menuSurface?.contains(element)) return;
-            for (let box = element.parentElement; box; box = box === menuSurface ? null : box.parentElement) {
+            for (let box = parentElementOf(element); box; box = box === menuSurface ? null : parentElementOf(box)) {
               const style = getComputedStyle(box);
               // Measured per box, since scrolling an inner box moves the
               // item; `client*` is the area inside the border and scrollbar.
@@ -1673,10 +1680,10 @@ class CMenu(LibraryComponent):
             }
           };
           const composedParent = (node) => {
-            if (node?.parentNode) {
-              return node.parentNode;
+            if (node && parentNodeOf(node)) {
+              return parentNodeOf(node);
             }
-            const root = node?.getRootNode?.();
+            const root = node instanceof Node ? rootNodeOf(node) : null;
             return root instanceof ShadowRoot ? builtIn(root).host : null;
           };
           const inheritedLanguage = (element) => {
@@ -3046,7 +3053,7 @@ class CMenu(LibraryComponent):
           };
           const registerNativeDisabled = () => {
             anchoredLayerRuntime.menuDisabledObservers ??= new WeakMap();
-            const rootNode = disabledElement.getRootNode();
+            const rootNode = rootNodeOf(disabledElement);
             let manager = anchoredLayerRuntime.menuDisabledObservers.get(rootNode);
             if (!manager) {
               const entries = new Map();
@@ -3094,7 +3101,7 @@ class CMenu(LibraryComponent):
           let nativeDisabledRoot = null;
           let unregisterNativeDisabled = () => {};
           refreshNativeDisabledObserver = () => {
-            const nextRoot = disabledElement.getRootNode();
+            const nextRoot = rootNodeOf(disabledElement);
             if (nextRoot === nativeDisabledRoot) {
               return;
             }
@@ -5247,6 +5254,9 @@ class CMenuSubmenu(LibraryComponent):
       // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
       // reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode, parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 
       $component({
         props: {
@@ -5531,7 +5541,7 @@ class CMenuSubmenu(LibraryComponent):
                 return;
               }
               const start = { x: event.clientX, y: event.clientY };
-              const targetRoot = surface.getRootNode();
+              const targetRoot = rootNodeOf(surface);
               const onMove = (moveEvent) => {
                 if (moveEvent.pointerType !== event.pointerType) {
                   cancelIntent();

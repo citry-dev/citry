@@ -148,10 +148,16 @@ export function installFragmentManager(
   };
   const scan = (node: Node): void => {
     if (!(node instanceof Element)) return;
-    if (node.matches('script[type="application/json"][data-citry-vue-fragment]')) process(node as HTMLScriptElement);
-    node
-      .querySelectorAll<HTMLScriptElement>('script[type="application/json"][data-citry-vue-fragment]')
-      .forEach(process);
+    // The added node can be a form whose field hides `matches` or `querySelectorAll`, so call the
+    // built-in methods.
+    if (Element.prototype.matches.call(node, 'script[type="application/json"][data-citry-vue-fragment]'))
+      process(node as HTMLScriptElement);
+    (
+      Element.prototype.querySelectorAll.call(
+        node,
+        'script[type="application/json"][data-citry-vue-fragment]',
+      ) as NodeListOf<HTMLScriptElement>
+    ).forEach(process);
   };
   let connectivityQueued = false;
   new MutationObserver((records) => {

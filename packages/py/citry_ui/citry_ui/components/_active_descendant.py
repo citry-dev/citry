@@ -6,6 +6,9 @@ ACTIVE_DESCENDANT_RUNTIME_KEY = "citry-ui:active-descendant-runtime"
 ACTIVE_DESCENDANT_RUNTIME_GENERATION = 1
 
 ACTIVE_DESCENDANT_RUNTIME_JS = r"""
+  // A form's named field can hide the form's own getRootNode, so read them from
+  // Node.prototype.
+  const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
   (() => {
     const key = Symbol.for("citry-ui:active-descendant-runtime");
     const installed = globalThis[key];
@@ -123,7 +126,7 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
           if (
             !(option instanceof HTMLElement)
             || !option.isConnected
-            || option.getRootNode() !== listbox.getRootNode()
+            || rootNodeOf(option) !== rootNodeOf(listbox)
             || !listbox.contains(option)
           ) continue;
           const active = open && !unavailable && !item.disabled && item.value === activeValue;

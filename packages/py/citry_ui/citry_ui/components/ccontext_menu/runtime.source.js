@@ -1,6 +1,10 @@
 
       // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement or getRootNode, so read them from Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
       // A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
       const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
       const menuKey = Symbol.for("citry-ui:menu-root-runtime"),
@@ -37,7 +41,7 @@
             active = !0;
           const entry = { notify: callback };
           const attach = () => {
-            ((scope = root.getRootNode()), (manager = mutationScopes.get(scope)));
+            ((scope = rootNodeOf(root)), (manager = mutationScopes.get(scope)));
             if (!manager) {
               const entries = new Map(),
                 observer = new MutationObserver((allRecords) => {
@@ -91,7 +95,7 @@
           attach();
           return {
             refresh() {
-              if (active && root.getRootNode() !== scope) (detach(), attach());
+              if (active && rootNodeOf(root) !== scope) (detach(), attach());
             },
             cleanup() {
               ((active = !1), detach());
@@ -209,7 +213,7 @@
           const T = new Set(),
             M = new Set(),
             tt = new Set();
-          let z = i.getRootNode();
+          let z = rootNodeOf(i);
           const P = i.ownerDocument,
             q = builtIn(P).defaultView,
             Zt = () => {
@@ -274,7 +278,7 @@
             X = Boolean(
               D &&
                 D.fingerprint === F &&
-                D.actualRoot === i.getRootNode() &&
+                D.actualRoot === rootNodeOf(i) &&
                 D.root === i &&
                 D.target === s &&
                 D.point === l &&
@@ -297,7 +301,7 @@
             ? D
             : {
                 fingerprint: F,
-                actualRoot: i.getRootNode(),
+                actualRoot: rootNodeOf(i),
                 root: i,
                 target: s,
                 point: l,
@@ -364,14 +368,14 @@
             },
             J = (e, t) => {
               try {
-                const n = builtIn(i.getRootNode()).querySelectorAll(`#${CSS.escape(e)}`);
+                const n = builtIn(rootNodeOf(i)).querySelectorAll(`#${CSS.escape(e)}`);
                 return 1 === n.length && n[0] === t;
               } catch {
                 return !1;
               }
             },
             At = () => {
-              const e = i.getRootNode();
+              const e = rootNodeOf(i);
               return (
                 i.ownerDocument === P &&
                 (e === P ||
@@ -382,7 +386,7 @@
               );
             },
             ensureShadowStyles = (force = !1) => {
-              const e = i.getRootNode();
+              const e = rootNodeOf(i);
               if (!At() || !(e instanceof ShadowRoot)) return;
               const t = builtIn(P).querySelector("style[nonce], script[nonce]"),
                 n = contextMenuRuntimeNonce || t?.nonce || t?.getAttribute("nonce") || null,
@@ -393,7 +397,7 @@
                 ].filter(Boolean)),
                 a = (t) =>
                   t instanceof HTMLStyleElement &&
-                  t.getRootNode() === e &&
+                  rootNodeOf(t) === e &&
                   t.getAttribute("data-citry-context-menu-runtime") === "" &&
                   t.textContent === shadowPointStyleText &&
                   (t.nonce || t.getAttribute("nonce") || null) === n,
@@ -402,10 +406,10 @@
                 return;
               if (s) {
                 for (const t of r)
-                  t !== s && t.getRootNode() === e && t.remove();
+                  t !== s && rootNodeOf(t) === e && t.remove();
                 return void shadowStyleRoots.set(e, s);
               }
-              for (const t of r) t.getRootNode() === e && t.remove();
+              for (const t of r) rootNodeOf(t) === e && t.remove();
               const l = builtIn(P).createElement("style");
               (n && l.setAttribute("nonce", n),
                 l.setAttribute("data-citry-context-menu-runtime", ""),
@@ -449,9 +453,9 @@
               !s.localName.includes("-") &&
               !s.hasAttribute("is") &&
               !s.shadowRoot &&
-              s.getRootNode() === i.getRootNode() &&
-              l.getRootNode() === i.getRootNode() &&
-              c.getRootNode() === i.getRootNode()),
+              rootNodeOf(s) === rootNodeOf(i) &&
+              rootNodeOf(l) === rootNodeOf(i) &&
+              rootNodeOf(c) === rootNodeOf(i)),
             Q = () =>
               G() &&
               s.id === n.targetId &&
@@ -542,8 +546,9 @@
                 )
               )
                 return !1;
-              for (let n = e; n; n = n.parentElement ?? shadowHost(n.getRootNode()))
-                if (n.hasAttribute?.("hidden") || n.hasAttribute?.("inert"))
+              for (let n = e; n; n = parentElementOf(n) ?? shadowHost(rootNodeOf(n)))
+                // A form field named `hasAttribute` hides the form's method, so call the built-in one.
+                if (n instanceof Element && (Element.prototype.hasAttribute.call(n, "hidden") || Element.prototype.hasAttribute.call(n, "inert")))
                   return !1;
               return !0;
             },
@@ -569,9 +574,9 @@
                 v = u,
                 h = d;
               for (
-                let e = r.parentElement;
+                let e = parentElementOf(r);
                 e;
-                e = e.parentElement ?? shadowHost(e.getRootNode())
+                e = parentElementOf(e) ?? shadowHost(rootNodeOf(e))
               ) {
                 const t = getComputedStyle(e),
                   n = e.getBoundingClientRect(),
@@ -588,7 +593,7 @@
               }
               if (m <= f || h <= v) return null;
               const y = [],
-                x = r.getRootNode(),
+                x = rootNodeOf(r),
                 w = builtIn(x).elementsFromPoint?.bind(x) ?? builtIn(P).elementsFromPoint.bind(P),
                 A =
                   "none" === getComputedStyle(r).pointerEvents
@@ -1457,9 +1462,9 @@
             const a = [];
             if (n)
               for (
-                let e = s.parentElement;
+                let e = parentElementOf(s);
                 e;
-                e = e.parentElement ?? shadowHost(e.getRootNode())
+                e = parentElementOf(e) ?? shadowHost(rootNodeOf(e))
               )
                 e !== i && a.push(e);
             (a.length !== Xt.length || a.some((e, t) => e !== Xt[t])) &&
@@ -1548,7 +1553,7 @@
                   setAttr(c, "role", "menu"),
                   setAttr(c, "aria-label", n.ariaLabel),
                   setData(c, "citryUiPart", "menu"),
-                  (z = i.getRootNode()),
+                  (z = rootNodeOf(i)),
                   v.repairOwned(),
                   v.refreshRootScope(),
                   (g = !1),
@@ -1589,7 +1594,7 @@
                 if (Q() && qe() && ye() && Z())
                   return (
                     needsRepair() && Fe(),
-                    (z = i.getRootNode()),
+                    (z = rootNodeOf(i)),
                     v.refreshRootScope(),
                     Ge(),
                     void He.refresh()

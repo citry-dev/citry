@@ -1,6 +1,9 @@
 
       // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
       $component({
         props: {
           items: {},
@@ -872,7 +875,7 @@
           };
           const onListboxPointerDown = (event) => {
             const element = event.target.closest?.('[data-citry-ui-part="option"]');
-            if (element && element.parentElement === listbox) {
+            if (element && parentElementOf(element) === listbox) {
               event.preventDefault();
             }
           };
@@ -880,7 +883,7 @@
             const element = event.target.closest?.('[data-citry-ui-part="option"]');
             if (
               !element
-              || element.parentElement !== listbox
+              || parentElementOf(element) !== listbox
               || element.hasAttribute("data-disabled")
             ) {
               return;
@@ -890,7 +893,7 @@
           };
           const onListboxClick = (event) => {
             const element = event.target.closest?.('[data-citry-ui-part="option"]');
-            if (!element || element.parentElement !== listbox) {
+            if (!element || parentElementOf(element) !== listbox) {
               return;
             }
             const option = visibleItems.find((item) => item.value === element?.dataset.value);

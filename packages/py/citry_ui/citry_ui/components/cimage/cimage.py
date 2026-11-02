@@ -674,6 +674,11 @@ class CImage(LibraryComponent):
       // them through the core runtime's helper; Citry before 0.7.0 have no
       // helper, so the fallback reads the members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
       const imageReady = "data-citry-image-initialized";
       const imageOwner = Symbol.for("citry-ui:image-owner");
       const imageScopes = globalThis[Symbol.for("citry-ui:image-mutation-scopes")] ??= new WeakMap();
@@ -690,7 +695,7 @@ class CImage(LibraryComponent):
           }
         };
         const attach = () => {
-          scope = root.getRootNode();
+          scope = rootNodeOf(root);
           manager = imageScopes.get(scope);
           if (!manager) {
             const entries = new Map();
@@ -730,7 +735,7 @@ class CImage(LibraryComponent):
         attach();
         return {
           refresh() {
-            if (active && root.getRootNode() !== scope) {
+            if (active && rootNodeOf(root) !== scope) {
               detach();
               attach();
             }
@@ -1020,7 +1025,7 @@ class CImage(LibraryComponent):
             ["draggable", data.draggable ? "true" : "false"],
           ].every(([name, value]) => sameAttribute(image, name, value));
           const scopeValid = () => {
-            const actual = root.getRootNode();
+            const actual = rootNodeOf(root);
             return root.ownerDocument === documentOwner && (actual === documentOwner
               || (actual instanceof ShadowRoot
                 && actual.host.ownerDocument === documentOwner
@@ -1064,7 +1069,7 @@ class CImage(LibraryComponent):
                 || sourceElements.some((source, index) => !sourceValid(source, data.sources[index]))) return false;
             }
             for (const [visual, part] of [[placeholder, "placeholder"], [fallback, "fallback"]]) {
-              if (visual && (visual.parentElement !== root || visual.dataset.citryUiPart !== part
+              if (visual && (parentElementOf(visual) !== root || visual.dataset.citryUiPart !== part
                 || visual.getAttribute("aria-hidden") !== "true" || !visual.hasAttribute("inert")
                 || (!started && !previous && !visual.hidden)
                 || visual.querySelector(

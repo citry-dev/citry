@@ -615,6 +615,10 @@ class CAccordion(LibraryComponent):
       // Page markup can hide a document's members behind named elements. The core runtime's helper
       // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
 
       $component({
         props: {
@@ -1217,8 +1221,8 @@ class CAccordion(LibraryComponent):
           });
 
           const ancestorFieldsets = [];
-          for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
-            if (ancestor.matches("fieldset")) {
+          for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
+            if (ancestor instanceof HTMLFieldSetElement) {
               ancestorFieldsets.push(ancestor);
             }
           }

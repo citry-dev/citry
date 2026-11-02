@@ -356,6 +356,11 @@ class CNavigationMenu(LibraryComponent):
       // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
       // reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+      const parentNodeOf = (node) => nodeParentNode.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 
       $component({
         props: {
@@ -494,8 +499,8 @@ class CNavigationMenu(LibraryComponent):
             while (current) {
               if (current === container) return true;
               // Only a shadow root has a host; a named element can make a document answer `host`.
-              const rootNode = current.getRootNode?.();
-              current = current.parentNode ?? (rootNode instanceof ShadowRoot ? builtIn(rootNode).host : null);
+              const rootNode = current instanceof Node ? rootNodeOf(current) : null;
+              current = parentNodeOf(current) ?? (rootNode instanceof ShadowRoot ? builtIn(rootNode).host : null);
             }
             return false;
           };

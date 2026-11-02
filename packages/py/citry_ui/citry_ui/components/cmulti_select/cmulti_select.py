@@ -775,6 +775,11 @@ class CMultiSelect(LibraryComponent):
       // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
       // reads members directly.
       const builtIn = globalThis[Symbol.for('citry:built-in-members')] ?? (target => target);
+      // A form's named field can hide the form's own parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
       const multiSelectHandoffKey = Symbol.for('citry-ui:multi-select-handoff');
       $component({
         props: {
@@ -845,7 +850,7 @@ class CMultiSelect(LibraryComponent):
           // however that happens, which a ResizeObserver notices; it watches
           // only while an episode lasts.
           let shownWatch=null;
-          const startBlockedEpisode=()=>{invalidEpisodes.add('blocked-open');if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(trigger.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;invalidEpisodes.delete('blocked-open');});let box=/** @type {Element} */(trigger);while(/^(inline|contents)/.test(getComputedStyle(box).display)){const boxRoot=box.getRootNode();const next=box.parentElement??(boxRoot instanceof ShadowRoot?builtIn(boxRoot).host:null);if(!next)break;box=next;}shownWatch.observe(box);};
+          const startBlockedEpisode=()=>{invalidEpisodes.add('blocked-open');if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(trigger.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;invalidEpisodes.delete('blocked-open');});let box=/** @type {Element} */(trigger);while(/^(inline|contents)/.test(getComputedStyle(box).display)){const boxRoot=rootNodeOf(box);const next=parentElementOf(box)??(boxRoot instanceof ShadowRoot?builtIn(boxRoot).host:null);if(!next)break;box=next;}shownWatch.observe(box);};
           let logicalOpen=false, highlightedValue=prior?.highlightedValue??null;
           let controlledValue=false, controlledOpen=false, clientValue, clientOpen;
           let onValueChange=null,onOpenChange=null,nativeInvalid=false,active=true,generation=0;

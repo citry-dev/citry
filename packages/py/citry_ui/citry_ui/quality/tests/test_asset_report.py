@@ -498,8 +498,13 @@ def test_scroll_area_helper_inclusive_assets_stay_within_the_frozen_budget():
 
     assert incremental["baseline_components"] == []
     assert incremental["javascript"]["raw"] < 12 * 1024
-    assert incremental["javascript"]["gzip"] < 3 * 1024
-    assert incremental["javascript"]["brotli"] < int(2.75 * 1024)
+    # 3.25 KiB from 3 KiB: the scroll-area scripts read `parentNode`,
+    # `parentElement` and `getRootNode` from Node.prototype, so a form field
+    # with that name cannot trap their walk up the page in a loop. That added about 100
+    # gzip bytes when about 20 were left, and about 80 brotli bytes, so that
+    # limit moves from 2.75 KiB to 3 KiB.
+    assert incremental["javascript"]["gzip"] < int(3.25 * 1024)
+    assert incremental["javascript"]["brotli"] < 3 * 1024
     assert incremental["css"]["raw"] < 6 * 1024
     assert incremental["css"]["gzip"] < int(1.5 * 1024)
     assert incremental["css"]["brotli"] < int(1.25 * 1024)
@@ -520,7 +525,11 @@ def test_context_menu_assets_stay_within_the_family_budgets():
     # document's members through the core runtime's built-in member helper, so
     # a named element in the page cannot stand in for them. That added about
     # 1.2 KiB raw when about 0.2 KiB was left.
-    assert family["javascript"]["raw"] < 163 * 1024
+    # 165 KiB from 163 KiB: the same scripts read `parentNode`,
+    # `parentElement` and `getRootNode` from Node.prototype, so a form field
+    # with that name cannot trap their walk up the page in a loop. That added about
+    # 1.2 KiB raw.
+    assert family["javascript"]["raw"] < 165 * 1024
     # 35 KiB from 34 KiB: CMenu now scrolls only its own list to show the
     # focused item, and scrolls the page only after a key press (#383),
     # which added about 880 gzip bytes that shorter comments could not
@@ -530,7 +539,11 @@ def test_context_menu_assets_stay_within_the_family_budgets():
     # for TypeScript and two comments explaining it (#534). That added about
     # 95 gzip bytes when about 80 were left. Deleting the comments would
     # recover about 75 bytes, so the next small change would trip it again.
-    assert family["javascript"]["gzip"] < int(35.5 * 1024)
+    # 36 KiB from 35.5 KiB: the scripts on this page call `hasAttribute`,
+    # `matches` and `closest` from Element.prototype and read `assignedSlot`
+    # from it, so a form field with that name cannot break their walk up the
+    # page. That added about 60 gzip bytes when about 30 were left.
+    assert family["javascript"]["gzip"] < 36 * 1024
     assert family["javascript"]["brotli"] < 30 * 1024
     assert family["css"]["raw"] < 20 * 1024
     assert family["css"]["gzip"] < 3 * 1024

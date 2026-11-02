@@ -1,5 +1,7 @@
 // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
 const builtIn=globalThis[Symbol.for("citry:built-in-members")]??(target=>target);
+// A form's named field can hide the form's own getRootNode, so read them from Node.prototype.
+const rootNodeOf=(node,options)=>Node.prototype.getRootNode.call(node,options);
 // A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
 const shadowHost=root=>(root instanceof ShadowRoot?root.host:null);
 $component({
@@ -41,13 +43,13 @@ $component({
     // node from the picker's up to the document listens in the capture phase,
     // and containment is checked across shadow boundaries. Declared as
     // functions because `sync`, defined above, calls them.
-    function composedContains(ancestor,node){for(let current=node;current;current=shadowHost(current.getRootNode())){if(ancestor.contains(current))return true;}return false;}
+    function composedContains(ancestor,node){for(let current=node;current;current=shadowHost(rootNodeOf(current))){if(ancestor.contains(current))return true;}return false;}
     function onAncestorClose(event){const target=event.target;if(!currentOpen||target===root||!(target instanceof Node)||!composedContains(target,root))return;if(event.type==='toggle'&&event.newState!=='closed')return;if(event.type==='close'&&target.open)return;currentOpen=false;markReportedWhileHidden();try{openCallback?.(false,{open:false,reason:'ancestor',sourceEvent:event});}catch(error){console.error('[citry-ui] CColorPicker onOpenChange callback failed.',error,root);}sync();}
     // The owner was told that an ancestor hides the picker; that holds until
     // the picker can be seen again, however that happens, which a
     // ResizeObserver notices while the flag is set.
     function markReportedWhileHidden(){reportedWhileHidden=true;if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(root.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;reportedWhileHidden=false;});shownWatch.observe(root);}
-    function listenForAncestorClose(listen){if(listen===ancestorListening)return;ancestorListening=listen;if(listen){ancestorRoots=[];for(let node=root.getRootNode();node;node=shadowHost(node)?.getRootNode()??null)ancestorRoots.push(node);}for(const node of ancestorRoots){for(const type of ['close','toggle']){if(listen)builtIn(node).addEventListener(type,onAncestorClose,true);else builtIn(node).removeEventListener(type,onAncestorClose,true);}}}
+    function listenForAncestorClose(listen){if(listen===ancestorListening)return;ancestorListening=listen;if(listen){ancestorRoots=[];for(let node=rootNodeOf(root);node;node=shadowHost(node)?rootNodeOf(shadowHost(node)):null)ancestorRoots.push(node);}for(const node of ancestorRoots){for(const type of ['close','toggle']){if(listen)builtIn(node).addEventListener(type,onAncestorClose,true);else builtIn(node).removeEventListener(type,onAncestorClose,true);}}}
     const onTrigger=event=>requestOpen(!currentOpen,'trigger',event);const onHue=event=>{if(disabled||readonly)return;const hsv=rgbHsv(hexRgb(current));requestValue(rgbHex(hsvRgb({h:Number(hue.value),s:hsv.s,v:hsv.v})),'hue',event,false);};
     const onFormat=()=>{format=formatSelect.value;root.dataset.format=format;input.removeAttribute('aria-invalid');input.value=display(current);};const onInputKey=event=>{if(event.key==='Enter'){event.preventDefault();commitText(event);}else if(event.key==='Escape'){input.removeAttribute('aria-invalid');input.value=display(current);}};const onSwatch=event=>{const swatch=event.target.closest('[data-citry-color-swatch]');if(swatch)requestValue(swatch.dataset.value,'swatch',event);};const onNative=event=>{if(!internal)requestValue(native.value,'native',event);};const onPopupKey=event=>{if(event.key==='Escape'){event.preventDefault();requestOpen(false,'escape',event);}};
     const onReset=event=>{if(event.target!==native.form)return;setTimeout(()=>{const next=native.defaultValue;if(valueControlled)valueCallback?.(next,detail(next,current,'reset',event));else{accepted=next;current=next;sync();}},0);};

@@ -10,6 +10,9 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
       // them through the core runtime's helper; Citry before 0.7.0 have no
       // helper, so the fallback reads the members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own getRootNode, so read them from
+      // Node.prototype.
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
       (() => {
         const runtimeKey = Symbol.for("citry-ui:split-button-submit-runtime");
         const generation = 1;
@@ -37,7 +40,7 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
         );
         const actualRoot = (element) => {
           if (!element?.isConnected) return null;
-          const root = element?.getRootNode?.() ?? null;
+          const root = element instanceof Node ? rootNodeOf(element) : null;
           return root instanceof Document || isOpenShadowRoot(root) ? root : null;
         };
         const refreshShadowManagers = () => {

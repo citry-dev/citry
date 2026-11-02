@@ -10,6 +10,13 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
   // so read them through the core runtime's helper; Citry before 0.7.0 have no
   // helper, so the fallback reads the members directly.
   const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+  // A form's named field can hide the form's own parentNode, parentElement or getRootNode, so read them from
+  // Node.prototype.
+  const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+  const parentNodeOf = (node) => nodeParentNode.call(node);
+  const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+  const parentElementOf = (node) => nodeParentElement.call(node);
+  const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
   (() => {
     const key = Symbol.for("citry-ui:dialog-controller-runtime");
     const installed = globalThis[key];
@@ -35,7 +42,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       return active;
     };
     const supportedRoot = (element, documentOwner) => {
-      const root = element.getRootNode();
+      const root = rootNodeOf(element);
       return root === documentOwner
         || (root instanceof ShadowRoot
           && root.mode === "open"
@@ -123,9 +130,9 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
     // still modal counts as open: a re-render may have removed its `open`
     // attribute before its own run puts it back and closes it.
     const closedAncestorDialog = (dialog) => {
-      for (let node = dialog.parentNode; node; ) {
+      for (let node = parentNodeOf(dialog); node; ) {
         if (node instanceof HTMLDialogElement) return node.open || isModal(node) ? null : node;
-        node = node.parentNode ?? (node instanceof ShadowRoot ? node.host : null);
+        node = parentNodeOf(node) ?? (node instanceof ShadowRoot ? node.host : null);
       }
       return null;
     };
@@ -184,8 +191,8 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         || !(surface instanceof HTMLElement)
         || !(title instanceof HTMLElement)
         || !(closeButton instanceof HTMLButtonElement)
-        || dialog.parentElement !== host
-        || surface.parentElement !== dialog
+        || parentElementOf(dialog) !== host
+        || parentElementOf(surface) !== dialog
       ) {
         throw new TypeError("[citry-ui] Dialog controller received invalid owned anatomy.");
       }
@@ -200,7 +207,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       let previousFocus = null;
       let focusGeneration = 0;
       let handedOff = false;
-      let actualRoot = host.getRootNode();
+      let actualRoot = rootNodeOf(host);
       const liveOwner = dialog[ownerKey] ?? null;
       liveOwner?.transfer?.();
       const owner = {
@@ -454,14 +461,14 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       const record = { dialog, force };
       let unwatchScope = watchScope(actualRoot, owner);
       const refreshRoot = () => {
-        const nextRoot = host.getRootNode();
+        const nextRoot = rootNodeOf(host);
         if (nextRoot === actualRoot) return true;
         if (
           !supportedRoot(host, documentOwner)
-          || dialog.getRootNode() !== nextRoot
-          || surface.getRootNode() !== nextRoot
-          || title.getRootNode() !== nextRoot
-          || closeButton.getRootNode() !== nextRoot
+          || rootNodeOf(dialog) !== nextRoot
+          || rootNodeOf(surface) !== nextRoot
+          || rootNodeOf(title) !== nextRoot
+          || rootNodeOf(closeButton) !== nextRoot
         ) return false;
         if (dialog.open || appliedOpen) force("ancestor", host);
         unwatchScope();
@@ -515,7 +522,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
             title,
             closeButton,
             documentOwner,
-            actualRoot: host.getRootNode(),
+            actualRoot: rootNodeOf(host),
             signature,
             initialFocusTarget,
             appliedOpen,

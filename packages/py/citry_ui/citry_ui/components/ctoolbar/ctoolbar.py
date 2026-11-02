@@ -148,6 +148,10 @@ class CToolbar(LibraryComponent):
       // Page markup can hide a document's members behind named elements. The core runtime's helper
       // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
 
       $component({
         props: {orientation: {}, loop: {}, variant: {}, size: {}},
@@ -216,7 +220,7 @@ class CToolbar(LibraryComponent):
             if (!element.isConnected) return true;
             if (element instanceof HTMLButtonElement && element.matches(':disabled')) return true;
             if (element.getAttribute("aria-disabled") === "true") return true;
-            for (let node = element; node && node !== root; node = node.parentElement) {
+            for (let node = element; node && node !== root; node = parentElementOf(node)) {
               if (node.hidden || node.inert) return true;
             }
             return false;
@@ -376,7 +380,7 @@ class CToolbar(LibraryComponent):
             ],
           });
           const fieldsetObservers = [];
-          for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
             if (!(ancestor instanceof HTMLFieldSetElement)) continue;
             const fieldsetObserver = new MutationObserver(scheduleReconcile);
             fieldsetObserver.observe(ancestor, {

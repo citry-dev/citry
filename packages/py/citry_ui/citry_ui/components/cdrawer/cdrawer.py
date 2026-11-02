@@ -258,6 +258,11 @@ class CDrawer(LibraryComponent):
       // runtime's helper reads the built-in ones; Citry before 0.7.0 have no helper, so the
       // fallback reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentNode or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+      const parentNodeOf = (node) => nodeParentNode.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 
       $component({
         props: {
@@ -338,8 +343,8 @@ class CDrawer(LibraryComponent):
             return active;
           };
           const composedParent = (node) => {
-            if (node?.parentNode) return node.parentNode;
-            const root = node?.getRootNode?.();
+            if (node && parentNodeOf(node)) return parentNodeOf(node);
+            const root = node instanceof Node ? rootNodeOf(node) : null;
             return root instanceof ShadowRoot ? builtIn(root).host : null;
           };
           const composedContains = (ancestor, node) => {
@@ -543,9 +548,9 @@ class CDrawer(LibraryComponent):
                   attributeFilter: ["class", "hidden", "inert", "open", "style"],
                 });
               }
-              if (node?.parentNode && !observed.has(node.parentNode)) {
-                observed.add(node.parentNode);
-                eligibilityObserver.observe(node.parentNode, { childList: true });
+              if (node && parentNodeOf(node) && !observed.has(parentNodeOf(node))) {
+                observed.add(parentNodeOf(node));
+                eligibilityObserver.observe(parentNodeOf(node), { childList: true });
               }
             }
             eligibilityObserver.observe(drawer, {

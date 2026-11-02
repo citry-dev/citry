@@ -1,5 +1,9 @@
 // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
 const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A form's named field can hide the form's own parentElement or getRootNode, so read them from Node.prototype.
+const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+const parentElementOf = node => nodeParentElement.call(node);
+const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 // A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
 const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
 $component({
@@ -102,7 +106,7 @@ $component({
       return item;
     };
     const visible = () => all().filter(item => !item.closest('[data-citry-cascader-column]')?.hidden);
-    const column = item => [...item.parentElement.children].filter(entry => entry.getAttribute?.('role') === 'treeitem');
+    const column = item => [...parentElementOf(item).children].filter(entry => entry.getAttribute?.('role') === 'treeitem');
     const focus = item => {
       if (!(item instanceof HTMLElement)) return;
       activeValue = path(item);
@@ -171,7 +175,7 @@ $component({
     // each root node from the cascader's up to the document listens in the
     // capture phase, and containment is checked across shadow boundaries.
     const composedContains = (ancestor, node) => {
-      for (let current = node; current; current = shadowHost(current.getRootNode())) {
+      for (let current = node; current; current = shadowHost(rootNodeOf(current))) {
         if (ancestor.contains(current)) return true;
       }
       return false;
@@ -194,7 +198,7 @@ $component({
       ancestorListening = listen;
       if (listen) {
         ancestorRoots = [];
-        for (let node = root.getRootNode(); node; node = shadowHost(node)?.getRootNode() ?? null) ancestorRoots.push(node);
+        for (let node = rootNodeOf(root); node; node = shadowHost(node) ? rootNodeOf(shadowHost(node)) : null) ancestorRoots.push(node);
       }
       for (const node of ancestorRoots) {
         for (const type of ['close', 'toggle']) {

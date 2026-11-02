@@ -304,6 +304,11 @@ class CHoverCard(LibraryComponent):
       // helper reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback
       // reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? ((target) => target);
+      // A form's named field can hide the form's own parentElement or getRootNode, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = (node) => nodeParentElement.call(node);
+      const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 
       const handoffKey = Symbol.for("citry-ui:hover-card-handoff");
 
@@ -335,7 +340,7 @@ class CHoverCard(LibraryComponent):
             !surface
             || triggers.length !== 1
             || !(triggers[0] instanceof HTMLElement)
-            || triggers[0].parentElement !== host
+            || parentElementOf(triggers[0]) !== host
           ) {
             throw new Error(
               "[citry-ui] CHoverCard activator must spread activator_attrs onto exactly one HTMLElement.",
@@ -440,8 +445,8 @@ class CHoverCard(LibraryComponent):
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
               // Step out of a shadow root to its host; a document has no host.
-              const boxRoot = box.getRootNode();
-              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? builtIn(boxRoot).host : null);
+              const boxRoot = rootNodeOf(box);
+              const next = parentElementOf(box) ?? (boxRoot instanceof ShadowRoot ? builtIn(boxRoot).host : null);
               if (!next) {
                 break;
               }

@@ -1,5 +1,9 @@
 // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
 const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A form's named field can hide the form's own parentNode or getRootNode, so read them from Node.prototype.
+const nodeParentNode = Object.getOwnPropertyDescriptor(Node.prototype, "parentNode").get;
+const parentNodeOf = node => nodeParentNode.call(node);
+const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 const toastRegistryKey = Symbol.for("citry-ui:toast-region-runtime");
 const toastRegistry = globalThis[toastRegistryKey] ?? new WeakMap();
 globalThis[toastRegistryKey] = toastRegistry;
@@ -15,7 +19,7 @@ $component({
     const props = component.$props;
     const effect = Citry.vue.watchEffect;
     const i18n = component.$i18n;
-    const scope = region.getRootNode();
+    const scope = rootNodeOf(region);
     const ownerDocument = region.ownerDocument;
     const existing = toastRegistry.get(scope);
     if (existing?.isConnected && existing !== region) {
@@ -97,8 +101,8 @@ $component({
     let nodeCounter = runtimeState.nodeCounter ?? 0;
 
     const composedParent = (node) => {
-      if (node?.parentNode) return node.parentNode;
-      const root = node?.getRootNode?.();
+      if (node && parentNodeOf(node)) return parentNodeOf(node);
+      const root = node instanceof Node ? rootNodeOf(node) : null;
       return root instanceof ShadowRoot ? root.host : null;
     };
     const composedContains = (ancestor, node) => {

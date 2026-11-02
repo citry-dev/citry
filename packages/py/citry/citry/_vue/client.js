@@ -1580,7 +1580,8 @@
     const type = state.spec.event;
     numberCitryEventsOn(window, type);
     numberCitryEventsOn(document, type);
-    state.root = state.element.getRootNode();
+    // The element may be a form whose named field hides `getRootNode`, so call the built-in one.
+    state.root = callBuiltIn(state.element, "getRootNode");
     if (state.root !== document) numberCitryEventsOn(state.root, type);
   }
   // Whether an event started before the listener was attached.
@@ -1598,7 +1599,7 @@
     if (order !== undefined) return order <= state.attachedOrder;
     // An element that moved to another root, such as by a `<Teleport>` whose
     // target changed, gets numbering there. Its event came after the attach.
-    if (state.target === state.element && state.element.getRootNode() !== state.root) {
+    if (state.target === state.element && callBuiltIn(state.element, "getRootNode") !== state.root) {
       numberCitryEvents(state);
       return false;
     }

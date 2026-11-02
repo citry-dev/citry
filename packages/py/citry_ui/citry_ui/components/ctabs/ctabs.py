@@ -311,6 +311,10 @@ class CTabs(LibraryComponent):
       // Page markup can hide a document's members behind named elements. The core runtime's helper
       // reads the built-in ones; Citry before 0.7.0 have no helper, so the fallback reads members directly.
       const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+      // A form's named field can hide the form's own parentElement, so read them from
+      // Node.prototype.
+      const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+      const parentElementOf = node => nodeParentElement.call(node);
 
       $component({
         props: {
@@ -713,9 +717,9 @@ class CTabs(LibraryComponent):
             }
           });
           const list = tabList();
-          const hasInvalidPhysicalStructure = list?.parentElement !== root
-            || tabs().some((tab) => tab.parentElement !== list)
-            || panels().some((panel) => panel.parentElement !== root);
+          const hasInvalidPhysicalStructure = (list && parentElementOf(list)) !== root
+            || tabs().some((tab) => parentElementOf(tab) !== list)
+            || panels().some((panel) => parentElementOf(panel) !== root);
           if (hasInvalidPhysicalStructure) {
             console.error(
               "[citry-ui] CTabs requires its generated tab list and TabPanels to be direct "

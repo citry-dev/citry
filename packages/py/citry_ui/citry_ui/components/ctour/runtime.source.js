@@ -1,5 +1,7 @@
 // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
 const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A form's named field can hide the form's own getRootNode, so read them from Node.prototype.
+const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 // A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
 const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
 $component({
@@ -335,7 +337,7 @@ $component({
     let ancestorListening = false;
     let ancestorRoots = [];
     const composedContains = (ancestor, node) => {
-      for (let current = node; current; current = shadowHost(current.getRootNode())) {
+      for (let current = node; current; current = shadowHost(rootNodeOf(current))) {
         if (ancestor.contains(current)) return true;
       }
       return false;
@@ -356,7 +358,7 @@ $component({
       ancestorListening = listen;
       if (listen) {
         ancestorRoots = [];
-        for (let node = host.getRootNode(); node; node = shadowHost(node)?.getRootNode() ?? null) ancestorRoots.push(node);
+        for (let node = rootNodeOf(host); node; node = shadowHost(node) ? rootNodeOf(shadowHost(node)) : null) ancestorRoots.push(node);
       }
       for (const node of ancestorRoots) {
         for (const type of ['close', 'toggle']) {

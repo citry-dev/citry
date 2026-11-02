@@ -47,11 +47,24 @@ DOCUMENT_MEMBERS = [
     "removeEventListener",
 ]
 
+# Form members Citry UI reads while it walks up from a component, each hidden by
+# a named field in the form that holds the components.
+FORM_MEMBERS = [
+    "parentElement",
+    "parentNode",
+    "getRootNode",
+    "assignedSlot",
+    "matches",
+    "hasAttribute",
+    "closest",
+    "contains",
+]
+
 # The pages hide `document.querySelector` too, so the test finds elements through `Document.prototype`.
 _FIND = "Document.prototype.querySelector.bind(document)"
 
 
-def _page(names: list[str]) -> str:
+def _page(names: list[str], fields: list[str]) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -81,6 +94,7 @@ def _page(names: list[str]) -> str:
         def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
             return {
                 "options": [CSelectOption("earth", "Earth"), CSelectOption("mars", "Mars")],
+                "fields": fields,
                 # Written into the page as HTML, ahead of every component script.
                 "named": Markup(str(Named().render())),  # noqa: S704 - Citry rendered and escaped it
             }
@@ -94,7 +108,15 @@ def _page(names: list[str]) -> str:
             </head>
             <body>
               {{ named }}
-              <main style="padding: 120px">
+              <form
+                style="padding: 120px"
+                onsubmit="return false"
+              >
+                <input
+                  c-for="field in fields"
+                  c-name="field"
+                  type="hidden"
+                >
                 <c-CMenu>
                   <c-fill
                     name="activator"
@@ -142,13 +164,23 @@ def _page(names: list[str]) -> str:
                   <c-fill name="title">Mare Imbrium</c-fill>
                   <c-fill name="default">A lunar basin.</c-fill>
                 </c-CDialog>
+                <c-CAccordion value="canopy">
+                  <c-CAccordionItem value="canopy">
+                    <c-fill name="title">Canopy</c-fill>
+                    <c-fill name="default">Crowns collect the light.</c-fill>
+                  </c-CAccordionItem>
+                  <c-CAccordionItem value="floor">
+                    <c-fill name="title">Floor</c-fill>
+                    <c-fill name="default">Fungi return wood to the soil.</c-fill>
+                  </c-CAccordionItem>
+                </c-CAccordion>
                 <c-CSelect
                   class_="named-select"
                   c-options="options"
                   placeholder="Choose a planet"
                   c-trigger_attrs="{'aria-label': 'Planet'}"
                 />
-              </main>
+              </form>
             </body>
           </html>
         """
@@ -156,22 +188,38 @@ def _page(names: list[str]) -> str:
     return str(Page().render().serialize())
 
 
+def _click(page: Any, selector: str) -> None:
+    # Playwright's own locators walk up the page through the same members a named
+    # form field hides, so the test finds the element itself and clicks its middle.
+    x, y = page.evaluate(
+        f"""() => {{
+          const rect = {_FIND}({selector!r}).getBoundingClientRect();
+          return [rect.x + rect.width / 2, rect.y + rect.height / 2];
+        }}"""
+    )
+    page.mouse.click(x, y)
+
+
 def _expanded(page: Any, trigger_class: str, value: str) -> None:
     page.wait_for_function(f"() => {_FIND}('.{trigger_class}').getAttribute('aria-expanded') === '{value}'")
 
 
 # The page without named elements is the control: a failure there is not about names.
-@pytest.mark.parametrize("names", [[], DOCUMENT_MEMBERS], ids=["control", "named"])
-def test_overlays_work_when_data_names_document_members(page: Any, names: list[str]) -> None:
+@pytest.mark.parametrize(
+    ("names", "fields"),
+    [([], []), (DOCUMENT_MEMBERS, []), ([], FORM_MEMBERS)],
+    ids=["control", "document-names", "form-field-names"],
+)
+def test_overlays_work_when_data_names_document_members(page: Any, names: list[str], fields: list[str]) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     # A component whose script stopped never opens, so fail in seconds.
     page.set_default_timeout(5000)
-    page.set_content(_page(names), wait_until="load")
-    page.wait_for_selector(".named-select[data-citry-select-initialized]")
+    page.set_content(_page(names, fields), wait_until="load")
+    page.wait_for_function(f"() => {_FIND}('.named-select[data-citry-select-initialized]') !== null")
 
     # Menu: opens on click, moves focus to an item from the keyboard, closes on Escape.
-    page.locator(".menu-trigger").click()
+    _click(page, ".menu-trigger")
     _expanded(page, "menu-trigger", "true")
     page.keyboard.press("ArrowDown")
     page.wait_for_function(
@@ -183,15 +231,16 @@ def test_overlays_work_when_data_names_document_members(page: Any, names: list[s
 
     # Popover and dialog: open on click, close on Escape.
     for trigger in ("popover-trigger", "dialog-trigger"):
-        page.locator(f".{trigger}").click()
+        _click(page, f".{trigger}")
         _expanded(page, trigger, "true")
         page.keyboard.press("Escape")
         _expanded(page, trigger, "false")
 
     # Select: opens, picks an option, and shows it.
-    control = page.locator('.named-select [role="combobox"]')
-    control.click()
-    page.locator('.named-select [role="option"][data-value="mars"]').click()
+    _click(page, '.named-select [role="combobox"]')
+    page.wait_for_function(f"""() => {_FIND}('.named-select [role="option"][data-value="mars"]')?.checkVisibility()""")
+    _click(page, '.named-select [role="option"][data-value="mars"]')
     page.wait_for_function(f"() => {_FIND}('.named-select select')?.value === 'mars'")
-    assert control.locator('[data-citry-ui-part="value"]').text_content().strip() == "Mars"
+    shown = page.evaluate(f"""() => {_FIND}('.named-select [data-citry-ui-part="value"]').textContent""")
+    assert shown.strip() == "Mars"
     assert errors == []

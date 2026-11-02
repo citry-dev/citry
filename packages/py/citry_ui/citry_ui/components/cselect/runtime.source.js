@@ -1,5 +1,9 @@
 // Page markup can hide a document's or a form's members behind named elements; the core runtime's helper reads the built-in ones (Citry before 0.7.0 have no helper, so the fallback reads members directly).
 const builtIn = globalThis[Symbol.for("citry:built-in-members")] ?? (target => target);
+// A form's named field can hide the form's own parentElement or getRootNode, so read them from Node.prototype.
+const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+const parentElementOf = node => nodeParentElement.call(node);
+const rootNodeOf = (node, options) => Node.prototype.getRootNode.call(node, options);
 // A Document has no host, yet page markup can add a named element "host" to it, so `host` is read only from a ShadowRoot.
 const shadowHost = root => (root instanceof ShadowRoot ? root.host : null);
 const anchoredLayerRuntimeCompatible = globalThis[
@@ -122,7 +126,7 @@ $component({
       // until the trigger next opens.
       let box = trigger;
       while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
-        const next = box.parentElement ?? shadowHost(box.getRootNode());
+        const next = parentElementOf(box) ?? shadowHost(rootNodeOf(box));
         if (!next) break;
         box = next;
       }
@@ -697,7 +701,7 @@ $component({
     nativeForm && builtIn(nativeForm).addEventListener('reset', onReset);
 
     const fieldsetObservers = [];
-    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {
       if (!(ancestor instanceof HTMLFieldSetElement)) continue;
       const observer = new MutationObserver(reconcileControlled);
       observer.observe(ancestor, {attributes:true, childList:true, attributeFilter:['disabled']});
