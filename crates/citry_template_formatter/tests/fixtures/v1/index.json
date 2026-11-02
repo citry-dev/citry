@@ -479,6 +479,14 @@
       ]
     },
     {
+      "id": "python-expressions.expressions.nested-format-quotes",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/nested-format-quotes.input.citry-html",
+      "expected": "expressions/nested-format-quotes.expected.citry-html",
+      "features": ["python-expression-formatting", "strings"]
+    },
+    {
       "id": "python-expressions.expressions.attributes",
       "capability": "python-expressions",
       "category": "expressions",

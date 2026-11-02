@@ -73,7 +73,8 @@ pub fn call(func: Expr, args: Vec<Expr>, keywords: Vec<Keyword>, range: TextRang
         arguments: Arguments {
             range,
             node_index: Default::default(),
-            // Ruff stores arguments and keywords in compact vectors.
+            // Ruff stores arguments and keywords in compact vectors, so both
+            // are converted with `.into()`.
             args: args.into(),
             keywords: keywords.into(),
         },

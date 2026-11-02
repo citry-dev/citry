@@ -63,7 +63,7 @@ ruff_python_codegen = { path = "third_party/rust/ruff/crates/ruff_python_codegen
 ruff_python_formatter = { path = "third_party/rust/ruff/crates/ruff_python_formatter" }
 ruff_python_literal = { path = "third_party/rust/ruff/crates/ruff_python_literal" }
 # Citry parses template expressions that can nest deeply, so the parser must
-# grow its stack as Ruff's own binaries do; this feature is off by default.
+# grow its stack as Ruff's own binaries do. Ruff leaves this feature off by default.
 ruff_python_parser = { path = "third_party/rust/ruff/crates/ruff_python_parser", features = ["stacker"] }
 ruff_python_trivia = { path = "third_party/rust/ruff/crates/ruff_python_trivia" }
 ruff_source_file = { path = "third_party/rust/ruff/crates/ruff_source_file" }
@@ -179,7 +179,7 @@ unicode-normalization = { version = "0.1.23" }
 hashbrown = { version = "0.17.0", default-features = false, features = ["inline-more"] }
 walkdir = { version = "2.3.2" }
 
-# Used by ruff_unicode_names2
+# Used by ruff_unicode_names2 and ruff_unicode_names2_generator
 phf = { version = "0.14.0", default-features = false }
 phf_codegen = { version = "0.14.0", default-features = false }
 
