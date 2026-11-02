@@ -269,3 +269,76 @@ $component({data() { return {count: 0}; }});
     assert admission is not None
     assert admission.server_html
     assert [item for item in caught if "used by more than one element" in str(item.message)] == []
+
+
+def _reference_pages() -> dict[str, type[Component]]:
+    """Pages built from components whose ids are written with a numeric reference."""
+    engine = Citry(autodiscover=False, mode="development")
+
+    class Kept(Component):
+        citry = engine
+        template = """
+<p id="a&#1;b">Kept</p>
+"""
+
+    class Plain(Component):
+        citry = engine
+        template = """
+<p id="ab">Plain</p>
+"""
+
+    class Escape(Component):
+        citry = engine
+        template = """
+<p id="a&#27;b">Escape</p>
+"""
+
+    class Different(Component):
+        citry = engine
+        template = """
+<!doctype html>
+<html>
+  <head><title>Page</title></head>
+  <body><c-Kept /><c-Plain /></body>
+</html>
+"""
+
+    class Repeated(Component):
+        citry = engine
+        template = """
+<!doctype html>
+<html>
+  <head><title>Page</title></head>
+  <body><c-Kept /><c-Kept /></body>
+</html>
+"""
+
+    class Escaped(Component):
+        citry = engine
+        template = """
+<!doctype html>
+<html>
+  <head><title>Page</title></head>
+  <body><c-Escape /><c-Escape /></body>
+</html>
+"""
+
+    return {"different": Different, "repeated": Repeated, "escape": Escaped}
+
+
+def test_ids_that_differ_by_a_character_reference_are_different_ids() -> None:
+    pages = _reference_pages()
+
+    # The browser reads ``a&#1;b`` as "a", U+0001, "b", which is not "ab".
+    assert _serialize_warnings(pages["different"]()) == []
+    [message] = _serialize_warnings(pages["repeated"]())
+    assert '- id "a\\x01b": Kept (2 elements, ' in message
+
+
+def test_the_warning_spells_out_a_control_character_in_an_id() -> None:
+    [message] = _serialize_warnings(_reference_pages()["escape"]())
+
+    # ESC would reach the developer's terminal as a command, so it is
+    # written as the four characters backslash, x, 1, b.
+    assert "\x1b" not in message
+    assert '- id "a\\x1bb": Escape (2 elements, ' in message

@@ -155,7 +155,7 @@ class PageIdCheck:
                 _describe_place(component, origin, total)
                 for (component, origin), total in sorted(by_component.items(), key=lambda item: item[0][0])
             )
-            lines.append(f'- id "{value}": {places}')
+            lines.append(f'- id "{_visible(value)}": {places}')
         body = "\n".join(lines)
         noun = "id" if len(repeated) == 1 else "ids"
         message = (
@@ -168,6 +168,18 @@ class PageIdCheck:
         # The author fixes this in a component, so point at their render or
         # serialize call, not at whichever Citry frame noticed it.
         warn_at_caller(message, RuntimeWarning)
+
+
+def _visible(text: str) -> str:
+    """
+    Return ``text`` with each character that Python calls unprintable spelled out as a visible escape.
+
+    An id can hold a control character, because a numeric reference such as
+    ``&#27;`` in the HTML reads as that character. Left as it is, the warning
+    would send it to the developer's terminal, where ESC starts a command
+    such as changing the window title.
+    """
+    return "".join(char if char.isprintable() else char.encode("unicode_escape").decode("ascii") for char in text)
 
 
 def _describe_place(component: str, origin: str | None, count: int) -> str:

@@ -151,6 +151,9 @@ does. The upgrade notes below list what can change.
   showed `binding ... is not active` and the Vue app did not start. The
   same fix covers `$c-tr` elements in slot content that a caller passes
   to a cached component.
+- The development warning for a repeated `id` now reads a numeric
+  character reference in an `id` as the browser does, so `id="a&#1;b"`
+  and `id="ab"` are no longer reported as the same id.
 
 ## v0.8.0
 
