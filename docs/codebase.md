@@ -1920,7 +1920,8 @@ Prepare a release as follows:
     which exists only after publication, so no earlier check can prove them.
     If a link returns 404, check that the package's tag exists. Rerunning
     **Release qualified packages** with the same candidate resumes the
-    remaining steps, including creating the tag.
+    remaining steps, including creating the tag (see
+    [When a release stops partway](#when-a-release-stops-partway)).
 11. When an example raised its Citry or citry-lsp floor to a version that
     this release published, run `uv lock` in that example, run
     `python -m examples._internal.release_gate` from the repository root, and
@@ -1934,16 +1935,72 @@ wait for a selected Citry only when their compatibility floor requires that
 new release. The VS Code extension waits for its selected citry-lsp version.
 Packages without a dependency relationship publish together.
 
-Rerunning publication is safe only for the same candidate. Python workers
-accept an already-public version only when its complete filename and SHA-256
-inventory exactly matches the retained candidate. The VS Code worker uses
-duplicate-safe registry commands, then downloads both registry versions and
-compares them to the qualified VSIX. An absent version can be uploaded, and a
-completed matching upload can resume later closeout steps. A partial Python
-inventory or any different public bytes stop for deliberate reconciliation.
-The two extension registries can recover independently because both accept the
-same one-file VSIX. No worker rebuilds during promotion or overwrites an
-existing release asset.
+#### When a release stops partway
+
+PyPI, the extension registries, or sigstore can fail for a few minutes.
+Sigstore is the service that signs each uploaded file, so a user can check
+that the file came from this repository's CI. The controller retries a short
+outage on its own; after a longer one, a person only has to start the release
+again.
+
+First, it retries a failed publish step. When a worker fails in a step that
+uploads to a registry or signs with sigstore, the controller waits five
+minutes and starts that run's failed jobs again, up to two times. The new
+attempt reads the registry first. When some qualified files are already
+there, it sends the files again with `skip-existing`, so PyPI skips a file it
+already holds. The check after the upload then compares every public
+file's SHA-256 with the qualified bytes. A failure in any other step, such as
+a hash check, stops the release at once. Every attempt signs what it uploads:
+Citry never publishes a file without its attestation (the signed record of
+which workflow published it).
+
+Second, you can start the whole release again. First wait until every
+publish run that the stopped release started has finished, so two runs do not
+publish the same package at once. Then run **Release qualified packages**
+again with the same candidate run ID:
+
+```sh
+gh workflow run repo--release.yml -f candidate_run_id=<run-id>
+```
+
+For each package, the controller first looks for its tag:
+
+- No tag yet: the package goes to its publish worker as usual.
+- The tag exists and the GitHub Release exists: the controller downloads the
+  retained qualification archive, checks it against the candidate's digest,
+  and compares each qualified file's SHA-256 with what the registry serves.
+  PyPI lists its own hashes. For the VS Code extension, the controller
+  downloads the VSIX from both the Marketplace and Open VSX. It also checks
+  that the GitHub Release holds exactly the qualified files, with the same
+  SHA-256, plus the worker's two small JSON records (checked for presence
+  only). When all of this matches, the package is skipped. When a registry
+  is still missing files, or the GitHub Release holds anything else, the
+  worker runs again and finishes or checks the rest.
+- The tag exists but the GitHub Release does not: the worker runs. It skips
+  the upload when the registry already has the files, then creates the
+  missing GitHub Release.
+
+A public file that differs from the qualified file stops the release with an
+error that names the file and the registry. A registry never lets a version's
+file be replaced, so this needs a person to decide what to do. A tag that
+names a different commit, or a tag that is not annotated, stops the release
+in the same way.
+
+After the remaining layers, the restarted run also does the closing steps,
+such as starting the documentation release.
+
+Restart only with the same candidate. A new candidate rebuilds only the
+packages that have no tag yet. A package that is on its registry but has no
+tag would then be compared against the new build. When that build differs
+from the earlier one, the publish fails with the hash error above.
+**Prepare release candidate** also refuses an explicit package list that
+names a version whose tag exists.
+
+Open VSX reviews a new version before serving it, and answers 404 until the
+review ends. After a successful upload, the VS Code worker waits up to 45
+minutes for Open VSX, and logs each 404 as "still under review". It waits up
+to five minutes for the Marketplace. No worker rebuilds during promotion or
+replaces an existing release asset.
 
 If publication created the GitHub Release but failed to start documentation
 or Discord, recover that remaining step directly. Rerunning package
@@ -2076,7 +2133,8 @@ Release. It uses the ordinary Actions token and has neither publishing credentia
 nor the release App key. It sends a Discord notification only for a newly created
 Release. A failure after publication can be recovered by rerunning the controller
 with the same candidate: public packages must still match exactly, and matching
-annotated tags and complete Releases with byte-matching assets are accepted. A
+annotated tags and complete Releases with byte-matching assets are accepted
+(see [When a release stops partway](#when-a-release-stops-partway)). A
 draft, incomplete or mismatched Release stops for deliberate reconciliation; the
 workflow does not overwrite it. Existing Python Releases may also contain publish
 attestation files: these are accepted only when their bytes match GitHub metadata,
@@ -2518,10 +2576,12 @@ commit, and artifact digest.
 
 An interrupted upload can be retried with the same candidate. The worker reads
 PyPI's complete file inventory: an absent version is uploaded, an exact
-filename and SHA-256 match is accepted, and a partial or different inventory
-fails closed. It never blindly skips an existing file or overwrites a GitHub
-Release asset. Release-critical third-party actions are pinned to reviewed
-commits.
+filename and SHA-256 match is accepted, and a partial upload whose files all
+match is finished by uploading the rest. Any different or unknown public file
+stops the worker. It turns on skip-existing only when this check found the
+public files with the qualified SHA-256, and the check after the upload proves
+every file again. It never overwrites a GitHub Release asset. Release-critical
+third-party actions are pinned to reviewed commits.
 
 The permanent browser build tuple lives in
 `packages/py/citry_core/pyodide-build.json`. Its Pyodide and Python versions
@@ -2569,7 +2629,8 @@ The candidate retains `verified-citry-lsp-distributions` and its exact byte
 inventory for 30 days. Promotion receives that artifact's exact run, ID, and
 digest, safely extracts and re-verifies the pair against the release checkout,
 and publishes without rebuilding. An exact already-public PyPI inventory is a
-safe retry; a partial or different inventory fails closed.
+safe retry, the worker uploads the rest of a partial upload whose files match,
+and any different file stops the worker.
 
 For the first release, create a pending PyPI Trusted Publisher with this exact
 identity: project `citry-lsp`, owner `citry-dev`, repository `citry`, workflow
@@ -2602,8 +2663,9 @@ rows remain recorded honestly and must not be reported as passing evidence.
 The candidate retains `verified-citry-ui-distributions` and its exact byte
 inventory for 30 days. Promotion selects it by exact run, artifact ID, and
 digest, safely extracts and re-verifies the pair, and publishes without
-rebuilding. An exact already-public PyPI inventory is a safe retry; a partial
-or different inventory fails closed.
+rebuilding. An exact already-public PyPI inventory is a safe retry, the worker
+uploads the rest of a partial upload whose files match, and any different file
+stops the worker.
 
 The PyPI Trusted Publisher created for the first release uses project
 `citry-ui`, owner `citry-dev`, repository `citry`, workflow

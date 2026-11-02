@@ -192,11 +192,14 @@ def test_publish_workflow_only_promotes_the_controller_selected_candidate() -> N
 
     assert "if: ${{ inputs.operation == 'promote' }}" in release_job
     assert "qualification_artifact_id:" in workflow
-    assert "python scripts/release.py verify-qualification" in workflow
+    assert "python -m scripts.release verify-qualification" in workflow
     assert "--package pygments-citry" in workflow
     assert '--artifact-digest "$QUALIFICATION_ARTIFACT_DIGEST"' in workflow
     assert "Require the qualified commit to remain on main" in release_job
-    assert "Accept only absent or byte-identical public state" in release_job
+    assert "Accept only absent, partly uploaded, or byte-identical public state" in release_job
     assert "scripts/pypi_release.py" in release_job
-    assert "skip-existing" not in release_job
+    # Skipping a file is allowed only when the public-state check proved it
+    # is already on PyPI with the qualified hash.
+    guarded = "skip-existing: ${{ steps.public-state.outputs.skip_existing == 'true' }}"
+    assert release_job.count("skip-existing") == release_job.count(guarded) == 1
     assert "--clobber" not in release_job

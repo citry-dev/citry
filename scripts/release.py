@@ -3,21 +3,30 @@
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 import tomllib
+
+try:
+    from scripts.pypi_release import PyPIReleaseError, compare_public, public_state
+except ImportError:  # validate.py loads this file with scripts/ itself on sys.path.
+    from pypi_release import PyPIReleaseError, compare_public, public_state  # type: ignore[no-redef]
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -34,6 +43,30 @@ JOB_CHECK_SECONDS: Final = 60
 # a runner, and the run took 65 minutes. Two hours leaves room for a slower day.
 QUALIFICATION_TIMEOUT_SECONDS: Final = 2 * 60 * 60
 PUBLICATION_TIMEOUT_SECONDS: Final = 20 * 60
+# The VS Code worker waits up to 45 minutes for the Open VSX review on top of
+# its usual work, so its publish run gets a longer limit.
+VSCODE_PUBLICATION_TIMEOUT_SECONDS: Final = 75 * 60
+# A publish step that fails during a short registry or signing outage is
+# started again this many times, this long after the failure. On 2026-11-02
+# sigstore's signing log answered 502 for a few minutes; three tries spread
+# over ten minutes cover an outage like that without stalling a real failure
+# for long.
+PUBLISH_RETRIES: Final = 2
+RETRY_DELAY_SECONDS: Final = 5 * 60
+# The publish workers' steps that talk to a registry or to sigstore, which can
+# fail for a few minutes and then work again. A failure in any other step
+# (a hash check, a tag check) is not retried, because running it again gives
+# the same answer. packages/py/citry/tests/test_release_controller.py checks that every name here
+# is still a step in a publish workflow.
+RETRYABLE_STEPS: Final = frozenset(
+    {
+        "Attest the promotion of the qualified bytes",
+        "Publish to PyPI",
+        "Publish the qualified VSIX to Visual Studio Marketplace",
+        "Publish the same VSIX to Open VSX",
+    }
+)
+FAILED_CONCLUSIONS: Final = frozenset({"failure", "cancelled", "timed_out"})
 FULL_SHA: Final = re.compile(r"[0-9a-f]{40}")
 
 
@@ -51,6 +84,7 @@ class PackageSpec:
     artifact: str
     tag_prefix: str
     manifest_kind: str = "python"
+    publish_timeout_seconds: int = PUBLICATION_TIMEOUT_SECONDS
 
 
 PACKAGE_SPECS: Final = (
@@ -96,6 +130,7 @@ PACKAGE_SPECS: Final = (
         "verified-vscode-citry-extension",
         "vscode-citry@",
         "json",
+        VSCODE_PUBLICATION_TIMEOUT_SECONDS,
     ),
 )
 PACKAGE_BY_KEY: Final = {package.key: package for package in PACKAGE_SPECS}
@@ -302,23 +337,34 @@ class GitHubClient:
         self.repository = repository
         self.token = token
 
-    def request(self, method: str, path: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    def _headers(self, request: urllib.request.Request) -> None:
+        request.add_header("Accept", "application/vnd.github+json")
+        request.add_header("Content-Type", "application/json")
+        request.add_header("X-GitHub-Api-Version", API_VERSION)
+        # An artifact download redirects to blob storage, which rejects a
+        # second credential; a header added with `add_unredirected_header` is
+        # not sent on to the redirect target.
+        request.add_unredirected_header("Authorization", f"Bearer {self.token}")
+
+    def _call(
+        self,
+        method: str,
+        path: str,
+        payload: Mapping[str, Any] | None,
+        *,
+        missing_ok: bool,
+    ) -> dict[str, Any] | None:
         body = None if payload is None else json.dumps(payload).encode()
-        request = urllib.request.Request(  # noqa: S310 - fixed GitHub API origin
-            f"{self.api_root}{path}",
-            data=body,
-            method=method,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self.token}",
-                "Content-Type": "application/json",
-                "X-GitHub-Api-Version": API_VERSION,
-            },
-        )
+        request = urllib.request.Request(f"{self.api_root}{path}", data=body, method=method)  # noqa: S310 - fixed GitHub API origin
+        self._headers(request)
         try:
             with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 - fixed GitHub API origin
                 raw = response.read()
         except urllib.error.HTTPError as error:
+            # A missing tag or GitHub Release is an answer, not a failure, when
+            # the caller asks whether it exists.
+            if missing_ok and error.code == 404:
+                return None
             details = error.read().decode(errors="replace")
             raise ReleaseError(f"GitHub API {method} {path} failed with HTTP {error.code}: {details}") from error
         except (OSError, urllib.error.URLError) as error:
@@ -332,6 +378,62 @@ class GitHubClient:
         if not isinstance(value, dict):
             raise ReleaseError(f"GitHub API {method} {path} returned a non-object response")
         return value
+
+    def request(self, method: str, path: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        value = self._call(method, path, payload, missing_ok=False)
+        # `_call` returns None only for a 404 that the caller allowed.
+        return {} if value is None else value
+
+    def request_if_present(self, path: str) -> dict[str, Any] | None:
+        """GET one resource, returning None when GitHub answers 404."""
+        return self._call("GET", path, None, missing_ok=True)
+
+    def tag_commit(self, tag: str) -> str | None:
+        """Return the commit a tag names, or None when the tag does not exist."""
+        ref = self.request_if_present(f"/git/ref/tags/{urllib.parse.quote(tag, safe='')}")
+        if ref is None:
+            return None
+        target = ref.get("object")
+        if not isinstance(target, dict):
+            raise ReleaseError(f"GitHub returned no object for tag {tag}")
+        # The release App creates only annotated tags, and the tag job rejects
+        # any other kind, so a lightweight tag was made by hand and stops here.
+        if target.get("type") != "tag":
+            raise ReleaseError(f"tag {tag} is not an annotated release tag")
+        # An annotated tag's ref names a tag object, which names the commit.
+        tag_object = self.request("GET", f"/git/tags/{target.get('sha')}")
+        target = tag_object.get("object")
+        if not isinstance(target, dict):
+            raise ReleaseError(f"GitHub returned no commit for tag {tag}")
+        if target.get("type") != "commit" or not isinstance(target.get("sha"), str):
+            raise ReleaseError(f"tag {tag} does not name a commit")
+        return str(target["sha"])
+
+    def release(self, tag: str) -> dict[str, Any] | None:
+        """Return the GitHub Release for a tag, or None when there is none."""
+        return self.request_if_present(f"/releases/tags/{urllib.parse.quote(tag, safe='')}")
+
+    def download_artifact(self, artifact_id: int, destination: Path) -> None:
+        """Save one workflow artifact's zip archive to a file."""
+        request = urllib.request.Request(  # noqa: S310 - fixed GitHub API origin
+            f"{self.api_root}/actions/artifacts/{artifact_id}/zip"
+        )
+        self._headers(request)
+        try:
+            with (
+                urllib.request.urlopen(request, timeout=120) as response,  # noqa: S310 - fixed GitHub API origin
+                destination.open("wb") as stream,
+            ):
+                # The citry-core archive is about 400 MB, so copy it in pieces
+                # rather than holding it in memory.
+                while chunk := response.read(1024 * 1024):
+                    stream.write(chunk)
+        except (OSError, urllib.error.URLError) as error:
+            raise ReleaseError(f"could not download artifact {artifact_id}: {error}") from error
+
+    def rerun_failed_jobs(self, run_id: int) -> None:
+        """Start the failed jobs of a finished run again, with the jobs that depend on them."""
+        self.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
 
     def dispatch(self, *, workflow: str, ref: str, inputs: Mapping[str, str]) -> None:
         workflow_id = urllib.parse.quote(workflow, safe="")
@@ -410,6 +512,250 @@ def verify_qualification(
         raise ReleaseError(f"{package} qualification artifact has different source or identity")
 
 
+class RegistryClient:
+    """Read public package registries over HTTPS without credentials."""
+
+    def get(self, url: str) -> tuple[int, bytes]:
+        """Return the HTTP status and body for one URL; a 404 is an answer, not an error."""
+        if not url.startswith("https://"):
+            raise ReleaseError(f"registry URL must use HTTPS: {url}")
+        request = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})  # noqa: S310 - HTTPS checked above
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310 - HTTPS checked above
+                body = response.read()
+                encoding = response.headers.get("Content-Encoding", "")
+                status = int(response.status)
+        except urllib.error.HTTPError as error:
+            return error.code, b""
+        except (OSError, urllib.error.URLError) as error:
+            raise ReleaseError(f"could not read {url}: {error}") from error
+        # The Marketplace compresses its VSIX download; the hash must be of
+        # the VSIX itself, as the worker's `curl --compressed` sees it.
+        return status, gzip.decompress(body) if encoding == "gzip" else body
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def qualified_files(archive: Path, artifact_digest: str) -> dict[str, str]:
+    """
+    Return each qualified file's name and SHA-256 from a retained qualification archive.
+
+    The archive must hash to the digest the candidate recorded, and every file
+    named in its `release-inventory.json` must be in the archive with that
+    hash, so the result describes exactly the bytes qualification approved.
+    """
+    match = re.fullmatch(r"sha256:([0-9a-f]{64})", artifact_digest)
+    if match is None or _sha256_file(archive) != match.group(1):
+        raise ReleaseError(f"qualification archive does not match digest {artifact_digest}")
+    try:
+        with zipfile.ZipFile(archive) as bundle:
+            inventory = json.loads(bundle.read("release-inventory.json"))
+            entries = inventory.get("artifacts") if isinstance(inventory, dict) else None
+            if not isinstance(entries, list) or not entries:
+                raise ReleaseError("qualification inventory has no artifacts")
+            files: dict[str, str] = {}
+            for entry in entries:
+                name = entry.get("name") if isinstance(entry, dict) else None
+                recorded = entry.get("sha256") if isinstance(entry, dict) else None
+                if not isinstance(name, str) or not isinstance(recorded, str) or name in files:
+                    raise ReleaseError("qualification inventory has an invalid or repeated artifact")
+                digest = hashlib.sha256()
+                with bundle.open(name) as stream:
+                    while chunk := stream.read(1024 * 1024):
+                        digest.update(chunk)
+                # The inventory is only a list of claims; hash the archived
+                # file itself so a wrong entry cannot vouch for other bytes.
+                if digest.hexdigest() != recorded:
+                    raise ReleaseError(f"qualified file {name} does not match its inventory hash")
+                files[name] = recorded
+    except (KeyError, OSError, ValueError, zipfile.BadZipFile) as error:
+        raise ReleaseError(f"could not read the qualification archive: {error}") from error
+    return files
+
+
+def _vscode_registry_files(registry: RegistryClient, version: str, name: str) -> dict[str, dict[str, str]]:
+    """Download the VSIX from both extension registries and hash what each one serves."""
+    found: dict[str, dict[str, str]] = {}
+    marketplace_url = (
+        "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/citry-dev/"
+        f"vsextensions/citry/{version}/vspackage"
+    )
+    status, body = registry.get(marketplace_url)
+    if status not in {200, 404}:
+        raise ReleaseError(f"could not read the Marketplace version {version}; HTTP {status}")
+    found["Visual Studio Marketplace"] = {name: hashlib.sha256(body).hexdigest()} if status == 200 else {}
+
+    status, body = registry.get(f"https://open-vsx.org/api/citry-dev/citry/{version}")
+    if status not in {200, 404}:
+        raise ReleaseError(f"could not read the Open VSX version {version}; HTTP {status}")
+    found["Open VSX"] = {}
+    if status == 200:
+        try:
+            download = json.loads(body)["files"]["download"]
+        except (KeyError, TypeError, ValueError) as error:
+            raise ReleaseError(f"Open VSX returned no download link for {version}") from error
+        status, vsix = registry.get(str(download))
+        if status != 200:
+            raise ReleaseError(f"could not download the Open VSX VSIX {version}; HTTP {status}")
+        found["Open VSX"] = {name: hashlib.sha256(vsix).hexdigest()}
+    return found
+
+
+def registry_state(
+    package: str,
+    version: str,
+    expected: Mapping[str, str],
+    registry: RegistryClient,
+) -> str:
+    """
+    Compare a package's public files with the qualified ones by SHA-256.
+
+    Returns:
+        "absent" when no registry has the version, "partial" when some files
+        or registries are still missing, and "complete" when every registry
+        serves every qualified file.
+
+    Raises:
+        ReleaseError: A registry serves a file whose bytes differ from the
+            qualified file, or a file qualification never produced. The
+            message names the registry and the file.
+
+    """
+    if PACKAGE_BY_KEY[package].manifest_kind == "json":
+        if len(expected) != 1:
+            raise ReleaseError("the VS Code qualification must contain exactly one VSIX")
+        public_by_registry = _vscode_registry_files(registry, version, next(iter(expected)))
+        states = []
+        for name, public in public_by_registry.items():
+            try:
+                states.append(compare_public(expected, public))
+            except PyPIReleaseError as error:
+                raise ReleaseError(f"{package} {version} on {name}: {error}") from error
+        if all(state == "complete" for state in states):
+            return "complete"
+        return "absent" if all(state == "absent" for state in states) else "partial"
+
+    status, body = registry.get(f"https://pypi.org/pypi/{package}/{version}/json")
+    try:
+        payload = json.loads(body) if status == 200 else None
+        inventory = {"artifacts": [{"name": name, "sha256": digest} for name, digest in expected.items()]}
+        # One comparison serves this controller and the publish workers, so
+        # both accept and reject exactly the same public state.
+        return public_state(status=status, inventory=inventory, payload=payload)
+    except (PyPIReleaseError, ValueError) as error:
+        raise ReleaseError(f"{package} {version} on PyPI: {error}") from error
+
+
+def release_holds_qualified_files(
+    release: Mapping[str, Any],
+    *,
+    tag: str,
+    expected_assets: Mapping[str, str],
+    other_assets: Iterable[str],
+) -> bool:
+    """
+    Return whether a GitHub Release holds exactly the files its publish worker uploads.
+
+    `expected_assets` maps each qualified file, and the inventory, to its
+    SHA-256, which must equal the digest GitHub reports for that asset.
+    `other_assets` names the small JSON files the worker writes during
+    promotion; they must be present, but their bytes are not known here.
+    Any other asset, a draft, or a missing file returns False, so the worker
+    runs again and its own Release check, which also reads those JSON files,
+    decides.
+    """
+    if release.get("draft") is not False or release.get("tag_name") != tag:
+        return False
+    assets = release.get("assets")
+    if not isinstance(assets, list):
+        return False
+    found: dict[str, str] = {}
+    for asset in assets:
+        if not isinstance(asset, dict) or asset.get("state") != "uploaded":
+            return False
+        found[str(asset.get("name"))] = str(asset.get("digest"))
+    if set(found) != set(expected_assets) | set(other_assets):
+        return False
+    return all(found[name] == f"sha256:{digest}" for name, digest in expected_assets.items())
+
+
+def _inventory_sha256(archive: Path) -> str:
+    with zipfile.ZipFile(archive) as bundle:
+        return hashlib.sha256(bundle.read("release-inventory.json")).hexdigest()
+
+
+def already_published(
+    client: GitHubClient,
+    registry: RegistryClient,
+    *,
+    package: Mapping[str, Any],
+    qualification: Mapping[str, Any],
+    commit: str,
+) -> bool:
+    """
+    Return whether an earlier release run already finished this package from the same bytes.
+
+    A package counts as finished only when its annotated tag names the
+    candidate commit, its GitHub Release holds the qualified files, and every
+    registry serves exactly the qualified files. Anything less returns False,
+    and the publish worker finishes the rest: it uploads what the registry is
+    missing and creates a missing tag or Release.
+
+    Raises:
+        ReleaseError: The tag names another commit or is not annotated, or a
+            registry serves a file with other bytes than the qualified file.
+
+    """
+    key = str(package["key"])
+    tag = str(package["tag"])
+    tagged = client.tag_commit(tag)
+    # The tag is the last thing a worker creates before its GitHub Release,
+    # so a first release run, where no tag exists yet, costs one API call.
+    if tagged is None:
+        return False
+    if tagged != commit:
+        raise ReleaseError(f"{tag} names commit {tagged}, not the candidate commit {commit}")
+    github_release = client.release(tag)
+    if github_release is None:
+        _log(f"{tag} exists without a GitHub Release; its publish worker will finish it")
+        return False
+    with tempfile.TemporaryDirectory() as directory:
+        archive = Path(directory) / "qualification.zip"
+        client.download_artifact(int(qualification["artifact_id"]), archive)
+        expected = qualified_files(archive, str(qualification["artifact_digest"]))
+        inventory_digest = _inventory_sha256(archive)
+    # The registries come first: a file there with other bytes must stop the
+    # release even when the GitHub Release looks wrong too.
+    state = registry_state(key, str(package["version"]), expected, registry)
+    if state != "complete":
+        _log(f"{tag} is {state} on its registries; its publish worker will upload the rest")
+        return False
+    # The worker writes the provenance record for every package, and the
+    # registry record only for the extension.
+    other_assets = ["qualification-provenance.json"]
+    if PACKAGE_BY_KEY[key].manifest_kind == "json":
+        other_assets.append("registry-verification.json")
+    if not release_holds_qualified_files(
+        github_release,
+        tag=tag,
+        expected_assets={**expected, "release-inventory.json": inventory_digest},
+        other_assets=other_assets,
+    ):
+        _log(
+            f"{tag} has a GitHub Release that does not hold exactly the qualified files; "
+            "running its worker to check it"
+        )
+        return False
+    _log(f"{tag} is already published from the qualified bytes; skipping it")
+    return True
+
+
 def _log(message: str) -> None:
     """Report one progress line in the Actions log as it happens."""
     # Progress goes to stderr beside the `release error:` line, which keeps
@@ -425,22 +771,51 @@ def _run_state(run: Mapping[str, Any] | None) -> str:
     return f"{status}/{run.get('conclusion')}" if status == "completed" else status
 
 
-def _failed_jobs(client: GitHubClient, run: Mapping[str, Any]) -> list[str]:
-    """List the jobs that made a run fail, so the error message points at the cause."""
+def _jobs(client: GitHubClient, run: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Read a run's jobs, with their steps, for the latest attempt of the run."""
     try:
         payload = client.request("GET", f"/actions/runs/{run.get('id')}/jobs?per_page=100")
-    except Exception:  # noqa: BLE001 - the job names are optional detail
+    except Exception:  # noqa: BLE001 - the job details are optional
         # The caller still raises the run failure; a failed job lookup only
-        # drops the job names, whatever went wrong in the request.
+        # drops the job names and turns off a retry, whatever went wrong.
         return []
     jobs = payload.get("jobs")
     if not isinstance(jobs, list):
         return []
-    return [
-        str(job.get("name"))
-        for job in jobs
-        if isinstance(job, dict) and job.get("conclusion") in {"failure", "cancelled", "timed_out"}
-    ]
+    return [job for job in jobs if isinstance(job, dict)]
+
+
+def _failed_job_names(jobs: Iterable[Mapping[str, Any]]) -> list[str]:
+    return [str(job.get("name")) for job in jobs if job.get("conclusion") in FAILED_CONCLUSIONS]
+
+
+def should_retry(jobs: Sequence[Mapping[str, Any]], *, retries_used: int, max_retries: int) -> bool:
+    """
+    Decide whether a failed publish run is worth starting again.
+
+    A retry is worth it only when every failed job failed in a step that talks
+    to a registry or to sigstore (`RETRYABLE_STEPS`). Someone stopped a
+    cancelled job on purpose, and a timed-out job, a job without a failed
+    step, or a failed check step would fail the same way again, so those stop
+    the release at once.
+    """
+    if retries_used >= max_retries:
+        return False
+    failed = [job for job in jobs if job.get("conclusion") in FAILED_CONCLUSIONS]
+    if not failed:
+        return False
+    for job in failed:
+        if job.get("conclusion") != "failure":
+            return False
+        steps = job.get("steps")
+        failed_steps = [
+            str(step.get("name"))
+            for step in (steps if isinstance(steps, list) else [])
+            if isinstance(step, dict) and step.get("conclusion") == "failure"
+        ]
+        if not failed_steps or not set(failed_steps) <= RETRYABLE_STEPS:
+            return False
+    return True
 
 
 def _run_title(operation: str, package: str, candidate_id: str) -> str:
@@ -465,12 +840,18 @@ def _find_run(client: GitHubClient, *, workflow: str, title: str, started_at: da
     return max(matches, key=lambda run: int(run.get("id", 0)), default=None)
 
 
+def _run_attempt(run: Mapping[str, Any]) -> int:
+    attempt = run.get("run_attempt", 1)
+    return attempt if isinstance(attempt, int) else 1
+
+
 def _wait_for_runs(
     client: GitHubClient,
     pending: Mapping[str, tuple[str, str]],
     *,
     started_at: datetime,
     timeout_seconds: int,
+    max_retries: int = 0,
 ) -> dict[str, dict[str, Any]]:
     started = time.monotonic()
     deadline = started + timeout_seconds
@@ -484,6 +865,15 @@ def _wait_for_runs(
     states: dict[str, tuple[object, str]] = {}
     # The newest run seen for each package, listed in the still-waiting line.
     latest: dict[str, dict[str, Any] | None] = dict.fromkeys(pending)
+    # Retries already started for each package, and when a scheduled retry is
+    # due. A retry waits `RETRY_DELAY_SECONDS` so a short outage can end.
+    retries_used = dict.fromkeys(pending, 0)
+    # Each scheduled retry also keeps the attempt that failed, so a run that
+    # someone restarted by hand during the delay is not restarted twice.
+    retry_due: dict[str, tuple[float, int]] = {}
+    # After a retry starts, GitHub can still report the failed attempt for a
+    # few polls; states from attempts below this number are ignored.
+    current_attempt = dict.fromkeys(pending, 1)
     while len(completed) != len(pending):
         if time.monotonic() >= deadline:
             missing = ", ".join(sorted(set(pending) - completed.keys()))
@@ -493,31 +883,67 @@ def _wait_for_runs(
                 continue
             run = _find_run(client, workflow=workflow, title=title, started_at=started_at)
             latest[package] = run
+            if run is None:
+                continue
+            if package in retry_due:
+                due, failed_attempt = retry_due[package]
+                restarted_by_hand = _run_attempt(run) > failed_attempt or run.get("status") != "completed"
+                if restarted_by_hand:
+                    # Follow the newer attempt like any other run.
+                    del retry_due[package]
+                    current_attempt[package] = _run_attempt(run)
+                elif time.monotonic() < due:
+                    continue
+                else:
+                    del retry_due[package]
+                    current_attempt[package] = failed_attempt + 1
+                    client.rerun_failed_jobs(int(run["id"]))
+                    # The new attempt gets the same time limit as the first one.
+                    deadline = max(deadline, time.monotonic() + timeout_seconds)
+                    _log(
+                        f"{title}: started attempt {current_attempt[package]}: "
+                        f"{run.get('html_url', 'unknown run URL')}"
+                    )
+                    continue
+            if _run_attempt(run) < current_attempt[package]:
+                continue
             state = _run_state(run)
-            if run is not None and states.get(package) != (run.get("id"), state):
+            if states.get(package) != (run.get("id"), state):
                 # A newly seen run carries its URL, so the log links to every run,
                 # including one dispatched again by hand under the same title.
                 is_new_run = states.get(package, (None, ""))[0] != run.get("id")
                 link = f": {run.get('html_url', 'unknown run URL')}" if is_new_run else ""
                 _log(f"{title}: {state}{link}")
                 states[package] = (run.get("id"), state)
-            if run is None:
-                continue
             if run.get("status") != "completed":
                 # A run reports its failure only after its slowest job ends,
-                # so stop at the first failed job and name it.
+                # so stop at the first failed job and name it, unless the job
+                # can be retried; a retry can start only once the run ends.
                 if time.monotonic() >= next_job_check[package]:
                     next_job_check[package] = time.monotonic() + JOB_CHECK_SECONDS
-                    jobs = _failed_jobs(client, run)
-                    if jobs:
+                    jobs = _jobs(client, run)
+                    names = _failed_job_names(jobs)
+                    if names and not should_retry(jobs, retries_used=retries_used[package], max_retries=max_retries):
                         raise ReleaseError(
-                            f"{title} failed in jobs {', '.join(jobs)} while its other jobs were still running: "
+                            f"{title} failed in jobs {', '.join(names)} while its other jobs were still running: "
                             f"{run.get('html_url', 'unknown run URL')}"
                         )
                 continue
             if run.get("conclusion") != "success":
-                jobs = _failed_jobs(client, run)
-                detail = f" in jobs {', '.join(jobs)}" if jobs else ""
+                jobs = _jobs(client, run)
+                names = _failed_job_names(jobs)
+                if should_retry(jobs, retries_used=retries_used[package], max_retries=max_retries):
+                    retries_used[package] += 1
+                    retry_due[package] = (time.monotonic() + RETRY_DELAY_SECONDS, _run_attempt(run))
+                    # A failure close to the time limit must still get its
+                    # retry, so the limit covers the delay and a new attempt.
+                    deadline = max(deadline, retry_due[package][0] + timeout_seconds)
+                    _log(
+                        f"{title} failed in jobs {', '.join(names)}; retry {retries_used[package]}/{max_retries} "
+                        f"starts in {RETRY_DELAY_SECONDS // 60} min"
+                    )
+                    continue
+                detail = f" in jobs {', '.join(names)}" if names else ""
                 raise ReleaseError(f"{title} failed{detail}: {run.get('html_url', 'unknown run URL')}")
             completed[package] = run
         if len(completed) != len(pending):
@@ -621,8 +1047,17 @@ def publish_candidate(
     ref: str,
     publication_id: str,
     candidate_run_id: int,
+    registry: RegistryClient | None = None,
 ) -> None:
-    """Publish each dependency layer concurrently from retained candidate bytes."""
+    """
+    Publish each dependency layer concurrently from retained candidate bytes.
+
+    The run can be started again for the same candidate after any failure. A
+    package an earlier run already finished from the same bytes is skipped,
+    and every other package is sent to its publish worker, which uploads only
+    the files its registry is missing.
+    """
+    registry = RegistryClient() if registry is None else registry
     # A correctly shaped JSON bundle alone does not prove who qualified it.
     run = client.request("GET", f"/actions/runs/{candidate_run_id}")
     verify_producer_run(
@@ -652,6 +1087,14 @@ def publish_candidate(
                 raise ReleaseError(f"publication layer names unknown package {key!r}")
             package = packages[key]
             qualification = qualifications[key]
+            if already_published(
+                client,
+                registry,
+                package=package,
+                qualification=qualification,
+                commit=str(candidate["commit"]),
+            ):
+                continue
             title = _run_title("promote", key, publication_id)
             client.dispatch(
                 workflow=package["workflow"],
@@ -667,12 +1110,15 @@ def publish_candidate(
             )
             pending[key] = (package["workflow"], title)
             _log(f"Dispatched {title} from qualification run {qualification['run_id']}")
-        _wait_for_runs(
-            client,
-            pending,
-            started_at=started_at,
-            timeout_seconds=PUBLICATION_TIMEOUT_SECONDS,
-        )
+        if pending:
+            _wait_for_runs(
+                client,
+                pending,
+                started_at=started_at,
+                # The slowest worker in the layer sets the limit for the layer.
+                timeout_seconds=max(PACKAGE_BY_KEY[key].publish_timeout_seconds for key in pending),
+                max_retries=PUBLISH_RETRIES,
+            )
         _log(f"Layer {number}/{len(layers)} published: {', '.join(layer)}")
     _log(f"Published every package in candidate run {candidate_run_id}")
 

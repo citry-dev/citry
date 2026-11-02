@@ -337,7 +337,7 @@ jobs:
           QUALIFICATION_ARTIFACT_ID: ${{ inputs.qualification_artifact_id }}
           QUALIFICATION_ARTIFACT_DIGEST: ${{ inputs.qualification_artifact_digest }}
         run: >-
-          python scripts/release.py verify-qualification
+          python -m scripts.release verify-qualification
           --repository "$GITHUB_REPOSITORY"
           --package vscode-citry
           --commit "$RELEASE_COMMIT"
@@ -443,31 +443,53 @@ jobs:
         run: |
           marketplace_url="https://marketplace.visualstudio.com/_apis/public/gallery/publishers/citry-dev/vsextensions/citry/$EXTENSION_VERSION/vspackage"
           open_vsx_url="https://open-vsx.org/api/citry-dev/citry/$EXTENSION_VERSION"
+          expected_sha=$(sha256sum "verified/${{ needs.verify-version.outputs.filename }}" | cut -d' ' -f1)
+          # The Marketplace serves a new version within a few minutes, so it
+          # gets 20 tries, 15 seconds apart. A network error counts as one
+          # failed try (curl reports 000) rather than ending the step.
           for attempt in $(seq 1 20); do
-            marketplace_status=$(curl --compressed --location --silent --show-error --output marketplace.vsix --write-out '%{http_code}' "$marketplace_url")
-            open_vsx_status=$(curl --silent --show-error --output open-vsx.json --write-out '%{http_code}' "$open_vsx_url")
-            if [ "$marketplace_status" = "200" ] && [ "$open_vsx_status" = "200" ]; then
-              test "$(jq -r '.namespace' open-vsx.json)" = "citry-dev"
-              test "$(jq -r '.name' open-vsx.json)" = "citry"
-              test "$(jq -r '.version' open-vsx.json)" = "$EXTENSION_VERSION"
-              open_vsx_download=$(jq -r '.files.download' open-vsx.json)
-              curl --fail --location --silent --show-error "$open_vsx_download" --output open-vsx.vsix
-              expected_sha=$(sha256sum "verified/${{ needs.verify-version.outputs.filename }}" | cut -d' ' -f1)
-              test "$(sha256sum marketplace.vsix | cut -d' ' -f1)" = "$expected_sha"
-              test "$(sha256sum open-vsx.vsix | cut -d' ' -f1)" = "$expected_sha"
-              jq -n \
-                --arg marketplace "$marketplace_url" \
-                --arg open_vsx "$open_vsx_url" \
-                --arg version "$EXTENSION_VERSION" \
-                '{version: $version, visual_studio_marketplace: $marketplace, open_vsx: $open_vsx}' \
-                > verified/registry-verification.json
-              exit 0
+            marketplace_status=$(curl --compressed --location --silent --show-error --output marketplace.vsix --write-out '%{http_code}' "$marketplace_url" || true)
+            if [ "$marketplace_status" = "200" ]; then break; fi
+            echo "Marketplace attempt $attempt: HTTP $marketplace_status"
+            if [ "$attempt" = 20 ]; then
+              echo "::error::extension version did not become public on the Marketplace"
+              exit 1
             fi
-            echo "registry propagation attempt $attempt: marketplace=$marketplace_status open-vsx=$open_vsx_status"
             sleep 15
           done
-          echo "::error::extension version did not become public in both registries"
-          exit 1
+          test "$(sha256sum marketplace.vsix | cut -d' ' -f1)" = "$expected_sha" || {
+            echo "::error::Marketplace VSIX differs from the qualified bytes"; exit 1; }
+          # Open VSX reviews a new version before serving it, and the review
+          # of 0.3.0 took longer than five minutes. The upload above
+          # succeeded, so a 404 here most likely means the version is held
+          # for review. Wait up to 45 minutes: 180 tries, 15 seconds apart.
+          for attempt in $(seq 1 180); do
+            open_vsx_status=$(curl --silent --show-error --output open-vsx.json --write-out '%{http_code}' "$open_vsx_url" || true)
+            if [ "$open_vsx_status" = "200" ]; then break; fi
+            if [ "$open_vsx_status" = "404" ]; then
+              echo "Open VSX attempt $attempt: still under review (HTTP 404)"
+            else
+              echo "Open VSX attempt $attempt: HTTP $open_vsx_status"
+            fi
+            if [ "$attempt" = 180 ]; then
+              echo "::error::Open VSX did not serve the version within 45 minutes; it may still be under review"
+              exit 1
+            fi
+            sleep 15
+          done
+          test "$(jq -r '.namespace' open-vsx.json)" = "citry-dev"
+          test "$(jq -r '.name' open-vsx.json)" = "citry"
+          test "$(jq -r '.version' open-vsx.json)" = "$EXTENSION_VERSION"
+          open_vsx_download=$(jq -r '.files.download' open-vsx.json)
+          curl --fail --location --silent --show-error "$open_vsx_download" --output open-vsx.vsix
+          test "$(sha256sum open-vsx.vsix | cut -d' ' -f1)" = "$expected_sha" || {
+            echo "::error::Open VSX VSIX differs from the qualified bytes"; exit 1; }
+          jq -n \
+            --arg marketplace "$marketplace_url" \
+            --arg open_vsx "$open_vsx_url" \
+            --arg version "$EXTENSION_VERSION" \
+            '{version: $version, visual_studio_marketplace: $marketplace, open_vsx: $open_vsx}' \
+            > verified/registry-verification.json
       - name: Attest the promotion of the qualified bytes
         uses: actions/attest-build-provenance@v4
         with:

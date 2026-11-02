@@ -269,7 +269,7 @@ jobs:
           QUALIFICATION_ARTIFACT_ID: ${{ inputs.qualification_artifact_id }}
           QUALIFICATION_ARTIFACT_DIGEST: ${{ inputs.qualification_artifact_digest }}
         run: >-
-          python scripts/release.py verify-qualification
+          python -m scripts.release verify-qualification
           --repository "$GITHUB_REPOSITORY"
           --package citry
           --commit "$RELEASE_COMMIT"
@@ -332,14 +332,14 @@ jobs:
             > verified/qualification-provenance.json
           mkdir dist
           cp verified/*.whl verified/*.tar.gz dist/
-      - name: Accept only absent or byte-identical public state
+      - name: Accept only absent, partly uploaded, or byte-identical public state
         id: public-state
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           status=$(curl --silent --show-error --output pypi.json --write-out '%{http_code}' \
             "https://pypi.org/pypi/citry/${CITRY_VERSION}/json")
-          args=(--status "$status" --inventory verified/release-inventory.json --github-output "$GITHUB_OUTPUT")
+          args=(--status "$status" --inventory verified/release-inventory.json --github-output "$GITHUB_OUTPUT" --allow-partial)
           if [ "$status" = "200" ]; then args+=(--pypi-json pypi.json); fi
           python scripts/pypi_release.py "${args[@]}"
           release_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
@@ -362,6 +362,12 @@ jobs:
       - name: Publish to PyPI
         if: steps.public-state.outputs.publish == 'true'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          # Set only when an earlier attempt left some files on PyPI. The
+          # check after this step still compares every public file's SHA-256
+          # with the qualified bytes, so a skipped file is proven, not trusted.
+          # Signing stays on: the action attests every file it uploads.
+          skip-existing: ${{ steps.public-state.outputs.skip_existing == 'true' }}
       - name: Verify the exact public artifact pair
         run: |
           for attempt in $(seq 1 20); do
