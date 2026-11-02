@@ -836,10 +836,18 @@ The Citry/HTML printer always owns the outer `script` or `style` tag and its
 indentation. Eligible embedded output is reindented as one block; the lexical
 guards above exclude tokens for which that transform could alter meaningful
 raw whitespace or start position. The block goes on lines of its own between
-the start and end tags, even when the body touched them. That newline is
-inside JavaScript or CSS text, so the page behaves the same, but the
-element's `textContent` changes; this is the one place the formatter adds
-whitespace to text in the page where the author wrote none.
+the start and end tags, even when the body touched them. Its indent follows
+the start tag's column in the composed text: in `</script><style>`, putting
+the script body on its own lines moves the `<style>` tag, and the style body
+is indented from where that tag lands, so the next pass leaves it in place.
+Only the body indent follows the moved tag. When other layout after the
+composed body depends on that column, such as a start tag that breaks
+across lines, the composition check rejects the result and the document is
+left unchanged. The line breaks around the block are inside JavaScript or
+CSS text, so the page
+behaves the same, but the element's `textContent` changes; this is the one
+place the formatter adds whitespace to text in the page where the author
+wrote none.
 
 ### 6.8 Protected content
 

@@ -26,7 +26,7 @@ use crate::diagnostic_catalog::{
 use crate::error::FormatError;
 use crate::formatter;
 use crate::newline::{detect_newline, normalize_to_lf};
-use crate::source::{EmbeddedBodyModel, SourceModel};
+use crate::source::{EmbeddedBodyModel, SourceModel, source_column};
 
 /// Language requested from an external embedded formatter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -78,6 +78,8 @@ pub struct EmbeddedFormatRequest {
     source: String,
     virtual_source: String,
     byte_range: Range<usize>,
+    /// Where the body's start tag begins in the plan's formatted source.
+    tag_start: usize,
     base_indent: usize,
     newline: String,
 }
@@ -110,7 +112,12 @@ impl EmbeddedFormatRequest {
         self.byte_range.clone()
     }
 
-    /// Return the absolute content indentation used when composing output.
+    /// Return the number of spaces the plan's formatted source puts before
+    /// each line of this body.
+    ///
+    /// Composing can still move it: when an earlier body on the start tag's
+    /// line is put on lines of its own, the tag moves with the text after that
+    /// body, and the composed body follows the tag.
     pub const fn base_indent(&self) -> usize {
         self.base_indent
     }
@@ -373,6 +380,7 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
             source: exact.to_string(),
             virtual_source: standalone,
             byte_range: body.span.start..body.span.end,
+            tag_start: body.tag_start,
             base_indent: body.tag_column + 2,
             newline: newline.clone(),
         });
@@ -480,10 +488,7 @@ pub fn finish_embedded_format(
                 if let Some(provider) = provider {
                     providers.insert(provider.clone());
                 }
-                replacements.push((
-                    request.byte_range.clone(),
-                    compose_body(text, request.base_indent, &request.newline),
-                ));
+                replacements.push((request, text.as_str()));
             }
             EmbeddedFormatResult::Unchanged { .. } => {}
             EmbeddedFormatResult::Unavailable { message, .. } => notices.push(notice(
@@ -501,16 +506,35 @@ pub fn finish_embedded_format(
         }
     }
 
-    replacements.sort_by_key(|(range, _)| range.start);
+    replacements.sort_by_key(|(request, _)| request.byte_range.start);
     for pair in replacements.windows(2) {
-        if pair[0].0.end > pair[1].0.start {
+        if pair[0].0.byte_range.end > pair[1].0.byte_range.start {
             return Err(provider_error("embedded replacement ranges overlap"));
         }
     }
-    let mut candidate = plan.formatted_source.clone();
-    for (range, replacement) in replacements.into_iter().rev() {
-        candidate.replace_range(range, &replacement);
+    // Compose front to back, because a body's indent depends on the composed
+    // text before it: `</script><style>` keeps both tags on one line, and once
+    // the script body moves onto its own lines the `<style>` tag sits at a new
+    // column. Indenting the style body from the column it had before would put
+    // it somewhere the next pass moves it again.
+    let source = plan.formatted_source.as_str();
+    let mut candidate = String::with_capacity(source.len());
+    let mut cursor = 0;
+    // Each composed body's source end, with how many bytes the candidate has
+    // gained or lost by then. A tag finds its candidate offset from the last
+    // body that ended before it, which skips a body nested inside its own
+    // attributes.
+    let mut growth = Vec::<(usize, isize)>::new();
+    for (request, text) in replacements {
+        let range = &request.byte_range;
+        candidate.push_str(&source[cursor..range.start]);
+        let base_indent = composed_base_indent(request, source, &candidate, &growth)?;
+        candidate.push_str(&compose_body(text, base_indent, &request.newline));
+        cursor = range.end;
+        let gained = candidate.len().cast_signed() - range.end.cast_signed();
+        growth.push((range.end, gained));
     }
+    candidate.push_str(&source[cursor..]);
     let verified = formatter::format(&candidate).map_err(|error| {
         FormatError::provider(
             format!("composed embedded output failed Citry validation: {error}"),
@@ -987,6 +1011,43 @@ fn starts_with_lexical_sentinel(source: &str, language: EmbeddedLanguage) -> boo
             .get(.."@charset".len())
             .is_some_and(|prefix| prefix.eq_ignore_ascii_case("@charset")),
     }
+}
+
+/// Return the body indent for `request` after the bodies before it are composed.
+///
+/// `candidate` holds the composed text up to the body's start, and `growth`
+/// lists each composed body's source end with the bytes the candidate had
+/// gained by then. The plan's indent is kept and shifted by however far the
+/// earlier bodies moved the start tag along its line (usually left), so a body
+/// with nothing composed before it on that line keeps the indent the plan gave
+/// it.
+fn composed_base_indent(
+    request: &EmbeddedFormatRequest,
+    source: &str,
+    candidate: &str,
+    growth: &[(usize, isize)],
+) -> Result<usize, FormatError> {
+    // Bodies that end before the tag shift its offset. A body inside the tag's
+    // own attributes ends after the `<`, so it changes the tag's length but
+    // does not move the `<`.
+    let gained = growth
+        .iter()
+        .rev()
+        .find(|(end, _)| *end <= request.tag_start)
+        .map_or(0, |(_, gained)| *gained);
+    let candidate_tag_start = request
+        .tag_start
+        .checked_add_signed(gained)
+        .filter(|offset| *offset <= candidate.len())
+        .ok_or_else(|| {
+            provider_error(format!(
+                "embedded start tag for {:?} is outside the composed text",
+                request.id
+            ))
+        })?;
+    let planned = source_column(source, request.tag_start)?;
+    let composed = source_column(candidate, candidate_tag_start)?;
+    Ok((request.base_indent + composed).saturating_sub(planned))
 }
 
 fn compose_body(source: &str, base_indent: usize, newline: &str) -> String {

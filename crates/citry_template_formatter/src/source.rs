@@ -138,6 +138,10 @@ pub(crate) struct EmbeddedBodyModel {
     pub(crate) span: Span,
     pub(crate) language: Option<EmbeddedLanguage>,
     pub(crate) kind: EmbeddedRegionKind,
+    /// Byte offset of the start tag's `<` in the source. `finish_embedded_format`
+    /// uses it to measure how far bodies composed earlier on the line moved
+    /// the tag.
+    pub(crate) tag_start: usize,
     pub(crate) tag_column: usize,
     pub(crate) has_interpolation: bool,
 }
@@ -778,6 +782,7 @@ fn visit_node_on_stack(
                 },
                 language,
                 kind,
+                tag_start: context.base + start_tag.token.start_index,
                 tag_column: layout.column,
                 has_interpolation: body
                     .elements
@@ -1547,7 +1552,7 @@ fn validate_local_span(
     }
 }
 
-fn source_column(source: &str, at: usize) -> Result<usize, FormatError> {
+pub(crate) fn source_column(source: &str, at: usize) -> Result<usize, FormatError> {
     let before = source.get(..at).ok_or_else(|| {
         FormatError::invalid_span("layout position is not valid UTF-8 source", at..at)
     })?;
