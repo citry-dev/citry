@@ -71,6 +71,7 @@ from citry.util.routing import (
     body_read_limit,
     flatten_routes,
     normalize_mount_prefix,
+    route_allows_method,
     sent_content_type,
     sent_headers,
 )
@@ -175,7 +176,10 @@ def _make_view(route: URLRoute) -> Any:
     from django.http import HttpResponse, HttpResponseNotAllowed  # noqa: PLC0415
 
     def view(request: Any, **kwargs: Any) -> Any:
-        if request.method not in route.methods and request.method != "HEAD":
+        # The shared rule keeps HEAD off POST-only routes. That matters most
+        # here: CsrfViewMiddleware skips its token check for HEAD, so a HEAD
+        # that reached a POST handler would run it without the token.
+        if not route_allows_method(route, request.method):
             not_allowed = HttpResponseNotAllowed(route.methods)
             # The same standard header every other Citry response carries.
             not_allowed["X-Content-Type-Options"] = "nosniff"

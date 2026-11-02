@@ -56,7 +56,8 @@ from citry.util.routing import (
     RouteResponse,
     body_read_limit,
     call_maybe_sync,
-    match_route,
+    match_path_below_mount,
+    route_allows_method,
     sent_content_type,
     sent_headers,
 )
@@ -169,13 +170,13 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
         path: str = scope["path"]
         root_path: str = scope.get("root_path", "")
         full_path = path if path.startswith(root_path) else root_path + path
-        path = full_path[len(root_path) :].lstrip("/")
-        matched = match_route(citry_instance.urls, path)
+        matched = match_path_below_mount(citry_instance.urls, full_path[len(root_path) :])
         if matched is None:
             await _send_response(send, RouteResponse(content="Not Found", status=404))
             return
         method: str = scope["method"]
-        if method not in matched.route.methods and method != "HEAD":
+        # The shared rule keeps HEAD off POST-only routes, the same on every adapter.
+        if not route_allows_method(matched.route, method):
             await _send_response(send, RouteResponse(content="Method Not Allowed", status=405))
             return
 

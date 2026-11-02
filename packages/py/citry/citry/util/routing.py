@@ -190,9 +190,10 @@ class URLRoute:
     register or check the route. Any other value raises ``TypeError`` (not a
     tuple of strings) or ``ValueError`` (empty, or a name that is not an
     uppercase HTTP method token such as ``"get"``) when the route is built.
-    Adapters answer any other method with 405 (``HEAD`` is always
-    admitted). When a route admits more methods than its handler serves,
-    the handler answers 405 for the rest.
+    Adapters answer any other method with 405. A route that lists ``GET``
+    also accepts ``HEAD`` (see :func:`route_allows_method`). When a route
+    admits more methods than its handler serves, the handler answers 405
+    for the rest.
 
     ``max_body_bytes`` is an optional function that returns the largest
     request body the route accepts. Citry calls it for each request, so the
@@ -387,6 +388,40 @@ def compile_route_pattern(path: str) -> re.Pattern[str]:
     return re.compile(f"^{pattern}$")
 
 
+def match_path_below_mount(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
+    """
+    Resolve the part of a request path below the mount prefix against a route tree.
+
+    The host adapters call this with what follows the prefix: empty, or a
+    path that starts with ``/`` (``/ext/events/call``), as the WSGI and
+    ASGI specs describe. Only that one ``/`` is removed before
+    :func:`match_route` runs, so ``/citry//ext/events/call`` matches no
+    route. A remainder that does not start with ``/`` matches nothing
+    either: a server passes the request line ``POST ext/events/call``
+    through unchanged, and an ASGI server with a ``root_path`` of
+    ``/citry`` can hand over ``/citryext/events/call``. In each case a
+    host rule that checks the path, such as
+    ``path.startswith("/citry/ext/events")``, sees a different path from
+    the one Citry would route, so Citry answers 404.
+    """
+    if path and not path.startswith("/"):
+        return None
+    return match_route(routes, path.removeprefix("/"))
+
+
+def route_allows_method(route: URLRoute, method: str) -> bool:
+    """
+    Return whether ``route`` accepts a request with ``method``.
+
+    A method the route lists is accepted. ``HEAD`` is also accepted when the
+    route lists ``GET``, since HEAD asks for the same response without its
+    body (RFC 9110 section 9.3.2). So a POST-only route answers 405 to HEAD:
+    a host rule that checks only POST requests, and Django's CSRF check,
+    which skips HEAD, both see every request that reaches a POST handler.
+    """
+    return method in route.methods or (method == "HEAD" and "GET" in route.methods)
+
+
 def match_route(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
     """
     Resolve a request path (no leading slash) against a route tree.
@@ -394,10 +429,15 @@ def match_route(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
     Routes are tried in definition order; the first match wins, so define
     more specific patterns first (e.g. the two-parameter
     ``cache/{class_id}.{vars_hash}.{script_type}`` before the one-parameter
-    ``cache/{class_id}.{script_type}``).
+    ``cache/{class_id}.{script_type}``). The whole path must match. The
+    ASGI and WSGI adapters call :func:`match_path_below_mount`, which
+    prepares the request path first.
     """
     for full_path, route in flatten_routes(routes):
-        match = compile_route_pattern(full_path).match(path)
+        # fullmatch, because the pattern's `$` also matches just before a
+        # final newline, so `call%0a` would otherwise reach the `call` route
+        # while a host rule comparing the exact path lets it through.
+        match = compile_route_pattern(full_path).fullmatch(path)
         if match is not None:
             return MatchedRoute(route=route, full_path=full_path, params=match.groupdict())
     return None
