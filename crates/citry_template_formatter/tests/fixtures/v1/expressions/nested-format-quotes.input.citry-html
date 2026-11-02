@@ -1,0 +1,2 @@
+<p>{{ f"{value:{spec["width"]}}" }}</p>
+<p>{{ f'{value:{spec['width']}}' }}</p>

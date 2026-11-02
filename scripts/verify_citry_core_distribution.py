@@ -473,8 +473,8 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         elif payload != release_links.checkout_bytes(PACKAGE_ROOT, source_path):
             raise DistributionVerificationError(f"{path.name} contains changed source bytes in {name}")
     workspace = _loads_toml(relative["Cargo.toml"].decode("utf-8"))
-    if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.96":
-        raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.96 minimum")
+    if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.97":
+        raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.97 minimum")
     workspace_dependencies = workspace.get("workspace", {}).get("dependencies", {})
     patches = workspace.get("patch", {}).get("crates-io", {})
     for crate, vendored_version in VENDORED_VIZE_CRATES.items():
@@ -712,7 +712,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     promote.add_argument("--output-dir", type=Path, required=True)
     sdist = subparsers.add_parser("smoke-sdist")
     sdist.add_argument("--sdist", required=True)
-    sdist.add_argument("--rust-toolchain", default="1.96.0")
+    sdist.add_argument("--rust-toolchain", default="1.97.0")
     args = parser.parse_args(argv)
     try:
         if args.command == "inventory":

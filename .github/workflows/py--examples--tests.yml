@@ -58,7 +58,7 @@ env:
   # here as well as in the setup step because these jobs build inside the
   # checkout, where rust-toolchain.toml would otherwise select the
   # development nightly.
-  RUSTUP_TOOLCHAIN: "1.96.0"
+  RUSTUP_TOOLCHAIN: "1.97.0"
 
 jobs:
   clean-copy:

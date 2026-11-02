@@ -1202,10 +1202,10 @@ impl Transformer for SandboxTransformer {
                 }
             }
             Expr::Compare(compare) => {
-                // Transform the left side and all comparators
-                self.visit_expr(&mut compare.left);
-                for comparator in compare.comparators.iter_mut() {
-                    self.visit_expr(comparator);
+                // Ruff keeps every operand of a chain like `a < b <= c` in
+                // one list, so walking it covers the left side too.
+                for operand in compare.operands.iter_mut() {
+                    self.visit_expr(operand);
                 }
             }
             // ✅ Ternary if expression: `x if condition else y`
@@ -1514,11 +1514,11 @@ impl Transformer for SandboxTransformer {
                 // Process all parts of the f-string
                 for part in &mut f_string.value {
                     let f_str = match part {
-                        ast::FStringPart::FString(f_str) => f_str,
+                        ast::FStringPartMut::FString(f_str) => f_str,
                         // An ordinary literal joined to the f-string by
                         // implicit concatenation (`'a' f'{x}'`) is part of
                         // the text too.
-                        ast::FStringPart::Literal(literal) => {
+                        ast::FStringPartMut::Literal(literal) => {
                             match self.literal_needing_source(literal) {
                                 Some(text) => {
                                     template_parts.push("{}".to_string());

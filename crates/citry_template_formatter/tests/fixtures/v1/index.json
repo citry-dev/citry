@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "python_expression_provider": "ruff@0.16.6+22f65a2ab5",
+  "python_expression_provider": "ruff@0.17.3+ba65abf8ba",
   "cases": [
     {
       "id": "opening-tags.tags.normalize-spacing",
@@ -477,6 +477,14 @@
         "python-comment",
         "trailing-comma"
       ]
+    },
+    {
+      "id": "python-expressions.expressions.nested-format-quotes",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/nested-format-quotes.input.citry-html",
+      "expected": "expressions/nested-format-quotes.expected.citry-html",
+      "features": ["python-expression-formatting", "strings"]
     },
     {
       "id": "python-expressions.expressions.attributes",

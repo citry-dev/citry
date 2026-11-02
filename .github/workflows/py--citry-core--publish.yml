@@ -44,7 +44,7 @@ env:
   CITRY_RELEASE_TAG_PREFIX: "citry-core@"
   PROJECT_DIR: packages/py/citry_core
   SOURCE_DATE_EPOCH: "315532800"
-  CITRY_CORE_RUST_TOOLCHAIN: "1.96.0"
+  CITRY_CORE_RUST_TOOLCHAIN: "1.97.0"
   CITRY_CORE_EMSCRIPTEN_VERSION: "5.0.3"
   MATURIN_VERSION: "1.15.0"
 
@@ -392,11 +392,11 @@ jobs:
     needs: verify-version
     runs-on: ubuntu-latest
     env:
-      # Every cargo run in the checkout uses Rust 1.96.0, the version the
+      # Every cargo run in the checkout uses Rust 1.97.0, the version the
       # wheels are built with, not the nightly that rust-toolchain.toml names.
       # A job's env cannot read the workflow env, so the toolchain validator
       # checks that this equals CITRY_CORE_RUST_TOOLCHAIN.
-      RUSTUP_TOOLCHAIN: "1.96.0"
+      RUSTUP_TOOLCHAIN: "1.97.0"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -426,7 +426,7 @@ jobs:
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           working-directory: ${{ env.PROJECT_DIR }}
-      - name: Rebuild and smoke-test the sdist at Rust 1.96
+      - name: Rebuild and smoke-test the sdist at Rust 1.97
         run: >-
           python scripts/verify_citry_core_distribution.py smoke-sdist
           --sdist '${{ env.PROJECT_DIR }}/dist/*.tar.gz'
@@ -448,11 +448,11 @@ jobs:
         copy: [a, b]
     env:
       CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
-      # Every cargo run in the checkout uses Rust 1.96.0, the version the
+      # Every cargo run in the checkout uses Rust 1.97.0, the version the
       # wheels are built with, not the nightly that rust-toolchain.toml names.
       # A job's env cannot read the workflow env, so the toolchain validator
       # checks that this equals CITRY_CORE_RUST_TOOLCHAIN.
-      RUSTUP_TOOLCHAIN: "1.96.0"
+      RUSTUP_TOOLCHAIN: "1.97.0"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -478,7 +478,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/citry-pyodide-xbuildenv
-          key: pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.96.0-cli-0.5.0-build-0.37.0
+          key: pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.97.0-cli-0.5.0-build-0.37.0
       - name: Install the pinned Pyodide cross environment
         env:
           CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv

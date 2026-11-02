@@ -113,8 +113,8 @@ def check() -> list[str]:
 
     root_manifest = tomllib.loads(_ROOT_CARGO.read_text(encoding="utf-8"))
     minimum = root_manifest.get("workspace", {}).get("package", {}).get("rust-version")
-    if minimum != "1.96":
-        errors.append(f"Cargo workspace rust-version must be '1.96', found {minimum!r}")
+    if minimum != "1.97":
+        errors.append(f"Cargo workspace rust-version must be '1.97', found {minimum!r}")
     for crate in _CORE_CRATES:
         manifest_path = REPO_ROOT / "crates" / crate / "Cargo.toml"
         manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
@@ -457,7 +457,7 @@ def selected_toolchain_errors(root: Path) -> list[str]:
     env reaches that step alone, not the cargo steps after it. A
     `${{ env.NAME }}` setup input is resolved against the workflow and job
     env, with the job env winning, as GitHub does. A setup with no
-    `toolchain` input takes the toolchain from its ref (`@1.96.0`), unless
+    `toolchain` input takes the toolchain from its ref (`@1.97.0`), unless
     the ref is a commit SHA, which then installs nothing specific.
     """
     errors: list[str] = []

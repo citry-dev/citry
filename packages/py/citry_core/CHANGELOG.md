@@ -4,6 +4,13 @@
 
 ### Changed
 
+- Building from source now requires Rust 1.97 or newer, because the
+  bundled Ruff parser and formatter (now Ruff 0.17.3) need it.
+- The formatter now writes a string inside a nested f-string format
+  field with the other quote character, so `f"{v:{d["n"]}}"` becomes
+  `f"{v:{d['n']}}"`, which also runs on Python 3.10 and 3.11.
+- Syntax errors in template expressions now say "found identifier" where
+  they said "found name", as in ``Expected `)`, found identifier``.
 - **Breaking:** `compile_template()` now compiles a written empty value,
   such as `alt=""`, to `""` instead of `True` on a component tag and on
   `<c-slot>` data. A bare attribute such as `compact` still compiles to

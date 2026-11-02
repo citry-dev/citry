@@ -526,7 +526,7 @@ def test_no_app_selects_reported_syntax_only_mode(tmp_path):
     assert state.status.app is None
     assert "No Citry app configured" in (state.status.message or "")
     assert state.status.to_dict()["mode"] == "syntax-only"
-    assert state.status.python_expression_provider == "ruff@0.16.6+22f65a2ab5"
+    assert state.status.python_expression_provider == "ruff@0.17.3+ba65abf8ba"
 
 
 def test_worker_process_and_json_failures_degrade(tmp_path, monkeypatch):
