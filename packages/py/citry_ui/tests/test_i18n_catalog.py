@@ -522,6 +522,17 @@ _TOUR = (
     '<c-CTourStep value="a"><c-fill name="title">T1</c-fill><c-fill name="default">D1</c-fill></c-CTourStep>'
     "</c-fill></c-CTour>"
 )
+_COLLECTION = (
+    '<c-CFormCollection label="Contacts" c-bind="kw">'
+    '<c-CFormCollectionItem value="a" label="Primary"><input aria-label="Email" /></c-CFormCollectionItem>'
+    '<c-CFormCollectionItem value="b" label="Backup"><input aria-label="Email" /></c-CFormCollectionItem>'
+    "</c-CFormCollection>"
+)
+_SORTABLE = (
+    '<c-CSortable name="order" c-bind="kw">'
+    '<c-CSortableItem value="alpha" label="Alpha" /><c-CSortableItem value="beta" label="Beta" />'
+    "</c-CSortable>"
+)
 
 
 @pytest.mark.parametrize(
@@ -559,6 +570,57 @@ _TOUR = (
             {"value": {"type": "str", "value": "red"}},
             {"messages": citry_ui.CTagsInputMessages(remove_label="Drop {value}")},
             'aria-label="Drop red"',
+        ),
+        # The messages below take variables (an item's label, a page number,
+        # or step numbers), so each binding record must carry the values the
+        # server passed to tr() for the browser to translate again.
+        (
+            _COLLECTION,
+            {},
+            "citry-ui-form-collection-move-up",
+            {"item": {"type": "str", "value": "Primary"}},
+            {"move_up_label": "Raise {item}"},
+            'aria-label="Raise Primary"',
+        ),
+        (
+            _COLLECTION,
+            {},
+            "citry-ui-form-collection-move-down",
+            {"item": {"type": "str", "value": "Primary"}},
+            {"move_down_label": "Lower {item}"},
+            'aria-label="Lower Primary"',
+        ),
+        (
+            _COLLECTION,
+            {},
+            "citry-ui-form-collection-remove",
+            {"item": {"type": "str", "value": "Primary"}},
+            {"remove_label": "Drop {item}"},
+            'aria-label="Drop Primary"',
+        ),
+        (
+            _SORTABLE,
+            {},
+            "citry-ui-sortable-handle",
+            {"item": {"type": "str", "value": "Alpha"}},
+            {"handle_label": "Drag {item}"},
+            'aria-label="Drag Alpha"',
+        ),
+        (
+            '<c-CPagination c-pages="3" c-page="2" c-bind="kw" />',
+            {},
+            "citry-ui-pagination-page",
+            {"page": {"type": "str", "value": "1"}},
+            {"page_label": "Go to {page}"},
+            'aria-label="Go to 1"',
+        ),
+        (
+            _TOUR,
+            {},
+            "citry-ui-tour-progress",
+            {"current": {"type": "str", "value": "1"}, "total": {"type": "str", "value": "1"}},
+            {"progress_label": "{current}/{total}"},
+            ">1/1</span>",
         ),
     ],
 )

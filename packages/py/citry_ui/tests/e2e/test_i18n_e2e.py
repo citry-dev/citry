@@ -62,6 +62,11 @@ citry-ui-number-input-step = Zadejte hodnotu v krocích po { $step }.
 citry-ui-range-slider-lower = Dolní hodnota
 citry-ui-range-slider-upper = Horní hodnota
 citry-ui-rating-value = { $value } z { $max }
+citry-ui-form-collection-remove = Odebrat { $item }
+citry-ui-form-collection-move-up = Posunout { $item } nahoru
+citry-ui-form-collection-move-down = Posunout { $item } dolů
+citry-ui-sortable-handle = Přesunout { $item }
+citry-ui-tour-progress = Krok { $current } z { $total }
 """.lstrip(),
         "ar-EG": """
 citry-ui-breadcrumbs-label = مسار التنقل
@@ -85,6 +90,11 @@ citry-ui-number-input-step = أدخل قيمة بزيادات قدرها { $step
 citry-ui-range-slider-lower = القيمة الدنيا
 citry-ui-range-slider-upper = القيمة العليا
 citry-ui-rating-value = { $value } من { $max }
+citry-ui-form-collection-remove = إزالة { $item }
+citry-ui-form-collection-move-up = نقل { $item } لأعلى
+citry-ui-form-collection-move-down = نقل { $item } لأسفل
+citry-ui-sortable-handle = نقل { $item }
+citry-ui-tour-progress = الخطوة { $current } من { $total }
 """.lstrip(),
     }
     for locale, content in translations.items():
@@ -179,6 +189,38 @@ def _page(app: Citry) -> str:
               c-duration_ms="0"
               :items="notices"
             />
+            <c-CFormCollection
+              id="collection"
+              label="Contacts"
+            >
+              <c-CFormCollectionItem
+                value="a"
+                label="Primary"
+              ><input aria-label="Primary email" /></c-CFormCollectionItem>
+              <c-CFormCollectionItem
+                value="b"
+                label="Backup"
+              ><input aria-label="Backup email" /></c-CFormCollectionItem>
+            </c-CFormCollection>
+            <c-CSortable
+              id="sortable"
+              name="priority"
+            >
+              <c-CSortableItem value="alpha" label="Alpha" />
+              <c-CSortableItem value="beta" label="Beta" />
+            </c-CSortable>
+            <c-CTour id="tour">
+              <c-fill name="default">
+                <c-CTourStep value="intro">
+                  <c-fill name="title">Introduction</c-fill>
+                  <c-fill name="default">Hello.</c-fill>
+                </c-CTourStep>
+                <c-CTourStep value="finish">
+                  <c-fill name="title">Finish</c-fill>
+                  <c-fill name="default">Done.</c-fill>
+                </c-CTourStep>
+              </c-fill>
+            </c-CTour>
             <button
               id="change-values"
               type="button"
@@ -253,6 +295,20 @@ def _label(page: Any, selector: str) -> str | None:
     return _plain(page.locator(selector).get_attribute("aria-label"))
 
 
+def _item_labels(page: Any) -> list[str | None]:
+    # Each of these messages takes a variable: the item's label or the step
+    # numbers. After a locale switch, the text shows whether the browser
+    # translated again with the values the server passed to tr().
+    collection = page.locator("#collection [data-citry-form-collection-item] [data-citry-form-collection-action]")
+    handles = page.locator("#sortable [data-citry-sortable-handle]")
+    progress = page.locator('#tour-dialog [data-citry-ui-part="progress"]')
+    return [
+        *(_plain(collection.nth(index).get_attribute("aria-label")) for index in range(collection.count())),
+        *(_plain(handles.nth(index).get_attribute("aria-label")) for index in range(handles.count())),
+        *(_plain(progress.nth(index).text_content()) for index in range(progress.count())),
+    ]
+
+
 def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed(
     page: Any,
     serve_citry_ui_live: Any,
@@ -307,6 +363,18 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
     assert page.locator("#combobox-root [data-citry-combobox-trigger]").get_attribute("aria-label") == "Show options"
     assert _label(page, '.cui-tags-input:has(#tags) [data-citry-ui-part="remove"]') == "Remove alpha"
     assert _label(page, '#toasts [data-citry-toast-id="saved"] [data-citry-toast-dismiss]') == "Dismiss Saved"
+    assert _item_labels(page) == [
+        "Move Primary up",
+        "Move Primary down",
+        "Remove Primary",
+        "Move Backup up",
+        "Move Backup down",
+        "Remove Backup",
+        "Move Alpha",
+        "Move Beta",
+        "Step 1 of 2",
+        "Step 2 of 2",
+    ]
 
     page.locator("#change-values").click()
     page.wait_for_function(
@@ -322,6 +390,15 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
     )
     assert _label(page, '#toasts [data-citry-toast-id="saved"] [data-citry-toast-dismiss]') == "Dismiss Updated"
     assert _label(page, '#toasts [data-citry-toast-id="queued"] [data-citry-toast-dismiss]') == "Dismiss Queued"
+    # Reordering moves the server-rendered items in the browser. Each handle
+    # must keep its own item's label through the locale switches below.
+    page.wait_for_selector("[data-citry-sortable-initialized]")
+    page.locator('#sortable [data-value="alpha"] [data-citry-sortable-handle]').focus()
+    page.keyboard.press("Space")
+    page.keyboard.press("ArrowDown")
+    page.keyboard.press("Space")
+    page.wait_for_function("document.querySelector('#sortable [data-citry-sortable-item]')?.dataset.value === 'beta'")
+    assert _item_labels(page)[6:8] == ["Move Beta", "Move Alpha"]
 
     page.locator("#combobox-root [data-citry-combobox-trigger]").click()
     assert page.locator("#combobox-root [data-citry-combobox-trigger]").get_attribute("aria-label") == "Hide options"
@@ -348,6 +425,19 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
         "Odebrat beta"
     )
     assert _label(page, '#toasts [data-citry-toast-id="saved"] [data-citry-toast-dismiss]') == "Zavřít Updated"
+    assert _label(page, '#toasts [data-citry-toast-id="queued"] [data-citry-toast-dismiss]') == "Zavřít Queued"
+    assert _item_labels(page) == [
+        "Posunout Primary nahoru",
+        "Posunout Primary dolů",
+        "Odebrat Primary",
+        "Posunout Backup nahoru",
+        "Posunout Backup dolů",
+        "Odebrat Backup",
+        "Přesunout Beta",
+        "Přesunout Alpha",
+        "Krok 1 z 2",
+        "Krok 2 z 2",
+    ]
     page.locator("#number-input").press("ArrowUp")
     assert page.locator("#number-input-transport").input_value() == "1234.6"
 
@@ -362,4 +452,20 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
     assert page.locator('#range-root [role="slider"]').nth(0).get_attribute("aria-valuetext") == "١٬٢٣٤٫٥"  # noqa: RUF001
     assert _plain(page.locator(rating_label).text_content()) == "٣٫٥ من ٥"  # noqa: RUF001
     assert _label(page, '#pagination [data-kind="page"][data-page="3"]') == "الصفحة ٣"
+    assert _label(page, '.cui-tags-input:has(#tags) [data-value="beta"][data-citry-ui-part="remove"]') == (
+        "إزالة beta"
+    )
+    assert _label(page, '#toasts [data-citry-toast-id="queued"] [data-citry-toast-dismiss]') == "إغلاق Queued"
+    assert _item_labels(page) == [
+        "نقل Primary لأعلى",
+        "نقل Primary لأسفل",
+        "إزالة Primary",
+        "نقل Backup لأعلى",
+        "نقل Backup لأسفل",
+        "إزالة Backup",
+        "نقل Beta",
+        "نقل Alpha",
+        "الخطوة 1 من 2",
+        "الخطوة 2 من 2",
+    ]
     assert errors == []
