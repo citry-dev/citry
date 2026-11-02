@@ -214,14 +214,45 @@ def _raise_type_error(
     # Row", so the module tells them apart.
     if type_name in expected.replace("|", " ").replace("[", " ").replace("]", " ").split():
         type_name = f"{type(value).__module__}.{type_name}"
+    # The app's author cannot edit a library's annotations, so the advice
+    # for a library component is about the value. This lookup runs only on
+    # the error path.
+    library = component_class.citry._library_name_of(component_class)
+    library_note = ""
+    if library is not None and role != "Kwargs":
+        # A library data method usually built this value, but the default
+        # template_data() and State built from Kwargs pass the app's input
+        # through, so the message cannot tell whose value it is.
+        library_note = (
+            f" {component_class.__name__} comes from the component library {library!r}. If you passed this "
+            "value as an input, pass one of the expected type; otherwise report it to that library."
+        )
     if not matcher.type_tests and matcher.accepted <= {_NONE_TYPE} and matcher.value_tests:
         # Literal and type[...] fail on the value itself, so a wider type
         # would not help.
         fix = f"Use one of the values that {expected} allows."
     else:
-        verb = "Pass" if role == "Kwargs" else "Use"
-        fix = f"{verb} a value of the expected type, or change the annotation to accept {type_name}."
-        if role == "Kwargs" and isinstance(value, str):
+        if library is None:
+            verb = "Pass" if role == "Kwargs" else "Use"
+            fix = f"{verb} a value of the expected type, or change the annotation to accept {type_name}."
+        elif role == "Kwargs":
+            fix = (
+                f"{component_class.__name__} comes from the component library {library!r}, "
+                "so pass a value of the expected type."
+            )
+        else:
+            fix = ""
+        if role == "Kwargs" and type(value) is str and not value and _wants_bool(matcher):
+            # A written empty attribute such as compact="" passes "", while a
+            # bare one passes True, which is what a bool input needs. This
+            # is the fix the reader most likely needs, so it replaces the
+            # general one.
+            tag = getattr(component_class, "name", None) or component_class.__name__
+            fix = (
+                f'In a template, {name}="" passes the text "", so write {name} without a value,'
+                f" as in <c-{tag} {name} />, to pass True."
+            )
+        elif role == "Kwargs" and isinstance(value, str):
             # A plain template attribute always passes text.
             fix += f' In a template, write c-{name}="..." to pass a Python value instead of text.'
     shown = _short_repr(value)
@@ -245,8 +276,20 @@ def _raise_type_error(
                 f"Citry never sends a Secret to the browser, so a {role} field cannot hold one. Remove the "
                 "field, and read the value on the server where you need it."
             )
-    msg = f"{component_class.__name__}.{role}.{name} expects {expected}, got {type_name} ({shown}). {fix}"
+    msg = f"{component_class.__name__}.{role}.{name} expects {expected}, got {type_name} ({shown})."
+    if fix:
+        msg += f" {fix.strip()}"
+    msg += library_note
     raise TypeError(msg)
+
+
+def _wants_bool(matcher: _Matcher) -> bool:
+    """Whether an annotation takes ``True`` but not other numbers, so it means a ``bool`` input."""
+    # `accepted` grows as values pass, and a bool passes an int field, so
+    # test values rather than read the set: an int or float field accepts 2.
+    # accepts_now() records nothing, so the check leaves the cache as it was.
+    # Each probe is passed by keyword, the same way, so no bool reads as a flag.
+    return matcher.accepts_now(value=True) and not matcher.accepts_now(value=2) and not matcher.accepts_now(value=2.5)
 
 
 def _class_label(cls: type) -> str:

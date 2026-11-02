@@ -76,6 +76,9 @@
         },
         "allowBatching": {
           "const": false
+        },
+        "detached": {
+          "const": true
         }
       }
     },

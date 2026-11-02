@@ -10,7 +10,7 @@ not need a web framework or a server yet.
 
 ## Check Python version
 
-Citry supports Python 3.11 through 3.14. Check the version you are about to
+Citry supports Python 3.11 through 3.15. Check the version you are about to
 use:
 
 ```sh

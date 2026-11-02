@@ -294,17 +294,17 @@ def test_button_unavailable_link_is_inert_without_javascript(kwargs, expected_ta
 @pytest.mark.parametrize(
     ("kwargs", "exception", "message"),
     [
-        ({"type": "link"}, ValueError, "CButton type"),
-        ({"variant": "raised"}, ValueError, "CButton variant"),
-        ({"intent": "accent"}, ValueError, "CButton intent"),
-        ({"size": "tiny"}, ValueError, "CButton size"),
-        ({"loading_pos": "middle"}, ValueError, "CButton loading_pos"),
-        ({"href": 42}, TypeError, "CButton href"),
+        ({"type": "link"}, TypeError, r"CButton\.Kwargs\.type expects Literal\["),
+        ({"variant": "raised"}, TypeError, r"CButton\.Kwargs\.variant expects Literal\["),
+        ({"intent": "accent"}, TypeError, r"CButton\.Kwargs\.intent expects Literal\["),
+        ({"size": "tiny"}, TypeError, r"CButton\.Kwargs\.size expects Literal\["),
+        ({"loading_pos": "middle"}, TypeError, r"CButton\.Kwargs\.loading_pos expects Literal\["),
+        ({"href": 42}, TypeError, r"CButton\.Kwargs\.href expects str \| None"),
         ({"href": "/next", "type": "submit"}, ValueError, "type applies only"),
         ({"href": "/next", "attrs": {"name": "action"}}, ValueError, "apply only to action buttons"),
-        ({"disabled": 1}, TypeError, "CButton disabled"),
-        ({"loading": 1}, TypeError, "CButton loading"),
-        ({"block": 1}, TypeError, "CButton block"),
+        ({"disabled": 1}, TypeError, r"CButton\.Kwargs\.disabled expects bool"),
+        ({"loading": 1}, TypeError, r"CButton\.Kwargs\.loading expects bool"),
+        ({"block": 1}, TypeError, r"CButton\.Kwargs\.block expects bool"),
         ({"attrs": {"type": "reset"}}, ValueError, "owned attribute"),
         ({"attrs": {"href": "/next"}}, ValueError, "owned attribute"),
         ({"attrs": {"DATA-LOADING": "false"}}, ValueError, "owned attribute"),
@@ -377,13 +377,13 @@ def test_dialog_renders_native_modal_anatomy_and_typed_slot_bindings():
 @pytest.mark.parametrize(
     ("kwargs", "exception", "message"),
     [
-        ({"open": 1}, TypeError, "CDialog open"),
-        ({"dismissible": 1}, TypeError, "CDialog dismissible"),
-        ({"close_on_escape": 1}, TypeError, "CDialog close_on_escape"),
-        ({"close_on_outside": 1}, TypeError, "CDialog close_on_outside"),
-        ({"size": "huge"}, ValueError, "CDialog size"),
-        ({"scroll": "page"}, ValueError, "CDialog scroll"),
-        ({"initial_focus": "#target"}, ValueError, "CDialog initial_focus"),
+        ({"open": 1}, TypeError, r"CDialog\.Kwargs\.open expects bool"),
+        ({"dismissible": 1}, TypeError, r"CDialog\.Kwargs\.dismissible expects bool"),
+        ({"close_on_escape": 1}, TypeError, r"CDialog\.Kwargs\.close_on_escape expects bool"),
+        ({"close_on_outside": 1}, TypeError, r"CDialog\.Kwargs\.close_on_outside expects bool"),
+        ({"size": "huge"}, TypeError, r"CDialog\.Kwargs\.size expects Literal\["),
+        ({"scroll": "page"}, TypeError, r"CDialog\.Kwargs\.scroll expects Literal\["),
+        ({"initial_focus": "#target"}, TypeError, r"CDialog\.Kwargs\.initial_focus expects Literal\["),
         ({"close_label": ""}, ValueError, "CDialog close_label"),
         ({"attrs": {"open": True}}, ValueError, "owned attribute"),
         ({"attrs": {"closedby": "any"}}, ValueError, "owned attribute"),
@@ -497,8 +497,8 @@ def test_combobox_server_output_filters_open_options_and_matches_unicode_thresho
         ({"name": ""}, ValueError, "name"),
         ({"name": "owner", "min_chars": -1}, ValueError, "min_chars"),
         ({"name": "owner", "debounce_ms": True}, TypeError, "debounce_ms"),
-        ({"name": "owner", "filter": "fuzzy"}, ValueError, "filter"),
-        ({"name": "owner", "size": "medium"}, ValueError, "size"),
+        ({"name": "owner", "filter": "fuzzy"}, TypeError, r"CCombobox\.Kwargs\.filter expects Literal\["),
+        ({"name": "owner", "size": "medium"}, TypeError, r"CCombobox\.Kwargs\.size expects Literal\["),
         ({"name": "owner", "placeholder": 123}, TypeError, "placeholder"),
         (
             {"options": (CComboboxOption("mars", "Mars", description=""),)},
@@ -853,11 +853,11 @@ def test_disabled_form_wins_over_explicit_false_field_state():
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"value": 1}, "value must be a string or None"),
-        ({"autocomplete": 1}, "autocomplete must be a string or None"),
-        ({"inputmode": 1}, "inputmode must be a string or None"),
-        ({"placeholder": 1}, "placeholder must be a string or None"),
-        ({"id": 1}, "id must be a string or None"),
+        ({"value": 1}, r"CInput\.Kwargs\.value expects str \| None"),
+        ({"autocomplete": 1}, r"CInput\.Kwargs\.autocomplete expects str \| None"),
+        ({"inputmode": 1}, r"CInput\.Kwargs\.inputmode expects str \| None"),
+        ({"placeholder": 1}, r"CInput\.Kwargs\.placeholder expects str \| None"),
+        ({"id": 1}, r"CInput\.Kwargs\.id expects str \| None"),
     ],
 )
 def test_input_rejects_invalid_optional_string_inputs(kwargs, message):
@@ -1438,7 +1438,7 @@ def test_tab_and_panel_are_declarations_that_require_tabs(component):
 
 
 @pytest.mark.parametrize(
-    ("overrides", "message"),
+    ("overrides", "name"),
     [
         ({"activation": "eager"}, "activation"),
         ({"orientation": "diagonal"}, "orientation"),
@@ -1448,7 +1448,7 @@ def test_tab_and_panel_are_declarations_that_require_tabs(component):
         ({"align": "around"}, "align"),
     ],
 )
-def test_tabs_reject_unknown_configuration_values(overrides, message):
+def test_tabs_reject_unknown_configuration_values(overrides, name):
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     tabs = CTabs(
@@ -1458,7 +1458,8 @@ def test_tabs_reject_unknown_configuration_values(overrides, message):
         **overrides,
     )
 
-    with pytest.raises(ValueError, match=message):
+    # Each of these inputs is annotated with a Literal, so Citry's input type check rejects the value.
+    with pytest.raises(TypeError, match=rf"CTabs\.Kwargs\.{name} expects Literal\["):
         _page_html(app, tabs)
 
 
@@ -1474,7 +1475,7 @@ def test_tabs_reject_non_boolean_root_configuration(name, value):
         **{name: value},
     )
 
-    with pytest.raises(TypeError, match=rf"Tabs {name} must be a bool"):
+    with pytest.raises(TypeError, match=rf"CTabs\.Kwargs\.{name} expects bool"):
         _page_html(app, tabs)
 
 
@@ -1484,7 +1485,7 @@ def test_tab_rejects_non_boolean_disabled(value):
     app.register_library(citry_ui)
     tab = CTab(value="account", disabled=value, slots={"default": "Account"})
 
-    with pytest.raises(TypeError, match="Tab disabled must be a bool"):
+    with pytest.raises(TypeError, match=r"CTab\.Kwargs\.disabled expects bool"):
         _page_html(app, tab)
 
 

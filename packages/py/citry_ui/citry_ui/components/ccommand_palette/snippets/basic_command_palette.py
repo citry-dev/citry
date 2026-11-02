@@ -15,7 +15,6 @@ class BasicCommandPalette(Component):
                     value="open-settings",
                     label="Open settings",
                     keywords=("preferences",),
-                    shortcut="Ctrl ,",
                 ),
                 CCommandPaletteCommand(value="create-project", label="Create project"),
                 CCommandPaletteCommand(value="invite-teammate", label="Invite teammate"),

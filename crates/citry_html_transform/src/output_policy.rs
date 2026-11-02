@@ -627,6 +627,57 @@ pub fn is_javascript_url(value: &str) -> bool {
     chars.next() == Some(':')
 }
 
+/// What a strict Content Security Policy would block in one attribute.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CspAttributeProblem {
+    /// A native inline event handler such as `onclick="..."`.
+    NativeEvent,
+    /// A `javascript:` URL in an attribute the browser loads or follows.
+    JavascriptUrl,
+}
+
+impl CspAttributeProblem {
+    /// The name Python uses for this problem.
+    pub fn code(self) -> &'static str {
+        match self {
+            CspAttributeProblem::NativeEvent => "native-event",
+            CspAttributeProblem::JavascriptUrl => "javascript-url",
+        }
+    }
+}
+
+/// Judge one attribute written literally in a template, by the same rules
+/// [`check_output_html`] applies to a finished page under strict CSP.
+///
+/// `raw_value` is the value as written, before character references are
+/// decoded, or `None` for an attribute written without a value. ASCII
+/// letters in the tag and attribute names are compared without regard to
+/// case, as the browser reads them. This lets `citry check` and the editor
+/// report what the render-time check would report for the same attribute,
+/// with no second copy of the rules to keep in step. The caller decides
+/// which attributes the browser reads as attributes at all: inside
+/// `<noscript>` or `<xmp>`, for example, the page check reads none.
+pub fn csp_attribute_problem(
+    tag: &str,
+    name: &str,
+    raw_value: Option<&str>,
+) -> Option<CspAttributeProblem> {
+    let tag = ascii_lower(tag);
+    let name = ascii_lower(name);
+    // No URL attribute starts with `on` (a test checks this), so at most one
+    // rule can match, and the cheaper name check goes first.
+    if is_native_event_attribute(&name) {
+        return Some(CspAttributeProblem::NativeEvent);
+    }
+    // The page check reads a value-less attribute as an empty value, which
+    // is never a `javascript:` URL.
+    let raw_value = raw_value?;
+    if is_url_attribute(&tag, &name) && is_javascript_url(&decode_html_attribute(raw_value)) {
+        return Some(CspAttributeProblem::JavascriptUrl);
+    }
+    None
+}
+
 fn letter_matches(letter: char, c: char) -> bool {
     c.to_ascii_lowercase() == letter && c.is_ascii()
         || match letter {
@@ -1712,5 +1763,100 @@ mod tests {
         ] {
             assert_eq!(handler_only_controls(html), ["button"], "{html}");
         }
+    }
+
+    const EVENT: Option<CspAttributeProblem> = Some(CspAttributeProblem::NativeEvent);
+    const URL: Option<CspAttributeProblem> = Some(CspAttributeProblem::JavascriptUrl);
+
+    // Attributes an author might write, with the problem each one has. The
+    // decode cases are where a separate reading of the value would most
+    // likely differ from the page check: references, a tab inside the
+    // scheme, and uppercase.
+    const ATTRIBUTE_CASES: [(&str, &str, Option<&str>, Option<CspAttributeProblem>); 23] = [
+        ("button", "onclick", Some("go()"), EVENT),
+        ("button", "ONCLICK", Some("go()"), EVENT),
+        ("button", "onclick", None, EVENT),
+        // Any name longer than `on` that starts with it, so custom names too.
+        ("div", "online", Some("yes"), EVENT),
+        ("div", "on", Some("x"), None),
+        ("div", "data-onclick", Some("x"), None),
+        ("a", "href", Some("javascript:go()"), URL),
+        ("a", "HREF", Some("JavaScript:go()"), URL),
+        ("a", "href", Some("java&#115;cript:go()"), URL),
+        ("a", "href", Some("java&#x09;script:go()"), URL),
+        ("a", "href", Some("javascript&colon;go()"), URL),
+        ("a", "href", Some(" \tjavascript:go()"), URL),
+        ("form", "action", Some("javascript:go()"), URL),
+        ("button", "formaction", Some("javascript:go()"), URL),
+        ("img", "src", Some("javascript:go()"), URL),
+        ("use", "xlink:href", Some("javascript:go()"), URL),
+        ("object", "data", Some("javascript:go()"), URL),
+        // The tag matters only here, so this checks it is read without case.
+        ("OBJECT", "DATA", Some("javascript:go()"), URL),
+        // `data` is a URL only on `<object>`.
+        ("div", "data", Some("javascript:go()"), None),
+        ("a", "title", Some("javascript:go()"), None),
+        ("a", "href", Some("/javascript:go()"), None),
+        ("a", "href", Some("https://example.com"), None),
+        ("a", "href", None, None),
+    ];
+
+    #[test]
+    fn literal_attributes_get_the_problem_the_rules_give() {
+        for (tag, name, value, expected) in ATTRIBUTE_CASES {
+            assert_eq!(
+                csp_attribute_problem(tag, name, value),
+                expected,
+                "<{tag} {name}={value:?}>"
+            );
+        }
+    }
+
+    #[test]
+    fn a_literal_attribute_gets_the_problem_the_page_check_reports() {
+        // The static check and the render-time check must agree, so each
+        // case is also written into a page and run through the page check.
+        for (tag, name, value, _) in ATTRIBUTE_CASES {
+            let html = match value {
+                Some(value) => format!("<{tag} {name}=\"{value}\"></{tag}>"),
+                None => format!("<{tag} {name}></{tag}>"),
+            };
+            let report = check(&html, PolicyPass::Settled, true, None, None, &[], None);
+            let from_page: Vec<CspAttributeProblem> = report
+                .events
+                .iter()
+                .filter_map(|event| match event {
+                    PolicyEvent::Finding(Finding {
+                        rule: Rule::CspNativeEvent,
+                        ..
+                    }) => Some(CspAttributeProblem::NativeEvent),
+                    PolicyEvent::Finding(Finding {
+                        rule: Rule::CspJavascriptUrl,
+                        ..
+                    }) => Some(CspAttributeProblem::JavascriptUrl),
+                    _ => None,
+                })
+                .collect();
+            let alone: Vec<CspAttributeProblem> = csp_attribute_problem(tag, name, value)
+                .into_iter()
+                .collect();
+            assert_eq!(alone, from_page, "{html}");
+        }
+    }
+
+    #[test]
+    fn no_url_attribute_is_also_an_event_attribute() {
+        // `csp_attribute_problem` reports one problem per attribute, which
+        // is right only while no URL attribute name starts with `on`.
+        for name in ["action", "formaction", "href", "src", "xlink:href", "data"] {
+            assert!(is_url_attribute("object", name), "{name}");
+            assert!(!is_native_event_attribute(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn each_problem_has_the_name_python_uses() {
+        assert_eq!(CspAttributeProblem::NativeEvent.code(), "native-event");
+        assert_eq!(CspAttributeProblem::JavascriptUrl.code(), "javascript-url");
     }
 }

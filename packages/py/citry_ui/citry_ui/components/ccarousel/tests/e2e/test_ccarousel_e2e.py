@@ -13,6 +13,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -209,6 +210,7 @@ def test_reactive_presentation_disabled_reduced_forced_print_and_axe(page: Any) 
 
     axe = _root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => (await axe.run(document, {resultTypes:['violations']})).violations
           .filter(item => ['serious','critical'].includes(item.impact)).map(item => item.id)"""

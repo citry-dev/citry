@@ -1,4 +1,4 @@
 [submodule "third_party/rust/ruff"]
 	path = third_party/rust/ruff
 	url = https://github.com/astral-sh/ruff.git
-	# tag = 0.16.6
+	# tag = 0.17.3

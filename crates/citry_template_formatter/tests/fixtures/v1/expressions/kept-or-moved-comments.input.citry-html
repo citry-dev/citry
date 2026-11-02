@@ -1,0 +1,12 @@
+<main>
+  <p>{{ (a + b) # sum
+  }}</p>
+  <p>{{ ( # open
+    a + b) }}</p>
+  <p c-title="(a + b)  # title
+"></p>
+  <p>{{ '''first
+second''' }}</p>
+  <c-for each="item  # each item
+ in items">{{ item }}</c-for>
+</main>

@@ -16,6 +16,7 @@ pytest.importorskip("pytest_playwright")
 import citry_ui
 from citry import Citry, Component
 from citry import citry as default_citry
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -271,7 +272,8 @@ def test_keyboard_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: An
     errors = _load(page, serve_citry_ui_live)
     root = page.locator("#place")
     trigger = root.locator('[data-citry-ui-part="trigger"]')
-    assert trigger.get_attribute("aria-labelledby") == "place-label"
+    # The name is the outside label followed by the chosen path it shows.
+    assert trigger.get_attribute("aria-labelledby") == "place-label place-value"
     assert trigger.get_by_text("World / Europe / Prague").is_visible()
     trigger.focus()
     trigger.press("Enter")
@@ -288,6 +290,7 @@ def test_keyboard_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: An
     assert page.evaluate("window.__cascade.changes.at(-1)[1]") == "keyboard"
     page.emulate_media(forced_colors="active", reduced_motion="reduce")
     page.add_script_tag(path=str(_root() / "node_modules" / "axe-core" / "axe.min.js"))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async()=> (await axe.run(document,{resultTypes:['violations']})).violations.filter(x=>['serious','critical'].includes(x.impact)).map(x=>x.id)"""
     )
@@ -546,6 +549,7 @@ def test_shipped_previews_initialize_without_high_impact_axe_findings(
     page.locator('[data-citry-ui-part="trigger"]').click()
     page.wait_for_timeout(50)
     page.add_script_tag(path=str(_root() / "node_modules" / "axe-core" / "axe.min.js"))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => (await axe.run(document, {resultTypes:['violations']})).violations
           .filter(item => ['serious','critical'].includes(item.impact)).map(item => item.id)"""

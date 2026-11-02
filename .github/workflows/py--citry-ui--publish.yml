@@ -81,7 +81,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: ${{ env.UV_VERSION }}
@@ -105,9 +105,12 @@ jobs:
         run: uv build --package citry-ui --out-dir dist
       - name: Build selected workspace dependencies for candidate smoke tests
         if: inputs.workspace_dependencies != ''
+        env:
+          # The shell reads the dispatch input as data, not as script text.
+          WORKSPACE_DEPENDENCIES: ${{ inputs.workspace_dependencies }}
         shell: bash
         run: |
-          selected=",${{ inputs.workspace_dependencies }},"
+          selected=",$WORKSPACE_DEPENDENCIES,"
           mkdir -p candidate-dependencies
           if [[ "$selected" == *,citry-core,* ]]; then
             git submodule update --init --recursive
@@ -138,7 +141,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -156,7 +159,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: ${{ env.UV_VERSION }}
@@ -188,7 +191,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: ${{ env.UV_VERSION }}
@@ -265,7 +268,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: ${{ env.UV_VERSION }}

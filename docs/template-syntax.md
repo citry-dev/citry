@@ -320,7 +320,9 @@ When you only pass content to the default slot, you can omit `<c-fill>`:
 
 A slot can expose data to its fill, like Vue's scoped slots.
 
-Any extra attributes on `<c-slot>` become slot data:
+Any extra attributes on `<c-slot>` become slot data, except `:` slot props
+such as `:row="row"`, which pass Vue data (see "Scoped slots" in
+`docs_site/content/vue/slots.md`):
 
 ```html
 <!-- UserList.html -->

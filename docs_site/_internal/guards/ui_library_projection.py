@@ -29,7 +29,7 @@ _GUIDE_REQUIRED_FRAGMENTS: dict[str, tuple[tuple[str, str], ...]] = {
         ("callback-only options", "teach the callback-only command semantic boundary"),
         ("frozen value records", "teach the immutable record composition model"),
         ("never fuzzy-ranked", "state the deterministic filtering boundary"),
-        ("presentational text only", "state that shortcut hints register no listener"),
+        ("never listens for that key combination", "state that shortcut hints register no listener"),
         ("completed close clears", "teach accepted-close query reset timing"),
         ("installs no document or window shortcut listener", "teach application-owned shortcuts"),
         ("Every noncomposing Enter is contained", "teach native Form containment"),
@@ -83,7 +83,7 @@ _PREVIEW_REQUIRED_FRAGMENTS: dict[str, dict[str, tuple[tuple[str, str], ...]]] =
         ),
         "disabled-and-shortcuts": (
             ("Deploy production", "include a disabled command"),
-            ("Shift Delete", "include presentational shortcut text"),
+            ("Alt Shift X", "include presentational shortcut text"),
             ('intent="danger"', "include destructive visual intent"),
         ),
         "command-adornments": (

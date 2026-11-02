@@ -25,13 +25,7 @@ def alert_dialog_states_component(app: Citry) -> type[Component]:
             <h1 id="alert-dialog-states-title">AlertDialog states</h1>
             <c-CAlertDialog
               id="quality-delete-project"
-              :onOpenChange="(open, detail) => {
-                  window.__qualityAlertDialogChange = {
-                    open,
-                    reason: detail.reason,
-                    returnValue: detail.returnValue
-                  };
-                }"
+              :onOpenChange="recordOpenChange"
             >
               <c-fill name="activator" data="{activator_attrs}">
                 <c-CButton c-attrs="activator_attrs" intent="danger">
@@ -94,6 +88,17 @@ def alert_dialog_states_component(app: Citry) -> type[Component]:
               return {
                 controlledOpen: false
               };
+            },
+            methods: {
+              // Browser tests read the latest request from window to check
+              // the reason and return value the dialog reports.
+              recordOpenChange(open, detail) {
+                window.__qualityAlertDialogChange = {
+                  open,
+                  reason: detail.reason,
+                  returnValue: detail.returnValue
+                };
+              },
             },
           });
         """

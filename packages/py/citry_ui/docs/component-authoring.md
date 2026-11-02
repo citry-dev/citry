@@ -112,12 +112,17 @@ component has a reason to turn it off:
 - **Internal components** (`CInternal*`) keep it on. Their inputs come only
   from Citry UI's own templates, so a failure there is a Citry UI bug.
 - **Public components keep it on** when their annotations name every value
-  they accept. Its own checks then run after Citry's and cover what an
+  they accept. Their own checks then run after Citry's and cover what an
   annotation cannot say, such as a number range or a non-empty string.
+  Keep those checks complete for types and choices too: an app can turn
+  Citry's check off, and then a component's own checks are all that stand
+  between a hostile value, such as `Markup`, and the page.
 - **Turn it off on a public component** only when its own checks give a
-  better error than Citry's, or when it accepts values its annotations do
-  not name. Do this with a nested `Lint` class after its input schemas, and
-  say why in a comment:
+  clearly better error than Citry's, for example when the annotation lists
+  dozens of names, or lists each number twice (as a number and as text) and
+  the component's own error can say that in a few words, or when it accepts
+  values its annotations do not name. Do this with a nested `Lint` class after its input schemas,
+  and say why in a comment:
 
 ```python
 class CDisclosure(LibraryComponent):
@@ -125,11 +130,19 @@ class CDisclosure(LibraryComponent):
 
     class Slots: ...
 
-    # heading_level accepts 2 to 6 as a number or as text, and Citry UI's
-    # error says so in one line.
+    # heading_level allows 2 to 6 as a number or as text. Citry's error would
+    # print all 10 values twice; Citry UI's says it in one line.
     class Lint:
         check_input_types = False
 ```
+
+When `template_data()` builds its result through a helper, which most
+Citry UI components do, list every key it returns in the same `Lint`
+class with `template_data_keys`. `citry check --include-libraries` and the
+editor then check the template against that list. When you add a key to
+the helper and read it in the template, add it to the list too:
+`test_citry_ui_templates_check_clean_against_their_declared_keys` fails
+until you do.
 
 ## Edit readable assets and ship checked production files
 

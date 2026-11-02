@@ -34,7 +34,7 @@ def test_multi_version_cpython_smokes_build_selected_core_as_abi3() -> None:
             for step in jobs["build"]["steps"]
             if step.get("uses") == "actions/setup-python@v7"
         ]
-        assert versions == ["3.11", "3.12", "3.13", "3.14"], path.name
+        assert versions == ["3.11", "3.12", "3.13", "3.14", "3.15"], path.name
         assert build_pythons == ["3.14"], path.name
         assert len(core_builds) == 1, path.name
         assert "--config-setting 'maturin.build-args=--features abi3-py311'" in core_builds[0], path.name

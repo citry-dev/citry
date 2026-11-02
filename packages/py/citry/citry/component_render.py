@@ -131,7 +131,7 @@ from citry.util.exception import (
 )
 from citry.util.html import Markup, escape
 from citry.util.id import gen_render_id, validate_render_id
-from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
+from citry.util.logger import is_tracing, logger, trace_component_msg, trace_node_msg
 from citry.util.misc import get_fields, is_generator, to_dict
 from citry_core.template_parser import ForeignSpan, ParseOptions, compile_template, parse_template
 
@@ -723,6 +723,18 @@ def _simple_vue_record(
         and component_class.citry.mode != "development"
         else None
     )
+    # A template nested past the native path's depth limits renders the same,
+    # only more slowly, so a debug message is enough. It is cleared once
+    # logged, so it appears about once per template (twice if two threads
+    # build the plan at the same moment).
+    if native is None and leaf_node.native_depth_refusal is not None:
+        reason = leaf_node.native_depth_refusal
+        leaf_node.native_depth_refusal = None
+        logger.debug(
+            "Citry renders the simple='vue' component %s with its Python path, because %s.",
+            component_class.__name__,
+            reason,
+        )
     leaf = (
         leaf_node.render_static_instance_free(
             variables,
@@ -3371,10 +3383,12 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     happens in ``CitryRender.serialize()``.
 
     ``<c-if>`` and ``<c-for>`` nodes, and a ``<c-slot>`` that renders its
-    own fallback, render their bodies on this function's own stack, so
-    Python's call depth does not grow with how deeply they nest. Each one
-    adds a ``_NodeFrame`` and one ``_BodyFrame`` per body, and its part is
-    wrapped exactly as its ``render`` would wrap it. An error raised inside
+    own fallback or a template fill the component was given, render their
+    bodies on this function's own stack, so Python's call depth does not
+    grow with how deeply they nest, or with how many components a fill is
+    passed on through. Each one adds a ``_NodeFrame`` and one
+    ``_BodyFrame`` per body, and its part is wrapped exactly as its
+    ``render`` would wrap it. An error raised inside
     passes out through every frame in turn, innermost first: each body frame
     resets the value context, and each node frame closes its loop (or, for a
     slot, raises the error inside the slot's ``with`` blocks, which add the
@@ -3395,7 +3409,7 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
             direct_prepared = frame.direct_prepared
             tracing = frame.tracing
             pushed = False
-            # A StopIteration a slot's fallback carried out, raised below,
+            # A StopIteration a slot's steps carried out, raised below,
             # outside the `except`, so its context stays the one it had.
             stopped: StopIteration | None = None
             for item in frame.items:
@@ -3494,7 +3508,7 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
 
 def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> None:
     """
-    Add a finished ``<c-if>``, ``<c-for>`` or ``<c-slot>`` fallback part to the body that holds it.
+    Add a finished ``<c-if>``, ``<c-for>`` or ``<c-slot>`` part to the body that holds it.
 
     These are the same steps the main loop in ``_render_body`` takes, inline,
     for every other node's part; the two must stay alike.
@@ -3516,8 +3530,8 @@ def _unwind_body_frames(stack: list[_BodyFrame | _NodeFrame], err: BaseException
     A body frame resets its value context. A node frame closes its loop, so
     the loop's ``finally`` blocks run now, and adds its node's template
     position, as the node's ``render`` does when an error passes out of it.
-    A slot's fallback instead gets the error thrown in where it waits for
-    its body, so the ``with`` blocks it holds there see the error as they
+    A slot instead gets the error thrown in where it waits for its body,
+    so the ``with`` blocks it holds there see the error as they
     would around a ``Slot`` call; one of them adds the slot to the error's
     component path. Adding a position can replace the error with a clearer
     one; the replacement is raised from the original and passes through the

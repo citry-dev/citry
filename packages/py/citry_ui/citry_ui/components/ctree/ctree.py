@@ -236,9 +236,18 @@ class CTree(LibraryComponent):
     class Slots:
         default: SlotInput[CTreeDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "disabled",
+            "expanded",
+            "label",
+            "root_id",
+            "selected",
+            "selectionMode",
+            "size",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_CONTEXT, None) is not None:

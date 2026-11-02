@@ -90,10 +90,7 @@ class ImageLifecycle(Component):
                 'lifecycle retained-root replacement-root morph-target removal restore '
                 + 'cleanup owner-token shadow-root clone hostile-fail-closed',
             }"
-            :onStatusChange="(detail)=>{
-                status=detail.status;
-                selected=(detail.current_src || detail.src).split('/').pop().split('?')[0];
-              }"
+            :onStatusChange="recordStatus"
           >
             <c-fill name="placeholder">Loading calibration plate</c-fill>
             <c-fill name="fallback">Calibration plate unavailable</c-fill>
@@ -112,6 +109,14 @@ class ImageLifecycle(Component):
           return {
             status:'waiting',selected:'none'
           };
+        },
+        methods: {
+          // Show the reported status and the bare filename, without the
+          // path or the `?plate=` query.
+          recordStatus(detail) {
+            this.status = detail.status;
+            this.selected = (detail.current_src || detail.src).split('/').pop().split('?')[0];
+          },
         },
       });
     """

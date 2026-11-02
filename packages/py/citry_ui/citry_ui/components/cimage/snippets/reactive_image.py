@@ -34,13 +34,7 @@ class ReactiveImage(Component):
           c-width="1280"
           c-height="720"
           :src="source"
-          :onStatusChange="(detail)=>{
-              callbacks++;
-              status=detail.status;
-              selected=redact(detail.current_src || detail.src);
-              if (detail.status === 'loaded') nativeLoads++;
-              if (detail.status === 'error') nativeErrors++;
-            }"
+          :onStatusChange="recordStatus"
         >
           <c-fill name="fallback">Survey frame unavailable</c-fill>
         </c-CImage>
@@ -79,6 +73,15 @@ class ReactiveImage(Component):
             queueMicrotask(() => {
               this.source = '/static/img/ui/image/orion-nebula-640.jpg?frame=rapid-b';
             });
+          },
+          // Count every status report and show only the filename, so the
+          // output never exposes a full image path.
+          recordStatus(detail) {
+            this.callbacks++;
+            this.status = detail.status;
+            this.selected = this.redact(detail.current_src || detail.src);
+            if (detail.status === 'loaded') this.nativeLoads++;
+            if (detail.status === 'error') this.nativeErrors++;
           },
         },
       });

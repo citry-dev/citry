@@ -228,9 +228,25 @@ class CTransferList(LibraryComponent):
     class Slots:
         default: SlotInput[CTransferListDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "available_title_id",
+            "catalog",
+            "chosen_title_id",
+            "disabled",
+            "form",
+            "labels",
+            "name",
+            "native_id",
+            "registry",
+            "required",
+            "root_id",
+            "show_move_all",
+            "show_reorder",
+            "size",
+            "value",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_transfer_list_snapshot", None)
@@ -502,6 +518,37 @@ class CInternalTransferList(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "ae_catalog",
+            "ae_label",
+            "attrs",
+            "available_items",
+            "available_title_id",
+            "available_total",
+            "catalog",
+            "catalog_move_bottom",
+            "chosen_items",
+            "chosen_title_id",
+            "chosen_total",
+            "count_available",
+            "count_chosen",
+            "disabled",
+            "form",
+            "items",
+            "labels",
+            "move_bottom_label",
+            "name",
+            "native_id",
+            "native_items",
+            "native_size",
+            "required",
+            "root_id",
+            "show_move_all",
+            "show_reorder",
+            "size",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declarations = kwargs.registry.items
         known = {item.value for item in declarations}
@@ -590,8 +637,7 @@ class CInternalTransferList(LibraryComponent):
             "move_bottom_label": kwargs.labels["move_bottom"],
         }
 
-    template = (
-        """
+    template = """
       <div
         class="cui-transfer-list"
         c-bind="attrs"
@@ -655,10 +701,8 @@ class CInternalTransferList(LibraryComponent):
               data-citry-transfer-listbox="available"
               data-citry-ui-part="listbox"
             >
-"""
-        '              <c-for each="item in available_items"><c-CInternalTransferListItem #c-ke'
-        'y="item[\'declaration\'].value" c-item="item" /></c-for>\n'
-        """            </div>
+              <c-for each="item in available_items"><c-CInternalTransferListItem #c-key="item['declaration'].value" c-item="item" /></c-for>
+            </div>
             <p
               c-hidden="available_total != 0"
               c-$c-tr:citry-ui-transfer-list-available-empty="True if catalog['available_empty'] else None"
@@ -708,10 +752,8 @@ class CInternalTransferList(LibraryComponent):
               data-citry-transfer-listbox="chosen"
               data-citry-ui-part="listbox"
             >
-"""
-        '              <c-for each="item in chosen_items"><c-CInternalTransferListItem #c-key="'
-        'item[\'declaration\'].value" c-item="item" /></c-for>\n'
-        """            </div>
+              <c-for each="item in chosen_items"><c-CInternalTransferListItem #c-key="item['declaration'].value" c-item="item" /></c-for>
+            </div>
             <p c-hidden="chosen_total != 0"
               c-$c-tr:citry-ui-transfer-list-chosen-empty="True if catalog['chosen_empty'] else None"
               data-citry-ui-part="empty"
@@ -745,8 +787,7 @@ class CInternalTransferList(LibraryComponent):
         </div>
         <div aria-live="polite" aria-atomic="true" data-citry-ui-part="status"></div>
       </div>
-    """
-    )
+    """  # noqa: E501
 
 
 class CInternalTransferListItem(LibraryComponent):

@@ -165,14 +165,14 @@ def test_root_and_part_attrs_have_exact_destinations():
 @pytest.mark.parametrize(
     ("kwargs", "error", "match"),
     [
-        ({"tag": 2}, TypeError, "tag must be a string"),
-        ({"tag": "main"}, ValueError, "tag must be one of"),
-        ({"variant": 2}, TypeError, "variant must be a string"),
-        ({"variant": "flat"}, ValueError, "variant must be one of"),
-        ({"size": 2}, TypeError, "size must be a string"),
-        ({"size": "xl"}, ValueError, "size must be one of"),
-        ({"attrs": []}, TypeError, "attrs must be a mapping"),
-        ({"body_attrs": []}, TypeError, "body_attrs must be a mapping"),
+        ({"tag": 2}, TypeError, r"CCard\.Kwargs\.tag expects Literal"),
+        ({"tag": "main"}, TypeError, r"CCard\.Kwargs\.tag expects Literal"),
+        ({"variant": 2}, TypeError, r"CCard\.Kwargs\.variant expects Literal"),
+        ({"variant": "flat"}, TypeError, r"CCard\.Kwargs\.variant expects Literal"),
+        ({"size": 2}, TypeError, r"CCard\.Kwargs\.size expects Literal"),
+        ({"size": "xl"}, TypeError, r"CCard\.Kwargs\.size expects Literal"),
+        ({"attrs": []}, TypeError, r"CCard\.Kwargs\.attrs expects Mapping"),
+        ({"body_attrs": []}, TypeError, r"CCard\.Kwargs\.body_attrs expects Mapping"),
     ],
 )
 def test_invalid_inputs_fail_deterministically(kwargs, error, match):

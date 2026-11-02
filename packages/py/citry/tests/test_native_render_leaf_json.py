@@ -35,6 +35,7 @@ import pickle
 import random
 import struct
 import sys
+import threading
 from decimal import Decimal
 from enum import IntEnum
 from typing import TYPE_CHECKING, Any, cast
@@ -962,3 +963,101 @@ def test_the_leaf_json_holds_no_python_value_and_is_not_tracked() -> None:
     assert not gc.is_tracked(leaf_json)
     del leaf_json
     assert sys.getrefcount(PLACEHOLDER) == placeholder_refs
+
+
+def _nested_at_depth(depth: int, leaf: object = "bottom") -> object:
+    """Build ``depth`` alternating lists and dicts around ``leaf``."""
+    value: object = leaf
+    for level in range(depth):
+        value = [level, value] if level % 2 else {"b": value, "a": level}
+    return value
+
+
+@pytest.mark.parametrize("stack_kib", [128, 512])
+def test_rust_writes_deep_leaf_data_on_a_thread_with_a_small_stack(stack_kib: int) -> None:
+    # A thread gets the platform's default stack unless Python sets one:
+    # 128 KiB on musl Linux, also for Python's own threads, and 512 KiB on
+    # macOS for a thread started outside Python; `threading.stack_size()`
+    # gives any Python thread the same. Rust's walk reads Python objects, so
+    # no stack guard can help it; past a few levels it keeps the containers
+    # it has open on a list instead.
+    deepest = _nested_at_depth(_first_too_deep_nesting() - 1)
+    results: list[tuple[str, str]] = []
+    previous = threading.stack_size(stack_kib * 1024)
+    try:
+        thread = threading.Thread(target=lambda: results.append(_both({"citryDeep": deepest})))
+        thread.start()
+        thread.join()
+    finally:
+        threading.stack_size(previous)
+    assert len(results) == 1
+    rust, python = results[0]
+    assert rust == python
+
+
+def _first_too_deep_nesting() -> int:
+    """Return the smallest nesting Rust declines with ``too_deep``, found by asking it."""
+    depth = 1
+    while type(_native._leaf_values_json({"k": _nested_at_depth(depth)}, PLACEHOLDER)) is not str:
+        depth += 1
+    assert _native._leaf_values_json({"k": _nested_at_depth(depth)}, PLACEHOLDER) == "too_deep"
+    return depth
+
+
+def _loop_at(depth: int) -> object:
+    # The outer list holds itself again ``depth + 1`` levels down.
+    loop: list[object] = []
+    loop.append(_nested_at_depth(depth, loop))
+    return loop
+
+
+@pytest.mark.parametrize(
+    ("leaf", "reason"),
+    [
+        (math.nan, "non_finite"),
+        (2**70, "big_int"),
+        ("\ud800", "not_utf8"),
+        (Secret("hidden"), "not_plain"),
+        ({1: "x"}, "not_plain"),
+    ],
+)
+@pytest.mark.parametrize("depth", [3, 40])
+def test_rust_declines_the_same_value_above_and_below_its_switch_to_a_stack(
+    leaf: object, reason: str, depth: int
+) -> None:
+    # Rust writes the first few levels with direct calls and deeper ones with
+    # a list of open containers; both refuse the same value for the same
+    # reason.
+    assert _native._leaf_values_json({"citryDeep": _nested_at_depth(depth, leaf)}, PLACEHOLDER) == reason
+
+
+@pytest.mark.parametrize("depth", [3, 40])
+def test_rust_declines_a_loop_above_and_below_its_switch_to_a_stack(depth: int) -> None:
+    assert _native._leaf_values_json({"citryDeep": _loop_at(depth)}, PLACEHOLDER) == "cycle"
+
+
+@pytest.mark.parametrize("depth", [3, 40, 150])
+def test_rust_writes_what_python_writes_above_and_below_its_switch_to_a_stack(depth: int) -> None:
+    shared = ["shared"]
+    rust, python = _both({"citryDeep": _nested_at_depth(depth, {"x": shared, "y": shared, "t": (1, 2.5)})})
+    assert rust == python
+
+
+def _loop_between(outer: int, inner: int) -> object:
+    """Nest ``outer`` levels, then a list that holds itself again ``inner + 1`` levels down."""
+    loop: list[object] = []
+    loop.append(_nested_at_depth(inner, loop))
+    return _nested_at_depth(outer, loop)
+
+
+def test_rust_declines_a_loop_entirely_past_its_switch_to_a_stack() -> None:
+    # The loop starts at depth 35 and closes at 40, both past the switch.
+    assert _native._leaf_values_json({"citryDeep": _loop_between(35, 4)}, PLACEHOLDER) == "cycle"
+
+
+@pytest.mark.parametrize("depth", [3, 40])
+def test_rust_names_the_first_refused_value_above_and_below_its_switch(depth: int) -> None:
+    # A dict's keys are checked before its values, so the int key wins over
+    # the NaN beside it, at any depth.
+    leaf = {"a": math.nan, 7: "x"}
+    assert _native._leaf_values_json({"citryDeep": _nested_at_depth(depth, leaf)}, PLACEHOLDER) == "not_plain"

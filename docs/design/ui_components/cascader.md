@@ -40,11 +40,16 @@ Without JavaScript, the selected path remains visible and form-submittable.
 ## 3. Semantics and keyboard
 
 The trigger is a native button with `aria-haspopup=tree`, `aria-expanded`, and
-`aria-controls`. The popup uses a single-select tree model, following the WAI
-APG distinction between focus and selection. Each Option is a treeitem. Its
-child list is a logically owned group and becomes the next visible column only
-while that branch is active. Visual columns are DOM siblings so one column
-cannot become another column's horizontal scroll container. Explicit
+`aria-controls`. Its accessible name is the label from `aria_labelledby` or
+`aria_label`, followed by the path it shows, so the name contains the visible
+text (WCAG 2.5.3 Label in Name). An `aria_label` is rendered as a hidden
+element that `aria-labelledby` points to. The tree is named by the label
+alone; without a label, it takes the trigger's name. The popup uses a
+single-select tree model, following the WAI APG distinction between focus and
+selection. Each Option is a treeitem. Its child list is a logically owned
+group and becomes the next visible column only while that branch is active.
+Visual columns are DOM siblings so one column cannot become another column's
+horizontal scroll container. Explicit
 `aria-level`, `aria-posinset`, `aria-setsize`, and `aria-owns` preserve the
 hierarchy exposed to assistive technology.
 

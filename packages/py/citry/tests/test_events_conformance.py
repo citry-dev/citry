@@ -97,6 +97,10 @@ def _conformance_surface() -> tuple[Citry, type[Component]]:
             def fail(self, data: FailIn):
                 raise EventError("The counter cannot do that.", status=data.status)
 
+            @event(detached=True)
+            def peek(self, state: CounterState):
+                return {"count": state.count}
+
         def template_data(self, kwargs, slots):
             return {"count": kwargs.count, "name": kwargs.name}
 

@@ -371,6 +371,44 @@ def test_a_failed_run_names_its_failed_jobs(monkeypatch: pytest.MonkeyPatch) -> 
     assert client.requested == ["/actions/runs/7/jobs?per_page=100"]
 
 
+def test_a_failed_job_stops_the_wait_before_the_run_finishes(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The run would finish only after its slowest job, so the wait must stop
+    # as soon as one job has failed. A zero interval reads jobs on every poll.
+    monkeypatch.setattr(release, "JOB_CHECK_SECONDS", 0)
+    client = _ScriptedRuns(
+        [("in_progress", None)],
+        jobs=[
+            {"name": "sdist", "conclusion": "failure"},
+            {"name": "linux (x86)", "conclusion": None},
+        ],
+    )
+
+    with pytest.raises(ReleaseError, match=r"failed in jobs sdist while its other jobs were still running"):
+        _wait(monkeypatch, client)
+
+
+def test_running_jobs_without_a_failure_keep_the_wait_going(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A job that is still running has no conclusion, so the wait goes on. With
+    # a zero interval it reads jobs once for each poll of the unfinished run.
+    monkeypatch.setattr(release, "JOB_CHECK_SECONDS", 0)
+    client = _ScriptedRuns(
+        [("in_progress", None), ("in_progress", None), ("completed", "success")],
+        jobs=[{"name": "linux (x86)", "conclusion": None}],
+    )
+
+    assert _wait(monkeypatch, client)["citry"]["id"] == 7
+    assert client.requested == ["/actions/runs/7/jobs?per_page=100"] * 2
+
+
+def test_jobs_of_a_running_run_wait_for_the_check_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Polls come every 10 seconds, so reading jobs on each one would spend the
+    # API budget; the first read waits for the full interval.
+    client = _ScriptedRuns([("queued", None), ("in_progress", None), ("completed", "success")])
+
+    _wait(monkeypatch, client)
+    assert client.requested == []
+
+
 def test_a_failed_job_lookup_still_reports_the_run_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     # The job names are extra detail, so a lookup error of any kind must leave
     # the original failure message in place.

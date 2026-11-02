@@ -2,7 +2,7 @@ use pest::error::{ErrorVariant, InputLocation, LineColLocation};
 use pyo3::prelude::*;
 use thiserror::Error;
 
-use crate::diagnostic_catalog::{PARSE_SYNTAX, PARSE_VALUE};
+use crate::diagnostic_catalog::{PARSE_SYNTAX, PARSE_TOO_DEEP, PARSE_VALUE};
 use crate::grammar::Rule;
 
 /// Machine-readable details for one template parse failure.
@@ -79,6 +79,17 @@ impl From<&str> for CompileError {
 pub enum ParseError {
     #[error("Parse error: {0}")]
     Syntax(#[from] pest::error::Error<Rule>),
+    /// A tag nests deeper than `nesting::MAX_TAG_NESTING` tags, or deeper
+    /// than `nesting::MAX_LOGIC_NESTING` logic levels. It reads like a syntax
+    /// error, but carries its own diagnostic code, so editors and
+    /// `citry check` can tell it apart.
+    ///
+    /// The second field, when present, is the frame to display instead of
+    /// the error's own: a deep template written on one line would otherwise
+    /// print that whole line, megabytes long, so the frame shows the part of
+    /// the line around the tag.
+    #[error("Parse error: {}", .1.as_deref().map_or_else(|| .0.to_string(), str::to_string))]
+    TooDeep(pest::error::Error<Rule>, Option<String>),
     #[error("Parse error: {0}")]
     Value(String),
 }
@@ -92,7 +103,12 @@ impl ParseError {
     /// Return stable, machine-readable details without changing display text.
     pub fn diagnostic(&self) -> ParseDiagnostic {
         match self {
-            ParseError::Syntax(error) => {
+            ParseError::Syntax(error) | ParseError::TooDeep(error, _) => {
+                let code = if matches!(self, ParseError::TooDeep(..)) {
+                    PARSE_TOO_DEEP
+                } else {
+                    PARSE_SYNTAX
+                };
                 let (start_index, end_index) = match error.location {
                     InputLocation::Pos(position) => (position, position),
                     InputLocation::Span((start, end)) => (start, end),
@@ -102,7 +118,7 @@ impl ParseError {
                     LineColLocation::Span(start, end) => (start, end),
                 };
                 ParseDiagnostic {
-                    code: PARSE_SYNTAX.to_string(),
+                    code: code.to_string(),
                     message: self.to_string(),
                     start_index: Some(start_index),
                     end_index: Some(end_index),

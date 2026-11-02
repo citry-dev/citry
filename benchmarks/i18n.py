@@ -161,7 +161,7 @@ def _large_catalog() -> tuple[dict[str, object], dict[str, bool]]:
     )
     elapsed = time.perf_counter() - started
     artifact = compiled.artifact_json().encode()
-    compressed = gzip.compress(artifact, mtime=0)
+    compressed = gzip.compress(artifact, compresslevel=9, mtime=0)
     peak_rss = _peak_rss_bytes()
     measured: dict[str, object] = {
         "artifact_bytes": len(artifact),

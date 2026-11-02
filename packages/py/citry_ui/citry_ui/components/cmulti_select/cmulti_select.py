@@ -12,7 +12,6 @@ from typing import Any, Literal, TypedDict, cast
 from citry import LibraryComponent, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
-    ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
@@ -26,6 +25,7 @@ from citry_ui.components._attrs import (
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import FORM_CONTROL_RUNTIME_DEPENDENCY, FORM_CONTROL_STYLE_DEPENDENCY
+from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -317,7 +317,7 @@ def _options(
 
 class CMultiSelect(LibraryComponent):
     class Dependencies:
-        js = (ANCHORED_LAYER_RUNTIME_DEPENDENCY, FORM_CONTROL_RUNTIME_DEPENDENCY)
+        js = (ANCHORED_LAYER_RUNTIME_DEPENDENCY, FORM_CONTROL_RUNTIME_DEPENDENCY, REVEAL_RUNTIME_DEPENDENCY)
         css = (FORM_CONTROL_STYLE_DEPENDENCY,)
 
     @dataclass(slots=True)
@@ -349,9 +349,55 @@ class CMultiSelect(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "anchorName",
+            "aria_describedby",
+            "aria_disabled",
+            "aria_errormessage",
+            "aria_expanded",
+            "aria_invalid",
+            "aria_label",
+            "aria_labelledby",
+            "aria_readonly",
+            "aria_required",
+            "attrs",
+            "closeOnSelect",
+            "disabled",
+            "empty",
+            "externalDescribedBy",
+            "externalErrorMessage",
+            "field_control",
+            "form",
+            "groups",
+            "input_id",
+            "invalid",
+            "listbox_aria_label",
+            "listbox_attrs",
+            "listbox_id",
+            "loop",
+            "matchWidth",
+            "name",
+            "native_disabled",
+            "native_name",
+            "open",
+            "options",
+            "options_resolved",
+            "placeholder",
+            "placement",
+            "popup_anchor_style",
+            "popup_id",
+            "readonly",
+            "readonly_values",
+            "required",
+            "selected_options",
+            "size",
+            "trigger_anchor_style",
+            "trigger_attrs",
+            "trigger_id",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_multi_select_snapshot", None)
@@ -717,9 +763,14 @@ class CMultiSelect(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       const multiSelectHandoffKey = Symbol.for('citry-ui:multi-select-handoff');
       $component({
         props: {
@@ -790,7 +841,7 @@ class CMultiSelect(LibraryComponent):
           // however that happens, which a ResizeObserver notices; it watches
           // only while an episode lasts.
           let shownWatch=null;
-          const startBlockedEpisode=()=>{invalidEpisodes.add('blocked-open');if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(trigger.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;invalidEpisodes.delete('blocked-open');});let box=trigger;while(/^(inline|contents)/.test(getComputedStyle(box).display)){const next=box.parentElement??box.getRootNode().host;if(!next)break;box=next;}shownWatch.observe(box);};
+          const startBlockedEpisode=()=>{invalidEpisodes.add('blocked-open');if(shownWatch||typeof ResizeObserver!=='function')return;shownWatch=new ResizeObserver(()=>{if(trigger.getClientRects().length===0)return;shownWatch.disconnect();shownWatch=null;invalidEpisodes.delete('blocked-open');});let box=/** @type {Element} */(trigger);while(/^(inline|contents)/.test(getComputedStyle(box).display)){const boxRoot=box.getRootNode();const next=box.parentElement??(boxRoot instanceof ShadowRoot?boxRoot.host:null);if(!next)break;box=next;}shownWatch.observe(box);};
           let logicalOpen=false, highlightedValue=prior?.highlightedValue??null;
           let controlledValue=false, controlledOpen=false, clientValue, clientOpen;
           let onValueChange=null,onOpenChange=null,nativeInvalid=false,active=true,generation=0;
@@ -832,7 +883,7 @@ class CMultiSelect(LibraryComponent):
             // component, or one with no enabled option, cannot open, so it is
             // not reported here; disabling a showing one reports its own
             // close.
-            const blocked=eligible();internalOpen=false;logicalOpen=false;if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;popup.inert=true;if(blocked&&(settled||Boolean(prior?.shown))&&!invalidEpisodes.has('blocked-open')){startBlockedEpisode();notifyOpen(false,'ancestor',popup,true);}sync();return;}invalidEpisodes.delete('blocked-open');highlightedValue=chooseHighlight(pendingDirection);pendingDirection=1;popup.hidden=false;popup.inert=false;try{if(!popup.matches(':popover-open'))popup.showPopover();}catch(error){console.error('[citry-ui] CMultiSelect could not open:',error);popup.hidden=true;popup.inert=true;internalOpen=false;sync();return;}logicalOpen=true;popup.setAttribute('data-open','');if(!coordinator.register(layer)){logicalOpen=false;popup.hidePopover();popup.hidden=true;popup.inert=true;popup.removeAttribute('data-open');sync();return;}sync();if(focus)formRuntime.focus(trigger);optionFor(highlightedValue)?.scrollIntoView({block:'nearest'});return;}logicalOpen=false;highlightedValue=null;popup.inert=true;popup.removeAttribute('data-open');coordinator.unregister(layer);if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;sync();void reason;void source;};
+            const blocked=eligible();internalOpen=false;logicalOpen=false;if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;popup.inert=true;if(blocked&&(settled||Boolean(prior?.shown))&&!invalidEpisodes.has('blocked-open')){startBlockedEpisode();notifyOpen(false,'ancestor',popup,true);}sync();return;}invalidEpisodes.delete('blocked-open');highlightedValue=chooseHighlight(pendingDirection);pendingDirection=1;popup.hidden=false;popup.inert=false;try{if(!popup.matches(':popover-open'))popup.showPopover();}catch(error){console.error('[citry-ui] CMultiSelect could not open:',error);popup.hidden=true;popup.inert=true;internalOpen=false;sync();return;}logicalOpen=true;popup.setAttribute('data-open','');if(!coordinator.register(layer)){logicalOpen=false;popup.hidePopover();popup.hidden=true;popup.inert=true;popup.removeAttribute('data-open');sync();return;}sync();if(focus)formRuntime.focus(trigger);globalThis[Symbol.for('citry-ui:reveal')].reveal(optionFor(highlightedValue),popup);return;}logicalOpen=false;highlightedValue=null;popup.inert=true;popup.removeAttribute('data-open');coordinator.unregister(layer);if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;sync();void reason;void source;};
           const requestOpen=(next,reason,source,focus=false,direction=1)=>{if(next===logicalOpen)return;if(next){pendingDirection=direction;coordinator.clearSuppression(layer);}if(controlledOpen){notifyOpen(next,reason,source);return;}internalOpen=next;applyOpen(next,{reason,source,focus});
             // An ancestor kept the popup closed, and applyOpen told the owner.
             if(next&&!logicalOpen)return;notifyOpen(next,reason,source);};
@@ -866,7 +917,6 @@ class CMultiSelect(LibraryComponent):
         },
       })
     """
-    )
 
     css_file = "runtime.min.css"
 

@@ -12,7 +12,6 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -20,6 +19,10 @@ on:
       - ".github/workflows/py--examples--tests.yml"
       - "scripts/build_constraints.py"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "examples/**"
       - "packages/py/citry/**"
@@ -29,7 +32,6 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -43,12 +45,24 @@ on:
 permissions:
   contents: read
 
+# A newer run cancels an older one for the same pull request, or for the same
+# branch when both come from a push. Any other run gets a group named after
+# its own run ID, so no newer run cancels it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'push' }}
+
+env:
+  # Test the examples with the compiler the citry-core release wheels are
+  # built with: the minimum Rust version that Cargo.toml declares. It is set
+  # here as well as in the setup step because these jobs build inside the
+  # checkout, where rust-toolchain.toml would otherwise select the
+  # development nightly.
+  RUSTUP_TOOLCHAIN: "1.97.0"
 
 jobs:
   clean-copy:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -59,7 +73,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
@@ -70,7 +84,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
-          toolchain: "1.96.0"
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
@@ -111,6 +125,7 @@ jobs:
           if-no-files-found: error
 
   browser:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -121,7 +136,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
@@ -132,7 +147,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
-          toolchain: "1.96.0"
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 

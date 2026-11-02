@@ -76,19 +76,72 @@ pub(crate) enum ContractError {
     Python { kind: &'static str, message: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct DocumentProjection {
     body: BodyProjection,
     comments: Vec<CommentProjection>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 struct BodyProjection {
     items: Vec<BodyItemProjection>,
     gaps: Vec<GapProjection>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Comparing, printing and freeing a projection walk its whole tree, once per
+/// nested element, as deep as the parser accepts. Each level passes through a
+/// `BodyProjection`, so each one checks that enough stack is left first, like
+/// the parser's own `Template`. The results are the same as the derived
+/// implementations'.
+impl PartialEq for BodyProjection {
+    fn eq(&self, other: &Self) -> bool {
+        let compare = || self.items == other.items && self.gaps == other.gaps;
+        // A body without nodes cannot nest further, so it skips the guard.
+        if self.has_child_nodes() {
+            citry_template_parser::stack::with_enough_stack(compare)
+        } else {
+            compare()
+        }
+    }
+}
+
+impl Eq for BodyProjection {}
+
+impl std::fmt::Debug for BodyProjection {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let print = |formatter: &mut std::fmt::Formatter<'_>| {
+            formatter
+                .debug_struct("BodyProjection")
+                .field("items", &self.items)
+                .field("gaps", &self.gaps)
+                .finish()
+        };
+        if self.has_child_nodes() {
+            citry_template_parser::stack::with_enough_stack(|| print(formatter))
+        } else {
+            print(formatter)
+        }
+    }
+}
+
+impl Drop for BodyProjection {
+    fn drop(&mut self) {
+        if self.has_child_nodes() {
+            let items = std::mem::take(&mut self.items);
+            citry_template_parser::stack::with_enough_stack(|| drop(items));
+        }
+    }
+}
+
+impl BodyProjection {
+    /// Whether this body holds a node, the only item that can nest further.
+    fn has_child_nodes(&self) -> bool {
+        self.items
+            .iter()
+            .any(|item| matches!(item, BodyItemProjection::Node(_)))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 enum BodyItemProjection {
     Node(NodeProjection),
     Expr(String),
@@ -96,14 +149,14 @@ enum BodyItemProjection {
     TemplateComment(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct NodeProjection {
     start_tag: StartTagProjection,
     end_tag: Option<EndTagProjection>,
     body: Option<BodyProjection>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct StartTagProjection {
     name: String,
     attrs: Vec<AttrProjection>,
@@ -119,7 +172,7 @@ struct EndTagProjection {
     comments: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct AttrProjection {
     key: String,
     kind: AttrKindProjection,
@@ -127,7 +180,7 @@ struct AttrProjection {
     value: AttrValueProjection,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 enum AttrValueProjection {
     None,
     Exact(String),
@@ -386,7 +439,20 @@ fn project_body(
     })
 }
 
+// The projection recurses once per nested element, as deep as the parser
+// accepts, so every level checks that enough stack is left first.
 fn project_node(
+    source: &str,
+    node: &Node,
+    mode: ProjectionCapability,
+    document_comments: &[Comment],
+) -> Result<NodeProjection, ContractError> {
+    citry_template_parser::stack::with_enough_stack(|| {
+        project_node_on_stack(source, node, mode, document_comments)
+    })
+}
+
+fn project_node_on_stack(
     source: &str,
     node: &Node,
     mode: ProjectionCapability,
@@ -529,7 +595,9 @@ fn project_attr(
             if mode == ProjectionCapability::PythonExpressions
                 && (key == "c-for" || (tag_name == "c-for" && key == "each")) =>
         {
-            project_python(
+            // The clause gets the parser's own generator wrapper, not the
+            // `(\n...\n)` one, which would add to its nesting count.
+            project_wrapped_python(
                 &format!("(None for {}\n)", inner_value.content),
                 "c-for clause",
             )?
@@ -615,22 +683,32 @@ fn project_expression(expr: &Expr, mode: ProjectionCapability) -> Result<String,
 /// Comments are carried separately because they are not part of the tree, so
 /// comparing trees alone would let a provider drop one unnoticed.
 fn project_python(source: &str, kind: &'static str) -> Result<AttrValueProjection, ContractError> {
+    // Parse the text the way the template parser does, inside `(\n...\n)`, so
+    // an expression that is valid only inside parentheses is accepted here too.
+    project_wrapped_python(&crate::python::wrap_authored_expression(source), kind)
+}
+
+/// Project Python text that already carries the parser's wrapper.
+fn project_wrapped_python(
+    wrapped: &str,
+    kind: &'static str,
+) -> Result<AttrValueProjection, ContractError> {
     // The tree comparison and its `Debug` text call themselves once per tree
     // level, so they need the same stack guarantee as formatting.
-    with_enough_stack(|| project_python_on_stack(source, kind))
+    with_enough_stack(|| project_python_on_stack(wrapped, kind))
 }
 
 fn project_python_on_stack(
-    source: &str,
+    wrapped: &str,
     kind: &'static str,
 ) -> Result<AttrValueProjection, ContractError> {
-    let parsed = parse_expression(source).map_err(|error| ContractError::Python {
+    let parsed = parse_expression(wrapped).map_err(|error| ContractError::Python {
         kind,
         message: error.to_string(),
     })?;
     Ok(AttrValueProjection::Python {
         syntax: format!("{:?}", ComparableExpr::from(parsed.syntax().body.as_ref())),
-        comments: python_comments(source, parsed.tokens()),
+        comments: python_comments(wrapped, parsed.tokens()),
     })
 }
 
@@ -655,11 +733,19 @@ fn python_comments(source: &str, tokens: &Tokens) -> Vec<String> {
                 .iter()
                 .find(|token| is_python_anchor_token(token.kind()));
             let comment = &source[range.start().to_usize()..range.end().to_usize()];
-            let same_line = previous.is_some_and(|token| {
-                let token_range = token.as_tuple().1;
-                !source[token_range.end().to_usize()..range.start().to_usize()]
-                    .contains(['\n', '\r'])
-            });
+            // Judged against the code just before the comment, a closing
+            // parenthesis included, as in `python::comment_fingerprint`.
+            let same_line = tokens[..index]
+                .iter()
+                .rev()
+                .find(|token| {
+                    is_python_anchor_token(token.kind()) || token.kind() == TokenKind::Rpar
+                })
+                .is_some_and(|token| {
+                    let token_range = token.as_tuple().1;
+                    !source[token_range.end().to_usize()..range.start().to_usize()]
+                        .contains(['\n', '\r'])
+                });
             Some(format!(
                 "{}|{:?}|{same_line}|{:?}",
                 comment.strip_prefix('#').unwrap_or(comment).trim(),
@@ -670,10 +756,14 @@ fn python_comments(source: &str, tokens: &Tokens) -> Vec<String> {
         .collect()
 }
 
+/// Whether a comment's position is judged against this token. Parentheses do
+/// not count, for the reason `python::is_anchor_token` gives.
 fn is_python_anchor_token(kind: TokenKind) -> bool {
     !matches!(
         kind,
-        TokenKind::Comment
+        TokenKind::Lpar
+            | TokenKind::Rpar
+            | TokenKind::Comment
             | TokenKind::Newline
             | TokenKind::NonLogicalNewline
             | TokenKind::Indent
@@ -938,12 +1028,22 @@ mod tests {
         );
         assert!(
             verify_contract_projection(
-                "<div><section></section></div>",
+                "<div> <section></section> </div>",
                 "<div>\n<section></section>\n</div>",
                 ProjectionCapability::OpeningTags,
             )
             .is_ok()
         );
+        // A gap the author left empty renders as nothing, so filling it is a
+        // change to the output, not to the layout.
+        assert!(matches!(
+            verify_contract_projection(
+                "<div><section></section></div>",
+                "<div>\n<section></section>\n</div>",
+                ProjectionCapability::OpeningTags,
+            ),
+            Err(ContractError::Mismatch { .. })
+        ));
         assert!(matches!(
             verify_contract_projection(
                 "{{ name }}",
@@ -966,12 +1066,20 @@ mod tests {
     fn structural_layout_allows_structural_but_not_sensitive_whitespace_changes() {
         assert!(
             verify_contract_projection(
-                "<main><section></section><footer></footer></main>",
+                "<main> <section></section>\n\n<footer></footer> </main>",
                 "<main>\n  <section></section>\n  <footer></footer>\n</main>",
                 ProjectionCapability::StructuralLayout,
             )
             .is_ok()
         );
+        assert!(matches!(
+            verify_contract_projection(
+                "<main><section></section><footer></footer></main>",
+                "<main>\n  <section></section>\n  <footer></footer>\n</main>",
+                ProjectionCapability::StructuralLayout,
+            ),
+            Err(ContractError::Mismatch { .. })
+        ));
         assert!(matches!(
             verify_contract_projection(
                 "<span>A</span><span>B</span>",
@@ -1043,7 +1151,7 @@ mod tests {
     fn nested_template_values_use_the_same_projection_contract() {
         assert!(matches!(
             verify_contract_projection(
-                r#"<c-Card c-body="<main><section></section></main>" />"#,
+                r#"<c-Card c-body="<main> <section></section> </main>" />"#,
                 "<c-Card c-body=\"<main>\n  <section></section>\n</main>\" />",
                 ProjectionCapability::OpeningTags,
             ),
@@ -1051,7 +1159,7 @@ mod tests {
         ));
         assert!(
             verify_contract_projection(
-                r#"<c-Card c-body="<main><section></section></main>" />"#,
+                r#"<c-Card c-body="<main> <section></section> </main>" />"#,
                 "<c-Card c-body=\"<main>\n  <section></section>\n</main>\" />",
                 ProjectionCapability::StructuralLayout,
             )
@@ -1059,19 +1167,28 @@ mod tests {
         );
         assert!(
             verify_contract_projection(
-                r#"<c-Card c-body="  <><main><section></section></main></>  " />"#,
+                r#"<c-Card c-body="  <><main> <section></section> </main></>  " />"#,
                 "<c-Card c-body=\"  <><main>\n  <section></section>\n</main></>  \" />",
                 ProjectionCapability::StructuralLayout,
             )
             .is_ok()
         );
+        // The nested template follows the same rule as the outer one.
+        assert!(matches!(
+            verify_contract_projection(
+                r#"<c-Card c-body="<main><section></section></main>" />"#,
+                "<c-Card c-body=\"<main>\n  <section></section>\n</main>\" />",
+                ProjectionCapability::StructuralLayout,
+            ),
+            Err(ContractError::Mismatch { .. })
+        ));
     }
 
     #[test]
     fn exhaustive_block_control_branches_are_structural() {
         assert!(
             verify_contract_projection(
-                r#"<main><c-if cond="ok"><section></section></c-if><c-else><footer></footer></c-else></main>"#,
+                r#"<main> <c-if cond="ok"> <section></section> </c-if> <c-else> <footer></footer> </c-else> </main>"#,
                 "<main>\n  <c-if cond=\"ok\">\n    <section></section>\n  </c-if>\n  <c-else>\n    <footer></footer>\n  </c-else>\n</main>",
                 ProjectionCapability::StructuralLayout,
             )
@@ -1111,7 +1228,7 @@ mod tests {
         ));
         assert!(
             verify_contract_projection(
-                r#"<main><section c-if="ok"></section><footer c-else></footer></main>"#,
+                r#"<main> <section c-if="ok"></section> <footer c-else></footer> </main>"#,
                 "<main>\n  <section c-if=\"ok\"></section>\n  <footer c-else></footer>\n</main>",
                 ProjectionCapability::StructuralLayout,
             )

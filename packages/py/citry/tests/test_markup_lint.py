@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import re
+import warnings
+
 import pytest
 
+from citry import Citry, Component
 from citry.analysis import (
     MarkupLintConsumer,
     browser_expressions,
     lint_invalid_vue_expressions,
     lint_markup,
 )
-from citry_core.template_parser import parse_template
+from citry_core.template_parser import ForeignSpan, ParseOptions, parse_template
 
 
 def _markup(
@@ -82,6 +86,41 @@ def test_misspelled_attribute_stays_silent(source):
     assert "misspelled-attribute" not in _codes(source)
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves `:titl` under `v-pre` as an attribute literally named
+        # `:titl`, not a binding of `titl`, so it is not a misspelling.
+        '<p v-pre :titl="x"></p>',
+        '<p v-pre v-bind:titl="x"></p>',
+        '<div v-pre><p :titl="x"></p></div>',
+        "<c-card c-header=\"<><p v-pre :titl='x'></p></>\" />",
+        "<div v-pre><c-card c-header=\"<><p :titl='x'></p></>\" /></div>",
+    ],
+)
+def test_misspelled_attribute_ignores_vue_bindings_at_and_inside_v_pre(source):
+    assert "misspelled-attribute" not in _codes(source)
+
+
+@pytest.mark.parametrize(
+    ("source", "span"),
+    [
+        # A plain name is the attribute the browser reads, so it is still checked.
+        ('<p v-pre titl="x"></p>', "titl"),
+        ('<div v-pre><p titl="x"></p></div>', "titl"),
+        # Citry renders `c-titl` on the server, before Vue sees the page.
+        ('<p v-pre c-titl="x"></p>', "c-titl"),
+        # The bindings outside `v-pre` are checked as usual, also after a `v-pre` sibling.
+        ('<p :titl="x"></p>', ":titl"),
+        ('<p v-bind:titl="x"></p>', "v-bind:titl"),
+        ('<div v-pre></div><p :titl="x"></p>', ":titl"),
+        ("<c-card c-header=\"<><p :titl='x'></p></>\" />", ":titl"),
+    ],
+)
+def test_misspelled_attribute_still_checks_plain_names_in_v_pre_and_bindings_outside_it(source, span):
+    assert _markup(source) == [("misspelled-attribute", span, "error")]
+
+
 # --- citry.template.misspelled-element ----------------------------------------
 
 
@@ -142,6 +181,36 @@ def test_unknown_aria_attribute_accepts_aria_1_2_and_1_3_names_and_component_inp
     assert _markup(source) == []
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves `:aria-lable` under `v-pre` as an attribute literally
+        # named `:aria-lable`, so it is not an ARIA attribute to check.
+        '<p v-pre :aria-lable="x"></p>',
+        '<div v-pre><p :aria-lable="x"></p></div>',
+    ],
+)
+def test_unknown_aria_attribute_ignores_vue_bindings_at_and_inside_v_pre(source):
+    assert _markup(source) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "span"),
+    [
+        # A plain name is the attribute the browser reads, so it is still checked.
+        ('<p v-pre aria-lable="x"></p>', "aria-lable"),
+        ('<div v-pre><p aria-lable="x"></p></div>', "aria-lable"),
+        # Only the plain name is checked when both are written.
+        ('<p v-pre :aria-lable="x" aria-lable="y"></p>', "aria-lable"),
+        # The binding outside `v-pre` is checked as usual, also after a `v-pre` sibling.
+        ('<p :aria-lable="x"></p>', ":aria-lable"),
+        ('<div v-pre></div><p :aria-lable="x"></p>', ":aria-lable"),
+    ],
+)
+def test_unknown_aria_attribute_still_checks_plain_names_in_v_pre_and_bindings_outside_it(source, span):
+    assert _markup(source) == [("unknown-aria-attribute", span, "error")]
+
+
 # --- citry.template.invalid-nesting -------------------------------------------
 
 
@@ -193,6 +262,38 @@ def test_invalid_nesting_stays_silent(source):
     assert "invalid-nesting" not in _codes(source)
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue resolves no component under `v-pre`, so `<Card>` is a plain
+        # element, as `<card>` is, and the browser still closes the paragraph.
+        "<p v-pre><Card><div></div></Card></p>",
+        "<p><Card v-pre><div></div></Card></p>",
+        "<div v-pre><p><Card><div></div></Card></p></div>",
+        "<p><card><div></div></card></p>",
+    ],
+)
+def test_invalid_nesting_treats_a_pascal_case_tag_under_v_pre_as_plain_markup(source):
+    assert _markup(source) == [("invalid-nesting", "div", "error")]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Outside `v-pre` the same tag may be a component, whose output is not visible here.
+        "<p><Card><div></div></Card></p>",
+        # A `v-pre` element elsewhere does not turn the tag into plain markup.
+        "<p><Card><div></div></Card></p><div v-pre><b></b></div>",
+        # A Citry component tag is rendered on the server, even under `v-pre`.
+        "<p v-pre><c-Card><div></div></c-Card></p>",
+        # Nothing here sits inside a paragraph.
+        "<Card v-pre><div></div></Card>",
+    ],
+)
+def test_invalid_nesting_keeps_a_component_tag_silent_outside_v_pre_and_a_citry_tag_inside_it(source):
+    assert "invalid-nesting" not in _codes(source)
+
+
 # --- citry.template.duplicate-id ----------------------------------------------
 
 
@@ -225,6 +326,67 @@ def test_duplicate_id_reports_the_benchmark_template():
     ],
 )
 def test_duplicate_id_stays_silent_when_either_element_may_not_render(source):
+    assert "duplicate-id" not in _codes(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves `v-if` and `v-else` as written, so both elements are on the page.
+        '<div v-pre><p v-if="a" id="same"></p><p v-else id="same"></p></div>',
+        '<div v-pre><p v-if="a" id="same"></p><p v-else-if="b" id="same"></p></div>',
+        '<p v-pre v-if="a" id="same"></p><p v-pre v-else id="same"></p>',
+        # A `v-for` is not a loop there, so its element appears once.
+        '<div v-pre><li v-for="x in xs" id="same"></li><li id="same"></li></div>',
+        '<li v-pre v-for="x in xs" id="same"></li><li id="same"></li>',
+    ],
+)
+def test_duplicate_id_counts_vue_conditions_and_loops_under_v_pre_as_plain_attributes(source):
+    assert _codes(source) == ["duplicate-id"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # A PascalCase tag is plain markup there, not a component rendered elsewhere.
+        '<div v-pre><Card id="same"></Card><i id="same"></i></div>',
+        '<Card v-pre id="same"></Card><i id="same"></i>',
+    ],
+)
+def test_duplicate_id_counts_a_pascal_case_tag_under_v_pre_as_plain_markup(source):
+    assert _codes(source) == ["duplicate-id"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Citry renders these before Vue sees the page, so they still choose or repeat.
+        '<div v-pre><p c-if="a" id="same"></p><p c-else id="same"></p></div>',
+        '<p v-pre c-if="a" id="same"></p><p v-pre c-else id="same"></p>',
+        '<div v-pre><li c-for="x in xs" id="same"></li><li id="same"></li></div>',
+        '<div v-pre><c-if cond="x"><i id="same"></i></c-if><c-else><i id="same"></i></c-else></div>',
+    ],
+)
+def test_duplicate_id_stays_silent_for_citry_conditions_and_loops_under_v_pre(source):
+    assert "duplicate-id" not in _codes(source)
+
+
+def test_duplicate_id_stays_silent_for_a_vue_loop_under_v_pre_with_one_id():
+    # A `v-for` under `v-pre` is not a loop, so one id is not repeated.
+    assert "duplicate-id" not in _codes('<div v-pre><li v-for="x in xs" id="one"></li></div>')
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # A component, or a `v-if`/`v-else` pair, outside `v-pre` may not render both.
+        '<Card id="same"></Card><i id="same"></i>',
+        '<p v-if="a" id="same"></p><p v-else id="same"></p><div v-pre><i id="other"></i></div>',
+        # A `v-pre` sibling earlier in the template does not reach the pair after it.
+        '<div v-pre></div><p v-if="a" id="same"></p><p v-else id="same"></p>',
+    ],
+)
+def test_duplicate_id_keeps_its_result_outside_v_pre(source):
     assert "duplicate-id" not in _codes(source)
 
 
@@ -420,6 +582,451 @@ def test_markup_rules_do_not_read_ids_or_paragraphs_across_a_nested_template():
     assert _markup(source) == []
 
 
+# --- citry.template.csp-incompatible ------------------------------------------
+
+_CSP_NATIVE_EVENT = (
+    "A strict Content Security Policy blocks the inline event attribute '{name}'. "
+    "Use a Vue listener such as @click instead, or rename a custom attribute, for example to data-{name}."
+)
+_CSP_JAVASCRIPT_URL = (
+    "A strict Content Security Policy blocks the javascript: URL in '{name}'. "
+    "Use a real URL, and a Vue listener for the action."
+)
+_CSP_RAW_TAG = (
+    "A strict Content Security Policy blocks this inline <{tag}>. "
+    "Move it into the component's js or css, or into a Script or Style dependency."
+)
+
+
+def _csp(source: str, *modes: str) -> list[tuple[int, int, str, str]]:
+    """Return (start, end, severity, message) of each strict-CSP finding, for consumers set to ``modes``."""
+    consumers = tuple(MarkupLintConsumer(csp=mode) for mode in modes)  # type: ignore[arg-type]
+    return [
+        (finding.start_index, finding.end_index, finding.severity, finding.message)
+        for finding in lint_markup(parse_template(source), consumers)
+        if finding.code == "citry.template.csp-incompatible"
+    ]
+
+
+def test_csp_rule_follows_the_consumers_mode():
+    source = '<div onclick="go()"></div>'
+    message = _CSP_NATIVE_EVENT.format(name="onclick")
+    # The engine's default is off, so a consumer that says nothing reports nothing.
+    assert lint_markup(parse_template(source), (MarkupLintConsumer(),)) == ()
+    assert _csp(source, "off") == []
+    assert _csp(source, "warn") == [(5, 12, "warning", message)]
+    assert _csp(source, "strict") == [(5, 12, "error", message)]
+    # With no consumer at all, no rule is active.
+    assert lint_markup(parse_template(source), ()) == ()
+
+
+def test_csp_rule_takes_the_strictest_consumer_and_ignores_an_off_consumer():
+    source = '<div onclick="go()"></div>'
+    message = _CSP_NATIVE_EVENT.format(name="onclick")
+    # Components of two engines can share one template; the stricter one decides.
+    assert _csp(source, "warn", "strict") == [(5, 12, "error", message)]
+    assert _csp(source, "strict", "warn") == [(5, 12, "error", message)]
+    assert _csp(source, "warn", "off") == [(5, 12, "warning", message)]
+    assert _csp(source, "off", "strict") == [(5, 12, "error", message)]
+    assert _csp(source, "off", "off") == []
+
+
+def test_csp_rule_does_not_change_the_other_markup_rules():
+    source = '<div titel="x" onclick="go()"></div>'
+    codes = {finding.code for finding in lint_markup(parse_template(source), (MarkupLintConsumer(csp="strict"),))}
+    assert codes == {"citry.template.misspelled-attribute", "citry.template.csp-incompatible"}
+    # An engine that ignores the other rules still gets the CSP rule.
+    quiet = MarkupLintConsumer(rule_misspelled_attribute="ignore", csp="warn")
+    assert [finding.code for finding in lint_markup(parse_template(source), (quiet,))] == [
+        "citry.template.csp-incompatible"
+    ]
+
+
+@pytest.mark.parametrize("mode", ["", "Strict", "on", "error", None, True])
+def test_csp_consumer_rejects_an_unknown_mode(mode):
+    with pytest.raises(ValueError, match="Unknown csp mode"):
+        MarkupLintConsumer(csp=mode)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # An event handler is reported on the attribute name, as written.
+        ('<button onclick="go()">x</button>', [(8, 15, _CSP_NATIVE_EVENT.format(name="onclick"))]),
+        ('<button ONCLICK="go()">x</button>', [(8, 15, _CSP_NATIVE_EVENT.format(name="ONCLICK"))]),
+        # Any name that starts with "on" is read as a possible handler, as at render time.
+        ('<div online="1"></div>', [(5, 11, _CSP_NATIVE_EVENT.format(name="online"))]),
+        ('<div onboarding-step="1"></div>', [(5, 20, _CSP_NATIVE_EVENT.format(name="onboarding-step"))]),
+        # A name of one or two letters is too short to be a handler.
+        ('<div on="1" ono="2"></div>', [(12, 15, _CSP_NATIVE_EVENT.format(name="ono"))]),
+        # A name decides, so a handler without a value is still reported.
+        ("<button onclick>x</button>", [(8, 15, _CSP_NATIVE_EVENT.format(name="onclick"))]),
+        # A javascript: URL is reported on the value, as written.
+        ('<a href="javascript:alert(1)">x</a>', [(9, 28, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        ('<a href="JavaScript:x">x</a>', [(9, 21, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        ("<a href=javascript:x>x</a>", [(8, 20, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        # The value is decoded before it is read, as the browser does.
+        ('<a href="java&#115;cript:alert(1)">x</a>', [(9, 33, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        ('<a href="java&#x73;cript:x">x</a>', [(9, 26, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        ('<a href="javascript&colon;x">x</a>', [(9, 27, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        ('<a href="java&Tab;script:x">x</a>', [(9, 26, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        # A tab, or leading spaces, do not stop the browser reading the scheme.
+        ('<a href="java\tscript:alert(1)">x</a>', [(9, 29, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        ('<a href="  JavaScript:x">x</a>', [(9, 23, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        # Only some attributes hold a URL; "data" is one only on <object>.
+        ('<object data="javascript:x"></object>', [(14, 26, _CSP_JAVASCRIPT_URL.format(name="data"))]),
+        ('<div data="javascript:x"></div>', []),
+        ('<img src="javascript:x" alt="">', [(10, 22, _CSP_JAVASCRIPT_URL.format(name="src"))]),
+        ('<form action="javascript:x"></form>', [(14, 26, _CSP_JAVASCRIPT_URL.format(name="action"))]),
+        ('<button formaction="javascript:x">x</button>', [(20, 32, _CSP_JAVASCRIPT_URL.format(name="formaction"))]),
+        ('<svg><a xlink:href="javascript:x"></a></svg>', [(20, 32, _CSP_JAVASCRIPT_URL.format(name="xlink:href"))]),
+        ('<a title="javascript:x">x</a>', []),
+        ('<a href="https://example.com/javascript:x">x</a>', []),
+        # Both problems on one element are two findings, in source order.
+        (
+            '<a href="javascript:x"\n   onclick="y">x</a>',
+            [
+                (9, 21, _CSP_JAVASCRIPT_URL.format(name="href")),
+                (26, 33, _CSP_NATIVE_EVENT.format(name="onclick")),
+            ],
+        ),
+        # A raw script or style is reported on the tag name, in any element.
+        ("<script>var a = 1</script>", [(1, 7, _CSP_RAW_TAG.format(tag="script"))]),
+        ("<style>a { color: red }</style>", [(1, 6, _CSP_RAW_TAG.format(tag="style"))]),
+        ("<svg><script>x</script></svg>", [(6, 12, _CSP_RAW_TAG.format(tag="script"))]),
+        # A known HTML element is checked in any letter case, as the browser reads it.
+        ('<BUTTON onclick="x">y</BUTTON>', [(8, 15, _CSP_NATIVE_EVENT.format(name="onclick"))]),
+        ('<A HREF="javascript:x">y</A>', [(9, 21, _CSP_JAVASCRIPT_URL.format(name="HREF"))]),
+        ("<Script>a</Script>", [(1, 7, _CSP_RAW_TAG.format(tag="Script"))]),
+        ("<SCRIPT>a</SCRIPT>", [(1, 7, _CSP_RAW_TAG.format(tag="SCRIPT"))]),
+        ("<STYLE>a { color: red }</STYLE>", [(1, 6, _CSP_RAW_TAG.format(tag="STYLE"))]),
+        # An element that Citry renders as a plain element has plain attributes.
+        ('<c-element is="div" onclick="x"></c-element>', [(20, 27, _CSP_NATIVE_EVENT.format(name="onclick"))]),
+        # A fixed `is` names the element the page gets, so the rules for that element apply.
+        (
+            '<c-element is="object" data="javascript:x"></c-element>',
+            [(29, 41, _CSP_JAVASCRIPT_URL.format(name="data"))],
+        ),
+        ('<c-element is="div" data="javascript:x"></c-element>', []),
+        ('<c-element is="a" href="javascript:x"></c-element>', [(24, 36, _CSP_JAVASCRIPT_URL.format(name="href"))]),
+        ('<c-element is="script">a</c-element>', [(1, 10, _CSP_RAW_TAG.format(tag="script"))]),
+        ('<c-element is="STYLE"></c-element>', [(1, 10, _CSP_RAW_TAG.format(tag="STYLE"))]),
+        # A name with a dot that is not a binding is still the attribute the browser gets.
+        ('<div onclick.prevent="x"></div>', [(5, 20, _CSP_NATIVE_EVENT.format(name="onclick.prevent"))]),
+        ("<div ONCLICK.once></div>", [(5, 17, _CSP_NATIVE_EVENT.format(name="ONCLICK.once"))]),
+        ('<a href.x="javascript:x"></a>', []),
+        # The start tag of a text-content element is still HTML.
+        ('<plaintext onclick="x">y</plaintext>', [(11, 18, _CSP_NATIVE_EVENT.format(name="onclick"))]),
+        # Vue sets the attributes a v-pre region leaves as written, so they are checked.
+        ('<div v-pre onclick="x"></div>', [(11, 18, _CSP_NATIVE_EVENT.format(name="onclick"))]),
+        ('<div v-pre><span onclick="x"></span></div>', [(17, 24, _CSP_NATIVE_EVENT.format(name="onclick"))]),
+        (
+            '<div v-pre onclick="x"><script>a</script><a href="javascript:y"></a></div>',
+            [
+                (11, 18, _CSP_NATIVE_EVENT.format(name="onclick")),
+                (24, 30, _CSP_RAW_TAG.format(tag="script")),
+                (50, 62, _CSP_JAVASCRIPT_URL.format(name="href")),
+            ],
+        ),
+    ],
+)
+def test_csp_rule_reports_each_case_with_its_range(source, expected):
+    assert [(start, end, message) for start, end, _severity, message in _csp(source, "strict")] == expected
+
+
+def test_csp_rule_reads_c_raw_content_with_utf8_byte_offsets():
+    source = '<c-raw>é <a onclick="x" href="javascript:y">z</a><script>q</script></c-raw>'
+    findings = _csp(source, "strict")
+    assert findings == [
+        (13, 20, "error", _CSP_NATIVE_EVENT.format(name="onclick")),
+        (31, 43, "error", _CSP_JAVASCRIPT_URL.format(name="href")),
+        (51, 57, "error", _CSP_RAW_TAG.format(tag="script")),
+    ]
+    # The offsets are bytes into the template, so "é" counts as two.
+    encoded = source.encode()
+    assert [encoded[start:end] for start, end, _severity, _message in findings] == [
+        b"onclick",
+        b"javascript:y",
+        b"script",
+    ]
+    assert [(start, end) for start, end, _severity, _message in _csp(source.replace("é", "e"), "strict")] == [
+        (12, 19),
+        (30, 42),
+        (50, 56),
+    ]
+
+
+def test_csp_rule_reads_c_raw_content_beside_other_markup_with_the_modes_severity():
+    source = '<p onclick="a"><c-raw><b ONCLICK="y"></b></c-raw></p>'
+    assert _csp(source, "warn") == [
+        (3, 10, "warning", _CSP_NATIVE_EVENT.format(name="onclick")),
+        # <c-raw> content goes through the page check, which reports names in
+        # lowercase, but the message shows the name as the content writes it.
+        (25, 32, "warning", _CSP_NATIVE_EVENT.format(name="ONCLICK")),
+    ]
+    assert _csp(source, "off") == []
+    assert _csp("<c-raw></c-raw>", "strict") == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # A binding, a Citry or Vue directive, a listener, and a spread are values from data.
+        """<a :href="'javascript:x'">x</a>""",
+        """<a c-href="'javascript:x'">x</a>""",
+        """<a v-bind:href="'javascript:x'">x</a>""",
+        """<a v-bind="{ href: 'javascript:x' }">x</a>""",
+        '<button @click="go()">x</button>',
+        '<button v-on:click="go()">x</button>',
+        '<button @click.once="go()" :onclick="x" v-onclick="z">x</button>',
+        '<button c-onclick="y">x</button>',
+        '<div c-bind="attrs"></div>',
+        '<div v-bind="attrs"></div>',
+        '<div #default="props"></div>',
+        # A component's attributes are inputs, not HTML.
+        '<c-Card onclick="x" href="javascript:y" />',
+        '<c-card onclick="x" />',
+        # A capitalized name that is no HTML element may be a Vue component.
+        '<Card onclick="x" href="javascript:y">z</Card>',
+        # A name with one of these prefixes is a binding or directive, not an attribute.
+        '<div $onclick="x" #onclick="y" [onclick]="z" .onclick="w"></div>',
+        '<div @onclick.prevent="x" :onclick.prop="y" v-onclick.z="w" c-onclick.x="q"></div>',
+        # The page check reads these elements' content as text, not as tags.
+        '<noscript><div onclick="x"></div><script>a</script></noscript>',
+        '<xmp><div onclick="x"></div></xmp>',
+        '<iframe><div onclick="x"></div></iframe>',
+        '<noembed><div onclick="x"></div></noembed>',
+        '<noframes><div onclick="x"></div></noframes>',
+        '<plaintext><div onclick="x"></div><script>a</script></plaintext>',
+        # The HTML of a nested template lands where the code that renders it decides.
+        "<c-card c-header=\"<><b onclick='x'></b><script>a</script></>\" />",
+        # A bound `is` gives no fixed element, so the c-element name stands.
+        """<c-element c-is="'script'"></c-element>""",
+        # An empty or missing URL, and a data attribute on a non-object.
+        "<a href>x</a>",
+        '<a href="">x</a>',
+        '<div data-x="javascript:y" data="javascript:y"></div>',
+    ],
+)
+def test_csp_rule_stays_silent(source):
+    assert _csp(source, "strict") == []
+
+
+def test_csp_rule_checks_the_element_that_holds_text_content_but_not_what_is_inside():
+    # The browser reads the content as text, but the start tag is still HTML.
+    source = '<noscript onclick="x"><i onclick="y"></i></noscript>'
+    assert _csp(source, "strict") == [(10, 17, "error", _CSP_NATIVE_EVENT.format(name="onclick"))]
+
+
+def test_csp_rule_reads_markup_around_a_v_pre_region_and_a_component_tag():
+    source = '<c-Card onclick="x"><b onclick="y"></b></c-Card><div v-pre onclick="z"></div><i onclick="w"></i>'
+    # The component tag's own attributes are inputs, so only its content is
+    # read. The v-pre element is read like any other.
+    assert [(start, end) for start, end, _severity, _message in _csp(source, "strict")] == [
+        (23, 30),
+        (59, 66),
+        (80, 87),
+    ]
+
+
+def test_csp_rule_reads_c_raw_content_with_the_names_as_written():
+    source = '<c-raw>é <B ONCLICK="x"></B><A HREF=javascript:y>z</A><STYLE>q</STYLE></c-raw>'
+    findings = _csp(source, "strict")
+    assert findings == [
+        (13, 20, "error", _CSP_NATIVE_EVENT.format(name="ONCLICK")),
+        (37, 49, "error", _CSP_JAVASCRIPT_URL.format(name="HREF")),
+        (56, 61, "error", _CSP_RAW_TAG.format(tag="STYLE")),
+    ]
+    # A name followed by spaces, or a value of mixed case, is still found.
+    spaced = '<c-raw><A\n  HREF = "JaVaScRiPt:x">y</A></c-raw>'
+    assert _csp(spaced, "strict") == [(20, 32, "error", _CSP_JAVASCRIPT_URL.format(name="HREF"))]
+    # Another attribute that holds the name as a word does not move the finding.
+    decoy = '<c-raw><a title="onclick" onclick="x"></a></c-raw>'
+    assert _csp(decoy, "strict") == [(26, 33, "error", _CSP_NATIVE_EVENT.format(name="onclick"))]
+
+
+def test_csp_rule_checks_an_attribute_with_extension_syntax_by_its_name_only():
+    # The value is known only after the extension runs, so a javascript: URL
+    # that may depend on it is not reported; an on* name never depends on it.
+    def findings(source: str, marker: str) -> list[tuple[int, int, str]]:
+        start = source.index(marker)
+        span = ForeignSpan(start, start + len(marker), "x", 0, may_control_body=False)
+        template = parse_template(source, options=ParseOptions([span]))
+        consumers = (MarkupLintConsumer(csp="strict"),)
+        return [
+            (finding.start_index, finding.end_index, finding.message)
+            for finding in lint_markup(template, consumers)
+            if finding.code == "citry.template.csp-incompatible"
+        ]
+
+    assert findings('<a href="javascript:{% x %}">y</a>', "{% x %}") == []
+    assert findings('<object data="javascript:{% x %}"></object>', "{% x %}") == []
+    assert findings('<div onclick="go({% x %})"></div>', "{% x %}") == [
+        (5, 12, _CSP_NATIVE_EVENT.format(name="onclick")),
+    ]
+    # An attribute beside it is judged as usual.
+    assert findings('<a href="javascript:{% x %}" onclick="y">z</a>', "{% x %}") == [
+        (29, 36, _CSP_NATIVE_EVENT.format(name="onclick")),
+    ]
+
+
+# The attribute snippets whose render-time result is compared with the template check.
+_CSP_AGREEMENT_SNIPPETS = [
+    '<button onclick="go()">x</button>',
+    '<button ONCLICK="go()">x</button>',
+    '<div online="1"></div>',
+    '<div on="1" ono="1"></div>',
+    "<button onclick>x</button>",
+    '<a href="javascript:alert(1)">x</a>',
+    '<a href="JavaScript:x">x</a>',
+    '<a href="  JavaScript:x">x</a>',
+    '<a href="java&#115;cript:alert(1)">x</a>',
+    '<a href="java&#x73;cript:x">x</a>',
+    '<a href="java&Tab;script:x">x</a>',
+    '<a href="java\tscript:x">x</a>',
+    '<a href="javascript&colon;x">x</a>',
+    '<a href="javascript&#58;x">x</a>',
+    '<a href="https://example.com/javascript:x">x</a>',
+    '<a href="/javascript:x">x</a>',
+    "<a href>x</a>",
+    '<a href="">x</a>',
+    '<a title="javascript:x">x</a>',
+    '<object data="javascript:x"></object>',
+    '<div data="javascript:x"></div>',
+    '<img src="javascript:x" alt="">',
+    '<form action="javascript:x"></form>',
+    '<button formaction="javascript:x">x</button>',
+    '<svg><a xlink:href="javascript:x"></a></svg>',
+    "<a href='javascript:x' onclick='y'>x</a>",
+    "<script>var a = 1</script>",
+    "<style>a { color: red }</style>",
+    "<svg><script>x</script></svg>",
+    '<BUTTON onclick="x">y</BUTTON>',
+    '<A HREF="javascript:x">y</A>',
+    "<Script>a</Script>",
+    "<SCRIPT>a</SCRIPT>",
+    '<c-raw>é <a onclick="x" href="javascript:y">z</a><script>q</script></c-raw>',
+    '<c-raw><B ONCLICK="x"></B><SCRIPT>a</SCRIPT><A HREF=javascript:y>z</A></c-raw>',
+    '<c-element is="object" data="javascript:x"></c-element>',
+    '<c-element is="div" data="javascript:x"></c-element>',
+    '<c-element is="script">a</c-element>',
+    '<c-element is="STYLE"></c-element>',
+    '<div onclick.prevent="x"></div>',
+    "<div ONCLICK.once></div>",
+    '<a href.x="javascript:x"></a>',
+    '<plaintext onclick="x">y</plaintext>',
+    # Vue bindings get their values in the browser, and a listener is not an
+    # attribute, so neither check reports these.
+    "<a :href=\"'javascript:x'\">x</a>",
+    '<button @click="go()">x</button>',
+    # The browser reads the content of these elements as text, so neither
+    # check reads the tags written inside them.
+    '<noscript><div onclick="x"></div></noscript>',
+    '<xmp><div onclick="x"></div></xmp>',
+    '<iframe><div onclick="x"></div></iframe>',
+    '<noembed><div onclick="x"></div></noembed>',
+    '<noframes><div onclick="x"></div></noframes>',
+    '<plaintext><div onclick="x"></div></plaintext>',
+]
+
+# Cases where the two checks differ, as (template, template check, page check), with the reason.
+_CSP_DIFFERENCES = [
+    # A template with v-pre becomes a Vue page, which the browser builds. When
+    # security_csp is not "off", Citry does not server-render a Vue page, so the
+    # page check sees an empty mount element. A component with no browser code
+    # is server-rendered as HTML and cannot use v-pre. Vue still sets the
+    # attributes it leaves as written, so the template check reports them.
+    ('<div v-pre onclick="x"></div>', [("native-event", "onclick")], []),
+    ('<div v-pre><span onclick="x"></span></div>', [("native-event", "onclick")], []),
+    # A bound `is` is a value from data, so the template check keeps the
+    # c-element name; the page check knows the element that was rendered.
+    ("""<c-element c-is="'script'"></c-element>""", [], [("raw-tag", "script")]),
+    # The template check does not read the content of an SVG <title> or <style>
+    # as text, as the page check does, so it misses the tags inside. For
+    # <style> it still reports the <style> itself.
+    ('<svg><title><a onclick="x"></a></title></svg>', [], [("native-event", "onclick")]),
+    (
+        '<svg><style><a onclick="x"></a></style></svg>',
+        [("raw-tag", "style")],
+        [("native-event", "onclick"), ("raw-tag", "style")],
+    ),
+]
+
+
+_RENDER_CSP_FINDING = re.compile(
+    r"^- \S+, (?:attribute '(?P<name>[^']+)', settled HTML bytes \d+:\d+: "
+    r"(?:the native inline (?P<event>event) attribute|a (?P<url>javascript): URL in)"
+    r"|pre-extension HTML bytes \d+:\d+: a raw <(?P<tag>\w+)> element)",
+    re.MULTILINE,
+)
+_TEMPLATE_CSP_FINDING = re.compile(
+    r"inline event attribute '(?P<event>[^']+)'|javascript: URL in '(?P<url>[^']+)'|inline <(?P<tag>\w+)>"
+)
+
+
+def _render_time_csp_findings(template: str) -> list[tuple[str, str]]:
+    """Render ``template`` with ``security_csp="warn"`` and return (kind, name) of what the page check found."""
+    engine = Citry(autodiscover=False, security_csp="warn")
+
+    # The template is data here, so the class is built from it.
+    page = type("Page", (Component,), {"citry": engine, "template": template})
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        page().render().serialize()
+    found = []
+    for warning in caught:
+        if issubclass(warning.category, RuntimeWarning):
+            for match in _RENDER_CSP_FINDING.finditer(str(warning.message)):
+                if match["event"]:
+                    found.append(("native-event", match["name"].lower()))
+                elif match["url"]:
+                    found.append(("javascript-url", match["name"].lower()))
+                else:
+                    found.append(("raw-tag", match["tag"].lower()))
+    return sorted(found)
+
+
+def _template_csp_findings(template: str) -> list[tuple[str, str]]:
+    found = []
+    for _start, _end, _severity, message in _csp(template, "warn"):
+        match = _TEMPLATE_CSP_FINDING.search(message)
+        assert match is not None, message
+        if match["event"]:
+            found.append(("native-event", match["event"].lower()))
+        elif match["url"]:
+            found.append(("javascript-url", match["url"].lower()))
+        else:
+            found.append(("raw-tag", match["tag"].lower()))
+    return sorted(found)
+
+
+@pytest.mark.parametrize("template", _CSP_AGREEMENT_SNIPPETS)
+def test_csp_rule_finds_what_the_page_check_finds_in_literal_markup(template):
+    assert _template_csp_findings(template) == _render_time_csp_findings(template)
+
+
+@pytest.mark.parametrize(("template", "from_template", "from_page"), _CSP_DIFFERENCES)
+def test_csp_rule_differs_from_the_page_check_in_these_documented_cases(template, from_template, from_page):
+    assert _template_csp_findings(template) == from_template
+    assert _render_time_csp_findings(template) == from_page
+
+
+def test_csp_rule_skips_a_capitalized_name_that_is_no_html_element_though_render_time_reports_it():
+    template = '<Card onclick="x">y</Card>'
+    # The browser gets <Card> as a plain element, so the page check reports its
+    # handler. The template check cannot tell that from a Vue component, whose
+    # attributes are inputs, so it stays silent rather than report a false alarm.
+    assert _render_time_csp_findings(template) == [("native-event", "onclick")]
+    assert _template_csp_findings(template) == []
+
+
+def test_csp_agreement_list_reports_something_and_covers_the_decode_cases():
+    reported = [template for template in _CSP_AGREEMENT_SNIPPETS if _template_csp_findings(template)]
+    # A list where neither check reported anything would agree with any rule.
+    assert len(reported) >= 20
+    assert {'<a href="java&#115;cript:alert(1)">x</a>', '<a href="java\tscript:x">x</a>'} <= set(reported)
+
+
 # --- citry.vue.invalid-expression ---------------------------------------------
 
 
@@ -541,6 +1148,47 @@ def test_invalid_vue_expression_follows_the_consumers_severity():
     source = '<p v-if="open &&"></p>'
     assert _invalid(source, (MarkupLintConsumer(rule_invalid_vue_expression="ignore"),)) == []
     assert _invalid(source, (MarkupLintConsumer(rule_invalid_vue_expression="warning"),)) == [("&", "warning")]
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # Citry renders the `@c-*` and `$c-tr` bindings of the `v-pre`
+        # element itself, so a mistake in them is still a mistake.
+        ('<p v-pre @c-click="save({)"></p>', [("{", "error")]),
+        ('<p v-pre $c-tr="{a:"></p>', [(":", "error")]),
+        # The Vue syntax beside them is left as written and stays unchecked.
+        ('<p v-pre $c-tr="{a:" :title="a &&" @click="go("></p>', [(":", "error")]),
+        # A later element outside `v-pre` is checked as usual.
+        ('<p v-pre @c-click="save({)"></p><b @c-click="save({)"></b>', [("{", "error"), ("{", "error")]),
+        # In a template-valued attribute.
+        ("<c-card c-header=\"<><i v-pre @c-click='save({)'></i></>\" />", [("{", "error")]),
+    ],
+)
+def test_invalid_vue_expression_checks_the_citry_bindings_of_the_v_pre_element_itself(source, expected):
+    assert _invalid(source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Inside the contents of a `v-pre` element, nothing is compiled.
+        '<p v-pre><b @c-click="save({)"></b></p>',
+        '<p v-pre><b $c-tr="{a:"></b></p>',
+        '<div v-pre><p @c-click="save({)"></p></div>',
+        '<div v-pre><p v-pre @c-click="save({)"></p></div>',
+        "<c-card c-header=\"<><i v-pre><b @c-click='save({)'></b></i></>\" />",
+    ],
+)
+def test_invalid_vue_expression_skips_the_contents_of_a_v_pre_element(source):
+    assert _invalid(source) == []
+
+
+def test_invalid_vue_expression_counts_each_citry_binding_on_the_v_pre_element_once():
+    # The element's own bindings are checked, and its contents are not
+    # checked a second time as a separate range.
+    source = '<p v-pre @c-click="save({)" $c-tr="{a:"><b @c-click="save({)"></b></p>'
+    assert _invalid(source) == [("{", "error"), (":", "error")]
 
 
 def test_invalid_vue_expression_skips_v_pre_inside_a_nested_template():

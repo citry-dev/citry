@@ -394,9 +394,53 @@ class CTagsInput(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "ariaDescribedby",
+            "ariaErrormessage",
+            "ariaLabel",
+            "ariaLabelledby",
+            "aria_disabled",
+            "aria_invalid",
+            "aria_readonly",
+            "aria_required",
+            "at_max",
+            "autocomplete",
+            "catalog_remove_label",
+            "delimiters",
+            "disabled",
+            "draftFingerprint",
+            "editorId",
+            "empty",
+            "fieldOwned",
+            "field_control",
+            "form",
+            "inheritsReadonly",
+            "inputValue",
+            "input_attrs",
+            "inputmode",
+            "invalid",
+            "maxTags",
+            "messages",
+            "name",
+            "nativeId",
+            "native_disabled",
+            "native_name",
+            "options",
+            "placeholder",
+            "publicId",
+            "readonly",
+            "readonly_values",
+            "required",
+            "root_attrs",
+            "serverFingerprint",
+            "size",
+            "structureFingerprint",
+            "tags",
+            "value",
+            "valueFingerprint",
+            "variant",
+        )
 
     def _localized_messages(self, value: CTagsInputMessages | None) -> tuple[CTagsInputMessages, dict[str, bool]]:
         if value is not None and not isinstance(value, CTagsInputMessages):

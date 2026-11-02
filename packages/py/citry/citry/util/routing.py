@@ -133,7 +133,10 @@ class RouteResponse:
         content_type: The `Content-Type` header value to send.
         status: The HTTP status code.
         headers: Extra response headers, as `(name, value)` pairs; adapters
-            send them in addition to `Content-Type`. A name may repeat (e.g.
+            send them in addition to `Content-Type`. Adapters also send
+            `X-Content-Type-Options: nosniff` unless this sets that header,
+            so the browser uses `content_type` as given; set it to the
+            body's real type. A name may repeat (e.g.
             two `Set-Cookie` lines): the ASGI and WSGI adapters send every
             pair, while the Django adapter raises `ValueError` on a repeated
             name, because Django's response object holds one value per header
@@ -188,6 +191,19 @@ class URLRoute:
     Adapters answer any other method with 405 (``HEAD`` is always
     admitted). When a route admits more methods than its handler serves,
     the handler answers 405 for the rest.
+
+    ``max_body_bytes`` is an optional function that returns the largest
+    request body the route accepts. Citry calls it for each request, so the
+    limit can follow a setting. The ASGI, WSGI, and Django integrations then
+    read at most one byte more than the limit (under ASGI, at most one more
+    message), whatever ``Content-Length`` says, so a client cannot make the
+    server hold a large body in memory. ``request.body`` then holds at most
+    the limit plus one byte, and the handler must reject a body longer than
+    the limit, because that body was cut short. ``None`` (the default) reads
+    the whole body. The limit applies to this route only, not to its
+    ``children``. A function that returns something other than an ``int``
+    of 0 or more makes each request fail with an error, which the web
+    framework answers with status 500.
     """
 
     path: str
@@ -202,6 +218,7 @@ class URLRoute:
     name: str | None = None
     methods: tuple[str, ...] = ("GET",)
     extra: dict[str, Any] = field(default_factory=dict)
+    max_body_bytes: Callable[[], int] | None = None
     # Path parameters whose values never hold a `.`; each matches up to the
     # next `.` instead of the next `/`. Citry's own routes use this for a
     # value that sits right before a literal `.`, so a path is matched in one
@@ -220,12 +237,55 @@ class URLRoute:
             )
             raise ValueError(msg)
         _validate_route_methods(self.methods)
+        if self.max_body_bytes is not None and not callable(self.max_body_bytes):
+            msg = (
+                "URLRoute(max_body_bytes=...) must be a function that returns the limit in bytes,"
+                f" such as lambda: 64_000; got {self.max_body_bytes!r}."
+            )
+            raise TypeError(msg)
 
 
 # An HTTP method is an RFC 9110 token. Adapters compare the request's method
 # with these names exactly, so a lowercase name would never match and the
 # route would answer 405 to every request; only uppercase tokens are accepted.
 _ROUTE_METHOD_RE = re.compile(r"[!#$%&'*+.^_`|~0-9A-Z-]+")
+
+
+# The standard header that tells the browser to use the declared
+# Content-Type and never guess another one from the body.
+_NOSNIFF_HEADER = ("X-Content-Type-Options", "nosniff")
+
+
+def sent_headers(response: RouteResponse) -> tuple[tuple[str, str], ...]:
+    """
+    Return the headers an adapter sends besides `Content-Type`.
+
+    Every adapter calls this, so each Citry response carries the same
+    standard headers: the response's own, plus
+    `X-Content-Type-Options: nosniff` unless the response sets it itself.
+    """
+    if any(name.lower() == "x-content-type-options" for name, _ in response.headers):
+        return response.headers
+    return (*response.headers, _NOSNIFF_HEADER)
+
+
+def body_read_limit(route: URLRoute) -> int | None:
+    """
+    Return how many body bytes an adapter reads for ``route``, or ``None`` to read the whole body.
+
+    One byte past the route's limit is enough for the handler to see that
+    the body is too long, so the adapter never reads more than that.
+    """
+    if route.max_body_bytes is None:
+        return None
+    limit = route.max_body_bytes()
+    if isinstance(limit, bool) or not isinstance(limit, int):
+        msg = f"URLRoute(max_body_bytes=...) must return an int byte count; got {limit!r}."
+        raise TypeError(msg)
+    if limit < 0:
+        msg = f"URLRoute(max_body_bytes=...) must return a byte count of 0 or more; got {limit!r}."
+        raise ValueError(msg)
+    return limit + 1
 
 
 def _validate_route_methods(methods: object) -> None:

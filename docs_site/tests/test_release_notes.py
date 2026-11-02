@@ -12,6 +12,7 @@ from docs_site._internal.release_notes import (
     _promote_body_headings,
     parse_changelog,
     release_index_markdown,
+    release_line_ranges,
     release_page_markdown,
     releases_nav_items,
 )
@@ -114,6 +115,31 @@ def test_parse_changelog_omits_excluded_headings() -> None:
 def test_real_changelog_excludes_the_initial_commit_entry() -> None:
     releases = parse_changelog((config.repo_root / "CHANGELOG.md").read_text(encoding="utf-8"))
     assert all(r.slug != "2025-12-21" for r in releases)  # hidden from the docs site
+
+
+def test_release_line_ranges_cover_each_section_up_to_the_next_heading() -> None:
+    text = (
+        "# Changelog\n"  # 1
+        "\n"
+        "## v0.2.0\n"  # 3
+        "\n"
+        "```md\n"
+        "## not a release\n"  # 6, inside a fence
+        "```\n"
+        "\n"
+        "## v0.2.0\n"  # 9, a duplicate slug
+        "- entry\n"
+        "\n"
+        "## Excluded\n"  # 12
+        "\n"
+        "## v0.1.0\n"  # 14
+        "- last entry\n"
+        "\n"
+    )
+
+    ranges = release_line_ranges(text, exclude=("Excluded",))
+
+    assert ranges == {"v0.2.0": (3, 7), "v0.2.0-2": (9, 10), "v0.1.0": (14, 15)}
 
 
 def test_promote_body_headings_demotes_a_stray_h1() -> None:

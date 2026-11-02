@@ -3,8 +3,8 @@
 //! Vue's compiler, the reader of the render function it emits, the HTML
 //! writers and `eval` call themselves once per nesting level, so without a
 //! guard a deep template overflows the stack and aborts the process. These
-//! tests run every step for templates at the nesting limits planned in #272
-//! (512 nested tags, 256 of them control flow) on threads with 128 KiB and
+//! tests run every step for templates at the nesting limits from #272
+//! (512 nested tags, 256 of them Citry logic) on threads with 128 KiB and
 //! 384 KiB stacks. 128 KiB is the default for threads on musl Linux. On it a
 //! render starts on a new 1 MiB segment, while 384 KiB is just enough to
 //! start on the thread's own stack, so the guard at each level must work in

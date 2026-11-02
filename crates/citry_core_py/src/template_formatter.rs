@@ -8,6 +8,7 @@ use citry_template_formatter::{
     prepare_embedded_format as prepare_embedded_format_rust,
 };
 use citry_template_parser::ParseOptions;
+use citry_template_parser::stack::with_enough_stack;
 use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -151,10 +152,13 @@ pub fn format_template(
     source: &str,
     options: Option<ParseOptions>,
 ) -> PyResult<String> {
-    let result = match options {
+    // The stack guard (`with_enough_stack`) comes first, so the formatter's
+    // frames run on a stack segment taken from the heap when Python has left
+    // little stack.
+    let result = with_enough_stack(|| match options {
         Some(options) => format_template_with_options_rust(source, &options),
         None => format_template_rust(source),
-    };
+    });
     result.map_err(|error| format_error_to_py(py, error))
 }
 
@@ -167,7 +171,7 @@ pub const fn python_expression_provider() -> &'static str {
 /// Prepare structural Citry output and discover safe embedded provider regions.
 #[pyfunction]
 pub fn prepare_embedded_format(py: Python<'_>, source: &str) -> PyResult<PyEmbeddedFormatPlan> {
-    prepare_embedded_format_rust(source)
+    with_enough_stack(|| prepare_embedded_format_rust(source))
         .map(|inner| PyEmbeddedFormatPlan { inner })
         .map_err(|error| format_error_to_py(py, error))
 }
@@ -250,7 +254,7 @@ pub fn finish_embedded_format(
         rust_results.push(result);
     }
 
-    finish_embedded_format_rust(&plan.inner, &rust_results)
+    with_enough_stack(|| finish_embedded_format_rust(&plan.inner, &rust_results))
         .map(|outcome| {
             (
                 outcome.source().to_string(),

@@ -34,17 +34,32 @@ validation, the exact compiler output format), see
 
 ## Gotchas
 
+- **Tree lists are shared.** `Template`'s lists and each node's
+  `used_variables`, `introduced_variables` and `comments` are `Shared<Vec<_>>`,
+  so a clone of the tree shares them. Write with `Shared::make_mut(&mut x)`,
+  move a list out with `Shared::into_inner(std::mem::take(&mut x))`, and build
+  one with `.into()`. There is no `DerefMut` on purpose; see
+  "AST (`ast.rs`)" in `docs/agent/INDEX.md`.
+- **Nesting is counted in one place.** `nesting::tag_levels` says how many
+  total and logic levels a tag adds, and the parser, the compiler and the
+  Python binding all use it. Count any new wrapping construct there, or the
+  three disagree at the limit.
 - **Build span errors with `ParseError::from_span`.** Pest's own
   `Error::new_from_span` takes time that grows with the span's line count
   times the input length; `from_span` builds the same error in time
   proportional to the input.
-- **Recursive passes run through the stack guard.** Every cycle of calls
-  that repeats once per nesting level of the tree passes through at least
-  one function that wraps its body in `crate::stack::with_enough_stack`, so
-  a deep template cannot overflow a small thread (`tests/deep_nesting.rs`
-  checks this on 128 KiB). The guarded work must stay pure Rust.
-  `Template`'s own `Clone`, `Drop`, `PartialEq` and `Debug` go through the
-  guard too, and `LangSpecArgument` frees its children without recursion.
+- **A walk over the tree keeps its own work list.** The parser's passes
+  over the finished tree, and `Template`'s `PartialEq` and `Drop`, keep a list
+  of what is left to visit (its `Clone` shares the lists below it and does not
+  walk), so their stack use stays flat at any
+  depth (the `walks_without_recursion` tests in `src/parser.rs` run them on a
+  64 KiB thread). Write a new pass the same way. Three parts of the parser call
+  themselves once per level and wrap their body in
+  `crate::stack::with_enough_stack`: the compiler, the parse of a template
+  written in an attribute value, and `Template`'s `Debug`. The grammar has
+  its own stack reservation in `parse_grammar`. The guarded work
+  must stay pure Rust, and `tests/deep_nesting.rs` checks the whole parser
+  on 128 KiB. `LangSpecArgument` frees its children without recursion.
   Rust does not allow moving a field out of a type that has its own `Drop`,
   so code takes a field out of either type with `std::mem::take`.
 - **Pest atomicity cascades.** The `template` rule is compound-atomic (`${ }`)

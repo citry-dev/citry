@@ -15,6 +15,7 @@ pytest.importorskip("pytest_playwright")
 import citry_ui
 from citry import Citry, Component
 from citry import citry as default_citry
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -170,6 +171,7 @@ def test_client_buttons_reactive_disabled_environment_axe_and_cleanup(page: Any)
     page.emulate_media(forced_colors="active", reduced_motion="reduce")
     axe = _root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => (await axe.run(document, {resultTypes:['violations']})).violations
           .filter(item => ['serious','critical'].includes(item.impact)).map(item => item.id)"""
@@ -289,6 +291,7 @@ def test_shipped_previews_have_no_high_impact_axe_findings(
     errors = _open_preview(page, serve_citry_ui_live, preview_name)
     axe = _root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => {
           const result = await axe.run(document, { resultTypes: ['violations'] });

@@ -97,12 +97,15 @@ itself:
 
 `<span />` renders as `<span></span>`.
 
-A value-less attribute on an HTML element stays a bare attribute. On a
-component tag, it passes the Python value `True`:
+An attribute with no value, such as `required`, is a bare attribute. On
+an HTML element it stays bare. On a component tag it passes the Python
+value `True`. A written value always passes a string, even an empty one,
+so `alt=""` passes `""`:
 
 ```citry-html
 <input required>
 <c-Button compact />
+<c-Avatar alt="" />
 ```
 
 Attribute values may use double quotes, single quotes, or no quotes. Quote
@@ -124,3 +127,50 @@ the output unchanged.
 
 Citry has no Django or Jinja block tags. Text such as
 `{% include "menu.html" %}` stays in the page as written.
+
+
+## Nesting limits { #nesting-limits }
+
+Tags inside tags can go at most 512 levels deep. At most 256 of those
+levels can be Citry logic levels: every `c-` tag except `<c-raw>`, and
+each `c-if=`, `c-elif=`, `c-else`, `c-for=` or `c-empty` attribute. Each
+tag is one level, and each of those attributes on it adds one more, so
+this `<div>` is three levels, two of them logic:
+
+```citry-html
+<div c-if="visible" c-for="item in items">{{ item }}</div>
+```
+
+Rendering a template that goes one level past either limit raises
+`SyntaxError`, pointing at the tag that goes too deep, and `citry check`
+reports the same problem without rendering. To go deeper, move the inner
+part into its own component's `template`, which starts counting again
+from zero. Markup you pass to a component between its tags, or in an
+attribute, still counts toward the template that writes it.
+
+A component can pass its slot content on to another component's slot by
+writing `<c-slot />` inside its `<c-fill>`, and that one can pass it on
+again. Such a chain can be long: Citry renders it in a fixed amount of
+Python's stack, up to
+[`max_component_depth`][citry.CitrySettings.max_component_depth]
+(2000 components by default). Content passed on through an expression
+instead, such as `{{ content }}` where `template_data()` returns
+`slots["default"]`, or through a Python slot function that calls the
+fill, uses about 11 levels of Python's stack for each component, so a
+chain of about 80 of those can raise `RecursionError`.
+
+Other components render any depth of `c-if` and `c-for` in a fixed
+amount of Python's stack. A
+[`simple = "vue"`](/performance/simple-components/#give-a-simple-component-its-own-vue-state)
+component uses one level of Python's stack for each level of `c-if` or
+`c-for` nesting in its template, written as a tag or as an attribute. A
+template with 256 such levels uses about 270 levels of Python's stack to
+render. Python's default recursion limit is 1,000, which leaves about
+700 for your web framework and the code around the render. If the whole
+stack goes past that limit, rendering raises `RecursionError`, so nest
+fewer `c-if` and `c-for` levels in that component.
+
+In a component that uses Vue, the server writes at most 400 levels of
+elements inside the component, which leaves room in Chrome for the page
+around it. Past that depth, the server writes a preview of the deeper
+part, and Vue renders that part again when it starts in the browser.

@@ -1,8 +1,9 @@
 """
 Check committed files that are exact copies of another file, or that record which Vue version they were generated from.
 
-No check rebuilds these files: the copies have no build step, and the HTML
-attribute module's generator downloads live standards, which CI cannot do.
+No check here rebuilds these files: the copies have no build step, the HTML
+attribute module's generator downloads live standards, which CI cannot do, and
+the DOM member table's own check needs that generator's separate install.
 Each check is a byte or text comparison that needs only the standard library,
 which lets the early "Generated files" CI job run it without installing the
 workspace.
@@ -29,6 +30,10 @@ HTML_ATTRIBUTE_VALUES = "packages/py/citry/citry/_html_attribute_values.py"
 VUE_TYPES_INVENTORY = "packages/py/citry_lsp/citry_lsp/types/inventory.json"
 # The generator writes this line into the module header from the Vue types it read.
 _VUE_TYPES_LINE = re.compile(r"^- @vue/runtime-dom (\S+) types,", re.MULTILINE)
+
+DOM_MEMBERS = "crates/citry_vue_compiler/src/dom_members.rs"
+# The generator writes this line into the table's header from the Vue it tested against.
+_DOM_MEMBERS_VUE_LINE = re.compile(r"^// - @vue/runtime-dom (\S+)$", re.MULTILINE)
 
 
 def _missing(root: Path, *relatives: str) -> list[str]:
@@ -67,9 +72,35 @@ def _check_html_attribute_vue_version(root: Path) -> list[str]:
     return []
 
 
+def _check_dom_members_vue_version(root: Path) -> list[str]:
+    # The table records what Vue's client render leaves in the page for each
+    # element and attribute name, so a Vue bump must regenerate it.
+    missing = _missing(root, DOM_MEMBERS, VUE_TYPES_INVENTORY)
+    if missing:
+        return missing
+    header = (root / DOM_MEMBERS).read_text(encoding="utf-8")
+    match = _DOM_MEMBERS_VUE_LINE.search(header)
+    if match is None:
+        return [f"{DOM_MEMBERS} does not name the @vue/runtime-dom version it was generated from"]
+    shipped = json.loads((root / VUE_TYPES_INVENTORY).read_text(encoding="utf-8"))["vue"]
+    if match.group(1) != shipped:
+        return [
+            f"{DOM_MEMBERS} was generated from @vue/runtime-dom {match.group(1)}, "
+            f"but {VUE_TYPES_INVENTORY} holds Vue {shipped}; "
+            "run pnpm --dir tools/dom-members run refresh"
+        ]
+    return []
+
+
 def check(root: Path = ROOT) -> list[str]:
     """Return one problem for each copy or recorded version that no longer matches."""
-    return [*_check_exact_copies(root), *_check_html_attribute_vue_version(root)]
+    problems = [
+        *_check_exact_copies(root),
+        *_check_html_attribute_vue_version(root),
+        *_check_dom_members_vue_version(root),
+    ]
+    # Two checks read the same inventory, so a missing one would be reported twice.
+    return list(dict.fromkeys(problems))
 
 
 if __name__ == "__main__":

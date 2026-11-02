@@ -98,7 +98,10 @@ mounted Citry Vue apps and the Events bridge; it does not load or emulate
 Alpine. This section records the v1 behavior that is easy to confuse with the
 older Alpine design retained later in this document for historical context.
 
-The v1 client serializes calls through one app-wide queue. Same-tick calls are
+The v1 client serializes calls through one app-wide queue. A call sent with
+`wait: false` to a handler declared `@event(detached=True)` goes out at once,
+outside the queue; `wait: false` on any other handler rejects before anything
+is sent (Events spec, "Detached calls"). Same-tick calls are
 not coalesced into one envelope, and `allowBatching` does not promise the old
 Alpine same-tick batching or dependency scheduler. A page must wait for the
 runtime and mounted app before calling `Citry.events`; no pre-runtime call
@@ -1068,7 +1071,9 @@ primitives (`int`/`float` cross-coercion, `str` to `UUID | datetime |
 date | time | Decimal | Enum`, which parse from strings because a
 string is their canonical JSON encoding, `list` to `tuple`/`set`,
 nested annotated
-classes from objects, and `Literal[...]`, which accepts a value equal to
+classes from objects, `dict[K, V]` objects key by key and value by value
+(a key is always a JSON string, so it binds by the form-value rule: `"3"`
+fills `dict[int, ...]`), and `Literal[...]`, which accepts a value equal to
 one of its listed values after that value's own type rule, so a form
 post's `"2"` binds to `Literal[1, 2]` and `true` never matches `1`; any
 other value is the per-field 422 "Expected one of ..."); extra keys are a 422, missing required fields are
@@ -1328,11 +1333,13 @@ live in no shared namespace):
 | `debounce` / `throttle` | `int`, milliseconds | the component's `_debounce` / `_throttle` | Client-side timing instructions, not server machinery: they travel in the class descriptor (4.4) and the runtime holds calls back before sending, so the server never sees the suppressed ones (server-side rate limiting is the `on_event` hook or a guard). An explicit modifier on a binding overrides both levels. |
 | `latest_wins` | `bool` | `False` | Newest-wins for this handler on one instance, opt-in (5.6): when a newer call to this handler enqueues from the same anchor, queued-not-sent predecessors are dropped before sending, and an in-flight predecessor is abandoned (its response's actions are dropped on arrival); either way the predecessor's promise rejects with the `superseded` reason and the drop event fires (the settle table, 5.2). Opting in is the author's statement that overlapping runs of this handler are safe (idempotent), because the server still executes every call it received. The default preserves every call: a killed save is data loss, so newest-wins is never a default (14.3.4). Like the timing hints, it travels in the class descriptor (4.4), which is how the runtime knows it at queue time. |
 | `bundle` | `bool` | `True` | Whether calls to this handler may share a batch envelope with other calls that become eligible together at dequeue (5.6). `bundle=False` sends alone, for handlers that should never ride a shared request (a slow export next to fast toggles). It travels in the class descriptor (4.4) like the timing hints. |
+| `detached` | `bool` | `False` | The handler never renders and never changes State, so a call site may send to it with `wait: false`, outside the queue (5.6). It travels in the class descriptor (4.4) as `detached: true`. |
 
-`latest_wins` and `bundle` are per-handler on purpose, never per call
-site: two call sites that need different overlap or bundling semantics
-are two handlers, which keeps a binding's behavior readable from the
-handler it names.
+`latest_wins`, `bundle` and `detached` are per-handler on purpose, never
+per call site: two call sites that need different overlap or bundling
+semantics are two handlers, which keeps a binding's behavior readable
+from the handler it names. `detached` only allows a call outside the
+queue; the call site still asks for it with `wait: false`.
 
 Two per-handler knobs from earlier drafts are **derived, not
 configured**. Token requirement follows the signature. A handler
@@ -1350,11 +1357,12 @@ Engine-wide configuration splits along one line, because Events is a
 built-in extension the user never instantiates. Config that a component
 can override rides `extensions_defaults["events"]` (default `_guard`,
 default `_context`), the mechanism that exists precisely
-for configuring extensions without touching them. The envelope size cap
-(`_max_envelope_bytes`) also rides `extensions_defaults["events"]` but
-is engine-wide only, with no per-component override: it guards the
+for configuring extensions without touching them. The request body cap
+(`_max_body_bytes`) and the form field cap (`_max_form_fields`) also ride
+`extensions_defaults["events"]` but are engine-wide only, with no
+per-component override: they guard the
 transport before any component resolves, and one batch envelope spans
-components, so declaring it on a component's `Events` class fails at
+components, so declaring either on a component's `Events` class fails at
 class definition. The host's CSRF field names (`_csrf_field_names`,
 default `("csrfmiddlewaretoken",)`) are engine-wide in the same way: the
 dispatcher removes those keys from a call's args before it validates them
@@ -1658,10 +1666,11 @@ is opaque, minted and verified by the same binding.
   interprets, so moving its bookkeeping to the anchor changes nothing on
   the wire. The event queue (5.6) serializes sends from overlapping
   anchors client-side, so in practice the guard's work narrows to what
-  the queue cannot see: `wait: false` sends, responses arriving from
-  unrelated anchors' calls, and future transports with different
-  delivery
-  orders. The guard itself is unchanged; it is the net beneath the
+  the queue cannot see: responses arriving from unrelated anchors' calls,
+  and future transports with different delivery orders. A detached
+  `wait: false` send (5.6) skips the queue but never renders or changes
+  State, so its result holds no render or State refresh for the guard to
+  drop, and it never makes another call's result count as older. The guard itself is unchanged; it is the net beneath the
   queue.
 
 Explicitly not in the envelope: CSRF tokens, cookies, auth (transport
@@ -1825,7 +1834,16 @@ signature verifies. On the per-event route
 the HTTP status mirrors the call's status; the batch endpoint answers 200
 with per-call statuses inside (one batch can mix outcomes). `fieldErrors` is
 the per-field error map, surfaced client-side as
-`$error(handler).fieldErrors` (5.5).
+`$error(handler).fieldErrors` (5.5). Only the request decides how many
+fields it sends that the `data` class does not declare (or that State
+does not let the browser write), and how many items a list or dict field
+holds. So the server lists at most 20 messages for undeclared or
+unwritable fields, and at most 20 item messages in each list or dict field, keeping the earliest
+by field path with list indexes in number order. `message` then ends
+with how many more there were, for example "1,000 more field errors are
+not shown." Messages for other fields, and the fields of an
+`EventError`, are always listed in full. The error still has only the
+protocol's fixed keys.
 
 ### 4.4 How the state token reaches the client
 
@@ -1869,8 +1887,8 @@ close a script tag.
 
 `componentClasses` carries handler names and browser hints. Each handler has
 `httpMethod`; the optional non-default hints are `usesState: true`,
-`debounceMilliseconds`, `throttleMilliseconds`, `latestCallWins: true`, and
-`allowBatching: false`. `writableStateFields` carries a narrowed
+`debounceMilliseconds`, `throttleMilliseconds`, `latestCallWins: true`,
+`allowBatching: false`, and `detached: true`. `writableStateFields` carries a narrowed
 `State._model` capability in declaration order. It is omitted when `_model`
 equals `_public`, while an explicit empty list means all public State is
 read-only.
@@ -2495,7 +2513,8 @@ class Chart(Component):
   action's value, rejects with a structured error (`{status, code,
   message, fieldErrors?}`). `opts` carries the per-call overrides: `timeout`
   (the `configure` field below) and `wait` (default `true`;
-  `wait: false` bypasses the event queue, 5.6).
+  `wait: false` sends at once, outside the event queue, and is accepted
+  only for a handler declared `@event(detached=True)`, 5.6).
 - `onEvent(name, fn) -> unsubscribe`: fires for `event` actions targeting
   this instance.
 - `loading(name?) -> boolean`: the same reactive accessor as `$loading()`;
@@ -2556,7 +2575,7 @@ bubbling DOM CustomEvents, all under the reserved `citry:` prefix:
 | `citry:events:after` | When a call or mounted-source `applyActions` settles, success and failure alike (the stop-side counterpart to `before`). | `ok` (boolean) |
 | `citry:events:error` | When a call or mounted-source `applyActions` fails: a transport failure, an error result, an interpreter error, or a timeout (5.6). | `error`: the `{status, code, message, fieldErrors?}` envelope (3.7) |
 | `citry:events:swapped` | After a `render` action has updated the DOM. | `els`: the swapped-in root elements |
-| `citry:events:stale` | Something was dropped or cancelled, and this is the one event that says so (research doc R3): every drop the runtime performs, of a response's application, of a queued call it cancels before sending, or of a one-shot send it drops at fire time (5.5 machinery item 5), fires it with a `reason` naming the cause. (The one cancel outside the claim is a send stopped by a `citry:events:before` listener's `preventDefault`: the page performed that cancel itself and already knows.) The reasons: `epoch` (an out-of-order response: its echoed epoch, 4.2, is not newer than what the anchor already applied, so its instance-mutating actions, the self-targeted render and the token refresh, drop rather than roll newer state back to older; the caller's promise still resolves with its `data` and all other actions apply), `retired` (the response's instance, or a single action's target, left the DOM, 5.5), `cancelled` (a send's dispatching element was dead when it was due to fire, at dequeue, 5.6, or at a one-shot closure's fire time, 5.5: never sent, promise rejected), `superseded` (a newer call superseded it under `@event(latest_wins=True)`, 3.5), `timeout` (a response arrived after its call timed out, 5.6), `version` (the version-skew prompt of 4.5 rides this same event under this reason; its default handling is the soft reload prompt). The `epoch` case in one line: a custom input sends on every keystroke through `sendEvent(..., {wait: false})`, you typed "ab" then "abc", "abc" answered first, and the slower "ab" response would overwrite newer results with older ones, so its application is dropped and this event fires instead. | `reason`, plus the dropped result's `event` name |
+| `citry:events:stale` | Something was dropped or cancelled, and this is the one event that says so (research doc R3): every drop the runtime performs, of a response's application, of a queued call it cancels before sending, or of a one-shot send it drops at fire time (5.5 machinery item 5), fires it with a `reason` naming the cause. (The one cancel outside the claim is a send stopped by a `citry:events:before` listener's `preventDefault`: the page performed that cancel itself and already knows.) The reasons: `epoch` (an out-of-order response: its echoed epoch, 4.2, is not newer than what the anchor already applied, so its instance-mutating actions, the self-targeted render and the token refresh, drop rather than roll newer state back to older; the caller's promise still resolves with its `data` and all other actions apply), `retired` (the response's instance, or a single action's target, left the DOM, 5.5), `cancelled` (a send's dispatching element was dead when it was due to fire, at dequeue, 5.6, or at a one-shot closure's fire time, 5.5: never sent, promise rejected), `superseded` (a newer call superseded it under `@event(latest_wins=True)`, 3.5), `timeout` (a response arrived after its call timed out, 5.6), `version` (the version-skew prompt of 4.5 rides this same event under this reason; its default handling is the soft reload prompt). The `epoch` case in one line: an older call's delayed action is still waiting when a newer result for the same component is accepted, so the action would change a page the newer result already replaced; it is dropped and this event fires instead. | `reason`, plus the dropped result's `event` name |
 
 For the Vue v1 mounted-source `applyActions` path, a delayed action that
 loses its source is also reported as `citry:events:stale` and followed by
@@ -2625,9 +2644,9 @@ document.addEventListener("citry:events:swapped", (e) => {
 
 // `stale` fires whenever the runtime dropped or cancelled something;
 // `e.detail.reason` says why (epoch, retired, cancelled, superseded,
-// timeout, version). Epoch drops are normal under fast `wait: false`
-// sends; the rarer reasons are the breadcrumb for "my update
-// disappeared"
+// timeout, version). Epoch drops are normal when a newer result lands
+// while an older call's delayed actions wait; the rarer reasons are the
+// breadcrumb for "my update disappeared"
 document.addEventListener("citry:events:stale", (e) => {
   console.debug(`${e.detail.event} dropped (${e.detail.reason})`);
 });
@@ -3330,9 +3349,9 @@ render replaced the child's token with a parent-derived one, and
 applying a pre-parent render or token afterwards would resurrect that
 replaced state into the child's next send. With the queue (5.6)
 serializing sends from overlapping anchors, the cut's remaining work
-is `wait: false` sends and arrivals from unrelated anchors' calls,
-the same residue the
-epoch guard nets. The alternative, last-writer-wins for late child
+is arrivals from unrelated anchors' calls, the same residue the epoch
+guard nets. Detached `wait: false` sends add none, because they never
+render or change State. The alternative, last-writer-wins for late child
 responses, is recorded with the decision (14.3.2); both are
 client-internal, so if dogfood users report "my save's UI never
 showed" more than they would tolerate stale-parent flicker, the cut is
@@ -3357,11 +3376,9 @@ leaves a briefly stale region that self-corrects on the next event),
 and dispatch-and-refresh for contested regions (`Dispatch` plus the
 region's own listener re-rendering itself, so the region's anchor
 serializes its own updates). Helper utilities for that cross-caller
-target ordering are a possible later addition, not v1 (16.1). One documented
-author trade: a `wait: false` send's targeted render bypasses the
-queue's ordering (5.6), so repeat-firing `wait: false` sends into one
-region can paint out of arrival order; bypassing the queue accepts
-last-arrival-wins there.
+target ordering are a possible later addition, not v1 (16.1). A
+call sent with `wait: false` never renders (5.6), so it takes no part in
+these races.
 
 **A selector matching several elements inserts one shared instance,
 mirrored per match.** The same fragment (one instance id, one anchor,
@@ -3874,29 +3891,49 @@ its own `calls[]` entry with its own promise and its own result (4.2
 reserved the array from day one; this is Livewire-style
 cross-component bundling, and it is why a burst costs one request). A
 batch larger than the envelope's sixteen-call cap splits into
-successive envelopes in order. Two `@event` knobs govern a handler's
+successive envelopes in order. Three `@event` knobs govern a handler's
 place in this (3.5): `bundle=False` keeps its calls out of shared
-envelopes, and `latest_wins=True` lets a newer call drop queued-not-sent
+envelopes, `detached=True` lets a call site send with `wait: false`
+(below), and `latest_wins=True` lets a newer call drop queued-not-sent
 predecessors and abandon an in-flight one, sending without waiting for
 the abandoned response, which is exactly why that opt-in is the
 author's statement that overlapping runs of the handler are safe.
-Neither knob has a call-site form by design: a call site that needs
-different semantics names a different handler.
+`bundle` and `latest_wins` have no call-site form by design: a call site
+that needs different semantics names a different handler.
 
-**`wait: false` joins no graph.** A send with
-`{wait: false}` neither waits nor is waited on: it fires
-immediately, it gains no dependency edges, no later event gains an
-edge to it, and its late
-responses are exactly what the per-anchor epoch guard (4.2) exists to
-net. The guard is unchanged and remains the floor beneath the queue
-for the three things the queue cannot see: `wait: false` sends,
-responses arriving from calls the graph holds no edge for (a targeted
-render from an unrelated anchor, 5.5), and future transports with
-different delivery orders.
-The send-level `wait` is the sibling of the action-level `wait` of
-4.3; both mean "do not hold the queue for me", one at the event
-queue, one at the action-application queue. The documented trade for
-`wait: false` targeted renders is in 5.5: last-arrival-wins ordering.
+**`wait: false` is for detached handlers only.** A handler declared
+`@event(detached=True)` promises never to render and never to change
+State; the manifest marks it `detached: true`. A send to it with
+`{wait: false}` goes out at once, outside the queue: it does not wait for
+queued calls and they do not wait for it. Because it cannot replace the
+caller's HTML or State, it needs none of the queue's ordering. The rules
+that keep this true:
+
+- The server answers `handler_error` when a detached handler renders or
+  changes State, or when an `on_event_result` extension adds a `render` or
+  `state` action to its result. It answers `invalid_args` when a call to
+  it carries `stateUpdates`, even an empty object.
+  The browser never attaches pending State writes to such a call, and
+  rejects a detached result holding `render` or `state` before any action
+  runs.
+- A detached result never counts as a newer result for the caller, so it
+  never drops another call's delayed actions. Its own delayed actions are
+  skipped, except a `redirect`, when a newer result from a queued call is
+  accepted while they wait; its actions without a delay are never dropped
+  by a newer result.
+- With `latest_wins`, a newer call to a detached handler from the same
+  instance supersedes older ones, whether each was queued or sent with
+  `wait: false`.
+- `wait: false` on any other handler rejects in the browser with a
+  `TypeError`, before anything is sent.
+
+These limits follow the handler, not the call: a call to a detached
+handler sent without `wait: false` waits its turn in the queue and has the
+same result limits. The send-level `wait` is the sibling of the
+action-level `wait` of 4.3; both mean "do not hold the queue for me", one
+at the event queue, one at the action-application queue. The protocol
+rules are in the Events spec,
+[Detached calls](../../packages/protocol/events/v1/spec.md#detached-calls).
 
 **Busy state spans the queue.** The user's gesture, not the send,
 starts the pending UI: `data-citry-busy` stamps and `$loading` counts
@@ -4181,7 +4218,25 @@ resolver.
 `Accept: text/html` (or a classic form post without the `X-Citry-Events`
 header), the response is not an envelope: the primary render action's HTML
 is the body, a redirect becomes HTTP 303, and errors carry their HTTP
-status. Two things fall out, both intentional: a plain
+status. The 303's `Location` must take the visitor where the runtime's
+`location.assign()` would, so the server resolves a relative redirect URL
+against the posting page named by the `Referer` header and sends the
+absolute result. When the request has no `Referer` from the same host, the
+URL goes out unchanged, the browser resolves it against the handler URL,
+and the server logs a warning that names the fix (a path starting with
+`/`). It logs this once per handler and URL, and never for `GET`, because
+a `GET` handler URL opened directly is itself the page. Two cases resolve differently from the
+runtime and cannot be detected: a `Referrer-Policy` that sends only the
+origin (resolved against the site root) and a page with `<base href>`.
+The user docs ask those pages to use a path starting with `/`.
+After resolving, the server percent-encodes the URL, because Citry's
+adapters send header text as Latin-1 and a browser expects UTF-8 escapes.
+It encodes spaces and every character outside printable ASCII as UTF-8,
+host included, and leaves the rest of printable ASCII as written. A browser decodes the escapes in the host and
+converts it with its own rules, so the 303 and `location.assign()` land on
+the same URL.
+
+Two things follow from the HTML-shaped response, both intentional: a plain
 `<form method="post" c-action="submit_url">` (the URL provided by
 `template_data` from `self.events.url("submit")`) works with
 JavaScript disabled, and htmx or Turbo users can point `hx-post` at an
@@ -4252,8 +4307,12 @@ Rules, each closing a named prior-art hole:
   the component and the State field. Kwargs are unconstrained; only State
   must serialize. No pickle, no rich-object revival, ever: verified state
   re-enters through `cls.State(**s)`, a plain dataclass constructor that
-  raises on unknown or missing keys. There is no hydration machinery to
-  attack (section 7.6).
+  raises on unknown or missing keys, or, for a Pydantic model State, the
+  model's own validation of the JSON the token holds, which rebuilds only
+  the field types the model declares (dates, nested models); unknown keys
+  follow the model's `extra` setting (ignored by default), and a
+  `ValidationError` answers `stale_state`.
+  There is no hydration machinery to attack (section 7.6).
 - Size-capped (State meta `_max_bytes`, default 8192). The cap is a **design
   smell canary, not a technical limit**: the audit measured real tokens
   at 150 to 300 bytes (section 1.4), so a component approaching the cap
@@ -4382,7 +4441,11 @@ field, always.
   either way (7.1).
 - **`_model`**: the subset of public fields the client may write
   (through two-way bindings or `$state`); `stateUpdates` entries outside it
-  are rejected, and each accepted value must satisfy the field's type.
+  are rejected, and each accepted value must satisfy the field's type,
+  down to each list or tuple item, each dict value, and the listed
+  values of a `Literal[...]`, with the error at the item's path
+  (`tags.2`). Dict keys are not checked: a JSON object key is always a
+  string, and a dataclass State keeps it as one.
   Defaults to **the same fields as `_public`**: public means visible
   and writable, and `_model = (...)` exists only to clamp down (a
   visible-but-read-only display flag). Every `_model` field must be
@@ -4505,9 +4568,13 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   method is an open endpoint). Honest limitation, documented: citry cannot
   inherit "the page's auth" framework-neutrally; the guard plus host
   middleware on the real per-event URLs are the tools.
-- Abuse limits: envelope size cap (413), `calls` length cap (16 in the
-  schema), state verified before args are parsed, `on_event` as the
-  rate-limit attachment point.
+- Abuse limits: request body cap (413, and the host adapters stop reading
+  one byte past it, or one message past it under ASGI, so an oversized
+  body is never held whole), form field
+  cap (413), JSON nesting cap (400 past 200 levels of arrays and objects,
+  `MAX_JSON_DEPTH` in the protocol package), `calls` length cap (16 in the
+  schema), state verified before
+  args are parsed, `on_event` as the rate-limit attachment point.
 
 ### 7.5 Rich components and slots
 
@@ -5348,8 +5415,8 @@ recorded here with the alternatives and why they lost.
    rule to every render action of a stale response) rejected as
    unnecessary once the queue exists: same-caller repeat-fire
    serializes client-side, so the stale overwrite the widening
-   targeted cannot occur for queued sends, and the residual
-   `wait: false` ordering is a documented author trade (5.5). The 4.2
+   targeted cannot occur for queued sends, and a `wait: false` send
+   never renders (5.6), so it leaves no ordering residue. The 4.2
    drop set therefore stays narrow (instance-mutating actions only),
    and 5.2's drop-event row was aligned to it. Option C
    (adopt-in-place against the target's anchor) rejected: two rules

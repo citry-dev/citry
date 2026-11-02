@@ -2,8 +2,78 @@
 
 ## Unreleased
 
+### Added
+
+- Citry UI now supports Python 3.15.
+
+
+- A `CCommandPalette` command with a `shortcut` now exposes it to
+  assistive technology as `aria-keyshortcuts`, for example `Control+,`
+  for "Ctrl ,". A hint that is not one key combination, such as
+  `Ctrl K, Ctrl S`, and a disabled command get no `aria-keyshortcuts`.
+  Set `shortcut` only for a combination your application handles.
+
+### Changed
+
+- Writing an empty value in a template for a text input, such as
+  `<c-CButtonGroup label="">` or `<c-CContextMenu aria_label="">`, raises
+  the component's own `ValueError` saying the text is empty, not a
+  `TypeError` about a `bool`, because Citry passes `""` for a written
+  empty value.
+- **Breaking:** in `CCommandPalette`, a command that closes the palette
+  now calls `onAction` after the palette closes, and after `onOpenChange`
+  and `onQueryChange`, so `onAction` can move focus anywhere on the page
+  once the palette has closed. If you pass `open`, set it to `false`
+  inside `onOpenChange` itself; when you close it later, `onAction` runs
+  while the palette is still open. An error thrown in `onAction` no longer
+  keeps the palette open; to keep it open, set `close_on_action=False` on
+  the palette or on the command.
+- **Breaking:** Citry UI now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing Citry UI 0.3.0.
+- The default `change_label` of `CDateRange`, and its
+  `citry-ui-date-range-change` message, now read "Change date range,
+  {start} – {end}" instead of "… {start} to {end}". The trigger's name
+  then contains the dates exactly as the trigger shows them, which voice
+  control needs. If you set your own `change_label` or translate the
+  message, write the dates as `{start} – {end}`, as the trigger shows
+  them.
+- Citry UI components work with Citry's new check that raises
+  `TypeError` for an input of the wrong type, and accept the same values
+  as before, such as `heading_level="2"`. Earlier Citry UI releases
+  reject some valid inputs under that check, so upgrade Citry UI and
+  Citry together.
+- `heading_level` on `CAccordion` and `CDisclosure` now accepts only
+  `2` to `6` and the same numbers as text, so `"02"` and `2.0` raise
+  `ValueError`.
+- **Breaking:** A wrong input to most Citry UI components now raises
+  Citry's `TypeError`, which names the input and the expected type. This
+  includes a value outside a listed choice, such as `variant="bogus"`,
+  which used to raise `ValueError`, so code that catches `ValueError`
+  there must catch `TypeError`. `CAccordion`, `CDisclosure`, `CIcon`,
+  `CAlert`, `CCalendar`, `CDatePicker`, and `CDateRange` keep Citry UI's
+  own errors on all their inputs.
+
 ### Fixed
 
+- `CTagsInput` no longer holds up the page for seconds when a typed or
+  pasted tag has a long run of spaces inside it, and `CNumberInput`,
+  `CSlider`, and `CImage` no longer slow down in Safari on a value with a
+  very long run of zeros or commas.
+- `CMenu` and `CAccordion` now accept a self-closed element such as
+  `<span/>` in an item's label or title, and write it as `<span></span>`,
+  as Citry does elsewhere. They used to reject it.
+- An open `CMenu`, `CContextMenu`, or `CSplitButton` menu that contains a
+  submenu no longer moves focus to its current item again and again, and an
+  idle `CSplitButton` or `CTimePicker` no longer rewrites its own markup
+  hundreds of times a second. Both loops cost CPU and battery on an idle
+  page.
+- When a server re-render updates an open `CMenu`, the focused item keeps
+  focus.
+- `CTooltip` now opens or closes when a re-render changes its server `open`
+  input, as the other popups do. Disabling an open tooltip, from the server
+  or with the client `disabled` prop, closes it and calls
+  `onOpenChange(false, ...)` with reason `"disabled"`. An uncontrolled
+  tooltip closed this way stays closed when it is enabled again.
 - A component that checks its rendered fills, such as `CDisclosure`'s
   title, now reads a numeric character reference with thousands of digits
   (`&#` followed by 5,000 zeros and `106;`) instead of raising
@@ -26,36 +96,22 @@
   `CDisclosure`.
 - `CCalendar`, `CDatePicker`, and `CDateRange` now accept
   `first_day_of_week="1"`, where they used to raise `TypeError`.
+- When a re-render keeps a `CSelect` or `CMultiSelect` open, gives an open
+  `CCombobox` new items, or removes the selected tab of a `CTabs` or the
+  focused item of a `CTagGroup` or `CToolbar`, the page no longer scrolls
+  back to that component. They scroll only their own list, or move focus
+  without scrolling.
 - While a `CMenu`, `CContextMenu`, or `CSplitButton` menu is open,
   scrolling the page no longer jumps back to the menu, for example when
   the pointer leaves a submenu trigger or the menu re-renders. The menu
   scrolls its own list to show the focused item, and scrolls the page only
   after a key press moves focus to an item that is off screen.
-
-### Changed
-
-- **Breaking:** Citry UI now requires Python 3.11 or newer. On Python
-  3.10, pip keeps installing Citry UI 0.3.0.
-- Citry UI components work with Citry's new check that raises
-  `TypeError` for an input of the wrong type, and accept the same values
-  as before, such as `heading_level="2"`. Earlier Citry UI releases
-  reject some valid inputs under that check, so upgrade Citry UI and
-  Citry together.
-- `heading_level` on `CAccordion` and `CDisclosure` now accepts only
-  `2` to `6` and the same numbers as text, so `"02"` and `2.0` raise
-  `ValueError`.
-- An invalid input to these components now raises Citry's `TypeError`,
-  which names the input and the expected type: Breadcrumbs, Carousel,
-  Command Palette, Data Grid, Drawer, Form Collection, List, Native
-  Select, Navigation Menu, Pagination, Scroll Area, Table, Tag, Toast
-  Region, Toggle, and Tree Grid, plus `CField`, `CAccordionItem`,
-  `CCascaderOption`, `CDropTarget`, `CListboxGroup`, `CListboxOption`,
-  `CMenuItem`, `CMenuGroup`, `CMenuRadioGroup`, `CMenuRadioItem`,
-  `CMenuSeparator`, `CRadio`, `CSortableItem`, `CSplitterPanel`,
-  `CStep`, `CTabPanel`, `CTransferListItem`, `CTreeItem`,
-  `CVirtualListItem`, and `CVirtualWindow`. For a value outside a listed choice, such as
-  `variant="bogus"`, this replaces Citry UI's `ValueError`, so code that
-  catches `ValueError` there must catch `TypeError`.
+- A `CCascader` trigger's accessible name is now its label followed by
+  the path it shows, such as "Place Europe / Slovakia", instead of only
+  "Place", so voice control users can say what they see. With
+  `aria_label`, the trigger now takes its name through `aria-labelledby`
+  from a hidden element and has no `aria-label` attribute, so a selector
+  such as `button[aria-label="Place"]` no longer finds it.
 
 ## [0.3.0] - 2026-10-19
 

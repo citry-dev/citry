@@ -157,6 +157,20 @@ def is_native_state_tag(tag: str) -> bool:
     return tag.casefold() in {"input", "textarea", "select", "option"}
 
 
+def writes_vue_owned_marker(tag: str, *, under_v_pre: bool) -> bool:
+    """
+    Return whether Citry adds the `v-citry-vue-owned` marker to this element in the template it gives Vue.
+
+    The marker names the form properties a Vue binding owns, so the browser
+    keeps a user's unsaved edit only in the properties no binding owns. Vue
+    reads an element under `v-pre` (its own or an ancestor's) as written, so
+    a `:value` there is a plain attribute that owns nothing, and Vue would
+    write the marker into the page as a plain attribute. Pass
+    ``under_v_pre=True`` for an element that has `v-pre` or sits inside one.
+    """
+    return is_native_state_tag(tag) and not under_v_pre
+
+
 def vue_owned_native_properties(
     tag: str,
     authored_attrs: object = (),

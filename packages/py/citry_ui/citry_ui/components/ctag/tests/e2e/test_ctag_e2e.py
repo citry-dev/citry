@@ -11,6 +11,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -31,7 +32,7 @@ def _tag_page() -> str:
         js = """
           $component({data(){const tagTest=Citry.vue.reactive({
             selected:'alpha',events:[],itemDisabled:false,variant:'soft',size:'md',
-            accept:false,fieldsetDisabled:false,
+            accept:false,fieldsetDisabled:false,showMiddle:true,
           }); window.__tagTest=tagTest; return {state:{tagTest}};}});
         """
         template = """
@@ -89,6 +90,14 @@ def _tag_page() -> str:
                   <c-CTag value="two">Two</c-CTag>
                 </c-CTagGroup>
               </fieldset>
+
+              <c-CTagGroup label="Removable topics" id="removable">
+                <c-CTag value="first">First</c-CTag>
+                <template v-if="state.tagTest.showMiddle">
+                  <c-CTag value="middle">Middle</c-CTag>
+                </template>
+                <c-CTag value="last">Last</c-CTag>
+              </c-CTagGroup>
 
               <c-CTagGroup label="Descriptive" id="descriptive">
                 <c-CTag value="plain">Plain label</c-CTag>
@@ -181,6 +190,23 @@ def test_roving_keyboard_typeahead_remove_button_and_selected_delete(page: Any) 
     assert errors == []
 
 
+def test_removing_the_focused_tag_leaves_the_page_where_the_reader_scrolled(page: Any) -> None:
+    errors = _load(page)
+    # A page long enough to scroll the tags out of view.
+    page.evaluate("document.body.append(Object.assign(document.createElement('div'), {style: 'height: 5000px'}))")
+    page.locator("#removable [data-value=middle]").focus()
+    page.evaluate("window.scrollTo(0, 3000)")
+    page.wait_for_function("window.scrollY === 3000")
+
+    # A re-render that drops the focused tag moves focus to a neighbor,
+    # which must not scroll the page back to the group (#383).
+    page.evaluate("window.__tagTest.showMiddle = false")
+    page.wait_for_function("document.activeElement?.closest('#removable [data-value=last]') !== null")
+    page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    assert page.evaluate("window.scrollY") == 3000
+    assert errors == []
+
+
 def test_item_and_native_fieldset_disabled_states_dominate_activation(page: Any) -> None:
     errors = _load(page)
     controlled = page.locator("#controlled")
@@ -221,6 +247,7 @@ def test_roles_css_environment_and_axe_are_clean(page: Any) -> None:
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file()
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => (await axe.run(document, {resultTypes: ['violations']})).violations
           .filter((item) => ['serious', 'critical'].includes(item.impact))

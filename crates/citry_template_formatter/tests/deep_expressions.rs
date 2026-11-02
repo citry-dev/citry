@@ -68,3 +68,48 @@ fn the_deepest_accepted_expressions_format_on_a_small_stack() {
         .join()
         .unwrap();
 }
+
+#[test]
+fn the_deepest_accepted_c_for_clause_formats() {
+    // A `c-for` clause has its own generator wrapper. Wrapping it a second
+    // time would push a clause at the parser's limit over it, so the
+    // formatter would reject a template the parser accepts.
+    let accepted = |terms: usize| {
+        let clause = format!("x in a{}", "+a".repeat(terms));
+        let template = format!("<c-for each=\"{clause}\"><b>{{{{ x }}}}</b></c-for>");
+        citry_template_parser::parser::parse_template(&template, None, None)
+            .is_ok()
+            .then_some(template)
+    };
+    let mut terms = 1;
+    while accepted(terms + 1).is_some() {
+        terms += 1;
+    }
+    let template = accepted(terms).expect("a short clause parses");
+    let skipped = template.replace("\"><b>", "  # fmt: skip\n\"><b>");
+    for template in [template, skipped] {
+        if let Err(error) = format_template(&template) {
+            panic!("{terms} terms: {error}");
+        }
+    }
+}
+
+#[test]
+fn a_multiline_expression_at_the_depth_limit_settles() {
+    // When Ruff's output would nest past the parser's limit, the formatter
+    // keeps the author's text. It must keep the bytes as they are: indenting
+    // the kept text again on every pass would never settle.
+    let accepted = |terms: usize| {
+        let template = format!("<p>{{{{ a\n{} }}}}</p>", "+a\n".repeat(terms));
+        citry_template_parser::parser::parse_template(&template, None, None)
+            .is_ok()
+            .then_some(template)
+    };
+    let mut terms = 1;
+    while accepted(terms + 1).is_some() {
+        terms += 1;
+    }
+    let template = accepted(terms).expect("a short expression parses");
+    let formatted = format_template(&template).unwrap_or_else(|error| panic!("{terms}: {error}"));
+    assert_eq!(format_template(&formatted).unwrap(), formatted);
+}

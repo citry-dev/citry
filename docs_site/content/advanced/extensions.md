@@ -345,6 +345,12 @@ The handler receives a [`RouteRequest`][citry.RouteRequest] and returns a
 [`RouteResponse`][citry.RouteResponse]. `{name}` segments in the path reach
 the handler as keyword arguments.
 
+Set `content_type` to the type of the body you return; the default is
+`text/plain`. Citry sends every
+route response with `X-Content-Type-Options: nosniff`, so the browser uses
+that type as given. For example, it refuses to run a script served as
+`text/plain`.
+
 A route accepts `GET` by default. Pass `methods=("POST",)` or another tuple
 to change it. With `methods=None`, every HTTP method reaches the handler,
 which must then return `405 Method Not Allowed` with an `Allow` header
@@ -354,6 +360,36 @@ A plain `def` handler works with every framework integration. An
 `async def` handler passed as `handler` works only with the direct ASGI
 integration. To support both without blocking the event loop, pass a plain
 `handler` and its async version as `handler_async`.
+
+A route that reads a request body can limit its size with
+`max_body_bytes`, a function that returns the limit in bytes. Citry calls
+it for each request and reads at most one byte past the limit. Under ASGI
+the server hands over the body in chunks, so Citry may read up to one
+chunk past it. `request.body` then holds at most the limit plus one byte,
+so the handler must reject a longer body, because it was cut short:
+
+```python
+from citry import RouteResponse, URLRoute
+
+LIMIT = 64_000
+
+
+def save(request):
+    if len(request.body) > LIMIT:
+        return RouteResponse(content="Too large", status=413)
+    return RouteResponse(content="Saved")
+
+
+route = URLRoute(
+    "save",
+    handler=save,
+    methods=("POST",),
+    max_body_bytes=lambda: LIMIT,
+)
+```
+
+A function that returns something other than a whole number of 0 or more
+makes the request fail with status 500.
 
 See [Web frameworks](/advanced/web-frameworks/) for mounting Citry's routes in your
 application.
@@ -500,6 +536,22 @@ Return the same result for the same input as well. When several threads
 run a hook at once, Citry keeps the result of the run that finishes first,
 so a hook that returns different text on different runs makes the page
 depend on which thread finished first.
+
+## Walk deep node lists
+
+The `on_template_compiled` and `on_template_foreign_compiled` hooks receive
+`ctx.nodes`, the node list Citry built from the template. It nests as
+deeply as the template's `<c-if>`, `<c-for>`, `<c-slot>`, `<c-fill>`, and
+component tags do.
+
+If your hook walks `ctx.nodes` with a function that calls itself for each
+nested node, a deeply nested template can make the component's first
+render fail with `RecursionError`. Each nested call counts toward Python's
+recursion limit, on top of the calls your web framework already uses.
+
+Walk the list with a loop instead. Keep a list of the node lists you still
+have to visit, and take one from it each time round the loop, so the walk
+works the same at any depth.
 
 ## Related reference
 

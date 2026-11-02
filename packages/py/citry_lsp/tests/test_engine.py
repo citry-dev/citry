@@ -1372,7 +1372,7 @@ def test_init_callback_context_fields_have_types_and_documentation_links(tmp_pat
         " * @property {(name?: CitryServerEventName) => boolean} loading",
         " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
         " * @property {CitryI18nService | null} i18n",
-        "=> Promise<any>} sendEvent",
+        " * @property {CitrySendEvent} sendEvent",
         "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>, "
         "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>}",
     ):
@@ -1863,6 +1863,593 @@ def test_citry_event_binding_hover_explains_the_dom_event_and_links_to_docs():
     state_result = hover(_document(state_source, project), _position(state_source, ":c-query", 3), project)
     assert state_result is not None
     assert "Component.State.query" in state_result.contents.value
+
+
+_VUE_OWN_MODIFIERS = {
+    ".stop",
+    ".prevent",
+    ".self",
+    ".capture",
+    ".once",
+    ".passive",
+    ".ctrl",
+    ".shift",
+    ".alt",
+    ".meta",
+    ".exact",
+}
+_MOUSE_BUTTON_MODIFIERS = {".left", ".right", ".middle"}
+# Modifiers that read held keys or the mouse button, which `input` and
+# `scroll` events do not carry.
+_INPUT_STATE_MODIFIERS = {".ctrl", ".shift", ".alt", ".meta", ".exact"} | _MOUSE_BUTTON_MODIFIERS
+_KEY_MODIFIERS = {".enter", ".tab", ".delete", ".esc", ".escape", ".space", ".up", ".down", ".left", ".right"}
+_CITRY_LISTENER_MODIFIERS = {".outside", ".window", ".document", ".debounce", ".throttle"}
+_TIMING_DURATIONS = {".100ms", ".250ms", ".300ms", ".500ms", ".1s"}
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "expected"),
+    [
+        ("<div @click.></div>", "@click.", _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS),
+        (
+            '<div v-on:click.="x"></div>',
+            "v-on:click.",
+            _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS,
+        ),
+        # A keyboard event takes key names, and Vue ignores `.middle` there.
+        ("<div @keydown.></div>", "@keydown.", _VUE_OWN_MODIFIERS | _KEY_MODIFIERS | _CITRY_LISTENER_MODIFIERS),
+        # Only the browser knows a dynamic event, so no key names are
+        # offered, and Vue reads `.left` and `.right` there as keys too.
+        # Citry's modifiers need the event name written out.
+        ("<div @[name].></div>", "@[name].", _VUE_OWN_MODIFIERS | {".middle"}),
+        (
+            "<div @input.debounce.></div>",
+            "debounce.",
+            (_VUE_OWN_MODIFIERS | _CITRY_LISTENER_MODIFIERS | _TIMING_DURATIONS)
+            - {".debounce"}
+            - _INPUT_STATE_MODIFIERS,
+        ),
+        # An `input` event carries no held keys or mouse button.
+        ("<input @input.>", "@input.", (_VUE_OWN_MODIFIERS | _CITRY_LISTENER_MODIFIERS) - _INPUT_STATE_MODIFIERS),
+        ("<div @input.debounce.3></div>", "debounce.3", {".300ms"}),
+        (
+            "<div @click.outside.></div>",
+            "outside.",
+            (_VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | {".debounce", ".throttle"})
+            - {".self", ".capture", ".once"},
+        ),
+        (
+            "<div @click.window.></div>",
+            "window.",
+            _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | {".debounce", ".throttle"},
+        ),
+        (
+            "<div @click.self.></div>",
+            "self.",
+            (_VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS) - {".self", ".outside"},
+        ),
+        (
+            "<div @scroll.passive.></div>",
+            "passive.",
+            (_VUE_OWN_MODIFIERS | _CITRY_LISTENER_MODIFIERS) - {".passive", ".prevent"} - _INPUT_STATE_MODIFIERS,
+        ),
+        ("<div @click.o></div>", "@click.o", {".once", ".outside"}),
+        # `<c-element>` renders a plain HTML element.
+        (
+            '<c-element is="div" @click.></c-element>',
+            "@click.",
+            _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS,
+        ),
+    ],
+)
+def test_vue_listener_modifier_completion_offers_only_modifiers_the_parser_accepts(source, marker, expected):
+    project = _syntax_state()
+    cursor = _position(source, marker, len(marker))
+
+    items = completion_items(_document(source, project), cursor, project)
+
+    assert {item.label for item in items} == expected
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        '<div @click.{}="close"></div>',
+        '<div v-on:keydown.{}="close"></div>',
+        '<div @[name].{}="close"></div>',
+        '<div @click.outside.{}="close"></div>',
+        '<div @keydown.escape.window.{}="close"></div>',
+        '<input @input.debounce.{}="search">',
+        '<div @scroll.passive.{}="track"></div>',
+        '<c-element is="div" @click.{}="close" />',
+        '<c-card @click.{}="close" />',
+        '<template @click.{}="close"></template>',
+    ],
+)
+def test_every_offered_vue_listener_modifier_loads(template):
+    project = _syntax_state()
+    head = template.split("{}", 1)[0]
+    unfinished = head + template.split("{}", 1)[1]
+
+    items = completion_items(_document(unfinished, project), _position(unfinished, head, len(head)), project)
+
+    assert items
+    for item in items:
+        # Whatever the list offers, the parser must accept in that place.
+        source = template.format(item.text_edit.new_text)
+        assert _document(source, project).diagnostics == (), source
+
+
+@pytest.mark.parametrize(
+    ("template", "current", "expected"),
+    [
+        # A duration already follows the cursor, so only the two modifiers
+        # it can belong to fit, and a second duration would not.
+        ('<div @click.{}.300ms="close"></div>', "", {".debounce", ".throttle"}),
+        ('<div @click.debounce.{}.300ms="close"></div>', "", {".throttle"}),
+        # The cursor starts the segment, so the item replaces `debounce`.
+        ('<div @click.{}.300ms="close"></div>', "debounce", {".debounce", ".throttle"}),
+    ],
+)
+def test_vue_listener_modifier_completion_before_a_duration(template, current, expected):
+    project = _syntax_state()
+    head = template.split("{}", 1)[0]
+    unfinished = head + current + template.split("{}", 1)[1]
+
+    items = completion_items(_document(unfinished, project), _position(unfinished, head, len(head)), project)
+
+    assert {item.label for item in items} == expected
+    for item in items:
+        source = template.format(item.text_edit.new_text)
+        assert _document(source, project).diagnostics == (), source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "<c-card @click.></c-card>",
+        '<c-component is="card" @click.></c-component>',
+        "<template @click.></template>",
+        "<slot @click.></slot>",
+        "<component @click.></component>",
+        # Vue reads a tag that starts with a capital letter as a component.
+        "<MyThing @click.></MyThing>",
+    ],
+)
+def test_vue_listener_modifier_completion_leaves_citry_modifiers_off_non_elements(source):
+    project = _syntax_state()
+    cursor = _position(source, "@click.", len("@click."))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    # The parser rejects Citry's modifiers here but accepts Vue's own.
+    assert labels == _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS
+
+
+@pytest.mark.parametrize("source", ["<c-slot @click.></c-slot>", '<c-fill name="body" @click.></c-fill>'])
+def test_vue_listener_modifier_completion_is_empty_where_no_listener_fits(source):
+    project = _syntax_state()
+    cursor = _position(source, "@click.", len("@click."))
+
+    assert completion_items(_document(source, project), cursor, project) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        # Vue reads no listener at or inside `v-pre`, so it has no modifiers to offer.
+        ("<div v-pre @click.", "@click."),
+        ("<div v-pre @click.></div>", "@click."),
+        ("<div v-pre><b @click.", "@click."),
+        ("<div v-pre><b @click.></b></div>", "@click."),
+        ("<div v-pre><b @keydown.", "@keydown."),
+        ('<div v-pre @click.prevent="x" @keydown.', "@keydown."),
+        ("<div v-pre v-on:click.", "v-on:click."),
+        # `v-pre` written after the cursor, in the same tag, still applies.
+        ("<div @click. v-pre></div>", "@click."),
+        ('<div @click. :title="a > b" v-pre></div>', "@click."),
+        # `v-pre` on an ancestor, found from the parsed elements around the tag.
+        ('<ul><li v-pre><b @click.="x">b</b></li></ul>', "@click."),
+    ],
+)
+def test_vue_listener_modifier_completion_is_empty_at_and_inside_v_pre(source, marker):
+    project = _syntax_state()
+    cursor = _position(source, marker, len(marker))
+
+    assert completion_items(_document(source, project), cursor, project) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "<div v-pre></div><b @click.",
+        "<div v-pre><p></p></div><b @click.",
+        "<br v-pre><b @click.",
+        # A `v-pre` only in a value, or in a later tag, does not apply.
+        '<div @click. title="v-pre"></div>',
+        "<div @click.></div><i v-pre></i>",
+        # The words `v-pre` inside an attribute value are not an attribute.
+        '<p title="see v-pre docs"><b @click.>',
+        '<p title="see v-pre docs" @click.',
+        # A closed `v-pre` sibling, also inside a template-valued attribute.
+        "<ul><li v-pre>a</li><li @click.>b</li></ul>",
+        '<c-card c-header="<><b v-pre>x</b></>"><p @click.></p></c-card>',
+    ],
+)
+def test_vue_listener_modifier_completion_stays_on_after_a_closed_v_pre_element(source):
+    project = _syntax_state()
+    cursor = _position(source, "@click.", len("@click."))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert labels == _VUE_OWN_MODIFIERS | _MOUSE_BUTTON_MODIFIERS | _CITRY_LISTENER_MODIFIERS
+
+
+@pytest.mark.parametrize("source", ["<div v-pre @c-click.", "<div v-pre><b @c-click."])
+def test_citry_listener_modifier_completion_stays_on_at_and_inside_v_pre(source):
+    project = _syntax_state()
+    cursor = _position(source, "@c-click.", len("@c-click."))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert {".debounce", ".once"} <= labels
+
+
+def test_vue_listener_modifier_completion_replaces_only_the_current_segment():
+    project = _syntax_state()
+    source = '<div @input.debounce.30.prevent="search"></div>'
+    cursor = _position(source, ".30", len(".30"))
+
+    items = completion_items(_document(source, project), cursor, project)
+
+    (duration,) = items
+    assert duration.label == ".300ms"
+    assert duration.text_edit is not None
+    assert duration.text_edit.new_text == "300ms"
+    assert duration.text_edit.range == types.Range(
+        _position(source, ".30", 1),
+        _position(source, ".30", len(".30")),
+    )
+    assert "how long `.debounce` waits after the last event" in duration.documentation.value
+
+
+def test_vue_listener_modifier_completion_maps_inline_python_templates():
+    project = _syntax_state()
+    source = (
+        'from citry import Component\nclass Card(Component):\n    template = """<div @click.out="close"></div>"""\n'
+    )
+    cursor = _position(source, ".out", len(".out"))
+
+    items = completion_items(_document(source, project, language_id="python"), cursor, project)
+
+    (outside,) = items
+    assert outside.label == ".outside"
+    assert outside.text_edit.range == types.Range(_position(source, ".out", 1), cursor)
+    assert "https://citry.dev/syntax/vue/#listener-modifiers" in outside.documentation.value
+
+
+def test_citry_binding_modifier_completion_is_unchanged_by_vue_listener_modifiers():
+    project = _syntax_state()
+    source = '<button @c-click.="save"></button>'
+    cursor = _position(source, "@c-click.", len("@c-click."))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert labels == {".prevent", ".stop", ".self", ".once", ".enter", ".escape", ".debounce", ".throttle"}
+
+
+@pytest.mark.parametrize(
+    ("source", "language_id"),
+    [
+        ('<input @input.debounce.300ms="search($event.target.value)">', "citry-html"),
+        ("<c-card c-body=\"<><input @input.debounce.300ms='search'></>\" />", "citry-html"),
+        (
+            "from citry import Component\nclass Card(Component):\n"
+            '    template = """<input @input.debounce.300ms="search">"""\n',
+            "python",
+        ),
+        # Two places to listen make the template invalid, so hover reads the
+        # attribute from the source text instead of the parsed tree.
+        ('<input @input.window.document.debounce.300ms="search">', "citry-html"),
+    ],
+)
+def test_vue_listener_modifier_hover_explains_each_segment(source, language_id):
+    project = _syntax_state()
+    document = _document(source, project, language_id=language_id)
+
+    modifier_hover = hover(document, _position(source, "debounce", 2), project)
+    duration_hover = hover(document, _position(source, "300ms", 2), project)
+
+    assert modifier_hover is not None
+    assert modifier_hover.contents.value.startswith("### `.debounce`")
+    assert "after 250 ms with no new event" in modifier_hover.contents.value
+    assert "https://citry.dev/syntax/vue/#listener-modifiers" in modifier_hover.contents.value
+    assert modifier_hover.range == types.Range(
+        _position(source, ".debounce"),
+        _position(source, ".debounce", len(".debounce")),
+    )
+    assert duration_hover is not None
+    assert duration_hover.contents.value.startswith("### `.300ms`")
+    assert "how long `.debounce` waits after the last event" in duration_hover.contents.value
+    assert duration_hover.range == types.Range(
+        _position(source, ".300ms"),
+        _position(source, ".300ms", len(".300ms")),
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "heading", "fragment"),
+    [
+        ('<div @click.outside="close"></div>', ".outside", "### `.outside`", "starts outside this element"),
+        ('<div @keydown.escape.window="close"></div>', ".window", "### `.window`", "Listen on `window`"),
+        ('<div @click.document="close"></div>', ".document", "### `.document`", "Listen on `document`"),
+        (
+            '<div @scroll.throttle.1s="track"></div>',
+            ".throttle",
+            "### `.throttle`",
+            "drop the events that follow for 250 ms",
+        ),
+        (
+            '<div v-on:scroll.throttle.1s="track"></div>',
+            ".1s",
+            "### `.1s`",
+            "how long `.throttle` drops events after each one it runs",
+        ),
+        ('<form @submit.prevent="save"></form>', ".prevent", "### `.prevent`", "preventDefault()"),
+        ('<div @keydown.left="back"></div>', ".left", "### `.left`", "Arrow Left"),
+        ('<div @click.left="pick"></div>', ".left", "### `.left`", "left mouse button"),
+        ('<div @[name].once="run"></div>', ".once", "### `.once`", "after its first event"),
+    ],
+)
+def test_vue_listener_modifier_hover_covers_vue_and_citry_modifiers(source, marker, heading, fragment):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 1), project)
+
+    assert result is not None
+    assert result.contents.value.startswith(heading)
+    assert fragment in result.contents.value
+    assert result.range == types.Range(_position(source, marker), _position(source, marker, len(marker)))
+
+
+def test_vue_listener_hover_keeps_the_listener_help_for_the_event_and_unknown_keys():
+    project = _syntax_state()
+    source = '<div @keydown.page-down="next"></div>'
+    document = _document(source, project)
+
+    for marker in ("@keydown", ".page-down"):
+        result = hover(document, _position(source, marker, 2), project)
+
+        assert result is not None
+        assert result.contents.value.startswith("### `@keydown.page-down`")
+        assert result.range == types.Range(
+            _position(source, "@keydown"),
+            _position(source, ".page-down", len(".page-down")),
+        )
+
+
+@pytest.mark.parametrize(
+    ("attribute", "message"),
+    [
+        ('@click.outside.window="close"', "combines '.outside' and '.window'"),
+        ('@click.window.document="close"', "combines '.window' and '.document'"),
+        ('@click.outside.self="close"', "combines '.outside' with '.self'"),
+        ('@click.outside.capture="close"', "combines '.outside' with '.capture'"),
+        ('@click.outside.once="close"', "combines '.outside' with '.once'"),
+        ('@wheel.passive.prevent.window="zoom"', "combines '.passive' with '.prevent'"),
+        ('@input.debounce.100ms.debounce.200ms="search"', "repeats '.debounce'"),
+        ('@input.300ms.debounce="search"', "has the time '.300ms' without '.debounce' or '.throttle'"),
+        ('@input.debounce.99999999999999999ms="search"', "longer than JavaScript can hold exactly"),
+        ('@input.debounce.300MS="search"', "gives '.300MS' as a time"),
+        ('@input.throttle.1m="search"', "gives '.1m' as a time"),
+        ('@input.debounce.500="search"', "gives '.500' as a time"),
+        ('@click.Outside="close"', "Write it in lowercase, '.outside'"),
+        ('v-on:click.Window="close"', "Write it in lowercase, '.window'"),
+        ('@keydown.minus="back"', "uses '.minus', which is not a Vue event modifier"),
+        ('@keydown.spacebar="jump"', "Use Vue's '.space' modifier instead."),
+        ('@click.away="close"', "Use Citry's '.outside' modifier instead."),
+        ('@citry-on-0="close"', "uses a name Citry's compiler writes for itself"),
+        ('v-on:citry-on0="close"', "uses a name Citry's compiler writes for itself"),
+        (':onCitryOn0="close"', "uses a name Citry's compiler writes for itself"),
+        ('onCitryOn0="close"', "uses a name Citry's compiler writes for itself"),
+    ],
+)
+def test_vue_listener_modifier_errors_mark_the_attribute(attribute, message):
+    source = f'<div>\n  <p\n    class="note"\n    {attribute}\n  ></p>\n</div>'
+    document = _document(source, _syntax_state())
+
+    (diagnostic,) = document.diagnostics
+    assert diagnostic.code == "citry.parse.syntax"
+    assert message in diagnostic.message
+    # The parser reports the whole attribute, name and value, at its line.
+    assert diagnostic.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "attribute"),
+    [
+        ('<c-card @click.outside="close" />', '@click.outside="close"'),
+        ('<c-component is="card" @click.window="close" />', '@click.window="close"'),
+        ('<template @click.window="close"></template>', '@click.window="close"'),
+        ('<slot @click.window="close"></slot>', '@click.window="close"'),
+        ('<component is="div" @scroll.throttle="track"></component>', '@scroll.throttle="track"'),
+    ],
+)
+def test_vue_listener_modifier_error_on_a_non_element_marks_the_attribute(source, attribute):
+    document = _document(source, _syntax_state())
+
+    (diagnostic,) = document.diagnostics
+    assert "uses a Citry listener modifier, which works only on HTML elements" in diagnostic.message
+    assert diagnostic.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "heading", "fragment", "shown"),
+    [
+        (
+            '<c-slot name="item" :row="row" />',
+            ":row",
+            "### `:row`",
+            "Pass the value of a Vue expression to the fill as a Vue slot prop, which the fill reads with `v-slot`.",
+            ":row",
+        ),
+        (
+            '<c-slot name="item" v-bind:row-data="row" />',
+            "v-bind:row-data",
+            "### `v-bind:row-data`",
+            "Pass the value of a Vue expression to the fill as a Vue slot prop, which the fill reads with `v-slot`.",
+            "v-bind:row-data",
+        ),
+        (
+            '<c-card><c-fill name="item" v-slot="{ row }">x</c-fill></c-card>',
+            "v-slot",
+            "### `v-slot`",
+            "Read the Vue slot props that the matching `<c-slot>` passes, as one object pattern such as `{ row }`",
+            "v-slot",
+        ),
+        # A `<c-slot>` nested in a fill is still a `<c-slot>`.
+        (
+            '<c-card><c-fill name="a"><c-slot name="item" :row="row" /></c-fill></c-card>',
+            ":row",
+            "### `:row`",
+            "Pass the value of a Vue expression to the fill as a Vue slot prop",
+            ":row",
+        ),
+    ],
+)
+def test_scoped_slot_attribute_hover_explains_the_attribute(source, marker, heading, fragment, shown):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 2), project)
+
+    assert result is not None
+    assert result.contents.value.startswith(heading)
+    assert fragment in result.contents.value
+    assert "https://citry.dev/vue/slots/#scoped-slots" in result.contents.value
+    # The hover covers the attribute name only, not its value.
+    assert result.range == types.Range(_position(source, marker), _position(source, marker, len(shown)))
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "heading"),
+    [
+        ('<div :row="row"></div>', ":row", "### `:row`"),
+        ('<div v-bind:row="row"></div>', "v-bind:row", "### `v-bind:row`"),
+        ('<c-card :row="row" />', ":row", "### `:row`"),
+    ],
+)
+def test_vue_bind_hover_off_c_slot_keeps_the_general_vue_text(source, marker, heading):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 2), project)
+
+    assert result is not None
+    assert result.contents.value.startswith(heading)
+    assert "Keep an HTML attribute or component prop synchronized with a Vue expression." in result.contents.value
+    assert "https://vuejs.org/api/built-in-directives.html#v-bind" in result.contents.value
+    assert "slot prop" not in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        ('<c-slot name="item" :name="slot_name" :row="row" />', ":name"),
+        ('<c-slot name="item" v-bind:name="slot_name" :row="row" />', "v-bind:name"),
+        ('<c-slot name="item" :key="row" :row="row" />', ":key"),
+        ('<c-slot name="item" v-bind:key="row" :row="row" />', "v-bind:key"),
+    ],
+)
+def test_name_and_key_on_c_slot_get_no_slot_prop_hover(source, marker):
+    project = _syntax_state()
+
+    # The parser rejects `:name` and `:key` on `<c-slot>`, so they pass no
+    # slot prop and the hover must not describe them as one.
+    assert hover(_document(source, project), _position(source, marker, 2), project) is None
+
+    # The `:row` beside them is still a slot prop.
+    result = hover(_document(source, project), _position(source, ":row", 2), project)
+    assert result is not None
+    assert result.contents.value.startswith("### `:row`")
+    assert "Pass the value of a Vue expression to the fill as a Vue slot prop" in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "attribute", "message"),
+    [
+        (
+            '<c-card><c-fill name="item" #item>x</c-fill></c-card>',
+            "#item",
+            "Vue directive '#item' is not supported on '<c-fill>'.",
+        ),
+        (
+            '<c-card><c-fill v-slot:item="{ row }">x</c-fill></c-card>',
+            'v-slot:item="{ row }"',
+            "Vue directive 'v-slot:item' is not supported on '<c-fill>'.",
+        ),
+        (
+            '<c-slot name="item" :row.prop="row" />',
+            ':row.prop="row"',
+            "Vue directive ':row.prop' is not supported on '<c-slot>'.",
+        ),
+        (
+            '<c-card><c-fill name="item" v-slot="a, b">x</c-fill></c-card>',
+            'v-slot="a, b"',
+            "lists several parameters; a slot passes one props object.",
+        ),
+    ],
+)
+def test_rejected_scoped_slot_forms_mark_the_attribute(source, attribute, message):
+    # Each form is refused by the parser, so the editor reports it as a
+    # syntax error that covers the attribute, as the listener modifiers do.
+    document = _document(f"<div>\n  {source}\n</div>", _syntax_state())
+
+    (diagnostic,) = document.diagnostics
+    assert diagnostic.code == "citry.parse.syntax"
+    assert diagnostic.severity == types.DiagnosticSeverity.Error
+    assert message in diagnostic.message
+    text = f"<div>\n  {source}\n</div>"
+    assert diagnostic.range == types.Range(
+        _position(text, attribute),
+        _position(text, attribute, len(attribute)),
+    )
+
+
+def test_vue_listener_modifier_error_maps_into_an_inline_python_template():
+    source = (
+        "from citry import Component\nclass Card(Component):\n"
+        '    template = """\n        <div @click.window.document="close"></div>\n    """\n'
+    )
+    attribute = '@click.window.document="close"'
+    document = _document(source, _syntax_state(), language_id="python")
+
+    (diagnostic,) = document.diagnostics
+    assert "combines '.window' and '.document'" in diagnostic.message
+    assert diagnostic.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<div @click.outside="open = false"></div>',
+        '<div @keydown.escape.window="close"></div>',
+        '<input @input.debounce.300ms="search($event.target.value)">',
+        '<div @scroll.throttle.1s="track"></div>',
+        '<div @input.debounce.100ms.throttle.200ms="search"></div>',
+        '<input @keydown.5.debounce="pick">',
+        '<c-element is="div" @click.outside="close" />',
+    ],
+)
+def test_accepted_vue_listener_modifiers_have_no_diagnostics(source):
+    assert _document(source, _syntax_state()).diagnostics == ()
 
 
 def test_callback_projection_delegates_closed_instance_and_official_vue_types(tmp_path):
@@ -2862,6 +3449,44 @@ def test_template_lint_diagnostics_use_inferred_roots_and_warning_policy(tmp_pat
     )
 
 
+def test_template_lint_diagnostics_check_against_declared_template_data_keys(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ title }} {{ titel }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "def build(kwargs):\n"
+        "    return {'title': 'Hi'}\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class Lint:\n"
+        "        template_data_keys = ('title',)\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return build(kwargs)\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    # The list closes the namespace that the helper call leaves open, so
+    # the typo gets the same message as for a literal dict.
+    assert [item.message for item in diagnostics] == [
+        "Template variable 'titel' is not available in this template.",
+    ]
+
+    # Completion offers the listed keys, so the editor can suggest the
+    # name it reports the typo against.
+    position = _position(template_source, "titel", 2)
+    labels = [item.label for item in completion_items(document, position, project, {document.uri: document})]
+    assert "title" in labels
+
+
 def test_template_lint_diagnostics_do_not_run_without_registry_ownership():
     source = "{{ unknown }}"
     project = _syntax_state()
@@ -3089,6 +3714,64 @@ def test_template_lint_diagnostics_apply_owner_policy_to_the_html_rules(tmp_path
     assert codes("badge.html") == []
     assert codes("logo.html") == []
     assert codes("counter.html") == []
+
+
+_CSP_TEMPLATE = """\
+<button onclick="save()">Save</button>
+<a href="javascript:go()">Go</a>
+<script>run()</script>
+<p :title="x" @click="go">ok</p>
+"""
+
+
+@pytest.mark.parametrize(
+    ("mode", "severity"),
+    [("warn", types.DiagnosticSeverity.Warning), ("strict", types.DiagnosticSeverity.Error), ("off", None)],
+)
+def test_template_lint_diagnostics_report_strict_csp_problems_with_the_engines_severity(tmp_path, mode, severity):
+    (tmp_path / "card.html").write_text(_CSP_TEMPLATE, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        f"engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, security_csp={mode!r})\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState((tmp_path / "card.html").as_uri(), "citry-html", _CSP_TEMPLATE, 1)
+    document.update(_CSP_TEMPLATE, 1, project)
+
+    diagnostics = [
+        item
+        for item in template_lint_diagnostics(document, project, {document.uri: document})
+        if item.code == "citry.template.csp-incompatible"
+    ]
+
+    if severity is None:
+        assert diagnostics == []
+        return
+    # The editor underlines the attribute name, the javascript: value, and the tag name.
+    assert [(item.severity, item.range) for item in diagnostics] == [
+        (severity, types.Range(_position(_CSP_TEMPLATE, "onclick"), _position(_CSP_TEMPLATE, "onclick", 7))),
+        (
+            severity,
+            types.Range(_position(_CSP_TEMPLATE, "javascript:go()"), _position(_CSP_TEMPLATE, "javascript:go()", 15)),
+        ),
+        (severity, types.Range(_position(_CSP_TEMPLATE, "script>run"), _position(_CSP_TEMPLATE, "script>run", 6))),
+    ]
+    assert diagnostics[0].message.startswith("A strict Content Security Policy blocks the inline event attribute")
+    assert diagnostics[0].source == "citry"
+
+
+@pytest.mark.parametrize("mode", ["off", "warn", "strict"])
+def test_editor_passes_the_lint_records_security_csp_to_the_markup_lint(mode):
+    lint = TemplateAnalysis.from_dict(Citry(autodiscover=False, security_csp=mode).template_analysis().to_dict()).lint
+
+    consumer = engine_module._markup_lint_consumer(lint, root_may_receive_attributes=True)
+
+    assert consumer.csp == mode
 
 
 def test_template_lint_diagnostics_read_directives_and_inherit_attrs_from_the_owner_javascript(tmp_path):
@@ -3586,6 +4269,15 @@ def test_literal_marker_diagnostics_ignore_dynamic_and_nonmark_selectors(source:
     assert not [item for item in document.diagnostics if item.code == TEMPLATE_MARKER_NAME_INVALID]
 
 
+def test_a_template_nested_too_deeply_reports_the_too_deep_code():
+    # 257 nested <c-if> tags: one past the logic levels a template may nest.
+    source = '<c-if cond="x">' * 257 + "x" + "</c-if>" * 257
+    document = _document(source, _syntax_state())
+
+    assert [item.code for item in document.diagnostics] == ["citry.parse.too-deep"]
+    assert "is 257 Citry logic levels deep" in document.diagnostics[0].message
+
+
 def test_duplicate_mark_name_uses_the_parser_syntax_diagnostic():
     source = '<c-component is="mark" name="one" name="two" />'
     document = _document(source, _syntax_state())
@@ -3919,8 +4611,12 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
     assert plain_by_label["c-for"].insert_text == 'c-for="${1:item} in ${2:items}"'
     assert plain_by_label["#c-key"].insert_text == '#c-key="${1:key}"'
     assert {item.label for item in conditional} == {"cond"}
-    assert {item.label for item in fill} == {"name", "c-name", "data", "fallback", "c-bind"}
-    assert {"c-if", "c-elif", "c-else", "c-for", "c-empty"} <= {item.label for item in slot}
+    # `v-slot` reads the Vue slot props, and `:` passes them.
+    assert {item.label for item in fill} == {"name", "c-name", "data", "fallback", "c-bind", "v-slot"}
+    assert {"c-if", "c-elif", "c-else", "c-for", "c-empty", ":"} <= {item.label for item in slot}
+    # The parser rejects a slot prop named `name`, so the snippets start from a name it accepts.
+    assert {item.label: item for item in slot}[":"].insert_text == ':${1:row}="${2:expression}"'
+    assert {item.label: item for item in fill}["v-slot"].insert_text == 'v-slot="{ ${1:row} }"'
     assert not {"#c-key", "#c-ignore"} & {item.label for item in slot}
     assert len(dynamic_component) == len({item.label for item in dynamic_component})
 
@@ -3995,6 +4691,144 @@ def test_vue_structural_directives_are_available_on_html_elements_without_vue_na
 
     assert {"v-if", "v-for", "v-show"} <= labels
     assert not any(label.startswith("x-") for label in labels)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves its own attributes at or inside `v-pre` as written, so
+        # none of them is offered.
+        "<div v-pre ",
+        "<div v-pre><p ",
+        "<div v-pre><span>x</span><p ",
+        "<div v-pre v-",
+        "<div v-pre @",
+        "<div v-pre :",
+        '<div v-pre="" ',
+        "<div V-PRE ",
+        "<c-card v-pre ",
+    ],
+)
+def test_attribute_completion_offers_no_vue_syntax_at_or_inside_v_pre(source):
+    project = _syntax_state()
+
+    labels = {
+        item.label
+        for item in completion_items(_document(source, project), _position(source, source, len(source)), project)
+    }
+
+    assert not [label for label in labels if label.startswith(("v-", ":", "@")) and not label.startswith("@c-")]
+    # Citry renders its own attributes before Vue sees the page.
+    assert {"c-if", "c-for"} <= labels
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "vue_syntax"),
+    [
+        # The template parses, so the parsed elements decide, including
+        # those inside a template-valued attribute.
+        ("<ul><li v-pre><b ></b></li></ul>", "<b ", False),
+        ('<c-card c-header="<><div v-pre><p ></p></div></>" />', "<p ", False),
+        ("<ul><li v-pre>a</li><li ></li></ul>", "</li><li ", True),
+        ('<c-card c-header="<><div><p ></p></div></>" />', "<p ", True),
+        ('<c-card c-header="<><b v-pre>x</b></>"><p ></p></c-card>', "<p ", True),
+        # The words `v-pre` inside an attribute value are not an attribute.
+        ('<p title="see v-pre docs"><b ></b></p>', "<b ", True),
+        ('<p title="see v-pre docs" ></p>', 'docs" ', True),
+    ],
+)
+def test_attribute_completion_reads_v_pre_from_the_parsed_template(source, marker, vue_syntax):
+    project = _syntax_state()
+    document = _document(source, project)
+    assert document.diagnostics == ()
+    cursor = _position(source, marker, len(marker))
+
+    labels = {item.label for item in completion_items(document, cursor, project)}
+
+    assert ({"v-if", "v-for", ":class", "@click"} <= labels) is vue_syntax
+    assert {"c-if", "c-for"} <= labels
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "vue_syntax"),
+    [
+        # While the template does not parse, the text around the cursor decides.
+        ('<div v-pre><p v-if="a"></p><b ', "<b ", False),
+        ("<div v-pre><p ", "<p ", False),
+        ('<p title="see v-pre docs" ', 'docs" ', True),
+        ('<p title="see v-pre docs"><b ', "<b ", True),
+        ("<ul><li v-pre>a</li><li ", "</li><li ", True),
+    ],
+)
+def test_attribute_completion_reads_v_pre_from_the_text_when_the_template_does_not_parse(source, marker, vue_syntax):
+    project = _syntax_state()
+    document = _document(source, project)
+    assert document.diagnostics
+    cursor = _position(source, marker, len(marker))
+
+    labels = {item.label for item in completion_items(document, cursor, project)}
+
+    assert ({"v-if", "v-for", ":class", "@click"} <= labels) is vue_syntax
+    assert {"c-if", "c-for"} <= labels
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # `v-pre` written after the cursor, in the same tag, still applies,
+        # even when a quoted `>` sits between them.
+        "<div  v-pre></div>",
+        '<div  :title="a > b" v-pre></div>',
+    ],
+)
+def test_attribute_completion_offers_no_vue_syntax_before_a_v_pre_in_the_same_tag(source):
+    project = _syntax_state()
+    cursor = _position(source, "<div ", len("<div "))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert not [label for label in labels if label.startswith(("v-", ":", "@")) and not label.startswith("@c-")]
+    assert {"c-if", "c-for"} <= labels
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # A `v-pre` only in a value, a name part, or a later tag does not apply.
+        '<div  title="v-pre"></div>',
+        "<div  data-v-pre></div>",
+        "<div  ></div><i v-pre></i>",
+    ],
+)
+def test_attribute_completion_keeps_vue_syntax_when_v_pre_is_not_an_attribute_of_the_tag(source):
+    project = _syntax_state()
+    cursor = _position(source, "<div ", len("<div "))
+
+    labels = {item.label for item in completion_items(_document(source, project), cursor, project)}
+
+    assert {"v-if", "v-for", ":class", "@click"} <= labels
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "<div ",
+        # A closed `v-pre` element earlier does not reach the tag after it.
+        "<div v-pre></div><p ",
+        "<div v-pre><p></p></div><p ",
+        "<br v-pre><p ",
+        "<div v-pre /><p ",
+    ],
+)
+def test_attribute_completion_offers_vue_syntax_outside_v_pre(source):
+    project = _syntax_state()
+
+    labels = {
+        item.label
+        for item in completion_items(_document(source, project), _position(source, source, len(source)), project)
+    }
+
+    assert {"v-if", "v-for", "v-show", ":class", "@click", "c-if"} <= labels
 
 
 @pytest.mark.parametrize(
@@ -4443,6 +5277,127 @@ def test_vue_condition_and_model_hover_on_component_tags(source, marker, anchor)
 
     assert result is not None
     assert f"https://vuejs.org/api/built-in-directives.html{anchor}" in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        # Vue leaves its own attributes at or inside `v-pre` as written, so
+        # there is no Vue syntax to explain.
+        ('<div v-pre v-if="a"></div>', "v-if"),
+        ('<div v-pre @click="go"></div>', "@click"),
+        ('<div v-pre :title="t"></div>', ":title"),
+        ('<div v-pre v-model.trim="text"></div>', "v-model"),
+        ('<div v-pre @click.prevent="go"></div>', ".prevent"),
+        ('<c-card v-pre v-show="open"></c-card>', "v-show"),
+        ('<div V-PRE v-if="a"></div>', "v-if"),
+        ('<div v-pre><p v-if="a"></p></div>', "v-if"),
+        ('<div v-pre><section><p @click="go"></p></section></div>', "@click"),
+        # A void element before the hovered tag leaves `v-pre` open.
+        ('<div v-pre><br><p v-if="a"></p></div>', "v-if"),
+        # The inner `v-pre` sits in a tag that is still open.
+        ('<div v-pre><p v-pre v-if="a"></p></div>', "v-if"),
+        # `v-pre` written after the hovered attribute still applies to it.
+        ('<div v-if="a" v-pre></div>', "v-if"),
+        ('<div @click="go" v-pre></div>', "@click"),
+        ('<div v-if="a" v-pre><p></p></div>', "v-if"),
+        ('<div v-if="a" v-pre="x"></div>', "v-if"),
+        ('<div v-if="a" v-pre/>', "v-if"),
+        # A `>` inside a quoted value before `v-pre` does not end the tag.
+        ('<div :title="a > b" v-if="x" v-pre></div>', "v-if"),
+        ("<div :title='a > b' v-if=\"x\" v-pre></div>", "v-if"),
+        # An element with `v-pre` inside a template-valued attribute.
+        ("<c-card c-header=\"<><div v-pre><p v-if='a'></p></div></>\" />", "v-if"),
+        ('<ul><li v-pre><b v-if="a">b</b></li></ul>', "v-if"),
+    ],
+)
+def test_vue_syntax_hover_is_off_at_and_inside_v_pre(source, marker):
+    project = _syntax_state()
+
+    assert hover(_document(source, project), _position(source, marker, 1), project) is None
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "anchor"),
+    [
+        ('<div v-if="a"></div>', "v-if", "#v-if"),
+        ('<div @click="go"></div>', "@click", "#v-on"),
+        ('<div @click.prevent="go"></div>', ".prevent", None),
+        # A closed `v-pre` element earlier does not reach the tags after it.
+        ('<div v-pre></div><p v-if="a"></p>', "v-if", "#v-if"),
+        ('<div v-pre><p></p></div><p @click="go"></p>', "@click", "#v-on"),
+        # Void and self-closing `v-pre` elements have no contents.
+        ('<br v-pre><p v-if="a"></p>', "v-if", "#v-if"),
+        ('<div v-pre /><p v-if="a"></p>', "v-if", "#v-if"),
+        # A `v-pre` on a later element, or only in text, does not apply.
+        ('<div v-if="a"></div><p v-pre></p>', "v-if", "#v-if"),
+        ('<div v-if="a" title="v-pre"></div>', "v-if", "#v-if"),
+        ('<div v-if="a" data-v-pre></div>', "v-if", "#v-if"),
+        ('<div :title="a > b" v-if="x"></div>', "v-if", "#v-if"),
+        # The words `v-pre` inside an attribute value are not an attribute.
+        ('<p title="see v-pre docs"><b v-if="a"></b></p>', "v-if", "#v-if"),
+        # A closed `v-pre` sibling, also inside a template-valued attribute.
+        ('<ul><li v-pre>a</li><li v-if="a">b</li></ul>', "v-if", "#v-if"),
+        ('<c-card c-header="<><b v-pre>x</b></>"><p v-if="a"></p></c-card>', "v-if", "#v-if"),
+        ("<c-card c-header=\"<><div v-pre></div><p v-if='a'></p></>\" />", "v-if", "#v-if"),
+        ("<c-card c-header=\"<><div><p v-if='a'></p></div></>\" />", "v-if", "#v-if"),
+    ],
+)
+def test_vue_syntax_hover_stays_on_outside_v_pre(source, marker, anchor):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 1), project)
+
+    assert result is not None
+    if anchor is not None:
+        assert f"https://vuejs.org/api/built-in-directives.html{anchor}" in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "vue_help"),
+    [
+        # While the template does not parse, the text around the cursor decides.
+        ('<div v-pre><p v-if="a">', "v-if", False),
+        ('<div v-pre><p v-if="a">x', "v-if", False),
+        ('<div v-pre title="a"><p v-if="a"><b>', "v-if", False),
+        ('<div><p v-if="a" v-pre><b>', "v-if", False),
+        ('<div><p v-if="a">', "v-if", True),
+        ('<div v-pre></div><p v-if="a">', "v-if", True),
+        ('<ul><li v-pre>a</li><li v-if="a">b', "v-if", True),
+        # The words `v-pre` inside an attribute value are not an attribute.
+        ('<p title="see v-pre docs" v-if="a">', "v-if", True),
+        ('<div title="see v-pre docs"><p v-if="a"><b>', "v-if", True),
+    ],
+)
+def test_vue_syntax_hover_reads_v_pre_from_the_text_when_the_template_does_not_parse(source, marker, vue_help):
+    project = _syntax_state()
+    document = _document(source, project)
+    # The sources are unfinished on purpose, so the parsed template is not available.
+    assert document.diagnostics
+
+    result = hover(document, _position(source, marker, 1), project)
+
+    assert (result is not None) is vue_help
+    if vue_help:
+        assert result.contents.value.startswith("### `v-if`")
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "heading"),
+    [
+        # Citry renders its own syntax before Vue sees the page, so it keeps its help.
+        ('<div v-pre c-if="a"></div>', "c-if", "### `c-if`"),
+        ('<div v-pre><p c-if="a"></p></div>', "c-if", "### `c-if`"),
+        ('<div v-pre><c-if cond="a"></c-if></div>', "c-if", "### `<c-if>`"),
+    ],
+)
+def test_citry_syntax_hover_stays_on_at_and_inside_v_pre(source, marker, heading):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 1), project)
+
+    assert result is not None
+    assert result.contents.value.startswith(heading)
 
 
 def test_vue_show_hover_is_available_on_component_tags():
@@ -7130,6 +8085,64 @@ class Card(Component):
     assert "component's browser value 'label'" in findings[1].message
 
 
+def test_editor_reads_no_vue_syntax_at_or_inside_v_pre(tmp_path):
+    template_source = (
+        '<p :title="title" id="out" v-if="missing"></p>\n'
+        '<div v-pre><p :title="title" id="nested" v-if="gone"></p></div>\n'
+        '<section v-pre :title="title" id="self" v-if="away"></section>\n'
+        '<div v-pre><p id="same" v-if="a"></p><p id="same" v-else></p></div>\n'
+    )
+    app_source = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Card(Component):
+    citry = engine
+    template_file = 'card.html'
+    class JsData:
+        title: str
+"""
+    template_file = tmp_path / "card.html"
+    app_file = tmp_path / "app.py"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    template = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    python = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    for document in (template, python):
+        document.update(document.source, document.version, project)
+    documents = {template.uri: template, python.uri: python}
+
+    # Vue leaves `v-if` under `v-pre` as written, so only `missing` is unknown.
+    unknown = [
+        finding.message
+        for finding in browser_diagnostics(template, project, documents)
+        if finding.code == "citry.vue.unknown-variable"
+    ]
+    assert unknown == ["Vue variable 'missing' is not available in this component."]
+
+    # Both elements of the `v-if`/`v-else` pair are on the page, so the id repeats.
+    duplicates = [
+        finding
+        for finding in template_lint_diagnostics(template, project, documents)
+        if finding.code == "citry.template.duplicate-id"
+    ]
+    assert [finding.range.start for finding in duplicates] == [
+        _position(template_source, 'same" v-else', 0),
+    ]
+
+    # The `js_data()` name `title` is offered and explained outside `v-pre`
+    # only, because Vue reads no value inside it.
+    outside = _position(template_source, 'title" id="out"', 2)
+    assert [item.label for item in completion_items(template, outside, project, documents)] == ["title"]
+    outside_hover = hover(template, outside, project, documents)
+    assert outside_hover is not None
+    assert "(variable) title: string" in outside_hover.contents.value
+    for marker in ('title" id="nested"', 'title" id="self"'):
+        position = _position(template_source, marker, 2)
+        assert completion_items(template, position, project, documents) == []
+        assert hover(template, position, project, documents) is None
+
+
 def test_component_js_types_accept_page_plugins_async_initializers_and_send_options(tmp_path):
     """The editor accepts `Citry.vue.use`, an async initializer, and valid send options, and rejects wrong ones."""
     js_source = """$component({
@@ -7140,6 +8153,8 @@ def test_component_js_types_accept_page_plugins_async_initializers_and_send_opti
         await component.$sendEvent('save', {}, { timeout: 500 });
         Citry.vue.use(42);
         await sendEvent('save', {}, { wait: false });
+        await sendEvent('peek', {}, { wait: false });
+        await component.$sendEvent('peek', {}, { wait: false, timeout: 500 });
         return () => undefined;
       },
     });
@@ -7149,6 +8164,7 @@ def test_component_js_types_accept_page_plugins_async_initializers_and_send_opti
     js_file.write_text(js_source, encoding="utf8")
     app_source = """from pathlib import Path
 from citry import Citry, Component
+from citry.ext.events import event
 engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
 class Card(Component):
     citry = engine
@@ -7156,6 +8172,10 @@ class Card(Component):
     js_file = 'card.js'
     class Events:
         def save(self):
+            return None
+
+        @event(detached=True)
+        def peek(self):
             return None
 """
     (tmp_path / "app.py").write_text(app_source, encoding="utf8")
@@ -7201,7 +8221,8 @@ class Card(Component):
     def line_of(snippet: str) -> int:
         return projection.source[: projection.source.index(snippet)].count("\n") + 2
 
-    # Exactly the two wrong calls are reported: a number is not a plugin, and `wait` accepts only true.
+    # Exactly the two wrong calls are reported: a number is not a plugin, and `wait: false` needs a
+    # handler declared `@event(detached=True)`, which `peek` is and `save` is not.
     assert {int(line.split("(")[1].split(",")[0]) for line in errors} == {
         line_of("Citry.vue.use(42)"),
         line_of("{ wait: false }"),

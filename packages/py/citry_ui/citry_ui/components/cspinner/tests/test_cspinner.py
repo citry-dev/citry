@@ -7,13 +7,15 @@ import pytest
 from markupsafe import Markup
 
 import citry_ui
-from citry import Citry, Component
+from citry import Citry, Component, LintSettings
 from citry_ui import CSpinner
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(spinner: object, *, include_css: bool = False, static_fallback: bool = False) -> str:
-    app = Citry(autodiscover=False)
+def _render(
+    spinner: object, *, include_css: bool = False, static_fallback: bool = False, check_input_types: bool = True
+) -> str:
+    app = Citry(autodiscover=False, lint=LintSettings(check_input_types=check_input_types))
     app.register_library(citry_ui)
 
     class Page(Component):
@@ -85,10 +87,10 @@ def test_spinner_merges_root_styling_and_metadata():
     ("kwargs", "error", "match"),
     [
         ({"label": ""}, ValueError, "label must be non-empty"),
-        ({"label": 4}, TypeError, "label must be a string"),
-        ({"label": "Task", "intent": "info"}, ValueError, "intent must be one of"),
-        ({"label": "Task", "size": "xl"}, ValueError, "size must be one of"),
-        ({"label": "Task", "attrs": []}, TypeError, "attrs must be a mapping"),
+        ({"label": 4}, TypeError, r"CSpinner\.Kwargs\.label expects str"),
+        ({"label": "Task", "intent": "info"}, TypeError, r"CSpinner\.Kwargs\.intent expects Literal"),
+        ({"label": "Task", "size": "xl"}, TypeError, r"CSpinner\.Kwargs\.size expects Literal"),
+        ({"label": "Task", "attrs": []}, TypeError, r"CSpinner\.Kwargs\.attrs expects Mapping"),
     ],
 )
 def test_invalid_server_inputs_fail_deterministically(kwargs, error, match):
@@ -149,8 +151,11 @@ def test_spinner_attrs_without_vue_syntax_stay_ordinary_attributes():
     assert 'title="Busy"' in html
 
 
-def test_choices_and_label_are_detrusted_before_rendering():
-    with pytest.raises(ValueError, match="intent must be one of"):
+def test_markup_outside_the_choices_is_rejected_and_label_is_plain_text():
+    # Markup is a str subclass that templates do not escape, so a Markup value
+    # that is not one of the choices must fail before it reaches an attribute.
+    # Citry's check compares the text with each choice.
+    with pytest.raises(TypeError, match=r"CSpinner\.Kwargs\.intent expects Literal"):
         _render(CSpinner(label="Task", intent=Markup('primary" onfocus="evil')))
     html = _render(CSpinner(label=Markup('Aligning "Vega"')), static_fallback=True)
     assert 'aria-label="Aligning &#34;Vega&#34;"' in html
@@ -166,3 +171,10 @@ def test_css_exposes_spinner_and_environment_contract():
     assert "prefers-reduced-motion: reduce" in css
     assert "forced-colors: active" in css
     assert "@media print" in css
+
+
+def test_markup_outside_the_choices_is_rejected_with_citrys_check_off():
+    # An app can turn Citry's input check off, and then Citry UI's own check
+    # is the only thing between a Markup value and the rendered attribute.
+    with pytest.raises(ValueError, match="intent must be one of"):
+        _render(CSpinner(label="Task", intent=Markup('primary" onfocus="evil')), check_input_types=False)

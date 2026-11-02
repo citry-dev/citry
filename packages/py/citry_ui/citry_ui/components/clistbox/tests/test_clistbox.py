@@ -167,7 +167,7 @@ def test_root_surface_option_and_group_attrs_reach_their_destinations() -> None:
         (_listbox('value="missing"'), "unknown Options"),
         (_listbox('multiple value="earth"'), "sequence of strings"),
         (_listbox("mandatory"), "requires an initial selected value"),
-        (_listbox('variant="raised"'), "variant must be one of"),
+        (_listbox('variant="raised"'), r"CListbox\.Kwargs\.variant expects Literal\["),
         (
             '<c-CListbox label="Nested"><c-CListboxGroup label="A">'
             '<c-CListboxGroup label="B"><c-CListboxOption value="a">A</c-CListboxOption>'

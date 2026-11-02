@@ -22,7 +22,7 @@ pub use comments::extract_comments;
 pub use parse::parse_expression;
 pub use transformer::{
     Comment, Token, TransformResult, parse_expression_with_adjusted_error_ranges,
-    transform_expression_string,
+    parse_wrapped_expression, transform_expression_string,
 };
 
 /// Transform potentially unsafe Python expression into a safe one.

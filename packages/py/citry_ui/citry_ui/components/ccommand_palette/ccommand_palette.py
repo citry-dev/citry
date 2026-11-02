@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
@@ -115,6 +116,7 @@ class _ResolvedCommand:
     option_id: str
     label_id: str
     description_id: str | None
+    keyshortcuts: str | None
     slot_data: CCommandPaletteItemSlotData
 
 
@@ -230,6 +232,123 @@ def _plain_choice(component: str, field: str, value: object, allowed: tuple[str,
         expected = ", ".join(repr(item) for item in allowed)
         raise ValueError(f"{component} {field} must be one of {expected}.")
     return plain
+
+
+# `aria-keyshortcuts` names keys by their UI Events `key` values, with the
+# modifiers first. These are the spellings people write in a shortcut hint.
+_ARIA_MODIFIER_KEYS = {
+    "ctrl": "Control",
+    "control": "Control",
+    "ctl": "Control",
+    "\N{UP ARROWHEAD}": "Control",
+    "cmd": "Meta",
+    "command": "Meta",
+    "\N{PLACE OF INTEREST SIGN}": "Meta",
+    "meta": "Meta",
+    "win": "Meta",
+    "super": "Meta",
+    "alt": "Alt",
+    "option": "Alt",
+    "opt": "Alt",
+    "\N{OPTION KEY}": "Alt",
+    "shift": "Shift",
+    "\N{UPWARDS WHITE ARROW}": "Shift",
+}
+_ARIA_NAMED_KEYS = {
+    "esc": "Escape",
+    "escape": "Escape",
+    "enter": "Enter",
+    "return": "Enter",
+    "\N{RETURN SYMBOL}": "Enter",
+    "tab": "Tab",
+    "space": "Space",
+    "backspace": "Backspace",
+    "\N{ERASE TO THE LEFT}": "Backspace",
+    "del": "Delete",
+    "delete": "Delete",
+    "ins": "Insert",
+    "insert": "Insert",
+    "home": "Home",
+    "end": "End",
+    "pageup": "PageUp",
+    "pgup": "PageUp",
+    "pagedown": "PageDown",
+    "pgdn": "PageDown",
+    "up": "ArrowUp",
+    "\N{UPWARDS ARROW}": "ArrowUp",
+    "down": "ArrowDown",
+    "\N{DOWNWARDS ARROW}": "ArrowDown",
+    "left": "ArrowLeft",
+    "\N{LEFTWARDS ARROW}": "ArrowLeft",
+    "right": "ArrowRight",
+    "\N{RIGHTWARDS ARROW}": "ArrowRight",
+    # The symbols that macOS menus and keyboard hints use for these keys.
+    "\N{LEFTWARDS ARROW WITH HOOK}": "Enter",
+    "\N{UP ARROWHEAD BETWEEN TWO HORIZONTAL BARS}": "Enter",
+    "\N{ERASE TO THE RIGHT}": "Delete",
+    "\N{BROKEN CIRCLE WITH NORTHWEST ARROW}": "Escape",
+    "\N{RIGHTWARDS ARROW TO BAR}": "Tab",
+    "\N{UPWARDS ARROW WITH DOUBLE STROKE}": "PageUp",
+    "\N{DOWNWARDS ARROW WITH DOUBLE STROKE}": "PageDown",
+    "\N{NORTH WEST ARROW}": "Home",
+    "\N{SOUTH EAST ARROW}": "End",
+    "\N{OPEN BOX}": "Space",
+}
+_GLUED_MODIFIER_SYMBOLS = re.compile(
+    "([\N{UP ARROWHEAD}\N{PLACE OF INTEREST SIGN}\N{OPTION KEY}\N{UPWARDS WHITE ARROW}])"
+)
+
+
+def _aria_keyshortcuts(shortcut: str | None) -> str | None:
+    """
+    Write a shortcut hint such as ``Ctrl ,`` or ``⌘K`` as an ``aria-keyshortcuts`` value.
+
+    Returns None when the hint is not one key combination this function can
+    convert, such as a key sequence (``Ctrl K, Ctrl S``), a ``+`` key, or a
+    character that Shift produces (``Shift ?``), so the command shows its hint
+    without exposing a shortcut that might be wrong.
+    """
+    if shortcut is None:
+        return None
+    # A Mac hint glues its modifier symbols to the key (`⌘⇧P`), so split
+    # them off before splitting on spaces and `+`.
+    text = _GLUED_MODIFIER_SYMBOLS.sub(r" \1 ", shortcut)
+    # A `+` that is the key itself cannot be told from the separator.
+    if re.search(r"\+\s*$|\+\s*\+|^\s*\+", text):
+        return None
+    tokens = [token for token in re.split(r"[\s+]+", text) if token]
+    modifiers: list[str] = []
+    key: str | None = None
+    for token in tokens:
+        modifier = _ARIA_MODIFIER_KEYS.get(token.lower())
+        if modifier is not None:
+            # A modifier after the key, or one written twice, is not one
+            # combination ARIA can name.
+            if key is not None or modifier in modifiers:
+                return None
+            modifiers.append(modifier)
+            continue
+        if key is not None:
+            return None
+        named = _ARIA_NAMED_KEYS.get(token.lower())
+        if named is not None:
+            key = named
+        elif re.fullmatch(r"[Ff](?:[1-9]|1[0-9]|2[0-4])", token):
+            key = token.upper()
+        elif len(token) == 1 and token.isascii() and token.isprintable() and not token.isspace():
+            # ARIA writes a letter key in upper case, as in `Control+P`. A
+            # character outside ASCII may name no key on the keyboard (`ß`).
+            key = token.upper()
+        else:
+            return None
+    if key is None:
+        return None
+    # ARIA names the key that is pressed, not the character it produces, so
+    # `Shift ?` would have to be written as the key under the `?`, which
+    # depends on the keyboard layout.
+    if "Shift" in modifiers and len(key) == 1 and not key.isalnum():
+        return None
+    return "+".join((*modifiers, key))
 
 
 def _copy_attrs(
@@ -387,6 +506,43 @@ class CCommandPalette(LibraryComponent):
         item_end: SlotInput[CCommandPaletteItemSlotData] | None = None
         empty: SlotInput[_CCommandPaletteEmptySlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "activator_attrs",
+            "activator_disabled",
+            "aria_expanded",
+            "attrs",
+            "catalog_close_label",
+            "catalog_empty_label",
+            "catalog_placeholder",
+            "catalog_search_label",
+            "close_label",
+            "close_on_action",
+            "dialog_id",
+            "disabled",
+            "empty_label",
+            "entries",
+            "fingerprint",
+            "has_activator",
+            "has_empty",
+            "has_item_end",
+            "has_item_start",
+            "input_attrs",
+            "input_id",
+            "label",
+            "label_attrs",
+            "listbox_id",
+            "loop",
+            "open",
+            "placeholder",
+            "query",
+            "regions",
+            "root_id",
+            "search_label",
+            "size",
+            "title_id",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_command_palette_snapshot", None)
         if cached is not None:
@@ -539,6 +695,10 @@ class CCommandPalette(LibraryComponent):
                 option_id=option_id,
                 label_id=label_id,
                 description_id=description_id,
+                # Tell assistive technology about the shortcut the hint
+                # shows. The application must handle that key combination,
+                # and a disabled command offers no shortcut.
+                keyshortcuts=None if command_disabled else _aria_keyshortcuts(shortcut),
                 slot_data=slot_data,
             )
 
@@ -813,6 +973,7 @@ class CCommandPalette(LibraryComponent):
                     aria-selected="false"
                     c-aria-labelledby="entry.command.label_id"
                     c-aria-describedby="entry.command.description_id"
+                    c-aria-keyshortcuts="entry.command.keyshortcuts"
                     c-aria-disabled="'true' if entry.command.disabled else None"
                     c-data-value="entry.command.value"
                     c-data-disabled="'' if entry.command.disabled else None"
@@ -904,6 +1065,7 @@ class CCommandPalette(LibraryComponent):
                       aria-selected="false"
                       c-aria-labelledby="command.label_id"
                       c-aria-describedby="command.description_id"
+                      c-aria-keyshortcuts="command.keyshortcuts"
                       c-aria-disabled="'true' if command.disabled else None"
                       c-data-value="command.value"
                       c-data-disabled="'' if command.disabled else None"
@@ -1380,6 +1542,9 @@ class CCommandPalette(LibraryComponent):
           let actionGeneration = 0;
           let closeGeneration = 0;
           let pendingControlledClose = null;
+          // A closing command's onAction waits here until the close applies,
+          // so the owner's focus() outside the modal works.
+          let pendingAction = null;
           let formGuard = null;
           let effectStarted = false;
           const queue = (work) => {
@@ -1554,6 +1719,26 @@ class CCommandPalette(LibraryComponent):
               notifyQuery("", "close", reason, source, false);
             }
             if (generation !== closeGeneration) return;
+            // Run onAction outside the reactive effect, so the effect does
+            // not track what it reads.
+            if (pendingAction !== null) queue(runPendingAction);
+          };
+          const runAction = (value, detail) => {
+            try {
+              callbacks.action?.(value, detail);
+            } catch (error) {
+              // The close is already requested; report the error as uncaught.
+              if (typeof globalThis.reportError === "function") {
+                globalThis.reportError(error);
+              } else {
+                queueMicrotask(() => { throw error; });
+              }
+            }
+          };
+          const runPendingAction = () => {
+            const action = pendingAction;
+            pendingAction = null;
+            if (action !== null) runAction(action.value, action.detail);
           };
           const commitVisibility = (nextOpen, reason, source, { notify = false } = {}) => {
             const next = Boolean(nextOpen) && !configuration.disabled;
@@ -1588,7 +1773,13 @@ class CCommandPalette(LibraryComponent):
                   pendingControlledClose === closeRequest
                   && logicalOpen
                   && props.open === logicalOpen
-                ) pendingControlledClose = null;
+                ) {
+                  pendingControlledClose = null;
+                }
+                // Vue queued the owner's synchronous open=false before this
+                // task, so it has applied. Whatever the owner did, the waiting
+                // command runs now and never on a later close.
+                runPendingAction();
               });
               return false;
             }
@@ -1649,20 +1840,42 @@ class CCommandPalette(LibraryComponent):
               input.focus({ preventScroll: true });
             }
             const close = command.closeOnAction ?? configuration.closeOnAction;
-            callbacks.action?.(command.value, {
+            const detail = {
               query,
               source,
               item: option,
               event,
               closeOnAction: close,
-            });
+            };
+            // Keep actions in the order they were chosen.
+            runPendingAction();
+            if (!close) {
+              callbacks.action?.(command.value, detail);
+              return;
+            }
+            const pending = { value: command.value, detail };
+            pendingAction = pending;
+            try {
+              requestVisibility(false, "action", option);
+            } catch (error) {
+              // An owner callback threw, so no settle may run this action.
+              // Controlled mode waits a microtask for an open=false set first.
+              if (pendingAction === pending) {
+                if (openControlled) queue(runPendingAction);
+                else runPendingAction();
+              }
+              throw error;
+            }
+            // An uncontrolled close (or an already applied controlled one)
+            // leaves nothing to wait for: run now, inside the user's event,
+            // even if onOpenChange reopened the palette.
             if (
-              generation !== actionGeneration
-              || !active
-              || host[ownerKey] !== owner
-              || !option.isConnected
-            ) return;
-            if (close) requestVisibility(false, "action", option);
+              generation === actionGeneration
+              && pendingAction === pending
+              && (!openControlled || !logicalOpen)
+            ) {
+              runPendingAction();
+            }
           };
 
           collection = activeRuntime.create({
@@ -1966,6 +2179,13 @@ class CCommandPalette(LibraryComponent):
             actionGeneration += 1;
             compositionGeneration += 1;
             closeGeneration += 1;
+            // A waiting command still reaches the owner after cleanup, for
+            // example when the owner unmounts the palette while closing it.
+            const leftoverAction = pendingAction;
+            pendingAction = null;
+            if (leftoverAction !== null) {
+              queueMicrotask(() => runAction(leftoverAction.value, leftoverAction.detail));
+            }
             removeFormGuard();
             tasks.clear();
             watcher?.cleanup();

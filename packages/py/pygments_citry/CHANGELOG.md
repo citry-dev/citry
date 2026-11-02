@@ -6,6 +6,10 @@ All notable changes to `pygments-citry` are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- pygments-citry now supports Python 3.15.
+
 ### Changed
 
 - **Breaking:** pygments-citry now requires Python 3.11 or newer. On

@@ -201,9 +201,9 @@ def test_conflicting_form_owner_is_rejected(component: str) -> None:
 @pytest.mark.parametrize(
     ("template", "message"),
     [
-        ('<c-CFileInput capture="rear" />', "capture must be one of"),
-        ('<c-CFileInput variant="raised" />', "variant must be one of"),
-        ('<c-CFileInput size="xl" />', "size must be one of"),
+        ('<c-CFileInput capture="rear" />', r"CFileInput\.Kwargs\.capture expects Literal\["),
+        ('<c-CFileInput variant="raised" />', r"CFileInput\.Kwargs\.variant expects Literal\["),
+        ('<c-CFileInput size="xl" />', r"CFileInput\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"),
         ('<c-CFileInput id="bad id" />', "ASCII whitespace"),
         ("<c-CDropTarget c-label=\"''\" />", "label must be a nonempty"),
     ],

@@ -5,6 +5,8 @@ class-definition errors, and the three-level config resolution
 (docs/design/events.md sections 3.1 to 3.6 and 7.2).
 """
 
+import _py_abc
+import abc
 import functools
 import gc
 import json
@@ -22,6 +24,7 @@ import citry as citry_module
 from citry import Citry as _Citry
 from citry import Component, NestedSchemaReplacedWarning
 from citry.ext.events import EventsExtension, event
+from citry.ext.events.emission import EventInstanceEntry, build_events_manifest
 from citry.ext.events.handlers import EventOptions, event_options
 from citry.ext.events.schemas import validate_args
 
@@ -531,6 +534,37 @@ class TestStateCapture:
             " _public, _model, _storage, _max_bytes, _max_age." in str(err.value)
         )
 
+    @pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["abc", "py_abc"])
+    def test_the_caches_an_abc_metaclass_writes_are_not_meta_typos(self, meta):
+        # ABCMeta stores its `isinstance()` caches on the class: CPython's
+        # `_abc_impl`, or the `_abc_registry` group that PyPy's `abc.ABCMeta`
+        # and `_py_abc` both write.
+        # Every Pydantic model is such a class, so neither set may read as a
+        # misspelt meta name on any interpreter.
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+
+            class State(metaclass=meta):
+                x: int = 0
+                _public = ("x",)
+
+        assert Comp.State(x=2).x == 2
+
+    @pytest.mark.parametrize("typo", ["_pubilc", "_abc_cahce"])
+    def test_a_misspelt_meta_name_on_an_abc_state_still_fails(self, typo):
+        # Only the exact names the metaclass writes are skipped, so a typo
+        # that merely looks like one of them still fails.
+        app = _Citry()
+
+        with pytest.raises(ValueError, match=f"'{typo}' is not a recognized State meta attribute"):
+
+            class Comp(Component):
+                citry = app
+
+                State = _py_abc.ABCMeta("State", (), {"__annotations__": {"x": int}, "x": 0, typo: ("x",)})
+
     def test_underscore_state_methods_are_helpers(self):
         app = _Citry()
 
@@ -957,7 +991,7 @@ class TestHandlerEnumeration:
             "Component Comp: invalid config field on its nested 'Events' class (the"
             " 'events' extension). '_guardd' is not a recognized Events config attribute;"
             " the recognized names are:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names."
             " Did you mean '_guard'?" in str(err.value)
         )
@@ -1433,6 +1467,10 @@ class TestEventDecorator:
                 def export(self):
                     return None
 
+                @event(detached=True)
+                def preview(self):
+                    return None
+
                 @event
                 def refresh(self):
                     return None
@@ -1444,10 +1482,34 @@ class TestEventDecorator:
         # Each knob rides independently; the one not given keeps its default.
         assert event_options(handlers["autosave"].func) == EventOptions(latest_wins=True)
         assert event_options(handlers["export"].func) == EventOptions(bundle=False)
-        # Omitted knobs default to latest_wins=False, bundle=True; an
+        assert event_options(handlers["preview"].func) == EventOptions(detached=True)
+        # Omitted knobs default to latest_wins=False, bundle=True, detached=False; an
         # undecorated handler carries no options record at all.
         assert event_options(handlers["refresh"].func) == EventOptions()
         assert event_options(handlers["plain"].func) is None
+
+    def test_manifest_marks_only_detached_handlers(self):
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+
+            class Events:
+                @event(detached=True, latest_wins=True)
+                def preview(self):
+                    return None
+
+                def save(self):
+                    return None
+
+        entry = EventInstanceEntry("r1", Comp.class_id, None, "{}")
+        manifest = build_events_manifest(_events_ext(app), app, [entry])
+        [descriptor] = manifest["componentClasses"]
+        # The browser reads `detached` to allow `wait: false`; the default stays omitted.
+        assert descriptor["eventHandlers"] == {
+            "preview": {"httpMethod": "POST", "latestCallWins": True, "detached": True},
+            "save": {"httpMethod": "POST"},
+        }
 
     def test_decorator_value_validation(self):
         with pytest.raises(ValueError, match="name") as err:
@@ -1484,6 +1546,10 @@ class TestEventDecorator:
         with pytest.raises(ValueError, match="bundle") as err:
             event(bundle="no")
         assert "@event(bundle=...) must be True or False; got 'no'." in str(err.value)
+
+        with pytest.raises(ValueError, match="detached") as err:
+            event(detached=1)
+        assert "@event(detached=...) must be True or False; got 1." in str(err.value)
 
 
 class TestConfigResolution:
@@ -1714,10 +1780,27 @@ class TestConfigFieldValidation:
             "Extension 'events': invalid config field in the 'extensions_defaults'"
             " setting. '_guardd' is not a recognized Events config attribute; the"
             " recognized names are:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names."
             " Did you mean '_guard'?" in str(err.value)
         )
+
+    @pytest.mark.parametrize("meta", [abc.ABCMeta, _py_abc.ABCMeta], ids=["abc", "py_abc"])
+    def test_the_caches_an_abc_metaclass_writes_are_not_config_fields(self, meta):
+        # An ABC config class carries its metaclass's subclass caches, which
+        # the author never wrote, so they must not read as unknown settings.
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+            template = """
+              <p>x</p>
+            """
+
+            class Events(metaclass=meta):
+                _debounce = 5
+
+        assert Comp.Events._debounce == 5
 
     def test_defaults_handler_rejected(self):
         # Event handlers live on each component's Events class; there is no
@@ -1730,7 +1813,7 @@ class TestConfigFieldValidation:
             " setting. 'refresh' cannot be a global default: unprefixed names on Events"
             " are event handlers, and event handlers are defined on each component's"
             " nested Events class. Only the underscore config can be defaulted globally:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names." in str(err.value)
         )
 
@@ -1761,7 +1844,7 @@ class TestConfigFieldValidation:
             " 'events' extension). 'greeting' must be an event handler (unprefixed names"
             " on Events are handlers, and a handler is a plain method defined with"
             " 'def'); got 'hi'. Configuration uses the underscore names:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names." in str(err.value)
         )
 
@@ -1806,7 +1889,7 @@ class TestConfigFieldValidation:
             " on Events are handlers, and a handler is a plain method defined with"
             " 'def'); got functools.partial(<built-in function print>, 'hi')."
             " Configuration uses the underscore names:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names." in str(err.value)
         )
 

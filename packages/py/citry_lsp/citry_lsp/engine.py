@@ -17,7 +17,14 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from lsprotocol import types
 
 from citry import LspPosition, LspRange
-from citry._browser_expressions import _normalized_dynamic_slot_source, _vue_hyphenated_prop_name, _vue_prop_name
+from citry._authored_expression import parse_authored_expression
+from citry._browser_expressions import (
+    _ascii_lower,
+    _normalized_dynamic_slot_source,
+    _tokens,
+    _vue_hyphenated_prop_name,
+    _vue_prop_name,
+)
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
@@ -56,6 +63,16 @@ from citry._registry_lint import (
     unknown_inject_key_findings,
     unknown_url_findings,
 )
+from citry._slot_props import (
+    ScopedFill,
+    SlotOutlet,
+    lint_unknown_slot_props,
+    outlets_for_slot,
+    scoped_fills,
+    slot_outlets,
+    slot_prop_name,
+    unknown_slot_props_for,
+)
 from citry._source_lines import source_lines
 from citry._vue_compile_lint import lint_vue_compile
 from citry._walk import Call, run
@@ -74,6 +91,7 @@ from citry.analysis import (
     BrowserObjectProperty,
     BrowserProp,
     ComponentJsLintConsumer,
+    JsonWireField,
     JsonWireType,
     MarkupLintConsumer,
     MarkupLintFinding,
@@ -780,10 +798,17 @@ def template_lint_diagnostics(
                 break
             known_names.update(current_schema_names)
             known_names.update(variable.name for variable in lint.template_variables)
+            namespace_policy = context.namespace_policy
+            if lint.template_data_keys is not None:
+                # The component lists every key its template_data() returns,
+                # so the template is checked against that list, as `citry
+                # check` does.
+                known_names.update(lint.template_data_keys)
+                namespace_policy = "closed"
             consumers.append(
                 TemplateLintConsumer(
                     known_names=frozenset(known_names),
-                    namespace_policy=("allow-extra" if lint.allows_extra_variables else context.namespace_policy),
+                    namespace_policy=("allow-extra" if lint.allows_extra_variables else namespace_policy),
                     rule_unknown_template_variable=lint.rule_unknown_template_variable,
                 )
             )
@@ -1029,6 +1054,8 @@ def _markup_lint_consumer(lint: TemplateLintInfo, *, root_may_receive_attributes
     return MarkupLintConsumer(
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
         root_may_receive_attributes=root_may_receive_attributes,
+        # The app worker sends the engine's CSP policy in the lint record.
+        csp=lint.security_csp,
     )
 
 
@@ -1187,12 +1214,11 @@ def _i18n_call_findings(
     template: bool,
     known_types: Mapping[str, str] | None = None,
 ) -> list[tuple[int, int, str, str]]:
-    # Multiline interpolation queries retain the indentation before their
-    # closing delimiter. It is outside the expression and must not make an
-    # otherwise valid formatter call fail Python parsing.
-    parsed_source = source.rstrip() if template else source
     try:
-        tree = ast.parse(parsed_source, mode="eval" if template else "exec")
+        # A template expression is parsed the way Citry runs it, so one split
+        # across lines without parentheses, or followed by the indentation
+        # before its closing delimiter, is read like its one-line spelling.
+        tree: ast.AST = parse_authored_expression(source) if template else ast.parse(source)
     except (SyntaxError, TypeError, ValueError):
         return []
     findings: list[tuple[int, int, str, str]] = []
@@ -1456,8 +1482,9 @@ def _literal_trans_values(attribute: Any | None) -> dict[str, ast.expr] | None:
     if attribute is None or attribute.inner_value is None:
         return {}
     try:
-        expression = ast.parse(attribute.inner_value.content, mode="eval").body
-    except SyntaxError:
+        # The value may start on an indented line of a multi-line attribute.
+        expression = parse_authored_expression(attribute.inner_value.content).body
+    except (SyntaxError, ValueError):
         return None
     if not isinstance(expression, ast.Dict) or not all(
         key is not None and isinstance(key, ast.Constant) and type(key.value) is str for key in expression.keys
@@ -1618,6 +1645,21 @@ def browser_diagnostics(
                         source="citry",
                     )
                 )
+        # A `v-slot` key the receiving component's `<c-slot>` never passes is
+        # `undefined` in the fill without any error, so it is reported here at
+        # the key. A receiver the editor cannot read gets no warning.
+        fills = scoped_fills(parsed.template, parse_nested=parser)
+        if fills:
+            # Each receiving component is read once, however many fills target it.
+            receivers: dict[str, tuple[SlotOutlet, ...] | None] = {}
+            for fill in fills:
+                tag = _ascii_lower(fill.tag)
+                if tag not in receivers:
+                    receivers[tag] = _receiver_slot_outlets(fill.tag, project, document, open_documents)
+            diagnostics.extend(
+                _vue_finding_diagnostic(region, finding)
+                for finding in lint_unknown_slot_props(fills, unknown_slot_props_for(receivers))
+            )
         diagnostics.extend(
             _vue_finding_diagnostic(region, finding)
             for finding in (
@@ -1826,6 +1868,183 @@ def _owner_rule_severities(
     if analysis is None:
         return []
     return [getattr(analysis.component_lint.get(owner.definition_id, analysis.lint), rule) for owner in consumers]
+
+
+def _receiver_slot_outlets(
+    tag: str,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[SlotOutlet, ...] | None:
+    """Return the `<c-slot>` tags of the component a `c-*` tag renders, or `None` when its template is unknown."""
+    component = None if project.catalog is None else project.catalog.get_tag(tag)
+    if component is None:
+        return None
+    template = _component_template_ast(component, project, document, open_documents)
+    if template is None:
+        return None
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    return slot_outlets(template, parse_nested=parser)
+
+
+class _SlotBindingTypes:
+    """
+    Type the names a `<c-fill v-slot>` binds, from the props its slot passes, on demand.
+
+    The receiving component's template is read only for a fill whose names an
+    expression actually uses, and once per component and slot, so a page
+    with many scoped fills does not slow down every completion and hover.
+    """
+
+    def __init__(
+        self,
+        template: Any,
+        parser: Callable[[str], Any],
+        project: ProjectState,
+        document: DocumentState,
+        open_documents: Mapping[str, DocumentState] | None,
+    ) -> None:
+        self._template = template
+        self._parser = parser
+        self._project = project
+        self._document = document
+        self._open_documents = open_documents
+        self._fills: dict[int, ScopedFill] | None = None
+        self._props: dict[tuple[str, str], dict[str, JsonWireField] | None] = {}
+        self._types: dict[int, dict[str, JsonWireType]] = {}
+
+    def wire_type(self, binding: BrowserBinding) -> JsonWireType | None:
+        """Return a `v-slot` name's type, or `None` when its slot or prop is not known."""
+        if binding.kind != "v-slot":
+            return None
+        start = binding.source_start_index
+        if start not in self._types:
+            self._types[start] = self._fill_types(start)
+        return self._types[start].get(binding.name)
+
+    def _fill_types(self, pattern_start: int) -> dict[str, JsonWireType]:
+        if self._fills is None:
+            # A `v-slot` binding records where its pattern starts, which is
+            # also where `scoped_fills` says the fill's pattern starts.
+            self._fills = {
+                fill.pattern_start_index: fill for fill in scoped_fills(self._template, parse_nested=self._parser)
+            }
+        fill = self._fills.get(pattern_start)
+        if fill is None:
+            return {}
+        key = (_ascii_lower(fill.tag), fill.slot)
+        if key not in self._props:
+            self._props[key] = _receiver_slot_prop_types(
+                fill.tag, fill.slot, self._project, self._document, self._open_documents
+            )
+        props = self._props[key]
+        if props is None:
+            return {}
+        if fill.keys is None:
+            name = fill.pattern.strip()
+            # `v-slot="props"` binds the whole props object.
+            if re.fullmatch(r"[A-Za-z_$][\w$]*", name):
+                return {name: JsonWireType("object", fields=tuple(props.values()))}
+            return {}
+        return {key.local: props[key.name].value for key in fill.keys if key.local is not None and key.name in props}
+
+
+def _receiver_slot_prop_types(
+    tag: str,
+    slot: str,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> dict[str, JsonWireField] | None:
+    """
+    Return each Vue prop a component's slot passes, with its type, or `None` when the slot is not known.
+
+    A prop whose expression is a `js_data` name, a Vue `v-for` alias over one,
+    or a field of either gets that type, and a literal gets its own type. A
+    prop that only some `<c-slot>` tags pass is optional, and one they
+    disagree on is `unknown`. When several `<c-slot>` tags serve the
+    slot and disagree on a prop's type, the prop is `unknown`.
+    """
+    component = None if project.catalog is None else project.catalog.get_tag(tag)
+    if component is None:
+        return None
+    return _component_slot_prop_types(component, slot, project, document, open_documents)
+
+
+def _component_slot_prop_types(
+    component: ComponentRecord,
+    slot: str,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> dict[str, JsonWireField] | None:
+    """Return each Vue prop one component's slot passes, as `_receiver_slot_prop_types` does."""
+    template = _component_template_ast(component, project, document, open_documents)
+    if template is None:
+        return None
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    serving = outlets_for_slot(slot_outlets(template, parse_nested=parser), slot)
+    if serving is None:
+        return None
+    roots = _component_js_data_roots(component, project, document, open_documents).roots
+    expressions = tuple(
+        expression
+        for expression in browser_expressions(template, parse_nested=parser)
+        if expression.element is not None and expression.element.lower() == "c-slot"
+    )
+    found: dict[str, list[JsonWireType]] = {}
+    for outlet in serving:
+        for prop in outlet.props:
+            expression = next(
+                (
+                    candidate
+                    for candidate in expressions
+                    if prop.start_index <= candidate.start_index <= prop.end_index
+                ),
+                None,
+            )
+            wire = JsonWireType("unknown") if expression is None else _outlet_prop_wire_type(expression, roots)
+            found.setdefault(prop.name, []).append(wire)
+    # A prop that only some of the slot's `<c-slot>` tags pass may be
+    # `undefined` in the fill, so it is optional; tags that disagree on its
+    # type leave it `unknown`.
+    return {
+        name: JsonWireField(
+            name,
+            wires[0] if all(wire == wires[0] for wire in wires) else JsonWireType("unknown"),
+            required=len(wires) == len(serving),
+        )
+        for name, wires in found.items()
+    }
+
+
+def _outlet_prop_wire_type(expression: BrowserExpression, roots: tuple[_JsDataRoot, ...]) -> JsonWireType:
+    """Type one `:row` value on a `<c-slot>` from the receiving component's names."""
+    source = expression.source.strip()
+
+    def name_type(name: str) -> JsonWireType:
+        # A Vue `v-for` alias around the `<c-slot>` hides a root of the same name.
+        binding = next(
+            (candidate for candidate in reversed(expression.binding_details) if candidate.name == name), None
+        )
+        if binding is not None:
+            return _browser_binding_wire_type(binding, roots)
+        root = next((candidate for candidate in roots if candidate.name == name), None)
+        return root.wire_type if root is not None else JsonWireType("unknown")
+
+    if re.fullmatch(r"[A-Za-z_$][\w$]*", source):
+        return name_type(source)
+    member = re.fullmatch(r"([A-Za-z_$][\w$]*)\??\.([A-Za-z_$][\w$]*)", source)
+    if member is not None:
+        owner_type = name_type(member.group(1))
+        if owner_type.kind == "object":
+            field = next((candidate for candidate in owner_type.fields if candidate.name == member.group(2)), None)
+            if field is not None:
+                return field.value
+            if owner_type.additional is not None:
+                return owner_type.additional
+        return JsonWireType("unknown")
+    return browser_literal_wire_type(source)
 
 
 def _tag_js_source(
@@ -2331,6 +2550,7 @@ def _component_js_projection_parts(
         props,
         tuple(events),
         state_roots,
+        detached_event_names=_detached_event_names(consumers, project),
         binding_types=component_globals,
         include_root_variables=False,
         component_js=True,
@@ -2361,6 +2581,9 @@ class _TemplateScope:
     native_names: tuple[str, ...]
     instance: _TemplateComponentInstance | None
     i18n: Any
+    # Types the names `<c-fill v-slot>` binds in this template, reading each
+    # receiving component only when an expression uses one of those names.
+    slot_types: _SlotBindingTypes | None = None
 
 
 def _template_scope(
@@ -2394,6 +2617,7 @@ def _template_scope(
         () if instance is None else instance.props,
         tuple(events),
         state_roots,
+        detached_event_names=_detached_event_names(consumers, project),
         component_analysis=None if instance is None else instance.analysis,
         writable_state_names=_shared_writable_state_names(consumers, project),
         i18n=project.i18n,
@@ -2405,7 +2629,12 @@ def _template_scope(
     )
     if instance is not None:
         preamble = f"{preamble}\n{instance.source}"
-    return _TemplateScope(preamble, roots, state_roots, tuple(native_names), instance, project.i18n)
+    parsed = document.parsed.get(region.key)
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    slot_types = (
+        None if parsed is None else _SlotBindingTypes(parsed.template, parser, project, document, open_documents)
+    )
+    return _TemplateScope(preamble, roots, state_roots, tuple(native_names), instance, project.i18n, slot_types)
 
 
 def _template_expression_block(
@@ -2429,7 +2658,9 @@ def _template_expression_block(
     `_component_prop_value_types` returns it.
     """
     binding_types = {
-        binding.name: _browser_binding_wire_type(binding, scope.roots) for binding in expression.binding_details
+        binding.name: (scope.slot_types.wire_type(binding) if scope.slot_types is not None else None)
+        or _browser_binding_wire_type(binding, scope.roots)
+        for binding in expression.binding_details
     }
     name_declarations = _browser_name_declarations(
         scope.roots,
@@ -3551,11 +3782,10 @@ def _python_i18n_uses(
     template: bool,
 ) -> list[tuple[str, str, str | None, str | None, str | None, str | None, int, int]]:
     """Extract direct Python/template calls with exact string-token spans."""
-    # The removed suffix is only template indentation after the expression,
-    # so every retained AST byte offset still maps to the authored source.
-    parsed_source = source.rstrip() if template else source
     try:
-        tree = ast.parse(parsed_source, mode="eval" if template else "exec")
+        # Parse a template expression the way Citry runs it; the helper's
+        # positions point into `source`.
+        tree: ast.AST = parse_authored_expression(source) if template else ast.parse(source)
     except (SyntaxError, TypeError, ValueError):
         return []
     uses: list[tuple[str, str, str | None, str | None, str | None, str | None, int, int]] = []
@@ -3930,7 +4160,7 @@ def _trans_i18n_uses(template: Any, region: TemplateRegion) -> Generator[Call, A
 def _literal_trans_value_spans(source: str) -> tuple[tuple[str, int, int], ...]:
     """Return literal mapping keys from one ``c-values`` expression."""
     try:
-        expression = ast.parse(source, mode="eval").body
+        expression = parse_authored_expression(source).body
     except (SyntaxError, TypeError, ValueError):
         return ()
     if not isinstance(expression, ast.Dict):
@@ -4197,6 +4427,9 @@ def completion_result(
     modifier_result = _citry_binding_modifier_completion_result(document, position)
     if modifier_result is not None:
         return modifier_result
+    listener_modifier_result = _vue_listener_modifier_completion_result(document, position, project)
+    if listener_modifier_result is not None:
+        return listener_modifier_result
     browser_result = _browser_data_completion_result(document, position, project, open_documents)
     if browser_result is not None:
         return browser_result
@@ -4350,6 +4583,7 @@ def completion_result(
         authored_attrs,
         edit_range=attribute_context.edit_range,
         preserve_value=attribute_context.preserve_value,
+        vue=not _cursor_inside_v_pre(document, region, source, cursor, project),
     )
     if component is None:
         return CompletionResult(tuple(items), is_incomplete=True)
@@ -4505,10 +4739,7 @@ def _citry_binding_modifier_markdown(reference: _CitryBindingReference) -> str |
         if reference.channel == "event" and reference.base_name == "poll":
             documentation = "Use one whole number of seconds, such as `.30s`, as the polling interval."
         elif reference.previous_modifier in {"debounce", "throttle"}:
-            documentation = (
-                "Use a whole number followed by `ms` or `s`, such as `.300ms` or `.1s`, "
-                f"as the `.{reference.previous_modifier}` duration."
-            )
+            documentation = f"{_CITRY_DURATION_DOCUMENTATION}, as the `.{reference.previous_modifier}` duration."
         else:
             return None
     else:
@@ -4597,7 +4828,26 @@ def hover(
     # structural tag makes the otherwise recognizable document invalid.
     if syntax_reference is None:
         syntax_reference = _syntax_reference_from_source(source, cursor)
+    # Vue leaves an element with `v-pre` as written, so its `v-if` or `@click`
+    # there is a plain attribute with nothing to explain. `v-pre` itself has
+    # no entry in `_VUE_SYNTAX`, so no hover is lost here.
+    if (
+        syntax_reference is not None
+        and syntax_reference.spec in _VUE_SYNTAX
+        and _cursor_inside_v_pre(document, region, source, cursor, project)
+    ):
+        syntax_reference = None
     if syntax_reference is not None:
+        # A listener's modifier gets its own explanation over its own span.
+        modifier_hover = _vue_listener_modifier_hover(source, syntax_reference, parser_index)
+        if modifier_hover is not None:
+            modifier_reference, modifier_markdown = modifier_hover
+            modifier_range = _mapped_syntax_range(document, region, source, modifier_reference)
+            if modifier_range is not None:
+                return types.Hover(
+                    types.MarkupContent(types.MarkupKind.Markdown, modifier_markdown),
+                    range=modifier_range,
+                )
         syntax_range = _mapped_syntax_range(document, region, source, syntax_reference)
         if syntax_range is not None:
             return types.Hover(
@@ -4627,10 +4877,24 @@ def hover(
                 slot_name = token_text
             slot = _find_field(parent.slots, slot_name or "")
             if slot is None:
-                return None
+                # A slot that no `Slots` class declares still shows the Vue
+                # props its `<c-slot>` tags pass.
+                if not slot_name or token_text != slot_name:
+                    return None
+                vue_props = _component_slot_prop_types(parent, slot_name, project, document, open_documents)
+                if not vue_props:
+                    return None
+                content = _vue_slot_markdown(slot_name, vue_props)
+                return types.Hover(
+                    types.MarkupContent(types.MarkupKind.Markdown, content),
+                    range=_range(
+                        region.source_map.map_range(_char_to_byte(source, start), _char_to_byte(source, end))
+                    ),
+                )
             data_fields = project.component_slot_data_fields(parent, slot.name)
             if token_text == slot.name:
-                content = _slot_markdown(slot, data_fields)
+                vue_props = _component_slot_prop_types(parent, slot.name, project, document, open_documents)
+                content = _slot_markdown(slot, data_fields, vue_props)
             elif data_fields is not None and token_text in data_fields:
                 content = _slot_data_field_markdown(token_text, slot.name, parent)
             else:
@@ -5396,12 +5660,18 @@ def _query_slot_data_types(
     return found
 
 
+def _parse_query_host(source: str, *, loop: bool) -> ast.Expression:
+    """Parse a template expression, or a loop clause, the way Citry runs it."""
+    # A loop clause is read inside a generator, which already allows newlines;
+    # any other expression is read inside `(\n...\n)`.
+    return ast.parse(f"[\nNone for {source}\n]", mode="eval") if loop else parse_authored_expression(source)
+
+
 def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:
     """Return whether one complete Python host mutates the render context."""
     source = query.source.rstrip()
-    framed = f"[\nNone for {source}\n]" if query.host_kind == "loop" else source
     try:
-        tree = ast.parse(framed, mode="eval")
+        tree = _parse_query_host(source, loop=query.host_kind == "loop")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return True
     return any(isinstance(node, ast.NamedExpr) for node in ast.walk(tree))
@@ -5410,9 +5680,8 @@ def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:
 def _query_contains_lambda_named_expression(query: TemplatePythonQuery) -> bool:
     """Detect Citry's context-leaking lambda assignment special case."""
     source = query.source.rstrip()
-    framed = f"[\nNone for {source}\n]" if query.host_kind == "loop" else source
     try:
-        tree = ast.parse(framed, mode="eval")
+        tree = _parse_query_host(source, loop=query.host_kind == "loop")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return True
     return any(
@@ -6260,6 +6529,233 @@ _CITRY_TIMING_EXAMPLES = ("100ms", "250ms", "300ms", "500ms", "1s")
 _CITRY_POLL_EXAMPLES = ("1s", "5s", "30s", "60s")
 _CITRY_TIME_SEGMENT = re.compile(r"[0-9]+(?:ms|s)\Z")
 
+
+@dataclass(frozen=True, slots=True)
+class _VueListenerModifierSpec:
+    """
+    One modifier a Vue listener (`@event` or `v-on:event`) accepts.
+
+    `scope` says which events the modifier belongs to: `keyboard` holds key
+    names, which the parser rejects on a static event name that is not a
+    keyboard event; `mouse` holds the mouse buttons. On a keyboard event
+    Vue reads `.left` and `.right` as arrow keys and ignores `.middle`.
+    `citry` marks the modifiers Citry adds, which the parser accepts only on
+    HTML elements.
+    """
+
+    name: str
+    detail: str
+    documentation: str
+    documentation_url: str
+    scope: Literal["any", "keyboard", "mouse"] = "any"
+    citry: bool = False
+
+
+_VUE_EVENT_HANDLING_URL = "https://vuejs.org/guide/essentials/event-handling.html"
+_VUE_EVENT_MODIFIERS_URL = f"{_VUE_EVENT_HANDLING_URL}#event-modifiers"
+_VUE_KEY_MODIFIERS_URL = f"{_VUE_EVENT_HANDLING_URL}#key-modifiers"
+_VUE_SYSTEM_KEYS_URL = f"{_VUE_EVENT_HANDLING_URL}#system-modifier-keys"
+_VUE_MOUSE_BUTTONS_URL = f"{_VUE_EVENT_HANDLING_URL}#mouse-button-modifiers"
+_CITRY_LISTENER_MODIFIERS_URL = "https://citry.dev/syntax/vue/#listener-modifiers"
+
+
+def _vue_key_modifier(name: str, key: str, note: str = "") -> _VueListenerModifierSpec:
+    """Describe one of Vue's key aliases, which match `event.key`."""
+    return _VueListenerModifierSpec(
+        name,
+        f"Require the {key} key",
+        f"Run the listener only when the pressed key is {key}.{f' {note}' if note else ''}",
+        _VUE_KEY_MODIFIERS_URL,
+        scope="keyboard",
+    )
+
+
+def _vue_system_key_modifier(name: str, key: str) -> _VueListenerModifierSpec:
+    """Describe one of Vue's modifier-key checks."""
+    return _VueListenerModifierSpec(
+        name,
+        f"Require the {key} key to be held",
+        f"Run the listener only while the {key} key is held down.",
+        _VUE_SYSTEM_KEYS_URL,
+    )
+
+
+# Keep the Vue part in step with the modifiers Vue's `compiler-dom` handles
+# itself (`VUE_NON_KEY_MODIFIERS` in
+# crates/citry_template_parser/src/parser.rs) and Vue's documented key
+# aliases, and the Citry part with `CITRY_LISTENER_MODIFIERS` in the same
+# file.
+_VUE_LISTENER_DURATION_HINT = "To change the 250 ms, add a duration after the modifier, such as `.300ms` or `.1s`."
+_VUE_LISTENER_MODIFIERS = (
+    _VueListenerModifierSpec(
+        "stop",
+        "Stop the event from reaching parent elements",
+        "Call `event.stopPropagation()` before the listener runs.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "prevent",
+        "Prevent the browser's default action",
+        "Call `event.preventDefault()` before the listener runs, for example so a form does not submit.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "self",
+        "Ignore events that start on a child",
+        "Run the listener only when the event starts on this element itself, not on a child. With "
+        "`.window` or `.document`, the event must start on the window or the document itself, as "
+        "`resize` does on the window and `selectionchange` on the document.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "capture",
+        "Run before inner elements' listeners",
+        "Run this listener before the listeners on the elements inside this one.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "once",
+        "Run at most once",
+        "Remove the listener after its first event.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "passive",
+        "Promise not to cancel the event",
+        "Tell the browser the listener never calls `preventDefault()`, so scrolling stays smooth. "
+        "Do not combine it with `.prevent`: a passive listener cannot cancel the event.",
+        _VUE_EVENT_MODIFIERS_URL,
+    ),
+    _vue_system_key_modifier("ctrl", "Ctrl"),
+    _vue_system_key_modifier("shift", "Shift"),
+    _vue_system_key_modifier("alt", "Alt"),
+    _VueListenerModifierSpec(
+        "meta",
+        "Require the Meta key to be held",
+        "Run the listener only while the Meta key is held: Command on macOS, the Windows key on Windows.",
+        _VUE_SYSTEM_KEYS_URL,
+    ),
+    _VueListenerModifierSpec(
+        "exact",
+        "Require exactly these modifier keys",
+        "Run the listener only when exactly the keys named on it, such as `.ctrl`, are held, and no "
+        "other Ctrl, Shift, Alt or Meta key. Alone, `@click.exact` runs only when none is held.",
+        f"{_VUE_EVENT_HANDLING_URL}#exact-modifier",
+    ),
+    _VueListenerModifierSpec(
+        "left",
+        "Require the left mouse button",
+        "Run the listener only for the left mouse button.",
+        _VUE_MOUSE_BUTTONS_URL,
+        scope="mouse",
+    ),
+    _VueListenerModifierSpec(
+        "right",
+        "Require the right mouse button",
+        "Run the listener only for the right mouse button. On `@click.right`, Vue listens for "
+        "`contextmenu`, so the listener runs when the browser would open its context menu; add "
+        "`.prevent` to keep that menu closed.",
+        _VUE_MOUSE_BUTTONS_URL,
+        scope="mouse",
+    ),
+    _VueListenerModifierSpec(
+        "middle",
+        "Require the middle mouse button",
+        "Run the listener only for the middle mouse button. On `@click.middle`, Vue listens for "
+        "`mouseup`, because browsers send `auxclick`, not `click`, for the middle button.",
+        _VUE_MOUSE_BUTTONS_URL,
+        scope="mouse",
+    ),
+    _vue_key_modifier("enter", "Enter"),
+    _vue_key_modifier("tab", "Tab"),
+    _vue_key_modifier("delete", "Delete or Backspace"),
+    _vue_key_modifier("esc", "Escape", "Same as `.escape`."),
+    # Vue also matches any key name in kebab case; Citry's docs write
+    # `.escape`, so it is offered beside Vue's shorter alias.
+    _vue_key_modifier("escape", "Escape"),
+    _vue_key_modifier("space", "Space"),
+    _vue_key_modifier("up", "Arrow Up"),
+    _vue_key_modifier("down", "Arrow Down"),
+    _vue_key_modifier("left", "Arrow Left"),
+    _vue_key_modifier("right", "Arrow Right"),
+    _VueListenerModifierSpec(
+        "outside",
+        "Run for events outside this element",
+        "Run the listener for an event that starts outside this element. Citry skips the event while the "
+        "element is hidden, so a closed menu does not react to every click.",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+    _VueListenerModifierSpec(
+        "window",
+        "Listen on the whole window",
+        "Listen on `window`, for events such as `resize` or a key pressed anywhere on the page.",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+    _VueListenerModifierSpec(
+        "document",
+        "Listen on the whole document",
+        "Listen on `document`, for events that bubble up from anywhere on the page.",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+    _VueListenerModifierSpec(
+        "debounce",
+        "Wait for a quiet period",
+        f"Run the listener once, with the last event, after 250 ms with no new event. {_VUE_LISTENER_DURATION_HINT}",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+    _VueListenerModifierSpec(
+        "throttle",
+        "Limit how often the listener runs",
+        "Run the listener for the first event, then drop the events that follow for 250 ms. "
+        f"{_VUE_LISTENER_DURATION_HINT}",
+        _CITRY_LISTENER_MODIFIERS_URL,
+        citry=True,
+    ),
+)
+# The parser rejects two of `.outside`, `.window` and `.document` together,
+# and `.outside` with `.self`, `.capture` or `.once`, because the listener
+# would never run or would run too early.
+_VUE_LISTENER_PLACES = frozenset({"outside", "window", "document"})
+_VUE_LISTENER_OUTSIDE_CONFLICTS = frozenset({"self", "capture", "once"})
+_VUE_KEYBOARD_EVENTS = frozenset({"keydown", "keyup", "keypress"})
+_CITRY_DURATION_DOCUMENTATION = "Use a whole number followed by `ms` or `s`, such as `.300ms` or `.1s`"
+_CITRY_DURATION_DETAIL = "Citry timing duration"
+# What each duration controls on a Vue listener. Throttle does not wait: it
+# runs the first event at once and drops the ones that follow.
+_VUE_LISTENER_DURATION_PURPOSE = {
+    "debounce": "for how long `.debounce` waits after the last event",
+    "throttle": "for how long `.throttle` drops events after each one it runs",
+}
+# Modifiers that read the keys held or the mouse button. Vue's checks find
+# neither on these events, so the listener never runs (`.ctrl` and the
+# other held keys) or the modifier does nothing (`.exact` and the buttons).
+_VUE_INPUT_STATE_MODIFIERS = frozenset({"ctrl", "shift", "alt", "meta", "exact", "left", "right", "middle"})
+_VUE_EVENTS_WITHOUT_INPUT_STATE = frozenset(
+    {
+        "input",
+        "beforeinput",
+        "change",
+        "submit",
+        "reset",
+        "invalid",
+        "select",
+        "toggle",
+        "scroll",
+        "scrollend",
+        "resize",
+        "focus",
+        "blur",
+        "focusin",
+        "focusout",
+        "load",
+        "error",
+    }
+)
+
 _VUE_SYNTAX = (
     _SyntaxSpec(
         "v-show",
@@ -6716,6 +7212,27 @@ _STRUCTURAL_ATTRIBUTES: dict[str, tuple[_SyntaxSpec, ...]] = {
 # tags, so add the parser's five control-flow forms after slot-owned fields.
 _STRUCTURAL_ATTRIBUTES["c-slot"] = (*_STRUCTURAL_ATTRIBUTES["c-slot"], *_GENERAL_DIRECTIVES[:5])
 _DYNAMIC_TARGET_ATTRIBUTES = _syntax_specs(kind="attribute", context="dynamic-target")
+# The Vue forms that carry Vue slot props. They are kept apart from the
+# structural lists above, which mirror the parser list that citry-core exports.
+_SLOT_PROP_SPEC = _SyntaxSpec(
+    ":",
+    "attribute",
+    "Pass Vue data to the fill",
+    "Pass the value of a Vue expression to the fill as a Vue slot prop, which the fill reads with "
+    "`v-slot`. Give it a fixed name, without modifiers.",
+    "https://citry.dev/vue/slots/#scoped-slots",
+    insert_text=':${1:row}="${2:expression}"',
+    repeatable=True,
+)
+_FILL_SLOT_PROPS_SPEC = _SyntaxSpec(
+    "v-slot",
+    "attribute",
+    "Read the slot's Vue props",
+    "Read the Vue slot props that the matching `<c-slot>` passes, as one object pattern such as `{ row }` or "
+    "one name. Choose the slot with `name`.",
+    "https://citry.dev/vue/slots/#scoped-slots",
+    insert_text='v-slot="{ ${1:row} }"',
+)
 
 
 def _is_semantic_component_tag(tag_name: str, registered_component: bool = False) -> bool:
@@ -6726,7 +7243,12 @@ def _is_semantic_component_tag(tag_name: str, registered_component: bool = False
 
 def _vue_completion_specs(tag_name: str, *, semantic_component: bool) -> tuple[_SyntaxSpec, ...]:
     """Select Vue spellings that are valid on this authored element."""
-    if tag_name.lower() in RESERVED_TAG_NAMES:
+    normalized = tag_name.lower()
+    if normalized == "c-slot":
+        return (_SLOT_PROP_SPEC,)
+    if normalized == "c-fill":
+        return (_FILL_SLOT_PROPS_SPEC,)
+    if normalized in RESERVED_TAG_NAMES:
         return ()
     event_specs = (_VUE_SYNTAX_BY_LABEL["v-on"], *_VUE_EVENT_COMPLETIONS)
     binding_specs = (_VUE_SYNTAX_BY_LABEL["v-bind"], *_VUE_BINDING_COMPLETIONS)
@@ -6940,6 +7462,14 @@ def _token_contains(token: Any, index: int, *, base_index: int) -> bool:
 def _syntax_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
     """Resolve context-sensitive structural attributes before general directives."""
     normalized_tag = tag_name.lower()
+    # The `:row` attributes on `<c-slot>` and `v-slot` on `<c-fill>` are kept
+    # out of `_STRUCTURAL_ATTRIBUTES`, which must match citry-core's list, so
+    # they are looked up here before it. The parser rejects `:name` and `:key`
+    # on `<c-slot>`, so those get no slot-prop help.
+    if normalized_tag == "c-slot" and slot_prop_name(attr_name) not in {None, "name", "key"}:
+        return _SLOT_PROP_SPEC
+    if normalized_tag == "c-fill" and attr_name == "v-slot":
+        return _FILL_SLOT_PROPS_SPEC
     if normalized_tag in RESERVED_TAG_NAMES:
         # Reserved tags accept only their context-qualified fixed syntax. This
         # keeps recovery hover from documenting parser-forbidden directives.
@@ -7174,6 +7704,7 @@ def _directive_attribute_completions(
     *,
     edit_range: types.Range,
     preserve_value: bool,
+    vue: bool = True,
 ) -> list[types.CompletionItem]:
     normalized_tag = tag_name.lower()
     semantic_component = _is_semantic_component_tag(tag_name, registered_component)
@@ -7186,7 +7717,9 @@ def _directive_attribute_completions(
     else:
         i18n_specs = () if semantic_component or normalized_tag.startswith("c-") else _I18N_BINDING_DIRECTIVES
         specs = (*_GENERAL_DIRECTIVES, *(_CLIENT_PROP_DIRECTIVES if semantic_component else ()), *i18n_specs)
-    specs = (*specs, *_vue_completion_specs(tag_name, semantic_component=semantic_component))
+    # Under `v-pre`, Vue leaves its own attributes as written, so none is offered.
+    if vue:
+        specs = (*specs, *_vue_completion_specs(tag_name, semantic_component=semantic_component))
 
     control_if_present = bool(authored_attrs & {"c-if", "c-elif", "c-else"})
     control_for_present = bool(authored_attrs & {"c-for", "c-empty"})
@@ -7548,7 +8081,8 @@ def _root_completion_context(
 def _python_name_at(source: str, cursor: int) -> bool:
     """Return whether a complete expression has a name at the cursor."""
     try:
-        tree = ast.parse(source, mode="eval")
+        # Positions still point into `source`; see `parse_authored_expression`.
+        tree = parse_authored_expression(source)
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return False
     lines = source_lines(source)
@@ -8240,6 +8774,130 @@ def _parent_component(source: str, cursor: int, catalog: CatalogIndex) -> Compon
     return None
 
 
+# `v-pre` as an attribute name, matched in a tag's text after `_without_quoted_values`
+# blanks its quoted values.
+_V_PRE_ATTRIBUTE = re.compile(r"\sv-pre(?=[\s=/>]|$)", re.IGNORECASE)
+
+
+def _cursor_inside_v_pre(
+    document: DocumentState,
+    region: TemplateRegion,
+    source: str,
+    cursor: int,
+    project: ProjectState,
+) -> bool:
+    """
+    Return whether the cursor sits on or inside an element with `v-pre`, where Vue leaves its syntax as written.
+
+    The parsed template answers exactly, including an element inside a
+    template-valued attribute. While the template does not parse, as it often
+    does while an attribute is being typed, the text around the cursor is read
+    instead.
+    """
+    parsed = document.parsed.get(region.key)
+    if parsed is None:
+        return _inside_v_pre_text(source, cursor)
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    index = len(source[:cursor].encode("utf-8"))
+    return run(_v_pre_encloses(parsed.template, index, parser, base_index=0))
+
+
+def _v_pre_encloses(template: Any, index: int, parser: Any, *, base_index: int) -> Generator[Call, Any, bool]:
+    """Return whether an element with `v-pre` contains a byte offset of the template, searching nested templates."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node: Any = element._0
+        end_tag = getattr(node, "end_tag", None)
+        start = base_index + node.start_tag.token.start_index
+        end = base_index + (end_tag.token.end_index if end_tag is not None else node.start_tag.token.end_index)
+        if not start <= index <= end:
+            continue
+        if any(attr.key.content.lower() == "v-pre" for attr in node.start_tag.attrs):
+            return True
+        for attr in node.start_tag.attrs:
+            inner = attr.inner_value
+            if attr.kind != HtmlAttrKind.Template or inner is None:
+                continue
+            if not base_index + inner.start_index <= index <= base_index + inner.end_index:
+                continue
+            nested = _parse_nested_template_source(inner.content, parser)
+            if nested is not None:
+                nested_template, nested_start, _nested_source = nested
+                return (
+                    yield Call(
+                        _v_pre_encloses,
+                        nested_template,
+                        index,
+                        parser,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+                )
+        body = getattr(node, "body", None)
+        return False if body is None else (yield Call(_v_pre_encloses, body, index, parser, base_index=base_index))
+    return False
+
+
+def _without_quoted_values(tag_text: str) -> str:
+    """Blank out quoted attribute values, so a name such as `v-pre` is found only where it is an attribute."""
+    kept: list[str] = []
+    quote = None
+    for char in tag_text:
+        if quote is not None:
+            kept.append(" ")
+            if char == quote:
+                quote = None
+        elif char in {'"', "'"}:
+            quote = char
+            kept.append(" ")
+        else:
+            kept.append(char)
+    return "".join(kept)
+
+
+def _inside_v_pre_text(source: str, cursor: int) -> bool:
+    """
+    Return whether the cursor sits on or inside an element with `v-pre`, reading the template text around it.
+
+    Used only while the template does not parse. An element inside a
+    template-valued attribute is not seen here.
+    """
+    current = source[:cursor]
+    open_tag = _open_start_tag(current)
+    # The cursor's own tag counts in full, since `v-pre` may come after the
+    # attribute being hovered or typed, as in `<div v-if="a" v-pre>`.
+    if open_tag is not None and _V_PRE_ATTRIBUTE.search(
+        _without_quoted_values(open_tag[1] + _rest_of_start_tag(source, cursor))
+    ):
+        return True
+    stack: list[tuple[str, str]] = []
+    tags = sorted(_complete_tags(current), key=lambda item: item[0])
+    for _start, tag_text, closing, name, self_closing in tags:
+        if closing:
+            for position in range(len(stack) - 1, -1, -1):
+                if stack[position][0].lower() == name.lower():
+                    del stack[position:]
+                    break
+        elif not self_closing and name.lower() not in HTML_VOID_ELEMENTS:
+            stack.append((name, tag_text))
+    return any(_V_PRE_ATTRIBUTE.search(_without_quoted_values(tag_text)) for _name, tag_text in stack)
+
+
+def _rest_of_start_tag(source: str, cursor: int) -> str:
+    """Return the text from the cursor to the end of the start tag it sits in, skipping `>` inside quotes."""
+    quote = None
+    for index in range(cursor, len(source)):
+        char = source[index]
+        if quote is not None:
+            if char == quote:
+                quote = None
+        elif char in {'"', "'"}:
+            quote = char
+        elif char in {">", "<"}:
+            return source[cursor:index]
+    return source[cursor:]
+
+
 def _token_at(source: str, cursor: int) -> tuple[str, int, int] | None:
     for match in _TOKEN_RE.finditer(source):
         if match.start() <= cursor <= match.end():
@@ -8302,7 +8960,10 @@ def _browser_binding_at(
     if binding is None:
         return None
     roots = _template_js_data_roots(document, region, project, open_documents)
-    return region, binding, _browser_binding_wire_type(binding, roots), use_start, use_end
+    wire_type = None
+    if binding.kind == "v-slot":
+        wire_type = _SlotBindingTypes(parsed.template, parser, project, document, open_documents).wire_type(binding)
+    return region, binding, wire_type or _browser_binding_wire_type(binding, roots), use_start, use_end
 
 
 def _browser_binding_hover(
@@ -8407,8 +9068,17 @@ def _browser_data_completion_result(
     completion = browser_completion_at(expression, parser_index)
     if completion is None:
         return CompletionResult((), is_incomplete=True)
-    roots = _template_js_data_roots(document, region, project, open_documents)
     edit_range = _range(region.source_map.map_range(completion.start_index, completion.end_index))
+    if expression.mode == "binding-pattern":
+        # A key names a slot prop and the name after `:` is a new variable,
+        # so neither reads the caller's `js_data`. The parser accepts only a
+        # literal as a default, so no other position takes a name either.
+        if _pattern_cursor_place(expression, completion.start_index) == "key":
+            return _slot_prop_key_completion(
+                document, region, expression, completion, edit_range, project, open_documents
+            )
+        return CompletionResult((), is_incomplete=True)
+    roots = _template_js_data_roots(document, region, project, open_documents)
     return CompletionResult(
         tuple(
             types.CompletionItem(
@@ -8421,6 +9091,78 @@ def _browser_data_completion_result(
             )
             for root in roots
             if root.name.startswith(completion.prefix) and root.name not in expression.bindings
+        ),
+        is_incomplete=True,
+    )
+
+
+def _pattern_cursor_place(expression: BrowserExpression, start_index: int) -> Literal["key", "name", "value"]:
+    """
+    Say what the identifier starting at `start_index` in a `v-slot` pattern is: a key, a new name, or a default value.
+
+    Only the pattern's top level is read. Inside a nested pattern every
+    position counts as a value, where completion offers nothing.
+    """
+    prefix = expression.source.encode("utf-8")[: max(0, start_index - expression.start_index)].decode(
+        "utf-8", errors="ignore"
+    )
+    depth = 0
+    last = None
+    for token in _tokens(prefix):
+        if token.source in {"(", "[", "{"}:
+            depth += 1
+        elif token.source in {")", "]", "}"}:
+            depth -= 1
+        last = (depth, token.source)
+    if last is None or last[0] != 1:
+        return "value"
+    if last[1] in {"{", ","}:
+        return "key"
+    if last[1] == ":":
+        return "name"
+    return "value"
+
+
+def _slot_prop_key_completion(
+    document: DocumentState,
+    region: TemplateRegion,
+    expression: BrowserExpression,
+    completion: Any,
+    edit_range: types.Range,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> CompletionResult:
+    """Offer the props a `<c-fill v-slot>` pattern's slot passes that the pattern does not name yet."""
+    parsed = document.parsed.get(region.key)
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    fill = (
+        None
+        if parsed is None
+        else next(
+            (
+                candidate
+                for candidate in scoped_fills(parsed.template, parse_nested=parser)
+                if candidate.pattern_start_index == expression.start_index
+            ),
+            None,
+        )
+    )
+    props = None if fill is None else _receiver_slot_prop_types(fill.tag, fill.slot, project, document, open_documents)
+    if fill is None or props is None:
+        return CompletionResult((), is_incomplete=True)
+    named = {key.name for key in fill.keys or ()}
+    return CompletionResult(
+        tuple(
+            types.CompletionItem(
+                label=name,
+                kind=types.CompletionItemKind.Property,
+                detail=prop.value.javascript,
+                documentation=_markdown(f"Vue prop passed by slot `{fill.slot}` on `<{fill.tag}>`."),
+                filter_text=name,
+                text_edit=types.TextEdit(edit_range, name),
+            )
+            for name, prop in props.items()
+            if name.startswith(completion.prefix) and (name not in named or name == completion.prefix)
         ),
         is_incomplete=True,
     )
@@ -9575,9 +10317,10 @@ _ALPINE_API_SPECS = {
         "function",
         (
             "(name: CitryServerEventName, args?: Record<string, unknown>, "
-            "opts?: {timeout?: number; wait?: true}) => Promise<unknown>"
+            "opts?: {timeout?: number; wait?: boolean}) => Promise<unknown>"
         ),
-        "Call one of this component's declared server event handlers.",
+        "Call one of this component's declared server event handlers. `wait: false` sends the call at once "
+        "and needs a handler declared with `@event(detached=True)`.",
         f"{_BROWSER_APIS_URL}#send-event",
     ),
     "$onEvent": _BrowserApiSpec(
@@ -9640,9 +10383,10 @@ _COMPONENT_CONTEXT_SPECS = {
         "parameter",
         (
             "(name: CitryServerEventName, args?: Record<string, unknown>, "
-            "opts?: {timeout?: number; wait?: true}) => Promise<unknown>"
+            "opts?: {timeout?: number; wait?: boolean}) => Promise<unknown>"
         ),
-        "Call one of this component's declared server event handlers, like `component.$sendEvent`.",
+        "Call one of this component's declared server event handlers, like `component.$sendEvent`. "
+        "`wait: false` sends the call at once and needs a handler declared with `@event(detached=True)`.",
         f"{_BROWSER_APIS_URL}#send-event",
     ),
     "loading": _BrowserApiSpec(
@@ -9884,8 +10628,8 @@ def _instance_helpers_typedef(i18n: Any | None, *, has_state: bool) -> tuple[str
     lines = [
         "/** @typedef {Object} CitryInstanceHelpers",
         f" * @property {{CitryEventsState}} $state {state_text} {_BROWSER_APIS_URL}#state",
-        " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: CitrySendOptions) "
-        "=> Promise<any>} $sendEvent Call one of this component's declared Citry server event handlers. "
+        " * @property {CitrySendEvent} $sendEvent Call one of this component's declared Citry server event "
+        "handlers. "
         f"{_BROWSER_APIS_URL}#send-event",
         " * @property {(name?: CitryServerEventName) => boolean} $loading Check whether any Citry server "
         f"handler, or one named handler, is queued or running. {_BROWSER_APIS_URL}#loading",
@@ -9937,6 +10681,7 @@ def _browser_preamble(
     instance_names: frozenset[str] = frozenset(),
     root_element_type: str = "Node",
     template_instance: bool = False,
+    detached_event_names: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     """
     Render collision-tolerant JSDoc facts for VS Code's JS provider.
@@ -10029,6 +10774,11 @@ def _browser_preamble(
         else "{}"
     )
     event_type = " | ".join(_js_string_literal(name) for name in event_names) or "string"
+    # Only a handler declared `@event(detached=True)` accepts `wait: false`, so those names get
+    # their own call signature; `never` leaves just the queued one when there are none.
+    detached_type = (
+        " | ".join(_js_string_literal(name) for name in event_names if name in detached_event_names) or "never"
+    )
     vue_import = f"import({_js_string_literal(vue_types)})"
     # Slots, local components, directives, exposed names and template refs
     # keep Vue's defaults; the last argument types `$el`.
@@ -10079,6 +10829,11 @@ def _browser_preamble(
             "context: CitryComponentContext<I>) => void | CitryCleanup | Promise<void | CitryCleanup>} "
             "CitryComponentInitializer */",
             "/** @typedef {{timeout?: number, wait?: true}} CitrySendOptions */",
+            f"/** @typedef {{{detached_type}}} CitryDetachedEventName */",
+            "/** @typedef {{timeout?: number, wait?: boolean}} CitryDetachedSendOptions */",
+            "/** @typedef {{(name: CitryDetachedEventName, args?: Record<string, unknown>, "
+            "opts?: CitryDetachedSendOptions): Promise<any>; (name: CitryServerEventName, "
+            "args?: Record<string, unknown>, opts?: CitrySendOptions): Promise<any>}} CitrySendEvent */",
             "/**",
             " * @template [I=CitryComponentPublicInstance]",
             " * @typedef {Object} CitryComponentContext",
@@ -10088,8 +10843,7 @@ def _browser_preamble(
             " * @property {string | null} id",
             " * @property {Element[]} els",
             " * @property {CitryEventsState | null} state",
-            " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: CitrySendOptions) "
-            "=> Promise<any>} sendEvent",
+            " * @property {CitrySendEvent} sendEvent",
             " * @property {(name?: CitryServerEventName) => boolean} loading",
             " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
             " * @property {CitryI18nService | null} i18n",
@@ -10168,12 +10922,8 @@ def _browser_preamble(
     if not component_js:
         lines.extend(
             (
-                "/** @param {CitryServerEventName} name @param {Record<string, unknown>=} args "
-                "@param {CitrySendOptions=} opts @returns {Promise<any>} */",
-                "function sendEvent(name, args, opts) { return Promise.resolve(); }",
-                "/** @param {CitryServerEventName} name @param {Record<string, unknown>=} args "
-                "@param {CitrySendOptions=} opts @returns {Promise<any>} */",
-                "function $sendEvent(name, args, opts) { return Promise.resolve(); }",
+                "/** @type {CitrySendEvent} */ var sendEvent = /** @type {any} */ (function () {});",
+                "/** @type {CitrySendEvent} */ var $sendEvent = /** @type {any} */ (function () {});",
                 "/** @param {string} name @param {(detail: any) => void} fn @returns {CitryCleanup} */",
                 "function onEvent(name, fn) { return function () {}; }",
                 "/** @param {string} name @param {(detail: any) => void} fn @returns {CitryCleanup} */",
@@ -10478,11 +11228,18 @@ def _citry_state_key_completion_result(
     )
 
 
-def _citry_binding_modifier_completion_result(
+def _attribute_name_at_cursor(
     document: DocumentState,
     position: types.Position,
-) -> CompletionResult | None:
-    """Complete only modifiers accepted by the active Citry binding channel."""
+) -> tuple[TemplateRegion, str, str, _AttributeCompletionContext, int] | None:
+    """
+    Find the attribute name the cursor is typing in, with its tag.
+
+    Returns the template region, its source, the tag name, the attribute's
+    completion context, and the cursor's character index in the source. The modifier
+    completions read the attribute name from the source text, so they also
+    work while the half-typed attribute makes the template fail to parse.
+    """
     region = document.region_at(position)
     if region is None:
         return None
@@ -10491,10 +11248,12 @@ def _citry_binding_modifier_completion_result(
         return None
     source = region.source_map.template_source
     cursor = parser_char_index(source, parser_index)
+    # Truncating at the cursor proves the cursor sits in an authored start
+    # tag rather than in a comment or a raw body.
     chain = _unfinished_start_tag_chain(source[:cursor])
     if not chain:
         return None
-    tag_start, _tag_name, _tag_text = chain[-1]
+    tag_start, tag_name, _tag_text = chain[-1]
     context, attribute_position = _attribute_completion_context(
         document,
         region,
@@ -10504,6 +11263,18 @@ def _citry_binding_modifier_completion_result(
     )
     if not attribute_position or context is None:
         return None
+    return region, source, tag_name, context, cursor
+
+
+def _citry_binding_modifier_completion_result(
+    document: DocumentState,
+    position: types.Position,
+) -> CompletionResult | None:
+    """Complete only modifiers accepted by the active Citry binding channel."""
+    active = _attribute_name_at_cursor(document, position)
+    if active is None:
+        return None
+    region, source, _tag_name, context, cursor = active
     authored_name = context.authored_name
     if authored_name.startswith("@c-"):
         channel: Literal["event", "state"] = "event"
@@ -10584,8 +11355,8 @@ def _citry_binding_modifier_candidates(
                 f".{duration}",
                 duration,
                 duration,
-                "Citry timing duration",
-                "Use a whole number followed by `ms` or `s`, such as `.300ms` or `.1s`.",
+                _CITRY_DURATION_DETAIL,
+                f"{_CITRY_DURATION_DOCUMENTATION}.",
                 False,
             )
             for duration in _CITRY_TIMING_EXAMPLES
@@ -10611,6 +11382,249 @@ def _citry_binding_modifier_candidates(
             )
         )
     return tuple(candidates)
+
+
+def _vue_listener_name_parts(attribute_name: str) -> tuple[str | None, list[tuple[int, int, str]]] | None:
+    """
+    Split a Vue listener name into its event name and its modifier segments.
+
+    Returns `None` for anything but `@event` or `v-on:event`, and for a
+    `@c-*` Events binding, which has its own modifiers. The event name is
+    `None` for a dynamic name (`@[name]`), whose event only the browser
+    knows. Each segment is `(start, end, text)`, with `start` just after
+    its dot, as character offsets into the name.
+    """
+    if attribute_name.startswith("@c-"):
+        return None
+    if attribute_name.startswith("v-on:"):
+        listener_start = len("v-on:")
+    elif attribute_name.startswith("@"):
+        listener_start = 1
+    else:
+        return None
+    event: str | None
+    if attribute_name.startswith("[", listener_start):
+        # A dynamic name may itself contain dots, so the modifiers start
+        # after its closing bracket, as the parser reads them.
+        close = attribute_name.find("]", listener_start)
+        if close < 0:
+            return None
+        event = None
+        modifiers_start = close + 1
+    else:
+        dot = attribute_name.find(".", listener_start)
+        modifiers_start = len(attribute_name) if dot < 0 else dot
+        event = attribute_name[listener_start:modifiers_start]
+    segments: list[tuple[int, int, str]] = []
+    index = modifiers_start
+    while index < len(attribute_name) and attribute_name[index] == ".":
+        end = attribute_name.find(".", index + 1)
+        end = len(attribute_name) if end < 0 else end
+        segments.append((index + 1, end, attribute_name[index + 1 : end]))
+        index = end
+    return event, segments
+
+
+def _accepts_citry_listener_modifiers(tag_name: str) -> bool:
+    """
+    Whether the parser accepts `.outside`, `.window` and the rest on this tag.
+
+    This mirrors the parser's rule: the parser rejects them on component
+    tags, where the listener may receive the component's emitted events
+    rather than DOM events, and on Vue's `<template>`, `<slot>` and
+    `<component>`, which render no element of their own. A tag that starts
+    with a capital letter, such as `<MyThing>`, is a Vue component too.
+    `<c-element>` renders a plain HTML element, so it accepts them.
+    """
+    if tag_name.startswith("c-") and tag_name[2:].lower() != "element":
+        return False
+    if tag_name[:1].isupper():
+        return False
+    return tag_name.lower() not in {"template", "slot", "component"}
+
+
+def _vue_listener_modifier_spec(event: str | None, name: str) -> _VueListenerModifierSpec | None:
+    """Look up a modifier, reading `.left` and `.right` as Vue does for this event."""
+    # On a dynamic name Vue reads `.left` and `.right` as keys, which blocks
+    # every mouse event, and the event is known only in the browser, so
+    # they are left out.
+    if event is None and name in {"left", "right"}:
+        return None
+    # On a keyboard event they are arrow keys; on any other static event
+    # they are mouse buttons.
+    scopes = ("keyboard", "any") if event in _VUE_KEYBOARD_EVENTS else ("mouse", "any")
+    return next(
+        (spec for scope in scopes for spec in _VUE_LISTENER_MODIFIERS if spec.name == name and spec.scope == scope),
+        None,
+    )
+
+
+def _vue_listener_modifier_allowed(name: str, used: set[str]) -> bool:
+    """Leave out a modifier that repeats or conflicts with one already written."""
+    if name in used:
+        return False
+    if name in _VUE_LISTENER_PLACES and used & _VUE_LISTENER_PLACES:
+        return False
+    if name == "outside" and used & _VUE_LISTENER_OUTSIDE_CONFLICTS:
+        return False
+    if name in _VUE_LISTENER_OUTSIDE_CONFLICTS and "outside" in used:
+        return False
+    # A passive listener cannot cancel its event.
+    return not ((name == "passive" and "prevent" in used) or (name == "prevent" and "passive" in used))
+
+
+def _vue_listener_modifier_completion_result(
+    document: DocumentState,
+    position: types.Position,
+    project: ProjectState,
+) -> CompletionResult | None:
+    """Complete the modifier segment of a Vue listener such as `@click.`."""
+    active = _attribute_name_at_cursor(document, position)
+    if active is None:
+        return None
+    region, source, tag_name, context, cursor = active
+    listener = _vue_listener_name_parts(context.authored_name)
+    if listener is None:
+        return None
+    event, segments = listener
+    relative_cursor = cursor - context.start_index
+    current = next(
+        (index for index, (start, end, _text) in enumerate(segments) if start <= relative_cursor <= end),
+        None,
+    )
+    # A cursor in the event name is left to the attribute completion.
+    if current is None:
+        return None
+    # `<c-slot>` and the structural tags take no listener, so no modifier
+    # fits there; the attribute names the general completion would offer
+    # do not belong after a dot either.
+    semantic_component = _is_semantic_component_tag(tag_name)
+    if _VUE_SYNTAX_BY_LABEL["v-on"] not in _vue_completion_specs(
+        tag_name, semantic_component=semantic_component
+    ) or _cursor_inside_v_pre(document, region, source, cursor, project):
+        return CompletionResult((), is_incomplete=True)
+    segment_start, segment_end, _text = segments[current]
+    edit_range = _mapped_template_range(
+        region,
+        source,
+        context.start_index + segment_start,
+        context.start_index + segment_end,
+    )
+    if edit_range is None:
+        return CompletionResult((), is_incomplete=True)
+    prefix = context.authored_name[segment_start:relative_cursor]
+    previous = segments[current - 1][2] if current > 0 else None
+    following = segments[current + 1][2] if current + 1 < len(segments) else None
+    used = {text for index, (_start, _end, text) in enumerate(segments) if index != current and text}
+
+    items: list[types.CompletionItem] = []
+    # Citry's modifiers need the event name written out, so a dynamic name
+    # (`@[name]`) gets Vue's own modifiers only.
+    citry_modifiers = _accepts_citry_listener_modifiers(tag_name) and event is not None
+    # A duration already follows this segment, and the parser accepts it
+    # only right after `.debounce` or `.throttle`, so nothing else fits.
+    before_duration = following is not None and _CITRY_TIME_SEGMENT.fullmatch(following) is not None
+    if citry_modifiers and previous in _VUE_LISTENER_DURATION_PURPOSE and not before_duration:
+        # A duration applies to the `.debounce` or `.throttle` right before it.
+        items.extend(
+            types.CompletionItem(
+                label=f".{duration}",
+                kind=types.CompletionItemKind.Keyword,
+                detail=_CITRY_DURATION_DETAIL,
+                documentation=_markdown(
+                    f"{_CITRY_DURATION_DOCUMENTATION}, {_VUE_LISTENER_DURATION_PURPOSE[previous]}.\n\n"
+                    f"[Read the Citry documentation]({_CITRY_LISTENER_MODIFIERS_URL})"
+                ),
+                filter_text=duration,
+                text_edit=types.TextEdit(edit_range, duration),
+            )
+            for duration in _CITRY_TIMING_EXAMPLES
+            if duration.startswith(prefix)
+        )
+    names = dict.fromkeys(spec.name for spec in _VUE_LISTENER_MODIFIERS)
+    for name in names:
+        # The lookup leaves out key names on other events, which the parser
+        # rejects, and `.middle` on a keyboard event, which Vue ignores there.
+        spec = _vue_listener_modifier_spec(event, name)
+        if spec is None:
+            continue
+        if (spec.citry and not citry_modifiers) or not _vue_listener_modifier_allowed(name, used):
+            continue
+        if before_duration and name not in _VUE_LISTENER_DURATION_PURPOSE:
+            continue
+        if event in _VUE_EVENTS_WITHOUT_INPUT_STATE and name in _VUE_INPUT_STATE_MODIFIERS:
+            continue
+        if not name.startswith(prefix):
+            continue
+        items.append(
+            types.CompletionItem(
+                label=f".{name}",
+                kind=types.CompletionItemKind.Keyword,
+                detail=spec.detail,
+                documentation=_markdown(_vue_listener_modifier_documentation(spec)),
+                filter_text=name,
+                text_edit=types.TextEdit(edit_range, name),
+            )
+        )
+    return CompletionResult(tuple(items), is_incomplete=True)
+
+
+def _vue_listener_modifier_documentation(spec: _VueListenerModifierSpec) -> str:
+    """Render one modifier's explanation with a link to the Vue or Citry guide that documents it."""
+    owner = "Citry" if spec.citry else "Vue"
+    return f"{spec.documentation}\n\n[Read the {owner} documentation]({spec.documentation_url})"
+
+
+def _vue_listener_modifier_hover(
+    source: str,
+    reference: _SyntaxReference,
+    parser_index: int,
+) -> tuple[_SyntaxReference, str] | None:
+    """
+    Narrow a `v-on` hover to the modifier segment under the cursor.
+
+    Returns the segment's span, dot included, and its explanation, or
+    `None` when the cursor is on the event name or on a segment with no
+    explanation, such as a custom key name; the caller then explains the
+    whole listener.
+    """
+    if reference.spec is not _VUE_SYNTAX_BY_LABEL["v-on"] or reference.display_label is None:
+        return None
+    attribute_name = reference.display_label
+    listener = _vue_listener_name_parts(attribute_name)
+    if listener is None:
+        return None
+    event, segments = listener
+    try:
+        name_start = parser_char_index(source, reference.start_index)
+        relative_cursor = parser_char_index(source, parser_index) - name_start
+    except ValueError:
+        return None
+    for index, (start, end, text) in enumerate(segments):
+        # The dot belongs to its segment, as in the `@c-*` hover.
+        if not start - 1 <= relative_cursor < end:
+            continue
+        previous = segments[index - 1][2] if index > 0 else None
+        if _CITRY_TIME_SEGMENT.fullmatch(text):
+            if previous not in _VUE_LISTENER_DURATION_PURPOSE:
+                return None
+            documentation = (
+                f"{_CITRY_DURATION_DOCUMENTATION}, {_VUE_LISTENER_DURATION_PURPOSE[previous]}.\n\n"
+                f"[Read the Citry documentation]({_CITRY_LISTENER_MODIFIERS_URL})"
+            )
+        else:
+            spec = _vue_listener_modifier_spec(event, text)
+            if spec is None:
+                return None
+            documentation = _vue_listener_modifier_documentation(spec)
+        segment = replace(
+            reference,
+            start_index=_char_to_byte(source, name_start + start - 1),
+            end_index=_char_to_byte(source, name_start + end),
+            display_label=f".{text}",
+        )
+        return segment, f"### `.{text}`\n\n{documentation}"
+    return None
 
 
 def _browser_event_completion_result(
@@ -11227,6 +12241,23 @@ def _event_contract(
         name: _sorted_locations([consumer_handlers[name] for consumer_handlers in per_consumer])
         for name in sorted(common)
     }
+
+
+def _detached_event_names(consumers: tuple[ComponentRecord, ...], project: ProjectState) -> frozenset[str]:
+    """
+    The handler names every consumer declares with `@event(detached=True)`.
+
+    A shared asset types `wait: false` as allowed only when each component
+    that uses it would accept the call, as the browser checks per component.
+    """
+    if not consumers or project.source_analysis is None:
+        return frozenset()
+    common: set[str] | None = None
+    for component in consumers:
+        handlers = project.source_analysis.event_handlers(component) or ()
+        names = {handler.name for handler in handlers if handler.detached}
+        common = names if common is None else common & names
+    return frozenset(common or ())
 
 
 def _event_handler_location(
@@ -12449,6 +13480,22 @@ def _with_component_lint_roots(
     if len(by_name) != len(roots):
         return roots
     ordered = list(roots)
+    # The keys a component lists in `Lint.template_data_keys` are its own
+    # template data, which wins over a lint variable of the same name at
+    # runtime, so they come first, and completion offers them as the
+    # diagnostics accept them.
+    for name in lint.template_data_keys or ():
+        key = _identifier_key(name)
+        if key in by_name:
+            continue
+        root = _TemplateRoot(
+            name=name,
+            presence="always",
+            origins=frozenset({"component template_data_keys"}),
+            access="analysis",
+        )
+        by_name[key] = root
+        ordered.append(root)
     for variable in lint.template_variables:
         key = _identifier_key(variable.name)
         if key in by_name:
@@ -13445,14 +14492,34 @@ def _direct_schema_field_names(class_node: ast.ClassDef) -> set[str]:
     return names
 
 
-def _slot_markdown(field: FieldRecord, data_fields: tuple[str, ...] | None) -> str:
+def _slot_markdown(
+    field: FieldRecord,
+    data_fields: tuple[str, ...] | None,
+    vue_props: Mapping[str, JsonWireField] | None = None,
+) -> str:
     lines = [f"### Slot `{field.name}`", "", _field_detail(field)]
     if field.description:
         lines.extend(("", field.description))
     if data_fields is not None:
         shape = ", ".join(f"`{name}`" for name in data_fields) if data_fields else "No fields."
         lines.extend(("", f"**Exposed data:** {shape}"))
+    # The fill reads the Vue props with `v-slot` and the Python data with
+    # `data=`, so the hover lists them apart.
+    if vue_props:
+        lines.extend(("", _vue_props_line(vue_props)))
     return "\n".join(lines)
+
+
+def _vue_slot_markdown(slot_name: str, vue_props: Mapping[str, JsonWireField]) -> str:
+    """Describe a slot that only its `<c-slot>` tags declare, by the Vue props they pass."""
+    return "\n".join((f"### Slot `{slot_name}`", "", _vue_props_line(vue_props)))
+
+
+def _vue_props_line(vue_props: Mapping[str, JsonWireField]) -> str:
+    props = ", ".join(
+        f"`{name}{'' if prop.required else '?'}: {prop.value.javascript}`" for name, prop in vue_props.items()
+    )
+    return f"**Vue props** (read with `v-slot`): {props}"
 
 
 def _slot_data_field_markdown(name: str, slot_name: str, component: ComponentRecord) -> str:

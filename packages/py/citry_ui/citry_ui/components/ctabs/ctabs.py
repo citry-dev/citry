@@ -8,6 +8,7 @@ from typing import Any, Literal, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 
 CTabsActivation = Literal["automatic", "manual"]
 CTabsOrientation = Literal["horizontal", "vertical"]
@@ -131,6 +132,9 @@ class CTabsDefaultSlotData:
 
 
 class CTabs(LibraryComponent):
+    class Dependencies:
+        js = (REVEAL_RUNTIME_DEPENDENCY,)
+
     @dataclass(slots=True)
     class Kwargs:
         default_value: str
@@ -155,10 +159,6 @@ class CTabs(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CTabsDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,
@@ -474,7 +474,10 @@ class CTabs(LibraryComponent):
             root.dataset.value = value;
             setRovingTab(preserveFocus && focusedTab ? focusedTab : selectedTab);
             if (scroll) {
-              selectedTab.scrollIntoView({ block: "nearest", inline: "nearest" });
+              // Scroll only the tab list: `scrollIntoView` would also scroll
+              // the page, and a re-render that selects another tab would pull
+              // a reader who scrolled away back to the tabs.
+              globalThis[Symbol.for("citry-ui:reveal")].reveal(selectedTab, tabList());
             }
             return true;
           };
@@ -758,10 +761,6 @@ class CTab(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CTabDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,

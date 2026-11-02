@@ -11,9 +11,11 @@ transform_html = _rust.html_transform.transform_html
 validate_html_fragment_boundary = _rust.html_transform.validate_html_fragment_boundary
 
 # Private: the strict-CSP and JavaScript-policy checks of finished HTML,
-# which only the citry package calls.
+# and of single attributes written in a template, which only the citry
+# package calls.
 _check_output_html = _rust.html_transform._check_output_html
 _classify_dependency_attribute = _rust.html_transform._classify_dependency_attribute
+_csp_attribute_problem = _rust.html_transform._csp_attribute_problem
 _is_javascript_url = _rust.html_transform._is_javascript_url
 _script_type_is_executable = _rust.html_transform._script_type_is_executable
 _JAVASCRIPT_MIME_TYPES = _rust.html_transform._JAVASCRIPT_MIME_TYPES

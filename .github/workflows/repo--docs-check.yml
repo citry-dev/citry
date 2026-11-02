@@ -1,6 +1,7 @@
 # The docs-site gate: builds the documentation site and runs the post-build
 # guards (the same `python -m docs_site build-check` a contributor runs locally),
-# then the docs-site unit tests. The docs live at the repo root (docs_site/) and
+# checks the committed version snapshots (`python -m docs_site versions-check`),
+# then runs the docs-site unit tests. The docs live at the repo root (docs_site/) and
 # are not covered by the main gate (scripts/check.py) or the package test
 # workflows, so this is their dedicated CI. A guard error fails the job.
 name: Docs check
@@ -40,6 +41,10 @@ on:
       - ".github/workflows/repo--docs-check.yml"
       - ".gitmodules"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "docs_site/**"
       - "CHANGELOG.md"
@@ -68,16 +73,20 @@ on:
       - ".gitmodules"
   workflow_dispatch:
 
+# A newer run cancels an older one for the same pull request, or for the same
+# branch when both come from a push. Any other run gets a group named after
+# its own run ID, so no newer run cancels it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'push' }}
 permissions:
   contents: read
 
 env:
-  # Docs only need the workspace MSRV. Override the repository's moving nightly
-  # so all Ubuntu docs jobs can reuse one stable citry-core build cache.
-  RUSTUP_TOOLCHAIN: "1.96.0"
+  # Docs only need the workspace MSRV. They build with it, not the
+  # repository's nightly, so all Ubuntu docs jobs can reuse one citry-core
+  # build cache that stays valid when the nightly date moves.
+  RUSTUP_TOOLCHAIN: "1.97.0"
   # Share compiler objects across simultaneous cold jobs; rust-cache below also
   # preserves the assembled Cargo target directory between workflow runs.
   SCCACHE_GHA_ENABLED: "true"
@@ -85,6 +94,7 @@ env:
 
 jobs:
   docs-check:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:
@@ -94,7 +104,7 @@ jobs:
           submodules: recursive
 
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
@@ -127,6 +137,7 @@ jobs:
       # minify-html, ...). The site imports Citry and Citry UI, but not the LSP,
       # so do not make this docs-only job build every workspace package.
       - name: Install the workspace with the docs extra
+        id: install
         run: >-
           uv sync --locked --package citry-monorepo --package citry
           --package citry-ui --extra docs
@@ -151,6 +162,17 @@ jobs:
       - name: Run the docs guard gate
         run: uv run --no-sync python -m docs_site build-check
 
+      # Check the committed release snapshots under docs_site/versions/. They
+      # load files from the shared docs_site/static/ folder, so a change there
+      # can break an old version that the build above never renders. It needs
+      # no build, so it also runs when an earlier check fails, and one CI run
+      # reports both kinds of failure. It still needs the installed workspace.
+      # Only the /static/ guard runs here (a few seconds); the slower link
+      # guards run in the docs release workflow with the full versions-check.
+      - name: Check the committed version snapshots
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run --no-sync python -m docs_site versions-check --strict --guard snapshot_static_files
+
       # docs_site/examples holds the per-example regression tests
       # (test_example_*.py), which live beside each example's component.py/page.py;
       # they are collected here alongside the main docs-site suite. The e2e suite
@@ -164,6 +186,7 @@ jobs:
   # Needs the root-owned `docs` extra (to build the site), the `citry`
   # package's `e2e` group (for Playwright), and the browser binary.
   docs-e2e:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:
@@ -172,7 +195,7 @@ jobs:
           submodules: recursive
 
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"

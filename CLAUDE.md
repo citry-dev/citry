@@ -43,6 +43,16 @@ done without them.
   subagent, run the session at that effort (or pick an agent/model tier that
   matches). When the delegated work is simply lookup, enumeration, or another
   simple task, lower the effort to match.
+- **Routine work runs on the latest Sonnet model.** Hand these tasks to an
+  agent on the newest Sonnet model (`model: "sonnet"` on the Agent tool or a
+  Workflow `agent()` call) instead of the main reasoning model: writing or
+  updating tests, linting, formatting, renames, small fixes, and running
+  checks (`scripts/check.py`, CI reruns) and fixing what they report. The
+  main reasoning model keeps the work that needs judgement: design,
+  debugging an unknown cause, review, and anything in a high-risk area
+  below. A routine task that turns out to need a design decision or an
+  unclear root cause goes back to the main model rather than being guessed
+  at.
 
 ## What this project is
 
@@ -263,17 +273,53 @@ render, or an Events action), check its security before delivery, as follows:
    defeat each check in a real browser, with a harmless test value whose effect
    is easy to see. Its report names each route as safe, author-only by design,
    or a hole.
-5. **Keep a hole private until its fix ships.** When you find one, stop, tell
-   the maintainer in your report, and do not commit, push, or open anything
-   public that describes it. The maintainer opens a private advisory as
-   [`SECURITY.md`](SECURITY.md) describes, and the fix is built in that
-   advisory's private fork. Sweep for siblings there (Mechanism 3). The fix's
-   regression tests, docs note, and changelog entry stay in the private fix
-   and become public only when the advisory is published, which overrides the
-   usual rule to publish those with the change.
+5. **Handle a hole by where it lives.** What you do depends on whether any
+   released version has it:
+   - **Only in the change you are writing:** fix it in the same pull request
+     and list it in the review record under "Fixed during the review"
+     (step 7).
+   - **On `main` but in no release yet:** fix it publicly in a small pull
+     request. Describe it neutrally, as tightening the code, without a
+     walkthrough of how to exploit it.
+   - **In a released version:** stop, tell the maintainer in your report, and
+     do not commit, push, or open anything public that describes it. The
+     maintainer opens a private advisory as [`SECURITY.md`](SECURITY.md)
+     describes, and the fix is built in that advisory's private fork. Sweep
+     for siblings there (Mechanism 3). The fix's regression tests, docs note,
+     and changelog entry stay in the private fix and become public only when
+     the advisory is published, which overrides the usual rule to publish
+     those with the change.
+
+   When you can't tell whether a release has it, treat it as released.
 6. **Say in the docs when an input is author-only.** When a value is trusted
    because only the template author writes it, the page that documents the
    API must say so, so app authors know not to pass request data into it.
+7. **Record a pass that leaves no hole open.** After the change merges,
+   write a short record in [`docs/security/reviews/`](docs/security/reviews/README.md)
+   using the template in its README. A hole in a released version follows
+   step 5 and [`SECURITY.md`](SECURITY.md) instead, and gets a record only
+   after its fix is released and disclosed.
+
+## Mechanism 8 - check library code against other frameworks' advisories
+
+Other frameworks and template engines have already shipped security bugs
+that Citry could repeat. The maintainers keep a survey of published
+security advisories for Vue, Nuxt, Jinja2, Django, Svelte, React,
+Angular, Next.js, and others, grouped by kind of bug. It is the advisory
+survey report (`reports/259-advisory-survey.md`) in the maintainers'
+private security repository, `citry-dev/citry--security`.
+
+When a change alters what code in a published package does (under
+`crates/` or `packages/`, not tests, docs, or examples), the independent
+reviewer (Mechanism 6) reads the survey, picks the kinds of bug that
+could occur in the code the change touches, and checks that the change
+does not introduce one. Its report lists the kinds it checked, or says
+that none apply.
+
+A reviewer that cannot open the survey says so in its report and
+describes what the change touches. The author, or the agent that started
+the review, then asks the maintainer which kinds apply. Until someone
+with access has done the check, the report lists it as not done.
 
 ## Where new agent knowledge goes
 
@@ -320,7 +366,9 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   while preserving first-seen (source) order.
 - **HTML rendering rules.** Void elements stay compact (`<br/>`), non-void
   self-closing expand (`<div></div>`), and `key=""` normalizes to a boolean
-  attribute (`True`).
+  attribute (`True`) on an HTML element, a dynamic `<c-element>`, and
+  `<c-if>`; on a component tag and on `<c-slot>` data it compiles to `""`,
+  and only a bare `key` is `True`.
 - **Rust nightly toolchain** (edition 2024), pinned in
   [`rust-toolchain.toml`](rust-toolchain.toml).
 - **maturin module mapping.** The Python extension is built with
@@ -431,6 +479,26 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   hunting through test files. An executable example that needs automated
   validation must opt in to a general guard; do not hard-code its page in a
   test.
+- **Pass event and input values into workflow scripts through `env:`.** In
+  a GitHub Actions `run:` or `github-script` block, do not write
+  `${{ github.event.* }}`, `${{ github.head_ref }}` or `${{ inputs.* }}`
+  into the script (`github.event_name` is fine). GitHub pastes the value
+  into the script text before the step starts, so a branch name or pull
+  request title becomes part of the code. Pass the value through the
+  step's `env:` block and read it as `"$NAME"` in a shell script or
+  `process.env.NAME` in `github-script`. Do the same for step and job
+  outputs that carry such a value.
+- **A Dependabot-only job checks who opened the pull request.** Test
+  `github.event.pull_request.user.login == 'dependabot[bot]'`.
+  `github.actor` names the user who started the first run, not the
+  author, so add it only when the job also needs to know who started the
+  run, as `repo--dependabot-relock.yml` does to read Dependabot's secrets.
+- The
+  [`workflow_run_expressions`](scripts/validators/workflow_run_expressions.py)
+  validator fails the gate when a `run:` or `script:` block in a workflow
+  or composite action contains one of the three values above. It does not
+  follow a value through a step or job output, and nothing checks the
+  Dependabot rule, so both rest on review.
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.

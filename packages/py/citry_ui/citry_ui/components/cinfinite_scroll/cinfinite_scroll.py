@@ -123,9 +123,32 @@ class CInfiniteScroll(LibraryComponent):
         # Keep this camelCase spelling in sync with the JavaScript data key.
         serverDefaults: dict[str, object]  # noqa: N815
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "action_name",
+            "action_value",
+            "aria_label",
+            "attrs",
+            "auto",
+            "button_disabled",
+            "button_type",
+            "catalog",
+            "content",
+            "content_busy",
+            "disabled",
+            "error",
+            "has_more",
+            "labels",
+            "loading",
+            "root_attrs",
+            "root_id",
+            "root_margin",
+            "show_action",
+            "show_end",
+            "show_error",
+            "show_loading",
+            "threshold",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_infinite_scroll_snapshot", None)

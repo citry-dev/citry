@@ -17,6 +17,7 @@ from pygls.exceptions import JsonRpcException, JsonRpcInvalidParams
 from pygls.lsp.server import LanguageServer
 
 from citry._diagnostic_catalog import FORMAT_PROVIDER_INVALID, FORMAT_STALE_DOCUMENT
+from citry._symbol_table import EDITOR_NOTE, symtable_missing
 from citry_core.template_formatter import EmbeddedFormatResult
 from citry_lsp.engine import (
     DocumentState,
@@ -804,6 +805,10 @@ async def initialized(ls: CitryLanguageServer, _params: types.InitializedParams)
     if status.message is not None and status.mode != "registry":
         message_type = types.MessageType.Warning if status.mode == "syntax-only" else types.MessageType.Error
         ls.window_show_message(types.ShowMessageParams(message_type, status.message))
+    # The editor's template types read the symbol table, so say once that
+    # some templates get no types on this interpreter.
+    if symtable_missing():
+        ls.window_show_message(types.ShowMessageParams(types.MessageType.Warning, EDITOR_NOTE))
 
 
 def _formatting_registration_params(workspace_uri: str) -> types.RegistrationParams:

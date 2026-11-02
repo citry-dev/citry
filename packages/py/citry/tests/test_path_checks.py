@@ -186,6 +186,71 @@ class TestFlaskPathChecker:
         ]
         assert _mismatches(engine, cases, lambda path: client.get(path, follow_redirects=True).status_code) == []
 
+    @pytest.mark.parametrize("application_root", ["/shop", "/shop/"])
+    def test_a_sub_path_deployment_agrees_with_the_test_client(self, app, application_root):
+        from citry.contrib.flask import mount
+
+        # APPLICATION_ROOT names the sub-path the app is served below, so its
+        # links start with it while its rules do not. Flask's test client
+        # sends each request below it, so each case passes the client the
+        # link with the sub-path removed. Werkzeug ignores a trailing "/" on
+        # the setting.
+        app.config["APPLICATION_ROOT"] = application_root
+        app.add_url_rule("/moved", "moved", redirect_to="/shop/about")
+        engine = Citry()
+        mount(app, engine)
+        client = app.test_client()
+        cases = [
+            Case("/shop/about", found=True),
+            Case("/shop/abuot", found=False, suggestion="/shop/about"),
+            Case("/shop/static/avatar.svg", found=True),
+            Case("/shop/static/avtar.svg", found=False, suggestion="/shop/static/avatar.svg"),
+            Case("/shop/docs", found=True),
+            # The sub-path alone reaches the app's root, which has no rule.
+            Case("/shop", found=False),
+            Case("/shop/moved", found=True),
+        ]
+
+        def status_of(path):
+            return client.get(path.removeprefix("/shop"), follow_redirects=True).status_code
+
+        assert _mismatches(engine, cases, status_of) == []
+
+    def test_a_sub_path_deployment_reports_links_outside_the_sub_path(self, app):
+        from citry.contrib.flask import mount
+
+        app.config["APPLICATION_ROOT"] = "/shop"
+        app.add_url_rule("/old", "old", redirect_to="/about")
+        engine = Citry()
+        mount(app, engine, prefix="/ui")
+        check = engine._path_checkers[0][1]
+        # A longer first segment is a different path.
+        assert not check("/shopping/about").found
+        # Werkzeug sends a redirect_to that starts with "/" to that path on
+        # the host, outside the sub-path, so the browser leaves the app.
+        # The test client cannot show that, because it stays below the
+        # sub-path.
+        assert not check("/shop/old").found
+        assert "/shop/about" in check("/about").nearby
+        # Citry's own routes are in front of the URL map, below the sub-path.
+        assert check("/shop/ui/citry.js").found
+        # The setting is read each time, so a change after mount() counts.
+        app.config["APPLICATION_ROOT"] = "/"
+        assert check("/about").found
+
+    def test_an_application_root_without_a_leading_slash_counts_as_the_site_root(self, app):
+        from citry.contrib.flask import mount
+
+        # Citry reads the sub-path the same way when it builds its own URLs,
+        # and such a value could point the page's scripts elsewhere, so both
+        # treat it as the site root.
+        app.config["APPLICATION_ROOT"] = "shop"
+        engine = Citry()
+        mount(app, engine)
+        check = engine._path_checkers[0][1]
+        assert check("/about").found
+        assert engine.build_url("citry.js") == "/citry/citry.js"
+
     def test_mount_registers_one_checker(self, app):
         from citry.contrib.flask import mount
 
@@ -356,6 +421,86 @@ class TestStarlettePathChecker:
         assert check("/guide").found
         assert not check("/giude/").found
 
+    def test_a_sub_path_deployment_agrees_with_the_test_client(self, app):
+        from fastapi.testclient import TestClient
+
+        from citry.contrib.fastapi import mount
+
+        # A FastAPI app states the sub-path it is served below as root_path,
+        # and its links start with it while its routes do not.
+        app.root_path = "/shop"
+        engine = Citry()
+        mount(app, engine)
+        client = TestClient(app)
+        cases = [
+            Case("/shop/about", found=True),
+            Case("/shop/abuot", found=False, suggestion="/shop/about"),
+            Case("/shop/static/avatar.svg", found=True),
+            Case("/shop/static/avtar.svg", found=False, suggestion="/shop/static/avatar.svg"),
+            Case("/shop/company/team", found=True),
+            Case("/shop/guides", found=True),
+            Case("/shop/citry/citry.js", found=True),
+            # The sub-path alone reaches the routes as an empty path, which
+            # only the trailing-slash redirect could serve; "/" has no route.
+            Case("/shop", found=False),
+        ]
+        assert _mismatches(engine, cases, lambda path: client.get(path).status_code) == []
+
+    def test_a_sub_path_deployment_reports_links_outside_the_sub_path(self, app):
+        from citry.contrib.fastapi import mount
+
+        app.root_path = "/shop"
+        engine = Citry()
+        mount(app, engine)
+        check = engine._path_checkers[0][1]
+        # Starlette serves these in-process, but a page below /shop that
+        # links to them sends the browser outside the app.
+        assert not check("/about").found
+        assert not check("/shopping/about").found
+        assert "/shop/about" in check("/about").nearby
+
+    def test_a_root_path_with_a_trailing_slash_reads_as_the_same_sub_path(self, app):
+        from citry.contrib.fastapi import mount
+
+        # The link check reads the sub-path the way Citry's own URLs do, so
+        # both start with "/shop".
+        app.root_path = "/shop/"
+        engine = Citry()
+        mount(app, engine)
+        assert engine._path_checkers[0][1]("/shop/about").found
+        assert engine.build_url("citry.js") == "/shop/citry/citry.js"
+
+    @pytest.mark.parametrize("redirect_slashes", [True, False])
+    def test_the_sub_path_alone_agrees_with_the_test_client(self, redirect_slashes):
+        fastapi = pytest.importorskip("fastapi")
+        from fastapi.testclient import TestClient
+
+        from citry.contrib.fastapi import mount
+
+        # Starlette routes the sub-path alone as an empty path, which the
+        # "/" route matches only through the trailing-slash redirect.
+        app = fastapi.FastAPI(root_path="/shop", redirect_slashes=redirect_slashes)
+        app.get("/")(lambda: "home")
+        engine = Citry()
+        mount(app, engine)
+        client = TestClient(app)
+        cases = [
+            # Without the redirect, the served root is one slip away.
+            Case("/shop", found=redirect_slashes, suggestion=None if redirect_slashes else "/shop/"),
+            Case("/shop/", found=True),
+        ]
+        assert _mismatches(engine, cases, lambda path: client.get(path).status_code) == []
+
+    def test_a_root_path_at_the_site_root_changes_nothing(self, app):
+        from citry.contrib.fastapi import mount
+
+        app.root_path = "/"
+        engine = Citry()
+        mount(app, engine)
+        check = engine._path_checkers[0][1]
+        assert check("/about").found
+        assert "/about" in check("/abuot").nearby
+
     def test_a_path_under_an_opaque_mount_is_found(self, app):
         from citry.contrib.fastapi import mount
 
@@ -501,6 +646,39 @@ class TestDjangoPathChecker:
             assert not check("/about").found
             assert check("/app/abuot").nearby
             assert "/app/about" in check("/app/abuot").nearby
+            # A longer first segment is a different path.
+            assert not check("/application/about").found
+        finally:
+            set_script_prefix("/")
+
+    def test_the_sub_path_alone_reaches_the_project_root(self, serving):
+        from django.http import HttpResponse
+        from django.test.utils import override_settings
+        from django.urls import path, set_script_prefix
+
+        engine, _client = serving
+        urlconf = types.ModuleType("citry_path_checks_root_urlconf")
+        urlconf.urlpatterns = [path("", lambda _request: HttpResponse("home"))]
+        check = engine._path_checkers[0][1]
+        with override_settings(ROOT_URLCONF=urlconf):
+            set_script_prefix("/app/")
+            try:
+                # Django serves an empty path below the sub-path as "/".
+                assert check("/app").found
+                assert check("/app/").found
+            finally:
+                set_script_prefix("/")
+
+    def test_a_script_prefix_without_a_leading_slash_matches_no_link(self, serving):
+        from django.urls import set_script_prefix
+
+        engine, _client = serving
+        check = engine._path_checkers[0][1]
+        # FORCE_SCRIPT_NAME = "app" gives this prefix, from which Django
+        # builds links that do not start with "/".
+        set_script_prefix("app/")
+        try:
+            assert not check("/app/about").found
         finally:
             set_script_prefix("/")
 

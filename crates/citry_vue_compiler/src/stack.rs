@@ -3,10 +3,12 @@
 //!
 //! Compiling a template, reading the render function it produces, writing
 //! its HTML, evaluating its expressions and freeing what was read all call
-//! themselves once per nesting level. Python may run them on any thread,
-//! and a thread other than the main one can have as little as 512 KiB of
-//! stack (macOS) or 128 KiB (musl Linux), so without a guard a deep template
-//! overflows it and aborts the process.
+//! themselves once per nesting level. Python may run them on any thread. A
+//! thread gets the platform's default stack unless Python sets one: 128 KiB
+//! on musl Linux, also for Python's own threads, and 512 KiB on macOS for a
+//! thread started outside Python; and `threading.stack_size()` can make any
+//! Python thread as small. So without a guard a deep template overflows it
+//! and aborts the process.
 //!
 //! Each recursion entry in the reader, the writers, `eval`, `fully_supported`
 //! and the class and style normalizers runs its work through
@@ -50,7 +52,7 @@ const FREE_RED_ZONE: usize = 1024 * 1024;
 
 /// The stack for work in `with_large_stack`. A debug build needed about
 /// 9.3 MiB to compile 512 nested `<div v-for>` elements (measured on macOS
-/// arm64), the depth the nesting limits planned in #272 allow, so this
+/// arm64), the depth the nesting limits from #272 allow, so this
 /// leaves a margin of about 70%. A release build needs less.
 const LARGE_STACK: usize = 16 * 1024 * 1024;
 

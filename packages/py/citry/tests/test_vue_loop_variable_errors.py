@@ -221,3 +221,35 @@ def test_other_key_errors_inside_the_loop_stay_key_errors(inner):
         page().render()
 
     assert type(exc_info.value) is KeyError
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        # Vue does not run a `v-for` on an element with `v-pre`, or one
+        # inside it, so no browser loop declares `member`.
+        '<ul><li v-for="(member, index) in members" v-pre>{inner}</li></ul>',
+        '<ul><li v-pre><span v-for="(member, index) in members">{inner}</span></li></ul>',
+    ],
+    ids=["v-pre-on-the-loop-element", "loop-inside-v-pre"],
+)
+def test_a_v_for_at_or_inside_v_pre_is_not_blamed_for_a_missing_variable(template):
+    page = _page("{{ member.name }}", template=template)
+
+    with pytest.raises(KeyError) as exc_info:
+        page().render()
+
+    # The hint about a browser-only loop variable would send the author to a
+    # loop that does not exist.
+    assert type(exc_info.value) is KeyError
+    assert "exists only in the browser" not in str(exc_info.value)
+
+
+def test_a_v_pre_sibling_does_not_stop_the_hint_for_a_loop_that_runs():
+    page = _page(
+        "{{ member.name }}",
+        template='<ul><li v-for="(member, index) in members"><div v-pre></div>{inner}</li></ul>',
+    )
+
+    with pytest.raises(VueLoopVariableError, match="exists only in the browser"):
+        page().render()

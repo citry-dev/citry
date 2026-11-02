@@ -9,7 +9,6 @@ from typing import Any, Literal, TypedDict
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
-    ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -180,9 +179,19 @@ class CHoverCard(LibraryComponent):
         activator: SlotInput[CHoverCardActivatorSlotData]
         default: SlotInput[CHoverCardDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "activator_attrs",
+            "arrow",
+            "attrs",
+            "close_delay",
+            "delay",
+            "disabled",
+            "hover_card_id",
+            "open",
+            "placement",
+            "size",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_hover_card_snapshot", None)
@@ -284,9 +293,14 @@ class CHoverCard(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       const handoffKey = Symbol.for("citry-ui:hover-card-handoff");
 
       $component({
@@ -417,9 +431,13 @@ class CHoverCard(LibraryComponent):
             // stepping out of a shadow root. If that box keeps a fixed size
             // while only an inline wrapper inside it hides the trigger, the
             // episode lasts until the trigger next opens.
+            // TypeScript types a shadow root's host as `Element`, so `box` is typed that wide.
+            /** @type {Element} */
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
-              const next = box.parentElement ?? box.getRootNode().host;
+              // Step out of a shadow root to its host; a document has no host.
+              const boxRoot = box.getRootNode();
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
               if (!next) {
                 break;
               }
@@ -1075,7 +1093,6 @@ class CHoverCard(LibraryComponent):
         },
       });
     """
-    )
 
     css_file = "runtime.min.css"
 

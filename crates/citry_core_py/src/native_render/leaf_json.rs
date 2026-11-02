@@ -41,17 +41,18 @@ use std::collections::HashMap;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::iter::{BoundListIterator, BoundTupleIterator};
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 
 use citry_native_render::write_json_str;
 
 use super::rows::{python_float_repr, without_panics};
 
-/// Deeper data declines, and Python's conversion handles it (raising its
-/// own `RecursionError` where the interpreter's limit is reached). It is
-/// far below Python's default limit of 1,000 frames, of which `_json_plain`
-/// uses one per level (two on Python 3.10 and 3.11, where a comprehension
-/// has its own frame), and far above the nesting of any real leaf data.
+/// Deeper data declines, and Python's conversion (`_json_plain`) writes it
+/// instead. Past `DIRECT_DEPTH` levels Rust's walk uses no more stack, so
+/// this limit's only job is to keep the cycle check short: that check
+/// compares each container with every container around it. It is far above
+/// the nesting of most leaf data.
 const MAX_DEPTH: usize = 200;
 
 /// Why Rust declines a leaf. Python receives the name as a `str` and then
@@ -101,33 +102,80 @@ impl From<PyErr> for WriteError {
     }
 }
 
+/// How many levels `write_value` writes with direct calls before it hands
+/// the rest of a value to `write_with_stack`. Direct calls are faster on the
+/// shallow data a leaf usually holds. One level takes about 3.3 KiB of stack
+/// in a debug build (measured on macOS arm64), so these take about 26 KiB.
+const DIRECT_DEPTH: usize = 8;
+
 /// Write `value` as `_script_json(_json_plain(value))` would, or refuse it.
 ///
 /// `open` holds the address of each container on the path from the top
 /// value down to this one, which is how a container that holds itself is
 /// found.
+///
+/// Python can run this on a thread with little stack, as little as 128 KiB
+/// on musl Linux or less after `threading.stack_size()`, and a stack guard
+/// cannot move work that reads Python objects onto a new stack: CPython 3.14
+/// and later check the stack pointer against the thread's own stack. So past
+/// `DIRECT_DEPTH` levels a container is written by `write_with_stack`, which
+/// keeps each container it has opened but not finished on a list. Both visit
+/// values in the same order, so the first value refused does not depend on
+/// where the walk switches.
 fn write_value(
     out: &mut String,
     value: &Bound<'_, PyAny>,
     depth: usize,
     open: &mut Vec<usize>,
 ) -> Result<(), WriteError> {
+    let Some(container) = write_scalar(out, value)? else {
+        return Ok(());
+    };
+    enter_container(value, depth, open)?;
+    let written = if depth >= DIRECT_DEPTH {
+        write_with_stack(out, container, depth, open)
+    } else {
+        match container {
+            Container::Dict(dict) => write_dict(out, &dict, depth, open),
+            Container::List(list) => write_items(out, list.iter(), depth, open),
+            // `_json_plain` turns a tuple into a list.
+            Container::Tuple(tuple) => write_items(out, tuple.iter(), depth, open),
+        }
+    };
+    open.pop();
+    written
+}
+
+/// A dict, list or tuple to write.
+enum Container<'py> {
+    Dict(Bound<'py, PyDict>),
+    List(Bound<'py, PyList>),
+    Tuple(Bound<'py, PyTuple>),
+}
+
+/// Write a value that is not a container, or return the container to write.
+// Called for every value, so it is inlined into both walks.
+#[inline(always)]
+fn write_scalar<'py>(
+    out: &mut String,
+    value: &Bound<'py, PyAny>,
+) -> Result<Option<Container<'py>>, WriteError> {
     if value.is_none() {
         out.push_str("null");
-        return Ok(());
+        return Ok(None);
     }
     // With exact type checks the order does not matter; this one mirrors
     // `json.dumps`, which writes a bool as `true` or `false`.
     if value.is_exact_instance_of::<PyBool>() {
         out.push_str(if value.is_truthy()? { "true" } else { "false" });
-        return Ok(());
+        return Ok(None);
     }
     if value.is_exact_instance_of::<PyInt>() {
         let number = value
             .extract::<i64>()
             .map_err(|_| WriteError::Refused(Decline::BigInt))?;
         out.push_str(&number.to_string());
-        return Ok(());
+        return Ok(None);
     }
     if let Ok(number) = value.cast_exact::<PyFloat>() {
         let number = number.value();
@@ -137,23 +185,37 @@ fn write_value(
         // `json.dumps` writes a float with `float.__repr__`, which is this
         // CPython formatter.
         out.push_str(&python_float_repr(value.py(), number)?);
-        return Ok(());
+        return Ok(None);
     }
     if let Ok(text) = value.cast_exact::<PyString>() {
         let text = text
             .to_str()
             .map_err(|_| WriteError::Refused(Decline::NotUtf8))?;
         write_json_str(out, text);
-        return Ok(());
+        return Ok(None);
     }
-    let dict = value.cast_exact::<PyDict>().ok();
-    let list = value.cast_exact::<PyList>().ok();
-    let tuple = value.cast_exact::<PyTuple>().ok();
-    if dict.is_none() && list.is_none() && tuple.is_none() {
-        // A `Const` marker, translated text, a `Secret`, a subclass: each
-        // gets Python's own conversion or refusal.
-        return Err(WriteError::Refused(Decline::NotPlain));
+    if let Ok(dict) = value.cast_exact::<PyDict>() {
+        return Ok(Some(Container::Dict(dict.clone())));
     }
+    if let Ok(list) = value.cast_exact::<PyList>() {
+        return Ok(Some(Container::List(list.clone())));
+    }
+    if let Ok(tuple) = value.cast_exact::<PyTuple>() {
+        return Ok(Some(Container::Tuple(tuple.clone())));
+    }
+    // A `Const` marker, translated text, a `Secret`, a subclass: each gets
+    // Python's own conversion or refusal.
+    Err(WriteError::Refused(Decline::NotPlain))
+}
+
+/// Check that a container at `depth` may be written, and add it to `open`.
+// Called for every container, so it is inlined into both walks.
+#[inline(always)]
+fn enter_container(
+    value: &Bound<'_, PyAny>,
+    depth: usize,
+    open: &mut Vec<usize>,
+) -> Result<(), WriteError> {
     if depth >= MAX_DEPTH {
         return Err(WriteError::Refused(Decline::TooDeep));
     }
@@ -164,18 +226,7 @@ fn write_value(
         return Err(WriteError::Refused(Decline::Cycle));
     }
     open.push(address);
-    let written = if let Some(dict) = dict {
-        write_dict(out, dict, depth, open)
-    } else if let Some(list) = list {
-        write_items(out, list.iter(), depth, open)
-    } else if let Some(tuple) = tuple {
-        // `_json_plain` turns a tuple into a list.
-        write_items(out, tuple.iter(), depth, open)
-    } else {
-        Ok(())
-    };
-    open.pop();
-    written
+    Ok(())
 }
 
 /// Write a list or tuple's items as a JSON array.
@@ -203,7 +254,25 @@ fn write_dict(
     depth: usize,
     open: &mut Vec<usize>,
 ) -> Result<(), WriteError> {
-    let mut entries: Vec<(String, Bound<'_, PyAny>)> = Vec::with_capacity(dict.len());
+    out.push('{');
+    for (index, (key, item)) in sorted_entries(dict)?.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        write_json_str(out, key);
+        out.push(':');
+        write_value(out, item, depth + 1, open)?;
+    }
+    out.push('}');
+    Ok(())
+}
+
+/// An exact dict's entries with their keys sorted, as `sort_keys=True` sorts
+/// them. Every key is checked before any value is written.
+fn sorted_entries<'py>(
+    dict: &Bound<'py, PyDict>,
+) -> Result<Vec<(String, Bound<'py, PyAny>)>, WriteError> {
+    let mut entries: Vec<(String, Bound<'py, PyAny>)> = Vec::with_capacity(dict.len());
     for (key, item) in dict.iter() {
         // `_json_plain` accepts a str subclass key and writes `str(key)`,
         // which can run user code, so only an exact str is written here.
@@ -219,16 +288,98 @@ fn write_dict(
     // UTF-8 byte order is code point order, which is how Python compares two
     // strs; a dict's keys are distinct, so the order is total.
     entries.sort_unstable_by(|left, right| left.0.cmp(&right.0));
-    out.push('{');
-    for (index, (key, item)) in entries.iter().enumerate() {
-        if index > 0 {
+    Ok(entries)
+}
+
+/// The items `write_with_stack` has not yet written of one container it has
+/// open.
+enum Remaining<'py> {
+    List(BoundListIterator<'py>),
+    Tuple(BoundTupleIterator<'py>),
+    /// A dict's entries, already sorted by key.
+    Dict(std::vec::IntoIter<(String, Bound<'py, PyAny>)>),
+}
+
+/// A container being written: what is left of it, and whether an item has
+/// been written yet.
+struct Open<'py> {
+    remaining: Remaining<'py>,
+    started: bool,
+}
+
+impl<'py> Open<'py> {
+    /// Write a container's opening bracket and start reading its items.
+    fn start(out: &mut String, container: Container<'py>) -> Result<Self, WriteError> {
+        let remaining = match container {
+            Container::Dict(dict) => {
+                out.push('{');
+                Remaining::Dict(sorted_entries(&dict)?.into_iter())
+            }
+            Container::List(list) => {
+                out.push('[');
+                Remaining::List(list.iter())
+            }
+            Container::Tuple(tuple) => {
+                out.push('[');
+                Remaining::Tuple(tuple.iter())
+            }
+        };
+        Ok(Open {
+            remaining,
+            started: false,
+        })
+    }
+}
+
+/// Write `container`, which sits at `depth` and is already the last entry
+/// of `open`, keeping each container it has opened but not finished on a
+/// list (`path`) instead of the call stack. The caller removes
+/// `container`'s own address from `open`. When writing stops with an error,
+/// the deeper addresses stay in `open`; that is harmless, because any error
+/// ends the whole leaf and `open` belongs to that one call.
+fn write_with_stack<'py>(
+    out: &mut String,
+    container: Container<'py>,
+    depth: usize,
+    open: &mut Vec<usize>,
+) -> Result<(), WriteError> {
+    let mut path = vec![Open::start(out, container)?];
+    // Each pass writes one more item of the innermost container, or closes
+    // that container when it has none left.
+    while let Some(current) = path.last_mut() {
+        let item = match &mut current.remaining {
+            Remaining::List(items) => items.next().map(|item| (None, item)),
+            Remaining::Tuple(items) => items.next().map(|item| (None, item)),
+            Remaining::Dict(entries) => entries.next().map(|(key, item)| (Some(key), item)),
+        };
+        let Some((key, item)) = item else {
+            out.push(if matches!(current.remaining, Remaining::Dict(_)) {
+                '}'
+            } else {
+                ']'
+            });
+            path.pop();
+            // The caller removes the first container's address from `open`;
+            // this removes each deeper one as it closes.
+            if !path.is_empty() {
+                open.pop();
+            }
+            continue;
+        };
+        if current.started {
             out.push(',');
         }
-        write_json_str(out, key);
-        out.push(':');
-        write_value(out, item, depth + 1, open)?;
+        current.started = true;
+        if let Some(key) = key {
+            write_json_str(out, &key);
+            out.push(':');
+        }
+        if let Some(child) = write_scalar(out, &item)? {
+            // The same checks, in the same order, as `write_value` makes.
+            enter_container(&item, depth + path.len(), open)?;
+            path.push(Open::start(out, child)?);
+        }
     }
-    out.push('}');
     Ok(())
 }
 

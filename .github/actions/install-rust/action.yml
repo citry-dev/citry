@@ -1,0 +1,21 @@
+name: Install Rust
+description: >-
+  Install the Rust toolchain and the components that rust-toolchain.toml
+  names, so every Rust job builds with the pinned compiler. Run it after
+  actions/checkout, because rustup reads that file from the checkout.
+runs:
+  using: composite
+  steps:
+    - name: Install the toolchain that rust-toolchain.toml names
+      shell: bash
+      run: |
+        # `--no-self-update` keeps the runner image's rustup, so a new rustup
+        # release cannot change a job between two runs of the same commit.
+        rustup toolchain install --no-self-update
+        # Print the compiler, so a log shows which build a job used.
+        rustc -vV
+        # Each CI job compiles the code once and never rebuilds after an
+        # edit, so incremental-compilation data would only make the cache
+        # larger. CARGO_TERM_COLOR keeps cargo's colours in the log.
+        echo CARGO_INCREMENTAL=0 >> "$GITHUB_ENV"
+        echo CARGO_TERM_COLOR=always >> "$GITHUB_ENV"

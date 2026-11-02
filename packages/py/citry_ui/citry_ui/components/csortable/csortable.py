@@ -199,9 +199,20 @@ class CSortable(LibraryComponent):
     class Slots:
         default: SlotInput[CSortableDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "catalog",
+            "disabled",
+            "form",
+            "labels",
+            "layout",
+            "name",
+            "order",
+            "registry",
+            "root_id",
+            "size",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_sortable_snapshot", None)
@@ -504,7 +515,8 @@ class CInternalSortableItem(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        # A read-only Mapping, so the parent's dict of narrower values fits it.
+        item: Mapping[str, object]
         name: str | None
         form: str | None
         disabled: bool
@@ -513,6 +525,26 @@ class CInternalSortableItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "button_disabled",
+            "catalog_handle_attr",
+            "content",
+            "declaration",
+            "form",
+            "handle",
+            "handle_label",
+            "handle_values_expression",
+            "index",
+            "item_id",
+            "label",
+            "morph_key",
+            "name",
+            "root_disabled",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item

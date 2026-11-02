@@ -344,6 +344,9 @@ def test_still_reports_another_mistake_inside_the_same_paragraph():
         '<c-if cond="a"><p v-if="b">1</p><p v-else>2</p></c-if><c-elif cond="c">x</c-elif><c-else>y</c-else>',
         '<c-for each="item in items"><li>{{ item }}</li></c-for><c-empty><li>none</li></c-empty>',
         '<div v-pre><p v-else>x</p><b :title="a +">y</b></div>',
+        # A `v-pre` element that holds a Citry value reaches the browser
+        # with its contents as one block of HTML, which Vue does not compile.
+        "<div v-pre>{{ a }}<table><div>x</div></table></div>",
         '<c-card v-if="open" :title="t" @close="open = false" v-model="value">'
         '<c-fill name="body">B</c-fill><c-fill name="footer" data="d">{{ d }}</c-fill></c-card>'
         "<p v-else>closed</p>",
@@ -406,3 +409,31 @@ def test_braces_that_meet_across_a_citry_tag_are_text_not_an_expression():
     # fails to parse.
     source = '<p>{<c-for each="i in xs">{ i +* 1 }}</c-for></p><c-raw><b>r</b></c-raw>'
     assert lint_vue_compile(source, parse_template(source), ()) == ()
+
+
+@pytest.mark.parametrize(
+    ("receiver", "renders_in_place"),
+    [
+        ('<c-provide key="k" value="v">{}</c-provide>', None),
+        ('<c-cache key="k">{}</c-cache>', None),
+        ('<c-element c-is="tag">{}</c-element>', None),
+        ("<c-Wrapper>{}</c-Wrapper>", True),
+    ],
+)
+def test_reports_a_scoped_fill_that_a_receiver_copies_in_place(receiver, renders_in_place):
+    fill = '<c-fill name="default" v-slot="{ row }"><b v-text="row"></b></c-fill>'
+    source = f"<main>{receiver.format(fill)}</main>"
+
+    findings = lint_vue_compile(source, parse_template(source), (), renders_in_place=lambda _name: renders_in_place)
+
+    # Vue's compiler sees no pattern there, as in a render, and the render then fails on it.
+    assert [(item.name, source.encode()[item.start_index : item.end_index].decode()) for item in findings] == [
+        ("CITRY_SCOPED_FILL_IN_PLACE", fill)
+    ]
+    assert "has no Vue slot to read from, and the page fails to render" in findings[0].message
+
+
+def test_a_scoped_fill_for_an_ordinary_call_is_not_reported():
+    source = '<main><c-List><c-fill name="item" v-slot="{ row }"><b v-text="row"></b></c-fill></c-List></main>'
+
+    assert lint_vue_compile(source, parse_template(source), (), renders_in_place=lambda _name: False) == ()

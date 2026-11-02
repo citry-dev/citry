@@ -50,8 +50,11 @@ pass through it. Root `disabled` also disables form inputs.
 Arrow keys move within and across columns; Home, End, typeahead, Enter, Space,
 Escape, and Tab follow the popup tree contract. Pointer activation, Enter, and
 Space toggle a branch's child level without changing an already accepted leaf.
-Use `aria_label` or `aria_labelledby` to give the trigger an application-specific
-accessible name. Active columns sit side by side whenever their preferred width
+Use `aria_label` or `aria_labelledby` to name the cascader. The trigger's
+accessible name is that label followed by the path it shows, such as
+"Place Europe / Slovakia", so voice control users can say what they see.
+The tree is named by the label alone. Without either input, the tree takes
+the trigger's name, which is the path or placeholder it shows. Active columns sit side by side whenever their preferred width
 fits the viewport. Only when they do not fit do they stack vertically at the
 trigger width, avoiding page-level and nested horizontal scrollbars. While open,
 the popup also shifts back inside the viewport when its trigger sits near an

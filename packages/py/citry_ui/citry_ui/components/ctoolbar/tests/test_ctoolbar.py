@@ -94,19 +94,39 @@ def test_configuration_and_root_customization_are_exact() -> None:
 
 
 @pytest.mark.parametrize(
-    ("template", "error"),
+    ("template", "error", "match"),
     [
-        (_toolbar().replace('label="Editor tools"', "c-label=\"''\""), ValueError),
-        (_toolbar().replace('label="Editor tools"', 'label="Editor" orientation="diagonal"'), ValueError),
-        (_toolbar().replace('label="Editor tools"', 'label="Editor" variant="solid"'), ValueError),
-        (_toolbar().replace('label="Editor tools"', 'label="Editor" size="xl"'), ValueError),
-        (_toolbar().replace('label="Editor tools"', 'label="Editor" c-loop="1"'), TypeError),
-        ('<c-CToolbar label="Editor"></c-CToolbar>', SyntaxError),
-        (_toolbar().replace('label="Editor tools"', 'label="Editor" c-attrs="[]"'), TypeError),
+        (_toolbar().replace('label="Editor tools"', "c-label=\"''\""), ValueError, None),
+        (
+            _toolbar().replace('label="Editor tools"', 'label="Editor" orientation="diagonal"'),
+            TypeError,
+            r"CToolbar\.Kwargs\.orientation expects Literal\[",
+        ),
+        (
+            _toolbar().replace('label="Editor tools"', 'label="Editor" variant="solid"'),
+            TypeError,
+            r"CToolbar\.Kwargs\.variant expects Literal\[",
+        ),
+        (
+            _toolbar().replace('label="Editor tools"', 'label="Editor" size="xl"'),
+            TypeError,
+            r"CToolbar\.Kwargs\.size expects Literal\[",
+        ),
+        (
+            _toolbar().replace('label="Editor tools"', 'label="Editor" c-loop="1"'),
+            TypeError,
+            r"CToolbar\.Kwargs\.loop expects bool",
+        ),
+        ('<c-CToolbar label="Editor"></c-CToolbar>', SyntaxError, None),
+        (
+            _toolbar().replace('label="Editor tools"', 'label="Editor" c-attrs="[]"'),
+            TypeError,
+            r"CToolbar\.Kwargs\.attrs expects",
+        ),
     ],
 )
-def test_invalid_server_inputs_fail(template: str, error: type[Exception]) -> None:
-    with pytest.raises(error):
+def test_invalid_server_inputs_fail(template: str, error: type[Exception], match: str | None) -> None:
+    with pytest.raises(error, match=match):
         _render(template)
 
 

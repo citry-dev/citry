@@ -140,12 +140,12 @@ def test_field_and_form_own_relationships_and_state() -> None:
         ({"value": "24:00"}, ValueError, "real wall-clock"),
         ({"value": time(9, tzinfo=timezone.utc)}, ValueError, "zone-free"),
         ({"value": time(9, microsecond=1)}, ValueError, "fractional"),
-        ({"value": 930}, TypeError, "time or canonical"),
+        ({"value": 930}, TypeError, r"CTimeInput\.Kwargs\.value expects time \| str \| None"),
         ({"step": True}, TypeError, "exact positive integer"),
         ({"step": 0}, ValueError, "greater than zero"),
-        ({"variant": "soft"}, ValueError, "must be one of"),
-        ({"size": "xl"}, ValueError, "must be one of"),
-        ({"attrs": []}, TypeError, "mapping or None"),
+        ({"variant": "soft"}, TypeError, r"CTimeInput\.Kwargs\.variant expects Literal\["),
+        ({"size": "xl"}, TypeError, r"CTimeInput\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"),
+        ({"attrs": []}, TypeError, r"CTimeInput\.Kwargs\.attrs expects Mapping\[str, object\] \| None"),
     ],
 )
 def test_invalid_server_inputs_fail_deterministically(kwargs, error, match) -> None:

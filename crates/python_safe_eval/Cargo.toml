@@ -2,8 +2,8 @@
 name = "python_safe_eval"
 version = "1.0.0"
 description = "Safe Python expression eval"
-# NOTE: To use this edition, run
-#       `rustup toolchain install nightly && rustup override set nightly`
+# Edition 2024 needs Rust 1.85 or later. From the repository root,
+# `rustup toolchain install` fetches the toolchain rust-toolchain.toml names.
 edition = "2024"
 rust-version = { workspace = true }
 authors = { workspace = true }

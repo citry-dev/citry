@@ -7,7 +7,7 @@ SHA-256 is
 `13d57e14a66a37b558d10c5a46c6c1deb857ffbbfaa7f99118db584646ca096d`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.6`.
+package as `0.420.0+citry.7`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,13 +16,14 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.6` package version, omits the
+- `Cargo.toml`: records the local `0.420.0+citry.7` package version, omits the
   upstream `emit_for` test target (the published manifest does not contain its
   `vize_atelier_dom` development dependency, and adding it would create a
   cycle), registers the `citry_runtime_directives`,
-  `citry_event_handler_statements`, `citry_event_key_modifiers`, and
-  `citry_attribute_entities` regression targets, and drops the upstream
-  `davinci_storage` benchmark target because its source is not included here.
+  `citry_event_handler_statements`, `citry_event_key_modifiers`,
+  `citry_v_pre_tags`, and `citry_attribute_entities` regression targets,
+  and drops the upstream `davinci_storage` benchmark target because its
+  source is not included here.
 - `src/emit/directive.rs`: keeps runtime directive and `v-model` wrappers on a
   single element unwrapped from `<template v-for>`; custom-directive modifier
   names are emitted as quoted and escaped JavaScript object keys.
@@ -81,6 +82,11 @@ Relative to that archive, the Citry delta is:
   dynamic arguments are not decoded. Each decoded value is allocated once,
   and `Cx` maps any part of it back to the span of the authored value
   (`decoded_directive_value`, `decoded_interpolation_text`).
+- `src/lower/element.rs`: inside `v-pre`, and on the element that opens it,
+  `<slot>`, components, and the built-ins (`<component>`, `<teleport>`,
+  `<keep-alive>`, `<transition>`) stay plain elements, as Vue's parser
+  leaves them, and a plain `<component>` drops its `is` attribute, as
+  Vue's `buildProps` does.
 - `src/emit/entity.rs`: every decoder reads each reference once, so a
   written `&amp;#40;` in text, an attribute value or an expression reads as
   `&#40;`, as in Vue and the browser.
@@ -114,6 +120,10 @@ Relative to that archive, the Citry delta is:
   rule in static, bound, `v-html`, `v-for` key, slot, and component
   attributes, and for names that stay as written, compared with the output
   of `@vue/compiler-dom` 3.5.44.
+- `tests/citry_v_pre_tags.rs`: adds Citry coverage for the `v-pre` rule
+  above: a slot, a component, and each built-in stay plain elements inside
+  `v-pre` and on the element that opens it, and `is` is dropped on a plain
+  `<component>`.
 - `tests/citry_event_handler_statements.rs`: adds Citry coverage for the
   statement rule in event handlers, interpolations, and conditions (with and
   without TypeScript when the `typescript` feature is on), for handlers that

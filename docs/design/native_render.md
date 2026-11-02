@@ -460,6 +460,7 @@ render as several outputs rebuilds each row once.
 | The layout callback raises | Rust declines; Python's own path calls the same function and raises there with the template position. |
 | User code raises while Rust looks a value up (a dict key's `__eq__`) | Raised inside a value, Rust declines and Python's evaluator meets the same error; raised while looking up a template variable itself, the error propagates from the read, as Python's check would raise it. |
 | A template shape Rust does not evaluate (a child call, a literal outside `None`, `bool` and `str`, a data key named `calls`) | No plan is built; every row of the template stays in Python. |
+| A template nested past the depth limits | No plan is built, and Citry logs this once per template at debug level; see "Templates nested too deeply" below. |
 | Building the plan raises anything but `ValueError` | The error propagates and nothing is cached, so every render fails loudly; `CITRY_NATIVE_RENDER=0` works around it. |
 | A call-run key with no UTF-8 form | Python computes that row's ids. |
 | A `str` subclass render id | Written from its text, as `json.dumps` does. |
@@ -632,6 +633,89 @@ Accepted differences, none of which changes output:
   itself (a non-empty `serverData`, an `eventContext`), instead of once for
   the whole item.
 
+### Templates nested too deeply
+
+Level A builds a plan for a template, then evaluates it and writes each
+row's data, with code that calls itself once per nesting level. So does the
+PyO3 code that reads Python's description of the plan and copies a row's
+values. That work reads and creates Python objects, so it cannot move to a
+stack taken from the heap the way the template parser's deep walks do
+(CPython 3.14 checks the stack pointer against the thread's own stack).
+Without a limit, a template nested deeply enough crashes the process on a
+thread with a small stack, for example the 128 KiB a thread gets by default
+on musl Linux.
+
+So `Plan::new` and the PyO3 reader refuse a template past either of two
+limits, with a `ValueError` whose message starts with `too_deep:`.
+`native_row_plan` caches that as "no plan", and logs one debug message for
+the template on the `citry` logger. Every row of the template then renders
+through Python's evaluator, with the same output.
+
+- **Body depth** (`MAX_BODY_DEPTH`). The template's top level is level 1,
+  each `c-if` branch and `c-for` body or empty body adds one, an
+  operation's expression is one level below the operation, and each
+  conditional expression adds one. `{{ n }}` inside six nested loops is
+  level 8.
+- **Read depth** (`MAX_READ_DEPTH`). A variable the template reads is level
+  1, and each subscript of it or loop over it adds one.
+
+Each build profile has its own limits, because a debug build's stack frames
+are several times larger. Python reads the active values as
+`citry_core._rust.NATIVE_RENDER_MAX_BODY_DEPTH` and
+`NATIVE_RENDER_MAX_READ_DEPTH`, so no test copies them.
+
+| Build | Body depth | Read depth |
+|---|---|---|
+| release (`release` and `release-wheel`, what `uv sync` and the published wheels build) | 64 | 64 |
+| debug (`maturin develop`) | 8 | 16 |
+
+The numbers come from rendering each shape on a fresh thread with the plan
+built there for the first time, which is the deepest the work goes:
+nested loops, nested `c-if`, nested conditional expressions and one deep
+read path. They were measured with a debug and a release build on macOS
+arm64 with Python 3.14:
+
+- A release build rendered about 140 levels of loops or `c-if` on a 128 KiB
+  thread, and read the deepest path the expression parser accepts (96
+  subscripts). Its limits are about half of that.
+- A debug build, on a 96 KiB thread (128 KiB with 32 KiB held back),
+  rendered 7 nested loops or `c-if`s (level 9) and read 18 subscripts (read
+  level 19). Its limits are one level below for bodies and three below for
+  read paths.
+
+What happens at the edges:
+
+- **Within the limits** the native path runs, as it does for any template.
+- **Past them** every row of the template uses Python's evaluator and skips
+  `_NativeRun`, even on a thread with plenty of stack. The output is the
+  same, only slower.
+- **A thread whose stack is mostly used before the render starts** is not
+  covered: the limits assume the render begins near the top of a fresh
+  thread. Python's own evaluator can run out of stack there too.
+- **Other platforms and Python versions** were not measured: only macOS
+  arm64 with Python 3.14 was. CI renders at the release limit on Linux
+  x86_64 with Python 3.14. Windows, macOS x86_64, musl, aarch64 Linux,
+  s390x, ppc64le, armv7 and x86 are unproven, and so are Python 3.11 to
+  3.13 and 3.15. A release limit at half the measured depth leaves room for
+  frames up to about twice as large.
+- **Compiling a template on a small thread** fails in Python's own compiler
+  from about 10 nested loops on a 128 KiB thread ("Parser stack
+  overflowed"), with or without the native path. The limits do not change
+  that.
+
+The derived `Drop`, `Clone` and `PartialEq` of the plan and value types
+also call themselves once per level, and the limits bound that depth too.
+They stay derived; their stack per level was not measured, but they hold
+far fewer locals than the walks above.
+
+`tests/test_native_render_depth.py` in the `citry` package checks the
+refusal at each limit and one past it, the output on both sides, and the
+debug message. Its last tests render at the limit and one past it on a
+fresh 128 KiB thread, in a separate interpreter so a crash fails one test.
+CI runs those in one Linux cell (`CITRY_NATIVE_DEPTH_PROBES=1`, on the
+release build `uv sync` makes), and a local run always does, so a
+`maturin develop` run checks the debug limits.
+
 ## 9. Where the code lives
 
 | Piece | File |
@@ -712,6 +796,12 @@ Accepted differences, none of which changes output:
   Rust's JSON compared byte for byte with Python's for hand-written values
   and a seeded random set through the manifest encoder, and each decline
   and encoder refusal called directly.
+- `tests/test_native_render_depth.py` covers level A's depth limits: the
+  refusal at each limit and one past it, the output on both sides, the debug
+  message, and rendering on a fresh 128 KiB thread in a separate
+  interpreter, which CI runs in one Linux cell (see "Templates nested too
+  deeply" in section 8). `crates/citry_native_render/tests/depth_limits.rs`
+  checks the same refusals in Rust.
 - The Rust crate's tests compare against fixtures that
   `scripts/native_render_fixtures.py` writes from the Python code;
   `--check` (run by a Python test) fails when a fixture no longer matches.

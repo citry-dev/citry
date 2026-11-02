@@ -57,7 +57,7 @@ JavaScript:
 
 | Helper | Use |
 |---|---|
-| [`$state`][$state] | Read State, or replace a field the browser may change. The change is sent with the next call from this component, unless that call uses GET (see [Event routes](/events/routes/)). |
+| [`$state`][$state] | Read State, or replace a field the browser may change. The change is sent with the next call from this component that does not use GET (see [Event routes](/events/routes/)) and does not go to a handler declared with `@event(detached=True)`. |
 | [`$loading()`][$loading] | True while any call from this component is waiting or running. |
 | [`$loading('save')`][$loading] | The same, for the `save` handler only. |
 | [`$error()`][$error] | The newest error from any of this component's handlers, or `null`. |
@@ -139,6 +139,13 @@ match the control:
 | `<select multiple>` | the selected option values, in page order | `list[str]` |
 | Other text-like inputs, a single `<select>`, `<textarea>` | the text | `str` |
 | A custom element | its `value` property, which must be JSON | the matching type |
+
+Citry checks inside the type too. It rejects a `list[int]` value with a
+string in it, checks each value of a `dict[str, int]`, and accepts only
+`"draft"` or `"sent"` for a `Literal["draft", "sent"]` field. The error
+names the item that failed, such as `tags.2` for the third item of a
+`tags` list. A `TypedDict` value is checked only as an object; Citry does
+not check the keys inside it.
 
 An empty or half-typed number input has no number, so it sends its text. A
 field declared `int` rejects that. Accept both and convert in the handler:

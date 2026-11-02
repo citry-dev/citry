@@ -225,13 +225,7 @@ def image_states_component(app: Citry) -> type[Component]:
                       + 'rapid supersession stale-events redacted cached shadow-root',
                   }"
                   :src="reactiveSource"
-                  :onStatusChange="(detail)=>{
-                      reactiveCallbacks++;
-                      reactiveStatus=detail.status;
-                      reactiveSelected=redact(detail.current_src || detail.src);
-                      if (detail.status === 'loaded') nativeLoads++;
-                      if (detail.status === 'error') nativeErrors++;
-                    }"
+                  :onStatusChange="recordReactiveStatus"
                 >
                   <c-fill name="fallback">Live frame unavailable</c-fill>
                 </c-CImage>
@@ -325,10 +319,7 @@ def image_states_component(app: Citry) -> type[Component]:
                       + 'hostile-fail-closed listener-count observer-count readiness request-fingerprint '
                       + 'selection-fingerprint',
                   }"
-                  :onStatusChange="(detail)=>{
-                      lifecycleCallbacks++;
-                      lifecycleStatus=detail.status;
-                    }"
+                  :onStatusChange="recordLifecycleStatus"
                 >
                   <c-fill name="placeholder">Loading calibration plate</c-fill>
                   <c-fill name="fallback">Calibration plate unavailable</c-fill>
@@ -363,6 +354,21 @@ def image_states_component(app: Citry) -> type[Component]:
                 queueMicrotask(() => {
                   this.reactiveSource = 'https://images.citry.test/northstar/orion-640.jpg?frame=rapid-b';
                 });
+              },
+              // Show only the filename, and count loads and errors separately
+              // so the tests can compare them with their starting values.
+              recordReactiveStatus(detail) {
+                this.reactiveCallbacks++;
+                this.reactiveStatus = detail.status;
+                this.reactiveSelected = this.redact(detail.current_src || detail.src);
+                if (detail.status === 'loaded') this.nativeLoads++;
+                if (detail.status === 'error') this.nativeErrors++;
+              },
+              // The callback count lets the lifecycle test check that a server
+              // re-render that keeps the same image does not call it again.
+              recordLifecycleStatus(detail) {
+                this.lifecycleCallbacks++;
+                this.lifecycleStatus = detail.status;
               },
             },
           });

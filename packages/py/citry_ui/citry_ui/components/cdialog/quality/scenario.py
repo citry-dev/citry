@@ -27,9 +27,7 @@ def dialog_states_component(app: Citry) -> type[Component]:
             </h1>
             <c-CDialog
               id="quality-dialog"
-              :onOpenChange="(open, detail) => {
-                  window.__qualityDialogChange = { open, reason: detail.reason };
-                }"
+              :onOpenChange="recordOpenChange"
             >
               <c-fill
                 name="activator"
@@ -132,6 +130,13 @@ def dialog_states_component(app: Citry) -> type[Component]:
               return {
                 controlledOpen: false
               };
+            },
+            methods: {
+              // Browser tests read the latest request from `window`, so the
+              // handler stores it there and not in component state.
+              recordOpenChange(open, detail) {
+                window.__qualityDialogChange = { open, reason: detail.reason };
+              },
             },
           });
         """

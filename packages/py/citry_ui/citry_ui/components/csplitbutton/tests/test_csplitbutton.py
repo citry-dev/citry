@@ -219,12 +219,18 @@ def test_native_anatomy_ids_relationships_and_form_destination_are_exact():
         ('id="save" label=" " menu_label="Menu actions"', "label must contain non-whitespace"),
         ('id="save" label="Save" menu_label=" "', "menu_label must contain non-whitespace"),
         ('id="two words" label="Save" menu_label="Menu actions"', "cannot contain ASCII whitespace"),
-        ('id="save" label="Save" menu_label="Menu actions" type="link"', "type must be one of"),
+        (
+            'id="save" label="Save" menu_label="Menu actions" type="link"',
+            r"CSplitButton\.Kwargs\.type expects Literal\[",
+        ),
         (
             'id="save" label="Save" menu_label="Menu actions" placement="left"',
-            "placement must be one of",
+            r"CSplitButton\.Kwargs\.placement expects Literal\[",
         ),
-        ('id="save" label="Save" menu_label="Menu actions" disabled=1', "disabled must be a bool"),
+        (
+            'id="save" label="Save" menu_label="Menu actions" disabled=1',
+            r"CSplitButton\.Kwargs\.disabled expects bool",
+        ),
     ],
 )
 def test_invalid_structural_inputs_fail_before_render(inputs: str, message: str):

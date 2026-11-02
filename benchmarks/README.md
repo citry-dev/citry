@@ -98,7 +98,7 @@ cd packages/py/citry_core && ../../../.venv/bin/maturin develop --release && cd 
 .venv/bin/python benchmarks/compare.py --quick    # smoke: 2 rounds, no import column
 ```
 
-`compare.py`, `client.py` and `i18n.py` read `citry_core._rust.BUILD_PROFILE`
+`compare.py`, `client.py`, `i18n.py` and `slot_renders.py` read `citry_core._rust.BUILD_PROFILE`
 before measuring and exit with the rebuild command when it is `"debug"`. To
 measure a debug build on purpose, for example to profile with debug
 assertions on, set `CITRY_BENCH_ALLOW_DEBUG_NATIVE=1`; the runner then prints
@@ -286,6 +286,7 @@ benchmarks/
     client_scenario.py reusable production-shaped browser workload and payload sizing
     compare.py   the comparison runner (one table per scenario size)
     native_build.py  the check that makes the runners exit on a debug build
+    slot_renders.py  compares two checkouts on pages of 300 filled, fallback, or passed-on slots
     utils.py     marker slicing shared by runners
     results/     the compact report of the 2026-09-10 rendering results
     web/         the framework interaction suite (see web/README.md)

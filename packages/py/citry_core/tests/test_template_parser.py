@@ -177,8 +177,14 @@ def test_browser_record_stubs_list_exactly_the_fields_python_reads() -> None:
     assert sorted(stubbed) == sorted(_BROWSER_RECORDS)
     for name in _BROWSER_RECORDS:
         record = getattr(_rust.template_parser, name)
+        # PyPy also lists the interpreter's own `__dict__` and `__weakref__`
+        # descriptors on a class built in Rust; a `#[pyo3(get)]` field is
+        # never named `__dict__` or `__weakref__`, so leaving those out keeps
+        # the comparison exact.
         fields = {
-            attribute for attribute, value in vars(record).items() if type(value).__name__ == "getset_descriptor"
+            attribute
+            for attribute, value in vars(record).items()
+            if type(value).__name__ == "getset_descriptor" and attribute not in {"__dict__", "__weakref__"}
         }
         assert fields == stubbed[name], name
 
@@ -775,3 +781,27 @@ class TestTagRules:
         rules = {"c-card": TagRules(required_attrs=[["title"]])}
         with pytest.raises(SyntaxError):
             parse_template("<c-card></c-card>", user_rules=rules)
+
+
+def test_compiling_leaves_the_parsed_template_unchanged():
+    # The compiler starts from a copy that shares its lists with the parsed
+    # template, and takes it apart while it works. Every change must copy a
+    # shared list first, so the template Python holds still compiles to the
+    # same code the second time. The source covers the places the compiler
+    # changes a tree: control-flow shorthands it turns into wrapper nodes,
+    # `<c-raw>` bodies it takes out, and a template inside an attribute.
+    source = """
+<div c-if="show" c-for="item in items">{{ item }}</div>
+<c-raw><b>{{ not_parsed }}</b></c-raw>
+<c-Card c-title='<em c-if="flag">{{ title }}</em>'>
+  <c-fill name="default">{{ body }}</c-fill>
+</c-Card>
+"""
+    template = parse_template(source)
+    before = repr(template)
+    first = compile_template(template)
+    first_prepared = _rust.template_parser._compile_prepared_template(template)
+    assert repr(template) == before
+    assert compile_template(template) == first
+    assert _rust.template_parser._compile_prepared_template(template) == first_prepared
+    assert repr(template) == before

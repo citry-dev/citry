@@ -4,10 +4,13 @@
 //! Comparing the browser's parse of written HTML with what was expected
 //! (`hydration_structure`) and checking a raw HTML block (`static_html`)
 //! call themselves once per level of the parsed tree. Python may run them
-//! on any thread, and a thread other than the main one can have as little
-//! as 512 KiB of stack (macOS) or 128 KiB (musl Linux). So each level runs
-//! through `with_enough_stack`: when less than `RED_ZONE` is left, `stacker`
-//! continues on a new segment of `NEW_SEGMENT` bytes from the heap. The
+//! on any thread. A thread gets the platform's default stack unless Python
+//! sets one: 128 KiB on musl Linux, also for Python's own threads, and
+//! 512 KiB on macOS for a thread started outside Python; and
+//! `threading.stack_size()` can make any Python thread as small. So each
+//! level runs through `with_enough_stack`: when less than `RED_ZONE` is
+//! left, `stacker` continues on a new segment of `NEW_SEGMENT` bytes from
+//! the heap. The
 //! sizes follow the template parser's own guard
 //! (`citry_template_parser/src/stack.rs`).
 

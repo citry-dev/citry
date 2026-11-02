@@ -51,10 +51,6 @@ class CForm(LibraryComponent):
     class Slots:
         default: SlotInput[CFormDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(
         self,
         kwargs: Kwargs,
@@ -172,8 +168,7 @@ class CForm(LibraryComponent):
       </form>
     """
 
-    js = (
-        """
+    js = """
       $component({
         props: {
           disabled: {default: undefined},
@@ -191,10 +186,8 @@ class CForm(LibraryComponent):
         computed: {
           resolvedDisabled() { return typeof this.disabled === 'boolean' ? this.disabled : this.serverDisabled; },
           resolvedReadonly() { return typeof this.readonly === 'boolean' ? this.readonly : this.serverReadonly; },
-"""
-        "          resolvedSubmitting() { return typeof this.submitting === 'boolean' ? this.su"
-        "bmitting : this.serverSubmitting; },\n"
-        """        },
+          resolvedSubmitting() { return typeof this.submitting === 'boolean' ? this.submitting : this.serverSubmitting; },
+        },
         provide() { return {[Symbol.for('citry-ui:form')]: this.formService}; },
         onServerRender: ({component}) => {
           const form = component.$refs.root;
@@ -306,8 +299,7 @@ class CForm(LibraryComponent):
           };
         },
       });
-    """
-    )
+    """  # noqa: E501
 
     css_file = "runtime.min.css"
 

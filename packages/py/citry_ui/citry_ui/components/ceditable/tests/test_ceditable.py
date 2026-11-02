@@ -137,11 +137,11 @@ def test_field_owns_state_and_relationships() -> None:
 @pytest.mark.parametrize(
     ("extra", "message"),
     [
-        ('submit_mode="automatic"', "submit_mode must be one of"),
-        ('action_position="left"', "action_position must be one of"),
+        ('submit_mode="automatic"', r"CEditable\.Kwargs\.submit_mode expects Literal\["),
+        ('action_position="left"', r"CEditable\.Kwargs\.action_position expects Literal\['inside', 'outside'\]"),
         ('c-max_length="-1"', "zero or greater"),
         ("c-edit_label=\"' '\"", "must be nonempty"),
-        ('c-select_on_focus="1"', "must be a bool"),
+        ('c-select_on_focus="1"', r"CEditable\.Kwargs\.select_on_focus expects bool"),
     ],
 )
 def test_invalid_server_inputs_fail(extra: str, message: str) -> None:

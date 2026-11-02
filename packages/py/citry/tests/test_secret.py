@@ -25,12 +25,16 @@ from citry import Citry, Component, Const, Secret
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
 from citry._json_wire import json_wire_type_from_annotation
+from citry._symbol_table import symtable
 from citry.ext.cache import CacheKeyError
 
 try:
     import pydantic
 except ImportError:
     pydantic = None  # type: ignore[assignment]
+
+# `citry check` reads module values sent by js_data() through the symbol table.
+requires_symtable = pytest.mark.skipif(symtable is None, reason="PyPy has no _symtable; see #434")
 
 # The m42 benchmark app's constants, with the token wrapped.
 API_BASE = "/api"
@@ -266,7 +270,9 @@ def test_a_secret_jsdata_field_fails_the_render():
     class Page(Component):
         citry = engine
         template = "<p></p>"
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class JsData:
             token: Secret[str]
@@ -458,7 +464,9 @@ def test_a_vue_component_may_use_a_secret_in_template_data():
         template = """
             <p>{{ token }} {{ count }}</p>
         """
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         def template_data(self, kwargs, slots):
             return {"token": SECRET_TOKEN, "count": len(SECRET_TOKEN.get_secret_value())}
@@ -493,7 +501,9 @@ def test_a_secret_passed_to_a_child_component_stays_on_the_server():
         template = """
             <span>{{ token }}</span>
         """
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class Kwargs:
             token: Secret[str]
@@ -562,7 +572,9 @@ def test_a_plain_value_in_a_secret_jsdata_field_says_to_remove_the_field():
     class Page(Component):
         citry = engine
         template = "<p></p>"
-        js = _COMPONENT_JS
+        js = """
+          $component({});
+        """
 
         class JsData:
             token: Secret[str]
@@ -732,6 +744,7 @@ def _secret_finding(field: str, where: str) -> tuple[str, str]:
     )
 
 
+@requires_symtable
 def test_m42_check_reports_a_secret_module_constant(tmp_path):
     assert _findings(_M42_ENGINE, tmp_path) == [
         _secret_finding("secretToken", "SECRET_TOKEN"),
@@ -800,6 +813,11 @@ class SecretSentFormsPage(Component):
             "starred": ["public", *TOKENS],
             "branch": None if kwargs.get("anonymous") else SECRET_TOKEN,
             "marked": Const(SECRET_TOKEN),
+            # Inside the dict the value may span lines with no parentheses
+            # of its own, and the check must still read it.
+            "splitBranch": None
+            if kwargs.get("anonymous")  # an anonymous page sends nothing
+            else SECRET_TOKEN,
         }
 
 
@@ -821,12 +839,14 @@ class SecretComputedPage(Component):
         }
 
 
+@requires_symtable
 def test_check_reads_a_secret_through_attributes_unpacking_branches_and_const(tmp_path):
     assert sorted(_findings(_SENT_FORMS_ENGINE, tmp_path)) == [
         _secret_finding("branch", "SECRET_TOKEN"),
         _secret_finding("fromModule", "secret_settings.API_TOKEN"),
         _secret_finding("fromObject", "SETTINGS.auth.token"),
         _secret_finding("marked", "SECRET_TOKEN"),
+        _secret_finding("splitBranch", "SECRET_TOKEN"),
         _secret_finding("starred", "TOKENS[0]"),
     ]
 
@@ -924,6 +944,7 @@ class OpaqueValuesPage(Component):
         }
 
 
+@requires_symtable
 def test_check_runs_no_code_of_a_value_it_reads_and_skips_what_it_cannot_judge(tmp_path):
     _OPAQUE_CALLS.clear()
 
@@ -947,6 +968,7 @@ class DeepValuesPage(Component):
         return {"deep": DEEP_CONSTANT, "deepObject": DEEP_OBJECT}
 
 
+@requires_symtable
 def test_check_reports_values_nested_deeper_than_the_recursion_limit(tmp_path):
     findings = _findings(_DEEP_ENGINE, tmp_path)
 
@@ -1014,7 +1036,9 @@ class ServerOnlyBoard(Component):
     template = """
         <c-SecretBadge c-token="token" />
     """
-    js = _COMPONENT_JS
+    js = """
+      $component({});
+    """
 
     class JsData:
         title: str

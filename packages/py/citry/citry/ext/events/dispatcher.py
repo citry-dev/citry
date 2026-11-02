@@ -37,7 +37,7 @@ import json
 import logging
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._input_types import _restore_json_tuples
@@ -66,7 +66,7 @@ from citry._protocol.events import (
 # of a broken user policy.
 from citry.ext.events.actions import Render, _download_content_disposition
 from citry.ext.events.csrf import _MSG_CSRF_FAILED, csrf_field_names
-from citry.ext.events.errors import EventError, wire_error
+from citry.ext.events.errors import EventError, limit_unexpected_fields, unlisted_fields_note, wire_error
 from citry.ext.events.handlers import event_options
 from citry.ext.events.results import (
     HTML_RENDER_ENCODER,
@@ -79,7 +79,7 @@ from citry.ext.events.results import (
     warn_unreturned_actions,
 )
 from citry.ext.events.schemas import StringArgs, declared_field_names, validate_args
-from citry.ext.events.state import public_state_values
+from citry.ext.events.state import check_changed_state, public_state_values, restore_state, state_wire_values
 from citry.ext.events.tokens import (
     InvalidStateError,
     StaleStateError,
@@ -372,10 +372,26 @@ def _state_fingerprint(state: Any) -> str | None:
     step gets to raise its own pointed error.
     """
     try:
-        values = {state_field.name: getattr(state, state_field.name) for state_field in fields(state)}
+        values = state_wire_values(state)
         return json.dumps(values, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
     except (TypeError, ValueError):
         return None
+
+
+def _is_detached(handler: EventHandler) -> bool:
+    """Whether the handler was declared ``@event(detached=True)``."""
+    options = event_options(handler.func)
+    return options is not None and options.detached
+
+
+def _detached_render_message(plan: _CallPlan) -> str:
+    """The error for a detached handler whose result holds a render."""
+    return (
+        f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} is declared with"
+        f" @event(detached=True) but returned actions.Render (or a component). A detached handler may"
+        f" return data, dispatch an event, redirect, update the URL, or return a Download; remove"
+        f" detached=True to render."
+    )
 
 
 def _debug_enabled() -> bool:
@@ -746,6 +762,18 @@ class EventsDispatcher:
         token = call.get("stateToken")
         updates = call.get("stateUpdates")
         needs_state = "state" in handler.params
+        if updates is not None and _is_detached(handler):
+            # A detached handler never returns a new State token, so browser
+            # State changes applied here would be lost after the call. Even
+            # an empty object is refused, matching the browser's own check.
+            error = build_error(
+                422,
+                "invalid_args",
+                f"The call carries state updates, but event {event_name!r} on component"
+                f" {comp_cls.__name__!r} is declared with @event(detached=True), so it cannot change State."
+                f" Send the State updates with a call to a handler that is not detached.",
+            )
+            return build_error_result(error, send_sequence)
         if info.state_cls is None:
             # A stray token on a stateless component is ignored (there is
             # nothing to rebuild), but updates have no writable target.
@@ -770,8 +798,21 @@ class EventsDispatcher:
                 logger.debug(err.message)
                 return build_error_result(build_error(409, "stale_state", _MSG_STALE_STATE), send_sequence)
             try:
-                state = info.state_cls(**verified.state_kwargs)
-            except TypeError:
+                state = restore_state(info.state_cls, verified.state_kwargs)
+            except Exception as err:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
+                if not isinstance(err, (TypeError, ValueError)):
+                    # Not a value that no longer fits: a State validator
+                    # failed, which is the author's bug and answers 500.
+                    return self._unexpected_error(
+                        ctx, err, comp_cls=comp_cls, handler=handler, send_sequence=send_sequence
+                    )
+                # A model State validates its values here, and a
+                # ValidationError means the same as a dataclass's TypeError.
+                # The browser will offer a reload, so the server says why.
+                logger.warning(
+                    f"Component {comp_cls.__name__}: a verified State token no longer fits the State class, so the"
+                    f" call answers stale_state: {type(err).__name__}."
+                )
                 # The token verified but its fields no longer match the State
                 # class: the version-skew case (the class changed across a
                 # deploy), which is the stale-token story (design 4.5).
@@ -806,6 +847,10 @@ class EventsDispatcher:
             validation = validate_args(handler.data_schema, args)
             if not validation.ok:
                 message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
+                # Validation listed only the first undeclared keys and the
+                # first item errors of each list or dict; the message
+                # counts the rest.
+                message += unlisted_fields_note(validation.unlisted_fields)
                 return build_error_result(build_error(422, "invalid_args", message, validation.fields), send_sequence)
             data_value = validation.value
         elif args:
@@ -813,6 +858,10 @@ class EventsDispatcher:
             # a 422 here exactly as they are on a schema (design 3.3).
             message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
             extra = dict.fromkeys(sorted(str(key) for key in args), "Unexpected field: not declared on the schema.")
+            # Every key here is undeclared, so the request decides how many
+            # there are: list the first few and count the rest.
+            extra, unlisted = limit_unexpected_fields(extra, extra.keys())
+            message += unlisted_fields_note(unlisted)
             return build_error_result(build_error(422, "invalid_args", message, extra), send_sequence)
 
         # The per-call events instance: the woven config class (the
@@ -988,6 +1037,28 @@ class EventsDispatcher:
         """Encode, apply capabilities, emit ``on_event_result``, re-sign state, echo send_sequence."""
         if ctx.response_mode == "compat":
             capabilities = {name: frozenset(values) for name, values in CAPABILITIES_BASELINE_V1.items()}
+        # Checked before encoding too, so a render the handler may not return
+        # is never built, which could already write server-stored State.
+        if _is_detached(plan.handler) and any(isinstance(action, Render) for action in actions):
+            raise ValueError(_detached_render_message(plan))
+        # A model State is validated once before anything signs or stores it,
+        # so a wrong value fails this call (500) instead of the next one (409).
+        # An unchanged State was validated when it was restored.
+        if plan.state is not None and self._state_changed(plan):
+            problem = check_changed_state(plan.state)
+            if problem is not None:
+                field, detail = problem
+                where = f" field {field!r}" if field is not None else ""
+                advice = (
+                    " Remove the field's serializer, or use a type whose JSON reads back as the same value."
+                    if "does not read back" in detail
+                    else " Assign a value of the field's declared type."
+                )
+                msg = (
+                    f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} left State{where}"
+                    f" with a value Citry cannot sign: {detail}.{advice}"
+                )
+                raise ValueError(msg)
         try:
             advertised_renderers = capabilities["renderers"]
             if ctx.response_mode == "compat":
@@ -1053,6 +1124,9 @@ class EventsDispatcher:
                 )
         else:
             final_actions = encoded
+        # Checked after the hooks, so an extension cannot add what the
+        # handler itself may not return.
+        self._check_detached_result(plan, final_actions)
         try:
             final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
         except ProtocolValueError:
@@ -1121,6 +1195,38 @@ class EventsDispatcher:
             )
             raise ValueError(msg)
         return validated
+
+    def _check_detached_result(self, plan: _CallPlan, wire_actions: list[dict[str, Any]]) -> None:
+        """
+        Fail the call when a detached handler renders or changes State.
+
+        The browser may send a detached call while the app's queued calls are
+        still in flight. A render would be built on a page that a queued call
+        may already have replaced, and a new State token could overwrite the
+        token a queued call returned, or be overwritten by it.
+        """
+        if not _is_detached(plan.handler):
+            return
+        kinds = {action.get("action") for action in wire_actions}
+        label = f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__}"
+        # The handler's own renders were refused before encoding, and handler
+        # code cannot build a state action, so an on_event_result extension
+        # added whatever is found here.
+        for kind in ("render", "state"):
+            if kind in kinds:
+                msg = (
+                    f"{label} is declared with @event(detached=True), but its result holds a {kind!r}"
+                    f" action, which an on_event_result extension added. Change that extension to leave"
+                    f" a detached handler's result without a {kind!r} action."
+                )
+                raise ValueError(msg)
+        if self._state_changed(plan):
+            msg = (
+                f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} is declared with"
+                f" @event(detached=True) but changed State. A detached handler may read State but not change"
+                f" it; remove detached=True to change State."
+            )
+            raise ValueError(msg)
 
     def _state_changed(self, plan: _CallPlan) -> bool:
         """Whether the call's State differs from what the verified token carried."""

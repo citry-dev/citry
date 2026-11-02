@@ -1,0 +1,3 @@
+# The root .gitignore leaves out Python build folders named lib/; this
+# package keeps its generator code there.
+!lib/

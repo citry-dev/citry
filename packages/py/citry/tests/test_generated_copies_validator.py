@@ -4,10 +4,17 @@ from pathlib import Path
 
 from scripts.validators import generated_copies
 
+_DOM_MEMBERS_HEADER = "// @generated\n//\n// Inputs:\n// - @vue/runtime-dom {version}\n// - @webref/idl 3.86.0\n"
 _HEADER = '"""\nGenerated; do not edit.\n- @vue/runtime-dom {version} types, path/to/runtime-dom.d.ts\n"""\n'
 
 
-def _repository(tmp_path: Path, *, module_vue: str = "3.5.44", vendored_vue: str = "3.5.44") -> Path:
+def _repository(
+    tmp_path: Path,
+    *,
+    module_vue: str = "3.5.44",
+    vendored_vue: str = "3.5.44",
+    table_vue: str = "3.5.44",
+) -> Path:
     # Lay out every file the validator reads, all matching, so each test
     # changes exactly one of them.
     for copy, original in generated_copies.EXACT_COPIES:
@@ -21,6 +28,9 @@ def _repository(tmp_path: Path, *, module_vue: str = "3.5.44", vendored_vue: str
     inventory = tmp_path / generated_copies.VUE_TYPES_INVENTORY
     inventory.parent.mkdir(parents=True, exist_ok=True)
     inventory.write_text(f'{{"vue": "{vendored_vue}"}}', encoding="utf-8")
+    table = tmp_path / generated_copies.DOM_MEMBERS
+    table.parent.mkdir(parents=True, exist_ok=True)
+    table.write_text(_DOM_MEMBERS_HEADER.format(version=table_vue), encoding="utf-8")
     return tmp_path
 
 
@@ -45,7 +55,8 @@ def test_a_missing_copy_is_reported(tmp_path: Path) -> None:
 
 
 def test_a_vue_bump_without_regenerating_the_attribute_module_is_reported(tmp_path: Path) -> None:
-    root = _repository(tmp_path, module_vue="3.5.44", vendored_vue="3.5.45")
+    # The table is current, so only the attribute module is stale.
+    root = _repository(tmp_path, module_vue="3.5.44", vendored_vue="3.5.45", table_vue="3.5.45")
 
     [problem] = generated_copies.check(root)
     assert "@vue/runtime-dom 3.5.44" in problem
@@ -65,3 +76,29 @@ def test_a_missing_vue_types_inventory_is_reported(tmp_path: Path) -> None:
     (root / generated_copies.VUE_TYPES_INVENTORY).unlink()
 
     assert generated_copies.check(root) == [f"{generated_copies.VUE_TYPES_INVENTORY} is missing"]
+
+
+def test_a_vue_bump_without_regenerating_the_dom_member_table_is_reported(tmp_path: Path) -> None:
+    # The attribute module is current, so only the table is stale.
+    root = _repository(tmp_path, table_vue="3.5.44", vendored_vue="3.5.45", module_vue="3.5.45")
+
+    [problem] = generated_copies.check(root)
+    assert "@vue/runtime-dom 3.5.44" in problem
+    assert "Vue 3.5.45" in problem
+    assert "pnpm --dir tools/dom-members run refresh" in problem
+
+
+def test_a_dom_member_table_header_without_the_vue_line_is_reported(tmp_path: Path) -> None:
+    root = _repository(tmp_path)
+    (root / generated_copies.DOM_MEMBERS).write_text("// @generated\n", encoding="utf-8")
+
+    assert generated_copies.check(root) == [
+        f"{generated_copies.DOM_MEMBERS} does not name the @vue/runtime-dom version it was generated from"
+    ]
+
+
+def test_a_missing_dom_member_table_is_reported(tmp_path: Path) -> None:
+    root = _repository(tmp_path)
+    (root / generated_copies.DOM_MEMBERS).unlink()
+
+    assert generated_copies.check(root) == [f"{generated_copies.DOM_MEMBERS} is missing"]

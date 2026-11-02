@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,8 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
+from citry import citry as default_citry
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -168,9 +171,249 @@ def test_focus_loop_role_description_variables_and_axe(page: Any) -> None:
 
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => (await axe.run(document, {resultTypes: ['violations']})).violations
           .filter((item) => ['serious', 'critical'].includes(item.impact)).map((item) => item.id)"""
     )
     assert violations == []
+    assert errors == []
+
+
+class AlertDialogPreviewDocument(Component):
+    citry = default_citry
+
+    class Kwargs:
+        content: object
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
+        return {"content": kwargs.content}
+
+    template = """
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <title>AlertDialog snippet</title>
+          <c-css />
+        </head>
+        <body>
+          <main>{{ content }}</main>
+          <c-js />
+        </body>
+      </html>
+    """
+
+
+def _open_snippet(page: Any, serve_citry_ui_live: Any, name: str) -> list[str]:
+    # Snippets register Citry UI on the default instance when imported, so the
+    # docs preview and this test render the same component.
+    module = importlib.import_module(f"citry_ui.components.calert_dialog.snippets.{name}")
+    html = AlertDialogPreviewDocument(content=module.preview).render().serialize()
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(serve_citry_ui_live(default_citry, html) + "/", wait_until="networkidle")
+    page.wait_for_selector("[data-citry-alert-dialog-initialized]")
+    return errors
+
+
+def test_quality_scenario_records_the_latest_open_change(page: Any, open_scenario: Any) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    open_scenario("alert-dialog.states")
+    page.wait_for_selector("[data-citry-alert-dialog-initialized]")
+
+    page.get_by_role("button", name="Delete project").click()
+    page.wait_for_function("document.querySelector('#quality-delete-project').open")
+    assert page.evaluate("window.__qualityAlertDialogChange") == {
+        "open": True,
+        "reason": "trigger",
+        "returnValue": "",
+    }
+
+    page.get_by_role("alertdialog", name="Delete this project?").get_by_role("button", name="Keep project").click()
+    page.wait_for_function("!document.querySelector('#quality-delete-project').open")
+    assert page.evaluate("window.__qualityAlertDialogChange") == {
+        "open": False,
+        "reason": "action",
+        "returnValue": "cancel",
+    }
+    assert errors == []
+
+
+def test_controlled_action_snippet_keeps_the_dialog_open_until_archiving_finishes(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    errors = _open_snippet(page, serve_citry_ui_live, "controlled_action")
+    trigger = page.get_by_role("button", name="Archive record")
+    result = page.locator("p[aria-live=polite]")
+
+    trigger.click()
+    page.wait_for_function("document.querySelector('#archive-record').open")
+    page.get_by_role("alertdialog", name="Archive this record?").get_by_role("button", name="Cancel").click()
+    page.wait_for_function("!document.querySelector('#archive-record').open")
+    assert result.text_content() == "Archive cancelled"
+
+    trigger.click()
+    page.wait_for_function("document.querySelector('#archive-record').open")
+    alert = page.get_by_role("alertdialog", name="Archive this record?")
+    alert.get_by_role("button", name="Archive").click()
+    # The owner keeps the controlled dialog open while the action runs. Read
+    # all three in one check, because the work finishes after 500 ms.
+    page.wait_for_function(
+        """() => document.querySelector('p[aria-live=polite]').textContent === 'Archiving...'
+          && document.querySelector('#archive-record').open
+          && [...document.querySelectorAll('#archive-record button')]
+            .find(button => button.textContent.trim() === 'Cancel').disabled"""
+    )
+    page.wait_for_function("!document.querySelector('#archive-record').open")
+    assert result.text_content() == "Record archived"
+    assert errors == []
+
+
+def test_controlled_action_snippet_ignores_escape_while_archiving(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    # Escape during the archive work must not report a cancel for a record
+    # that is archived a moment later.
+    errors = _open_snippet(page, serve_citry_ui_live, "controlled_action")
+    page.get_by_role("button", name="Archive record").click()
+    page.wait_for_function("document.querySelector('#archive-record').open")
+    page.get_by_role("alertdialog", name="Archive this record?").get_by_role("button", name="Archive").click()
+    page.wait_for_function("document.querySelector('p[aria-live=polite]').textContent === 'Archiving...'")
+
+    page.keyboard.press("Escape")
+    # Two frames give the dialog time to apply a close it accepted.
+    page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    assert page.evaluate("document.querySelector('#archive-record').open") is True
+    assert page.locator("p[aria-live=polite]").text_content() == "Archiving..."
+
+    page.wait_for_function("!document.querySelector('#archive-record').open")
+    assert page.locator("p[aria-live=polite]").text_content() == "Record archived"
+    assert errors == []
+
+
+# Owner focus probe: the owner's `onOpenChange(false, ...)` moves focus to a
+# button outside the alert dialog. Focus has to stay there once the alert dialog has
+# closed. The orders cover an uncontrolled owner (just focus), a controlled
+# owner that focuses before it accepts the close, and one that accepts the
+# close first and focuses in the same callback.
+_OWNER_STEPS = {
+    "uncontrolled": "window.__ownerFocus();",
+    "focus-first": "window.__ownerFocus(); open = false;",
+    "close-first": "open = false; window.__ownerFocus();",
+}
+
+_CONTROLLED_LOST = pytest.mark.xfail(
+    raises=AssertionError,
+    strict=True,
+    reason=(
+        "#442: focus() in a controlled owner's onOpenChange does nothing because "
+        "the modal dialog still makes the page inert; the close then returns focus "
+        "to the trigger (the 'Open probe' button)"
+    ),
+)
+
+_OWNER_FOCUS_CASES = [
+    pytest.param(False, "uncontrolled", id="uncontrolled"),
+    pytest.param(True, "focus-first", id="controlled-focus-first", marks=_CONTROLLED_LOST),
+    pytest.param(True, "close-first", id="controlled-close-first", marks=_CONTROLLED_LOST),
+]
+
+_TWO_FRAMES_ACTIVE_ID = """() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(
+  () => {
+    // An element without an id is named by its tag and text, so a failure says where focus went.
+    const element = document.activeElement;
+    resolve(element.id || `${element.tagName.toLowerCase()}:${(element.textContent || "").trim().slice(0, 24)}`);
+  }
+)))"""
+
+
+def _owner_focus_page(*, controlled: bool, order: str) -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+    open_binding = ':open="open"' if controlled else ""
+
+    class OwnerFocusPage(Component):
+        citry = app
+        js = """
+          $component({
+            data() {
+              return { open: false };
+            },
+          });
+        """
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body>
+              <c-CAlertDialog
+                id="probe"
+                OPEN_BINDING
+                :onOpenChange="(next, detail) => {
+                    if (next) {
+                      open = true;
+                      return;
+                    }
+                    OWNER_STEPS
+                  }"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <c-CButton c-attrs="activator_attrs">Open probe</c-CButton>
+                </c-fill>
+                <c-fill name="title">Probe</c-fill>
+                <c-fill name="description">Probe description.</c-fill>
+                <c-fill name="cancel" data="{ cancel_attrs }">
+                  <c-CButton c-attrs="cancel_attrs">Close probe</c-CButton>
+                </c-fill>
+                <c-fill name="action" data="{ action_attrs }">
+                  <c-CButton c-attrs="action_attrs">Confirm probe</c-CButton>
+                </c-fill>
+              </c-CAlertDialog>
+              <button id="target" type="button">Owner target</button>
+              <div id="empty-area" style="min-block-size: 3rem">Empty area</div>
+              <c-js />
+            </body>
+          </html>
+        """.replace("OPEN_BINDING", open_binding).replace("OWNER_STEPS", _OWNER_STEPS[order])
+
+    return str(OwnerFocusPage())
+
+
+def _load_owner_focus(page: Any, *, controlled: bool, order: str) -> list[str]:
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_owner_focus_page(controlled=controlled, order=order), wait_until="load")
+    page.wait_for_selector("[data-citry-alert-dialog-initialized]")
+    # The hook runs inside the owner's callback, so the test controls what it does.
+    page.evaluate("window.__ownerFocus = () => document.getElementById('target').focus()")
+    return errors
+
+
+@pytest.mark.parametrize("close", ["escape", "button", "action"])
+@pytest.mark.parametrize(("controlled", "order"), _OWNER_FOCUS_CASES)
+def test_owner_focus_move_in_on_open_change_survives_the_dialog_closing(
+    page: Any, controlled: bool, order: str, close: str
+) -> None:
+    errors = _load_owner_focus(page, controlled=controlled, order=order)
+    page.get_by_role("button", name="Open probe").click()
+    page.wait_for_function("document.querySelector('#probe').open")
+    if close == "escape":
+        page.keyboard.press("Escape")
+    elif close == "button":
+        page.get_by_role("button", name="Close probe").click()
+    else:
+        page.get_by_role("button", name="Confirm probe").click()
+    page.wait_for_function("!document.querySelector('#probe').open")
+    # Two frames let any deferred focus-return step run before we look.
+    final = page.evaluate(_TWO_FRAMES_ACTIVE_ID)
+    assert final == "target"
     assert errors == []

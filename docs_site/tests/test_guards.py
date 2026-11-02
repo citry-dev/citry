@@ -958,6 +958,25 @@ def test_rendered_markdown_guard_catches_a_wrapper_missing_markdown_attribute(tm
     assert "[Compatibility](/about/compatibility/)" in results[0].message
 
 
+def test_rendered_markdown_guard_points_a_release_page_at_its_changelog_section(tmp_path: Path) -> None:
+    """A leak on an older release's page takes its line from that release, not a newer one."""
+    build = tmp_path / "site"
+    (build / "releases" / "v0.5.0").mkdir(parents=True)
+    (build / "releases" / "v0.5.0" / "index.html").write_text(
+        "<html><body><article><div>### Fix</div></article></body></html>", encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## Unreleased\n\n### Fix\n\n## v0.5.0\n\n### Fix\n\n- An entry.\n",
+        encoding="utf-8",
+    )
+
+    [result] = rendered_markdown.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(tmp_path / "CHANGELOG.md")
+    assert result.line == 9
+    assert "outside backticks" in result.message
+
+
 def test_rendered_markdown_guard_ignores_markdown_shown_on_purpose(tmp_path: Path) -> None:
     """Documenting Markdown inside code or a heading element is not a leak."""
     build = tmp_path / "site"
@@ -1042,6 +1061,95 @@ def test_stray_markup_guard_catches_paragraphs_around_generated_markup(tmp_path:
     assert "'<p><div'" in result.message
     assert "'<p></div>'" in result.message
     assert "'<p></p>'" in result.message
+
+
+def test_stray_markup_guard_names_the_line_of_the_text_after_the_stray_tag(tmp_path: Path) -> None:
+    """The stray tags are not in the source, so the text after them locates the line."""
+    build = tmp_path / "site"
+    (build / "guide").mkdir(parents=True)
+    (build / "guide" / "index.html").write_text(
+        '<html><body><ul><li>One</li></ul><p><div class="highlight"><pre><code>'
+        "&lt;c-Card /&gt; x</code></pre></div></body></html>",
+        encoding="utf-8",
+    )
+    content = tmp_path / "guide"
+    content.mkdir()
+    (content / "index.md").write_text("# Guide\n\n- One\n\n  ```\n  <c-Card /> x\n  ```\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(content / "index.md")
+    assert result.line == 6
+    assert "'<c-Card /> x'" in result.message
+
+
+def test_stray_markup_guard_points_a_release_notes_page_at_the_changelog(tmp_path: Path) -> None:
+    """Release-notes pages have no content page; their source is CHANGELOG.md."""
+    build = tmp_path / "site"
+    (build / "releases" / "unreleased").mkdir(parents=True)
+    (build / "releases" / "unreleased" / "index.html").write_text(
+        "<html><body><p><div><code>broken entry</code></div></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## Unreleased\n\n- broken entry\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(tmp_path / "CHANGELOG.md")
+    assert result.line == 5
+
+
+def test_stray_markup_guard_searches_only_the_release_section_of_the_changelog(tmp_path: Path) -> None:
+    """The same text under a newer version must not take the line of an older release's entry."""
+    build = tmp_path / "site"
+    (build / "releases" / "v0.2.0").mkdir(parents=True)
+    (build / "releases" / "v0.2.0" / "index.html").write_text(
+        "<html><body><p><div><code>class Kwargs:</code></div></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## Unreleased\n\n- A newer entry.\n\n    ```python\n    class Kwargs:\n    ```\n\n"
+        "## v0.2.0\n\n- An entry.\n\n    ```python\n    class Kwargs:\n    ```\n",
+        encoding="utf-8",
+    )
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(tmp_path / "CHANGELOG.md")
+    # Line 8 holds the same text, under Unreleased.
+    assert result.line == 16
+
+
+def test_stray_markup_guard_reports_the_first_stray_tag_on_the_page(tmp_path: Path) -> None:
+    """The report starts from the first stray tag in page order, whatever kind it is."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><p></p>First text<p><div>Later text</div></body></html>", encoding="utf-8"
+    )
+    (tmp_path / "index.md").write_text("# Home\n\nFirst text\n\nLater text\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.message.index("'<p></p>'") < result.message.index("'<p><div'")
+    assert result.line == 3
+
+
+def test_stray_markup_guard_prefers_a_content_page_under_releases(tmp_path: Path) -> None:
+    """Only a release page with no Markdown of its own maps to the changelog."""
+    build = tmp_path / "site"
+    (build / "releases" / "policy").mkdir(parents=True)
+    (build / "releases" / "policy" / "index.html").write_text(
+        "<html><body><p><div>Policy text</div></body></html>", encoding="utf-8"
+    )
+    (tmp_path / "releases").mkdir()
+    (tmp_path / "releases" / "policy.md").write_text("# Policy\n\nPolicy text\n", encoding="utf-8")
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\nPolicy text\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.source == str(tmp_path / "releases" / "policy.md")
+    assert result.line == 3
 
 
 def test_stray_markup_guard_ignores_paragraphs_inside_scripts_and_ordinary_html(tmp_path: Path) -> None:

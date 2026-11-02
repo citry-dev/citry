@@ -7,9 +7,7 @@ citry.register_library(citry_ui)
 class DrawerForm(Component):
     template = """
       <section >
-        <c-CDrawer :onOpenChange="(open, detail) => {
-          if (!open && detail.returnValue) result = `Selected: ${detail.returnValue}`;
-        }">
+        <c-CDrawer :onOpenChange="showSelectedChart">
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Choose a chart</c-CButton>
           </c-fill>
@@ -30,6 +28,13 @@ class DrawerForm(Component):
           return {
             result:'No chart selected'
           };
+        },
+        methods: {
+          // Only a close from a button with a `value` carries a return
+          // value, so other closes keep the last selection on screen.
+          showSelectedChart(open, detail) {
+            if (!open && detail.returnValue) this.result = `Selected: ${detail.returnValue}`;
+          },
         },
       });
     """

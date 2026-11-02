@@ -1,7 +1,8 @@
 //! Reject an expression whose syntax tree could nest too deeply, before any
 //! code builds or walks that tree.
 //!
-//! Ruff's parser grows its own stack, but the passes after it do not: the
+//! Ruff's parser grows its own stack (the root `Cargo.toml` turns on its
+//! `stacker` feature), but the passes after it do not: the
 //! keyword check, the sandbox transformer, code generation, and dropping the
 //! tree all call themselves once per tree level. A long chain such as
 //! `1+1+...+1`, `not not ... x` or `a.b.b...` nests the tree one level per
@@ -87,7 +88,7 @@ pub fn nesting_bound(source: &str) -> usize {
         let kind = lexer.next_token();
         let ends_operand = matches!(
             kind,
-            TokenKind::Name
+            TokenKind::Identifier
                 | TokenKind::Int
                 | TokenKind::Float
                 | TokenKind::Complex
@@ -143,7 +144,7 @@ pub fn nesting_bound(source: &str) -> usize {
             // Names and literals are leaves, which the `+ 2` of each part
             // already covers; comments and layout tokens add nothing to the
             // tree.
-            TokenKind::Name
+            TokenKind::Identifier
             | TokenKind::Int
             | TokenKind::Float
             | TokenKind::Complex

@@ -15,10 +15,7 @@ class ControlledSplitButtonMenu(Component):
           menu_label="More publication actions"
           v-bind="{
             open: controlled ? open : null,
-            onOpenChange: (nextOpen, detail) => {
-              lastReason = detail.reason;
-              if (controlled && accept) open = nextOpen;
-            },
+            onOpenChange: applyOpenRequest,
           }"
         >
           <c-fill name="default">Publish specimen</c-fill>
@@ -55,12 +52,23 @@ class ControlledSplitButtonMenu(Component):
     """
 
     js = r"""
-      $component({data(){return {
+      $component({
+        data(){return {
           open:false,
           controlled:true,
           accept:true,
           lastReason:'none'
-        };}});
+        };},
+        methods: {
+          // Show every request's reason. Change `open` only while this owner controls
+          // the Menu and accepts requests; after release the Menu applies
+          // requests itself.
+          applyOpenRequest(nextOpen, detail) {
+            this.lastReason = detail.reason;
+            if (this.controlled && this.accept) this.open = nextOpen;
+          },
+        },
+      });
     """
 
     css = """

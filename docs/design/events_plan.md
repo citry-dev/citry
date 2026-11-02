@@ -595,9 +595,9 @@ calls dispatch on `document` (events.md 4.3). The original eleven:
 4. Unknown-major and cap rejections mirror per call, so `results[i]`
    answers `calls[i]` unconditionally; the server answers under its own
    protocol string.
-5. `payload_too_large` (413) covers both envelope caps (byte size and
-   the 16-call cap); the byte cap's value is deployment configuration,
-   not protocol.
+5. `payload_too_large` (413) covers the request caps (body size, form
+   field count, and the 16-call cap); the body and field caps' values are
+   deployment configuration, not protocol.
 6. An `event` action with absent `target` dispatches on `document`;
    the fixtures self-target the caller (following the 4.3 example).
 7. A user-raised `EventError(status=403)` carries code `forbidden`;
@@ -1340,7 +1340,7 @@ orchestrator: `get_event_url`, `EventsDispatcher`, `TransportContext`,
    events.md 3.3 (string transports bind `int`/`float`/`bool` with the
    HTML bool vocabulary; JSON stays strict; non-finite floats rejected
    at every layer, ingress and egress).
-5. **Envelope byte cap**: `_max_envelope_bytes` is engine-wide only
+5. **Envelope byte cap**: `_max_body_bytes` is engine-wide only
    (events.md 3.5 and decision 8 amended).
    Related, same date: the envelope moved to the
    `application/citry-events+json` vendor media type; plain

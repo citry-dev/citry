@@ -1,7 +1,5 @@
 """Shared TagsInput scenario used by repository quality tools."""
 
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from __future__ import annotations
 
 from typing import Any
@@ -78,7 +76,8 @@ def tags_input_states_component(app: Citry) -> type[Component]:
                         'required ordered form-data repeated-values editable reset field description'
                     }"
                     :onValueChange="(next,detail)=>
-                        last=`${detail.source}: ${JSON.stringify(next)}`" :onValueInvalid="(reason)=>last=`Rejected ${reason}`"
+                        last=`${detail.source}: ${JSON.stringify(next)}`"
+                    :onValueInvalid="(reason)=>last=`Rejected ${reason}`"
                   />
                 </c-fill>
               </c-CField>
@@ -120,13 +119,7 @@ def tags_input_states_component(app: Citry) -> type[Component]:
                 }"
                 :value="controlledTags"
                 :inputValue="controlledDraft"
-                :onValueChange="(next,detail)=>{
-                    last=`Requested ${JSON.stringify(next)}`;
-                    if (acceptControlled) {
-                      controlledTags=next;
-                      controlledDraft=detail.nextInputValue;
-                    }
-                  }"
+                :onValueChange="applyControlledRequest"
                 :onInputValueChange="(next)=>controlledDraft=next"
               />
 
@@ -263,6 +256,17 @@ def tags_input_states_component(app: Citry) -> type[Component]:
               };
             },
             methods: {
+              // The controlled editor only asks for new tags. Log every
+              // request, and store the tags and the draft only while the
+              // page accepts requests, so the scenario shows a refused and
+              // an accepted request.
+              applyControlledRequest(next, detail) {
+                this.last = `Requested ${JSON.stringify(next)}`;
+                if (this.acceptControlled) {
+                  this.controlledTags = next;
+                  this.controlledDraft = detail.nextInputValue;
+                }
+              },
               refresh() {
                 this.morphStep += 1;
                 this.includeLifecycle = ![2, 4].includes(this.morphStep);

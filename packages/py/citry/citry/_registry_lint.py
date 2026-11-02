@@ -711,12 +711,16 @@ def _collect_server_event_forms(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
+    vue_skipped: bool = False,
 ) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
         node = element._0
         attrs = node.start_tag.attrs
+        # Vue leaves its own syntax under `v-pre` as written, so a form's
+        # controls there are read as plain attributes.
+        inside_v_pre = vue_skipped or any(_ascii_lower(attr.key.content) == "v-pre" for attr in attrs)
         for attr in attrs:
             inner = attr.inner_value
             if attr.kind == HtmlAttrKind.Template and inner is not None:
@@ -730,6 +734,7 @@ def _collect_server_event_forms(
                         handler_names,
                         parse_nested=parse_nested,
                         base_index=base_index + inner.start_index + nested_start,
+                        vue_skipped=inside_v_pre,
                     )
         body = getattr(node, "body", None)
         call = (
@@ -738,9 +743,11 @@ def _collect_server_event_forms(
             else None
         )
         if call is not None:
-            form = _FormControls(complete=not any(_set_attribute(attr) == "id" for attr in attrs))
+            form = _FormControls(
+                complete=not any(_set_attribute(attr, vue=not inside_v_pre) == "id" for attr in attrs)
+            )
             if body is not None:
-                yield Call(form.walk, body, base_index=base_index, disabled=False)
+                yield Call(form.walk, body, base_index=base_index, disabled=False, vue_skipped=inside_v_pre)
             found.append(ServerEventForm(call, tuple(form.sent), frozenset(form.names), form.complete))
         # A form inside a form is invalid HTML, which the browser drops, so
         # the walk goes on into any element's content either way.
@@ -752,6 +759,7 @@ def _collect_server_event_forms(
                 handler_names,
                 parse_nested=parse_nested,
                 base_index=base_index,
+                vue_skipped=inside_v_pre,
             )
 
 
@@ -793,12 +801,18 @@ _UNSENT_BUTTON_TYPES = frozenset({"reset", "button"})
 _IN_PLACE_CONDITIONS = frozenset({"c-if", "c-elif", "c-else"})
 
 
-def _set_attribute(attr: Any) -> str | None:
-    """Return the attribute an attribute key sets, lowercased, whether written plainly or bound."""
+def _set_attribute(attr: Any, *, vue: bool = True) -> str | None:
+    """
+    Return the attribute an attribute key sets, lowercased, whether written plainly or bound.
+
+    With ``vue=False``, as under `v-pre`, a Vue binding such as `:disabled` is
+    an attribute literally named `:disabled`, so only plain and `c-`
+    attributes set a name.
+    """
     key = _ascii_lower(attr.key.content)
     # `.name` and `^name` are Vue's shorthands for `:name.prop` and
     # `:name.attr`.
-    for prefix in (":", "v-bind:", "c-", ".", "^"):
+    for prefix in (":", "v-bind:", "c-", ".", "^") if vue else ("c-",):
         if key.startswith(prefix):
             # A modifier such as `.prop` still sets the same name.
             return key[len(prefix) :].split(".", 1)[0]
@@ -813,7 +827,9 @@ class _FormControls:
     sent: list[FormControlName] = field(default_factory=list)
     names: set[str] = field(default_factory=set)
 
-    def walk(self, template: Template, *, base_index: int, disabled: bool) -> Generator[Call, Any, None]:
+    def walk(
+        self, template: Template, *, base_index: int, disabled: bool, vue_skipped: bool = False
+    ) -> Generator[Call, Any, None]:
         for element in template.elements:
             if not isinstance(element, TemplateElement.Node):
                 continue
@@ -822,32 +838,42 @@ class _FormControls:
             lower = _ascii_lower(tag)
             attrs = node.start_tag.attrs
             keys = {_ascii_lower(attr.key.content) for attr in attrs}
+            # Under `v-pre`, Vue leaves its own syntax as written: `v-for` does
+            # not repeat the element, `:disabled` sets no `disabled`, and a
+            # PascalCase tag is a plain element. Only Citry's syntax still acts.
+            inside_v_pre = vue_skipped or "v-pre" in keys
+            vue = not inside_v_pre
             # A component, custom element, slot, or `<template>` can render
             # controls the template does not show, and a loop or spread can
             # repeat a control or give it another name.
             if (
                 (lower.startswith("c-") and lower not in _IN_PLACE_CONDITIONS)
-                or tag != lower
+                or (vue and tag != lower)
                 or "-" in lower
                 or lower in {"slot", "template", "component"}
                 # A library may add controls inside `#c-ignore` content.
-                or keys & {"v-for", "c-for", "v-bind", "c-bind", "v-html", "v-slot", "#c-ignore"}
-                or any(key.startswith("v-slot:") for key in keys)
+                or keys
+                & (
+                    {"v-for", "c-for", "v-bind", "c-bind", "v-html", "v-slot", "#c-ignore"}
+                    if vue
+                    else {"c-for", "c-bind", "#c-ignore"}
+                )
+                or (vue and any(key.startswith("v-slot:") for key in keys))
                 # Markup written inside an attribute renders elsewhere.
                 or any(attr.kind == HtmlAttrKind.Template for attr in attrs)
             ):
                 self.complete = False
             # A disabled fieldset disables every control inside it.
             inside_disabled = disabled or (
-                lower == "fieldset" and any(_set_attribute(attr) == "disabled" for attr in attrs)
+                lower == "fieldset" and any(_set_attribute(attr, vue=vue) == "disabled" for attr in attrs)
             )
             if lower in _FORM_CONTROLS:
-                self._control(lower, attrs, base_index, disabled=inside_disabled)
+                self._control(lower, attrs, base_index, disabled=inside_disabled, vue=vue)
             body = getattr(node, "body", None)
             if body is not None:
-                yield Call(self.walk, body, base_index=base_index, disabled=inside_disabled)
+                yield Call(self.walk, body, base_index=base_index, disabled=inside_disabled, vue_skipped=inside_v_pre)
 
-    def _control(self, lower: str, attrs: Any, base_index: int, *, disabled: bool) -> None:
+    def _control(self, lower: str, attrs: Any, base_index: int, *, disabled: bool, vue: bool = True) -> None:
         name_attr = None
         image_type = None
         # Whether the browser may leave the control out of this form's submit.
@@ -856,17 +882,17 @@ class _FormControls:
         unsent_type = False
         for attr in attrs:
             key = _ascii_lower(attr.key.content)
-            sets = _set_attribute(attr)
+            sets = _set_attribute(attr, vue=vue)
             if key == "name":
                 name_attr = attr
-            elif lower == "button" and _prevents_click(key):
+            elif lower == "button" and _prevents_click(key, vue=vue):
                 # A button whose click is prevented never submits the form.
                 sometimes = True
             elif sets == "name":
                 # A name written as an expression may be anything.
                 self.complete = False
                 return
-            elif sets in {"disabled", "form"} or key in {"v-bind", "c-bind"}:
+            elif sets in {"disabled", "form"} or key in ({"v-bind", "c-bind"} if vue else {"c-bind"}):
                 # A disabled control is not sent, one tied to another form by
                 # `form` is sent with that form, and a spread may set
                 # another name.
@@ -906,9 +932,10 @@ class _FormControls:
             )
 
 
-def _prevents_click(key: str) -> bool:
+def _prevents_click(key: str, *, vue: bool = True) -> bool:
     """Return whether an attribute is a click listener with the ``.prevent`` modifier."""
-    for prefix in ("@click", "v-on:click", "@c-click"):
+    # Under `v-pre` only Citry's `@c-click` listens; Vue's are plain attributes there.
+    for prefix in ("@click", "v-on:click", "@c-click") if vue else ("@c-click",):
         if key.startswith(prefix) and ".prevent" in key[len(prefix) :]:
             return True
     return False

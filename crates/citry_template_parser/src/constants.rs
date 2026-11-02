@@ -372,6 +372,10 @@ mod tests {
                 .collect();
             if *tag == C_FILL_TAG {
                 operational.insert(C_BIND_ATTR);
+                // `v-slot` is Vue syntax, which editors document from their
+                // own Vue tables. Keeping it out of the exported list keeps
+                // that list the same for editor releases that check it.
+                operational.remove("v-slot");
             }
             assert_eq!(documented.get(tag), Some(&operational));
         }
@@ -410,13 +414,13 @@ pub const TAG_ATTR_RULES_DATA: &[(&str, (Option<&[&[&str]]>, &[&[&str]]))] = &[
     (C_EMPTY_TAG, (Some(&[]), &[])),
     // c-raw: nothing allowed, nothing required
     (C_RAW_TAG, (Some(&[]), &[])),
-    // c-fill: any of ["name", "c-name", "data", "fallback", "c-bind"] allowed,
-    //         but ["name", "c-name"] are mutually exclusive.
+    // c-fill: any of ["name", "c-name", "data", "fallback", "v-slot", "c-bind"]
+    //         allowed, but ["name", "c-name"] are mutually exclusive.
     //         also one of ["name", "c-name", "c-bind"] is required.
     (
         C_FILL_TAG,
         (
-            Some(&[&["name", "c-name"], &["data"], &["fallback"]]),
+            Some(&[&["name", "c-name"], &["data"], &["fallback"], &["v-slot"]]),
             &[&["name", "c-name", C_BIND_ATTR]],
         ),
     ),

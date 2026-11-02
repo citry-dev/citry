@@ -49,14 +49,24 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # development-mode browser check (`_vue/dev_checks.min.js`), and the check of
 # `inject()` keys against the keys provided above a component, and the Python
 # side of the native render levels (`_vue/native_render.py`,
-# `_vue/native_walk.py`, `_vue/native_leaf_json.py`), and the driver that
-# runs recursive template walks without one Python call per level
-# (`_walk.py`). The bug fixes and render-speed changes merged on
-# 2026-10-24 and 2026-10-25 added about 33 KB of Python source and no data
-# files, so the wheel grew to about 1,440,000 bytes, about 18 KB under this cap.
-# A sizeable addition should raise the cap on purpose rather than use up the
-# headroom unnoticed.
-MAX_WHEEL_BYTES: Final = 1_424 * 1024
+# `_vue/native_walk.py`, `_vue/native_leaf_json.py`). It also carries the
+# driver that runs recursive template walks without one Python call per level
+# (`_walk.py`), and the helper that copies deeply nested js_data() without a
+# Python call per level (`util/deep_json.py`). Between #439 (2026-10-27) and
+# 2026-10-28 the merged fixes and features added about 63 KB of compressed
+# source and no data files, almost all Python plus 2.2 KB in the bundled
+# `_vue/runtime.js`. The largest additions are the base classes that
+# `CitrySettings.model_base` picks for plain schemas, with Pydantic `State`
+# support (`_model_base.py`, #455, #461), Vue data passed to fills (#445,
+# across `nodes/__init__.py`, `_vue/static_template.py` and
+# `_vue/direct_capture.py`), scoped slot props for `citry check`
+# (`_slot_props.py`, #521), sub-path URLs (`_sub_path.py`, #479), and the
+# v-pre fixes (#514, #525, #526). The CI wheel measured 1,526,915 bytes on
+# main at f67bb05a5. #455 alone used up the previous 19 KB of headroom, so
+# this cap leaves about 45 KB above that, as a backstop rather than a tight
+# budget. A sizeable addition should still raise the cap on purpose rather
+# than use up the headroom unnoticed.
+MAX_WHEEL_BYTES: Final = 1_536 * 1024
 
 
 def _citry_core_version() -> str:
@@ -78,7 +88,7 @@ EXPECTED_REQUIRES_DIST: Final = {
     "markupsafe>=2.1",
     "typing-extensions>=4.10",
     "tzdata>=2026.3",
-    'ty==0.0.90; extra == "analysis-ty"',
+    'ty==0.0.94; extra == "analysis-ty"',
     'watchfiles>=1.0; extra == "watcher-watchfiles"',
     'watchdog>=4.0; extra == "watcher-watchdog"',
 }

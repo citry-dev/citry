@@ -36,7 +36,18 @@ def test_citry_ui_component_javascript_has_no_check_findings(tmp_path):
 
     # A separate process keeps this registration of Citry UI out of the test session.
     result = subprocess.run(
-        [sys.executable, "-m", "citry", "--app", "citry_ui_names_app:engine", "check", "--format", "json"],
+        # Citry UI is registered as a library here, so `--include-libraries` asks for its findings.
+        [
+            sys.executable,
+            "-m",
+            "citry",
+            "--app",
+            "citry_ui_names_app:engine",
+            "check",
+            "--include-libraries",
+            "--format",
+            "json",
+        ],
         cwd=_CITRY_UI_PACKAGE,
         env=environment,
         capture_output=True,

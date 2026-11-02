@@ -3,7 +3,8 @@ Cross-adapter tests of the framework-neutral request/response contract.
 
 Every web adapter hands route handlers the same ``RouteRequest`` (readable
 body, case-insensitive headers, repeated query keys, the host object as
-``native``) and forwards ``RouteResponse.headers`` back to the client. The
+``native``) and forwards ``RouteResponse.headers`` back to the client, plus
+``X-Content-Type-Options: nosniff`` unless the response sets that header. The
 ASGI adapter additionally awaits ``async def`` handlers and runs sync
 handlers in a worker thread; the sync adapters (WSGI, Django) reject async
 handlers with an error naming the fix. Design: docs/design/events.md
@@ -21,7 +22,7 @@ from contextvars import ContextVar
 import pytest
 
 from citry import Citry, Extension, RouteHeaders, RouteRequest, RouteResponse, URLRoute
-from citry.util.routing import call_maybe_sync
+from citry.util.routing import call_maybe_sync, sent_headers
 
 
 def _engine(*routes):
@@ -63,6 +64,11 @@ def _with_repeated_headers(_request):
     return RouteResponse(content="ok", headers=(("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")))
 
 
+def _with_own_nosniff_value(_request):
+    """A handler that sets the sniffing header itself, in lowercase, to a value the adapter must leave alone."""
+    return RouteResponse(content="ok", headers=(("x-content-type-options", "custom"),))
+
+
 def _pick_sync(_request):
     return RouteResponse(content="from-sync-handler")
 
@@ -95,6 +101,41 @@ class TestRouteHeaders:
         assert list(headers) == ["x-b", "x-a"]
         assert len(headers) == 2
         assert dict(headers.items()) == {"x-b": "2", "x-a": "1"}
+
+
+class TestSentHeaders:
+    NOSNIFF = ("X-Content-Type-Options", "nosniff")
+
+    def test_adds_nosniff_when_the_response_sets_no_headers(self):
+        assert sent_headers(RouteResponse(content="ok")) == (self.NOSNIFF,)
+
+    def test_adds_nosniff_after_the_headers_the_response_sets(self):
+        response = RouteResponse(content="ok", headers=(("Cache-Control", "no-store"), ("Set-Cookie", "a=1")))
+        assert sent_headers(response) == (("Cache-Control", "no-store"), ("Set-Cookie", "a=1"), self.NOSNIFF)
+
+    def test_keeps_repeated_headers_in_order(self):
+        response = RouteResponse(content="ok", headers=(("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")))
+        assert sent_headers(response)[:2] == (("Set-Cookie", "a=1"), ("Set-Cookie", "b=2"))
+
+    @pytest.mark.parametrize("name", ["X-Content-Type-Options", "x-content-type-options", "X-CONTENT-TYPE-OPTIONS"])
+    def test_does_not_repeat_the_header_the_response_sets_in_any_case(self, name):
+        response = RouteResponse(content="ok", headers=(("Cache-Control", "no-store"), (name, "nosniff")))
+        sent = sent_headers(response)
+        assert sent == response.headers
+        assert [pair for pair in sent if pair[0].lower() == "x-content-type-options"] == [(name, "nosniff")]
+
+    def test_keeps_the_value_the_response_chose(self):
+        response = RouteResponse(content="ok", headers=(("x-content-type-options", "custom"),))
+        assert sent_headers(response) == (("x-content-type-options", "custom"),)
+
+    def test_a_similarly_named_header_does_not_count(self):
+        response = RouteResponse(content="ok", headers=(("X-Content-Type-Options-Extra", "1"),))
+        assert sent_headers(response) == (("X-Content-Type-Options-Extra", "1"), self.NOSNIFF)
+
+    def test_leaves_the_response_unchanged(self):
+        response = RouteResponse(content="ok", headers=(("Cache-Control", "no-store"),))
+        sent_headers(response)
+        assert response.headers == (("Cache-Control", "no-store"),)
 
 
 class TestRouteRequest:
@@ -204,6 +245,21 @@ class TestAsgiAdapter:
         response = client.get("/citry/ext/probe/cookies")
         assert response.status_code == 200
         assert response.headers.get_list("set-cookie") == ["a=1", "b=2"]
+
+    def test_every_response_carries_nosniff_once(self, client_factory):
+        client = client_factory(_engine(URLRoute("headers", handler=_with_headers)))
+        served = client.get("/citry/ext/probe/headers")
+        # The adapter's own 404 and 405 answers carry it too.
+        missing = client.get("/citry/ext/probe/nope")
+        wrong_method = client.post("/citry/ext/probe/headers")
+        assert (served.status_code, missing.status_code, wrong_method.status_code) == (200, 404, 405)
+        for response in (served, missing, wrong_method):
+            assert response.headers.get_list("x-content-type-options") == ["nosniff"]
+
+    def test_a_handler_that_sets_the_sniffing_header_keeps_its_value(self, client_factory):
+        client = client_factory(_engine(URLRoute("own", handler=_with_own_nosniff_value)))
+        response = client.get("/citry/ext/probe/own")
+        assert response.headers.get_list("x-content-type-options") == ["custom"]
 
     def test_repeated_query_keys_survive(self, client_factory):
         client = client_factory(_engine(URLRoute("query", handler=_query)))
@@ -428,6 +484,29 @@ class TestWsgiAdapter:
         _status, headers, _body = self._call(engine, {"REQUEST_METHOD": "GET", "PATH_INFO": "/ext/probe/cookies"})
         assert [pair for pair in headers if pair[0] == "Set-Cookie"] == [("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")]
 
+    def test_every_response_carries_nosniff_once(self):
+        engine = _engine(URLRoute("headers", handler=_with_headers))
+        statuses = []
+        for method, path in (
+            ("GET", "/ext/probe/headers"),
+            ("GET", "/ext/probe/nope"),
+            ("POST", "/ext/probe/headers"),
+        ):
+            environ = {"REQUEST_METHOD": method, "PATH_INFO": path, "wsgi.input": io.BytesIO()}
+            status, headers, _body = self._call(engine, environ)
+            statuses.append(status.split()[0])
+            sniffing = [pair for pair in headers if pair[0].lower() == "x-content-type-options"]
+            assert sniffing == [("X-Content-Type-Options", "nosniff")]
+        # The adapter's own 404 and 405 answers carry it too.
+        assert statuses == ["200", "404", "405"]
+
+    def test_a_handler_that_sets_the_sniffing_header_keeps_its_value(self):
+        engine = _engine(URLRoute("own", handler=_with_own_nosniff_value))
+        _status, headers, _body = self._call(engine, {"REQUEST_METHOD": "GET", "PATH_INFO": "/ext/probe/own"})
+        assert [pair for pair in headers if pair[0].lower() == "x-content-type-options"] == [
+            ("x-content-type-options", "custom")
+        ]
+
     def test_invalid_content_length_means_no_body(self):
         captured = {}
 
@@ -542,6 +621,22 @@ class TestDjangoAdapter:
         assert response.status_code == 200
         assert response["X-Citry-Probe"] == "42"
         assert response["Cache-Control"] == "no-store"
+
+    def test_a_response_carries_nosniff(self):
+        engine = _engine(URLRoute("headers", handler=_with_headers))
+        with self._serving(engine) as client:
+            response = client.get("/citry/ext/probe/headers")
+        assert response.status_code == 200
+        assert response["X-Content-Type-Options"] == "nosniff"
+
+    def test_a_handler_that_sets_the_sniffing_header_keeps_its_value(self):
+        # Django holds one value per header name and the adapter rejects a
+        # repeated name, so this also proves the adapter did not add a second line.
+        engine = _engine(URLRoute("own", handler=_with_own_nosniff_value))
+        with self._serving(engine) as client:
+            response = client.get("/citry/ext/probe/own")
+        assert response.status_code == 200
+        assert response["X-Content-Type-Options"] == "custom"
 
     def test_repeated_response_headers_are_rejected(self):
         # Django's response object holds one value per header name, so the

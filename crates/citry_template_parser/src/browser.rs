@@ -230,6 +230,180 @@ pub struct BrowserBindingPatternAnalysis {
     pub references: Vec<BrowserReference>,
 }
 
+/// Why a `<c-fill v-slot="...">` value cannot be merged with Citry's own slot
+/// props, or `None` when it can.
+///
+/// Citry writes the fill's slot function with its context names in front,
+/// as `{ $i18n, row }` for the pattern `{ row }` or `{ $i18n, ...p }` for the
+/// identifier `p`. That works only for one parameter that is an object
+/// pattern or a plain identifier. A parameter list, an array pattern, or a
+/// top-level rest or default has no such merged form.
+pub fn browser_slot_pattern_problem(source: &str) -> Option<&'static str> {
+    const INVALID: &str = "is not a valid JavaScript parameter; write one object pattern, such as 'v-slot=\"{ row }\"', or one name, such as 'v-slot=\"props\"'";
+    // Vue decodes character references before it compiles the pattern, so a
+    // reference could hide text from these checks.
+    if source.contains('&') {
+        return Some(
+            "holds an '&' character, which Vue would read as the start of a character reference such as '&amp;'; write the pattern without it",
+        );
+    }
+    let wrapped = format!("({source}) => {{}}");
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &wrapped, SourceType::script()).parse();
+    if !parsed.diagnostics.is_empty() {
+        return Some(INVALID);
+    }
+    // Citry writes the pattern into a larger parameter, where a comment or a
+    // trailing comma would change what the rest of it means.
+    if !parsed.program.comments.is_empty() {
+        return Some("holds a comment; remove it, because Citry adds its own names to the pattern");
+    }
+    let [Statement::ExpressionStatement(statement)] = parsed.program.body.as_slice() else {
+        return Some(INVALID);
+    };
+    let Expression::ArrowFunctionExpression(function) = statement.expression.without_parentheses()
+    else {
+        return Some(INVALID);
+    };
+    // A value such as `a) => (b` would close the wrapper early.
+    if function.params.span().end as usize != source.len() + 2 {
+        return Some(INVALID);
+    }
+    if function.params.rest.is_some() {
+        return Some("starts with '...'; name the props object without it, as 'v-slot=\"props\"'");
+    }
+    let [parameter] = function.params.items.as_slice() else {
+        return Some("lists several parameters; a slot passes one props object");
+    };
+    // Only whitespace may surround the one parameter: `{ row },` would make
+    // Vue's compiler lose track of the names it binds.
+    let parameter_span = parameter.span();
+    let before = &wrapped[1..parameter_span.start as usize];
+    let after = &wrapped[parameter_span.end as usize..source.len() + 1];
+    if !before.trim().is_empty() || !after.trim().is_empty() {
+        return Some(
+            "has text around its one parameter, such as a trailing comma; write only the pattern",
+        );
+    }
+    if parameter.initializer.is_some() {
+        return Some("has a default value; remove it, because Vue always passes a props object");
+    }
+    match &parameter.pattern {
+        oxc_ast::ast::BindingPattern::BindingIdentifier(_) => None,
+        oxc_ast::ast::BindingPattern::ObjectPattern(object)
+            if let Some(problem) = object_pattern_value_problem(object) =>
+        {
+            Some(problem)
+        }
+        // Vue passes the key of Citry's `v-if` around each outlet as `key`,
+        // and an author's slot prop can never be named `key`.
+        oxc_ast::ast::BindingPattern::ObjectPattern(object)
+            if object
+                .properties
+                .iter()
+                .any(|property| property.key.is_specific_static_name("key")) =>
+        {
+            Some("reads 'key', which is not a slot prop: Vue uses that name for the key Citry gives the slot. Remove 'key' from the pattern")
+        }
+        oxc_ast::ast::BindingPattern::ObjectPattern(_) => None,
+        oxc_ast::ast::BindingPattern::AssignmentPattern(_) => {
+            Some("has a default value; remove it, because Vue always passes a props object")
+        }
+        oxc_ast::ast::BindingPattern::ArrayPattern(_) => {
+            Some("is an array pattern; slot props are an object, so write 'v-slot=\"{ name }\"'")
+        }
+    }
+}
+
+/// Find a part of a `v-slot` object pattern that Vue's compiler would read
+/// from the wrong scope.
+///
+/// Vue's compiler gives every name read in a default value or a computed key
+/// the outer component's scope, even when an enclosing fill binds that name
+/// or the default declares it itself (a named function, for example). Only a
+/// literal default and a plain key avoid that.
+fn object_pattern_value_problem(object: &oxc_ast::ast::ObjectPattern<'_>) -> Option<&'static str> {
+    for property in &object.properties {
+        if property.computed {
+            return Some(
+                "has a computed key, such as '{ [name]: row }'; Vue would read the key's names from the outer component, not the slot, so write the prop's name, as in '{ row }'",
+            );
+        }
+        if let Some(problem) = binding_value_problem(&property.value) {
+            return Some(problem);
+        }
+    }
+    object
+        .rest
+        .as_ref()
+        .and_then(|rest| binding_value_problem(&rest.argument))
+}
+
+fn binding_value_problem(pattern: &oxc_ast::ast::BindingPattern<'_>) -> Option<&'static str> {
+    use oxc_ast::ast::BindingPattern;
+    match pattern {
+        BindingPattern::BindingIdentifier(_) => None,
+        BindingPattern::ObjectPattern(object) => object_pattern_value_problem(object),
+        BindingPattern::ArrayPattern(array) => array
+            .elements
+            .iter()
+            .flatten()
+            .find_map(binding_value_problem)
+            .or_else(|| {
+                array
+                    .rest
+                    .as_ref()
+                    .and_then(|rest| binding_value_problem(&rest.argument))
+            }),
+        BindingPattern::AssignmentPattern(assignment) => {
+            if !is_literal_default(&assignment.right) {
+                return Some(
+                    "has a default value that is not a literal; Vue would read its names from the outer component, not the slot, so use a literal such as '{ row = null }' and compute the value in the fill",
+                );
+            }
+            binding_value_problem(&assignment.left)
+        }
+    }
+}
+
+/// Whether a default value reads no name: a literal, or an array or object
+/// built only from literals.
+fn is_literal_default(expression: &Expression<'_>) -> bool {
+    use oxc_ast::ast::{ArrayExpressionElement, ObjectPropertyKind, PropertyKind, UnaryOperator};
+    match expression.without_parentheses() {
+        Expression::StringLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::BigIntLiteral(_) => true,
+        Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+        // `void 0` and `-1`.
+        Expression::UnaryExpression(unary) => {
+            matches!(
+                unary.operator,
+                UnaryOperator::Void | UnaryOperator::UnaryNegation | UnaryOperator::UnaryPlus
+            ) && is_literal_default(&unary.argument)
+        }
+        Expression::ArrayExpression(array) => array.elements.iter().all(|element| match element {
+            ArrayExpressionElement::SpreadElement(_) => false,
+            ArrayExpressionElement::Elision(_) => true,
+            other => other.as_expression().is_some_and(is_literal_default),
+        }),
+        Expression::ObjectExpression(object) => {
+            object.properties.iter().all(|property| match property {
+                ObjectPropertyKind::ObjectProperty(property) => {
+                    property.kind == PropertyKind::Init
+                        && !property.computed
+                        && !property.method
+                        && is_literal_default(&property.value)
+                }
+                ObjectPropertyKind::SpreadProperty(_) => false,
+            })
+        }
+        _ => false,
+    }
+}
+
 /// Parse one Vue slot-props parameter list through a synchronous arrow function.
 pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAnalysis {
     let prefix = "(";
@@ -1956,7 +2130,9 @@ fn prop_details(
     Some((required, has_default, default_is_null, type_source))
 }
 
-fn camelize_prop(name: &str) -> String {
+/// Vue's `camelize`: `row-data` becomes `rowData`, as Vue does to the prop
+/// names it passes to a slot.
+pub(crate) fn camelize_prop(name: &str) -> String {
     let mut result = String::with_capacity(name.len());
     let mut characters = name.chars().peekable();
     while let Some(character) = characters.next() {

@@ -17,7 +17,7 @@ Install the server in the same Python environment as the Citry project:
 python -m pip install citry-lsp
 ```
 
-The server requires Citry 0.6.0 or newer and Python 3.11 through 3.14. It checks
+The server requires Citry 0.6.0 or newer and Python 3.11 through 3.15. It checks
 catalog and protocol schemas for compatibility. It installs
 the compatible Citry runtime, pygls, and the supported `ty` analyzer
 automatically.

@@ -595,6 +595,19 @@ export function createProviderTreeCore<
     stageTree,
   });
 }
+
+/**
+ * Return `digits` without its trailing `0` characters.
+ *
+ * A plain loop, so the time grows only in step with the length, even for a
+ * long run of zeros before another digit.
+ */
+export function withoutTrailingZeros(digits: string): string {
+  let end = digits.length;
+  while (end > 0 && digits[end - 1] === "0") end -= 1;
+  return digits.slice(0, end);
+}
+
 export function createPureI18nHelpers(fail: Failure) {
   function prohibitedText(value: string): boolean {
     return Array.from(value).some((character) => BIDI_CONTROLS.has(character) || PARAGRAPH_BOUNDARIES.has(character));
@@ -791,7 +804,7 @@ export function createPureI18nHelpers(fail: Failure) {
     const negative = value.startsWith("-");
     const unsigned = negative ? value.slice(1) : value;
     const [integer, fraction = ""] = unsigned.split(".");
-    const normalizedFraction = fraction.replace(/0+$/, "");
+    const normalizedFraction = withoutTrailingZeros(fraction);
     const magnitude = normalizedFraction.length === 0 ? integer : `${integer}.${normalizedFraction}`;
     return /^0(?:\.0*)?$/.test(magnitude) ? "0" : `${negative ? "-" : ""}${magnitude}`;
   }

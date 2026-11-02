@@ -1,0 +1,18 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_detached_data",
+  "results": [
+    {
+      "ok": true,
+      "sendSequence": 6,
+      "actions": [
+        {
+          "action": "data",
+          "value": {
+            "count": 0
+          }
+        }
+      ]
+    }
+  ]
+}

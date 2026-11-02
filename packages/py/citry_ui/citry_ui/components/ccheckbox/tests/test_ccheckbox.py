@@ -132,11 +132,11 @@ def test_root_customization_and_native_attributes_land_on_distinct_destinations(
         ({"value": "a\0b"}, r"U\+0000"),
         ({"id": "a\0b"}, r"U\+0000"),
         ({"id": "bad id"}, "cannot contain ASCII whitespace"),
-        ({"checked": 1}, "checked must be a bool"),
-        ({"indeterminate": None}, "indeterminate must be a bool"),
-        ({"variant": "loud"}, "must be one of"),
-        ({"size": "xl"}, "must be one of"),
-        ({"label_pos": "left"}, "must be one of"),
+        ({"checked": 1}, r"CCheckbox\.Kwargs\.checked expects bool"),
+        ({"indeterminate": None}, r"CCheckbox\.Kwargs\.indeterminate expects bool"),
+        ({"variant": "loud"}, r"CCheckbox\.Kwargs\.variant expects Literal"),
+        ({"size": "xl"}, r"CCheckbox\.Kwargs\.size expects Literal"),
+        ({"label_pos": "left"}, r"CCheckbox\.Kwargs\.label_pos expects Literal"),
     ],
 )
 def test_checkbox_rejects_invalid_direct_inputs(kwargs, message):

@@ -18,7 +18,7 @@ concurrency:
 env:
   # Snapshot builds need only the workspace MSRV. Keep it fixed so release
   # docs reuse the same citry-core cache as the ordinary Pages workflows.
-  RUSTUP_TOOLCHAIN: "1.96.0"
+  RUSTUP_TOOLCHAIN: "1.97.0"
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"
   # The public URL the built site targets (canonical, Open Graph, sitemap). Keep
@@ -57,7 +57,7 @@ jobs:
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"

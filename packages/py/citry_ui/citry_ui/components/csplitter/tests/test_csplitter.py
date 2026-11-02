@@ -170,7 +170,7 @@ def test_root_and_panel_attrs_reach_concrete_elements() -> None:
             '<c-CSplitterPanel id="b" label="B">B</c-CSplitterPanel></c-CSplitter>',
             "cannot exceed",
         ),
-        (_two_panels('orientation="diagonal"'), "orientation must be one of"),
+        (_two_panels('orientation="diagonal"'), r"CSplitter\.Kwargs\.orientation expects Literal\["),
         (_two_panels('c-keyboard_step="0"'), "between 0.1"),
         (
             '<c-CSplitter><c-CSplitterPanel id="bad id" label="A">A</c-CSplitterPanel>'

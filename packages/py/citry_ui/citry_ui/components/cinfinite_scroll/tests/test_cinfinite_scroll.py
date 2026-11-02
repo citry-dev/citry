@@ -83,7 +83,7 @@ def test_loading_error_end_and_explicit_labels() -> None:
     [
         ('<c-CInfiniteScroll c-threshold="2" />', "between 0 and 1"),
         ('<c-CInfiniteScroll root_margin=" " />', "nonempty"),
-        ('<c-CInfiniteScroll c-auto="1" />', "must be a bool"),
+        ('<c-CInfiniteScroll c-auto="1" />', r"CInfiniteScroll\.Kwargs\.auto expects bool"),
         ("<c-CInfiniteScroll c-attrs=\"{'aria-busy':'true'}\" />", "owned attribute"),
         ("<c-CInfiniteScroll c-attrs=\"{'ref':'other'}\" />", "owned attribute"),
         (

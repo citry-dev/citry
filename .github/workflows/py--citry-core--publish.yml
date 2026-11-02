@@ -44,7 +44,7 @@ env:
   CITRY_RELEASE_TAG_PREFIX: "citry-core@"
   PROJECT_DIR: packages/py/citry_core
   SOURCE_DATE_EPOCH: "315532800"
-  CITRY_CORE_RUST_TOOLCHAIN: "1.96.0"
+  CITRY_CORE_RUST_TOOLCHAIN: "1.97.0"
   CITRY_CORE_EMSCRIPTEN_VERSION: "5.0.3"
   MATURIN_VERSION: "1.15.0"
 
@@ -110,13 +110,13 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py311 --interpreter python3.14t pypy3.11
+            --features abi3-py311 --interpreter python3.14t python3.15t pypy3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
           manylinux: auto
           working-directory: ${{ env.PROJECT_DIR }}
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         if: ${{ matrix.target == 'x86_64' }}
         with:
           prune-cache: true
@@ -143,9 +143,19 @@ jobs:
           python-version: "3.14"
       - uses: actions/setup-python@v7
         if: ${{ matrix.target == 'x86_64' }}
+        id: python315
+        with:
+          python-version: "3.15"
+      - uses: actions/setup-python@v7
+        if: ${{ matrix.target == 'x86_64' }}
         id: python314t
         with:
           python-version: "3.14t"
+      - uses: actions/setup-python@v7
+        if: ${{ matrix.target == 'x86_64' }}
+        id: python315t
+        with:
+          python-version: "3.15t"
       - uses: actions/setup-python@v7
         if: ${{ matrix.target == 'x86_64' }}
         id: pypy311
@@ -163,7 +173,8 @@ jobs:
             "${{ steps.python311.outputs.python-path }}" \
             "${{ steps.python312.outputs.python-path }}" \
             "${{ steps.python313.outputs.python-path }}" \
-            "${{ steps.python314.outputs.python-path }}"
+            "${{ steps.python314.outputs.python-path }}" \
+            "${{ steps.python315.outputs.python-path }}"
           do
             "$python" scripts/verify_citry_core_distribution.py smoke-wheel \
               --wheel "$abi3_wheel" --python "$python"
@@ -171,6 +182,9 @@ jobs:
           "${{ steps.python314t.outputs.python-path }}" scripts/verify_citry_core_distribution.py smoke-wheel \
             --wheel "$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-cp314-cp314t-manylinux*x86_64.whl" \
             --python "${{ steps.python314t.outputs.python-path }}"
+          "${{ steps.python315t.outputs.python-path }}" scripts/verify_citry_core_distribution.py smoke-wheel \
+            --wheel "$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-cp315-cp315t-manylinux*x86_64.whl" \
+            --python "${{ steps.python315t.outputs.python-path }}"
           "${{ steps.pypy311.outputs.python-path }}" scripts/verify_citry_core_distribution.py smoke-wheel \
             --wheel "$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-pp311-pypy311_pp73-manylinux*x86_64.whl" \
             --python "${{ steps.pypy311.outputs.python-path }}"
@@ -216,7 +230,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py311 --interpreter python3.14t pypy3.11
+            --features abi3-py311 --interpreter python3.14t python3.15t pypy3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -241,7 +255,7 @@ jobs:
         with:
           ref: ${{ inputs.release_commit }}
           submodules: recursive
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
@@ -265,6 +279,11 @@ jobs:
         with:
           python-version: "3.14"
           architecture: ${{ matrix.target }}
+      - uses: actions/setup-python@v7
+        id: python315
+        with:
+          python-version: "3.15"
+          architecture: ${{ matrix.target }}
       # The registry keeps this package's README, changelog, and project URLs
       # forever, so their repository links must name the release tag rather
       # than main, which keeps changing.
@@ -282,7 +301,7 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
           working-directory: ${{ env.PROJECT_DIR }}
-      - name: Smoke the ABI3 wheel on CPython 3.11 through 3.14
+      - name: Smoke the ABI3 wheel on CPython 3.11 through 3.15
         env:
           CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
         shell: pwsh
@@ -292,7 +311,8 @@ jobs:
             '${{ steps.python311.outputs.python-path }}',
             '${{ steps.python312.outputs.python-path }}',
             '${{ steps.python313.outputs.python-path }}',
-            '${{ steps.python314.outputs.python-path }}'
+            '${{ steps.python314.outputs.python-path }}',
+            '${{ steps.python315.outputs.python-path }}'
           )
           foreach ($python in $pythons) {
             & $python scripts/verify_citry_core_distribution.py smoke-wheel --wheel $wheel --python $python
@@ -321,7 +341,7 @@ jobs:
         with:
           ref: ${{ inputs.release_commit }}
           submodules: recursive
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
@@ -330,9 +350,9 @@ jobs:
         with:
           python-version: "3.11"
       - uses: actions/setup-python@v7
-        id: python314
+        id: python315
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       # The registry keeps this package's README, changelog, and project URLs
       # forever, so their repository links must name the release tag rather
       # than main, which keeps changing.
@@ -356,7 +376,7 @@ jobs:
           wheel="$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-cp311-abi3-macosx*.whl"
           for python in \
             "${{ steps.python311.outputs.python-path }}" \
-            "${{ steps.python314.outputs.python-path }}"
+            "${{ steps.python315.outputs.python-path }}"
           do
             "$python" scripts/verify_citry_core_distribution.py smoke-wheel \
               --wheel "$wheel" --python "$python"
@@ -371,6 +391,12 @@ jobs:
     if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: ubuntu-latest
+    env:
+      # Every cargo run in the checkout uses Rust 1.97.0, the version the
+      # wheels are built with, not the nightly that rust-toolchain.toml names.
+      # A job's env cannot read the workflow env, so the toolchain validator
+      # checks that this equals CITRY_CORE_RUST_TOOLCHAIN.
+      RUSTUP_TOOLCHAIN: "1.97.0"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -379,7 +405,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
@@ -400,7 +426,7 @@ jobs:
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           working-directory: ${{ env.PROJECT_DIR }}
-      - name: Rebuild and smoke-test the sdist at Rust 1.96
+      - name: Rebuild and smoke-test the sdist at Rust 1.97
         run: >-
           python scripts/verify_citry_core_distribution.py smoke-sdist
           --sdist '${{ env.PROJECT_DIR }}/dist/*.tar.gz'
@@ -422,6 +448,11 @@ jobs:
         copy: [a, b]
     env:
       CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
+      # Every cargo run in the checkout uses Rust 1.97.0, the version the
+      # wheels are built with, not the nightly that rust-toolchain.toml names.
+      # A job's env cannot read the workflow env, so the toolchain validator
+      # checks that this equals CITRY_CORE_RUST_TOOLCHAIN.
+      RUSTUP_TOOLCHAIN: "1.97.0"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -434,7 +465,7 @@ jobs:
         if: ${{ matrix.copy == 'a' }}
         with:
           node-version: "24"
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
@@ -447,7 +478,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/citry-pyodide-xbuildenv
-          key: pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.96.0-cli-0.5.0-build-0.37.0
+          key: pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.97.0-cli-0.5.0-build-0.37.0
       - name: Install the pinned Pyodide cross environment
         env:
           CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv

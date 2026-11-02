@@ -134,6 +134,22 @@ class CPagination(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "catalog_first_label",
+            "catalog_label",
+            "catalog_last_label",
+            "catalog_next_label",
+            "catalog_page_label",
+            "catalog_previous_label",
+            "disabled",
+            "items",
+            "label",
+            "size",
+            "variant",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         pages = _integer("pages", kwargs.pages, minimum=1)
         page = _integer("page", kwargs.page, minimum=1, maximum=pages)

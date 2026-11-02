@@ -50,7 +50,9 @@ def parse_template(
         The parsed Template AST.
 
     Raises:
-        SyntaxError: If the template has invalid syntax. Pass the exception to
+        SyntaxError: If the template has invalid syntax, or nests more than 512
+            tags of any kind or more than 256 Citry logic levels (code
+            ``citry.parse.too-deep``). Pass the exception to
             [`parse_diagnostic`][citry_core.template_parser.parse_diagnostic]
             for its stable code and UTF-8 byte range.
         ValueError: If an unknown language is specified.

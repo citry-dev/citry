@@ -67,6 +67,15 @@
     ]
   },
   {
+    "call": "detached_data.call.json",
+    "result": "detached_data.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken"
+    ]
+  },
+  {
     "call": "error_conflict.call.json",
     "result": "error_conflict.result.json",
     "dynamic_fields": [
@@ -110,6 +119,15 @@
   {
     "call": "error_invalid_args.call.json",
     "result": "error_invalid_args.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken"
+    ]
+  },
+  {
+    "call": "error_detached_state_updates.call.json",
+    "result": "error_detached_state_updates.result.json",
     "dynamic_fields": [
       "call.calls[0].componentClassId",
       "call.calls[0].callerRenderId",

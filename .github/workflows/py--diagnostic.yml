@@ -23,6 +23,7 @@ on:
           - "3.12"
           - "3.13"
           - "3.14"
+          - "3.15"
       install_profile:
         description: Package test dependencies to install
         required: true
@@ -75,19 +76,17 @@ jobs:
           --target "$PYTEST_TARGET"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
 
-      # The moving nightly is part of the wheel identity. Resolve the actual
-      # compiler before cache lookup so a newly published nightly cannot reuse
-      # artifacts produced by an older compiler under the same channel name.
+      # The compiler is part of the wheel identity. Resolve the actual
+      # compiler before cache lookup, so a wheel built with an earlier nightly
+      # date is never reused once the date moves.
       - name: Install Rust toolchain
         if: ${{ inputs.install_profile != 'pygments-citry' }}
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+        uses: ./.github/actions/install-rust
 
       - name: Resolve Citry Core wheel identity
         if: ${{ inputs.install_profile != 'pygments-citry' }}

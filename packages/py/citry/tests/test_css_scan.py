@@ -172,3 +172,37 @@ def test_template_style_elements_and_attributes_declare_css():
 
     assert used.declarations.classes == {"from-style", "from-bare-type"}
     assert used.declarations.custom_properties == {"from-style", "from-attribute", "from-binding"}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Vue leaves `:style` under `v-pre` as an attribute literally named
+        # `:style`, which sets no custom property.
+        "<div v-pre :style=\"{'--gap': size}\"></div>",
+        "<section v-pre><div :style=\"{'--gap': size}\"></div></section>",
+        "<div v-pre v-bind:style=\"{'--gap': size}\"></div>",
+        # In a template-valued attribute, whether `v-pre` is inside or outside it.
+        "<c-card c-header='<><p v-pre :style=\"{`--gap`: size}\"></p></>' />",
+        "<div v-pre><c-card c-header='<><p :style=\"{`--gap`: size}\"></p></>' /></div>",
+    ],
+)
+def test_a_style_binding_at_or_inside_v_pre_sets_no_custom_property(source):
+    assert _template_css(source).declarations.custom_properties == set()
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Citry renders `c-style` on the server before Vue sees the page.
+        "<div v-pre c-style=\"{'--gap': size}\"></div>",
+        "<section v-pre><div c-style=\"{'--gap': size}\"></div></section>",
+        # A plain `style` attribute is read by the browser, not by Vue.
+        '<div v-pre style="--gap: 1rem"></div>',
+        # Outside `v-pre` the binding still sets it, including after a `v-pre` sibling.
+        "<div v-pre></div><div :style=\"{'--gap': size}\"></div>",
+        "<c-card c-header='<><p :style=\"{`--gap`: size}\"></p></>' />",
+    ],
+)
+def test_citry_and_plain_styles_at_or_inside_v_pre_and_bindings_outside_it_still_set_a_custom_property(source):
+    assert _template_css(source).declarations.custom_properties == {"gap"}

@@ -11,6 +11,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
+from citry_ui.quality.accessibility import axe_rule_exclusions_script
 
 pytestmark = pytest.mark.e2e
 
@@ -55,7 +56,9 @@ def _toolbar_page() -> str:
                 <c-CButton c-attrs="{'id': 'bold'}" @keydown.stop="window.__childKeydown = true">
                   Bold
                 </c-CButton>
-                <c-CToggle c-attrs="{'id': 'italic'}">Italic</c-CToggle>
+                <template v-if="toolbar.showItalic">
+                  <c-CToggle c-attrs="{'id': 'italic'}">Italic</c-CToggle>
+                </template>
                 <c-CButtonGroup label="Clipboard">
                   <c-CButton c-attrs="{'id': 'copy'}">Copy</c-CButton>
                   <c-CButton c-attrs="{'id': 'paste'}" c-disabled="True">Paste</c-CButton>
@@ -105,7 +108,7 @@ def _toolbar_page() -> str:
           $component({
             data() { return {
               fieldsetDisabled: false,
-              toolbar: {orientation: 'horizontal', loop: true},
+              toolbar: {orientation: 'horizontal', loop: true, showItalic: true},
             }; },
             mounted() { window.__toolbarState = this; },
           });
@@ -199,12 +202,30 @@ def test_native_fieldset_css_environment_and_axe(page: Any) -> None:
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file()
     page.add_script_tag(path=str(axe_path))
+    page.evaluate(axe_rule_exclusions_script())
     violations = page.evaluate(
         """async () => (await axe.run(document, {resultTypes: ['violations']})).violations
           .filter((item) => ['serious', 'critical'].includes(item.impact))
           .map((item) => item.id)"""
     )
     assert violations == []
+    assert errors == []
+
+
+def test_removing_the_focused_control_leaves_the_page_where_the_reader_scrolled(page: Any) -> None:
+    errors = _load(page)
+    # A page long enough to scroll the toolbar out of view.
+    page.evaluate("document.body.append(Object.assign(document.createElement('div'), {style: 'height: 5000px'}))")
+    page.locator("#italic").focus()
+    page.evaluate("window.scrollTo(0, 3000)")
+    page.wait_for_function("window.scrollY === 3000")
+
+    # A re-render that drops the focused control moves focus to another
+    # one, which must not scroll the page back to the toolbar (#383).
+    page.evaluate("window.__toolbarState.toolbar.showItalic = false")
+    page.wait_for_function("document.activeElement?.closest('#editor') !== null")
+    page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    assert page.evaluate("window.scrollY") == 3000
     assert errors == []
 
 

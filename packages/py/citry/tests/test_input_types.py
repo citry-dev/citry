@@ -117,6 +117,141 @@ class TestErrorMessage:
         # The render error wrapper still adds where the component was used.
         assert message.startswith("An error occurred while rendering components Card:")
 
+    def test_a_library_component_says_to_change_the_value_and_names_the_library(self):
+        class Badge(LibraryComponent):
+            class Kwargs:
+                count: int
+
+            template = """
+              <span>{{ count }}</span>
+            """
+
+        app = Citry()
+        app.register_library(ComponentLibrary(name="badges", components=(Badge,)))
+
+        with pytest.raises(TypeError) as error:
+            str(app.get("Badge")(count=[1]))
+
+        message = str(error.value)
+        assert "Badge.Kwargs.count expects int, got list ([1])." in message
+        # The app's author cannot edit a library's annotation.
+        assert "Badge comes from the component library 'badges', so pass a value of the expected type." in message
+        assert "change the annotation" not in message
+
+    def test_a_library_component_keeps_the_template_hint_for_text(self):
+        class Badge(LibraryComponent):
+            class Kwargs:
+                count: int
+
+            template = """
+              <span>{{ count }}</span>
+            """
+
+        app = Citry()
+        app.register_library(ComponentLibrary(name="badges", components=(Badge,)))
+
+        with pytest.raises(TypeError) as error:
+            str(app.get("Badge")(count="1"))
+
+        assert 'In a template, write c-count="..." to pass a Python value instead of text.' in str(error.value)
+
+    @pytest.mark.parametrize(
+        ("schema", "data_method"),
+        [("TemplateData", "template_data"), ("JsData", "js_data")],
+    )
+    def test_a_library_components_data_names_both_possible_owners(self, schema: str, data_method: str):
+        # The library's data method may have built the value, or passed the
+        # app's input through, so the message covers both.
+        def data(self, kwargs, slots):
+            return {"level": "high"}
+
+        gauge = type(
+            "Gauge",
+            (LibraryComponent,),
+            {
+                schema: type(schema, (), {"__annotations__": {"level": int}}),
+                data_method: data,
+                "template": "<span></span>",
+            },
+        )
+        app = Citry()
+        app.register_library(ComponentLibrary(name="gauges", components=(gauge,)))
+
+        with pytest.raises(TypeError) as error:
+            str(app.get("Gauge")())
+
+        message = str(error.value)
+        assert f"Gauge.{schema}.level expects int, got str ('high')." in message
+        assert (
+            "Gauge comes from the component library 'gauges'. If you passed this value as an input, "
+            "pass one of the expected type; otherwise report it to that library."
+        ) in message
+        assert "change the annotation" not in message
+
+    def test_a_library_components_literal_data_also_names_the_library(self):
+        class Gauge(LibraryComponent):
+            class TemplateData:
+                tone: Literal["calm", "loud"]
+
+            def template_data(self, kwargs, slots):
+                return {"tone": "quiet"}
+
+            template = """
+              <span>{{ tone }}</span>
+            """
+
+        app = Citry()
+        app.register_library(ComponentLibrary(name="gauges", components=(Gauge,)))
+
+        with pytest.raises(TypeError) as error:
+            str(app.get("Gauge")())
+
+        message = str(error.value)
+        assert "Use one of the values that Literal['calm', 'loud'] allows." in message
+        assert "comes from the component library 'gauges'" in message
+
+    def test_an_app_subclass_of_a_library_component_keeps_the_annotation_advice(self):
+        class Badge(LibraryComponent):
+            class Kwargs:
+                count: int
+
+            template = """
+              <span>{{ count }}</span>
+            """
+
+        app = Citry()
+        installed = app.register_library(ComponentLibrary(name="badges", components=(Badge,)))
+
+        # The app owns its subclass and can change that annotation.
+        class MyBadge(installed[Badge]):  # type: ignore[misc,valid-type]
+            citry = app
+
+        with pytest.raises(TypeError) as error:
+            str(MyBadge(count=[1]))
+
+        message = str(error.value)
+        assert "change the annotation to accept list" in message
+        assert "component library" not in message
+
+    @pytest.mark.parametrize("mode", [True, "vue"], ids=["simple", "simple-vue"])
+    def test_a_simple_library_component_names_the_library(self, mode: object):
+        badge = type(
+            "Badge",
+            (LibraryComponent,),
+            {
+                "simple": mode,
+                "Kwargs": type("Kwargs", (), {"__annotations__": {"count": int}}),
+                "template": "<span>{{ count }}</span>",
+            },
+        )
+        app = Citry()
+        app.register_library(ComponentLibrary(name="badges", components=(badge,)))
+
+        with pytest.raises(TypeError) as error:
+            str(app.get("Badge")(count=[1]))
+
+        assert "Badge comes from the component library 'badges'" in str(error.value)
+
     def test_long_value_is_shortened(self):
         app = Citry()
         card = _card(app, str)

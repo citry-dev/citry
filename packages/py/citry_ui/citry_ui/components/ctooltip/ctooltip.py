@@ -9,7 +9,6 @@ from typing import Any, Literal, TypedDict
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
-    ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -36,6 +35,7 @@ class CTooltipOpenChangeDetail(TypedDict):
         "native",
         "ancestor",
         "modal",
+        "disabled",
     ]
     controlled: bool
     forced: bool
@@ -182,9 +182,19 @@ class CTooltip(LibraryComponent):
         activator: SlotInput[CTooltipActivatorSlotData]
         default: SlotInput[CTooltipDefaultSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "activator_attrs",
+            "attrs",
+            "close_delay",
+            "delay",
+            "disabled",
+            "open",
+            "placement",
+            "tooltip_id",
+            "tooltip_text",
+            "uses_text",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tooltip_snapshot", None)
@@ -286,9 +296,14 @@ class CTooltip(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       const handoffKey = Symbol.for("citry-ui:tooltip-handoff");
 
       $component({
@@ -427,9 +442,13 @@ class CTooltip(LibraryComponent):
             // stepping out of a shadow root. If that box keeps a fixed size
             // while only an inline wrapper inside it hides the trigger, the
             // episode lasts until the trigger next opens.
+            // TypeScript types a shadow root's host as `Element`, so `box` is typed that wide.
+            /** @type {Element} */
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
-              const next = box.parentElement ?? box.getRootNode().host;
+              // Step out of a shadow root to its host; a document has no host.
+              const boxRoot = box.getRootNode();
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
               if (!next) {
                 break;
               }
@@ -437,7 +456,13 @@ class CTooltip(LibraryComponent):
             }
             shownWatch.observe(box);
           };
-          let internalOpen = initialHandoff?.open ?? defaults.open;
+          // A server re-render hands the previous run's open state to this one,
+          // so a tooltip that was open before the re-render is still open after
+          // it, and one the reader closed stays closed. When the server's `open`
+          // input changed, the tooltip follows the server instead.
+          const sameServerOpen = Boolean(initialHandoff) && initialHandoff.serverOpen === defaults.open;
+          let internalOpen = sameServerOpen ? initialHandoff.open : defaults.open;
+          let updated = false;
           let onOpenChange = null;
           let animation = null;
           let generation = 0;
@@ -995,6 +1020,27 @@ class CTooltip(LibraryComponent):
             if (!nextOpen) {
               layerCoordinator.clearSuppression(layer);
             }
+            // On this run's first update the tooltip was showing only if the
+            // previous run left it open. A render that disables a showing
+            // tooltip closes it because of the disable, even when it also
+            // changes the server's `open` input, so that first update reports
+            // the close either way.
+            const firstUpdate = !updated;
+            const wasShowing = firstUpdate ? Boolean(initialHandoff?.open) : logicalOpen;
+            updated = true;
+            if (configuration.disabled && wasShowing && (nextOpen || firstUpdate)) {
+              // Disabling an open tooltip hides it, as CHoverCard does. The owner
+              // did not ask for that close, so tell it once, and stop an
+              // uncontrolled tooltip from coming back on its own when it is
+              // enabled again.
+              if (!controlled) {
+                internalOpen = false;
+              }
+              applyOpen(false, null);
+              notify(false, "disabled", null, true);
+              pendingRequest = null;
+              return;
+            }
             const context = pendingRequest?.nextOpen === nextOpen ? pendingRequest : null;
             applyOpen(nextOpen, context);
             if (context || nextOpen === logicalOpen) {
@@ -1006,7 +1052,7 @@ class CTooltip(LibraryComponent):
 
           return () => {
             active = false;
-            surface[handoffKey] = { open: logicalOpen };
+            surface[handoffKey] = { open: logicalOpen, serverOpen: defaults.open };
             shownWatch?.disconnect();
             trigger.removeEventListener("pointerenter", onTriggerPointerEnter);
             trigger.removeEventListener("pointerleave", onTriggerPointerLeave);
@@ -1031,7 +1077,6 @@ class CTooltip(LibraryComponent):
         },
       });
     """
-    )
 
     css_file = "runtime.min.css"
 

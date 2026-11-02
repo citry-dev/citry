@@ -34,14 +34,8 @@ class ControlledCommandPalette(Component):
           c-entries="commands"
           :open="controlOpen ? open : null"
           :query="controlQuery ? query : null"
-          :onOpenChange="(value,detail)=>{
-              requests.push(`open:${value}:${detail.reason}`);
-              if (!controlOpen || value || acceptClose) open=value;
-            }"
-          :onQueryChange="(value,detail)=>{
-              requests.push(`query:${value}:${detail.reason}`);
-              if (!controlQuery || acceptQuery || detail.reason==='close') query=value;
-            }"
+          :onOpenChange="applyOpenRequest"
+          :onQueryChange="applyQueryRequest"
         />
         <output aria-live="polite">
           Owner: <span v-text="open ? 'open' : 'closed'">open</span>;
@@ -62,6 +56,22 @@ class ControlledCommandPalette(Component):
             acceptQuery:false,
             requests:[],
           };
+        },
+        methods: {
+          // A controlled palette opens on request but closes only once the
+          // owner ticks Accept close.
+          applyOpenRequest(value, detail) {
+            this.requests.push(`open:${value}:${detail.reason}`);
+            if (!this.controlOpen || value || this.acceptClose) this.open = value;
+          },
+          // The reset that comes with a close is always taken, so the next
+          // open starts with an empty query.
+          applyQueryRequest(value, detail) {
+            this.requests.push(`query:${value}:${detail.reason}`);
+            if (!this.controlQuery || this.acceptQuery || detail.reason === 'close') {
+              this.query = value;
+            }
+          },
         },
       });
     """

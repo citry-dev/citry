@@ -367,15 +367,44 @@ def test_every_production_component_is_in_the_manifest_and_installed():
     assert frozenset(installation.definitions) == discovered
 
 
-def test_check_project_loads_the_whole_library():
-    """`citry check` must be able to analyze every Citry UI component without failing to load the app."""
+def test_an_app_that_only_registers_citry_ui_checks_clean():
+    """`citry check` loads every Citry UI component and reports nothing an app could fix (GitHub #149)."""
     engine = Citry(autodiscover=False)
     engine.register_library(citry_ui)
 
     report = check_project(CheckAppSelection(spec="citry-ui-check", engine=engine), Path.cwd())
 
-    # Findings may include errors; this test only proves the registry loads.
+    # An app's author cannot change Citry UI, so its findings are left out
+    # and counted, and the app passes.
     assert report.app_failure is None
+    assert report.findings == ()
+    assert report.exit_code == 0
+    assert any("registered library 'citry-ui'" in note for note in report.all_notes)
+
+
+def test_citry_ui_templates_check_clean_against_their_declared_keys():
+    """Each Citry UI template reads only names its `Lint.template_data_keys` lists, and each list is complete."""
+    engine = Citry(autodiscover=False)
+    engine.register_library(citry_ui)
+
+    report = check_project(CheckAppSelection(spec="citry-ui-check", engine=engine), Path.cwd(), include_libraries=True)
+
+    # A template reading a name its list leaves out, or a literal key its
+    # template_data() returns that the list leaves out, shows up here.
+    codes = {"citry.template.unknown-variable", "citry.template.undeclared-template-data-key"}
+    assert [(finding.origin, finding.message) for finding in report.findings if finding.code in codes] == []
+
+
+def test_a_subclass_of_a_citry_ui_component_may_describe_its_data_with_a_schema():
+    installed = Citry(autodiscover=False).register_library(citry_ui)
+
+    # CButton lists its template data keys; the subclass's schema names them
+    # instead, without the app touching CButton's Lint class.
+    class MyButton(installed[CButton]):  # type: ignore[misc,valid-type]
+        class TemplateData:
+            variant: str
+
+    assert MyButton.TemplateData is not None
 
 
 def test_library_publication_rejects_invalid_invocations_and_manifests():
@@ -848,6 +877,70 @@ _GENERALLY_CHECKED = [
     ("CTreeItem", {"value": "one", "label": "One"}, "disabled", "yes"),
     ("CVirtualListItem", {}, "item_key", 3),
     ("CVirtualWindow", {"total_count": 3}, "focusable", "yes"),
+    # Classes whose own messages said no more than Citry's (#212).
+    ("CAlertDialog", {}, "open", "yes"),
+    ("CAvatar", {}, "src", 3),
+    ("CBadge", {}, "class_", 3),
+    ("CButton", {}, "disabled", "yes"),
+    ("CButtonGroup", {"label": "label"}, "attached", "yes"),
+    ("CCard", {}, "class_", 3),
+    ("CCascader", {}, "change_on_select", "yes"),
+    ("CCheckbox", {}, "checked", "yes"),
+    ("CCol", {}, "reverse", "yes"),
+    ("CColorPicker", {"label": "label"}, "open", "yes"),
+    ("CCombobox", {}, "open", "yes"),
+    ("CContainer", {}, "fluid", "yes"),
+    ("CContextMenu", {"aria_label": "x"}, "open", "yes"),
+    ("CDateInput", {}, "name", 3),
+    ("CDialog", {}, "open", "yes"),
+    ("CDivider", {}, "decorative", "yes"),
+    ("CEditable", {}, "editing", "yes"),
+    ("CFileInput", {}, "multiple", "yes"),
+    ("CForm", {}, "disabled", "yes"),
+    ("CGrid", {}, "min_col", 3),
+    ("CGridItem", {}, "class_", 3),
+    ("CHoverCard", {}, "open", "yes"),
+    ("CImage", {"src": "x", "alt": "x", "width": 1, "height": 1}, "draggable", "yes"),
+    ("CInfiniteScroll", {}, "has_more", "yes"),
+    ("CInput", {}, "name", 3),
+    ("CListbox", {"label": "label"}, "multiple", "yes"),
+    ("CMenu", {}, "open", "yes"),
+    ("CMenuCheckboxItem", {"value": "value"}, "disabled", "yes"),
+    ("CMenuSubmenu", {"value": "value"}, "disabled", "yes"),
+    ("CMultiSelect", {"options": [], "placeholder": "x"}, "open", "yes"),
+    ("CNumberInput", {}, "show_controls", "yes"),
+    ("CPinInput", {}, "mask", "yes"),
+    ("CPopover", {}, "open", "yes"),
+    ("CProgress", {"label": "label"}, "value_text", 3),
+    ("CRadioGroup", {"name": "name"}, "value", 3),
+    ("CRangeSlider", {}, "name", 3),
+    ("CRating", {}, "allow_clear", "yes"),
+    ("CRow", {}, "reverse", "yes"),
+    ("CSelect", {"options": [], "placeholder": "x"}, "open", "yes"),
+    ("CSidebar", {}, "collapsed", "yes"),
+    ("CSkeleton", {}, "width", 3),
+    ("CSlider", {}, "name", 3),
+    ("CSortable", {}, "disabled", "yes"),
+    ("CSpinner", {"label": "label"}, "class_", 3),
+    ("CSplitButton", {}, "disabled", "yes"),
+    ("CSplitter", {}, "disabled", "yes"),
+    ("CStepper", {"label": "label"}, "interactive", "yes"),
+    ("CSwitch", {}, "checked", "yes"),
+    ("CTab", {"value": "value"}, "disabled", "yes"),
+    ("CTabs", {"default_value": "x"}, "loop", "yes"),
+    ("CTagsInput", {}, "name", 3),
+    ("CTextarea", {}, "name", 3),
+    ("CTimeInput", {}, "name", 3),
+    ("CTimePicker", {}, "clearable", "yes"),
+    ("CTimeline", {}, "label", 3),
+    ("CTimelineItem", {}, "class_", 3),
+    ("CToolbar", {"label": "label"}, "loop", "yes"),
+    ("CTooltip", {}, "open", "yes"),
+    ("CTour", {}, "open", "yes"),
+    ("CTourStep", {"value": "value"}, "arrow", "yes"),
+    ("CTransferList", {}, "required", "yes"),
+    ("CTree", {"label": "label"}, "disabled", "yes"),
+    ("CVirtualList", {}, "focusable", "yes"),
 ]
 
 
@@ -876,9 +969,25 @@ def test_every_public_component_with_the_general_check_has_an_invalid_input_case
     assert checked == {case[0] for case in _GENERALLY_CHECKED}
 
 
+def test_every_public_kwargs_annotation_resolves_at_run_time():
+    # Citry's input check and the editor read the Kwargs annotations from the
+    # live class, and leave a field unchecked when its annotation names a type
+    # imported only for type checkers.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    unresolved = []
+    for definition in installation.definitions:
+        try:
+            get_type_hints(installation[definition].Kwargs)
+        except NameError as error:
+            unresolved.append(f"{definition.__name__}: {error}")
+    assert unresolved == []
+
+
 def test_cdisclosure_keeps_its_own_heading_level_check():
-    # CDisclosure keeps Citry's general check off and checks heading_level
-    # itself, so it still renders `heading_level="2"`.
+    # CDisclosure keeps Citry's general check off so that a wrong
+    # heading_level gets Citry UI's one-line message, and its own check still
+    # accepts `heading_level="2"`.
     app = Citry(autodiscover=False)
     installation = app.register_library(citry_ui)
     disclosure = next(installation[d] for d in installation.definitions if d.__name__ == "CDisclosure")

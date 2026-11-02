@@ -428,15 +428,23 @@ def test_generated_readset_check_matches_the_shared_walker() -> None:
 
 
 def test_deeply_nested_readset_keeps_the_shared_walker() -> None:
-    # Python rejects more than 20 nested loops in one function, so a read
+    # CPython rejects more than 20 nested loops in one function, so a read
     # set this deep cannot be written out and must use the shared walker.
     node = leaf_program._SimpleJsonReadNode(frozenset({"scalar"}), ())
     for _depth in range(24):
         node = leaf_program._SimpleJsonReadNode(frozenset({"list"}), (), node)
     read_set = leaf_program._SimpleJsonReadSet((("rows", node),), ())
     lines = leaf_program._simple_json_readset_check_lines(read_set, indent=4)
-    with pytest.raises(SyntaxError):
+    try:
         compile("\n".join(("def check(variables):", *lines)), "<test>", "exec")
+    except SyntaxError:
+        pass
+    else:
+        # CPython must still reject it, or a codegen change has made this
+        # read set too shallow to reach the fallback. PyPy has no such limit.
+        assert sys.implementation.name != "cpython", "CPython compiled 24 nested loops in one function"
+        reason = "this interpreter compiles 24 nested loops in one function, so Citry never needs the shared walker"
+        pytest.skip(reason)
 
     codegen = object.__new__(leaf_program._SimpleJsonCodegen)
     codegen.functions = []

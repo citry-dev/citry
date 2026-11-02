@@ -154,9 +154,38 @@ class CCalendar(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # Citry's error for first_day_of_week would print all 14 values twice;
+    # Citry UI's says "from 1 through 7, where 1 is Monday" in one line. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "catalog_label",
+            "catalog_next_label",
+            "catalog_previous_label",
+            "described_by",
+            "disabled",
+            "error_message",
+            "field_control",
+            "form",
+            "heading_id",
+            "invalid",
+            "label",
+            "labelled_by",
+            "maximum",
+            "minimum",
+            "name",
+            "next_label",
+            "previous_label",
+            "public_id",
+            "readonly",
+            "required",
+            "root_id",
+            "size",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_calendar_snapshot", None)

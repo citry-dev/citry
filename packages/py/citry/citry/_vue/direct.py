@@ -39,6 +39,9 @@ class DirectFillSource:
     span: tuple[int, int]
     origin: str | None
     strict_session: bool
+    # The fill's `v-slot` pattern, which reads the Vue slot props the
+    # receiving `<c-slot>` passes; `None` for a fill without one.
+    vue_pattern: str | None = None
 
 
 @dataclass(slots=True)
@@ -51,6 +54,13 @@ class DirectExecutionFrame:
     source: object
     span: tuple[int, int]
     consumed: bool = False
+    # The receiving `<c-slot>`'s Vue slot props, as `(attribute, expression)`
+    # pairs written in its template, such as `(":row", "row")`.
+    vue_props: tuple[tuple[str, str], ...] = ()
+    # Whether a `<c-slot>` outlet opened this frame, rather than a Slot printed
+    # as a value, such as `{{ icon }}`, which Python passed to the template;
+    # an error names which it was.
+    from_outlet: bool = False
 
 
 class DirectProjectionRender(CitryRender):
@@ -59,6 +69,7 @@ class DirectProjectionRender(CitryRender):
     __slots__ = (
         "execution_index",
         "fill_source",
+        "from_outlet",
         "parent_execution",
         "public_name",
         "receiver_render_id",
@@ -66,6 +77,7 @@ class DirectProjectionRender(CitryRender):
         "selected",
         "source",
         "span",
+        "vue_props",
     )
 
     def __init__(
@@ -80,6 +92,8 @@ class DirectProjectionRender(CitryRender):
         source: object,
         span: tuple[int, int],
         preserve_selected: bool = False,
+        vue_props: tuple[tuple[str, str], ...] = (),
+        from_outlet: bool = False,
     ) -> None:
         if not isinstance(selected, CitryRender):
             raise TypeError("a direct projection must wrap structured template output")
@@ -118,6 +132,8 @@ class DirectProjectionRender(CitryRender):
         self.selected = selected
         self.source = source
         self.span = span
+        self.vue_props = vue_props
+        self.from_outlet = from_outlet
 
 
 class DirectSlotRender(DirectProjectionRender):
@@ -343,6 +359,7 @@ def bind_template_fill(
     source: object,
     span: tuple[int, int],
     origin: str | None,
+    vue_pattern: str | None = None,
 ) -> None:
     session = direct_session()
     if session is None:
@@ -358,6 +375,7 @@ def bind_template_fill(
         span,
         origin,
         vue_render_active(),
+        vue_pattern,
     )
 
 
@@ -401,6 +419,8 @@ def wrap_slot_result(
         receiver_render_id=receiver_render_id,
         source=source,
         span=span,
+        vue_props=execution.vue_props,
+        from_outlet=execution.from_outlet,
     )
 
 
@@ -626,12 +646,67 @@ def begin_slot_execution(
     receiver_render_id: str,
     source: object,
     span: tuple[int, int],
+    vue_props: tuple[tuple[str, str], ...] = (),
+    from_outlet: bool = False,
 ) -> DirectExecutionFrame:
     session = direct_session()
     if session is None or session is not fill_source.session or not session.active:
         raise RuntimeError("prepared Slot belongs to a different or closed direct render session")
     return DirectExecutionFrame(
-        session.next_execution(), active_execution(), fill_source, public_name, receiver_render_id, source, span
+        session.next_execution(),
+        active_execution(),
+        fill_source,
+        public_name,
+        receiver_render_id,
+        source,
+        span,
+        vue_props=vue_props,
+        from_outlet=from_outlet,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _PythonSlotAtPropsOutlet:
+    """A Python Slot rendering at a `<c-slot>` that passes Vue slot props."""
+
+    component_name: str
+    slot_name: str
+    # The frame that was current when the Slot started. A component the Slot
+    # renders opens frames of its own, and a fill called inside one of those
+    # has its own outlet, so only a call made directly at this level loses props.
+    execution: DirectExecutionFrame | None
+
+
+_PYTHON_SLOT_AT_PROPS_OUTLET: ContextVar[_PythonSlotAtPropsOutlet | None] = ContextVar(
+    "citry_vue_python_slot_at_props_outlet", default=None
+)
+
+
+@contextmanager
+def python_slot_at_props_outlet(component_name: str, slot_name: str, *, has_props: bool) -> Iterator[None]:
+    """
+    Mark a Python Slot that renders at an outlet, so a scoped fill it calls can fail clearly.
+
+    Only an outlet with Vue slot props sets the mark. One without props
+    clears it, so a fill that a nested Python Slot calls is judged by the
+    outlet it actually renders at.
+    """
+    marker = _PythonSlotAtPropsOutlet(component_name, slot_name, active_execution()) if has_props else None
+    token = _PYTHON_SLOT_AT_PROPS_OUTLET.set(marker)
+    try:
+        yield
+    finally:
+        _PYTHON_SLOT_AT_PROPS_OUTLET.reset(token)
+
+
+def _scoped_fill_through_python_slot(fill_source: DirectFillSource, outlet: _PythonSlotAtPropsOutlet) -> RuntimeError:
+    """Explain why a fill with `v-slot` cannot receive props through a Python Slot."""
+    return RuntimeError(
+        f'{outlet.component_name}\'s <c-slot name="{outlet.slot_name}"> passes Vue slot props, but it renders '
+        f"a Python Slot, which calls the fill for slot '{fill_source.public_name}' "
+        f'(v-slot="{fill_source.vue_pattern}") from Python. A Python Slot cannot pass Vue slot props on, so '
+        "the fill would read nothing. Pass the fill to that component in a template, or read Python slot data "
+        "with 'data=\"...\"'."
     )
 
 
@@ -642,6 +717,10 @@ def capture_slot_call(slot: Slot, callback: Callable[[], RenderPart]) -> RenderP
     if fill_source is None or session is None:
         return callback()
     current = active_execution()
+    if fill_source.vue_pattern is not None:
+        outlet = _PYTHON_SLOT_AT_PROPS_OUTLET.get()
+        if outlet is not None and outlet.execution is current:
+            raise _scoped_fill_through_python_slot(fill_source, outlet)
     if current is not None and current.fill_source is fill_source and not current.consumed:
         execution = current
         current.consumed = True
@@ -658,6 +737,10 @@ def capture_slot_call(slot: Slot, callback: Callable[[], RenderPart]) -> RenderP
             receiver_render_id=receiver_render_id,
             source=current.source,
             span=current.span,
+            # The outlet's props belong to the fill it called. Another Slot
+            # printed inside that fill lands in another component, where the
+            # props' expressions would read that component's data.
+            vue_props=current.vue_props if current.fill_source is fill_source else (),
         )
     else:
         # A Slot remains a public Python callable and may be invoked through a

@@ -1,3 +1,4 @@
+import gzip
 import json
 
 import pytest
@@ -5,7 +6,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui.components.ccommand_palette import CCommandPaletteCommand
-from citry_ui.quality.asset_report import _family_asset_payloads, _family_assets, asset_report
+from citry_ui.quality.asset_report import _family_asset_payloads, _family_assets, _measure, asset_report
 
 
 def _render_split_button_instances(count: int) -> str:
@@ -461,6 +462,14 @@ def test_image_assets_stay_within_the_family_budgets():
     assert family["css"]["brotli"] < 1024
 
 
+def test_gzip_sizes_use_level_9_on_every_python():
+    # The budgets were set at level 9. Python 3.15 lowered gzip's default to
+    # 6, which made the same bytes measure larger there.
+    payload = b"const palette = { open: false, query: '' };\n" * 64
+
+    assert _measure(payload).gzip == len(gzip.compress(payload, compresslevel=9, mtime=0))
+
+
 def test_command_palette_assets_stay_within_the_family_budgets():
     family = asset_report()["families"]["command-palette"]
     incremental = family["incremental"]
@@ -470,8 +479,11 @@ def test_command_palette_assets_stay_within_the_family_budgets():
     assert incremental["javascript"]["gzip"] < 10 * 1024
     assert incremental["javascript"]["brotli"] < 9 * 1024
     assert family["javascript"]["raw"] < 112 * 1024
-    assert family["javascript"]["gzip"] < 20 * 1024
-    assert family["javascript"]["brotli"] < 17 * 1024
+    # Running a closing command's onAction after the close (#420), with its
+    # handling of owner errors, reopening and unmounting, adds about 2.3 KiB
+    # raw (0.6 KiB gzip) to a family that had under 0.1 KiB of headroom.
+    assert family["javascript"]["gzip"] < int(21.5 * 1024)
+    assert family["javascript"]["brotli"] < int(18.5 * 1024)
     assert family["css"]["raw"] < 10 * 1024
     assert family["css"]["gzip"] < int(2.25 * 1024)
     assert family["css"]["brotli"] < 2 * 1024
@@ -497,12 +509,20 @@ def test_context_menu_assets_stay_within_the_family_budgets():
     assert incremental["javascript"]["raw"] < 32 * 1024
     assert incremental["javascript"]["gzip"] < 10 * 1024
     assert incremental["javascript"]["brotli"] < 9 * 1024
-    assert family["javascript"]["raw"] < 160 * 1024
+    # 161 KiB from 160 KiB: CMenu's shared menu runtime skips writes whose
+    # value is already in place, so an idle open menu stops refocusing its
+    # item in a loop. That adds about 1 KiB raw after shorter comments.
+    assert family["javascript"]["raw"] < 161 * 1024
     # 35 KiB from 34 KiB: CMenu now scrolls only its own list to show the
     # focused item, and scrolls the page only after a key press (#383),
     # which added about 880 gzip bytes that shorter comments could not
     # recover.
-    assert family["javascript"]["gzip"] < 35 * 1024
+    # 35.5 KiB from 35 KiB: the shadow-root walk in CMenu's shared runtime
+    # now checks for a shadow root before it reads `host`, with a JSDoc type
+    # for TypeScript and two comments explaining it (#534). That added about
+    # 95 gzip bytes when about 80 were left. Deleting the comments would
+    # recover about 75 bytes, so the next small change would trip it again.
+    assert family["javascript"]["gzip"] < int(35.5 * 1024)
     assert family["javascript"]["brotli"] < 30 * 1024
     assert family["css"]["raw"] < 20 * 1024
     assert family["css"]["gzip"] < 3 * 1024

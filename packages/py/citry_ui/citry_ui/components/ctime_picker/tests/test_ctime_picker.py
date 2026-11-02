@@ -194,9 +194,9 @@ def test_empty_source_mode_and_explicit_overrides_are_useful() -> None:
         ({"options": ("09:00", "09:00")}, ValueError, "duplicates"),
         ({"options": ("08:00",), "min": "09:00"}, ValueError, "inside the min/max"),
         ({"value": "09:15", "options": ("09:00", "09:30")}, ValueError, "must equal"),
-        ({"placement": "sideways"}, ValueError, "placement"),
-        ({"variant": "glass"}, ValueError, "variant"),
-        ({"size": "xl"}, ValueError, "size"),
+        ({"placement": "sideways"}, TypeError, "CTimePicker.Kwargs.placement expects Literal["),
+        ({"variant": "glass"}, TypeError, "CTimePicker.Kwargs.variant expects Literal["),
+        ({"size": "xl"}, TypeError, "CTimePicker.Kwargs.size expects Literal['sm', 'md', 'lg']"),
         ({"change_label": "Change time"}, ValueError, "{time}"),
     ],
 )

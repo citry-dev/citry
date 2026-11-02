@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "python_expression_provider": "ruff@0.16.6+22f65a2ab5",
+  "python_expression_provider": "ruff@0.17.3+ba65abf8ba",
   "cases": [
     {
       "id": "opening-tags.tags.normalize-spacing",
@@ -27,6 +27,14 @@
       "features": ["preferred-width", "expression-attribute"]
     },
     {
+      "id": "opening-tags.tags.wrap-with-same-line-text",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "tags/wrap-with-same-line-text.input.citry-html",
+      "expected": "tags/wrap-with-same-line-text.expected.citry-html",
+      "features": ["preferred-width"]
+    },
+    {
       "id": "opening-tags.comments.tag-internal",
       "capability": "opening-tags",
       "category": "comments",
@@ -41,6 +49,14 @@
       "input": "whitespace/block-structure.input.citry-html",
       "expected": "whitespace/block-structure.expected.citry-html",
       "features": ["block-container", "expression-delimiters"]
+    },
+    {
+      "id": "structural-layout.whitespace.no-gap-added",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/no-gap-added.input.citry-html",
+      "expected": "whitespace/no-gap-added.expected.citry-html",
+      "features": ["no-gap-added", "block-container", "select", "fill-body"]
     },
     {
       "id": "structural-layout.whitespace.inline-boundaries",
@@ -403,7 +419,7 @@
       "id": "structural-layout.bytes.crlf",
       "capability": "structural-layout",
       "category": "bytes",
-      "input_text": "<main><section></section></main>\r\n",
+      "input_text": "<main> <section></section> </main>\r\n",
       "expected_text": "<main>\r\n  <section></section>\r\n</main>\r\n",
       "features": ["crlf", "newline-detection", "block-container"]
     },
@@ -411,7 +427,7 @@
       "id": "structural-layout.bytes.no-final-newline",
       "capability": "structural-layout",
       "category": "bytes",
-      "input_text": "<main><section></section></main>",
+      "input_text": "<main> <section></section> </main>",
       "expected_text": "<main>\n  <section></section>\n</main>",
       "features": ["missing-final-newline", "block-container"]
     },
@@ -463,6 +479,14 @@
       ]
     },
     {
+      "id": "python-expressions.expressions.nested-format-quotes",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/nested-format-quotes.input.citry-html",
+      "expected": "expressions/nested-format-quotes.expected.citry-html",
+      "features": ["python-expression-formatting", "strings"]
+    },
+    {
       "id": "python-expressions.expressions.attributes",
       "capability": "python-expressions",
       "category": "expressions",
@@ -485,6 +509,22 @@
       "input": "expressions/long-interpolation.input.citry-html",
       "expected": "expressions/long-interpolation.expected.citry-html",
       "features": ["python-expression-formatting", "line-width", "multiline-interpolation"]
+    },
+    {
+      "id": "python-expressions.expressions.multiline-without-parentheses",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/multiline-without-parentheses.input.citry-html",
+      "expected": "expressions/multiline-without-parentheses.expected.citry-html",
+      "features": ["python-expression-formatting", "multiline-interpolation"]
+    },
+    {
+      "id": "python-expressions.expressions.kept-or-moved-comments",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/kept-or-moved-comments.input.citry-html",
+      "expected": "expressions/kept-or-moved-comments.expected.citry-html",
+      "features": ["python-expression-formatting", "python-comment", "c-for-clause", "strings"]
     },
     {
       "id": "python-expressions.control.for-forms",
@@ -925,7 +965,7 @@
     {
       "id": "python-hosts.framing.crlf-wrapped-tag",
       "category": "framing",
-      "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton class=\\\"primary\\\" c-disabled=\\\"not enabled\\\" aria-label=\\\"Save changes to the current profile and return to the account overview\\\"></c-CButton>\"\"\"\r\n",
+      "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n    <c-CButton class=\\\"primary\\\" c-disabled=\\\"not enabled\\\" aria-label=\\\"Save changes to the current profile and return to the account overview\\\"></c-CButton>\r\n    \"\"\"\r\n",
       "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n      <c-CButton\r\n        class=\"primary\"\r\n        c-disabled=\"not enabled\"\r\n        aria-label=\"Save changes to the current profile and return to the account overview\"\r\n      ></c-CButton>\r\n    \"\"\"\r\n",
       "features": ["python-host-crlf", "python-host-framing", "preferred-width"]
     },
@@ -958,9 +998,16 @@
       "features": ["python-host-framing", "closing-delimiter-indentation", "structural-layout"]
     },
     {
+      "id": "python-hosts.framing.flush-close",
+      "category": "framing",
+      "input": "python-hosts/framing/flush-close.input.py",
+      "expected": "python-hosts/framing/flush-close.expected.py",
+      "features": ["python-host-framing", "no-gap-added", "structural-layout"]
+    },
+    {
       "id": "python-hosts.framing.crlf-structural",
       "category": "framing",
-      "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<main><section></section></main>\"\"\"\r\n",
+      "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n    <main> <section></section> </main>\r\n    \"\"\"\r\n",
       "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n      <main>\r\n        <section></section>\r\n      </main>\r\n    \"\"\"\r\n",
       "features": ["python-host-crlf", "python-host-framing", "structural-layout"]
     },

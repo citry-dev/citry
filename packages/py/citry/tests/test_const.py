@@ -1713,7 +1713,7 @@ class TestTemplateLiteralConst:
 
         class Page(Component):
             citry = c
-            template = '<c-Card compact="" />'
+            template = "<c-Card compact />"
 
         assert "True" in Page().render().serialize()
         assert "True" in Page().render().serialize()

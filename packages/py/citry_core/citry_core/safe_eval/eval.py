@@ -230,10 +230,10 @@ def _simple_name_evaluator(
     return evaluate
 
 
-# A read-only empty mapping used as `__builtins__` for unsandboxed evaluation:
-# no builtins are exposed, and because it cannot be mutated, one template cannot
-# plant a fake builtin (`__builtins__["len"] = ...`) that another would then see.
-# Read-only also lets it be shared across evaluations without a per-call copy.
+# A read-only empty mapping used as `__builtins__` for unsandboxed evaluation.
+# On CPython it hides every builtin, matching the sandbox; PyPy's `eval`
+# ignores it. Because it is read-only, an expression cannot change it for the
+# next one, and it can be shared without a per-call copy.
 _NO_BUILTINS: Mapping[str, Any] = MappingProxyType({})
 
 
@@ -246,16 +246,21 @@ def compile_expr(source: str, *, sandboxed: bool = True) -> Callable[[Mapping[st
     it runs. With ``sandboxed=False`` the expression is compiled to plain Python
     and run directly. That is faster, but it drops every safety check, so it is
     only for templates from a trusted source. Two things are kept the same so the
-    output does not change: Python builtins are still unavailable (``len(x)``
-    fails just as it does under the sandbox), and a walrus assignment
-    (``name := value``) still writes back into the variables mapping. The result
-    of a *successful* expression is identical either way; only the failures
-    differ (a missing name raises ``NameError`` here, ``KeyError`` under the
-    sandbox).
+    output does not change. A walrus assignment (``name := value``) still writes
+    back into the variables mapping. On CPython, Python builtins are still
+    unavailable, so ``len(x)`` fails just as it does under the sandbox. On PyPy
+    every builtin is available with the sandbox off, so ``len(x)`` succeeds
+    there. The result of a *successful* expression is identical either way;
+    only the failures differ (a missing name raises ``NameError`` here,
+    ``KeyError`` under the sandbox).
     """
     if sandboxed:
         return safe_eval(source)
 
+    # The Rust check rejects what only the `(\n...\n)` wrapper makes valid,
+    # such as `a) or (b` or an empty expression, so this path accepts exactly
+    # the text the sandbox accepts.
+    _rust.safe_eval.safe_eval(source)
     # Plain Python, no interceptors. Compiled once and reused across renders.
     code = compile(f"(\n{source}\n)", "<expr>", "eval")
 
@@ -264,8 +269,8 @@ def compile_expr(source: str, *, sandboxed: bool = True) -> Callable[[Mapping[st
         # name used inside a generator expression or lambda (a nested scope)
         # resolves from the same mapping as a top-level name, and a walrus writes
         # back into it. The runtime value is always a dict. An empty
-        # ``__builtins__`` blocks Python's automatic builtin injection (matching
-        # the sandbox, which exposes no builtins); it is removed afterwards so
+        # ``__builtins__`` stops CPython from adding the builtins, which matches
+        # the sandbox. PyPy adds them anyway. The entry is removed afterwards so
         # the caller's mapping is left exactly as it was found.
         namespace = cast("dict[str, Any]", variables)
         had_builtins = "__builtins__" in namespace

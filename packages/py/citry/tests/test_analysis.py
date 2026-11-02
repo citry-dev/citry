@@ -22,7 +22,7 @@ from citry import (
     format_python_templates,
     lint_unknown_template_variables,
 )
-from citry._linting import TemplateLintInfo
+from citry._linting import TemplateLintInfo, _application_lint_info, _component_lint_info
 from citry.analysis import (
     component_name_match,
     css_data_completion_at,
@@ -228,6 +228,50 @@ class TestTemplateAnalysis:
         del record["rule_alpine_cloak"]
         with pytest.raises(ValueError, match="exact supported fields"):
             TemplateLintInfo.from_dict(record)
+
+    @pytest.mark.parametrize("mode", ["warn", "strict"])
+    def test_lint_record_carries_the_security_csp_mode(self, mode):
+        record = TemplateLintInfo("warning", (), security_csp=mode).to_dict()
+        assert record["security_csp"] == mode
+        assert TemplateLintInfo.from_dict(record).security_csp == mode
+
+    def test_lint_record_leaves_out_security_csp_while_off_and_reads_a_record_without_it(self):
+        # An editor from a citry without the field must still read the record.
+        assert TemplateLintInfo("warning", ()).security_csp == "off"
+        record = TemplateLintInfo("warning", (), security_csp="off").to_dict()
+        assert "security_csp" not in record
+        assert TemplateLintInfo.from_dict(record).security_csp == "off"
+        # A record that spells out "off" reads the same.
+        assert TemplateLintInfo.from_dict({**record, "security_csp": "off"}).security_csp == "off"
+
+    @pytest.mark.parametrize("mode", ["", "Strict", "on", None, True, 1])
+    def test_lint_record_rejects_an_unknown_security_csp_mode(self, mode):
+        with pytest.raises(ValueError, match="Unknown security_csp mode"):
+            TemplateLintInfo("warning", (), security_csp=mode)  # type: ignore[arg-type]
+        record = TemplateLintInfo("warning", ()).to_dict()
+        with pytest.raises(ValueError, match="Unknown security_csp mode"):
+            TemplateLintInfo.from_dict({**record, "security_csp": mode})
+
+    @pytest.mark.parametrize("mode", ["off", "warn", "strict"])
+    def test_lint_info_takes_the_security_csp_mode_from_the_engine(self, mode):
+        engine = Citry(autodiscover=False, security_csp=mode)
+
+        class Card(Component):
+            citry = engine
+
+            class Lint:
+                rule_missing_image_alt = "error"
+
+        # A component cannot set its own policy, so it reads the engine's.
+        assert _application_lint_info(engine).security_csp == mode
+        assert _component_lint_info(engine, Card).security_csp == mode
+        analysis = engine.template_analysis()
+        assert analysis.lint.security_csp == mode
+        assert analysis.component_lint[Card.definition_id].security_csp == mode
+        # The record the app worker sends the editor keeps it.
+        restored = TemplateAnalysis.from_dict(analysis.to_dict())
+        assert restored.lint.security_csp == mode
+        assert restored.component_lint[Card.definition_id].security_csp == mode
 
     def test_runtime_global_cycles_and_executable_annotation_text_drop_only_the_type(self):
         cyclic: list[object] = []

@@ -20,11 +20,7 @@ class ContextMenuTouchAndPen(Component):
         <c-CContextMenu
           aria_label="Touch card actions"
           v-bind="{
-            onOpenChange:(next,detail)=>{
-              const state=touchState;
-              state.phase=next ? 'accepted' : 'idle';
-              state.log.unshift(`${next ? 'accepted' : 'closed'} ${detail.reason}`);
-            },
+            onOpenChange:recordTouchRequest,
           }"
         >
           <c-fill name="target" data="{ target_attrs }">
@@ -56,11 +52,7 @@ class ContextMenuTouchAndPen(Component):
             aria_label="Scrollable card actions"
             v-bind="{
               open:false,
-              onOpenChange:(next,detail)=>{
-                touchState.phase='controlled refused';
-                touchState.log.unshift(`refused ${detail.reason}`);
-                return false;
-              },
+              onOpenChange:refuseScrollCardRequest,
             }"
           >
             <c-fill name="target" data="{ target_attrs }">
@@ -113,6 +105,21 @@ class ContextMenuTouchAndPen(Component):
       $component({
         data(){return {touchState:{phase:'idle',log:[],targetClicks:0}};},
         methods: {
+          // Log every open and close, so the ledger shows which requests
+          // the touch card accepted.
+          recordTouchRequest(next, detail) {
+            const state = this.touchState;
+            state.phase = next ? 'accepted' : 'idle';
+            state.log.unshift(`${next ? 'accepted' : 'closed'} ${detail.reason}`);
+          },
+          // The scrollable card stays closed, so its menu shows that a
+          // refused request keeps the browser's own menu. Any return other
+          // than true refuses; returning false makes the refusal explicit.
+          refuseScrollCardRequest(next, detail) {
+            this.touchState.phase = 'controlled refused';
+            this.touchState.log.unshift(`refused ${detail.reason}`);
+            return false;
+          },
           simulate(kind) {
             const state=this.touchState;
             state.phase='armed: synthetic probe';

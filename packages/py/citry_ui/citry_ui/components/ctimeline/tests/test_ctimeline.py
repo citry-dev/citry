@@ -120,20 +120,20 @@ def test_root_and_item_styling_and_allowed_attrs_merge():
     ],
 )
 def test_invalid_root_choices_fail(attribute: str, value: str):
-    with pytest.raises(ValueError, match=f"CTimeline {attribute}"):
+    with pytest.raises(TypeError, match=rf"CTimeline\.Kwargs\.{attribute} expects Literal"):
         _render(f'<c-CTimeline {attribute}="{value}"><c-CTimelineItem>A</c-CTimelineItem></c-CTimeline>')
 
 
 @pytest.mark.parametrize(
-    "source",
+    ("attribute", "value"),
     [
-        '<c-CTimeline><c-CTimelineItem state="unknown">A</c-CTimelineItem></c-CTimeline>',
-        '<c-CTimeline><c-CTimelineItem side="alternate">A</c-CTimelineItem></c-CTimeline>',
+        ("state", "unknown"),
+        ("side", "alternate"),
     ],
 )
-def test_invalid_item_choices_fail(source: str):
-    with pytest.raises(ValueError, match="CTimelineItem"):
-        _render(source)
+def test_invalid_item_choices_fail(attribute: str, value: str):
+    with pytest.raises(TypeError, match=rf"CTimelineItem\.Kwargs\.{attribute} expects Literal"):
+        _render(f'<c-CTimeline><c-CTimelineItem {attribute}="{value}">A</c-CTimelineItem></c-CTimeline>')
 
 
 def test_declaration_grammar_and_current_uniqueness_fail_closed():

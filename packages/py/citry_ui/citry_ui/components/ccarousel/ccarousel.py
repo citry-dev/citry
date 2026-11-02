@@ -181,6 +181,30 @@ class CCarousel(LibraryComponent):
     class Slots:
         default: SlotInput[CCarouselDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "catalog_next_label",
+            "catalog_picker_label",
+            "catalog_previous_label",
+            "catalog_role_description",
+            "controls",
+            "disabled",
+            "draggable",
+            "index",
+            "indicators",
+            "label",
+            "loop",
+            "next_label",
+            "orientation",
+            "picker_label",
+            "previous_label",
+            "role_description",
+            "root_id",
+            "size",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_carousel_snapshot", None)
         if cached is not None:

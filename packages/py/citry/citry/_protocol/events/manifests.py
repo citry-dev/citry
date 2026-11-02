@@ -29,6 +29,7 @@ _HANDLER_FIELDS = (
     "throttleMilliseconds",
     "latestCallWins",
     "allowBatching",
+    "detached",
 )
 _INSTANCE_FIELDS = ("renderId", "componentClassId", "stateToken", "publicState")
 _MANIFEST_FIELDS = ("protocol", "componentClasses", "componentInstances")
@@ -81,6 +82,10 @@ def _validate_handler_descriptor_shape(value: Any, path: str) -> ValidationIssue
     if "allowBatching" in value and value["allowBatching"] is not False:
         return ValidationIssue(
             pointer(path, "allowBatching"), "enum", "The allowBatching hint has its non-default literal value."
+        )
+    if "detached" in value and value["detached"] is not True:
+        return ValidationIssue(
+            pointer(path, "detached"), "enum", "The detached hint has its non-default literal value."
         )
     return None
 
@@ -146,6 +151,7 @@ def build_handler_descriptor(
     throttle_milliseconds: int | None = None,
     latest_call_wins: bool = False,
     allow_batching: bool = True,
+    detached: bool = False,
 ) -> dict[str, Any]:
     """Build one handler's compact browser hints."""
     hints: dict[str, Any] = {"httpMethod": http_method}
@@ -159,6 +165,8 @@ def build_handler_descriptor(
         hints["latestCallWins"] = True
     if not allow_batching:
         hints["allowBatching"] = False
+    if detached:
+        hints["detached"] = True
     issue = validate_handler_descriptor(hints)
     if issue is not None:
         raise ProtocolValueError(issue)

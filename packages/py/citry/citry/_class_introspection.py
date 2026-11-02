@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from _py_abc import ABCMeta as _PyABCMeta
+from abc import ABCMeta
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -67,6 +69,40 @@ def _static_class_namespace_copy(cls: type) -> dict[str, object]:
         # dict mid-copy, with or without the GIL.
         return value.copy()
     return {}
+
+
+def _names_abc_meta_writes(meta: type) -> frozenset[str]:
+    """Return the non-dunder names ``meta`` writes into a class it builds with an empty body."""
+    empty = meta("_EmptyABC", (), {})
+    namespace = _static_class_namespace_copy(empty)
+    return frozenset(name for name in namespace if not (name.startswith("__") and name.endswith("__")))
+
+
+# ABCMeta stores, on every class it builds, the caches it keeps to answer
+# `isinstance()` and `issubclass()` quickly. The names differ by
+# implementation: CPython's `abc.ABCMeta` writes `_abc_impl`, while PyPy's
+# `abc.ABCMeta` writes `_abc_registry`, `_abc_cache`, `_abc_negative_cache`
+# and `_abc_negative_cache_version`, the same names as the stdlib's
+# pure-Python `_py_abc`. `_py_abc` is listed too, so a test on CPython can
+# build a class the way PyPy does. Each set is read from an empty class on the
+# running interpreter, so it matches whatever that interpreter writes.
+_ABC_BOOKKEEPING: tuple[tuple[type, frozenset[str]], ...] = tuple(
+    (meta, _names_abc_meta_writes(meta)) for meta in dict.fromkeys((ABCMeta, _PyABCMeta))
+)
+
+
+def _is_abc_bookkeeping(cls: type, name: str) -> bool:
+    """
+    Return whether ``name`` on ``cls`` is a cache that an ABCMeta wrote, not an authored attribute.
+
+    A check that rejects unknown underscore names on a class uses this to
+    leave the metaclass's own entries alone. Every Pydantic model's metaclass
+    extends ABCMeta, so this covers model classes too.
+    """
+    # `type(cls)` rather than `isinstance`, which could read `cls.__class__`
+    # through a metaclass hook; this module reads classes without running one.
+    metaclass = type(cls)
+    return any(name in names and issubclass(metaclass, meta) for meta, names in _ABC_BOOKKEEPING)
 
 
 def _static_class_mro(cls: type) -> tuple[type, ...]:

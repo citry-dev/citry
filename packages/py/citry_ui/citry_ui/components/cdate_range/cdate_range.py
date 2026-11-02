@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias, TypedDict, cast
+from typing import Any, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import (
@@ -36,9 +36,9 @@ from citry_ui.components._validation import (
 from citry_ui.components.ccalendar import (
     CCalendarFirstDayOfWeek,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
 )
-
-if TYPE_CHECKING:
-    from citry_ui.components.cpopover import CPopoverPlacement
+from citry_ui.components.cpopover import (
+    CPopoverPlacement,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
+)
 
 CDateRangeDate: TypeAlias = date | str
 CDateRangeVariant = Literal["outline", "filled", "plain"]
@@ -201,7 +201,7 @@ class CDateRange(LibraryComponent):
         fixed_weeks: bool = True
         placeholder: str = "Choose dates"
         range_label: str = "Choose date range"
-        change_label: str = "Change date range, {start} to {end}"
+        change_label: str = "Change date range, {start} \N{EN DASH} {end}"
         start_label: str = "Start date"
         end_label: str = "End date"
         clear_label: str = "Clear date range"
@@ -216,9 +216,57 @@ class CDateRange(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # Citry's error for first_day_of_week would print all 14 values twice;
+    # Citry UI's says "from 1 through 7, where 1 is Monday" in one line. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "calendar_id",
+            "catalog_clear_label",
+            "catalog_end_label",
+            "catalog_range_label",
+            "catalog_start_label",
+            "clear_label",
+            "clearable",
+            "described_by",
+            "disabled",
+            "dismissible",
+            "display_value",
+            "end",
+            "end_id",
+            "end_label",
+            "end_min",
+            "end_name",
+            "error_message",
+            "first_day",
+            "fixed_weeks",
+            "form",
+            "invalid",
+            "labelled_by",
+            "match_width",
+            "maximum",
+            "minimum",
+            "placeholder",
+            "placement",
+            "popover_id",
+            "public_id",
+            "range_label",
+            "readonly",
+            "required",
+            "root_id",
+            "show_adjacent_days",
+            "size",
+            "start",
+            "start_id",
+            "start_label",
+            "start_max",
+            "start_name",
+            "trigger_label",
+            "unavailable_dates",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_date_range_snapshot", None)
@@ -893,7 +941,7 @@ class CDateRange(LibraryComponent):
       citry-ui-date-range-label = Choose date range
       # @param {str} $start - Locale-formatted start date.
       # @param {str} $end - Locale-formatted end date.
-      citry-ui-date-range-change = Change date range, { $start } to { $end }
+      citry-ui-date-range-change = Change date range, { $start } \N{EN DASH} { $end }
       citry-ui-date-range-start-label = Start date
       citry-ui-date-range-end-label = End date
       citry-ui-date-range-clear = Clear date range

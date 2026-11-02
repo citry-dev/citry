@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CToolbarOrientation = Literal["horizontal", "vertical"]
@@ -83,6 +84,9 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
 
 
 class CToolbar(LibraryComponent):
+    class Dependencies:
+        js = (REVEAL_RUNTIME_DEPENDENCY,)
+
     @dataclass(slots=True)
     class Kwargs:
         label: str
@@ -97,10 +101,6 @@ class CToolbar(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CToolbarDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         label = _plain("label", kwargs.label)
@@ -251,7 +251,13 @@ class CToolbar(LibraryComponent):
               element.tabIndex = element === current && !unavailable(element) ? 0 : -1;
             });
             currentIndex = current ? enabled.indexOf(current) : 0;
-            if (focusReplacement && current) current.focus();
+            // A re-render removed or disabled the focused control, so the
+            // replacement takes focus without scrolling the page, and is
+            // shown by scrolling only the toolbar.
+            if (focusReplacement && current) {
+              current.focus({ preventScroll: true });
+              globalThis[Symbol.for("citry-ui:reveal")].reveal(current, root);
+            }
           };
           const reconcileStructure = () => {
             reconciliationTask = null;

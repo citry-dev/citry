@@ -274,6 +274,10 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
                         source=part.source,
                         span=part.span,
                         origin=fill.origin,
+                        vue_props=part.vue_props,
+                        fill_vue_pattern=fill.vue_pattern,
+                        from_outlet=part.from_outlet,
+                        fill_public_name=None if fill.public_name == part.public_name else fill.public_name,
                     )
                 )
             elif isinstance(part, DirectCallRunRender):
@@ -630,11 +634,12 @@ def _replay_boundary_artifact(
                     session=replay_session,
                     lexical_render_id=lexical_render_id,
                     kind=item.kind,
-                    public_name=item.public_name,
+                    public_name=item.public_name if item.fill_public_name is None else item.fill_public_name,
                     source=item.fill_source,
                     span=item.span,
                     origin=item.origin,
                     strict_session=True,
+                    vue_pattern=item.fill_vue_pattern,
                 )
                 live_execution = replay_session.next_execution()
                 execution = DirectExecutionFrame(
@@ -646,22 +651,40 @@ def _replay_boundary_artifact(
                     item.source,
                     item.span,
                     consumed=True,
+                    vue_props=item.vue_props,
+                    from_outlet=item.from_outlet,
                 )
                 executions[item.execution] = execution
                 selected = yield Call(build, item.frame)
-                projection_type = DirectNestedTemplateRender if item.kind == "nested-template" else DirectSlotRender
-                parts.append(
-                    projection_type(
-                        selected,
-                        execution_index=live_execution,
-                        fill_source=fill_source,
-                        parent_execution=parent_execution,
-                        public_name=item.public_name,
-                        receiver_render_id=receiver_render_id,
-                        source=item.source,
-                        span=item.span,
+                if item.kind == "nested-template":
+                    parts.append(
+                        DirectNestedTemplateRender(
+                            selected,
+                            execution_index=live_execution,
+                            fill_source=fill_source,
+                            parent_execution=parent_execution,
+                            public_name=item.public_name,
+                            receiver_render_id=receiver_render_id,
+                            source=item.source,
+                            span=item.span,
+                        )
                     )
-                )
+                else:
+                    parts.append(
+                        DirectSlotRender(
+                            selected,
+                            execution_index=live_execution,
+                            fill_source=fill_source,
+                            parent_execution=parent_execution,
+                            public_name=item.public_name,
+                            receiver_render_id=receiver_render_id,
+                            source=item.source,
+                            span=item.span,
+                            # Only a slot outlet passes Vue slot props.
+                            vue_props=item.vue_props,
+                            from_outlet=item.from_outlet,
+                        )
+                    )
             elif type(item) is ArtifactDirectCallRunPart:
                 selected = yield Call(build, item.frame)
                 call_node = _CachedCallNode(item.source, item.span)

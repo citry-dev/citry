@@ -26,7 +26,9 @@ from typing import Literal
 import pytest
 
 from citry import Citry, Component
+from citry._protocol import events
 from citry.ext.events import actions, event
+from citry.ext.events import dispatcher as dispatcher_module
 from citry.ext.events.dispatcher import (
     CAPABILITIES_BASELINE_V1,
     CallEvent,
@@ -857,6 +859,105 @@ class TestErrors:
         assert error["code"] == "invalid_args"
         assert error["fieldErrors"] == {"oops": "Unexpected field: not declared on the schema."}
 
+    @pytest.mark.parametrize(
+        ("count", "note"),
+        [
+            (20, ""),
+            (21, " 1 more field error is not shown."),
+            (100, " 80 more field errors are not shown."),
+        ],
+    )
+    @pytest.mark.parametrize("path", ["data_class", "no_data_class", "state_updates"])
+    def test_a_call_with_many_unexpected_names_gets_a_limited_field_list(self, path, count, note):
+        c = _citry()
+        counter = _counter(c)
+        # Built in reverse so the listed names come from the sorted order,
+        # not from whichever order the browser happened to send them in.
+        unknown = {f"u{index:03d}": 1 for index in reversed(range(count))}
+        call = {"componentClassId": counter.class_id, "stateToken": _token(counter)}
+        if path == "data_class":
+            # `name` is valid, so every error comes from an unknown key.
+            call |= {"handlerName": "rename", "args": {"name": "Tally", **unknown}}
+            summary = "The args for event 'rename' on component 'Counter' did not validate."
+            reason = "Unexpected field: not declared on the schema."
+        elif path == "no_data_class":
+            call |= {"handlerName": "increment", "args": unknown}
+            summary = "The args for event 'increment' on component 'Counter' did not validate."
+            reason = "Unexpected field: not declared on the schema."
+        else:
+            # Counter's State fields are all writable, so these names are
+            # outside the State, and each one is a rejected write.
+            call |= {"handlerName": "increment", "stateUpdates": unknown}
+            summary = "Some state updates were rejected; see the field messages."
+            reason = "This field cannot be written from the client (it is not in the State _model set)."
+
+        error = _dispatch(c, call)["results"][0]["error"]
+
+        assert error["status"] == 422
+        assert error["code"] == "invalid_args"
+        # Up to the limit the summary is untouched; past it the count is appended.
+        assert error["message"] == summary + note
+        expected = [f"u{index:03d}" for index in range(min(count, 20))]
+        assert list(error["fieldErrors"]) == expected
+        assert set(error["fieldErrors"].values()) == {reason}
+
+    def test_a_declared_field_error_is_kept_beside_limited_unexpected_names(self):
+        c = _citry()
+        counter = _counter(c)
+        unknown = {f"u{index:03d}": 1 for index in range(25)}
+        call = {
+            "componentClassId": counter.class_id,
+            "stateToken": _token(counter),
+            "handlerName": "rename",
+            "args": {"name": 5, **unknown},
+        }
+
+        error = _dispatch(c, call)["results"][0]["error"]
+
+        assert error["message"] == (
+            "The args for event 'rename' on component 'Counter' did not validate. 5 more field errors are not shown."
+        )
+        assert error["fieldErrors"]["name"] == "Expected str, got int."
+        assert len(error["fieldErrors"]) == 21
+
+    def test_a_wrong_typed_state_write_is_kept_beside_limited_unwritable_names(self):
+        c = _citry()
+        counter = _counter(c)
+        unknown = {f"u{index:03d}": 1 for index in range(25)}
+        call = {
+            "componentClassId": counter.class_id,
+            "stateToken": _token(counter),
+            "handlerName": "increment",
+            "stateUpdates": {"count": "many", **unknown},
+        }
+
+        error = _dispatch(c, call)["results"][0]["error"]
+
+        assert error["message"] == (
+            "Some state updates were rejected; see the field messages. 5 more field errors are not shown."
+        )
+        assert error["fieldErrors"]["count"] == "Expected int, got str."
+        assert [name for name in error["fieldErrors"] if name != "count"] == [f"u{index:03d}" for index in range(20)]
+
+    def test_a_handler_error_lists_every_field_it_names(self):
+        c = _citry()
+        fields = {f"f{index:02d}": "Taken." for index in range(25)}
+
+        class Signup(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class Events:
+                def submit(self):
+                    raise EventError("Fix the form.", fields=fields)
+
+        result = _dispatch(c, {"componentClassId": Signup.class_id, "handlerName": "submit"})
+        error = result["results"][0]["error"]
+        # The author wrote these fields, so nothing is left out and the
+        # message stays as written.
+        assert error["message"] == "Fix the form."
+        assert error["fieldErrors"] == fields
+
     def test_handler_error_is_generic_without_debug(self):
         c = _citry()
         counter = _counter(c)
@@ -916,6 +1017,8 @@ class TestErrors:
         result = EventsDispatcher().dispatch(["nope"], _ctx(c))
         assert result["requestId"] is None
         assert result["results"][0]["error"]["code"] == "protocol_mismatch"
+        # The answer must be a valid result envelope, not just carry the code.
+        assert events.validate_result_envelope(result) is None
         # No calls.
         result = EventsDispatcher().dispatch({"protocol": "citry-events/1", "requestId": "r1", "calls": []}, _ctx(c))
         assert result["results"][0]["error"]["code"] == "protocol_mismatch"
@@ -1577,6 +1680,24 @@ class TestPipelineOrder:
         assert result["results"][0]["error"]["message"] == "Reported."
         assert result["results"][0]["error"]["fieldErrors"] == {"report": "saved"}
 
+    def test_on_event_error_replacement_keeps_every_field_it_names(self):
+        fields = {f"f{index:02d}": "saved" for index in range(25)}
+
+        class Reporter(Extension):
+            name = "reporter"
+
+            def on_event_error(self, ctx):
+                error = {"status": 500, "code": "handler_error", "message": "Reported.", "fieldErrors": fields}
+                return {"ok": False, "error": error}
+
+        c = _citry(extensions=[Reporter])
+        counter = _counter(c)
+        call = {"componentClassId": counter.class_id, "handlerName": "crash", "stateToken": _token(counter)}
+        error = _dispatch(c, call)["results"][0]["error"]
+        # The extension's own error is sent as it wrote it.
+        assert error["message"] == "Reported."
+        assert error["fieldErrors"] == fields
+
     def test_error_hook_non_json_mapping_retains_the_generic_result(self):
         class MappingReporter(Extension):
             name = "mapping_reporter"
@@ -1846,6 +1967,19 @@ class TestPipelineOrder:
                 "fieldErrors": {"token": "Expired."},
             },
         }
+
+    def test_event_error_from_csrf_policy_keeps_every_field_it_names(self):
+        c = _citry()
+        counter = _counter(c)
+        fields = {f"f{index:02d}": "Expired." for index in range(25)}
+
+        def denied(handler):
+            raise EventError("No access.", fields=fields, status=403)
+
+        call = {"componentClassId": counter.class_id, "handlerName": "square", "args": {"value": 2}}
+        [item] = _dispatch(c, call, csrf_check=denied)["results"]
+        assert item["error"]["message"] == "No access."
+        assert item["error"]["fieldErrors"] == fields
 
 
 class TestInjection:
@@ -2665,3 +2799,159 @@ class TestEpochEchoOnRejections:
         calls = [{"componentClassId": "X", "handlerName": "e", "sendSequence": index} for index in range(17)]
         results = EventsDispatcher().dispatch(_envelope(*calls), _ctx(c))["results"]
         assert [item["sendSequence"] for item in results] == list(range(17))
+
+
+class TestDetachedHandlers:
+    """``@event(detached=True)``: the handler may read State but never render or change it."""
+
+    def _board(self, c, *, runs=None):
+        class BoardState:
+            moves: int = 0
+
+        class Board(Component):
+            citry = c
+            State = BoardState
+            template = "<div>{{ moves }}</div>"
+
+            def template_data(self, kwargs, slots):
+                return {"moves": 0}
+
+            class Events:
+                @event(detached=True)
+                def peek(self, state):
+                    if runs is not None:
+                        runs.append("peek")
+                    return [actions.Dispatch("board:peeked"), {"moves": state.moves}]
+
+                @event(detached=True)
+                def bump(self, state):
+                    state.moves += 1
+                    return {"moves": state.moves}
+
+                @event(detached=True)
+                def redraw(self, state):
+                    return Board()
+
+        return Board
+
+    def _call(self, board, handler, **extra):
+        return {
+            "componentClassId": board.class_id,
+            "handlerName": handler,
+            "callerRenderId": "i1",
+            "stateToken": _token(board),
+            "sendSequence": 3,
+            **extra,
+        }
+
+    def test_reading_state_returns_the_actions_without_a_state_refresh(self):
+        c = _citry()
+        board = self._board(c)
+        [item] = _dispatch(c, self._call(board, "peek"))["results"]
+        assert item == {
+            "ok": True,
+            "sendSequence": 3,
+            "actions": [
+                {"action": "event", "eventName": "board:peeked", "target": "render:i1"},
+                {"action": "data", "value": {"moves": 0}},
+            ],
+        }
+
+    @pytest.mark.parametrize(
+        ("handler", "reason"),
+        [
+            ("bump", "but changed State"),
+            ("redraw", "but returned actions.Render (or a component)"),
+        ],
+    )
+    def test_a_render_or_a_state_change_becomes_handler_error(self, caplog, handler, reason):
+        c = _citry()
+        board = self._board(c)
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [item] = _dispatch(c, self._call(board, handler))["results"]
+        assert item == {
+            "ok": False,
+            "sendSequence": 3,
+            "error": {
+                "status": 500,
+                "code": "handler_error",
+                "message": "The event handler raised an unexpected error.",
+            },
+        }
+        # The log names the handler, the rule it broke, and the fix.
+        logged = "\n".join(record.getMessage() + str(record.exc_info[1]) for record in caplog.records)
+        assert f"Event handler {handler!r} on component Board is declared with @event(detached=True)" in logged
+        assert reason in logged
+        assert "remove detached=True" in logged
+
+    @pytest.mark.parametrize("kind", ["state", "render"])
+    def test_an_action_added_by_an_extension_blames_the_extension(self, caplog, kind):
+        added = {
+            "state": {"action": "state", "targetRenderId": "i1", "stateToken": "token", "publicState": {}},
+            "render": {"action": "render", "target": "render:i1", "swap": "replace", "html": "<p>x</p>"},
+        }[kind]
+
+        class AddsAction(Extension):
+            name = "adds_action"
+
+            def on_event_result(self, ctx):
+                return [added, *ctx.actions]
+
+        c = _citry(extensions=[AddsAction])
+        board = self._board(c)
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [item] = _dispatch(c, self._call(board, "peek"))["results"]
+        assert item["error"]["code"] == "handler_error"
+        logged = "\n".join(str(record.exc_info[1]) for record in caplog.records if record.exc_info)
+        assert f"its result holds a {kind!r} action, which an on_event_result extension added" in logged
+        assert f"Change that extension to leave a detached handler's result without a {kind!r} action" in logged
+
+    def test_a_render_from_a_detached_handler_is_refused_before_it_is_built(self, monkeypatch):
+        c = _citry()
+        board = self._board(c)
+        encoded = []
+        original = dispatcher_module.encode_actions
+
+        def spy(*args, **kwargs):
+            encoded.append(args[0])
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(dispatcher_module, "encode_actions", spy)
+        [item] = _dispatch(c, self._call(board, "redraw"))["results"]
+        assert item["error"]["code"] == "handler_error"
+        # The render never reached the encoder, so no nested render or State token was produced.
+        assert encoded == []
+        assert _dispatch(c, self._call(board, "peek"))["results"][0]["ok"] is True
+        assert len(encoded) == 1
+
+    @pytest.mark.parametrize("updates", [{"moves": 5}, {}])
+    def test_state_updates_are_rejected_before_the_handler_runs(self, updates):
+        c = _citry()
+        runs = []
+        board = self._board(c, runs=runs)
+        [item] = _dispatch(c, self._call(board, "peek", stateUpdates=updates))["results"]
+        assert runs == []
+        # The same call without updates does reach the handler.
+        assert _dispatch(c, self._call(board, "peek"))["results"][0]["ok"] is True
+        assert runs == ["peek"]
+        assert item == {
+            "ok": False,
+            "sendSequence": 3,
+            "error": {
+                "status": 422,
+                "code": "invalid_args",
+                "message": (
+                    "The call carries state updates, but event 'peek' on component 'Board' is declared"
+                    " with @event(detached=True), so it cannot change State. Send the State updates with"
+                    " a call to a handler that is not detached."
+                ),
+            },
+        }
+
+    def test_async_dispatch_holds_a_detached_handler_to_the_same_rules(self):
+        c = _citry()
+        board = self._board(c)
+        envelope = _envelope(self._call(board, "bump"), self._call(board, "peek"))
+        bump, peek = asyncio.run(EventsDispatcher().dispatch_async(envelope, _ctx(c)))["results"]
+        assert bump["error"]["code"] == "handler_error"
+        assert [action["action"] for action in peek["actions"]] == ["event", "data"]

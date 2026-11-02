@@ -63,7 +63,8 @@ As such, the Rust crates are ideal for:
 ### Prerequisites
 
 - **Rust**: Install via [rustup](https://rustup.rs/). Vendored Ruff requires
-  Rust 1.96 or higher, and this repository selects the nightly channel.
+  Rust 1.97 or higher, and this repository builds with one dated nightly that
+  rustup selects for you.
 - **Python**: 3.11 or higher
 - **UV**: Fast Python package installer (recommended)
 - **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based
@@ -78,11 +79,23 @@ As such, the Rust crates are ideal for:
 
 ### Installing and Managing Rust
 
-This codebase uses **Rust edition 2024**, and vendored Ruff requires Rust 1.96
-or higher. The edition and minimum version are both available on stable Rust;
-the repository separately chooses to track nightly in
-[`rust-toolchain.toml`](../rust-toolchain.toml) so local and CI builds use one
-development channel.
+This codebase uses **Rust edition 2024**, and vendored Ruff requires Rust 1.97
+or higher. The edition and minimum version are both available on stable Rust.
+For development, the repository names one dated nightly, written
+`nightly-YYYY-MM-DD`, in [`rust-toolchain.toml`](../rust-toolchain.toml).
+Every machine and CI job then builds with the same compiler, and a new nightly
+reaches the project only when someone moves that date on purpose (see
+[Moving the Rust nightly date](#moving-the-rust-nightly-date)).
+
+The published `citry-core` wheels, the docs builds and the example-project
+tests use the minimum version, Rust 1.97.0, so moving the nightly date does
+not change what users install. Inside the checkout, `rust-toolchain.toml`
+takes priority over a toolchain that `dtolnay/rust-toolchain` installs, so
+every job that installs Rust that way also sets `RUSTUP_TOOLCHAIN` to the
+same version. The wheel jobs get the same result from maturin-action, which
+runs `rustup override set`. The `toolchain` validator
+(`scripts/validators/toolchain.py`) fails on a `dtolnay/rust-toolchain` job
+without a matching `RUSTUP_TOOLCHAIN`.
 
 **Check your Rust version:**
 
@@ -102,14 +115,12 @@ rustup show
 # Install rustup (if not already installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Install the nightly toolchain selected by this repository
-rustup toolchain install nightly
+# From the repository root, install the toolchain and components that
+# rust-toolchain.toml names
+rustup toolchain install
 
-# Update to the latest nightly
-rustup update nightly
-
-# The rust-toolchain.toml file will automatically select the correct toolchain
-# when you run cargo commands in this directory
+# rustup then selects that toolchain whenever cargo or rustc runs in this
+# directory
 ```
 
 **Verify the correct toolchain is active:**
@@ -117,15 +128,38 @@ rustup update nightly
 ```bash
 # From the repository root
 cd citry
-cargo --version  # Should show nightly version
-rustc --version  # Should show nightly version
+rustup show active-toolchain  # Should name the date in rust-toolchain.toml
+rustc --version               # Should show a nightly version
 ```
 
-If you need to manually override the toolchain for this directory:
+Do not run `rustup override set` in this directory: an override wins over
+`rust-toolchain.toml`, so your builds would no longer use the pinned compiler.
 
-```bash
-rustup override set nightly
-```
+### Moving the Rust nightly date
+
+Treat the nightly date like any other dependency pin. Move it on purpose, in
+its own pull request, when the project needs a newer compiler or as routine
+maintenance. Never move it as a side effect of unrelated work.
+
+1. Change `channel` in [`rust-toolchain.toml`](../rust-toolchain.toml) to the
+   new `nightly-YYYY-MM-DD`. A nightly's date is usually the day after the
+   commit date that `rustc --version` prints, so
+   `rustc 1.101.0-nightly (16d1ffac1 2026-10-26)` is `nightly-2026-10-27`.
+2. Run `rustup toolchain install` to fetch it, and check `rustc --version`.
+   If a nightly lacks `clippy` or `rustfmt`, the install fails; pick another
+   date.
+3. Run the fast gate (`python scripts/check.py --profile fast`). New clippy
+   lints and format changes often come with a new nightly. Fix them in the
+   same pull request.
+4. Open the pull request. Every Rust job in CI installs the new date through
+   the [`install-rust`](../.github/actions/install-rust/action.yml) action,
+   which reads the file. The `toolchain` validator
+   (`scripts/validators/toolchain.py`) fails if the channel is not a dated
+   nightly, or if a workflow, composite action or example workflow names a
+   nightly outside a comment.
+
+Only `rust-toolchain.toml` sets the date. Workflows and scripts read that
+file, so moving the date needs no other edit.
 
 ### Installing UV
 
@@ -156,19 +190,14 @@ pip install uv
 2. **Verify Rust toolchain** (required before building):
 
    ```bash
-   # Check that nightly is installed and active
-   rustc --version  # Should show nightly version
-   cargo --version  # Should show nightly version
-
-   # If not using nightly, install it:
-   rustup toolchain install nightly
-   rustup override set nightly
+   # Install the toolchain that rust-toolchain.toml names
+   rustup toolchain install
+   rustc --version  # Should show a nightly version
    ```
 
-   The [`rust-toolchain.toml`](../rust-toolchain.toml) file automatically
-   selects the repository's nightly development channel when you run cargo
-   commands in this directory. Rust edition 2024 itself does not require
-   nightly.
+   The [`rust-toolchain.toml`](../rust-toolchain.toml) file selects the
+   repository's dated nightly whenever you run cargo commands in this
+   directory. Rust edition 2024 itself does not require nightly.
 
 3. **Install the workspace** (from the repository root):
 
@@ -194,7 +223,7 @@ pip install uv
    the editable package into another checkout's environment. Check the selected
    interpreter and imported `citry_core._rust` path after rebuilding.
 
-   Note: both `maturin develop` and the `uv sync` build produce a **debug** (unoptimized) extension. That is fine for tests, but it makes the Rust-backed paths ~10x or more slower, so pass `--release` (for example `uv run maturin develop --release`) before running any benchmark.
+   Note: `uv sync` builds the extension through maturin's PEP 517 backend, which compiles Cargo's `release` profile, so CI's test jobs run an optimized build. `maturin develop` without `--release` produces a **debug** (unoptimized) extension. That is fine for tests, but it makes the Rust-backed paths ~10x or more slower, so pass `--release` (for example `uv run maturin develop --release`) before running any benchmark. A few limits differ between the two builds, such as the native render path's depth limits, so a test that depends on one reads it from `citry_core._rust` rather than copying it.
    The extension reports how it was compiled in `citry_core._rust.BUILD_PROFILE` (`"release"` or `"debug"`), and the benchmark runners exit on a debug build with the rebuild command. To measure a debug build on purpose, set `CITRY_BENCH_ALLOW_DEBUG_NATIVE=1`. Check which build is installed:
 
    ```bash
@@ -293,6 +322,64 @@ Review the diff before committing: a new name or keyword becomes valid, and
 a removed one starts being reported. No CI job refreshes the tables, because
 that would need network access.
 
+### Refreshing the DOM member table
+
+When Vue's first render in the browser sets an attribute, it either calls
+`setAttribute` or assigns an element property, and the two can leave
+different text in the page. The Vue server renderer cannot ask a browser which
+one happens, so it reads
+[`crates/citry_vue_compiler/src/dom_members.rs`](../crates/citry_vue_compiler/src/dom_members.rs).
+That file tells it, for each HTML element and lowercase attribute name, which
+attribute text a browser keeps. When the table is unsure, the server leaves
+that region for the browser to render.
+
+The file is generated by [`tools/dom-members/`](../tools/dom-members/) from the
+web platform IDL (`@webref/idl` and `@webref/elements`) and MDN's browser
+compatibility data. The tools directory is its own pnpm root, outside the
+workspace, with its own lockfile, so the data packages are installed only where
+the table is generated or tested. From the repository root:
+
+```sh
+pnpm --dir tools/dom-members install
+pnpm --dir tools/dom-members run generate
+pnpm --dir tools/dom-members run check
+pnpm --dir tools/dom-members run test
+pnpm --dir tools/dom-members run test:browser
+pnpm --dir tools/dom-members run refresh
+```
+
+- `generate` rewrites `dom_members.rs`, and `check` fails when the committed
+  file differs from what the pinned data produces.
+- `test` runs the generator's own tests on small synthetic inputs.
+- `test:browser` mounts every element in real browsers, runs Vue's attribute
+  code, and compares the result with the table. Set `BROWSERS` to a comma-separated
+  list (`BROWSERS=chromium,firefox,webkit`) to choose the engines. Install them
+  first with `pnpm --dir tools/dom-members exec playwright install`.
+- `refresh` updates the data packages to their latest versions and
+  regenerates the table. It needs network access, adds a browser-data copy
+  when one is due, and stops when a new member needs review in
+  `lib/reviewed.mjs`.
+
+A Vue bump must refresh the table. The `@vue/runtime-dom` line in the file's
+header has to match the Vue version in
+`packages/py/citry_lsp/citry_lsp/types/inventory.json`, and
+`scripts/validators/generated_copies.py` fails the gate when it does not.
+
+Some members cannot be classified from the IDL alone, because the web
+standard describes them in prose, because a boolean attribute does nothing
+when it is set to `false`, or because a browser has them although no data
+records them. The generator reads the reviewed lists of these from
+`tools/dom-members/lib/reviewed.mjs`. It stops when a string attribute with
+no reflection marker in the IDL is on neither of the two lists that say
+whether it mirrors, until someone reviews it.
+
+The "Generated files" workflow runs `check` and `test` on every pull request.
+`test:browser` runs in its own workflow,
+`.github/workflows/repo--dom-members.yml`, only when a pull request changes the
+table or `tools/dom-members/`. The Playwright version in that directory's
+lockfile decides which browser builds are installed, so a Playwright bump runs
+it too. Because of the path filter, it cannot be a required check.
+
 ### Running tests
 
 Rust tests are scoped to the crates under `crates/`, one `-p` flag per crate.
@@ -343,10 +430,13 @@ uv run --no-sync pytest \
 ```
 
 The pull-request Chromium job and the scheduled Chromium, Firefox, and WebKit
-jobs use this same distribution. The browser matrix still assigns each browser
-to a separate GitHub job; the four workers run inside that browser's one job
-and do not request four GitHub runners. `--durations 30` reports the slowest
-tests so an oversized file that limits parallelism remains visible.
+jobs use this same distribution. The pull-request job selects
+`-m "e2e and not weekly"` so it skips the tests marked `weekly`; the
+scheduled cross-browser job selects `-m e2e` and runs them. The browser
+matrix still assigns each browser to a separate GitHub job; the four workers
+run inside that browser's one job and do not request four GitHub runners.
+`--durations 30` reports the slowest tests so an oversized file that limits
+parallelism remains visible.
 
 Do not put the worker flags in pytest's global `addopts`. Small focused runs,
 the ordinary Python matrix, and the docs-site E2E suite stay serial. In
@@ -450,6 +540,43 @@ This ownership rule avoids concurrent full gates by practice rather than by a
 workspace lock. A full result belongs to the source generation it checked; it
 is not evidence for edits made while or after it ran.
 
+#### Saving disk space
+
+A Rust build folder (`target/`) for this workspace takes 4 to 10 GB, and
+several worktrees building in parallel can fill a laptop disk. When the disk
+is full, no shell command can run, not even the one that would free space, so
+every agent on the machine stops until someone deletes files by hand. Agents
+working in a worktree follow these rules to keep that from happening:
+
+- Run `df -h /` before starting a Rust build, and do not start one with less
+  than 6 GB free.
+- Give each worktree its own `target/`, and do not point several worktrees
+  at one shared folder through `CARGO_TARGET_DIR`. Cargo identifies the
+  workspace's own crates by their path inside the workspace, which is the
+  same in every worktree, so a build in one worktree can reuse crates that
+  were compiled from another worktree's source and test the wrong code.
+- Build with `CARGO_INCREMENTAL=0` and
+  `CARGO_PROFILE_DEV_DEBUG=line-tables-only`, and export both in every shell
+  that builds, including `uv sync`. Cargo's incremental cache (saved state for
+  faster rebuilds) and full debug information roughly double the folder's
+  size, and neither pays off in a short-lived worktree that rebuilds only a
+  few times. A build without the two variables recompiles everything and
+  stores a second copy in the same `target/`.
+- Build a release profile only when a measurement needs it. Release builds
+  keep full debug information here (`[profile.release]` in `Cargo.toml`), so
+  delete `target/release` right after.
+- Delete a worktree's `target/` once its pull request is open. After
+  `maturin develop`, the built extension sits in
+  `packages/py/citry_core/citry_core/`, so tests still run once `target/` is
+  gone. Check that a `_rust.*.so` file is there before you delete it.
+- Give each pytest run its own temporary folder. Set
+  `PYTEST_ADDOPTS=--basetemp=/tmp/<your-folder>/pytest` so `scripts/check.py`
+  picks it up too. Use a folder no other run uses, because pytest empties it
+  at the start of each run, and delete it when the run ends. Without this,
+  every run on the machine shares the default `pytest-of-<user>` folder (under
+  `$TMPDIR` on macOS), and cleaning that folder by age can delete files a
+  parallel run still uses.
+
 #### Writing tests that stay fast
 
 Test fidelity comes first, but setup cost should match the boundary under test:
@@ -477,6 +604,12 @@ Test fidelity comes first, but setup cost should match the boundary under test:
   when a cheaper test already covers the ordinary behavior. The fast profile
   omits that marker. The full profile runs it in a separate two-worker phase
   without coverage instrumentation, and the Python version matrix retains it.
+- Mark a browser test `weekly` when it is too slow to run on every pull
+  request, such as a guard that walks every browser scenario. The
+  pull-request e2e job runs `-m "e2e and not weekly"`, and the weekly
+  cross-browser job (`py--tests-cross-browser.yml`) runs `-m e2e`, so it
+  includes these tests. Give a `weekly` test the `e2e` marker too. Without
+  it, the ordinary `not e2e` jobs run the test on every pull request.
 - Citry renders on two paths: the native (Rust) render path on standard
   CPython and the Python path everywhere else
   ([`native_render.md`](design/native_render.md)). Tests run on the native
@@ -694,12 +827,42 @@ selected in the same plan. This qualifies the unreleased pair concurrently.
 During promotion, the controller still publishes and verifies Core before it
 starts Citry, whose public dependency must then resolve to those exact bytes.
 
-### Pull request cancellation and targeted diagnostics
+### Cancelling stale runs and targeted diagnostics
 
-Each pull-request workflow uses a concurrency group containing the workflow
-name and pull-request number. A newer run cancels an older run for the same
-pull request. Push and manual runs use their unique run IDs, so this policy
-does not interrupt or replace them.
+Each workflow that runs on pull requests or on pushes to `main` and `dev`
+puts a run in a concurrency group (GitHub runs one run of a group at a time)
+named after the workflow and either the pull request or, for a push, the
+branch. Three workflows that run on a push to `main` are exceptions, listed
+below. A newer run then cancels the older one still going in that group:
+
+- A new commit on a pull request cancels the checks for the previous commit.
+- A new push to `main` (or `dev`) cancels the checks still running for the
+  previous push. The older commit then has no complete result from those
+  checks, though the repository Check still finishes.
+  The newer commit's run tests the older commit's changes too, so a failure
+  the older commit introduced shows up on the newer one. Release step 5 below
+  says how to get a result for the release commit itself.
+- A scheduled or manual run gets a group of its own, named after its run ID,
+  so no other run cancels it.
+
+Three workflows that run on a push to `main` never let a newer push cancel a
+push run:
+
+- `repo--check.yml`, because release step 5 requires a complete repository
+  Check result for the release commit itself. It still cancels an older run
+  for the same pull request.
+- `repo--docs-deploy.yml`, because a cancelled deploy publishes nothing, so
+  if the newer run then fails, the site stays on a deploy older than both
+  commits. Its `pages` group still keeps at most one newer run waiting.
+- `repo--release-candidate.yml`, because it starts the publish workflows that
+  qualify a release and waits for them.
+
+The publish workflows start only when the release candidate or
+`repo--release.yml` dispatches them. `repo--release.yml` starts only by hand,
+and it starts `repo--docs-release.yml` once the packages are published. None
+of them cancels a started run, at the workflow or the job level.
+`packages/py/citry/tests/test_ci_workflows.py` checks the concurrency settings
+these rules depend on.
 
 Use [`py--diagnostic.yml`](../.github/workflows/py--diagnostic.yml) to reproduce
 one Python failure on a selected hosted OS and supported Python version. Its
@@ -1430,46 +1593,73 @@ uv run maturin develop
 
 ### Pin build backends
 
-Every build backend uv downloads for a workspace package is pinned to an exact
-version and hash in the root `pyproject.toml`. When you change a package's
+Every build backend uv downloads for a workspace package or a benchmark runner
+is pinned to an exact version and hash. When you change a project's
 `[build-system] requires`, want a newer backend release, or see the
-`build_backend_pins` validator fail, refresh the pins:
+`build_backend_pins` validator fail, refresh the pins and record them in each
+lockfile:
 
 ```bash
 python scripts/build_constraints.py update
 uv lock
+uv lock --directory benchmarks/web/runner
+uv lock --directory benchmarks/errors/runner
 ```
 
 When uv builds or syncs a workspace package, it first downloads that package's
 build backend from PyPI: setuptools for citry, citry-lsp, citry-ui, and
-pygments-citry, and maturin for citry-core. `uv.lock` records the packages
-Citry installs, but not these build-time downloads. So the root
-`pyproject.toml` lists every build backend, and each package a backend needs,
-in `[tool.uv] build-constraint-dependencies` with an exact version and the sha256 hash of
-each file PyPI publishes for it. It also sets `require-build-hashes = true`.
+pygments-citry, and maturin for citry-core. The two benchmark runners build with
+hatchling, which also needs `editables` while uv installs the runner as an
+editable project. `uv.lock` records the packages Citry installs, but not these
+build-time downloads. So the root `pyproject.toml` lists every build backend of
+the workspace packages, and each package a backend needs, in `[tool.uv]
+build-constraint-dependencies` with an exact version and the sha256 hash of each
+file PyPI publishes for it. It also sets `require-build-hashes = true`.
 uv then stops the build when a download does not match a listed hash, or when
 a build needs a package the list leaves out. uv reuses a workspace package
 wheel it has already built and cached without checking the backend again.
 
-uv reads the pins only when it runs inside this workspace: from the repository
-root, or on a path inside it. A command run from a project outside the
-workspace, such as an example project copied to a temporary folder, has to
-pass the pins itself (`examples/_internal/qualify.py` does this for
-`--editable-root`). The published citry-core wheels are built by
+uv reads `require-build-hashes` from the nearest `pyproject.toml` that has a
+`[tool.uv]` table, but it reads the pins, and the copy of them in `uv.lock`,
+from the root of the workspace that the project belongs to. The workspace
+packages belong to the repository's workspace, so they use the root table. A
+benchmark runner sits under the repository root without being a workspace
+member, so it is a workspace root itself. uv applies the root's
+`require-build-hashes` to a runner that has no `[tool.uv]` table, but does not
+read the root's pins for it, so `uv sync --frozen` there stops with
+`Hash-checking is required, but no trusted hash was provided for: hatchling`.
+Each runner's `pyproject.toml` therefore has its own `[tool.uv]` table with the
+same two settings, because a table of its own stops uv from inheriting the
+root's, and a generated block of pins for its backend.
+`uv lock --directory <runner>` copies the pins into the runner's `uv.lock`.
+The benchmark apps and error-benchmark baselines have a `[tool.uv]` table of
+their own and no build backend, so the setting does not reach them. The
+example projects have no `[tool.uv]` table, so they inherit
+`require-build-hashes` but not the pins; they have no build backend, and
+`uv sync --frozen` only installs wheels for them. A command run from a project
+outside the repository, such as an example project copied to a temporary
+folder, has to pass the pins itself (`examples/_internal/qualify.py` does this
+for `--editable-root`). The published citry-core wheels are built by
 maturin-action, which downloads maturin from GitHub itself and does not use
 these pins.
 
 `update` resolves every `[build-system] requires` entry under `packages/py/`
 for Python 3.11 and later on every platform, then rewrites the lines between
-the `BEGIN build constraints` and `END build constraints` comments. `uv lock`
-copies the pins into `uv.lock`. The `build_backend_pins` validator fails when
-a package asks for a backend or a version range the list does not cover, and
-its message names these two commands.
+the `BEGIN build constraints` and `END build constraints` comments in the root
+`pyproject.toml`. It does the same in each benchmark runner's `pyproject.toml`
+(`STANDALONE_PROJECT_PATTERNS` in `scripts/build_constraints.py`), resolving
+only that runner's backend and the extras in `BACKEND_EXTRA_REQUIREMENTS`. A new
+standalone project that builds with a backend needs its `pyproject.toml` path
+added to `STANDALONE_PROJECT_PATTERNS`. `uv lock` copies the pins into each
+`uv.lock`. The `build_backend_pins` validator fails when a project asks for a
+backend or a version range its table does not cover, or when a runner's
+`uv.lock` does not record its table, and its message names the command that
+repairs it.
 
 The release verifiers and the Citry UI rebuild in `py--tests.yml` pass
 `--no-config` when they rebuild a wheel from a fresh sdist, so they never read
-the root table. Those builds export the pins to a
-file (`python scripts/build_constraints.py export <file>`, or
+the root table. Those builds export the pins to a file
+(`python scripts/build_constraints.py export <file>`, or
 `build_constraints.export()` from Python) and pass
 `--build-constraints <file> --require-hashes` to `uv build`.
 
@@ -1494,10 +1684,16 @@ release that changes this setting cannot break CI before the pin moves; the
 setting is still marked experimental (`build-dependency-hashes`), so check
 uv's release notes when raising the pin.
 
-The pins cover the build backends of this repository's own packages. When uv
-has to build a third-party package from its sdist, because no wheel fits the
-interpreter (for example on a free-threaded Python), that backend has no pin
-and the build stops. Install a Python build that the package ships wheels for.
+The pins cover the build backends of this repository's own packages and
+benchmark runners, plus the ones in `THIRD_PARTY_BUILD_REQUIREMENTS` in
+`scripts/build_constraints.py`: backends that a locked third-party package
+needs on a supported interpreter it ships no wheel for, such as Cython for
+PyYAML on CPython 3.15 and PyPy 3.11, and pkgconfig for Brotli on free-threaded
+CPython 3.14. When uv has to build some other third-party package from its
+sdist, that backend has no pin and the build stops with `Hash-checking is
+required, but no trusted hash was provided`. Add the backend to that list, then
+run `python scripts/build_constraints.py update` and the `uv lock` commands it
+prints.
 
 ### Root pyproject.toml Protection
 
@@ -1663,6 +1859,17 @@ Prepare a release as follows:
    Qualification requires each worker to be dispatched from the planned commit
    on `main`. If `main` advances before dispatch, prepare a new candidate on
    current `main`.
+
+   No newer push cancels the repository Check, so every commit on `main`
+   keeps its own Check result. A newer push to `main` cancels the other
+   checks still running for the older commit (see
+   [Cancelling stale runs and targeted diagnostics](#cancelling-stale-runs-and-targeted-diagnostics)),
+   so hold merges to `main` until the release commit's checks finish. If a
+   newer push already cancelled some of them, push a temporary branch at the
+   release commit and start each cancelled check on that branch with
+   **Run workflow**. A manual
+   run tests the tip of the branch it is started on, gets a group of its own,
+   and is never cancelled. Delete the branch afterwards.
 6. Start the only publication entry point, **Release qualified packages**, and
    supply the successful candidate workflow run ID. From the command line:
 
@@ -1998,7 +2205,7 @@ webhook workflows are event-scoped and intentionally have no file path filter.
 
 ### Test Workflows
 
-The repository uses **four separate test workflows** to keep CI fast, and the path-filtered ones run only when relevant code changes:
+The repository uses **five separate test workflows** to keep CI fast, and the path-filtered ones run only when relevant code changes:
 
 #### 1. `repo--check.yml` - The full gate
 
@@ -2041,8 +2248,10 @@ one even after an earlier one fails:
   and the Vue types copied for the language server (`build-vue-types.mjs --check`)
 - the minified Citry UI assets (`pnpm run citry-ui:check-assets`)
 - the VS Code extension bundle (`compile`, then `check-built-output.mjs`)
+- the DOM member table (`generate.mjs --check`) and its generator tests, after
+  an install of `tools/dom-members` from its own lockfile
 - the protocol Python copies, the diagnostic catalog bindings, and the copied
-  logo files and recorded Vue version (`scripts/validators/generated_copies.py`),
+  logo files and recorded Vue versions (`scripts/validators/generated_copies.py`),
   all with Python's standard library only
 
 Generated files that need a built `citry_core`, such as the Citry UI message
@@ -2078,7 +2287,36 @@ pytest phase.
 
 **Purpose**: Tests all Python packages.
 
-**Triggers**: Runs when changes are made to:
+**Triggers**: A push to `main` or `dev` starts the workflow only when it
+changes one of the paths below. Every pull request starts it. On a pull
+request, its first job, `changes`, lists the pull request's files and compares
+them with the same paths, and every other job skips when none of them match.
+GitHub counts a skipped job's check as passing, so a check from a job without
+a matrix, such as `citry-ui-wheel-build`, can be required on `main` without
+blocking a docs-only pull request. (A skipped matrix job reports only its
+plain name, such as `test`, so do not require a matrix cell such as
+`test (3.11, ubuntu-latest)`: it never reports on a docs-only pull request.)
+
+- **If `changes` fails** (for example, the GitHub API is down), every job
+  runs, so a required check is never skipped by mistake. The same happens
+  when the API lists fewer files than the pull request has (it lists at most
+  3,000), or when the pull request gets a newer commit while `changes` runs.
+- **The two jobs that need the wheel build check its result directly.**
+  `citry-ui-wheel-install` and `citry-ui-wheel-browser` run when
+  `citry-ui-wheel-build` succeeds. GitHub's default condition would skip them
+  on every push, because `changes` is skipped there.
+- **Cost:** `changes` itself takes a few seconds, but every pull-request run
+  waits for it to get a runner before its other jobs start, about a minute
+  when runners are busy. A push or a manual run does not run `changes` and
+  does not wait.
+- **A retargeted pull request keeps its old result.** Changing a pull
+  request's base branch does not start a new run, so push a commit after
+  retargeting a pull request (for example, one that was based on another
+  pull request's branch).
+- **The path list appears twice.** It is under `on.push.paths` and in the
+  `changes` job, and `test_ci_workflows.py` fails if they differ.
+
+The paths are:
 
 - `packages/py/**` - Python package code
 - `packages/js/citry-client/**` and `packages/protocol/**` - browser/runtime contracts exercised by Python jobs
@@ -2094,13 +2332,22 @@ pytest phase.
 
 - Installs the whole workspace with `uv sync --locked --all-packages`, which builds the `citry_core` extension through maturin and installs `citry` editable, so both packages' suites run (`citry` did not run in CI before the uv workspace)
 - Runs the portable Python tests via
-  `uv run --no-sync pytest -m "not e2e" -n 4 --dist loadfile --durations 30`;
+  `uv run --no-sync pytest -m "not e2e" --ignore packages/py/citry/tests/test_server_reload.py -n 4 --dist loadfile --durations 30`;
   four file-level workers share one GitHub runner
 
 **Configuration**:
 
-- Python versions: 3.11, 3.12, 3.13, 3.14
-- OS: ubuntu-latest and windows-latest, plus a macOS smoke pair (oldest and newest Python)
+- Pushes to `main` and `dev`, and manual runs, test the full set: Linux and
+  Windows on Python 3.11 to 3.15, plus macOS on the oldest and newest Python
+- Pull requests test a trimmed set to save runner slots: Linux on every Python,
+  Windows on 3.11 and 3.15, and macOS on 3.15. A failure that shows only on
+  Windows 3.12 to 3.14 or on macOS 3.11 appears in the push run right after
+  the merge
+- Both sets leave out the Linux cell for the Python that `repo--check.yml`
+  uses (3.14), because that workflow runs the same tests there on every pull
+  request
+- The `include:` expression in the `test` job's matrix is the one place that
+  picks the set; `test_ci_workflows.py` pins both sets
 - Requires Rust toolchain (`uv sync` builds the citry_core extension via maturin)
 - Uses Rust dependency caching
 
@@ -2110,11 +2357,32 @@ because Python packages depend on Rust code via PyO3 bindings, and names the
 release helpers that the distribution tests import so those dependencies are
 not missed.
 
+#### 5. `repo--dom-members.yml` - DOM member table in browsers
+
+**Purpose**: Mounts every HTML element in Chromium, Firefox, and WebKit, runs
+Vue's own attribute code on it, and fails when a browser keeps different
+attribute text than the generated table
+(`crates/citry_vue_compiler/src/dom_members.rs`) says the server should write.
+
+**Triggers**: Runs by hand at any time, and on pushes to `main` and pull
+requests only when the table, anything under `tools/dom-members/`, or the
+workflow's own file changes. The Playwright version in that directory's
+lockfile decides which browser builds are installed, so a Playwright bump runs
+it too.
+
+**What it runs**: `pnpm --dir tools/dom-members install --frozen-lockfile`,
+installs the three browsers, then `pnpm --dir tools/dom-members run test:browser`
+with `BROWSERS=chromium,firefox,webkit`.
+
+**Why path filters**: Only a change to the table or its inputs can change the
+result. Because of the filter, it cannot be a required check; the unfiltered
+table check in `repo--generated.yml` covers the table matching its inputs.
+
 ### Docs workflow Rust cache
 
 The docs workflows build the local `citry_core` extension because the rendered
-site imports Citry. They use the workspace MSRV (`RUSTUP_TOOLCHAIN=1.96.0`), not
-the repository's moving development nightly, and share the
+site imports Citry. They use the workspace MSRV (`RUSTUP_TOOLCHAIN=1.97.0`), not
+the repository's dated development nightly, and share the
 `docs-citry-core-py314` Rust cache across Ubuntu/CPython 3.14 jobs. The cache
 deliberately omits the GitHub job ID and is saved even if a later docs guard,
 browser audit, link check, or deployment step fails. This prevents an unrelated
@@ -2144,7 +2412,12 @@ the Rust build entirely.
   `python scripts/check.py --profile full` (lint, types, coverage, validators,
   and single-environment portable tests)
 - **Dependencies**: Installed from the uv workspace lockfile; `--locked` keeps CI reproducible
-- **Matrix testing**: Python tests run across Python versions (3.11-3.14) and OSes
+- **Matrix testing**: on pushes to `main`, Python tests run across Python
+  versions (3.11-3.15) and OSes, except Linux with Python 3.14, which the full
+  gate in `repo--check.yml` already covers on every pull request. Pull requests
+  run Windows and macOS only on the oldest and newest Python (see the
+  `py--tests.yml` configuration above). The real-server reload tests run only there, in
+  check.py's serial "pytest reload servers" phase.
 
 ### Publishing
 
@@ -2175,15 +2448,16 @@ The first publish from a configured pending publisher creates the project. The G
 
 Candidate preparation invokes `py--citry-core--publish.yml` on the exact
 `main` release commit. That qualification builds one source distribution and
-34 native wheels. Fourteen `cp311-abi3` wheels cover GIL-enabled CPython
+44 native wheels. Fourteen `cp311-abi3` wheels cover GIL-enabled CPython
 3.11 and newer across every supported platform. Linux and musllinux also carry
-one CPython 3.14 free-threaded wheel and one PyPy 3.11 wheel per architecture.
+one free-threaded wheel each for CPython 3.14 and 3.15, and one PyPy 3.11 wheel,
+per architecture.
 The workflow also builds one
 `cp314-cp314-pyemscripten_2026_0_wasm32` wheel for the exact Pyodide runtime
 pinned by the playground. That browser wheel is another build of
 `citry-core`, not a package dependency.
 
-The qualification uses Rust 1.96.0, Maturin 1.15.0, and Cargo's
+The qualification uses Rust 1.97.0, Maturin 1.15.0, and Cargo's
 performance-qualified `release-wheel` profile: fat LTO, one codegen unit, and
 no debug information in the stripped distribution build. The four-way
 profile/ABI comparison and keep/drop decision are recorded in
@@ -2193,11 +2467,11 @@ runner-image change cannot silently add or remove a wheel. Runnable wheels are
 installed and exercised in their build jobs: every supported interpreter on
 Linux x86_64 and Windows, plus the oldest and newest CPython on macOS. The
 remaining cross-architecture wheels receive the same static inspection. The
-sdist job rebuilds outside the checkout with the declared Rust 1.96 minimum and
+sdist job rebuilds outside the checkout with the declared Rust 1.97 minimum and
 exercises the resulting wheel before uploading the sdist.
 
 Each builder keeps its output in a separate directory. The final qualification
-job rejects duplicate filenames and requires the complete 36-file set before
+job rejects duplicate filenames and requires the complete 46-file set before
 it creates `verified-citry-core-distributions`. Every wheel is checked against
 the checkout for metadata, tags, Python payload, extension module, license,
 `RECORD`, and size. `release-inventory.json` records every filename, byte size,
@@ -2248,7 +2522,7 @@ Candidate preparation invokes `py--citry--publish.yml` on the exact release
 commit. The workflow builds one universal wheel and one source distribution,
 requires their package, metadata, license, entry-point, and `RECORD`
 inventories, rebuilds the sdist outside the checkout, and install-smokes both
-wheels on CPython 3.11 through 3.14. When selected alongside an unreleased
+wheels on CPython 3.11 through 3.15. When selected alongside an unreleased
 Citry Core, the smoke uses the qualified candidate dependency rather than
 waiting for public PyPI. The verified pair and `release-inventory.json` are
 retained for 30 days.
@@ -2268,7 +2542,7 @@ commit. The workflow builds one universal wheel and one source distribution,
 then requires that closed pair and its package, metadata, license,
 console-entry-point, and `RECORD` inventories. It rebuilds the source
 distribution outside the checkout and installs the wheel on CPython 3.11
-through 3.14.
+through 3.15.
 
 The installed-wheel smoke imports every shipped module, verifies Citry and the
 analyzer dependencies against the manifest requirements, checks `citry-lsp --help`, and starts the stdio
@@ -2301,7 +2575,7 @@ Candidate preparation invokes `py--citry-ui--publish.yml` on the exact release
 commit. The workflow builds one universal wheel and one source distribution,
 requires their closed runtime, metadata, license, and source inventories,
 rebuilds the source distribution outside the checkout, and install-smokes the
-wheel on CPython 3.11 through 3.14.
+wheel on CPython 3.11 through 3.15.
 
 The launch floor registers the library, renders representative Button and
 Pagination components with the bundled i18n catalog, and exercises Tabs in an
@@ -2343,10 +2617,13 @@ unavailable editor/Node API or emit syntax the oldest supported host cannot
 run.
 
 This is a desktop and remote **workspace** extension. It starts
-`python -m citry_lsp` in each file-backed workspace and therefore has no
+`python -I -m citry_lsp` in each file-backed workspace and therefore has no
 `browser` entry point and does not claim VS Code for the Web support. The one
 universal VSIX contains no native binary; compatible desktop forks can use
 `citry.python` when they do not expose Microsoft's Python extension API.
+The manifest sets `capabilities.untrustedWorkspaces.supported` to `false`:
+the extension runs the workspace's Python interpreter and imports its app,
+so VS Code keeps it off in Restricted Mode.
 
 The Marketplace listing takes its public links from `package.json`: the
 extension-specific guide is the homepage, the repository link names this
@@ -2410,15 +2687,14 @@ promotion; candidate qualification does not need either publishing secret.
    `VSCE_PAT`. Do not use a repository-level secret, commit it, paste it into an
    issue/chat, or put it in a local release command.
 
-The release currently pins `@vscode/vsce` 3.9.2. As checked on 2026-08-20, that
-is the latest stable release and supports `--azure-credential`, but not the
-GitHub-native `publish --oidc` command documented on the unreleased
-[`vscode-vsce` main branch](https://github.com/microsoft/vscode-vsce#trusted-publishing).
-The first Citry release therefore uses the narrowly scoped `VSCE_PAT`. Global
-Azure DevOps PATs are
+The release pins `@vscode/vsce` 4.1.0, whose `vsce publish --help` lists
+both `--oidc`, the GitHub-native option for
+[trusted publishing](https://github.com/microsoft/vscode-vsce#trusted-publishing),
+and `--azure-credential`. The release workflow uses the narrowly scoped
+`VSCE_PAT`. Global Azure DevOps PATs are
 [retired on 1 December 2026](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#secure-automated-publishing-to-visual-studio-marketplace),
-so migrate to a reviewed stable OIDC client when available, or implement
-Microsoft's fuller Entra workload-identity flow with `--azure-credential`.
+so before then, move the workflow to `--oidc`, or implement Microsoft's fuller Entra workload-identity flow with
+`--azure-credential`.
 Neither route reuses the PyPI trusted-publisher configuration.
 
 #### Open VSX identity and credential

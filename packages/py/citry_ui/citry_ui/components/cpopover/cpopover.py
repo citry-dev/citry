@@ -9,7 +9,6 @@ from typing import Any, Literal, TypedDict
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
-    ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -174,9 +173,22 @@ class CPopover(LibraryComponent):
         description: SlotInput[CPopoverDescriptionSlotData] | None = None
         actions: SlotInput[CPopoverActionsSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "activator_attrs",
+            "attrs",
+            "close_attrs",
+            "described_by",
+            "description_id",
+            "dismissible",
+            "has_actions",
+            "has_description",
+            "match_width",
+            "open",
+            "placement",
+            "popover_id",
+            "title_id",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_popover_snapshot", None)
@@ -308,9 +320,14 @@ class CPopover(LibraryComponent):
       </div>
     """
 
-    js = (
-        ANCHORED_LAYER_RUNTIME_JS
-        + r"""
+    js = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
+      const anchoredLayerRuntime = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime")
+      ];
+
       const handoffKey = Symbol.for("citry-ui:popover-handoff");
 
       $component({
@@ -396,9 +413,13 @@ class CPopover(LibraryComponent):
             // stepping out of a shadow root. If that box keeps a fixed size
             // while only an inline wrapper inside it hides the trigger, the
             // episode lasts until the trigger next opens.
+            // TypeScript types a shadow root's host as `Element`, so `box` is typed that wide.
+            /** @type {Element} */
             let box = trigger;
             while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
-              const next = box.parentElement ?? box.getRootNode().host;
+              // Step out of a shadow root to its host; a document has no host.
+              const boxRoot = box.getRootNode();
+              const next = box.parentElement ?? (boxRoot instanceof ShadowRoot ? boxRoot.host : null);
               if (!next) {
                 break;
               }
@@ -889,7 +910,6 @@ class CPopover(LibraryComponent):
         },
       });
     """
-    )
 
     css_file = "runtime.min.css"
 

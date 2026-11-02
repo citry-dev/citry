@@ -15,3 +15,19 @@ packages:
 overrides:
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
   brace-expansion@<1.1.21: 1.1.21
+
+# Advisories that `pnpm audit` skips, each with its reason and tracking
+# issue. Add one only when no compatible fixed release exists and the
+# affected code cannot run in what we ship. An entry silences the advisory
+# on every path to it, including dev tooling.
+auditConfig:
+  ignoreGhsas:
+    # minimatch before 11.0.1 can take a very long time to prepare a
+    # crafted glob pattern, but only when the caller passes
+    # `optimizationLevel` 2 or higher. vscode-languageclient and vsce never
+    # do. vscode-languageclient 10 and 11 depend on minimatch 10 and call
+    # `Minimatch.makeRe()`, which minimatch 11 removed, so an override to 11
+    # would break them. Remove this once vscode-languageclient depends on
+    # minimatch 11.0.1 or newer, or minimatch publishes a fixed 10.x
+    # release (issue #552).
+    - GHSA-g3hv-75wg-m249

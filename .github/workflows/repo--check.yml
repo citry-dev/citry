@@ -12,13 +12,22 @@ on:
       - "main"
       - "dev"
   pull_request:
+    # `closed` starts a run in this PR's concurrency group, which cancels the
+    # PR's queued or running checks once it merges or closes; every job
+    # skips on that event, so the cancelling run needs no runner.
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
+# A newer run cancels an older one for the same pull request. A push or any
+# other run gets a group named after its own run ID, so no newer run cancels
+# it. Every commit on main then keeps a complete Check result, which release
+# step 5 in docs/codebase.md relies on.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 jobs:
   check:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
 
     steps:
@@ -28,7 +37,7 @@ jobs:
           submodules: recursive
 
       - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
@@ -41,11 +50,7 @@ jobs:
       # Rust is needed for the cargo fmt/clippy/test phases and to build the
       # citry_core extension during `uv sync`.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
-          components: rustfmt, clippy
+        uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

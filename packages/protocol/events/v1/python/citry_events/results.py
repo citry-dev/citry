@@ -222,18 +222,23 @@ def build_rejected_call_envelope(
     code: str,
     message: str,
 ) -> dict[str, Any]:
-    """Build a rejection, correlating call slots only when a request ID permits it."""
-    request_id: str | None = None
-    calls: list[Any] | None = None
-    if isinstance(raw_envelope, Mapping):
-        raw_id = raw_envelope.get("requestId")
-        if isinstance(raw_id, str) and raw_id:
-            request_id = raw_id
-        if request_id is None:
-            return build_edge_error_envelope(status, code, message)
-        raw_calls = raw_envelope.get("calls")
-        if isinstance(raw_calls, list) and raw_calls:
-            calls = raw_calls
+    """
+    Build a rejection, correlating call slots only when a request ID permits it.
+
+    Without a usable request ID the rejection is the single transport-edge
+    error, which the result schema allows only for ``protocol_mismatch`` and
+    ``payload_too_large``; any other code raises ``ProtocolValueError``, so
+    the builder never returns an envelope its own validator rejects.
+    """
+    raw_id = raw_envelope.get("requestId") if isinstance(raw_envelope, Mapping) else None
+    if not isinstance(raw_id, str) or not raw_id:
+        # Without a usable request ID, whether because the envelope is not an
+        # object or because it names no ID, nothing can be correlated, and the
+        # result schema allows only the single transport-edge error.
+        return build_edge_error_envelope(status, code, message)
+    request_id = raw_id
+    raw_calls = raw_envelope.get("calls")
+    calls = raw_calls if isinstance(raw_calls, list) and raw_calls else None
     slot_calls = calls if calls is not None else [None]
     error = build_error(status, code, message)
     results = [build_error_result(error, call_send_sequence(call)) for call in slot_calls]

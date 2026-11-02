@@ -160,7 +160,7 @@ Direct native inputs own their corresponding attributes. Supplying `id`,
 `attrs` is always an error, even when the direct input is omitted. `action` and
 `target` accept strings, including the empty string. Nullable string inputs
 reject other types with `TypeError`; enum inputs accept only the exact lowercase
-literals below and reject other values with `ValueError`. Native combinations
+literals below, and Citry's input check rejects other values with `TypeError`. Native combinations
 such as `method="get"` with an authored `enctype` pass through unchanged.
 
 ## 4. Server inputs and client inputs

@@ -244,6 +244,21 @@ class CNavigationMenu(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "close_delay",
+            "delay",
+            "disabled",
+            "label",
+            "loop",
+            "orientation",
+            "root_id",
+            "size",
+            "value",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_navigation_menu_snapshot", None)
         if cached is not None:

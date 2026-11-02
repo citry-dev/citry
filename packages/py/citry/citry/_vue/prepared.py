@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, TypeAlias
 
+from citry.util import deep_json
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -267,8 +269,20 @@ class PreparedOccurrence:
 def _detach_object(value: object, name: str) -> dict[str, object]:
     if type(value) is not dict or any(type(key) is not str for key in value):
         raise TypeError(f"{name} must be an exact dict with exact string keys")
-    _validate_keys(value, name)
-    return json.loads(json.dumps(value, allow_nan=False))
+    try:
+        _validate_keys(value, name)
+    except RecursionError:
+        # Data nested about as deep as the recursion limit, or a container
+        # that holds itself. The stack walk raises the same error for the
+        # first bad key, if there is one.
+        _validate_keys_with_stack(value, name)
+    try:
+        return json.loads(json.dumps(value, allow_nan=False))
+    except RecursionError:
+        # The standard encoder and decoder stop at a nesting limit (Python's
+        # own on 3.11). Writing and reading the same text with a stack gives
+        # the same copy and the same errors.
+        return deep_json.loads(deep_json.dumps(value, sort_keys=False, ensure_ascii=True))
 
 
 def _nonempty_string(value: object, name: str) -> None:
@@ -296,6 +310,44 @@ def _validate_keys(value: object, name: str) -> None:
     elif isinstance(value, (list, tuple)):
         for item in value:
             _validate_keys(item, name)
+
+
+def _validate_keys_with_stack(value: object, name: str) -> None:
+    """
+    Check every dict key in ``value`` as `_validate_keys` does, with a stack instead of nested calls.
+
+    It visits values in the same order, so it raises for the same key. A
+    container that holds itself is walked once; the JSON encoder that runs
+    next reports the loop.
+    """
+    # The ids of the containers on the path to the current one, and the
+    # iterators over what each still holds.
+    ancestors: set[int] = set()
+    pending: list[tuple[int, Iterator[object]]] = []
+    current: object = value
+    while True:
+        if isinstance(current, (dict, list, tuple)) and id(current) not in ancestors:
+            if isinstance(current, dict):
+                if any(type(key) is not str for key in current):
+                    raise TypeError(f"{name} contains a non-string object key")
+                items: Iterator[object] = iter(current.values())
+            else:
+                items = iter(current)
+            ancestors.add(id(current))
+            pending.append((id(current), items))
+        # Move on to the next item of the innermost container that has one.
+        while pending:
+            following = next(pending[-1][1], _END_OF_ITEMS)
+            if following is not _END_OF_ITEMS:
+                current = following
+                break
+            ancestors.discard(pending.pop()[0])
+        else:
+            return
+
+
+# Marks the end of a container's items in `_validate_keys_with_stack`.
+_END_OF_ITEMS = object()
 
 
 @dataclass(frozen=True, slots=True)

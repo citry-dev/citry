@@ -170,7 +170,9 @@ class CAlert(LibraryComponent):
         default: SlotInput[CAlertDefaultSlotData] | None = None
         actions: SlotInput[CAlertActionsSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # Citry's error for icon_name would print all 57 icon names twice; Citry
+    # UI's says in one line that it must be a documented icon name. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

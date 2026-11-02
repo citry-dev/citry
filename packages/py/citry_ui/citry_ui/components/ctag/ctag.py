@@ -508,8 +508,10 @@ class CTagGroup(LibraryComponent):
             let current = enabled.find((entry) => entry.value === runtime.focusedValue) ?? enabled[0] ?? null;
             if (runtime.focusedValue && !entries().some((entry) => entry.value === runtime.focusedValue)) {
               current = nearest(runtime.order, runtime.focusedValue, enabled);
-              if (focusWithin && current) queueMicrotask(() => current.root.focus());
-              else if (focusWithin && !current) queueMicrotask(() => list.focus());
+              // Focus moves because a re-render removed the focused tag, not
+              // because the reader moved it, so the page stays where it is.
+              if (focusWithin && current) queueMicrotask(() => current.root.focus({ preventScroll: true }));
+              else if (focusWithin && !current) queueMicrotask(() => list.focus({ preventScroll: true }));
             }
             runtime.focusedValue = current?.value ?? null;
             entries().forEach((entry) => { entry.root.tabIndex = entry === current ? 0 : -1; });
@@ -561,7 +563,7 @@ class CTagGroup(LibraryComponent):
             }
             applyRoving(groupDisabled);
             runtime.order = currentOrder;
-            if (groupDisabled && focusWithin) queueMicrotask(() => list.focus());
+            if (groupDisabled && focusWithin) queueMicrotask(() => list.focus({ preventScroll: true }));
             root.setAttribute("data-citry-tag-group-initialized", "");
           };
           const schedule = () => {

@@ -47,12 +47,7 @@ class ContextMenuPositioningAndRtl(Component):
           <c-CContextMenu
             aria_label="Top start actions"
             v-bind="{
-              onOpenChange:(next,detail)=>{
-                if (next) {
-                  lastPoint=`${Math.round(detail.clientX)}, ${Math.round(detail.clientY)}`;
-                  lastInvocation=detail.reason === 'contextmenu' ? 'pointer' : detail.reason;
-                }
-              },
+              onOpenChange:recordAcceptedPoint,
             }"
           >
             <c-fill name="target" data="{ target_attrs }">
@@ -102,14 +97,7 @@ class ContextMenuPositioningAndRtl(Component):
             aria_label="Bottom end actions"
             v-bind="{
               open:externalOpen,
-              onOpenChange:(next,detail)=>{
-                externalOpen=next;
-                if (next) {
-                  lastPoint=`${Math.round(detail.clientX)}, ${Math.round(detail.clientY)}`;
-                  lastInvocation=detail.reason === 'contextmenu' ? 'pointer' : detail.reason;
-                  return true;
-                }
-              },
+              onOpenChange:claimExternalOpen,
             }"
           >
             <c-fill name="target" data="{ target_attrs }">
@@ -178,9 +166,26 @@ class ContextMenuPositioningAndRtl(Component):
           lastPoint:'none',
           lastInvocation:'none',
         };},
-        // Template expressions cannot reach window or document, so the
-        // fixture controls that need them live here.
+        // This block holds the menus' callbacks and the fixture controls.
+        // The controls need window or document, which template expressions
+        // cannot reach.
         methods: {
+          // Only an opening has a point worth showing, so a close leaves the
+          // last accepted point on screen.
+          recordAcceptedPoint(next, detail) {
+            if (next) {
+              this.lastPoint = `${Math.round(detail.clientX)}, ${Math.round(detail.clientY)}`;
+              this.lastInvocation = detail.reason === 'contextmenu' ? 'pointer' : detail.reason;
+            }
+          },
+          // This menu is controlled, so owner state follows every request.
+          // Returning true claims an opening, which blocks the browser's own
+          // menu; a close needs no claim.
+          claimExternalOpen(next, detail) {
+            this.externalOpen = next;
+            this.recordAcceptedPoint(next, detail);
+            if (next) return true;
+          },
           openFromOwnerState() {
             this.externalOpen=true;
             this.lastInvocation='external';

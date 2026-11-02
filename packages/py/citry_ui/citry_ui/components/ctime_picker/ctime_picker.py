@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import time
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias, TypedDict, cast
+from typing import Any, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
@@ -34,9 +34,9 @@ from citry_ui.components._validation import (
     validate_non_empty_string,
     validate_optional_boolean,
 )
-
-if TYPE_CHECKING:
-    from citry_ui.components.cpopover import CPopoverPlacement
+from citry_ui.components.cpopover import (
+    CPopoverPlacement,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
+)
 
 CTimePickerTime: TypeAlias = time | str
 CTimePickerVariant = Literal["outline", "filled", "plain"]
@@ -245,9 +245,42 @@ class CTimePicker(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
-        check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "catalog_clear_label",
+            "catalog_picker_label",
+            "clear_label",
+            "clearable",
+            "described_by",
+            "disabled",
+            "dismissible",
+            "display_value",
+            "error_message",
+            "field_control",
+            "form",
+            "invalid",
+            "match_width",
+            "maximum",
+            "minimum",
+            "name",
+            "native_id",
+            "native_step",
+            "options",
+            "picker_label",
+            "placeholder",
+            "placement",
+            "popover_id",
+            "public_id",
+            "readonly",
+            "required",
+            "root_id",
+            "size",
+            "trigger_label",
+            "value",
+            "variant",
+            "visible_id",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_time_picker_snapshot", None)
@@ -703,30 +736,37 @@ class CTimePicker(LibraryComponent):
             requestOpen(false, source === 'option' ? 'selection' : 'clear', event);
             return true;
           };
+          // Writing the text or attribute already there still reports a
+          // change to the listbox's observer, which renders the listbox
+          // again; skipping unchanged writes lets both go idle.
+          const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
           const updateGeneratedLabels = () => {
             const label = root.querySelector('[data-citry-ui-part="listbox-label"]');
-            if (label instanceof HTMLElement) label.textContent = pickerLabel();
+            if (label instanceof HTMLElement) setText(label, pickerLabel());
             root.querySelectorAll('[data-citry-ui-part="listbox-option"]').forEach(option => {
               const copy = option.querySelector('[data-citry-ui-part="listbox-option-label"]');
-              if (copy instanceof HTMLElement && option instanceof HTMLElement && option.dataset.value) copy.textContent = formatTime(option.dataset.value);
+              if (copy instanceof HTMLElement && option instanceof HTMLElement && option.dataset.value) setText(copy, formatTime(option.dataset.value));
             });
           };
           const render = () => owned(() => {
             input.value = current || '';
-            input.required = configuration.required;
-            input.disabled = configuration.disabled;
-            input.readOnly = configuration.readonly;
+            if (input.required !== configuration.required) input.required = configuration.required;
+            if (input.disabled !== configuration.disabled) input.disabled = configuration.disabled;
+            if (input.readOnly !== configuration.readonly) input.readOnly = configuration.readonly;
             const unavailable = current !== null && !optionSet.has(current);
             input.setCustomValidity(unavailable ? unavailableMessage : '');
             const invalid = configuration.invalid || nativeInvalid || unavailable;
-            trigger.disabled = configuration.disabled;
-            trigger.setAttribute('aria-label', triggerLabel(current));
-            valueText.textContent = current ? formatTime(current) : placeholderText();
-            clear.hidden = !configuration.clearable || configuration.required || current === null;
-            clear.disabled = configuration.disabled || configuration.readonly;
+            if (trigger.disabled !== configuration.disabled) trigger.disabled = configuration.disabled;
+            const label = triggerLabel(current);
+            if (trigger.getAttribute('aria-label') !== label) trigger.setAttribute('aria-label', label);
+            setText(valueText, current ? formatTime(current) : placeholderText());
+            const clearHidden = !configuration.clearable || configuration.required || current === null;
+            if (clear.hidden !== clearHidden) clear.hidden = clearHidden;
+            const clearDisabled = configuration.disabled || configuration.readonly;
+            if (clear.disabled !== clearDisabled) clear.disabled = clearDisabled;
             runtime.states(root, { empty:current === null, open:scope.timePickerOpen, required:configuration.required, disabled:configuration.disabled, readonly:configuration.readonly, invalid });
-            root.dataset.variant = configuration.variant;
-            root.dataset.size = configuration.size;
+            if (root.dataset.variant !== configuration.variant) root.dataset.variant = configuration.variant;
+            if (root.dataset.size !== configuration.size) root.dataset.size = configuration.size;
             runtime.relationships([trigger], field, { describedby:data.describedby, errormessage:data.errormessage }, invalid);
             scope.timePickerListValue = current;
             scope.timePickerListDisabled = configuration.disabled || configuration.readonly;

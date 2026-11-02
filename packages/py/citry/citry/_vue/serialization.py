@@ -24,6 +24,7 @@ from citry.citry_render import CitryRender, SimpleVueRecord, simple_vue_called_c
 from citry.ext.dependencies.extension import DependenciesExtension
 from citry.ext.dependencies.scripts import has_component_asset
 from citry.ext.dependencies.types import DependencyRecord, Script, Style
+from citry.util import deep_json
 from citry.util.html import LongReferenceSafeParser, script_json
 from citry.util.id import validate_render_id
 from citry_core import _rust
@@ -293,18 +294,23 @@ class HydrationDecline:
     ``browser-text``, ``browser-condition`` (a ``v-if`` test) and
     ``browser-list`` (a ``v-for`` source). Codes for what the server does not
     write the way Vue does: ``unsupported-attribute``, ``unsupported-tag``,
-    ``unsupported-directive``, ``unsupported-comment``, ``text-value`` (a NUL,
-    a carriage return or an unpaired surrogate in text or an attribute value,
-    or a leading newline the parser would drop), ``parser-repair`` (an element
-    the browser's HTML parser would move), ``opaque-html`` (HTML Python hands
-    over as a finished string, such as ``<c-raw>`` contents, that the page's
-    parser would change, that holds a ``<script>``, or that starts with a
-    comment),
+    ``unsupported-directive``, ``unsupported-comment``,
+    ``form-named-property`` (a ``<form>`` key that the ``name`` or ``id`` of
+    one of its controls turns into a form property, or might, when the server
+    cannot see every control's name; the browser then sets a property where
+    the server would write an attribute),
+    ``text-value`` (a NUL, a carriage return or an unpaired surrogate in text
+    or an attribute value, or a leading newline the parser would drop),
+    ``parser-repair`` (an element the browser's HTML parser would move),
+    ``opaque-html`` (HTML Python hands over as a finished string, such as
+    ``<c-raw>`` contents, that the page's parser would change, that holds a
+    ``<script>``, or that starts with a comment),
     ``component-text-root`` (a component whose render is one text node),
     ``component-attrs``
     (attributes passed to a component), ``component-lookup`` (a component
     whose occurrence or render program is missing, including one whose render
-    function could not be read), ``slot-props`` (a scoped slot),
+    function could not be read), ``slot-props`` (a ``v-slot`` pattern that nests a pattern or gives a
+    default),
     ``dynamic-slots``, ``dynamic-component``, ``dynamic-attribute-name``,
     ``render-shape``, ``render-helper``, ``nesting-depth`` and ``host-root``
     (text directly inside the Vue host element).
@@ -1083,6 +1089,16 @@ def _server_host_contents(full_html: str, placeholders: Mapping[str, str]) -> st
 _MANIFEST_SLOT = "\x00citry-manifest\x00"
 
 
+def _loads_own_json(text: str) -> object:
+    """Read back JSON Citry wrote, at any depth."""
+    try:
+        return json.loads(text)
+    except RecursionError:
+        # The standard decoder stops at a nesting limit (Python's own on
+        # 3.11) that a page's prepared data can pass.
+        return deep_json.loads(text)
+
+
 def _script_json(value: object) -> str:
     """Serialize prepared data for the configuration data block, with sorted keys so the output is repeatable."""
     return script_json(value, sort_keys=True)
@@ -1391,7 +1407,7 @@ def prepare_vue_serialization(
             "protocol": "citry-vue-fragment/1",
             "appId": app_id,
             "host": f"#{host_id}",
-            "prepared": json.loads(serialized),
+            "prepared": _loads_own_json(serialized),
         }
     else:
         from citry.ext.dependencies.emission import VUE_RUNTIME_REQUIRED_KEY  # noqa: PLC0415

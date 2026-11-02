@@ -17,9 +17,11 @@ from citry._nested_declarations import _active_nested_class_declarations
 from citry._schema_introspection import _format_annotation
 from citry.introspection import _is_utf8_string
 from citry.settings import (
+    _ALLOWED_SECURITY_CSP_MODES,
     _TEMPLATE_RULE_FIELDS,
     LintSettings,
     LintSeverity,
+    SecurityCspMode,
     _is_vue_variable_name,
     _replaced_lint_settings_hint,
 )
@@ -176,7 +178,9 @@ class VueVariableInfo:
 # the record's first release, and the app worker can import a different
 # citry than the language server, for example when the project's environment
 # file puts another copy on PYTHONPATH.
-_OPTIONAL_LINT_INFO_FIELDS = frozenset({"rule_misspelled_directive", *_TEMPLATE_RULE_FIELDS})
+_OPTIONAL_LINT_INFO_FIELDS = frozenset(
+    {"rule_misspelled_directive", "template_data_keys", "security_csp", *_TEMPLATE_RULE_FIELDS}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +226,12 @@ class TemplateLintInfo:
     rule_undeclared_css_variable: LintSeverity = "ignore"
     rule_unknown_url: LintSeverity = "warning"
     rule_unknown_inject_key: LintSeverity = "warning"
+    # The nearest `Lint.template_data_keys`, from the component or a base
+    # class, sorted, or None when no Lint class sets it.
+    template_data_keys: tuple[str, ...] | None = None
+    # The engine's `security_csp`. The template rule that reports what a
+    # strict Content Security Policy blocks takes its severity from it.
+    security_csp: SecurityCspMode = "off"
 
     def __post_init__(self) -> None:
         if (
@@ -310,6 +320,16 @@ class TemplateLintInfo:
         if component_js_names != tuple(sorted(set(component_js_names))):
             msg = "Component JavaScript globals must be unique and sorted by name"
             raise ValueError(msg)
+        if self.template_data_keys is not None and (
+            type(self.template_data_keys) is not tuple
+            or any(type(name) is not str or not _is_exact_template_name(name) for name in self.template_data_keys)
+            or self.template_data_keys != tuple(sorted(set(self.template_data_keys)))
+        ):
+            msg = "TemplateLintInfo.template_data_keys must be None or a sorted tuple of unique template names"
+            raise ValueError(msg)
+        if type(self.security_csp) is not str or self.security_csp not in _ALLOWED_SECURITY_CSP_MODES:
+            msg = f"Unknown security_csp mode: {self.security_csp!r}"
+            raise ValueError(msg)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-ready detached copy."""
@@ -330,6 +350,11 @@ class TemplateLintInfo:
             "rule_i18n_cross_language_fallback": self.rule_i18n_cross_language_fallback,
             "rule_misspelled_directive": self.rule_misspelled_directive,
             **{rule_name: getattr(self, rule_name) for rule_name in _TEMPLATE_RULE_FIELDS},
+            # Left out when unset, so a language server from a citry that has
+            # no such field still reads the record.
+            **({} if self.template_data_keys is None else {"template_data_keys": list(self.template_data_keys)}),
+            # Left out while off, for the same reason.
+            **({} if self.security_csp == "off" else {"security_csp": self.security_csp}),
         }
 
     @classmethod
@@ -368,6 +393,12 @@ class TemplateLintInfo:
         if type(component_js_globals) is not list:
             msg = "component_js_globals must be a list"
             raise ValueError(msg)
+        template_data_keys = value.get("template_data_keys")
+        if template_data_keys is not None and type(template_data_keys) is not list:
+            msg = "template_data_keys must be null or a list"
+            raise ValueError(msg)
+        optional = {name: value[name] for name in _OPTIONAL_LINT_INFO_FIELDS if name in value}
+        optional.pop("template_data_keys", None)
         return cls(
             rule_unknown_template_variable=value["rule_unknown_template_variable"],  # type: ignore[arg-type]
             template_variables=tuple(TemplateVariableInfo.from_dict(item) for item in variables),
@@ -383,8 +414,9 @@ class TemplateLintInfo:
             rule_alpine_cloak=value["rule_alpine_cloak"],  # type: ignore[arg-type]
             rule_invalid_attribute_value=value["rule_invalid_attribute_value"],  # type: ignore[arg-type]
             rule_i18n_cross_language_fallback=value["rule_i18n_cross_language_fallback"],  # type: ignore[arg-type]
+            template_data_keys=None if template_data_keys is None else tuple(template_data_keys),
             # A missing optional rule takes the field's own default.
-            **{name: value[name] for name in _OPTIONAL_LINT_INFO_FIELDS if name in value},  # type: ignore[arg-type]
+            **optional,  # type: ignore[arg-type]
         )
 
 
@@ -415,6 +447,9 @@ class _ComponentLintOverrides:
     # The component's own value for each rule in _TEMPLATE_RULE_FIELDS that
     # it sets; a rule it leaves out follows the application.
     template_rules: Mapping[str, LintSeverity] = field(default_factory=dict)
+    # The nearest `Lint.template_data_keys`, sorted, or None when none is
+    # set or a nearer TemplateData schema replaces it.
+    template_data_keys: tuple[str, ...] | None = None
 
 
 def _application_lint_info(citry: Citry) -> TemplateLintInfo:
@@ -450,6 +485,7 @@ def _application_lint_info(citry: Citry) -> TemplateLintInfo:
         rule_i18n_cross_language_fallback=citry.settings.lint.rule_i18n_cross_language_fallback,
         rule_misspelled_directive=citry.settings.lint.rule_misspelled_directive,
         **{rule_name: getattr(citry.settings.lint, rule_name) for rule_name in _TEMPLATE_RULE_FIELDS},
+        security_csp=citry.settings.security_csp,
     )
 
 
@@ -541,6 +577,9 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
             rule_name: overrides.template_rules.get(rule_name, getattr(application, rule_name))
             for rule_name in _TEMPLATE_RULE_FIELDS
         },
+        template_data_keys=overrides.template_data_keys,
+        # The policy is the engine's; a component cannot set its own.
+        security_csp=application.security_csp,
     )
 
 
@@ -574,6 +613,8 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
     misspelled_directive_rule: LintSeverity | None = None
     template_rules: dict[str, LintSeverity] = {}
     check_input_types: bool | None = None
+    template_data_keys: tuple[str, ...] | None = None
+    template_data_keys_owner: type | None = None
     component_js_globals: dict[str, object] = {}
     component_js_global_owners: dict[str, type] = {}
     declarations = _active_nested_class_declarations(component_class, "Lint")
@@ -603,6 +644,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             "rule_misspelled_directive",
             "rule_i18n_cross_language_fallback",
             "check_input_types",
+            "template_data_keys",
             *_TEMPLATE_RULE_FIELDS,
         }
         if unknown:
@@ -733,6 +775,14 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
                 )
                 raise TypeError(msg)
             check_input_types = candidate_check
+        if "template_data_keys" in public_values:
+            # A nearer Lint class is read later, so its list replaces a
+            # base's; `None` clears an inherited list.
+            candidate_keys = public_values["template_data_keys"]
+            template_data_keys = (
+                None if candidate_keys is None else _validated_template_data_keys(component_class, candidate_keys)
+            )
+            template_data_keys_owner = declaration.declaring_class
         if "template_variables" in public_values:
             candidate_variables = public_values["template_variables"]
             try:
@@ -765,6 +815,9 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             component_js_globals.update(validated.component_js_globals)
             owner = public_owners["component_js_globals"]
             component_js_global_owners.update(dict.fromkeys(validated.component_js_globals, owner))
+    template_data_keys = _keys_beside_template_data_schema(
+        component_class, template_data_keys, template_data_keys_owner
+    )
     return _ComponentLintOverrides(
         rule,
         i18n_missing_param_rule,
@@ -785,7 +838,62 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         misspelled_directive_rule,
         check_input_types,
         template_rules,
+        template_data_keys,
     )
+
+
+def _keys_beside_template_data_schema(
+    component_class: type,
+    keys: tuple[str, ...] | None,
+    keys_owner: type | None,
+) -> tuple[str, ...] | None:
+    """
+    Settle a key list and a ``TemplateData`` schema that both name the keys.
+
+    A schema declared on a nearer class than the list wins, so a subclass of
+    a component that lists its keys, such as a Citry UI component, can add
+    a schema without touching the base's ``Lint``. A list declared on the
+    same class as the schema, or on a nearer one, has two places naming the
+    keys that could disagree, so it is rejected.
+    """
+    if keys is None or keys_owner is None:
+        return keys
+    schemas = _active_nested_class_declarations(component_class, "TemplateData")
+    if not schemas:
+        return keys
+    mro = list(_static_class_mro(component_class))
+    if mro.index(schemas[0].declaring_class) < mro.index(keys_owner):
+        return None
+    msg = (
+        f"Component {component_class.__name__} declares both a TemplateData schema and "
+        "Lint.template_data_keys; the schema already names every key, so remove template_data_keys "
+        "or set it to None."
+    )
+    raise TypeError(msg)
+
+
+def _validated_template_data_keys(component_class: type, value: object) -> tuple[str, ...]:
+    """
+    Check one ``Lint.template_data_keys`` declaration and return its names sorted.
+
+    It is read only by ``citry check`` and the editor, so a mistake in it
+    must fail when the class is defined rather than quietly check the
+    template against the wrong names.
+    """
+    owner = f"Component {component_class.__name__}.Lint.template_data_keys"
+    if not isinstance(value, (tuple, list, frozenset)) or any(type(name) is not str for name in value):
+        msg = f"{owner} must be a tuple, list, or frozenset of strings, got {value!r}"
+        raise TypeError(msg)
+    names = cast("tuple[str, ...] | list[str] | frozenset[str]", value)
+    for name in names:
+        if not _is_exact_template_name(name):
+            msg = f"{owner} names {name!r}, which is not a template variable name"
+            raise ValueError(msg)
+    if len(set(names)) != len(names):
+        duplicates = sorted({name for name in names if list(names).count(name) > 1})
+        msg = f"{owner} names {', '.join(map(repr, duplicates))} more than once"
+        raise ValueError(msg)
+    return tuple(sorted(names))
 
 
 def _component_lint_variable_owners(component_class: type) -> Mapping[str, type]:

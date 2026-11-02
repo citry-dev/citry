@@ -55,13 +55,7 @@ class TabsControlledSelection(Component):
           default_value="mercury"
           aria_label="Planetary briefing topics"
           :value="current"
-          :onValueChange="(value, detail) => {
-              requested = value;
-              requestSource = detail.source;
-              if (applyRequests) {
-                current = value;
-              }
-            }"
+          :onValueChange="applySelectionRequest"
         >
           <c-CTab value="mercury">
             Mercury
@@ -94,6 +88,18 @@ class TabsControlledSelection(Component):
             requestSource: 'none',
             applyRequests: true,
           };
+        },
+        methods: {
+          // Tabs only ask for a new selection. Record each request,
+          // and apply it only while "Apply requests from Tabs" is
+          // checked.
+          applySelectionRequest(value, detail) {
+            this.requested = value;
+            this.requestSource = detail.source;
+            if (this.applyRequests) {
+              this.current = value;
+            }
+          },
         },
       });
     """

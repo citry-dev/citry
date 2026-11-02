@@ -19,9 +19,14 @@ from citry.client_directives import _ONCE_MEMO_HINT
 from citry_core import _rust
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator, Iterator, Mapping
+    from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
 
-from .capture import prepared_spread_index
+from .capture import (
+    prepared_spread_index,
+    vue_owned_native_marker,
+    vue_owned_native_properties,
+    writes_vue_owned_marker,
+)
 from .prepared import (
     ComponentCall,
     ElementClose,
@@ -213,6 +218,9 @@ class CompiledRender:
     # "empty", "fragment", "text", "opaque-html", or "unknown". A caller's `v-show` or custom
     # directive only reaches the page through an element root (see `events.check_directive_roots`).
     root_shape: str = "unknown"
+    # The `<slot>` outlets written inside an authored `v-for`, which Vue calls
+    # once per item. `events.check_fills_in_vue_loops` reads them.
+    looped_slot_outlets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -360,7 +368,7 @@ class VueCompilerDiagnosticsError(ValueError):
 
 
 ORDINARY_TARGET = "ordinary-vnodes/1"
-_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.6"}
+_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.7"}
 _TEXT_ACTION_RULES = {
     "rewrite": {"condense.whitespace"},
     "drop": {"condense.drop-whitespace", "drop.comment", "drop.branch-gap"},
@@ -435,7 +443,38 @@ _ALLOWED_HELPERS = {
 }
 _ROOT_SHAPES = frozenset({"element", "component", "empty", "fragment", "text", "opaque-html", "unknown"})
 _FORBIDDEN_CODE = ("_cache[", "createStaticVNode", "setBlockTracking", "withMemo")
-_FORBIDDEN_TEMPLATE = re.compile(r"<(?:script|style)(?:\s|>|/)|\bv-(?:once|memo)\b", re.IGNORECASE)
+_FORBIDDEN_TEMPLATE = re.compile(r"<(?:script|style)(?:\s|>|/)", re.IGNORECASE)
+# `v-once` and `v-memo` are refused by their spelling, except in a template
+# that uses `v-pre`, where Vue reads them as plain attributes. There they are
+# refused by what they compile to instead, the constructs below.
+_ONCE_MEMO_SPELLING = re.compile(r"\bv-(?:once|memo)\b", re.IGNORECASE)
+_ONCE_MEMO_CONSTRUCTS = ("setBlockTracking", "withMemo", "_cache[")
+
+
+def _raise_for_once_or_memo(template: str, refused: Sequence[str]) -> None:
+    """
+    Name `v-once` or `v-memo` when the output was refused for the cached constructs they compile to.
+
+    ``refused`` holds the compiler's diagnostic messages, or the constructs
+    found in its code; only one that names `setBlockTracking`, `withMemo`, or
+    `_cache[` counts, so an unrelated refusal keeps its own message. The
+    template parser names the directives with their position; this names
+    them for a template that reached the compiler another way.
+    """
+    if any(construct in message for message in refused for construct in _ONCE_MEMO_CONSTRUCTS):
+        _raise_for_once_or_memo_spelling(template)
+
+
+def _raise_for_once_or_memo_spelling(template: str) -> None:
+    """Raise the error that names `v-once` or `v-memo` when the template spells either."""
+    spelling = _ONCE_MEMO_SPELLING.search(template)
+    if spelling is None:
+        return
+    msg = (
+        f"The Vue template contains '{spelling.group(0)}'. {_ONCE_MEMO_HINT} To keep an element's"
+        " contents as the server first rendered them, put '#c-ignore' on the element."
+    )
+    raise ValueError(msg)
 
 
 def _guard_template_braces(text: str) -> str:
@@ -513,17 +552,12 @@ class NativeCompiler:
     ) -> CompiledRender:
         if source_map:
             raise ValueError("ordinary target source maps are not implemented by this compiler adapter")
-        forbidden = _FORBIDDEN_TEMPLATE.search(template)
-        if forbidden is not None:
-            # The template parser names `v-once` and `v-memo` with their
-            # position; this names them for a template that reached here another way.
-            if forbidden.group(0).lower().startswith("v-"):
-                msg = (
-                    f"The Vue template contains '{forbidden.group(0)}'. {_ONCE_MEMO_HINT} To keep an element's"
-                    " contents as the server first rendered them, put '#c-ignore' on the element."
-                )
-                raise ValueError(msg)
+        if _FORBIDDEN_TEMPLATE.search(template) is not None:
             raise ValueError("ordinary target template contains an unsupported raw-text or cached construct")
+        if "v-pre" not in template:
+            # Without `v-pre` the spelling is always the directive, so it is
+            # named before anything compiles, as the template parser names it.
+            _raise_for_once_or_memo_spelling(template)
         identity = json.dumps(
             {
                 "binary": self._binary_sha256,
@@ -612,6 +646,7 @@ class NativeCompiler:
                 response.get("elements", []), runtime_event_sites
             )
             if diagnostics:
+                _raise_for_once_or_memo(template, [str(item.get("message", "")) for item in diagnostics])
                 raise VueCompilerDiagnosticsError(diagnostics)
             # Read after diagnostics so a rejected template reports its
             # diagnostics rather than a plan built from rejected output.
@@ -626,6 +661,7 @@ class NativeCompiler:
             if unsupported:
                 raise ValueError(f"ordinary target emitted unsupported helpers: {sorted(unsupported)!r}")
             if any(token in preamble or token in code for token in _FORBIDDEN_CODE):
+                _raise_for_once_or_memo(template, [token for token in _FORBIDDEN_CODE if token in preamble + code])
                 raise ValueError("ordinary target emitted cached or static compiler constructs")
             emits_directives = "withDirectives" in helpers
             if emits_directives != bool(directive_element_count):
@@ -689,6 +725,16 @@ class NativeCompiler:
                 hydration_plan,
                 server_render,
                 str(root_shape),
+                looped_slot_outlets=tuple(
+                    sorted(
+                        {
+                            name
+                            for element in response.get("elements", [])
+                            if any(directive.get("name") == "for" for directive in element.get("directives", []))
+                            for name in element.get("slotOutlets", [])
+                        }
+                    )
+                ),
             )
             self._cache[cache_key] = compiled
             if len(self._cache) > 256:
@@ -1362,7 +1408,9 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
     parts: list[str] = []
     local_calls: list[dict[str, object]] = []
     element_bindings: list[dict[str, object]] = []
-    element_stack: list[tuple[str, _SlotKeyScope | None]] = []
+    # Each open element's tag, key scope, and whether it sits under an
+    # authored `v-pre` (its own or an ancestor's).
+    element_stack: list[tuple[str, _SlotKeyScope | None, bool]] = []
     slot_key_scopes: list[_SlotKeyScope] = []
     byte_position = 0
 
@@ -1385,6 +1433,11 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
             elif isinstance(node, ElementOpen):
                 start = byte_position
                 attrs = list(node.authored_attrs)
+                # Vue reads an element under `v-pre` as written, so the
+                # ownership marker below would reach the page as a plain attribute.
+                under_v_pre = (bool(element_stack) and element_stack[-1][2]) or any(
+                    attr.casefold().partition("=")[0] == "v-pre" for attr in node.authored_attrs
+                )
                 if node.attrs_binding_key is not None:
                     spread = f'v-bind="$citryPrepared.{node.attrs_binding_key}"'
                     spread_index = prepared_spread_index(node.authored_attrs)
@@ -1398,12 +1451,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 # contract as the direct assembler.  ``ElementOpen`` predates
                 # the typed ``has_spread`` field, so its generated attrs
                 # binding is the only spread provenance available here.
-                if node.tag.casefold() in {"input", "textarea", "select", "option"}:
-                    from .capture import (  # noqa: PLC0415
-                        vue_owned_native_marker,
-                        vue_owned_native_properties,
-                    )
-
+                if writes_vue_owned_marker(node.tag, under_v_pre=under_v_pre):
                     attrs.append(
                         vue_owned_native_marker(
                             vue_owned_native_properties(
@@ -1443,13 +1491,13 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 element_scope = (
                     None if node.key_binding_key is None else _SlotKeyScope(f"$citryPrepared.{node.key_binding_key}")
                 )
-                element_stack.append((node.tag, element_scope))
+                element_stack.append((node.tag, element_scope, under_v_pre))
                 if element_scope is not None:
                     slot_key_scopes.append(element_scope)
             elif isinstance(node, ElementClose):
                 if not element_stack or element_stack[-1][0].lower() != node.tag.lower():
                     raise ValueError("prepared element close has no matching opening")
-                _, element_scope = element_stack.pop()
+                _, element_scope, _ = element_stack.pop()
                 if element_scope is not None:
                     if not slot_key_scopes or slot_key_scopes[-1] is not element_scope:
                         raise ValueError("prepared element key scope changed before its close")

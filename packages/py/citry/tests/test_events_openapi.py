@@ -34,7 +34,11 @@ _DATA_200_DESCRIPTION = (
     "The handler's data value (citry-events/1 envelope callers receive it as the result's data action)."
 )
 _RESPONSE_422 = {
-    "description": "The args did not validate; per-field messages ride in results[0].error.fieldErrors.",
+    "description": (
+        "The args did not validate; per-field messages ride in results[0].error.fieldErrors."
+        " fieldErrors lists at most 20 fields the schema does not declare and at most 20 items per list"
+        " or dict field; the message counts the rest."
+    ),
     "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EventErrorEnvelope"}}},
 }
 # Non-GET operations document the CSRF header, so a client generated from
