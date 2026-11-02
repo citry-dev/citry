@@ -1,12 +1,10 @@
 # Changelog
 
-## Unreleased
+## [0.4.0] - 2026-11-02
 
 ### Added
 
 - Citry UI now supports Python 3.15.
-
-
 - A `CCommandPalette` command with a `shortcut` now exposes it to
   assistive technology as `aria-keyshortcuts`, for example `Control+,`
   for "Ctrl ,". A hint that is not one key combination, such as
@@ -15,20 +13,6 @@
 
 ### Changed
 
-- **Breaking:** link inputs now accept only a relative URL or an
-  `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL, and raise
-  `ValueError` for any other scheme. Link inputs are `href` on
-  `CBreadcrumbItem`, `CButton`, `CListItem`, `CMenuItem`,
-  `CNavigationMenuLink`, and `CPagination`; `CForm`'s `action`; and a
-  `formaction` attribute on `CButton` or `CSplitButton`. Image inputs
-  (`CAvatar`'s `src`, and `CImage`'s `src` and `srcset`, including each
-  source's `srcset`) accept only a relative URL or an `http:`,
-  `https:`, `blob:`, or `data:image/` URL. To link to another scheme,
-  such as an app's own scheme, write the `<a>` in your template.
-- Citry UI components work with the next Citry release, which accepts
-  `$c-tr` translation bindings only when they are written in the
-  template. Earlier Citry UI releases fail to render under that release,
-  so upgrade Citry UI and Citry together.
 - Writing an empty value in a template for a text input, such as
   `<c-CButtonGroup label="">` or `<c-CContextMenu aria_label="">`, raises
   the component's own `ValueError` saying the text is empty, not a
@@ -51,11 +35,11 @@
   control needs. If you set your own `change_label` or translate the
   message, write the dates as `{start} – {end}`, as the trigger shows
   them.
-- Citry UI components work with Citry's new check that raises
-  `TypeError` for an input of the wrong type, and accept the same values
-  as before, such as `heading_level="2"`. Earlier Citry UI releases
-  reject some valid inputs under that check, so upgrade Citry UI and
-  Citry together.
+- **Breaking:** Citry UI now requires `citry` 0.7.0 or newer. Its
+  components accept the same values as before, such as
+  `heading_level="2"`, under Citry 0.7.0's check that raises `TypeError`
+  for an input of the wrong type. Citry UI 0.3.0 rejects some valid
+  inputs under that check, so upgrade both together.
 - `heading_level` on `CAccordion` and `CDisclosure` now accepts only
   `2` to `6` and the same numbers as text, so `"02"` and `2.0` raise
   `ValueError`.
@@ -66,23 +50,23 @@
   there must catch `TypeError`. `CAccordion`, `CDisclosure`, `CIcon`,
   `CAlert`, `CCalendar`, `CDatePicker`, and `CDateRange` keep Citry UI's
   own errors on all their inputs.
+- **Breaking:** link inputs now accept only a relative URL or an
+  `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL, and raise
+  `ValueError` for any other scheme. Link inputs are `href` on
+  `CBreadcrumbItem`, `CButton`, `CListItem`, `CMenuItem`,
+  `CNavigationMenuLink`, and `CPagination`; `CForm`'s `action`; and a
+  `formaction` attribute on `CButton` or `CSplitButton`. Image inputs
+  (`CAvatar`'s `src`, and `CImage`'s `src` and `srcset`, including each
+  source's `srcset`) accept only a relative URL or an `http:`,
+  `https:`, `blob:`, or `data:image/` URL. To link to another scheme,
+  such as an app's own scheme, write the `<a>` in your template.
+- Citry UI components work with the next Citry release, which accepts
+  `$c-tr` translation bindings only when they are written in the
+  template. Earlier Citry UI releases fail to render under that release,
+  so upgrade Citry UI and Citry together.
 
 ### Fixed
 
-- Menus, popovers, dialogs, selects and the other interactive components
-  keep working when data puts a `name` on a `form`, `img`, `iframe`,
-  `embed` or `object` that matches a `document` member they read, such as
-  `<form name="activeElement">`, or when a field inside a form has a `name`
-  that matches a form member. This needs Citry 0.7.0 or later; with an
-  older Citry the fix does not apply.
-
-- `CImage` now checks a long `srcset` in time proportional to its
-  length. A `srcset` with a long run of spaces could keep the server
-  busy for minutes or longer during a render, and a client `srcset`
-  prop with a long run of spaces or commas could freeze the browser
-  tab.
-- `CPagination` control labels and `CTable`'s status announcement now
-  follow a language switch in the browser.
 - `CTagsInput` no longer holds up the page for seconds when a typed or
   pasted tag has a long run of spaces inside it, and `CNumberInput`,
   `CSlider`, and `CImage` no longer slow down in Safari on a value with a
@@ -140,6 +124,19 @@
   `aria_label`, the trigger now takes its name through `aria-labelledby`
   from a hidden element and has no `aria-label` attribute, so a selector
   such as `button[aria-label="Place"]` no longer finds it.
+- Menus, popovers, dialogs, selects and the other interactive components
+  keep working when data puts a `name` on a `form`, `img`, `iframe`,
+  `embed` or `object` that matches a `document` member they read, such as
+  `<form name="activeElement">`, or when a field inside a form has a `name`
+  that matches a form member. This needs Citry 0.7.0 or later; with an
+  older Citry the fix does not apply.
+- `CImage` now checks a long `srcset` in time proportional to its
+  length. A `srcset` with a long run of spaces could keep the server
+  busy for minutes or longer during a render, and a client `srcset`
+  prop with a long run of spaces or commas could freeze the browser
+  tab.
+- `CPagination` control labels and `CTable`'s status announcement now
+  follow a language switch in the browser.
 
 ## [0.3.0] - 2026-10-19
 
