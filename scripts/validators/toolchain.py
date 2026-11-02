@@ -292,8 +292,8 @@ def check() -> list[str]:
     # The strict check after the upload then proves every file again.
     if publish.replace(_GUARDED_SKIP_EXISTING, "", 1).count("skip-existing") or "--clobber" in publish:
         errors.append(
-            "citry-core release retries must fail closed instead of replacing artifacts or "
-            "skipping files the public-state check did not prove"
+            "citry-core release retries must stop rather than replace artifacts or "
+            "skip files the public-state check did not prove"
         )
     for marker in (
         "operation:",

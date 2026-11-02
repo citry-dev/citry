@@ -96,9 +96,11 @@ def upload_required(
 ) -> bool:
     """Return whether to upload, accepting only absent, partial (when allowed), or byte-identical releases."""
     state = public_state(status=status, inventory=inventory, payload=payload)
-    if state == "partial" and not allow_partial:
-        # The check after an upload must see every file, so a partial set is a
-        # failure there. Only the check before an upload lets it through.
+    # The check after an upload must see every file, so when PyPI answers for
+    # the version, anything short of the complete set (some files, or an empty
+    # file list) is a failure there. Only the check before an upload lets a
+    # partial set through.
+    if status == 200 and state != "complete" and not allow_partial:
         missing = sorted(set(_inventory_artifacts(inventory)) - set(_public_artifacts(payload or {})))
         raise PyPIReleaseError(f"public PyPI release is missing qualified files: missing={missing}")
     return state != "complete"

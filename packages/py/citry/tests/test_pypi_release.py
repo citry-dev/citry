@@ -90,3 +90,16 @@ def test_the_workflow_output_turns_on_skip_existing_only_for_a_partial_release(
 
     assert main([*argv, "--github-output", str(output), "--allow-partial"]) == 0
     assert output.read_text(encoding="utf-8").splitlines() == expected
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"urls": []},
+        # Entries without a SHA-256 cannot prove anything, so they count as absent.
+        {"urls": [{"filename": "citry-0.4.7.tar.gz", "digests": {}}]},
+    ],
+)
+def test_the_check_after_an_upload_rejects_a_version_that_lists_no_proven_files(payload: dict) -> None:
+    with pytest.raises(PyPIReleaseError, match="missing qualified files"):
+        upload_required(status=200, inventory=_inventory(), payload=payload)

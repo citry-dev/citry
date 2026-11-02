@@ -23,7 +23,10 @@ from typing import TYPE_CHECKING, Any, Final
 
 import tomllib
 
-from scripts.pypi_release import PyPIReleaseError, compare_public, public_state
+try:
+    from scripts.pypi_release import PyPIReleaseError, compare_public, public_state
+except ImportError:  # validate.py loads this file with scripts/ itself on sys.path.
+    from pypi_release import PyPIReleaseError, compare_public, public_state  # type: ignore[no-redef]
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -43,7 +46,7 @@ PUBLICATION_TIMEOUT_SECONDS: Final = 20 * 60
 # The VS Code worker waits up to 45 minutes for the Open VSX review on top of
 # its usual work, so its publish run gets a longer limit.
 VSCODE_PUBLICATION_TIMEOUT_SECONDS: Final = 75 * 60
-# A publish step that fails during a passing registry or signing outage is
+# A publish step that fails during a short registry or signing outage is
 # started again this many times, this long after the failure. On 2026-11-02
 # sigstore's signing log answered 502 for a few minutes; three tries spread
 # over ten minutes cover an outage like that without stalling a real failure
@@ -339,7 +342,8 @@ class GitHubClient:
         request.add_header("Content-Type", "application/json")
         request.add_header("X-GitHub-Api-Version", API_VERSION)
         # An artifact download redirects to blob storage, which rejects a
-        # second credential; an unredirected header stays with GitHub.
+        # second credential; a header added with `add_unredirected_header` is
+        # not sent on to the redirect target.
         request.add_unredirected_header("Authorization", f"Bearer {self.token}")
 
     def _call(
@@ -392,20 +396,22 @@ class GitHubClient:
         target = ref.get("object")
         if not isinstance(target, dict):
             raise ReleaseError(f"GitHub returned no object for tag {tag}")
-        # Release tags are annotated, so the ref names a tag object that in
-        # turn names the commit.
-        if target.get("type") == "tag":
-            tag_object = self.request("GET", f"/git/tags/{target.get('sha')}")
-            target = tag_object.get("object")
-            if not isinstance(target, dict):
-                raise ReleaseError(f"GitHub returned no commit for tag {tag}")
+        # The release App creates only annotated tags, and the tag job rejects
+        # any other kind, so a lightweight tag was made by hand and stops here.
+        if target.get("type") != "tag":
+            raise ReleaseError(f"tag {tag} is not an annotated release tag")
+        # An annotated tag's ref names a tag object, which names the commit.
+        tag_object = self.request("GET", f"/git/tags/{target.get('sha')}")
+        target = tag_object.get("object")
+        if not isinstance(target, dict):
+            raise ReleaseError(f"GitHub returned no commit for tag {tag}")
         if target.get("type") != "commit" or not isinstance(target.get("sha"), str):
             raise ReleaseError(f"tag {tag} does not name a commit")
         return str(target["sha"])
 
-    def release_exists(self, tag: str) -> bool:
-        """Return whether a GitHub Release exists for the tag."""
-        return self.request_if_present(f"/releases/tags/{urllib.parse.quote(tag, safe='')}") is not None
+    def release(self, tag: str) -> dict[str, Any] | None:
+        """Return the GitHub Release for a tag, or None when there is none."""
+        return self.request_if_present(f"/releases/tags/{urllib.parse.quote(tag, safe='')}")
 
     def download_artifact(self, artifact_id: int, destination: Path) -> None:
         """Save one workflow artifact's zip archive to a file."""
@@ -646,6 +652,44 @@ def registry_state(
         raise ReleaseError(f"{package} {version} on PyPI: {error}") from error
 
 
+def release_holds_qualified_files(
+    release: Mapping[str, Any],
+    *,
+    tag: str,
+    expected_assets: Mapping[str, str],
+    other_assets: Iterable[str],
+) -> bool:
+    """
+    Return whether a GitHub Release holds exactly the files its publish worker uploads.
+
+    `expected_assets` maps each qualified file, and the inventory, to its
+    SHA-256, which must equal the digest GitHub reports for that asset.
+    `other_assets` names the small JSON files the worker writes during
+    promotion; they must be present, but their bytes are not known here.
+    Any other asset, a draft, or a missing file returns False, so the worker
+    runs again and its own Release check, which also reads those JSON files,
+    decides.
+    """
+    if release.get("draft") is not False or release.get("tag_name") != tag:
+        return False
+    assets = release.get("assets")
+    if not isinstance(assets, list):
+        return False
+    found: dict[str, str] = {}
+    for asset in assets:
+        if not isinstance(asset, dict) or asset.get("state") != "uploaded":
+            return False
+        found[str(asset.get("name"))] = str(asset.get("digest"))
+    if set(found) != set(expected_assets) | set(other_assets):
+        return False
+    return all(found[name] == f"sha256:{digest}" for name, digest in expected_assets.items())
+
+
+def _inventory_sha256(archive: Path) -> str:
+    with zipfile.ZipFile(archive) as bundle:
+        return hashlib.sha256(bundle.read("release-inventory.json")).hexdigest()
+
+
 def already_published(
     client: GitHubClient,
     registry: RegistryClient,
@@ -657,10 +701,16 @@ def already_published(
     """
     Return whether an earlier release run already finished this package from the same bytes.
 
-    A package counts as finished only when its tag names the candidate commit,
-    its GitHub Release exists, and every registry serves exactly the qualified
-    files. Anything less returns False, and the publish worker finishes the
-    rest: it uploads only missing files and creates a missing tag or Release.
+    A package counts as finished only when its annotated tag names the
+    candidate commit, its GitHub Release holds the qualified files, and every
+    registry serves exactly the qualified files. Anything less returns False,
+    and the publish worker finishes the rest: it uploads what the registry is
+    missing and creates a missing tag or Release.
+
+    Raises:
+        ReleaseError: The tag names another commit or is not annotated, or a
+            registry serves a file with other bytes than the qualified file.
+
     """
     key = str(package["key"])
     tag = str(package["tag"])
@@ -671,16 +721,33 @@ def already_published(
         return False
     if tagged != commit:
         raise ReleaseError(f"{tag} names commit {tagged}, not the candidate commit {commit}")
-    if not client.release_exists(tag):
+    github_release = client.release(tag)
+    if github_release is None:
         _log(f"{tag} exists without a GitHub Release; its publish worker will finish it")
         return False
     with tempfile.TemporaryDirectory() as directory:
         archive = Path(directory) / "qualification.zip"
         client.download_artifact(int(qualification["artifact_id"]), archive)
         expected = qualified_files(archive, str(qualification["artifact_digest"]))
+        inventory_digest = _inventory_sha256(archive)
+    # The registries come first: a file there with other bytes must stop the
+    # release even when the GitHub Release looks wrong too.
     state = registry_state(key, str(package["version"]), expected, registry)
     if state != "complete":
         _log(f"{tag} is {state} on its registries; its publish worker will upload the rest")
+        return False
+    # The worker writes the provenance record for every package, and the
+    # registry record only for the extension.
+    other_assets = ["qualification-provenance.json"]
+    if PACKAGE_BY_KEY[key].manifest_kind == "json":
+        other_assets.append("registry-verification.json")
+    if not release_holds_qualified_files(
+        github_release,
+        tag=tag,
+        expected_assets={**expected, "release-inventory.json": inventory_digest},
+        other_assets=other_assets,
+    ):
+        _log(f"{tag} has a GitHub Release that its publish worker has not finished checking; running the worker")
         return False
     _log(f"{tag} is already published from the qualified bytes; skipping it")
     return True
@@ -719,19 +786,15 @@ def _failed_job_names(jobs: Iterable[Mapping[str, Any]]) -> list[str]:
     return [str(job.get("name")) for job in jobs if job.get("conclusion") in FAILED_CONCLUSIONS]
 
 
-def _failed_jobs(client: GitHubClient, run: Mapping[str, Any]) -> list[str]:
-    """List the jobs that made a run fail, so the error message points at the cause."""
-    return _failed_job_names(_jobs(client, run))
-
-
 def should_retry(jobs: Sequence[Mapping[str, Any]], *, retries_used: int, max_retries: int) -> bool:
     """
     Decide whether a failed publish run is worth starting again.
 
     A retry is worth it only when every failed job failed in a step that talks
-    to a registry or to sigstore (`RETRYABLE_STEPS`). A cancelled or timed-out
-    job, a job without a failed step, or a failed check step would fail the
-    same way again, so those stop the release at once.
+    to a registry or to sigstore (`RETRYABLE_STEPS`). Someone stopped a
+    cancelled job on purpose, and a timed-out job, a job without a failed
+    step, or a failed check step would fail the same way again, so those stop
+    the release at once.
     """
     if retries_used >= max_retries:
         return False
@@ -800,11 +863,13 @@ def _wait_for_runs(
     # The newest run seen for each package, listed in the still-waiting line.
     latest: dict[str, dict[str, Any] | None] = dict.fromkeys(pending)
     # Retries already started for each package, and when a scheduled retry is
-    # due. A retry waits `RETRY_DELAY_SECONDS` so a passing outage can end.
+    # due. A retry waits `RETRY_DELAY_SECONDS` so a short outage can end.
     retries_used = dict.fromkeys(pending, 0)
-    retry_due: dict[str, float] = {}
+    # Each scheduled retry also keeps the attempt that failed, so a run that
+    # someone restarted by hand during the delay is not restarted twice.
+    retry_due: dict[str, tuple[float, int]] = {}
     # After a retry starts, GitHub can still report the failed attempt for a
-    # few polls; states from attempts below this number are old news.
+    # few polls; states from attempts below this number are ignored.
     current_attempt = dict.fromkeys(pending, 1)
     while len(completed) != len(pending):
         if time.monotonic() >= deadline:
@@ -818,15 +883,25 @@ def _wait_for_runs(
             if run is None:
                 continue
             if package in retry_due:
-                if time.monotonic() < retry_due[package]:
+                due, failed_attempt = retry_due[package]
+                restarted_by_hand = _run_attempt(run) > failed_attempt or run.get("status") != "completed"
+                if restarted_by_hand:
+                    # Follow the newer attempt like any other run.
+                    del retry_due[package]
+                    current_attempt[package] = _run_attempt(run)
+                elif time.monotonic() < due:
                     continue
-                del retry_due[package]
-                current_attempt[package] = _run_attempt(run) + 1
-                client.rerun_failed_jobs(int(run["id"]))
-                # The new attempt gets the same time limit as the first one.
-                deadline = max(deadline, time.monotonic() + timeout_seconds)
-                _log(f"{title}: started attempt {current_attempt[package]}: {run.get('html_url', 'unknown run URL')}")
-                continue
+                else:
+                    del retry_due[package]
+                    current_attempt[package] = failed_attempt + 1
+                    client.rerun_failed_jobs(int(run["id"]))
+                    # The new attempt gets the same time limit as the first one.
+                    deadline = max(deadline, time.monotonic() + timeout_seconds)
+                    _log(
+                        f"{title}: started attempt {current_attempt[package]}: "
+                        f"{run.get('html_url', 'unknown run URL')}"
+                    )
+                    continue
             if _run_attempt(run) < current_attempt[package]:
                 continue
             state = _run_state(run)
@@ -856,10 +931,13 @@ def _wait_for_runs(
                 names = _failed_job_names(jobs)
                 if should_retry(jobs, retries_used=retries_used[package], max_retries=max_retries):
                     retries_used[package] += 1
-                    retry_due[package] = time.monotonic() + RETRY_DELAY_SECONDS
+                    retry_due[package] = (time.monotonic() + RETRY_DELAY_SECONDS, _run_attempt(run))
+                    # A failure close to the time limit must still get its
+                    # retry, so the limit covers the delay and a new attempt.
+                    deadline = max(deadline, retry_due[package][0] + timeout_seconds)
                     _log(
                         f"{title} failed in jobs {', '.join(names)}; retry {retries_used[package]}/{max_retries} "
-                        f"starts in {RETRY_DELAY_SECONDS // 60} min and skips files the registry already holds"
+                        f"starts in {RETRY_DELAY_SECONDS // 60} min"
                     )
                     continue
                 detail = f" in jobs {', '.join(names)}" if names else ""
