@@ -15,6 +15,8 @@ use std::convert::Infallible;
 
 use html5gum::{Emitter, Tokenizer};
 
+use crate::html_limits::{HtmlLimits, HtmlTooLarge};
+
 /// The stack a tokenizer run keeps available. html5gum still calls a few
 /// state functions in a row within one token, and the emitter runs
 /// html5ever's tree builder and this crate's callbacks on top of them. None
@@ -22,15 +24,22 @@ use html5gum::{Emitter, Tokenizer};
 /// both debug and release builds.
 const TOKENIZER_STACK: usize = 1024 * 1024 + 256 * 1024;
 
-/// Run html5gum over `input`, sending its events to `emitter`.
+/// Run html5gum over `input`, sending its events to `emitter`, and return
+/// whether the run stayed within the limits the emitter counted in `limits`.
 ///
 /// Every tokenizer run in the crate goes through this function, so a run
 /// always starts with [`TOKENIZER_STACK`] available: it moves to a new stack
-/// segment when the thread has less left.
-pub(crate) fn run_tokenizer<E: Emitter<Token = Infallible>>(input: &str, emitter: E) {
+/// segment when the thread has less left. Taking `limits` here, and returning
+/// its result, means no run can forget to check them (see `html_limits`).
+pub(crate) fn run_tokenizer<E: Emitter<Token = Infallible>>(
+    input: &str,
+    emitter: E,
+    limits: &HtmlLimits,
+) -> Result<(), HtmlTooLarge> {
     crate::stack::with_stack_reserve(TOKENIZER_STACK, || {
         Tokenizer::new_with_emitter(input, emitter)
             .finish()
             .expect("string input is infallible");
     });
+    limits.result()
 }

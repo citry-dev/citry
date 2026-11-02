@@ -1,4 +1,5 @@
-//! A tag with a very long run of attributes is read on any stack.
+//! A tag with a very long run of attributes is read to its end on any
+//! stack, and refused.
 //!
 //! Upstream html5gum 0.8.4 nests a few calls for each `name="value"`
 //! attribute in a row, so one tag with about 50,000 of them overflowed the
@@ -7,6 +8,10 @@
 //! patched copy in `third_party/rust/html5gum` returns to its main loop
 //! after each attribute. These tests fail with a crash if that patch is
 //! lost, for example when html5gum is upgraded.
+//!
+//! Every entry point refuses a tag with more than 1,024 attributes (see
+//! `src/html_limits.rs`), but html5gum still reads the rest of the input
+//! after the limit, so a tag of 100,000 still exercises the patch.
 //!
 //! A stack overflow cannot be caught, so each case runs in a child process:
 //! this test binary starts itself again with `--exact child` and an
@@ -74,7 +79,10 @@ fn page(shape: &str, count: usize) -> String {
 /// What one entry point did with `html`, as one word or a short phrase.
 fn outcome(case: &str, html: &str) -> String {
     match case {
-        "scan" => format!("read {}", scan_output_html(html).len()),
+        "scan" => match scan_output_html(html) {
+            Ok(tags) => format!("read {}", tags.len()),
+            Err(_) => "refused".to_owned(),
+        },
         "check" => {
             let trusted = HashSet::new();
             let options = OutputPolicyOptions {
@@ -85,7 +93,10 @@ fn outcome(case: &str, html: &str) -> String {
                 trusted_tag_starts: &trusted,
                 omit_handler_marker: None,
             };
-            format!("{} events", check_output_html(html, &options).events.len())
+            match check_output_html(html, &options) {
+                Ok(report) => format!("{} events", report.events.len()),
+                Err(_) => "refused".to_owned(),
+            }
         }
         "srcdoc" => {
             // The attribute value is one small attribute for the page's own
@@ -101,7 +112,7 @@ fn outcome(case: &str, html: &str) -> String {
                 trusted_tag_starts: &trusted,
                 omit_handler_marker: None,
             };
-            let report = check_output_html(&page, &options);
+            let report = check_output_html(&page, &options).expect("the page has one attribute");
             let embedded = report.events.iter().any(|event| {
                 matches!(event, PolicyEvent::Finding(finding)
                     if finding.rule == Rule::JsEmbeddedDocument)
@@ -110,6 +121,7 @@ fn outcome(case: &str, html: &str) -> String {
         }
         "validate" => match validate_html_fragment_boundary(html) {
             Ok(()) => "accepted".to_owned(),
+            Err(message) if message.contains("more than 1024 attributes") => "refused".to_owned(),
             Err(message) => format!("refused: {message}"),
         },
         "nodes" => {
@@ -135,7 +147,10 @@ fn outcome(case: &str, html: &str) -> String {
                 None => "rejected".to_owned(),
             }
         }
-        "count" => format!("{}", static_html_node_count(html)),
+        "count" => match static_html_node_count(html) {
+            Ok(count) => format!("{count}"),
+            Err(_) => "refused".to_owned(),
+        },
         _ => panic!("unknown case {case}"),
     }
 }
@@ -188,29 +203,26 @@ fn run(case: &str, shape: &str, count: usize, stack_kib: usize) -> String {
 }
 
 #[test]
-fn every_entry_point_reads_a_tag_with_many_attributes() {
-    // The answers are the ones a tag with three attributes gets, so each
-    // entry point read the whole tag rather than giving up on it.
-    // `static_body` also parses the block with html5ever, whose time grows
-    // with the square of the attribute count, so it gets a smaller tag that
-    // still overflowed upstream html5gum on the segment `run_tokenizer`
-    // moves to. `count` parses only with html5ever, so the control is
-    // enough for it.
+fn every_entry_point_refuses_a_tag_with_many_attributes() {
+    // A tag with three attributes gets each entry point's ordinary answer,
+    // and the long tag gets its refusal, after html5gum has read all of it.
+    // A refused embedded document counts as running code, and the two
+    // comparisons answer that the block does not match.
     for stack_kib in STACKS_KIB {
-        for (case, expected, count) in [
-            ("scan", "read 1", MANY),
-            ("check", "0 events", MANY),
-            ("validate", "accepted", MANY),
-            ("nodes", "false", MANY),
-            ("srcdoc", "inert", MANY),
-            ("static_body", "accepted", 20_000),
-            ("count", "1", 3),
+        for (case, small, large) in [
+            ("scan", "read 1", "refused"),
+            ("check", "0 events", "refused"),
+            ("validate", "accepted", "refused"),
+            ("nodes", "false", "false"),
+            ("srcdoc", "inert", "running code"),
+            ("static_body", "accepted", "rejected"),
+            ("count", "1", "refused"),
         ] {
-            assert_eq!(run(case, "double", 3, stack_kib), expected, "{case}, 3");
+            assert_eq!(run(case, "double", 3, stack_kib), small, "{case}, 3");
             assert_eq!(
-                run(case, "double", count, stack_kib),
-                expected,
-                "{case} with {count} on {stack_kib} KiB"
+                run(case, "double", MANY, stack_kib),
+                large,
+                "{case} with {MANY} on {stack_kib} KiB"
             );
         }
     }
@@ -218,6 +230,8 @@ fn every_entry_point_reads_a_tag_with_many_attributes() {
 
 #[test]
 fn a_stray_quote_before_the_tag_changes_nothing() {
+    // The count comes from the tokenizer itself, so a `="` before the tag
+    // cannot hide the tag's attributes from it.
     for stack_kib in STACKS_KIB {
         for shape in [
             "stray_text",
@@ -225,21 +239,20 @@ fn a_stray_quote_before_the_tag_changes_nothing() {
             "stray_single_quoted",
             "stray_script",
         ] {
-            let scan = run("scan", shape, MANY, stack_kib);
-            let tags = if shape == "stray_script" { 2 } else { 1 };
-            assert_eq!(scan, format!("read {tags}"), "{shape} on {stack_kib} KiB");
-            let validate = run("validate", shape, MANY, stack_kib);
-            assert_eq!(validate, "accepted", "{shape} on {stack_kib} KiB");
+            for case in ["scan", "validate"] {
+                let result = run(case, shape, MANY, stack_kib);
+                assert_eq!(result, "refused", "{case} {shape} on {stack_kib} KiB");
+            }
         }
     }
 }
 
 #[test]
-fn attributes_written_other_ways_are_read_too() {
+fn attributes_written_other_ways_are_refused_too() {
     for shape in ["single", "unquoted", "bare"] {
         for case in ["scan", "validate"] {
             let result = run(case, shape, MANY, 128);
-            assert!(!result.starts_with("refused"), "{case} {shape}: {result}");
+            assert_eq!(result, "refused", "{case} {shape}");
         }
     }
 }

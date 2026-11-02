@@ -43,7 +43,11 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   callback instead of keeping them.
 - `src/tokenizer.rs` - the one function every html5gum run goes through
   (`run_tokenizer`). It keeps the run on enough stack, whatever thread
-  calls it.
+  calls it, and returns whether the run stayed within the size limits.
+- `src/html_limits.rs` - the size limits every parse applies before
+  html5ever builds a tree (1,024 attributes on one tag, 16 start tags of
+  each of `html`, `head` and `body`), because html5ever's cost grows with
+  the square of both.
 - `src/static_html.rs` - checks that a finished piece of HTML (a `<c-raw>`
   block, or the HTML the server writes inside a shell) keeps its own
   `<template>` parse where the page puts it, and counts the top-level nodes
@@ -51,7 +55,10 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
 - `tests/marker.rs`, `tests/transformer.rs` - the tests.
 - `tests/attribute_runs.rs` - runs each entry point on a tag with 100,000
   attributes on a 128 KiB and an 8 MiB stack, in a child process, because a stack overflow
-  cannot be caught.
+  cannot be caught. Each entry point refuses the tag, but html5gum still
+  reads all of it.
+- `tests/html_limits.rs` - each entry point at and just over each size
+  limit, and the inputs that were slow before the limits.
 
 ## Gotchas
 
@@ -65,7 +72,10 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   When you upgrade html5gum, carry the change over unless upstream has
   fixed it; `tests/attribute_runs.rs` fails if it is lost.
 - **Start html5gum only through `run_tokenizer`** (test helpers aside), so
-  every run gets the same stack reserve.
+  every run gets the same stack reserve and the same size limits. Build a
+  fragment's tree with `output_scanner::parse_fragment_in`, not
+  html5ever's own `parse_fragment`, so the limits count in the context the
+  tree is built in.
 
 ## Who depends on it
 

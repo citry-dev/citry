@@ -49,6 +49,7 @@ PATCHED_CRATES: Final = {
 LICENSE_FILES: Final = {
     "LICENSE": PACKAGE_ROOT / "LICENSE",
     "LICENSE-vize": PACKAGE_ROOT / "LICENSE-vize",
+    "LICENSE-html5gum": PACKAGE_ROOT / "LICENSE-html5gum",
 }
 MAX_WHEEL_BYTES: Final = 10 * 1024 * 1024
 LINUX_PLATFORMS: Final = {
@@ -402,6 +403,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         "README.md",
         "LICENSE",
         "LICENSE-vize",
+        "LICENSE-html5gum",
         "pyproject.toml",
         "Cargo.toml",
         "Cargo.lock",
@@ -426,6 +428,8 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         raise DistributionVerificationError(f"{path.name} does not contain the checked MIT license")
     if relative["LICENSE-vize"] != LICENSE_FILES["LICENSE-vize"].read_bytes():
         raise DistributionVerificationError(f"{path.name} does not contain the checked Vize license")
+    if relative["LICENSE-html5gum"] != LICENSE_FILES["LICENSE-html5gum"].read_bytes():
+        raise DistributionVerificationError(f"{path.name} does not contain the checked html5gum license")
     actual_patched_source = {
         name: hex_sha256(payload)
         for name, payload in relative.items()

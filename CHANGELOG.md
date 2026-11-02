@@ -370,6 +370,11 @@
 - A tag with thousands of attributes no longer ends the process when the
   output checks (`security_csp`, `security_javascript`), the checks on
   `Markup` and `<c-raw>` HTML, or the hydration checks read the page.
+  These checks now refuse HTML with more than 1,024 attributes on one tag,
+  or more than 16 start tags of any one of `<html>`, `<head>` and
+  `<body>`, which could take seconds to read: the output checks report the
+  page as unreadable, `Markup` and `<c-raw>` HTML in an interactive
+  component raise `ValueError`, and hydration leaves the server HTML out.
 - The i18n number formatters and `tr()` raise `ValueError` for a
   `Decimal` with more than 32,768 digits before or after the decimal point,
   before writing any digits.

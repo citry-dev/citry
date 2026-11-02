@@ -31,7 +31,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 license = "MIT"
-license-files = ["LICENSE", "LICENSE-vize"]
+license-files = ["LICENSE", "LICENSE-vize", "LICENSE-html5gum"]
 dependencies = []
 
 [dependency-groups]

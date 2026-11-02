@@ -17,8 +17,13 @@
   `validate_html_fragment_boundary()`,
   `browser_fragment_matches_nodes()`, and
   `browser_fragment_matches_elements()` no longer end the Python process
-  for HTML with a tag that has thousands of attributes. They read such a
-  tag like any other.
+  for HTML with a tag that has thousands of attributes. These functions,
+  `static_html_node_count()`, and the output checks now refuse HTML with
+  more than 1,024 attributes on one tag or more than 16 start tags of any
+  one of `<html>`, `<head>` and `<body>`, which could take seconds to read:
+  `scan_output_html()`, `validate_html_fragment_boundary()` and
+  `static_html_node_count()` raise `ValueError`, and the two
+  `browser_fragment_matches_*()` functions return `False`.
 - `parse_template()` no longer rejects Vue-only syntax inside `v-pre`, such
   as `v-once`, `<transition>`, or `@click.bogus`, because Vue reads it as
   plain HTML there. `<c-*>` tags inside `v-pre` keep their checks.

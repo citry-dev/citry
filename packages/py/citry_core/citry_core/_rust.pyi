@@ -239,7 +239,17 @@ class html_transform:
         `text` event carries attributes.
         """
     @staticmethod
-    def validate_html_fragment_boundary(html: str) -> None: ...
+    def validate_html_fragment_boundary(html: str) -> None:
+        """
+        Check that `html` is one strict, self-contained HTML fragment.
+
+        Raises `ValueError` when it is not. The message starts with
+        `opaque HTML has the HTML parse error ` and the standard's name for
+        the error, with `opaque HTML has a tag with more than` when a tag
+        holds more than 1,024 attributes, or with `opaque HTML has more than`
+        when it has more than 16 start tags of one of `html`, `head` and
+        `body`.
+        """
     @staticmethod
     def static_html_node_count(html: str) -> int:
         """
@@ -249,9 +259,20 @@ class html_transform:
         The browser parses the block inside a `<template>` element, so table
         parts stay where they are written. Vue needs this count to adopt the
         block's nodes when the server already wrote them into the page.
+
+        Raises `ValueError` when a tag holds more than 1,024 attributes, or
+        the HTML has more than 16 start tags of one of `html`, `head` and
+        `body`.
         """
     @staticmethod
-    def scan_output_html(html: str) -> list[dict[str, object]]: ...
+    def scan_output_html(html: str) -> list[dict[str, object]]:
+        """
+        Return the facts of each start tag in `html`.
+
+        Raises `ValueError` when a tag holds more than 1,024 attributes, or
+        the HTML has more than 16 start tags of one of `html`, `head` and
+        `body`.
+        """
     @staticmethod
     def _check_output_html(
         html: str,
@@ -279,7 +300,9 @@ class html_transform:
 
         Raises `ValueError` for an unknown `javascript` mode, and when the
         check fails inside Rust (the message starts with
-        `citry output check failed:`).
+        `citry output check failed:`). A page with a tag that holds more
+        than 1,024 attributes, or with more than 16 start tags of one of
+        `html`, `head` and `body`, fails this way too, without being checked.
         """
     @staticmethod
     def _script_type_is_executable(value: str) -> bool:
