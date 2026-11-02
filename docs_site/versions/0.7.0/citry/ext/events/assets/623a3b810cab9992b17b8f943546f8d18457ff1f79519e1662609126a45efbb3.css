@@ -1,0 +1,18 @@
+
+:where(.celestial-environment) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+  max-width: 48rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#bfdbfe, #1e40af);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.celestial-environment__narrow) {
+  max-width: 17rem;
+}

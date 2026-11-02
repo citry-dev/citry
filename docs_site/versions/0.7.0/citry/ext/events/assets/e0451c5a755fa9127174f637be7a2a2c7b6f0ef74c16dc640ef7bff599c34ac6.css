@@ -1,0 +1,14 @@
+
+:where(.split-button-menu-composition) {
+  display: grid;
+  gap: 0.875rem;
+  justify-items: start;
+  min-block-size: 23rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.split-button-menu-composition h2, .split-button-menu-composition p) { margin: 0; }
+:where(.split-button-menu-composition output) {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,136 @@
+schema_version: 1
+family: sidebar
+
+components:
+  - CSidebar
+
+inputs:
+  - id: csidebar-server-inputs
+    component: CSidebar
+    channel: server
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the landmark ID and bases the controlled panel ID.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Names the complementary or navigation landmark.}
+      - {id: tag, name: tag, type: {display: CSidebarTag, interfaces: [CSidebarTag]}, default: {kind: literal, value: aside}, effect: Selects complementary aside or navigation nav semantics.}
+      - {id: collapsed, name: collapsed, type: bool, default: {kind: literal, value: false}, effect: Sets initial expanded or collapsed state.}
+      - {id: collapsible, name: collapsible, type: {display: CSidebarCollapsible, interfaces: [CSidebarCollapsible]}, default: {kind: literal, value: rail}, effect: Selects rail offcanvas or permanent behavior.}
+      - {id: side, name: side, type: {display: CSidebarSide, interfaces: [CSidebarSide]}, default: {kind: literal, value: inline-start}, effect: Selects the logical page edge and border/toggle placement.}
+      - {id: variant, name: variant, type: {display: CSidebarVariant, interfaces: [CSidebarVariant]}, default: {kind: literal, value: plain}, effect: Selects flush or floating surface treatment.}
+      - {id: size, name: size, type: {display: CSidebarSize, interfaces: [CSidebarSize]}, default: {kind: literal, value: md}, effect: Selects the default expanded width.}
+      - {id: sticky, name: sticky, type: bool, default: {kind: literal, value: false}, effect: Sticks the Sidebar at the public block offset within its scroll container.}
+      - {id: expand-label, name: expand_label, type: str, default: {kind: literal, value: Expand sidebar}, effect: Overrides the localized expanded-state action name.}
+      - {id: collapse-label, name: collapse_label, type: str, default: {kind: literal, value: Collapse sidebar}, effect: Overrides the localized collapsed-state action name.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the native landmark.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the native landmark.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed landmark attributes without replacing owned semantics state or identity.}
+  - id: csidebar-client-inputs
+    component: CSidebar
+    channel: client
+    entries:
+      - {id: collapsed, name: collapsed, type: 'boolean | null', omitted: Releases control to the committed value., effect: Controls expanded or collapsed state.}
+      - {id: collapsible, name: collapsible, type: {display: CSidebarCollapsible, interfaces: [CSidebarCollapsible]}, omitted: Uses the server value., effect: Controls rail offcanvas or permanent behavior.}
+      - {id: side, name: side, type: {display: CSidebarSide, interfaces: [CSidebarSide]}, omitted: Uses the server value., effect: Controls logical placement.}
+      - {id: variant, name: variant, type: {display: CSidebarVariant, interfaces: [CSidebarVariant]}, omitted: Uses the server value., effect: Controls surface treatment.}
+      - {id: size, name: size, type: {display: CSidebarSize, interfaces: [CSidebarSize]}, omitted: Uses the server value., effect: Controls width profile.}
+      - {id: sticky, name: sticky, type: boolean, omitted: Uses the server value., effect: Controls sticky positioning.}
+      - {id: on-collapsed-change, name: onCollapsedChange, type: function, omitted: No semantic collapse callback., effect: Receives native toggle requests.}
+
+slots:
+  - id: csidebar-slots
+    component: CSidebar
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CSidebarDefaultSlotData]}, fallback: None.}
+      - {id: header, name: header, required: false, data: {display: '{}', interfaces: [CSidebarHeaderSlotData]}, fallback: Omitted.}
+      - {id: footer, name: footer, required: false, data: {display: '{}', interfaces: [CSidebarFooterSlotData]}, fallback: Omitted.}
+      - {id: toggle, name: toggle, required: false, data: {display: '{collapsed}', interfaces: [CSidebarToggleSlotData]}, fallback: Decorative neutral panel glyph.}
+
+events:
+  - id: csidebar-events
+    component: CSidebar
+    entries:
+      - {id: on-collapsed-change, name: onCollapsedChange, signature: {display: '(collapsed: boolean, detail: CSidebarCollapsedChangeDetail) => void', interfaces: [CSidebarCollapsedChangeDetail]}, trigger: Native toggle activation requests a different state., detail: {display: '{collapsed, previousCollapsed, controlled, source, sourceEvent}', interfaces: [CSidebarCollapsedChangeDetail]}, behavior: Uncontrolled state commits before notification; controlled state is request-only.}
+
+methods: []
+
+css:
+  - id: csidebar-css-variables
+    component: CSidebar
+    entries:
+      - {id: width, name: --cui-sidebar-width, type: length, purpose: Expanded inline size overriding the selected profile., default: 'sm 14rem; md 16rem; lg 20rem'}
+      - {id: rail-width, name: --cui-sidebar-rail-width, type: length, purpose: Collapsed rail inline size., default: 4rem}
+      - {id: background, name: --cui-sidebar-background, type: color, purpose: Landmark and toggle surface., default: Adaptive neutral}
+      - {id: foreground, name: --cui-sidebar-foreground, type: color, purpose: Sidebar text and icon color., default: CanvasText}
+      - {id: border-color, name: --cui-sidebar-border-color, type: color, purpose: Logical edge and floating border., default: Adaptive neutral}
+      - {id: shadow, name: --cui-sidebar-shadow, type: shadow, purpose: Floating surface elevation., default: Soft elevation}
+      - {id: radius, name: --cui-sidebar-radius, type: length, purpose: Floating surface and toggle corner input., default: 0.85rem}
+      - {id: padding, name: --cui-sidebar-padding, type: length, purpose: Internal panel spacing., default: 0.75rem}
+      - {id: gap, name: --cui-sidebar-gap, type: length, purpose: Header content footer and offcanvas-trigger spacing., default: 0.75rem}
+      - {id: toggle-size, name: --cui-sidebar-toggle-size, type: length, purpose: Native toggle target size., default: 2.75rem}
+      - {id: focus-color, name: --cui-sidebar-focus-color, type: color, purpose: Toggle focus outline., default: Highlight}
+      - {id: sticky-offset, name: --cui-sidebar-sticky-offset, type: length, purpose: Block offset reserved above a sticky Sidebar., default: 0px}
+
+attributes:
+  - id: csidebar-attributes
+    component: CSidebar
+    entries:
+      - {id: aria-label, name: aria-label, element: Root landmark, type: string, meaning: Names the complementary or navigation region.}
+      - {id: data-collapsed, name: data-collapsed, element: Root landmark, type: present | absent, meaning: Marks effective collapsed state.}
+      - {id: data-collapsible, name: data-collapsible, element: Root landmark, type: {display: CSidebarCollapsible, interfaces: [CSidebarCollapsible]}, meaning: Mirrors collapse behavior.}
+      - {id: data-side, name: data-side, element: Root landmark, type: {display: CSidebarSide, interfaces: [CSidebarSide]}, meaning: Mirrors logical placement.}
+      - {id: data-variant, name: data-variant, element: Root landmark, type: {display: CSidebarVariant, interfaces: [CSidebarVariant]}, meaning: Mirrors surface treatment.}
+      - {id: data-size, name: data-size, element: Root landmark, type: {display: CSidebarSize, interfaces: [CSidebarSize]}, meaning: Mirrors width profile.}
+      - {id: data-sticky, name: data-sticky, element: Root landmark, type: present | absent, meaning: Marks sticky positioning.}
+      - {id: data-has-header, name: data-has-header, element: Root landmark, type: present | absent, meaning: Marks header anatomy so the header and toggle share the first Row.}
+      - {id: aria-controls, name: aria-controls, element: Toggle Button, type: IDREF, meaning: Refers to the owned panel.}
+      - {id: aria-expanded, name: aria-expanded, element: Toggle Button, type: boolean-string, meaning: Reflects expanded state.}
+      - {id: data-citry-sidebar-expanded-only, name: data-citry-sidebar-expanded-only, element: Authored descendant, type: present | absent, meaning: Hides authored content in rail mode.}
+      - {id: data-citry-sidebar-rail-only, name: data-citry-sidebar-rail-only, element: Authored descendant, type: present | absent, meaning: Shows authored accessible replacement only in rail mode.}
+
+selectors:
+  - id: csidebar-selectors
+    component: CSidebar
+    entries:
+      - {id: sidebar, selector: '[data-citry-ui-part="sidebar"]', element: Native aside or nav root, purpose: State reflections and customization destination.}
+      - {id: toggle, selector: '[data-citry-ui-part="toggle"]', element: Native Button, purpose: Collapse control.}
+      - {id: toggle-icon, selector: '[data-citry-ui-part="toggle-icon"]', element: Decorative span, purpose: Custom or fallback visual.}
+      - {id: toggle-label, selector: '[data-citry-ui-part="toggle-label"]', element: Visually hidden span, purpose: Localized state-dependent accessible name.}
+      - {id: panel, selector: '[data-citry-ui-part="panel"]', element: Owned div, purpose: Full-width clipped transition and fixed/scroll region owner.}
+      - {id: header, selector: '[data-citry-ui-part="header"]', element: Optional header, purpose: Fixed branding and controls.}
+      - {id: content, selector: '[data-citry-ui-part="content"]', element: Scrollable div, purpose: Primary authored Sidebar content.}
+      - {id: footer, selector: '[data-citry-ui-part="footer"]', element: Optional footer, purpose: Fixed account status or actions.}
+
+interfaces:
+  - id: csidebar-aliases
+    kind: aliases
+    entries:
+      - {id: tag, name: CSidebarTag, definition: 'Literal["aside", "nav"]'}
+      - {id: collapsible, name: CSidebarCollapsible, definition: 'Literal["rail", "offcanvas", "none"]'}
+      - {id: side, name: CSidebarSide, definition: 'Literal["inline-start", "inline-end"]'}
+      - {id: variant, name: CSidebarVariant, definition: 'Literal["plain", "floating"]'}
+      - {id: size, name: CSidebarSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: csidebar-default-slot-data, kind: record, name: CSidebarDefaultSlotData, entries: []}
+  - {id: csidebar-header-slot-data, kind: record, name: CSidebarHeaderSlotData, entries: []}
+  - {id: csidebar-footer-slot-data, kind: record, name: CSidebarFooterSlotData, entries: []}
+  - id: csidebar-toggle-slot-data
+    kind: record
+    name: CSidebarToggleSlotData
+    entries:
+      - {id: collapsed, name: collapsed, type: bool, meaning: Server-rendered initial collapsed state.}
+  - id: csidebar-collapsed-change-detail
+    kind: record
+    name: CSidebarCollapsedChangeDetail
+    entries:
+      - {id: collapsed, name: collapsed, type: bool, meaning: Requested collapsed state.}
+      - {id: previous-collapsed, name: previousCollapsed, type: bool, meaning: Effective state before the request.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client state currently controls collapse.}
+      - {id: source, name: source, type: activation, meaning: Native toggle activation source.}
+      - {id: source-event, name: sourceEvent, type: Event, meaning: Native click event.}
+
+translations:
+  - id: csidebar-translations
+    component: CSidebar
+    entries:
+      - {id: expand, key: citry-ui-sidebar-expand, purpose: Names the action that expands a collapsed Sidebar., variables: None., override: '`expand_label`', updates: Stable `$c-tr` text binding follows client locale changes.}
+      - {id: collapse, key: citry-ui-sidebar-collapse, purpose: Names the action that collapses an expanded Sidebar., variables: None., override: '`collapse_label`', updates: Stable `$c-tr` text binding follows client locale changes.}

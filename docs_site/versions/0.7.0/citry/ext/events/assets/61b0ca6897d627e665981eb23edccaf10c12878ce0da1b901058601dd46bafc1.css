@@ -1,0 +1,77 @@
+
+:where(.filter-sequence) {
+  max-width: 48rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#c7c9e8, #45486f);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.filter-sequence header) {
+  margin-block-end: 1rem;
+}
+
+:where(.filter-sequence h2, .filter-sequence p) {
+  margin-block: 0;
+}
+
+:where(.filter-sequence header p) {
+  color: light-dark(#5b4bc4, #a9a2ff);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.filter-sequence__rows) {
+  display: grid;
+  gap: 0.625rem;
+}
+
+:where(.filter-sequence__row) {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.45fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+:where(.filter-sequence__row input) {
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid light-dark(#9498bd, #686c96);
+  border-radius: 0.45rem;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+}
+
+:where(.filter-sequence__row button) {
+  border: 0;
+  background: transparent;
+  color: light-dark(#9b2c24, #ff9d94);
+  cursor: pointer;
+}
+
+:where(.filter-sequence__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+:where(.filter-sequence output) {
+  display: block;
+  margin-block-start: 1rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 34rem) {
+  :where(.filter-sequence__row) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  :where(.filter-sequence__row label) {
+    grid-column: 1 / -1;
+  }
+}

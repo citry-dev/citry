@@ -1,0 +1,27 @@
+
+:where(.icon-composition) {
+  display: grid;
+  gap: 1rem;
+  max-width: 62rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.icon-composition__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+:where(.icon-composition__warning) {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  width: fit-content;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-inline-start: 0.25rem solid light-dark(#d97706, #fbbf24);
+  color: light-dark(#78350f, #fde68a);
+  background: light-dark(#fffbeb, #451a03);
+}

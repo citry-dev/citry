@@ -1,0 +1,1 @@
+:where(.date-range-locales){display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem}:where(.date-range-locales article){display:grid;align-content:start;gap:.5rem;padding:.75rem}:where(.date-range-locales h3){margin:0}

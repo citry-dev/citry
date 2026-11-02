@@ -1,0 +1,26 @@
+
+:where(.checkbox-compose) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+  max-width: 46rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.checkbox-compose > div) {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid light-dark(#c8d8c3, #3d5540);
+  border-radius: 0.875rem;
+  background: Canvas;
+}
+
+:where(.checkbox-compose__eyebrow) {
+  margin: 0;
+  color: light-dark(#38714a, #86c999);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}

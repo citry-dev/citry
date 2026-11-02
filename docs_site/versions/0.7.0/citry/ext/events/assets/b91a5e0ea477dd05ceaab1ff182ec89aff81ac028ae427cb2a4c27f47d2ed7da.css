@@ -1,0 +1,13 @@
+
+:where(.controlled-accordion) {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 44rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.controlled-accordion > p) {
+  margin: 0;
+  color: light-dark(#356548, #8bcda0);
+}

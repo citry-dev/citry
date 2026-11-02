@@ -1,0 +1,22 @@
+
+:where(.forest-glance) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  max-width: 54rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.forest-glance > *) {
+  padding: 1rem;
+  border: 1px solid light-dark(#a9c6ae, #43634a);
+  border-radius: 0.875rem;
+  background: light-dark(#f4faf4, #132319);
+}
+
+:where(.forest-glance__night) {
+  --cui-textarea-background: #17251c;
+  --cui-textarea-border-color: #5f8067;
+  --cui-textarea-focus-color: #91d39d;
+}

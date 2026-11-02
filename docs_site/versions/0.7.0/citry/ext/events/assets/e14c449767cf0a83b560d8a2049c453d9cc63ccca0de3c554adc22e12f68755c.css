@@ -1,0 +1,9 @@
+
+:where(.skeleton-glance) {
+  display: grid;
+  max-inline-size: 24rem;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid light-dark(#b8cbb9, #425947);
+  border-radius: 0.9rem;
+}

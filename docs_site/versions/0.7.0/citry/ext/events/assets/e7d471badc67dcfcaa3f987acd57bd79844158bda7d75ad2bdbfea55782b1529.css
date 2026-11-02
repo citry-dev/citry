@@ -1,0 +1,12 @@
+
+:where(.disclosure-overlay-demo) { display: grid; gap: 1rem; justify-items: start; }
+:where(.disclosure-overlay-demo > [data-citry-ui-part="disclosure"]) { inline-size: min(100%, 40rem); }
+:where(.disclosure-overlay-demo__dialog-trigger) {
+  min-block-size: 2.25rem;
+  padding-inline: 0.875rem;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 0.5rem;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+}

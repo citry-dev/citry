@@ -1,0 +1,26 @@
+
+:where(.tags-input-basic) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.tags-input-basic form, .tags-input-basic article) {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  border-radius: 0.75rem;
+}
+
+:where(.tags-input-basic h3) {
+  margin: 0;
+}
+
+:where(.tags-input-basic output) {
+  grid-column: 1 / -1;
+}

@@ -1,0 +1,41 @@
+
+:where(.observatory-tables) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  max-width: 70rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.observatory-tables article) {
+  min-width: 0;
+  padding: 1rem;
+  border-radius: 0.875rem;
+}
+
+:where(.observatory-tables h2) {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+:where(.observatory-tables__night) {
+  color-scheme: dark;
+  color: #e0f2fe;
+  background: #0c1b33;
+  --cui-table-background: #102a43;
+  --cui-table-foreground: #e0f2fe;
+  --cui-table-border-color: #486581;
+  --cui-table-header-background: #243b53;
+  --cui-table-striped-background: #173a5e;
+}
+
+:where(.observatory-tables__day) {
+  color-scheme: light;
+  color: #422006;
+  background: #fffbeb;
+  --cui-table-border-color: #f59e0b;
+}
+
+:where(.observatory-tables [data-citry-ui-part="footer-cell"]) {
+  letter-spacing: 0.02em;
+}

@@ -1,0 +1,14 @@
+
+:where(.checkbox-control-demo) {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.checkbox-control-demo__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}

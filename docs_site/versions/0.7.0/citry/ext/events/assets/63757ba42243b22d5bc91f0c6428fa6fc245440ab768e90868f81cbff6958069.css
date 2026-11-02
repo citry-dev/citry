@@ -1,0 +1,21 @@
+
+:where(.flow-alignments) {
+  max-inline-size: 44rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.flow-alignments__group) {
+  min-block-size: 3.5rem;
+  padding: 0.65rem;
+  border-radius: 0.55rem;
+  background: light-dark(#f2e4cf, #362c24);
+}
+
+:where(.flow-alignments__group span) {
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  background: light-dark(#b96540, #d7815b);
+  color: #ffffff;
+  font-size: 0.78rem;
+}

@@ -1,0 +1,6 @@
+
+:where(.number-input-demo-grid) {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;align-items:start
+}
+:where(.number-input-demo-grid article) { display:grid;gap:.75rem }
+:where(.number-input-demo-grid h3) { margin:0 }

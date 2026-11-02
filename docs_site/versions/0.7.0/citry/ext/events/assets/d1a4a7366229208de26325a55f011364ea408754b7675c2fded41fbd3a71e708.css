@@ -1,0 +1,9 @@
+
+:where(.badge-intents) {
+  max-inline-size: 34rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: light-dark(#f5f1e8, #25221e);
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

@@ -1,0 +1,8 @@
+
+:where(.forest-sizes) {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

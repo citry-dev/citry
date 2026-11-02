@@ -1,0 +1,25 @@
+
+:where(.sticky-tables) {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 64rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.sticky-tables article) {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid light-dark(#bae6fd, #075985);
+  border-radius: 0.875rem;
+  background: Canvas;
+}
+
+:where(.sticky-tables h2, .sticky-tables p) {
+  margin: 0;
+}
+
+:where(.sticky-tables p) {
+  margin-block: 0.25rem 0.75rem;
+  color: color-mix(in srgb, currentColor 68%, transparent);
+}

@@ -1,0 +1,36 @@
+
+:where(.account-request) {
+  max-width: 42rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#c7c9e8, #45486f);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.account-request header) {
+  margin-block-end: 1rem;
+}
+
+:where(.account-request h2, .account-request p) {
+  margin-block: 0;
+}
+
+:where(.account-request header p) {
+  color: light-dark(#5b4bc4, #a9a2ff);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.account-request [data-citry-ui-part="button"]) {
+  justify-self: start;
+}
+
+:where(.account-request__hint) {
+  margin-block-start: 1rem;
+  color: color-mix(in srgb, currentColor 68%, transparent);
+  font-size: 0.875rem;
+}

@@ -1,0 +1,5 @@
+
+:where(.orbit-group) {
+  --cui-button-group-radius: 999px;
+  --cui-button-group-border-width: 2px;
+}

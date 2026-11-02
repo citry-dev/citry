@@ -1,0 +1,15 @@
+
+:where(.flow-semantics) {
+  max-inline-size: 36rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.flow-semantics a) {
+  color: light-dark(#8a3f24, #f0a47c);
+}
+
+:where(.flow-semantics__list) {
+  margin: 0;
+  padding-inline-start: 1.4rem;
+}

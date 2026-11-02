@@ -1,0 +1,17 @@
+
+:where(.expansion-modes) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.expansion-modes article) {
+  min-width: 0;
+}
+
+:where(.expansion-modes h2) {
+  margin-block: 0 0.625rem;
+  font-size: 1rem;
+}

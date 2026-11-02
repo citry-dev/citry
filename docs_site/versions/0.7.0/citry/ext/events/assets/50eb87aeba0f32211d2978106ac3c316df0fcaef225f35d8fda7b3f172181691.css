@@ -1,0 +1,50 @@
+
+:where(.context-menu-touch) {
+  display: grid;
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.context-menu-touch__policy) {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.875rem;
+  border-inline-start: 0.25rem solid Highlight;
+  background: color-mix(in srgb, Highlight 8%, Canvas);
+}
+
+:where(.context-menu-touch__card) {
+  display: grid;
+  gap: 0.25rem;
+  inline-size: min(100%, 26rem);
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+  border-radius: 0.75rem;
+  background: Canvas;
+  color: CanvasText;
+  text-align: start;
+}
+
+:where(.context-menu-touch__scroller) {
+  max-block-size: 8rem;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, CanvasText 16%, transparent);
+}
+
+:where(.context-menu-touch__spacer) {
+  min-block-size: 12rem;
+  padding: 1rem;
+}
+
+:where(.context-menu-touch__controls) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+:where(.context-menu-touch p,
+  .context-menu-touch ol) {
+  margin: 0;
+}

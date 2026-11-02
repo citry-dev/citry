@@ -1,0 +1,8 @@
+
+:where(.radio-form) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

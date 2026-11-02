@@ -1,0 +1,6 @@
+
+:where(.archive-group-demo) {
+  min-block-size: 18rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

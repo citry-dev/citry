@@ -1,0 +1,45 @@
+
+:where(.scroll-area-direction) {
+  display: grid;
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.scroll-area-direction__controls) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+:where(.scroll-area-direction__grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+}
+
+:where(.scroll-area-direction article) {
+  display: grid;
+  gap: 0.5rem;
+  min-inline-size: 0;
+}
+
+:where(.scroll-area-direction h3) {
+  margin: 0;
+}
+
+:where(.scroll-area-direction__rail) {
+  display: flex;
+  inline-size: max-content;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+:where(.scroll-area-direction__rail span) {
+  min-inline-size: 7rem;
+  padding: 0.625rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, Highlight 12%, Canvas);
+  text-align: center;
+}

@@ -1,0 +1,4 @@
+
+:where([data-citry-ui-part="accordion-body"] > p:first-child) {
+  margin-block-start: 0;
+}

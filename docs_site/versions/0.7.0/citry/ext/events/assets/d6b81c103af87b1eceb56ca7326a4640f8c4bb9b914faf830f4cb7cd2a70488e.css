@@ -1,0 +1,25 @@
+
+@layer citry-ui.theme {
+  :where(.cui-context-menu-host) {
+    display: contents;
+  }
+
+  :where([data-citry-context-menu-point]) {
+    position: fixed;
+    inset: auto;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  @media print {
+    :where([data-citry-context-menu-point]) {
+      display: none !important;
+    }
+  }
+}

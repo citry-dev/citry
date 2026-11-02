@@ -1,0 +1,21 @@
+
+:where(.radio-glance) {
+  display: grid;
+  gap: 0.85rem;
+  max-inline-size: 42rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#a6b99b, #51664a);
+  border-radius: 0.9rem;
+  background: light-dark(#f4f8ef, #182219);
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.radio-glance h2, .radio-glance p) {
+  margin: 0;
+}
+
+:where(.radio-glance > p) {
+  color: light-dark(#53634c, #b8c9b0);
+  font-size: 0.82rem;
+}

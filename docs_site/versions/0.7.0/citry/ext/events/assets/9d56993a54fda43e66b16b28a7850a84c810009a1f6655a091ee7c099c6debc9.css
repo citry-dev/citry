@@ -1,0 +1,9 @@
+
+:where(.polar-drawer-theme) { color-scheme:light dark; padding:1.5rem; }
+:where(.polar-drawer) {
+  --cui-drawer-background: light-dark(#eef8fb, #102a34);
+  --cui-drawer-foreground: light-dark(#17343e, #e6f7fb);
+  --cui-drawer-border-color: light-dark(#76b7c7, #5ea5b6);
+  --cui-drawer-radius: 1.25rem;
+}
+:where(.polar-drawer [data-citry-ui-part="title"]) { letter-spacing:.04em; }

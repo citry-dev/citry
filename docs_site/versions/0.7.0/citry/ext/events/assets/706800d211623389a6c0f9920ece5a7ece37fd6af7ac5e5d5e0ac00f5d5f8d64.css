@@ -1,0 +1,20 @@
+
+:where(.tags-input-forms) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.tags-input-forms form, .tags-input-forms__transport) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+:where(.tags-input-forms h3) {
+  flex-basis: 100%;
+  margin: 0;
+}

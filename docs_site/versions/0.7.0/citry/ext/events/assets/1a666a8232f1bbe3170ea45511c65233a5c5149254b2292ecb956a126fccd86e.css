@@ -1,0 +1,14 @@
+
+:where(.command-palette-shortcut) {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.command-palette-shortcut h2, .command-palette-shortcut p) { margin: 0; }
+:where(.command-palette-shortcut [contenteditable]) {
+  min-block-size: 2.75rem;
+  padding: 0.625rem;
+  border: 1px solid currentColor;
+}

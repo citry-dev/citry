@@ -1,0 +1,10 @@
+
+:where(.moon-table) {
+  max-width: 48rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.moon-table [data-column-key="diameter"]) {
+  font-variant-numeric: tabular-nums;
+}

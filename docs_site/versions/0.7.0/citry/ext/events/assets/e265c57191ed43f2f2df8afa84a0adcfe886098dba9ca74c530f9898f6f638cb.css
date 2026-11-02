@@ -1,0 +1,72 @@
+
+:where(.card-glance) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+  max-width: 68rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.card-glance [data-citry-ui-part="card"]) {
+  align-self: start;
+}
+
+:where(.card-glance h2, .card-glance p) {
+  margin: 0;
+}
+
+:where(.card-glance h2) {
+  font-size: 1.05rem;
+}
+
+:where(.card-glance__eyebrow) {
+  margin-block-end: 0.25rem;
+  color: light-dark(#72531b, #e4bd70);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.card-glance__scene) {
+  position: relative;
+  block-size: 8.5rem;
+  overflow: hidden;
+}
+
+:where(.card-glance__scene::before) {
+  position: absolute;
+  inset: 0;
+  content: "";
+}
+
+:where(.card-glance__scene--sunroom::before) {
+  background:
+    linear-gradient(90deg, transparent 66%, rgb(255 255 255 / 46%) 66% 70%, transparent 70%),
+    linear-gradient(160deg, #e9cfa0, #8aaa79);
+}
+
+:where(.card-glance__scene--studio::before) {
+  background:
+    radial-gradient(circle at 62% 38%, #fff1c7 0 13%, transparent 14%),
+    linear-gradient(145deg, #8ba4bd, #3f5068);
+}
+
+:where(.card-glance__scene span) {
+  position: absolute;
+  inset-inline: 18%;
+  inset-block-end: 16%;
+  block-size: 30%;
+  border-radius: 999px 999px 0.35rem 0.35rem;
+  background: rgb(255 255 255 / 62%);
+}
+
+:where(.card-glance__sr-only) {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

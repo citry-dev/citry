@@ -1,0 +1,3 @@
+
+:where(.custom-grid [data-citry-ui-part="header-cell"]) { text-transform:uppercase;letter-spacing:.04em; }
+:where(.custom-grid [data-column-key="value"]) { font-variant-numeric:tabular-nums; }
