@@ -1,5 +1,17 @@
 # Release notes
 
+## Unreleased
+
+### Changed
+
+- State tokens in the default signed storage now use a key that Citry
+  derives from your secret for this one use, so values that other code
+  signs with the same secret (such as Django's `SECRET_KEY`) cannot be
+  used as State. Signed tokens from earlier versions stop working when
+  you upgrade: an open page asks the visitor to reload on its next event
+  call. During a rolling deploy, old and new processes reject each
+  other's signed tokens until every process runs the new version.
+
 ## v0.7.0
 
 Citry 0.7.0 catches more mistakes. A component input of the wrong type
