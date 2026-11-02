@@ -477,6 +477,7 @@
 - `parse_string_style`, and the `style` values Citry merges or formats
   in Python, now take time that grows with the length of the string, and
   split it into declarations exactly as before.
+- The built-in asset routes now match long request paths in linear time.
 - A form field named `__proto__` is now sent with the Events call like
   any other field.
 - Citry's routes now answer `404` to a path with a second `/` after the

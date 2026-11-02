@@ -223,6 +223,11 @@ class URLRoute:
     methods: tuple[str, ...] = ("GET",)
     extra: dict[str, Any] = field(default_factory=dict)
     max_body_bytes: Callable[[], int] | None = None
+    # Path parameters whose values never hold a `.`; each matches up to the
+    # next `.` instead of the next `/`. Citry's own routes use this for a
+    # value that sits right before a literal `.`, so a path is matched in one
+    # pass instead of by trying every way to split it at the dots.
+    dotless_params: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if self.handler is not None and self.children:
@@ -376,13 +381,18 @@ _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 @cache
-def compile_route_pattern(path: str) -> re.Pattern[str]:
-    """Compile a route path into a regex: ``{name}`` matches any characters except ``/``."""
+def compile_route_pattern(path: str, dotless_params: frozenset[str] = frozenset()) -> re.Pattern[str]:
+    """
+    Compile a route path into a regex: ``{name}`` matches any characters except ``/``.
+
+    A parameter named in ``dotless_params`` also excludes ``.``.
+    """
     pattern = ""
     last_end = 0
     for match in _PARAM_RE.finditer(path):
         pattern += re.escape(path[last_end : match.start()])
-        pattern += f"(?P<{match.group(1)}>[^/]+)"
+        characters = "[^/.]" if match.group(1) in dotless_params else "[^/]"
+        pattern += f"(?P<{match.group(1)}>{characters}+)"
         last_end = match.end()
     pattern += re.escape(path[last_end:])
     return re.compile(f"^{pattern}$")
@@ -437,7 +447,7 @@ def match_route(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
         # fullmatch, because the pattern's `$` also matches just before a
         # final newline, so `call%0a` would otherwise reach the `call` route
         # while a host rule comparing the exact path lets it through.
-        match = compile_route_pattern(full_path).fullmatch(path)
+        match = compile_route_pattern(full_path, route.dotless_params).fullmatch(path)
         if match is not None:
             return MatchedRoute(route=route, full_path=full_path, params=match.groupdict())
     return None
