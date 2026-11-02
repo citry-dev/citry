@@ -530,3 +530,49 @@ fn script_type_classification_follows_html_javascript_values() {
         );
     }
 }
+
+/// Format one pass with a fake provider that returns each body in a fixed,
+/// already formatted shape, so a second pass sends the providers the same text.
+fn format_once_with_fixed_bodies(source: &str) -> String {
+    let plan = prepare_embedded_format(source).unwrap();
+    let results = plan
+        .requests()
+        .iter()
+        .map(|request| {
+            let text = match request.language() {
+                EmbeddedLanguage::JavaScript => "const inline = 1;\n",
+                EmbeddedLanguage::Css => ".inline {\n  color: red;\n}\n",
+            };
+            EmbeddedFormatResult::formatted(plan.id(), request.id(), text, Some("fake@1"))
+        })
+        .collect::<Vec<_>>();
+    finish_embedded_format(&plan, &results)
+        .unwrap()
+        .source()
+        .to_string()
+}
+
+#[test]
+fn a_body_after_another_body_on_its_line_is_indented_from_the_composed_text() {
+    // `</script><style>` stays on one line, so the style tag moves once the
+    // script body is put on lines of its own. The style body must follow the
+    // tag to where it lands, or the next pass indents it differently.
+    let source =
+        "<main  ><script>const  inline=1;</script><style>.inline{color:red}</style></main>";
+    let first = format_once_with_fixed_bodies(source);
+    let second = format_once_with_fixed_bodies(&first);
+
+    assert_eq!(second, first);
+    assert_eq!(
+        first,
+        concat!(
+            "<main><script>\n",
+            "        const inline = 1;\n",
+            "      </script><style>\n",
+            "                 .inline {\n",
+            "                   color: red;\n",
+            "                 }\n",
+            "               </style></main>",
+        )
+    );
+}
