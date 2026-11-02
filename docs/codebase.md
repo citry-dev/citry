@@ -2687,14 +2687,13 @@ promotion; candidate qualification does not need either publishing secret.
    `VSCE_PAT`. Do not use a repository-level secret, commit it, paste it into an
    issue/chat, or put it in a local release command.
 
-The release pins `@vscode/vsce` 4.0.0. That release supports
-`--azure-credential` and accepts the GitHub-native `publish --oidc` option for
+The release pins `@vscode/vsce` 4.1.0, whose `vsce publish --help` lists
+both `--oidc`, the GitHub-native option for
 [trusted publishing](https://github.com/microsoft/vscode-vsce#trusted-publishing),
-but `vsce publish --help` does not list `--oidc`. The release workflow uses
-the narrowly scoped `VSCE_PAT`. Global Azure DevOps PATs are
+and `--azure-credential`. The release workflow uses the narrowly scoped
+`VSCE_PAT`. Global Azure DevOps PATs are
 [retired on 1 December 2026](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#secure-automated-publishing-to-visual-studio-marketplace),
-so before then, move the workflow to `--oidc` once vsce documents the option,
-or implement Microsoft's fuller Entra workload-identity flow with
+so before then, move the workflow to `--oidc`, or implement Microsoft's fuller Entra workload-identity flow with
 `--azure-credential`.
 Neither route reuses the PyPI trusted-publisher configuration.
 
