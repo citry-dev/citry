@@ -432,12 +432,13 @@ The sections below list every change.
   `null` where the server-rendered text should stay
   ([details](https://citry.dev/i18n/browser/#keep-the-server-text)):
 
-  ```citry-html
-  <!-- Before -->
-  <span c-$c-tr:my-app-save="True if use_catalog else None">
-  <!-- After: useCatalog comes from js_data() -->
-  <span $c-tr:my-app-save="useCatalog ? {} : null">
-  ```
+    ```citry-html
+    <!-- Before -->
+    <span c-$c-tr:my-app-save="True if use_catalog else None">
+    <!-- After: useCatalog comes from js_data() -->
+    <span $c-tr:my-app-save="useCatalog ? {} : null">
+    ```
+
 - Events State kept on the server (`_storage = "server"`) now expires after
   24 hours unless `State._max_age` sets another lifetime, so a page left
   open longer asks the visitor to reload. A browser write that would make

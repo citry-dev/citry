@@ -993,7 +993,10 @@
         typeof asset.id !== "string" || typeof asset.url !== "string" ||
         asset.target !== ORDINARY_TARGET || asset.helperContract !== HELPER_CONTRACT)
       throw new Error("invalid prepared definition asset");
-    requireWebAssetUrl(asset.url);
+    // A definition whose script already ran (a document build inlines it) is never loaded from its
+    // URL, so the URL is not checked. Refusing it would stop a page opened from disk, whose
+    // root-relative URLs resolve to file:.
+    if (!ownGlobal("__citryRuntimeDefinitions")?.[asset.id]) requireWebAssetUrl(asset.url);
     sriFromHex(asset.sha256);
     const directiveSignature = normalizeDirectiveSignature(asset.directiveSignature);
     const runtimeEventSites = normalizeRuntimeEventSites(asset.runtimeEventSites);
@@ -2701,8 +2704,9 @@
   // Scripts load only over http(s) or from a blob: URL. A data: URL would let a forged manifest
   // supply the script's text inline, and the element would still get the page's nonce. Only
   // script already running in the page can create a blob: URL, and the docs playground hands
-  // the runtime blob: URLs for the code it runs. Stylesheets keep data: URLs, which cannot run
-  // script.
+  // the runtime blob: URLs for the code it runs. A page opened from disk loads its scripts from
+  // file: URLs, which name a file and cannot carry the script's text, so file: is allowed on such
+  // a page only. Stylesheets keep data: URLs, which cannot run script.
   function requireWebAssetUrl(url) {
     // A named element such as <img name="baseURI"> replaces document.baseURI, so read the
     // document's real base URL through `pageDocument`.
@@ -2712,9 +2716,13 @@
     // not resolve here, such as a path on an about:blank page, is one it cannot load at all.
     try { resolved = new URL(url, base); }
     catch { return; }
-    if (resolved.protocol !== "http:" && resolved.protocol !== "https:" && resolved.protocol !== "blob:")
-      throw new Error(`[Citry] refused the script URL ${JSON.stringify(url.slice(0, 80))}: ` +
-        "a component script must load from an http:, https:, or blob: URL.");
+    if (resolved.protocol === "http:" || resolved.protocol === "https:" || resolved.protocol === "blob:") return;
+    // The page's own address decides, not the base URL, which an injected <base href> could set:
+    // a page served over http(s) still refuses file:.
+    const pageUrl = pageDocument.URL;
+    if (resolved.protocol === "file:" && typeof pageUrl === "string" && pageUrl.startsWith("file:")) return;
+    throw new Error(`[Citry] refused the script URL ${JSON.stringify(url.slice(0, 80))}: ` +
+      "a component script must load from an http:, https:, or blob: URL.");
   }
   function normalizeAssetSource(source, elementKind) {
     if (source.kind === "owned") {
