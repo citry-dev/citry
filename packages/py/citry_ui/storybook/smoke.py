@@ -27,8 +27,6 @@ _ADAPTERS = (("Server/Webpack", 6206, "server"), ("HTML/Vite", 6207, "html"))
 _STATIC_STORY_ID = "citry-ui-button-static--preview"
 _REACTIVE_STORY_ID = "citry-ui-readiness-reactive-state--preview"
 _TABS_STORY_ID = "citry-ui-tabs-interactive--preview"
-# A header carrying either character cannot be copied to the browser as one line.
-_LINE_BREAKS = frozenset("\r\n")
 _PROXY_HEADERS = frozenset(
     (
         "connection",
@@ -159,9 +157,13 @@ def _static_proxy(port: int, directory: Path) -> Iterator[ThreadingHTTPServer]:
                 # send_header writes the text as it is. An upstream header
                 # folded over several lines carries CR and LF in its value, so
                 # drop it rather than pass those characters to the browser.
-                if not _LINE_BREAKS.isdisjoint(name + value):
+                # The stripped copies are what get sent, which makes it plain
+                # that no line break can reach the output.
+                clean_name = name.replace("\r", "").replace("\n", "")
+                clean_value = value.replace("\r", "").replace("\n", "")
+                if clean_name != name or clean_value != value:
                     continue
-                self.send_header(name, value)
+                self.send_header(clean_name, clean_value)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
