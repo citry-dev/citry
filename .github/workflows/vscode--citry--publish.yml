@@ -2,6 +2,11 @@
 #
 # The repository release controller qualifies one exact VSIX, then sends that
 # retained bundle back here for both extension registries.
+#
+# No job here restores or saves a GitHub Actions cache. Every workflow that
+# runs on main can save main's caches, so a release job that restored one
+# would let any of those workflows change the released bytes.
+# scripts/validators/release_caches.py checks this.
 name: Publish Citry for VS Code
 run-name: >-
   ${{ inputs.operation == 'promote'
@@ -102,7 +107,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          package-manager-cache: false
       - name: Install the locked Node workspace
         run: pnpm install --frozen-lockfile
       - name: Run the extension checks
@@ -126,6 +131,7 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
+          enable-cache: false
           version: "0.13.5"
       - name: Build selected workspace dependencies for candidate smoke tests
         if: contains(inputs.workspace_dependencies, 'citry-lsp')
@@ -170,7 +176,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          package-manager-cache: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
@@ -414,7 +420,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          package-manager-cache: false
       - name: Install the locked registry clients
         run: pnpm install --frozen-lockfile
       - name: Publish the qualified VSIX to Visual Studio Marketplace

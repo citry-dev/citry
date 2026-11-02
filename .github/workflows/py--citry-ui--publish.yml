@@ -2,6 +2,11 @@
 #
 # The repository release controller qualifies an exact artifact pair, then
 # sends that retained bundle back here for Trusted Publishing.
+#
+# No job here restores or saves a GitHub Actions cache. Every workflow that
+# runs on main can save main's caches, so a release job that restored one
+# would let any of those workflows change the released bytes.
+# scripts/validators/release_caches.py checks this.
 name: Publish citry-ui to PyPI
 run-name: >-
   ${{ inputs.operation == 'promote'
@@ -84,6 +89,7 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
+          enable-cache: false
           version: ${{ env.UV_VERSION }}
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -91,7 +97,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: "pnpm"
+          package-manager-cache: false
       - name: Install the locked asset tools
         run: pnpm install --frozen-lockfile --filter citry-dev-tooling
       - name: Verify checked-in production assets
@@ -162,6 +168,7 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
+          enable-cache: false
           version: ${{ env.UV_VERSION }}
       - name: Rebuild the sdist and smoke the public dependency closure
         if: inputs.workspace_dependencies == ''
@@ -194,6 +201,7 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
+          enable-cache: false
           version: ${{ env.UV_VERSION }}
       - name: Install the exact wheel and public dependency closure
         if: inputs.workspace_dependencies == ''
@@ -271,6 +279,7 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
+          enable-cache: false
           version: ${{ env.UV_VERSION }}
       - name: Verify and stage the closed release pair
         run: >-

@@ -2434,6 +2434,18 @@ The VS Code extension follows the same boundary in
 `vscode--citry--publish.yml`: candidate preparation qualifies one VSIX, and
 promotion can publish only that retained VSIX for the exact `main` commit.
 
+The publish workflows build every release from a clean runner: no job in them
+restores or saves a GitHub Actions cache. Every workflow that runs on `main`
+can save caches that later `main` runs restore, so a release job that restored
+one would let any of those runs change the bytes it publishes. The setup-uv
+action turns its cache on by default, and setup-node does so for npm projects,
+so each of those steps sets `enable-cache: false` or
+`package-manager-cache: false`, and the Rust builds run without sccache. The
+`release_caches` validator
+([`scripts/validators/release_caches.py`](../scripts/validators/release_caches.py))
+fails the gate when a publish workflow restores a cache or uses an action
+nobody has checked for caching. Ordinary CI keeps its caches.
+
 **PyPI auth is Trusted Publishing (OIDC), not a stored API token.** The release jobs carry `id-token: write` and target a GitHub environment named `pypi`; PyPI verifies the workflow's OIDC identity, so there is no secret to keep. Before a package's first publish, configure a PyPI **publisher** (a *pending publisher* if the project does not exist yet) with:
 
 - PyPI project name (`citry-core`, `citry`, `citry-lsp`, `citry-ui`, or
