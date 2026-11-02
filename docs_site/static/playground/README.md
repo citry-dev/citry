@@ -133,7 +133,7 @@ them. Run these commands from the repository root:
 
 ```bash
 cache=~/Library/Caches/citry  # any directory outside the repository
-rustup toolchain install 1.96.0 --target wasm32-unknown-emscripten
+rustup toolchain install 1.97.0 --target wasm32-unknown-emscripten
 export PYODIDE_XBUILDENV_PATH=$cache/pyodide-xbuildenv
 uvx --python 3.14.2 --from pyodide-cli==0.5.0 \
   --with pyodide-build==0.37.0 \

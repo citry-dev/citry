@@ -64,7 +64,7 @@ permissions:
 env:
   # Lighthouse only needs the workspace MSRV. Keep the compiler stable so its
   # citry-core build can reuse the common Ubuntu docs cache.
-  RUSTUP_TOOLCHAIN: "1.96.0"
+  RUSTUP_TOOLCHAIN: "1.97.0"
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"
 

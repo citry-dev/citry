@@ -350,8 +350,8 @@ through the ambiguous generic command. Protocol v1 retains the
 adapter's identity, so it must not claim default-formatter parity or a provider
 identity. A future protocol revision may expose the stronger selection proof.
 
-M2 uses vendored Ruff 0.16.2 at git pin `5b48a04097`, reported as
-`ruff@0.16.6+22f65a2ab5`. It targets Python 3.10, preserves quote style, uses
+M2 uses vendored Ruff 0.17.3 at git pin `ba65abf8ba`, reported as
+`ruff@0.17.3+ba65abf8ba`. It targets Python 3.10, preserves quote style, uses
 two-space embedded continuation indentation, and accounts for the region's
 remaining absolute 100-column budget. Original and result expressions must
 have equivalent Ruff AST projections and normalized comments anchored to the

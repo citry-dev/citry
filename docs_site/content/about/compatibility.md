@@ -84,7 +84,7 @@ both interpreters give the same result.
 ## Build from source { #building-from-source }
 
 When PyPI has no wheel for your platform, pip downloads the source of
-`citry-core` and builds it on your machine. That build needs Rust 1.96 or
+`citry-core` and builds it on your machine. That build needs Rust 1.97 or
 newer. Install it with [rustup](https://rustup.rs/){: target="_blank" rel="noopener"},
 then run the install again. Nothing else in Citry needs a build step.
 

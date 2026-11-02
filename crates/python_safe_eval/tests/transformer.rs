@@ -84,7 +84,7 @@ mod tests {
         let result = transform_expression_string("x\n y").unwrap_err();
         assert_eq!(
             result,
-            "Parse error: Expected `)`, found name at byte range 3..4: 'y'"
+            "Parse error: Expected `)`, found identifier at byte range 3..4: 'y'"
         );
     }
 

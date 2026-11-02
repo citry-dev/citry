@@ -21,7 +21,7 @@ The implementation starts from these existing contracts:
   physical template and models lexical `c-for` and `c-fill` bindings.
 - `python_safe_eval` remains authoritative for the executable expression
   language and its sandbox restrictions.
-- Vendored Ruff 0.16.2 provides Ruff's parser to Citry's Rust crates. That
+- Vendored Ruff 0.17.3 provides Ruff's parser to Citry's Rust crates. That
   parser does not infer Python types. Ruff's type inference belongs to `ty`.
 
 The catalog's `type_display` values are presentation text. They deliberately do

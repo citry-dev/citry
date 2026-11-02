@@ -63,7 +63,7 @@ As such, the Rust crates are ideal for:
 ### Prerequisites
 
 - **Rust**: Install via [rustup](https://rustup.rs/). Vendored Ruff requires
-  Rust 1.96 or higher, and this repository builds with one dated nightly that
+  Rust 1.97 or higher, and this repository builds with one dated nightly that
   rustup selects for you.
 - **Python**: 3.11 or higher
 - **UV**: Fast Python package installer (recommended)
@@ -79,7 +79,7 @@ As such, the Rust crates are ideal for:
 
 ### Installing and Managing Rust
 
-This codebase uses **Rust edition 2024**, and vendored Ruff requires Rust 1.96
+This codebase uses **Rust edition 2024**, and vendored Ruff requires Rust 1.97
 or higher. The edition and minimum version are both available on stable Rust.
 For development, the repository names one dated nightly, written
 `nightly-YYYY-MM-DD`, in [`rust-toolchain.toml`](../rust-toolchain.toml).
@@ -88,7 +88,7 @@ reaches the project only when someone moves that date on purpose (see
 [Moving the Rust nightly date](#moving-the-rust-nightly-date)).
 
 The published `citry-core` wheels, the docs builds and the example-project
-tests use the minimum version, Rust 1.96.0, so moving the nightly date does
+tests use the minimum version, Rust 1.97.0, so moving the nightly date does
 not change what users install. Inside the checkout, `rust-toolchain.toml`
 takes priority over a toolchain that `dtolnay/rust-toolchain` installs, so
 every job that installs Rust that way also sets `RUSTUP_TOOLCHAIN` to the
@@ -2381,7 +2381,7 @@ table check in `repo--generated.yml` covers the table matching its inputs.
 ### Docs workflow Rust cache
 
 The docs workflows build the local `citry_core` extension because the rendered
-site imports Citry. They use the workspace MSRV (`RUSTUP_TOOLCHAIN=1.96.0`), not
+site imports Citry. They use the workspace MSRV (`RUSTUP_TOOLCHAIN=1.97.0`), not
 the repository's dated development nightly, and share the
 `docs-citry-core-py314` Rust cache across Ubuntu/CPython 3.14 jobs. The cache
 deliberately omits the GitHub job ID and is saved even if a later docs guard,
@@ -2457,7 +2457,7 @@ The workflow also builds one
 pinned by the playground. That browser wheel is another build of
 `citry-core`, not a package dependency.
 
-The qualification uses Rust 1.96.0, Maturin 1.15.0, and Cargo's
+The qualification uses Rust 1.97.0, Maturin 1.15.0, and Cargo's
 performance-qualified `release-wheel` profile: fat LTO, one codegen unit, and
 no debug information in the stripped distribution build. The four-way
 profile/ABI comparison and keep/drop decision are recorded in
@@ -2467,7 +2467,7 @@ runner-image change cannot silently add or remove a wheel. Runnable wheels are
 installed and exercised in their build jobs: every supported interpreter on
 Linux x86_64 and Windows, plus the oldest and newest CPython on macOS. The
 remaining cross-architecture wheels receive the same static inspection. The
-sdist job rebuilds outside the checkout with the declared Rust 1.96 minimum and
+sdist job rebuilds outside the checkout with the declared Rust 1.97 minimum and
 exercises the resulting wheel before uploading the sdist.
 
 Each builder keeps its output in a separate directory. The final qualification

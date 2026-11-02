@@ -184,7 +184,7 @@ _SETUP_JOB = """
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
         with:
-          toolchain: "1.96.0"
+          toolchain: "1.97.0"
       - run: cargo build
 """
 
@@ -195,18 +195,18 @@ def test_current_workflows_select_the_toolchain_they_install(root):
 
 def test_a_setup_input_that_names_an_unset_variable_fails(root):
     # The examples setup reads `${{ env.RUSTUP_TOOLCHAIN }}`, which is now unset.
-    _replace_once(root / ".github/workflows/py--examples--tests.yml", '  RUSTUP_TOOLCHAIN: "1.96.0"\n', "")
+    _replace_once(root / ".github/workflows/py--examples--tests.yml", '  RUSTUP_TOOLCHAIN: "1.97.0"\n', "")
     errors = selected_toolchain_errors(root)
     assert errors
     assert all("py--examples--tests.yml" in error and "not set" in error for error in errors)
 
 
 def test_a_publish_job_without_rustup_toolchain_fails(root):
-    # The sdist job installs 1.96.0, but cargo in the checkout would then
+    # The sdist job installs 1.97.0, but cargo in the checkout would then
     # follow rust-toolchain.toml to the development nightly.
     workflow = root / ".github/workflows/py--citry-core--publish.yml"
     text = workflow.read_text()
-    workflow.write_text(text.replace('      RUSTUP_TOOLCHAIN: "1.96.0"\n', "", 1))
+    workflow.write_text(text.replace('      RUSTUP_TOOLCHAIN: "1.97.0"\n', "", 1))
     errors = selected_toolchain_errors(root)
     assert any("job sdist" in error and "does not set RUSTUP_TOOLCHAIN" in error for error in errors)
 
@@ -215,8 +215,8 @@ def test_a_publish_job_without_rustup_toolchain_fails(root):
     ("env", "passes"),
     [
         ("", False),
-        ('\n    env:\n      RUSTUP_TOOLCHAIN: "1.97.0"', False),
-        ('\n    env:\n      RUSTUP_TOOLCHAIN: "1.96.0"', True),
+        ('\n    env:\n      RUSTUP_TOOLCHAIN: "1.98.0"', False),
+        ('\n    env:\n      RUSTUP_TOOLCHAIN: "1.97.0"', True),
         # An env written as an expression is read as empty, not as a crash.
         ("\n    env: ${{ fromJSON(vars.RUST_ENV) }}", False),
     ],
@@ -231,6 +231,6 @@ def test_a_job_must_select_the_toolchain_it_installs(root, env, passes):
 
 def test_a_setup_that_names_its_toolchain_in_the_ref_must_select_it(root):
     workflow = root / ".github/workflows/rust--tests.yml"
-    job = "\n  pinned:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: dtolnay/rust-toolchain@1.96.0\n"
+    job = "\n  pinned:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: dtolnay/rust-toolchain@1.97.0\n"
     workflow.write_text(workflow.read_text() + job)
-    assert any("job pinned" in error and "'1.96.0'" in error for error in selected_toolchain_errors(root))
+    assert any("job pinned" in error and "'1.97.0'" in error for error in selected_toolchain_errors(root))

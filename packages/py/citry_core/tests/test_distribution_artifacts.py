@@ -99,7 +99,7 @@ def test_expected_release_inventory_is_closed_and_includes_the_browser_wheel() -
 def test_pyodide_build_config_owns_the_exact_wheel_name() -> None:
     config = load_build_config()
 
-    assert config["rust"] == "1.96.0"
+    assert config["rust"] == "1.97.0"
     assert expected_wheel_name("1.7.0", config) == ("citry_core-1.7.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl")
 
 
@@ -380,7 +380,7 @@ def test_sdist_smoke_rebuild_gets_the_hashed_build_pins(monkeypatch: pytest.Monk
     monkeypatch.setattr(distribution_verifier, "verify_wheel", lambda *args, **kwargs: {})  # noqa: ARG005
     monkeypatch.setattr(distribution_verifier, "smoke_wheel", lambda *args, **kwargs: {})  # noqa: ARG005
     monkeypatch.setattr(distribution_verifier, "_run", fake_run)
-    report = distribution_verifier.smoke_sdist(Path("citry_core.tar.gz"), rust_toolchain="1.96.0")
+    report = distribution_verifier.smoke_sdist(Path("citry_core.tar.gz"), rust_toolchain="1.97.0")
     assert report["sdist"] == "citry_core.tar.gz"
 
 

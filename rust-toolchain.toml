@@ -2,8 +2,8 @@
 [toolchain]
 # A dated nightly, so every machine and CI job builds with the same compiler
 # until someone moves the date on purpose ("Moving the Rust nightly date" in
-# docs/codebase.md). The copy of Ruff 0.16.6 in third_party/rust/ruff
-# requires rustc/cargo 1.96 or higher, which this nightly satisfies.
+# docs/codebase.md). The copy of Ruff 0.17.3 in third_party/rust/ruff
+# requires rustc/cargo 1.97 or higher, which this nightly satisfies.
 # rustup selects this channel whenever cargo or rustc runs in this directory,
 # and CI installs it through .github/actions/install-rust, which reads this
 # file.

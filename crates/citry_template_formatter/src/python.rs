@@ -55,7 +55,7 @@ pub(crate) fn with_enough_stack<T>(work: impl FnOnce() -> T) -> T {
 const CLAUSE_PREFIX: &str = "None for ";
 
 /// Stable identity for the Python formatter pinned by this workspace.
-pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.16.6+22f65a2ab5";
+pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.17.3+ba65abf8ba";
 
 /// An authored expression as Citry's template parser reads it.
 ///
@@ -161,7 +161,7 @@ fn format_parsed_expression(
             "Python expression wrapper failed to parse: {error}"
         ))
     })?;
-    // Ruff 0.16.6 gives the formatter comments and other protected trivia in
+    // Ruff gives the formatter comments and other protected trivia in
     // one index, so every non-code range participates in attachment decisions.
     let wrapper_trivia = TriviaRanges::from(parsed_wrapper.tokens());
     let formatted_document = format_module_ast(&parsed_wrapper, &wrapper_trivia, &wrapped, options)
@@ -465,8 +465,8 @@ mod tests {
     #[test]
     fn provider_identity_matches_the_vendored_ruff_release() {
         let manifest = include_str!("../../../third_party/rust/ruff/crates/ruff/Cargo.toml");
-        assert!(manifest.contains("version = \"0.16.6\""));
-        assert_eq!(PYTHON_PROVIDER_IDENTITY, "ruff@0.16.6+22f65a2ab5");
+        assert!(manifest.contains("version = \"0.17.3\""));
+        assert_eq!(PYTHON_PROVIDER_IDENTITY, "ruff@0.17.3+ba65abf8ba");
     }
 
     #[test]
