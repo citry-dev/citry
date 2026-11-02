@@ -2,6 +2,11 @@
 #
 # The repository release controller qualifies one complete artifact set, then
 # sends that retained bundle back here for Trusted Publishing.
+#
+# No job here restores or saves a GitHub Actions cache. Every workflow that
+# runs on main can save main's caches, so a release job that restored one
+# would let any of those workflows change the released bytes.
+# scripts/validators/release_caches.py checks this.
 name: Publish citry-core to PyPI
 run-name: >-
   ${{ inputs.operation == 'promote'
@@ -85,7 +90,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_commit }}
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
           submodules: recursive
       # The registry keeps this package's README, changelog, and project URLs
       # forever, so their repository links must name the release tag rather
@@ -101,7 +109,6 @@ jobs:
             --features abi3-py311 --interpreter python3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
-          sccache: "true"
           manylinux: auto
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Build the free-threaded and PyPy wheels
@@ -113,13 +120,13 @@ jobs:
             --features abi3-py311 --interpreter python3.14t python3.15t pypy3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
-          sccache: "true"
           manylinux: auto
           working-directory: ${{ env.PROJECT_DIR }}
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         if: ${{ matrix.target == 'x86_64' }}
         with:
           prune-cache: true
+          enable-cache: false
           version: "0.13.5"
       - uses: actions/setup-python@v7
         if: ${{ matrix.target == 'x86_64' }}
@@ -205,7 +212,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_commit }}
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
           submodules: recursive
       # The registry keeps this package's README, changelog, and project URLs
       # forever, so their repository links must name the release tag rather
@@ -221,7 +231,6 @@ jobs:
             --features abi3-py311 --interpreter python3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
-          sccache: "true"
           manylinux: musllinux_1_2
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Build the free-threaded and PyPy wheels
@@ -233,7 +242,6 @@ jobs:
             --features abi3-py311 --interpreter python3.14t python3.15t pypy3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
-          sccache: "true"
           manylinux: musllinux_1_2
           working-directory: ${{ env.PROJECT_DIR }}
       - uses: actions/upload-artifact@v7
@@ -253,11 +261,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_commit }}
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
           submodules: recursive
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
+          enable-cache: false
           version: "0.13.5"
       - uses: actions/setup-python@v7
         id: python311
@@ -299,7 +311,6 @@ jobs:
             --features abi3-py311 --interpreter ${{ steps.python311.outputs.python-path }}
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
-          sccache: "true"
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Smoke the ABI3 wheel on CPython 3.11 through 3.15
         env:
@@ -339,11 +350,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_commit }}
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
           submodules: recursive
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
+          enable-cache: false
           version: "0.13.5"
       - uses: actions/setup-python@v7
         id: python311
@@ -367,7 +382,6 @@ jobs:
             --features abi3-py311 --interpreter ${{ steps.python311.outputs.python-path }}
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
-          sccache: "true"
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Smoke the ABI3 wheel on the oldest and newest CPython
         env:
@@ -400,7 +414,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_commit }}
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
           submodules: recursive
       - uses: actions/setup-python@v7
         with:
@@ -409,7 +426,7 @@ jobs:
         with:
           prune-cache: true
           version: "0.13.5"
-          enable-cache: true
+          enable-cache: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
           toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
@@ -456,7 +473,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_commit }}
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
           submodules: recursive
       - uses: actions/setup-python@v7
         with:
@@ -465,20 +485,16 @@ jobs:
         if: ${{ matrix.copy == 'a' }}
         with:
           node-version: "24"
+          package-manager-cache: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           prune-cache: true
           version: "0.13.5"
-          enable-cache: true
+          enable-cache: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
           toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           targets: wasm32-unknown-emscripten
-      - name: Cache the pinned Pyodide cross environment
-        uses: actions/cache@v6
-        with:
-          path: ${{ runner.temp }}/citry-pyodide-xbuildenv
-          key: pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.97.0-cli-0.5.0-build-0.37.0
       - name: Install the pinned Pyodide cross environment
         env:
           CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv
