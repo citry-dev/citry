@@ -12,6 +12,21 @@ from citry_core.html_transform import mark_html, static_html_node_count, validat
 # rather than the shape of the tags (`validate_html_fragment_boundary`). Keep
 # in step with the message in `output_scanner.rs`.
 _PARSE_ERROR_PREFIX = "opaque HTML has the HTML parse error "
+# How the same check starts its message when the HTML is over one of Citry's
+# size limits, with the hint each one gets. Keep in step with `html_limits.rs`.
+_TOO_LARGE_HINTS = {
+    "opaque HTML has a tag with more than ": " Spread the attributes over several elements.",
+    "opaque HTML has more than ": " A fragment needs no <html>, <head> or <body> tag, so remove them.",
+    "opaque HTML keeps more than ": " Nest the elements less deeply.",
+    "opaque HTML leaves formatting tags ": (
+        " Close each formatting tag such as <b>, <i> or <a> inside the element where it was opened, so the browser"
+        " does not have to reopen it."
+    ),
+}
+# How `scan_output_html` and `static_html_node_count` start their message
+# when one tag has too many attributes (`validate_html_fragment_boundary`
+# puts "opaque " before it). Keep in step with `html_limits.rs`.
+_ATTRIBUTE_LIMIT_PREFIX = "HTML has a tag with more than "
 # The parse errors a '<' that does not start a tag causes.
 _STRAY_LESS_THAN_ERRORS = frozenset(
     {"invalid-first-character-of-tag-name", "eof-before-tag-name", "missing-end-tag-name"}
@@ -31,6 +46,16 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
         validate_html_fragment_boundary(html)
     except ValueError as error:
         preview = html if len(html) <= 80 else f"{html[:77]}..."
+        # HTML over a size limit is refused, and the message from Rust says
+        # which limit the HTML is over.
+        hint = next((hint for prefix, hint in _TOO_LARGE_HINTS.items() if str(error).startswith(prefix)), None)
+        if hint is not None:
+            msg = (
+                f"{origin} is not accepted. {str(error).removeprefix('opaque ')}."
+                " Inside an interactive component, Vue inserts this HTML as one block, and Citry reads it"
+                f" first to check it.{hint}"
+            )
+            raise ValueError(msg) from error
         # The check names a parse error it refuses by its name in the HTML
         # standard, so the message can say what to fix in the text itself;
         # the tag rules cover the shape of the tags.
@@ -81,13 +106,30 @@ def mark_opaque_html(html: str, markers: tuple[tuple[str, object], ...]) -> str:
     marked = segments[0]
     marker_identities = {_html_attr_identity(name) for name, _ in markers}
     sentinel_identity = _html_attr_identity(sentinel)
-    for element in scan_output_html(marked).elements:
-        identities = {_html_attr_identity(attr.key.content) for attr in element.start_tag.attrs}
-        if sentinel_identity in identities and marker_identities & (identities - {sentinel_identity}):
-            raise ValueError("opaque HTML root conflicts with a component root marker")
+    # The HTML passed `reject_cross_boundary_html`, so only the markers
+    # added to each root element can take it over a limit. The check runs on
+    # the HTML with every marker in place, since several markers replace the
+    # one sentinel below.
     replacement = "".join(
         f' {name}=""' if value is True else f' {name}="{escape(str(value), quote=True)}"' for name, value in markers
     )
+    try:
+        elements = scan_output_html(marked).elements
+        static_html_node_count(marked.replace(f' {sentinel}=""', replacement))
+    except ValueError as error:
+        msg = f"{error}."
+        # Only the limit on one tag's attributes depends on the markers
+        # added to each root element; the other limits are not about them.
+        if str(error).startswith(_ATTRIBUTE_LIMIT_PREFIX):
+            msg += (
+                f" Citry adds {len(markers)} attribute(s) to each root element of this HTML to mark it,"
+                " so a root element can hold one attribute fewer for each marker."
+            )
+        raise ValueError(msg) from error
+    for element in elements:
+        identities = {_html_attr_identity(attr.key.content) for attr in element.start_tag.attrs}
+        if sentinel_identity in identities and marker_identities & (identities - {sentinel_identity}):
+            raise ValueError("opaque HTML root conflicts with a component root marker")
     return marked.replace(f' {sentinel}=""', replacement)
 
 

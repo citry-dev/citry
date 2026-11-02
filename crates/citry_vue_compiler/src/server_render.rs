@@ -54,7 +54,8 @@
 
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::LazyLock;
 
@@ -1761,40 +1762,63 @@ fn style_entries_on_stack<'a>(
     value: &Val<'a>,
     parts: Parts,
 ) -> Result<Option<StyleEntries<'a>>, &'static str> {
-    let mut output = Vec::new();
-    match value {
-        Val::Str(text) => output = parse_string_style(text),
-        Val::Object(entries) => output = entries.as_ref().clone(),
-        Val::Data(Json::Object(map)) => {
-            output = js_data_order(map)
-                .into_iter()
-                .map(|(key, value)| (Cow::Borrowed(key), Val::from_json(value)))
-                .collect();
-        }
+    let output = match value {
+        Val::Str(text) => parse_string_style(text),
+        Val::Object(entries) => entries.as_ref().clone(),
+        Val::Data(Json::Object(map)) => js_data_order(map)
+            .into_iter()
+            .map(|(key, value)| (Cow::Borrowed(key), Val::from_json(value)))
+            .collect(),
         Val::Array(_) | Val::Data(Json::Array(_)) => {
-            let items: Vec<Val<'a>> = match value {
-                Val::Array(items) => items.as_ref().clone(),
-                Val::Data(Json::Array(items)) => items.iter().map(Val::from_json).collect(),
-                _ => unreachable!("matched an array above"),
-            };
-            for item in &items {
-                // An item's declarations replace earlier values in place,
-                // like assigning to a JavaScript object.
-                for (key, value) in style_entries(item, parts)?.unwrap_or_default() {
-                    match output.iter_mut().find(|(name, _)| *name == key) {
-                        Some(existing) => existing.1 = value,
-                        None => output.push((key, value)),
-                    }
-                }
-            }
-            output = js_object_order(output);
+            // The items can hold as many declarations as the page's data,
+            // so each key's position is looked up rather than searched for.
+            let mut merged = ObjectEntries::default();
+            merge_style_array(value, parts, &mut merged)?;
+            // Ordering once at the top gives the same order as ordering at
+            // every level: array-index keys are sorted wherever they came
+            // from, and the other keys keep their first-written order.
+            js_object_order(merged.into_entries())
         }
         Val::Unknown(_) | Val::Ctx if parts == Parts::Known => return Ok(None),
         Val::Unknown(reason) => return Err(reason),
         Val::Ctx | Val::Data(_) => return Err("unsupported-attribute"),
         Val::Undefined | Val::Null | Val::Bool(_) | Val::Num(_) => return Ok(None),
-    }
+    };
     Ok(Some(output))
+}
+
+/// Assign the declarations of every item of a style array, in order, to
+/// `merged`. A nested array writes into the same table instead of building
+/// its own, so arrays nested many levels deep still cost time in proportion
+/// to the declarations they hold rather than to that times their depth.
+fn merge_style_array<'a>(
+    value: &Val<'a>,
+    parts: Parts,
+    merged: &mut ObjectEntries<'a, Val<'a>>,
+) -> Result<(), &'static str> {
+    // A style array may nest as deep as the page's data.
+    crate::stack::with_enough_stack(|| {
+        let items: Vec<Val<'a>> = match value {
+            Val::Array(items) => items.as_ref().clone(),
+            Val::Data(Json::Array(items)) => items.iter().map(Val::from_json).collect(),
+            _ => unreachable!("called with an array"),
+        };
+        for item in &items {
+            match item {
+                Val::Array(_) | Val::Data(Json::Array(_)) => {
+                    merge_style_array(item, parts, merged)?;
+                }
+                // An item's declarations replace earlier values in place,
+                // like assigning to a JavaScript object.
+                _ => {
+                    for (key, value) in style_entries(item, parts)?.unwrap_or_default() {
+                        merged.assign(key, value);
+                    }
+                }
+            }
+        }
+        Ok(())
+    })
 }
 
 /// Remove `/* ... */` comments from a style string the way Vue's
@@ -1856,26 +1880,10 @@ fn kept_style_token_length(rest: &str) -> Option<usize> {
 /// ignoring comments and semicolons inside parentheses.
 fn parse_string_style(text: &str) -> Vec<(Cow<'static, str>, Val<'static>)> {
     let without_comments = strip_style_comments(text);
-    let mut output: Vec<(Cow<'static, str>, Val<'static>)> = Vec::new();
-    // `;(?![^(]*\))`: a semicolon splits unless a `)` follows before any `(`.
-    let bytes = without_comments.as_bytes();
-    let mut start = 0;
-    let mut items = Vec::new();
-    for (index, byte) in bytes.iter().enumerate() {
-        if *byte != b';' {
-            continue;
-        }
-        let after = &without_comments[index + 1..];
-        let inside_parentheses = after
-            .find([')', '('])
-            .is_some_and(|at| after.as_bytes()[at] == b')');
-        if !inside_parentheses {
-            items.push(&without_comments[start..index]);
-            start = index + 1;
-        }
-    }
-    items.push(&without_comments[start..]);
-    for item in items {
+    // A style string from the page's data can hold any number of
+    // declarations, so a repeated key finds its earlier position by lookup.
+    let mut output = ObjectEntries::default();
+    for item in split_style_declarations(&without_comments) {
         // `split(/:([^]+)/)` keeps the text before the first colon and
         // everything after it; an item without a colon is dropped.
         let Some((key, value)) = item.split_once(':') else {
@@ -1886,12 +1894,113 @@ fn parse_string_style(text: &str) -> Vec<(Cow<'static, str>, Val<'static>)> {
         }
         let key = Cow::Owned(js_trim(key).to_owned());
         let value = Val::Str(Cow::Owned(js_trim(value).to_owned()));
-        match output.iter_mut().find(|(name, _)| *name == key) {
-            Some(existing) => existing.1 = value,
-            None => output.push((key, value)),
+        output.assign(key, value);
+    }
+    js_object_order(output.into_entries())
+}
+
+/// Split style text into declarations with the rule of Vue's
+/// `parseStringStyle` regex, `;(?![^(]*\))`: a semicolon splits unless the
+/// nearest parenthesis after it is a `)`, so `url(data:a;b)` stays whole.
+///
+/// The regex looks ahead from every semicolon, which can take time growing
+/// with the square of the text's length when the semicolons have no
+/// parenthesis after them. Walking the text once from the end
+/// and remembering the nearest parenthesis seen so far gives the same
+/// answer for each semicolon in one pass. This is not a depth count: the
+/// regex splits `url(a;(b))` at its semicolon, and so does this.
+fn split_style_declarations(text: &str) -> Vec<&str> {
+    // The three delimiters are ASCII, so their byte positions are always
+    // character boundaries in the UTF-8 text.
+    let mut cut_at = Vec::new();
+    let mut next_parenthesis = None;
+    for (index, byte) in text.bytes().enumerate().rev() {
+        match byte {
+            b'(' | b')' => next_parenthesis = Some(byte),
+            b';' if next_parenthesis != Some(b')') => cut_at.push(index),
+            _ => {}
         }
     }
-    js_object_order(output)
+    let mut pieces = Vec::with_capacity(cut_at.len() + 1);
+    let mut start = 0;
+    // The cuts were found from the end, so they are read back in reverse.
+    for &index in cut_at.iter().rev() {
+        pieces.push(&text[start..index]);
+        start = index + 1;
+    }
+    pieces.push(&text[start..]);
+    pieces
+}
+
+/// The entries of a JavaScript object being built one assignment at a
+/// time: a repeated key keeps the position it was first written at and
+/// takes the latest value. A table from each key to its position makes each
+/// assignment take the same time however many keys came before, so an
+/// object built from the page's data stays linear in its size. The table is
+/// only read, never iterated, so the entries keep their written order.
+struct ObjectEntries<'a, V> {
+    entries: Vec<(Cow<'a, str>, V)>,
+    positions: HashMap<Cow<'a, str>, usize>,
+}
+
+impl<V> Default for ObjectEntries<'_, V> {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            positions: HashMap::new(),
+        }
+    }
+}
+
+impl<'a, V> ObjectEntries<'a, V> {
+    /// Assign `value` to `key`, like `object[key] = value`.
+    fn assign(&mut self, key: Cow<'a, str>, value: V) {
+        match self.positions.entry(key) {
+            Entry::Occupied(position) => self.entries[*position.get()].1 = value,
+            Entry::Vacant(slot) => {
+                self.entries.push((slot.key().clone(), value));
+                slot.insert(self.entries.len() - 1);
+            }
+        }
+    }
+
+    /// The value assigned to `key`, if any.
+    fn get(&self, key: &str) -> Option<&V> {
+        self.positions
+            .get(key)
+            .map(|&position| &self.entries[position].1)
+    }
+
+    fn iter(&self) -> std::slice::Iter<'_, (Cow<'a, str>, V)> {
+        self.entries.iter()
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// The entries in the order their keys were first written.
+    fn into_entries(self) -> Vec<(Cow<'a, str>, V)> {
+        self.entries
+    }
+}
+
+impl<'s, 'a, V> IntoIterator for &'s ObjectEntries<'a, V> {
+    type Item = &'s (Cow<'a, str>, V);
+    type IntoIter = std::slice::Iter<'s, (Cow<'a, str>, V)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.iter()
+    }
+}
+
+impl<'a, V> IntoIterator for ObjectEntries<'a, V> {
+    type Item = (Cow<'a, str>, V);
+    type IntoIter = std::vec::IntoIter<(Cow<'a, str>, V)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.into_iter()
+    }
 }
 
 /// The style attribute text for normalized style declarations, as Vue's
@@ -2053,15 +2162,14 @@ fn is_array_index(key: &str) -> bool {
 /// they were first written. A repeated key keeps its first position and its
 /// last value.
 fn js_object_order<'a>(entries: Vec<(Cow<'a, str>, Val<'a>)>) -> Vec<(Cow<'a, str>, Val<'a>)> {
-    let mut unique: Vec<(Cow<'a, str>, Val<'a>)> = Vec::with_capacity(entries.len());
+    let mut unique = ObjectEntries::default();
     for (key, value) in entries {
-        match unique.iter_mut().find(|(name, _)| *name == key) {
-            Some(existing) => existing.1 = value,
-            None => unique.push((key, value)),
-        }
+        unique.assign(key, value);
     }
-    let (mut indexes, others): (Vec<_>, Vec<_>) =
-        unique.into_iter().partition(|(key, _)| is_array_index(key));
+    let (mut indexes, others): (Vec<_>, Vec<_>) = unique
+        .into_entries()
+        .into_iter()
+        .partition(|(key, _)| is_array_index(key));
     indexes.sort_by_key(|(key, _)| key.parse::<u64>().unwrap_or(u64::MAX));
     indexes.extend(others);
     indexes
@@ -2206,7 +2314,9 @@ enum PropVal<'a> {
     Listener,
 }
 
-type Props<'a> = Vec<(Cow<'a, str>, PropVal<'a>)>;
+/// An element's props in `mergeProps` order. A spread of the page's data
+/// can add any number of keys, so each key's position is looked up.
+type Props<'a> = ObjectEntries<'a, PropVal<'a>>;
 
 /// The attributes written for one element, its `textContent` prop, and every
 /// key Vue patches on it, written or not (the form check needs the keys whose
@@ -2223,10 +2333,7 @@ struct TextContent<'a> {
 
 fn set_prop<'a>(output: &mut Props<'a>, key: Cow<'a, str>, value: PropVal<'a>) {
     // A repeated key keeps the first key's position, like a JavaScript object.
-    match output.iter_mut().find(|(name, _)| *name == key) {
-        Some(existing) => existing.1 = value,
-        None => output.push((key, value)),
-    }
+    output.assign(key, value);
 }
 
 /// Merge one argument of `mergeProps` into the props merged so far, with
@@ -2234,10 +2341,7 @@ fn set_prop<'a>(output: &mut Props<'a>, key: Cow<'a, str>, value: PropVal<'a>) {
 /// string, `style` values are combined, and other keys are replaced.
 fn merge_prop<'a>(output: &mut Props<'a>, key: Cow<'a, str>, value: PropVal<'a>) {
     if key == "class" {
-        let before = output
-            .iter()
-            .find(|(name, _)| name == "class")
-            .map(|(_, value)| value);
+        let before = output.get("class");
         let merged = match (before, &value) {
             (Some(PropVal::Value(Val::Str(a))), PropVal::Value(Val::Str(b))) if a == b => return,
             (before, PropVal::Value(after)) => {
@@ -2260,12 +2364,12 @@ fn merge_prop<'a>(output: &mut Props<'a>, key: Cow<'a, str>, value: PropVal<'a>)
         // values' declarations, the later value winning. With no earlier
         // style that object holds exactly the declarations of the value on
         // its own, so a string is kept as authored, as outside `mergeProps`.
-        let merged = match (output.iter().find(|(name, _)| name == "style"), value) {
-            (_, PropVal::Listener) | (Some((_, PropVal::Listener)), _) => {
+        let merged = match (output.get("style"), value) {
+            (_, PropVal::Listener) | (Some(PropVal::Listener), _) => {
                 Val::Unknown("unsupported-attribute")
             }
             (None, PropVal::Value(after)) => normalize_style(after),
-            (Some((_, PropVal::Value(before))), PropVal::Value(after)) => {
+            (Some(PropVal::Value(before)), PropVal::Value(after)) => {
                 normalize_style(Val::Array(Rc::new(vec![before.clone(), after])))
             }
         };
@@ -2295,7 +2399,7 @@ fn eval_props<'a>(
         }
         PropsExpr::Merge(items) => {
             for item in items {
-                let mut part = Vec::new();
+                let mut part = Props::default();
                 eval_props(item, instance, locals, &mut part)?;
                 for (key, value) in part {
                     merge_prop(output, key, value);
@@ -3251,9 +3355,13 @@ impl<'a> Writer<'a> {
             // leaves no attribute: a control's property makes Vue take the
             // property path, which writes "null" for a key the form defines,
             // such as `action`.
+            // Both lists can grow with the page's data (a spread of keys on
+            // the form, a list of named controls inside it), so the names
+            // are put in a set once rather than searched for each key.
+            let control_names: HashSet<&str> = names.names.iter().map(String::as_str).collect();
             if let Some(key) = patched_keys.iter().find(|key| {
                 form_key_checks_members(key)
-                    && (names_unknown || names.names.iter().any(|name| name == *key))
+                    && (names_unknown || control_names.contains(key.as_str()))
             }) {
                 return Err(Fail::new("form-named-property", key.clone(), component));
             }
@@ -3372,13 +3480,14 @@ impl<'a> Writer<'a> {
     /// character the parser changes. Anything else sends the page to the
     /// full parse, which compares every attribute.
     fn check_attributes(&mut self, attributes: &[(String, String)]) {
-        for (index, (name, value)) in attributes.iter().enumerate() {
+        // A spread of the page's data can give an element any number of
+        // attributes, so earlier names are kept in a set to find a repeat.
+        let mut seen = HashSet::with_capacity(attributes.len());
+        for (name, value) in attributes {
             if !is_plain_attribute_name(name)
                 || name == "data-allow-mismatch"
                 || value.contains(['\0', '\r'])
-                || attributes[..index]
-                    .iter()
-                    .any(|(earlier, _)| earlier == name)
+                || !seen.insert(name.as_str())
             {
                 self.needs_full_parse = true;
             }
@@ -3433,7 +3542,7 @@ impl<'a> Writer<'a> {
         instance: &Instance<'a>,
         locals: &Scope<'a>,
     ) -> Result<ElementAttributes<'a>, (&'static str, String)> {
-        let mut values = Vec::new();
+        let mut values = Props::default();
         if let Some(props) = props {
             eval_props(props, instance, locals, &mut values)
                 .map_err(|reason| (reason, tag.to_owned()))?;
@@ -3510,7 +3619,7 @@ impl<'a> Writer<'a> {
         cx: Cx,
     ) -> Result<bool, Fail> {
         let component = Some(instance.occurrence.type_key.as_str());
-        let mut values = Vec::new();
+        let mut values = Props::default();
         if let Some(props) = props {
             eval_props(props, instance, locals, &mut values)
                 .map_err(|reason| Fail::new(reason, tag, component))?;
@@ -4015,7 +4124,7 @@ impl<'a> StaticWriter<'a> {
         {
             return;
         }
-        let mut values = Vec::new();
+        let mut values = Props::default();
         if let Some(props) = props {
             // A spread only the browser knows leaves the keys read so far.
             let _ = eval_props(props, instance, locals, &mut values);
@@ -4105,7 +4214,7 @@ impl<'a> StaticWriter<'a> {
         instance: &Rc<Instance<'a>>,
         locals: &Scope<'a>,
     ) {
-        let mut values = Vec::new();
+        let mut values = Props::default();
         if let Some(props) = props
             && eval_props(props, instance, locals, &mut values).is_err()
         {
@@ -4288,8 +4397,9 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        AttributeContext, HydrationRender, RenderRequest, ServerRenderProgram, Val,
-        client_attribute, parse_string_style, parser_moves, read_program, render_for_hydration,
+        AttributeContext, HydrationRender, Parts, RenderRequest, ServerRenderProgram, Val,
+        client_attribute, js_object_order, parse_string_style, parser_moves, read_program,
+        render_for_hydration, split_style_declarations, strip_style_comments, style_entries,
     };
     use crate::{CompileRequest, compile};
 
@@ -6295,5 +6405,321 @@ mod tests {
             html(&result),
             r#"<main><span data-allow-mismatch="children"><b>shown</b></span></main>"#
         );
+    }
+
+    /// The style rules written the direct way: a search ahead from every
+    /// semicolon and a search of the list for every key. They are slow but
+    /// plainly match Vue's regex and JavaScript assignment, so the tests
+    /// below compare the fast versions with them.
+    mod direct_reference {
+        use std::borrow::Cow;
+
+        use super::super::{Val, is_array_index, js_trim, strip_style_comments};
+
+        pub(super) fn split(text: &str) -> Vec<&str> {
+            let mut start = 0;
+            let mut items = Vec::new();
+            for (index, byte) in text.bytes().enumerate() {
+                if byte != b';' {
+                    continue;
+                }
+                let after = &text[index + 1..];
+                let inside_parentheses = after
+                    .find([')', '('])
+                    .is_some_and(|at| after.as_bytes()[at] == b')');
+                if !inside_parentheses {
+                    items.push(&text[start..index]);
+                    start = index + 1;
+                }
+            }
+            items.push(&text[start..]);
+            items
+        }
+
+        fn assign<'a>(
+            output: &mut Vec<(Cow<'a, str>, Val<'a>)>,
+            key: Cow<'a, str>,
+            value: Val<'a>,
+        ) {
+            match output.iter_mut().find(|(name, _)| *name == key) {
+                Some(existing) => existing.1 = value,
+                None => output.push((key, value)),
+            }
+        }
+
+        pub(super) fn js_object_order<'a>(
+            entries: Vec<(Cow<'a, str>, Val<'a>)>,
+        ) -> Vec<(Cow<'a, str>, Val<'a>)> {
+            let mut unique = Vec::new();
+            for (key, value) in entries {
+                assign(&mut unique, key, value);
+            }
+            let (mut indexes, others): (Vec<_>, Vec<_>) =
+                unique.into_iter().partition(|(key, _)| is_array_index(key));
+            indexes.sort_by_key(|(key, _)| key.parse::<u64>().unwrap_or(u64::MAX));
+            indexes.extend(others);
+            indexes
+        }
+
+        pub(super) fn parse_string_style(text: &str) -> Vec<(Cow<'static, str>, Val<'static>)> {
+            let without_comments = strip_style_comments(text);
+            let mut output = Vec::new();
+            for item in split(&without_comments) {
+                let Some((key, value)) = item.split_once(':') else {
+                    continue;
+                };
+                if value.is_empty() {
+                    continue;
+                }
+                let key = Cow::Owned(js_trim(key).to_owned());
+                let value = Val::Str(Cow::Owned(js_trim(value).to_owned()));
+                assign(&mut output, key, value);
+            }
+            js_object_order(output)
+        }
+
+        /// What `normalizeStyle` gives an array of style strings and
+        /// nested arrays, each nested array ordered on its own first.
+        pub(super) fn merge<'a>(items: &[Val<'a>]) -> Vec<(Cow<'a, str>, Val<'a>)> {
+            let mut output = Vec::new();
+            for item in items {
+                let entries = match item {
+                    Val::Str(text) => parse_string_style(text),
+                    Val::Array(inner) => merge(inner),
+                    _ => unreachable!("the tests build only strings and arrays"),
+                };
+                for (key, value) in entries {
+                    assign(&mut output, key, value);
+                }
+            }
+            js_object_order(output)
+        }
+    }
+
+    /// A small fixed-seed generator, so a failing case can be replayed.
+    struct Random(u64);
+
+    impl Random {
+        fn below(&mut self, limit: usize) -> usize {
+            // The xorshift64* generator: a few shifts and a multiply, enough
+            // to spread the cases.
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            let value = self.0.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 32;
+            usize::try_from(value).expect("32 bits fit") % limit
+        }
+
+        /// Text made mostly of the characters the style parser treats
+        /// specially, with a few others between them.
+        fn style_text(&mut self, max_length: usize) -> String {
+            const PIECES: [&str; 24] = [
+                ";", ";", ";", "(", "(", ")", ")", ":", ":", "a", "b", "0", "1", " ", "\n", "/*",
+                "*/", "\"", "'", "\\", "é", "\u{3000}", "url(", "x:y",
+            ];
+            let length = self.below(max_length + 1);
+            (0..length)
+                .map(|_| PIECES[self.below(PIECES.len())])
+                .collect()
+        }
+    }
+
+    fn debug_entries(entries: &[(std::borrow::Cow<'_, str>, Val<'_>)]) -> String {
+        format!("{entries:?}")
+    }
+
+    #[test]
+    fn the_style_split_follows_vues_semicolon_rule() {
+        // Observed from the regex rule `;(?![^(]*\))` (the reference copy).
+        for (text, pieces) in [
+            ("a:b;c:d", vec!["a:b", "c:d"]),
+            ("background:url(data:a;b)", vec!["background:url(data:a;b)"]),
+            // The nearest parenthesis after the semicolon is `(`, so it
+            // splits even though it sits inside `url(...)`.
+            ("x:url(a;(b))", vec!["x:url(a", "(b))"]),
+            ("a;)", vec!["a;)"]),
+            ("a;(", vec!["a", "("]),
+            (";;", vec!["", "", ""]),
+            ("", vec![""]),
+        ] {
+            assert_eq!(split_style_declarations(text), pieces, "{text:?}");
+            assert_eq!(direct_reference::split(text), pieces, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn the_linear_style_parsing_matches_the_direct_reference() {
+        let mut random = Random(0x5eed_c175);
+        for _ in 0..200_000 {
+            let text = random.style_text(40);
+            assert_eq!(
+                split_style_declarations(&text),
+                direct_reference::split(&text),
+                "{text:?}"
+            );
+            assert_eq!(
+                debug_entries(&parse_string_style(&text)),
+                debug_entries(&direct_reference::parse_string_style(&text)),
+                "{text:?}"
+            );
+        }
+        // Longer texts, where a wrong remembered parenthesis would have
+        // many semicolons to show up on.
+        for _ in 0..300 {
+            let text = random.style_text(3_000);
+            let stripped = strip_style_comments(&text);
+            assert_eq!(
+                split_style_declarations(&stripped),
+                direct_reference::split(&stripped),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_linear_key_removal_matches_the_direct_reference() {
+        const KEYS: [&str; 10] = [
+            "0",
+            "1",
+            "10",
+            "01",
+            "a",
+            "b",
+            "color",
+            "",
+            "4294967295",
+            "2",
+        ];
+        let mut random = Random(0x000b_1ec7);
+        for _ in 0..50_000 {
+            let entries: Vec<_> = (0..random.below(12))
+                .map(|index| {
+                    let key = KEYS[random.below(KEYS.len())];
+                    (
+                        std::borrow::Cow::Borrowed(key),
+                        Val::Str(index.to_string().into()),
+                    )
+                })
+                .collect();
+            assert_eq!(
+                debug_entries(&js_object_order(entries.clone())),
+                debug_entries(&direct_reference::js_object_order(entries)),
+            );
+        }
+        // A style array, nested or not, merges its items' declarations
+        // with the same rule.
+        fn style_array(random: &mut Random, depth: usize) -> Vec<Val<'static>> {
+            (0..random.below(4))
+                .map(|_| {
+                    if depth < 3 && random.below(3) == 0 {
+                        return Val::Array(std::rc::Rc::new(style_array(random, depth + 1)));
+                    }
+                    let text = (0..random.below(5))
+                        .map(|_| format!("{}:{};", KEYS[random.below(KEYS.len())], random.below(9)))
+                        .collect::<String>()
+                        + &random.style_text(8);
+                    Val::Str(text.into())
+                })
+                .collect()
+        }
+        for _ in 0..20_000 {
+            let items = style_array(&mut random, 0);
+            let array = Val::Array(std::rc::Rc::new(items.clone()));
+            let entries = style_entries(&array, Parts::All)
+                .expect("strings are known")
+                .expect("an array gives declarations");
+            assert_eq!(
+                debug_entries(&entries),
+                debug_entries(&direct_reference::merge(&items)),
+                "{items:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn long_styles_spreads_and_forms_take_linear_time() {
+        // Each case took seconds when every semicolon searched the rest of
+        // the text and every key searched the keys before it (40,000 keys
+        // took several seconds in a release build). Each now takes well
+        // under a second in a debug build. `render_once` sets the element
+        // threshold above the page size, so the HTML parse check, which
+        // this test does not measure, does not run.
+        let n = 50_000;
+        let keys: String = (0..n).map(|i| format!("a{i}:x;")).collect();
+        let attributes: serde_json::Map<String, Value> =
+            (0..n).map(|i| (format!("data-a{i}"), json!("x"))).collect();
+        // The same declarations wrapped in 200 arrays, the depth request
+        // JSON may reach.
+        let mut nested = json!([{"color": "red"}, keys.clone()]);
+        for _ in 0..200 {
+            nested = json!([nested]);
+        }
+        let names: Vec<String> = (0..n).map(|i| format!("f{i}")).collect();
+        let cases = [
+            (
+                r#"<p :style="[$citryPrepared.s, 'color: red']">x</p>"#,
+                json!({"s": ";".repeat(n)}),
+            ),
+            (
+                r#"<p :style="[$citryPrepared.s, 'color: red']">x</p>"#,
+                json!({"s": keys}),
+            ),
+            (
+                r#"<p :style="[$citryPrepared.o]">x</p>"#,
+                json!({"o": attributes.clone()}),
+            ),
+            (
+                r#"<p :style="$citryPrepared.s">x</p>"#,
+                json!({"s": nested}),
+            ),
+            (
+                r#"<p class="a" v-bind="$citryPrepared.o">x</p>"#,
+                json!({"o": attributes.clone()}),
+            ),
+            (
+                concat!(
+                    r#"<form v-bind="$citryPrepared.o">"#,
+                    r#"<input v-for="name in $citryPrepared.names" :name="name"></form>"#,
+                ),
+                json!({"o": attributes, "names": names}),
+            ),
+        ];
+        for (template, prepared) in cases {
+            let program = program(template);
+            let start = std::time::Instant::now();
+            let result = render_once(&program, prepared);
+            let elapsed = start.elapsed();
+            assert_eq!(result.reason, Some("below-threshold"), "{template}");
+            assert!(
+                result.declines.is_empty(),
+                "{template}: {:?}",
+                result.declines
+            );
+            assert!(elapsed.as_secs_f64() < 5.0, "{template}: {elapsed:?}");
+        }
+    }
+
+    /// Write one root component's page without the parse check.
+    fn render_once(program: &ServerRenderProgram, prepared: Value) -> HydrationRender {
+        let program_refs = HashMap::from([("def-Root".to_owned(), program)]);
+        let manifest = json!({
+            "rootId": "occ-Root",
+            "occurrences": [{
+                "id": "occ-Root",
+                "typeKey": "Root",
+                "definitionId": "def-Root",
+                "preparedData": prepared,
+                "serverData": {},
+            }],
+        })
+        .to_string();
+        let tags = HashMap::from([("Root".to_owned(), "citry-root".to_owned())]);
+        render_for_hydration(&RenderRequest {
+            programs: &program_refs,
+            manifest_json: &manifest,
+            tags: &tags,
+            threshold: usize::MAX,
+            full_parse_check: false,
+        })
     }
 }

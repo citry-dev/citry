@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::convert::Infallible;
 
 use html5ever::tendril::StrTendril;
@@ -11,8 +12,11 @@ use html5ever::tree_builder::create_element;
 use html5ever::tree_builder::{ElementFlags, NodeOrText, QuirksMode, TreeBuilder, TreeSink};
 use html5ever::{namespace_url, ns, Attribute, ExpandedName, LocalName, ParseOpts, QualName};
 use html5gum::emitters::callback::{Callback, CallbackEmitter, CallbackEvent};
-use html5gum::{Emitter, Error, ForwardingEmitter, Span, State, Tokenizer};
+use html5gum::{Emitter, Error, ForwardingEmitter, Span, State};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
+
+use crate::html_limits::{is_formatting_element, HtmlLimits, HtmlTooLarge};
+use crate::tokenizer::run_tokenizer;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputAttribute {
@@ -143,17 +147,35 @@ fn parent_of(node: &Handle) -> Option<Handle> {
     parent
 }
 
-/// The DOM the output check builds, which also remembers the element each
-/// start tag made, so the check can read where the browser put it.
+/// The DOM every scan here builds. It remembers the element each start tag
+/// made, so the output check can read where the browser put it, and counts
+/// the formatting elements the parser makes, so the scan can stop at the
+/// limit on reopened ones (see `html_limits`).
 #[derive(Default)]
 pub(crate) struct TrackingSink {
     dom: RcDom,
+    // What `create_element` has made of formatting elements, whatever made
+    // them (a start tag, or the parser reopening or copying one): one for
+    // each element and one for each of its attributes, which a reopened
+    // element copies.
+    formatting_made: Cell<usize>,
     // The element the latest `create_element` made, cleared before each
     // start tag is processed.
     last_created: RefCell<Option<Handle>>,
     // Whether the parser tied that element to the form its form pointer
     // names.
     form_associated: Cell<bool>,
+}
+
+impl TrackingSink {
+    /// A sink that builds into `dom`, which may already hold a context
+    /// element for a fragment parse.
+    fn new(dom: RcDom) -> Self {
+        Self {
+            dom,
+            ..Self::default()
+        }
+    }
 }
 
 impl TreeSink for TrackingSink {
@@ -179,6 +201,13 @@ impl TreeSink for TrackingSink {
 
     fn create_element(&self, name: QualName, attrs: Vec<Attribute>, flags: ElementFlags) -> Handle {
         let template = flags.template;
+        // Counted by name in any namespace, so what a start tag's own element
+        // adds matches what `HtmlLimits` counts for the tag, an SVG `<a>`
+        // included.
+        if is_formatting_element(name.local.as_bytes()) {
+            self.formatting_made
+                .set(self.formatting_made.get() + 1 + attrs.len());
+        }
         let element = self.dom.create_element(name, attrs, flags);
         if template {
             // The parser puts a template's children in a separate fragment
@@ -302,10 +331,15 @@ struct ScannerCallback<'a, S> {
     raw_stack: Vec<(String, usize)>,
     boundary: Option<&'a mut BoundaryTracker>,
     lexical_text: Option<&'a mut LexicalTextTracker>,
+    // The size limits this run counts against (see `html_limits`).
+    limits: &'a HtmlLimits,
 }
 
 trait ScannerSink: TokenSink {
     fn has_unacknowledged_self_closing(&self) -> bool;
+    /// Count what the tree builder holds, and the formatting elements it has
+    /// reopened, against the limits in `limits` (see `html_limits`).
+    fn check_limits(&self, limits: &HtmlLimits);
     /// Forget the element the previous start tag made.
     fn begin_start_tag(&self) {}
     /// Where the browser put the element the start tag named `name` made,
@@ -325,15 +359,15 @@ fn has_unacknowledged_self_closing(dom: &RcDom) -> bool {
         .any(|error| error.as_ref() == "Unacknowledged self-closing tag")
 }
 
-impl ScannerSink for TreeBuilder<Handle, RcDom> {
-    fn has_unacknowledged_self_closing(&self) -> bool {
-        has_unacknowledged_self_closing(&self.sink)
-    }
-}
-
 impl ScannerSink for TreeBuilder<Handle, TrackingSink> {
     fn has_unacknowledged_self_closing(&self) -> bool {
         has_unacknowledged_self_closing(&self.sink.dom)
+    }
+
+    fn check_limits(&self, limits: &HtmlLimits) {
+        limits.after_token(self.sink.formatting_made.get(), |tracer| {
+            self.trace_handles(tracer);
+        });
     }
 
     fn begin_start_tag(&self) {
@@ -473,7 +507,15 @@ impl LexicalTextTracker {
 
 impl<S: ScannerSink> ScannerCallback<'_, S> {
     fn sink_token(&mut self, token: Token) {
+        // One event can hold several tokens (text split at NULs). Once a
+        // token has put the tree over a limit, the rest are not handed on.
+        if self.limits.exceeded().is_some() {
+            return;
+        }
         let result = self.sink.process_token(token, 1);
+        // Any token can make the tree builder reopen formatting elements,
+        // so every token is followed by a check of what it holds.
+        self.sink.check_limits(self.limits);
         self.next_state = match result {
             TokenSinkResult::Continue => None,
             TokenSinkResult::Script(_) => Some(State::Data),
@@ -488,8 +530,18 @@ impl<S: ScannerSink> ScannerCallback<'_, S> {
 
 impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
     fn handle_event(&mut self, event: CallbackEvent<'_>, span: Span<usize>) -> Option<Infallible> {
+        // Once the page is over a limit, the caller refuses it, so nothing
+        // more reaches the tree builder, whose cost the limits bound.
+        // html5gum still reads the rest of the input, in linear time.
+        if self.limits.exceeded().is_some() {
+            return None;
+        }
         match event {
             CallbackEvent::OpenStartTag { name } => {
+                self.limits.start_tag(name);
+                if self.limits.exceeded().is_some() {
+                    return None;
+                }
                 let decoded = String::from_utf8_lossy(name).into_owned();
                 self.current_tag = Some(Tag {
                     kind: TagKind::StartTag,
@@ -509,6 +561,14 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                 });
             }
             CallbackEvent::AttributeName { name } => {
+                // Only a start tag's attributes reach the tree builder; the
+                // ones html5gum reports for an end tag are dropped below.
+                if self.current_tag.is_some() {
+                    self.limits.attribute();
+                    if self.limits.exceeded().is_some() {
+                        return None;
+                    }
+                }
                 let decoded = String::from_utf8_lossy(name).into_owned();
                 if let Some(tag) = self.current_tag.as_mut() {
                     tag.attrs.push(Attribute {
@@ -568,6 +628,14 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                 let mut context = TagContext::default();
                 if let Some(mut tag) = self.current_tag.take() {
                     tag.self_closing = self_closing;
+                    // The browser keeps the first of two attributes with the
+                    // same name, as html5ever's own tokenizer does; html5gum
+                    // reports both. A set keeps this linear in the count.
+                    if tag.attrs.len() > 1 {
+                        let mut seen = HashSet::with_capacity(tag.attrs.len());
+                        tag.attrs
+                            .retain(|attr| seen.insert(attr.name.local.clone()));
+                    }
                     let name = tag.name.as_ref().to_owned();
                     self.sink.begin_start_tag();
                     self.sink_token(Token::TagToken(tag));
@@ -808,9 +876,16 @@ impl<S: ScannerSink> ForwardingEmitter for ScannerEmitter<'_, S> {
     }
 }
 
-pub fn scan_output_html(input: &str) -> Vec<OutputTag> {
-    let dom = RcDom::default();
-    let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
+/// Read `input` the way the browser's parser does and return the facts of
+/// each start tag.
+///
+/// Returns [`HtmlTooLarge`] when `input` is over one of the limits in
+/// `html_limits` (too many attributes on one tag, too many `html`, `head` or
+/// `body` start tags, elements nested too deep, or too many formatting
+/// elements reopened).
+pub fn scan_output_html(input: &str) -> Result<Vec<OutputTag>, HtmlTooLarge> {
+    let limits = HtmlLimits::default();
+    let mut builder = TreeBuilder::new(TrackingSink::default(), ParseOpts::default().tree_builder);
     let mut facts = Vec::new();
     let emitter = ScannerEmitter {
         inner: CallbackEmitter::new(ScannerCallback {
@@ -825,12 +900,11 @@ pub fn scan_output_html(input: &str) -> Vec<OutputTag> {
             raw_stack: Vec::new(),
             boundary: None,
             lexical_text: None,
+            limits: &limits,
         }),
     };
-    Tokenizer::new_with_emitter(input, emitter)
-        .finish()
-        .expect("string input is infallible");
-    facts
+    run_tokenizer(input, emitter, &limits)?;
+    Ok(facts)
 }
 
 /// Scan `input` like [`scan_output_html`], but hand each start tag to
@@ -839,10 +913,14 @@ pub fn scan_output_html(input: &str) -> Vec<OutputTag> {
 /// The result holds only the `script` and `style` tags, in document order,
 /// with their element ends filled in. The observer receives each of those
 /// tags with its index in the result, and every other tag with `None`.
+///
+/// Refuses the input like [`scan_output_html`] does. The observer may have
+/// seen the tags before the limit was reached.
 pub(crate) fn scan_output_html_with(
     input: &str,
     observer: &mut StartTagObserver<'_>,
-) -> Vec<OutputTag> {
+) -> Result<Vec<OutputTag>, HtmlTooLarge> {
+    let limits = HtmlLimits::default();
     let mut builder = TreeBuilder::new(TrackingSink::default(), ParseOpts::default().tree_builder);
     let mut facts = Vec::new();
     let emitter = ScannerEmitter {
@@ -858,27 +936,34 @@ pub(crate) fn scan_output_html_with(
             raw_stack: Vec::new(),
             boundary: None,
             lexical_text: None,
+            limits: &limits,
         }),
     };
-    Tokenizer::new_with_emitter(input, emitter)
-        .finish()
-        .expect("string input is infallible");
-    facts
+    run_tokenizer(input, emitter, &limits)?;
+    Ok(facts)
 }
 
 /// Parse a `div` fragment while retaining decoded source text in lexical
 /// element occurrences. The DOM and source facts come from one tokenizer pass.
+///
+/// Returns `None` when the fragment cannot be read as one, including when it
+/// is over one of the limits in `html_limits`.
 pub(crate) fn parse_div_fragment_with_lexical_text(
     input: &str,
 ) -> Option<(RcDom, Vec<LexicalTextRun>)> {
+    let limits = HtmlLimits::default();
     let dom = RcDom::default();
     let context = create_element(
         &dom,
         QualName::new(None, ns!(html), LocalName::from("div")),
         Vec::new(),
     );
-    let mut builder =
-        TreeBuilder::new_for_fragment(dom, context, None, ParseOpts::default().tree_builder);
+    let mut builder = TreeBuilder::new_for_fragment(
+        TrackingSink::new(dom),
+        context,
+        None,
+        ParseOpts::default().tree_builder,
+    );
     let mut facts = Vec::new();
     let mut tracker = LexicalTextTracker::default();
     let emitter = ScannerEmitter {
@@ -894,15 +979,15 @@ pub(crate) fn parse_div_fragment_with_lexical_text(
             raw_stack: Vec::new(),
             boundary: None,
             lexical_text: Some(&mut tracker),
+            limits: &limits,
         }),
     };
-    Tokenizer::new_with_emitter(input, emitter)
-        .finish()
-        .expect("string input is infallible");
+    // The page cannot be compared with what was expected when it is not read.
+    run_tokenizer(input, emitter, &limits).ok()?;
     if !tracker.valid || tracker.frames.len() != 1 {
         return None;
     }
-    Some((builder.sink, tracker.runs))
+    Some((builder.sink.finish(), tracker.runs))
 }
 
 /// Validate one strict, independently parseable HTML fragment boundary.
@@ -919,10 +1004,12 @@ pub(crate) fn parse_div_fragment_with_lexical_text(
 /// validator also checks for that state change. Self-closed SVG and MathML
 /// elements are allowed. Other browser recovery behavior is not promised by
 /// this validator. When it refuses a tokenizer error, the message names the
-/// first one by its name in the HTML standard.
+/// first one by its name in the HTML standard. It also refuses a fragment
+/// over one of the limits in `html_limits`, with that limit's message
+/// (see [`HtmlTooLarge`]) after the word `opaque`.
 pub fn validate_html_fragment_boundary(input: &str) -> Result<(), String> {
-    let dom = RcDom::default();
-    let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
+    let limits = HtmlLimits::default();
+    let mut builder = TreeBuilder::new(TrackingSink::default(), ParseOpts::default().tree_builder);
     let mut facts = Vec::new();
     let mut boundary = BoundaryTracker::default();
     let emitter = ScannerEmitter {
@@ -938,11 +1025,18 @@ pub fn validate_html_fragment_boundary(input: &str) -> Result<(), String> {
             raw_stack: Vec::new(),
             boundary: Some(&mut boundary),
             lexical_text: None,
+            limits: &limits,
         }),
     };
-    Tokenizer::new_with_emitter(input, emitter)
-        .finish()
-        .expect("string input is infallible");
+    // Vue parses the block inside a `<template>`, where some tags read as
+    // raw text in a document (such as `<style>` after `<col>`) are ignored
+    // and the tags after them are read. Checking both contexts lets the
+    // caller name the limit, rather than the later count failing.
+    if let Err(too_large) = run_tokenizer(input, emitter, &limits)
+        .and_then(|()| parse_fragment_in(input, "template").map(drop))
+    {
+        return Err(format!("opaque {too_large}"));
+    }
     if let Some(name) = boundary.parse_error {
         Err(format!("opaque HTML has the HTML parse error {name}"))
     } else if boundary.invalid || !boundary.stack.is_empty() {
@@ -950,6 +1044,58 @@ pub fn validate_html_fragment_boundary(input: &str) -> Result<(), String> {
     } else {
         Ok(())
     }
+}
+
+/// Parse `input` as the contents of a `context` element, the way the
+/// browser's fragment parser does (`template.innerHTML = input` for
+/// `"template"`), and return the document that holds the nodes.
+///
+/// html5gum reads the input and html5ever's tree builder builds the tree,
+/// like every other scan here, so the size limits in `html_limits` apply
+/// in the same parser context as the tree: a tag the tree builder reads is
+/// counted, whatever raw text the context makes of the tags before it.
+/// Returns [`HtmlTooLarge`] when the input is over a limit.
+///
+/// html5gum starts in its data state, which is right only for a context
+/// whose contents the browser reads as markup, such as `template` or `div`
+/// (not `title`, `textarea`, `script` or the like).
+pub(crate) fn parse_fragment_in(input: &str, context: &str) -> Result<RcDom, HtmlTooLarge> {
+    debug_assert!(
+        matches!(context, "template" | "div"),
+        "html5gum would start in the wrong state for <{context}>"
+    );
+    let limits = HtmlLimits::default();
+    let dom = RcDom::default();
+    let context = create_element(
+        &dom,
+        QualName::new(None, ns!(html), LocalName::from(context)),
+        Vec::new(),
+    );
+    let mut builder = TreeBuilder::new_for_fragment(
+        TrackingSink::new(dom),
+        context,
+        None,
+        ParseOpts::default().tree_builder,
+    );
+    let mut facts = Vec::new();
+    let emitter = ScannerEmitter {
+        inner: CallbackEmitter::new(ScannerCallback {
+            sink: &mut builder,
+            facts: &mut facts,
+            collect_facts: false,
+            observer: None,
+            input: input.as_bytes(),
+            current_tag: None,
+            current_fact: None,
+            next_state: None,
+            raw_stack: Vec::new(),
+            boundary: None,
+            lexical_text: None,
+            limits: &limits,
+        }),
+    };
+    run_tokenizer(input, emitter, &limits)?;
+    Ok(builder.sink.finish())
 }
 
 fn repair_attribute_value_spans(input: &[u8], fact: &mut OutputTag) {
@@ -1128,13 +1274,13 @@ mod tests {
 
     #[test]
     fn tree_builder_feedback_distinguishes_html_and_svg_title() {
-        let html = scan_output_html("<title><script>x</script></title>");
+        let html = scan_output_html("<title><script>x</script></title>").unwrap();
         assert_eq!(
             html.iter().map(|tag| tag.name.as_str()).collect::<Vec<_>>(),
             ["title"]
         );
 
-        let svg = scan_output_html("<svg><title><script>x</script></title></svg>");
+        let svg = scan_output_html("<svg><title><script>x</script></title></svg>").unwrap();
         assert_eq!(
             svg.iter().map(|tag| tag.name.as_str()).collect::<Vec<_>>(),
             ["svg", "title", "script"]
@@ -1144,7 +1290,7 @@ mod tests {
     #[test]
     fn spans_slice_exact_utf8_source_bytes() {
         let source = "<p title='žluťoučký' onclick=go()>x</p>";
-        let tag = &scan_output_html(source)[0];
+        let tag = &scan_output_html(source).unwrap()[0];
         assert_eq!(
             &source.as_bytes()[tag.start..tag.end],
             b"<p title='\xc5\xbelu\xc5\xa5ou\xc4\x8dk\xc3\xbd' onclick=go()>"
@@ -1179,6 +1325,7 @@ mod tests {
         for (source, expected) in cases {
             assert_eq!(
                 scan_output_html(source)
+                    .unwrap()
                     .iter()
                     .map(|tag| tag.name.as_str())
                     .collect::<Vec<_>>(),
@@ -1190,7 +1337,7 @@ mod tests {
     #[test]
     fn duplicate_attributes_keep_every_authored_source_range() {
         let source = "<button onclick='first()' onclick=second()>x</button>";
-        let tag = &scan_output_html(source)[0];
+        let tag = &scan_output_html(source).unwrap()[0];
         assert_eq!(tag.attributes.len(), 2);
         assert_eq!(tag.attributes[0].value, "first()");
         assert_eq!(tag.attributes[1].value, "second()");
@@ -1205,7 +1352,7 @@ mod tests {
     #[test]
     fn facts_keep_raw_entities_null_name_span_and_unclosed_raw_extent() {
         let source = "<a\0b href='java&#x73;cript:x'><script>open";
-        let tags = scan_output_html(source);
+        let tags = scan_output_html(source).unwrap();
         assert_eq!(
             &source.as_bytes()[tags[0].name_start..tags[0].name_end],
             b"a\0b"
@@ -1218,7 +1365,7 @@ mod tests {
     #[test]
     fn vertical_tab_does_not_become_html_attribute_whitespace() {
         let source = "<a href=\x0b'javascript:x'>";
-        let attr = &scan_output_html(source)[0].attributes[0];
+        let attr = &scan_output_html(source).unwrap()[0].attributes[0];
         assert_eq!(
             &source.as_bytes()[attr.value_start..attr.value_end],
             b"\x0b'javascript:x'"

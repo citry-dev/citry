@@ -198,6 +198,16 @@
   `data.points["a"]["x"]`, use the declared types instead:
   `data.scores[3]` and `data.points["a"].x`. A Pydantic `data` class
   already did this.
+- Events State kept on the server (`_storage = "server"`) now expires after
+  24 hours unless `State._max_age` sets another lifetime, so a page left
+  open longer asks the visitor to reload. A browser write that would make
+  it larger than `State._max_bytes`, now 64 KiB by default for server
+  storage, answers 422 before the handler runs; set `_max_bytes` higher, or
+  to `None`, to allow more. The default `InMemoryCache` counts this State
+  against a 64 MiB budget, apart from other entries, and drops the entry
+  used longest ago when full; set `InMemoryCache(state_max_bytes=...)` to
+  change that. `max_entries` no longer counts these entries
+  ([details](https://citry.dev/performance/cache-backends/#server-stored-state)).
 - `$error(handler).fieldErrors` now lists at most 20 errors for fields
   that the call's `data` class does not declare (or `State` fields it may
   not write), and at most 20 item errors in each list or dict field.
@@ -435,6 +445,38 @@
   field that the component's `Slots` class declares. Before, a name such as
   `__class__` or `_fields` could select another attribute of the `Slots`
   object.
+- A tag with thousands of attributes no longer ends the process when the
+  output checks (`security_csp`, `security_javascript`), the checks on
+  `Markup` and `<c-raw>` HTML, or the hydration checks read the page.
+  These checks now refuse HTML with more than 1,024 attributes on one tag,
+  or more than 16 start tags of any one of `<html>`, `<head>` and
+  `<body>`, which could take seconds to read: the output checks report the
+  page as unreadable, `Markup` and `<c-raw>` HTML in an interactive
+  component raise `ValueError`, and hydration leaves the server HTML out.
+- The same checks now also refuse HTML that keeps more than 512 elements
+  open at once (about 510 nested elements), or that leaves formatting tags
+  such as `<b>` and `<i>` open or misnested so often that the parser would
+  copy more than 250,000 elements and attributes. Reading such HTML could
+  take minutes or gigabytes of memory. The checks react as they do to the
+  limits above. A template that nests about 510 elements or more makes a
+  page over the 512-element limit, so the output checks report it as
+  unreadable.
+- The i18n number formatters and `tr()` raise `ValueError` for a
+  `Decimal` with more than 32,768 digits before or after the decimal point,
+  before writing any digits.
+- WSGI, Flask and Django hosts no longer read the body of a GET, HEAD or
+  OPTIONS request, the same as ASGI hosts.
+- `InMemoryCache` removes an expired entry at the next write, even when
+  nothing reads it again.
+- A call whose caller cannot use a new State token, such as a plain JSON
+  API call, no longer writes server-stored State to the cache.
+- Citry checks how deeply request JSON nests before parsing it, and
+  refuses more than 200 levels, the same on every Python version. A State
+  nested that deep now fails when its token is made, naming the component,
+  instead of on the next call.
+- `parse_string_style`, and the `style` values Citry merges or formats
+  in Python, now take time that grows with the length of the string, and
+  split it into declarations exactly as before.
 - A form field named `__proto__` is now sent with the Events call like
   any other field.
 - An Events `actions.Redirect` to a relative URL, such as `"?page=2"` or
@@ -915,6 +957,12 @@
 - In browsers such as Safari, an i18n message given an exact decimal with
   a long run of zeros before its last digit, such as 100,000 zeros, no
   longer holds up the page for seconds.
+- When a page hydrates, the server now writes a Vue element's merged or
+  array `:style`, and an object spread onto it with `v-bind`, in time
+  proportional to the size of the value; before, the time grew with its
+  square. A `:style` holding 40,000 declarations took several seconds and
+  now takes tens of milliseconds. The HTML is the same as before: style
+  text is split and keys are ordered by the same rules.
 
 ## v0.6.0
 

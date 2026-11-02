@@ -23,9 +23,9 @@
 //! the browser runtime empties the shell, but it must not move nodes around
 //! the shell while the browser parses the page.
 
-use crate::output_scanner::scan_output_html;
-use html5ever::tendril::TendrilSink;
-use html5ever::{namespace_url, ns, parse_fragment, LocalName, ParseOpts, QualName};
+use crate::html_limits::HtmlTooLarge;
+use crate::output_scanner::{parse_fragment_in, scan_output_html};
+use html5ever::{namespace_url, ns};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 
 /// How the page uses a checked block, which decides what it may contain.
@@ -51,35 +51,34 @@ pub struct StaticHtmlFacts {
 
 /// The number of top-level nodes the browser creates when Vue inserts `html`
 /// as a static vnode while it builds a page (`template.innerHTML = html`).
-pub fn static_html_node_count(html: &str) -> usize {
-    parse_children(html, "template").map_or(0, |(_, nodes)| nodes.len())
+///
+/// Returns [`HtmlTooLarge`] when `html` is over a limit in `html_limits`.
+pub fn static_html_node_count(html: &str) -> Result<usize, HtmlTooLarge> {
+    Ok(parse_children(html, "template")?.map_or(0, |(_, nodes)| nodes.len()))
 }
 
 /// Parse `html` as the contents of a `context` element and return the
 /// nodes the parser put directly inside it, with the document that owns
 /// them. The caller keeps the document alive while it reads the nodes:
 /// dropping it empties every node's children.
-fn parse_children(html: &str, context: &str) -> Option<(RcDom, Vec<Handle>)> {
-    let dom = parse_fragment(
-        RcDom::default(),
-        ParseOpts::default(),
-        QualName::new(None, ns!(html), LocalName::from(context)),
-        Vec::new(),
-    )
-    .one(html);
+///
+/// Returns [`HtmlTooLarge`] when `html` is over a limit in `html_limits`,
+/// counted in this same context.
+fn parse_children(html: &str, context: &str) -> Result<Option<(RcDom, Vec<Handle>)>, HtmlTooLarge> {
+    let dom = parse_fragment_in(html, context)?;
     // A fragment parse puts one `html` element under the document, and the
     // parsed nodes inside it.
     let roots = dom.document.children.borrow().clone();
     let [root] = roots.as_slice() else {
-        return None;
+        return Ok(None);
     };
     let nodes = match &root.data {
         NodeData::Element { name, .. } if name.local.as_ref() == "html" => {
             root.children.borrow().clone()
         }
-        _ => return None,
+        _ => return Ok(None),
     };
-    Some((dom, nodes))
+    Ok(Some((dom, nodes)))
 }
 
 /// Elements whose parsed form runs code or loads content again when the
@@ -147,18 +146,21 @@ pub fn static_html_in_context(
     usage: StaticHtmlUse,
 ) -> Option<StaticHtmlFacts> {
     // Tokenizing the block costs a parse, so it runs only when one of the
-    // names appears at all.
+    // names appears at all. A block over a limit in `html_limits` cannot be
+    // shown to hold no document tag, so it is rejected like one that does;
+    // each parse below also rejects a block over a limit in its own context.
     let lowered = html.to_ascii_lowercase();
     if DOCUMENT_TAGS
         .iter()
         .any(|tag| lowered.contains(&format!("<{tag}")))
-        && scan_output_html(html)
-            .iter()
-            .any(|tag| DOCUMENT_TAGS.contains(&tag.name.to_ascii_lowercase().as_str()))
+        && scan_output_html(html).map_or(true, |tags| {
+            tags.iter()
+                .any(|tag| DOCUMENT_TAGS.contains(&tag.name.to_ascii_lowercase().as_str()))
+        })
     {
         return None;
     }
-    let (_reference_dom, reference) = parse_children(html, "template")?;
+    let (_reference_dom, reference) = parse_children(html, "template").ok()??;
     let mut element_count = 0;
     for node in &reference {
         if !allowed(node, usage, &mut element_count) {
@@ -208,7 +210,7 @@ pub fn static_html_in_context(
         page.push_str(tag);
         page.push('>');
     }
-    let (_page_dom, mut children) = parse_children(&page, "div")?;
+    let (_page_dom, mut children) = parse_children(&page, "div").ok()??;
     for tag in open {
         // Each open element must hold only the next one: anything else
         // means the parser closed or moved something around the block.
@@ -361,6 +363,9 @@ fn same_tree(actual: &Handle, expected: &Handle) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{static_html_in_context, static_html_node_count, StaticHtmlFacts, StaticHtmlUse};
+    use crate::output_scanner::parse_fragment_in;
+    use html5ever::{namespace_url, ns};
+    use markup5ever_rcdom::{Handle, NodeData, RcDom};
 
     fn adopted(open: &[&str], html: &str) -> Option<StaticHtmlFacts> {
         static_html_in_context(open, html, StaticHtmlUse::Adopted)
@@ -373,16 +378,102 @@ mod tests {
         })
     }
 
+    /// The tree as text, one node per line, indented by depth, with each
+    /// element's namespace and attributes, so two parses can be compared.
+    fn dump(node: &Handle, depth: usize, out: &mut String) {
+        let pad = "  ".repeat(depth);
+        match &node.data {
+            NodeData::Element {
+                name,
+                attrs,
+                template_contents,
+                ..
+            } => {
+                let attrs: Vec<String> = attrs
+                    .borrow()
+                    .iter()
+                    .map(|attr| format!("{:?}{}={:?}", attr.name.ns, attr.name.local, &*attr.value))
+                    .collect();
+                out.push_str(&format!("{pad}<{:?} {} {attrs:?}>\n", name.ns, name.local));
+                if let Some(contents) = template_contents.borrow().as_ref() {
+                    dump(contents, depth + 1, out);
+                }
+            }
+            NodeData::Text { contents } => {
+                out.push_str(&format!("{pad}{:?}\n", &**contents.borrow()));
+            }
+            NodeData::Comment { contents } => {
+                out.push_str(&format!("{pad}<!--{:?}>\n", &**contents));
+            }
+            other => out.push_str(&format!("{pad}{other:?}\n")),
+        }
+        for child in node.children.borrow().iter() {
+            dump(child, depth + 1, out);
+        }
+    }
+
+    #[test]
+    fn the_fragment_parse_builds_the_tree_html5ever_builds() {
+        // `parse_children` reads with html5gum and builds with html5ever's
+        // tree builder. These fragments cover the tokenizer states the tree
+        // builder switches and the insertion modes that move nodes; each
+        // must give the tree html5ever's own fragment parse gives.
+        use html5ever::tendril::TendrilSink;
+        use html5ever::{parse_fragment, LocalName, ParseOpts, QualName};
+        let fragments = [
+            "a &amp; b &copy c &#x41; &#0; &nosuch;",
+            "<p>one<p>two<div>three</div>",
+            "<b>x<i>y</b>z</i>",
+            "<table><tr><td>1<td>2</table>after",
+            "<tr><td>1</td></tr><tr></tr>",
+            "<col><style>x</style><p>y",
+            "<select><option>a<option>b<style>s</style></select>",
+            "<svg><title><b>t</b></title><foreignObject><p>x</p></foreignObject></svg>",
+            "<math><mi>x</mi><annotation-xml encoding=text/html><p>y</p></annotation-xml></math>",
+            "<svg><![CDATA[<b>]]></svg><![CDATA[x]]>",
+            "<script>if (a < b) { '</p>' }</script><style>p{}</style>",
+            "<textarea>\nkeep <b>text</b></textarea><title>a<b></title>",
+            "<pre>\n\nline</pre><listing>\nx</listing>",
+            "<template><tr><td>in</td></tr></template>",
+            "<noscript><p>n</p></noscript><iframe><p></iframe><xmp><p></xmp>",
+            "<DIV CLASS=a Class=b>case</DIV><IMAGE src=x>",
+            "line\r\nbreak\rcr<!-- c -- -> --><!-->",
+            "nul\0here<p a\0b=c>",
+            "<a href=1><a href=2>x</a><button><button>",
+            "<p a='1' b=\"2\" c=3 d>attributes</p><br/><div/>",
+            "<plaintext><p>rest is text",
+        ];
+        for fragment in fragments {
+            for context in ["template", "div"] {
+                let reference = parse_fragment(
+                    RcDom::default(),
+                    ParseOpts::default(),
+                    QualName::new(None, ns!(html), LocalName::from(context)),
+                    Vec::new(),
+                )
+                .one(fragment);
+                let ours = parse_fragment_in(fragment, context).unwrap();
+                let (mut expected, mut actual) = (String::new(), String::new());
+                dump(&reference.document, 0, &mut expected);
+                dump(&ours.document, 0, &mut actual);
+                assert_eq!(actual, expected, "{fragment:?} in {context}");
+            }
+        }
+    }
+
     #[test]
     fn counts_top_level_texts_comments_and_elements() {
-        assert_eq!(static_html_node_count(""), 0);
-        assert_eq!(static_html_node_count("   "), 1);
-        assert_eq!(static_html_node_count("a &amp; b"), 1);
-        assert_eq!(static_html_node_count("<b>x</b>"), 1);
-        assert_eq!(static_html_node_count("lead <b>x</b> tail"), 3);
-        assert_eq!(static_html_node_count("<b>x</b><!-- c --><i>y</i>"), 3);
+        assert_eq!(static_html_node_count(""), Ok(0));
+        assert_eq!(static_html_node_count("   "), Ok(1));
+        assert_eq!(static_html_node_count("a &amp; b"), Ok(1));
+        assert_eq!(static_html_node_count("<b>x</b>"), Ok(1));
+        assert_eq!(static_html_node_count("lead <b>x</b> tail"), Ok(3));
+        assert_eq!(static_html_node_count("<b>x</b><!-- c --><i>y</i>"), Ok(3));
         // Table parts stay where the `<template>` parse puts them.
-        assert_eq!(static_html_node_count("<tr><td>1</td></tr><tr></tr>"), 2);
+        assert_eq!(
+            static_html_node_count("<tr><td>1</td></tr><tr></tr>"),
+            Ok(2)
+        );
     }
 
     #[test]

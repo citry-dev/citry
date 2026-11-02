@@ -3,16 +3,21 @@
 //!
 //! Comparing the browser's parse with the expected nodes and checking a raw
 //! HTML block call themselves once per level of the parsed tree. These tests
-//! run both on HTML nested 2,000 elements deep on threads with 128 KiB and
-//! 384 KiB stacks. A crash aborts this test binary, which fails the test
-//! run.
+//! run both on HTML nested as deep as the parse allows (see
+//! `MAX_OPEN_ELEMENTS`) on threads with 128 KiB and 384 KiB stacks. A crash
+//! aborts this test binary, which fails the test run.
 
 use citry_html_transform::hydration_structure::{
     browser_fragment_matches_nodes, ExpectedNodeEvent,
 };
 use citry_html_transform::static_html::{static_html_in_context, StaticHtmlUse};
+use citry_html_transform::MAX_OPEN_ELEMENTS;
 
-const DEPTH: usize = 2_000;
+/// The deepest nesting both checks read. Each parse also holds the root
+/// `<html>` and its context element, and the raw block check holds the
+/// `<div>` it is told is open around the block. The nesting limit counts
+/// all three (see `tests/html_limits.rs`).
+const DEPTH: usize = MAX_OPEN_ELEMENTS - 3;
 
 fn on_small_stacks(work: fn() -> bool) {
     for stack_size in [128 * 1024, 384 * 1024] {

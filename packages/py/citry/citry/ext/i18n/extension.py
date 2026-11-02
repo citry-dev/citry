@@ -93,6 +93,13 @@ _PDI = "\u2069"
 _BIDI_CONTROLS = frozenset("\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
 _BIDI_PARAGRAPH_BOUNDARIES = frozenset("\r\n\x1c\x1d\x1e\x85\u2029")
 _NO_PROVIDED_CONTEXT = object()
+# The Rust number formatter (ICU4X) keeps each digit's power of ten in a signed
+# 16-bit number, so it formats only values whose digits all sit between 10^32767
+# and 10^-32768. A Decimal stores its exponent apart from its digits, so a short
+# string such as "1e999999999" is cheap to hold but would take a billion
+# characters to write out. Checking these bounds first keeps that from happening.
+_DECIMAL_MAX_MAGNITUDE = 32767
+_DECIMAL_MIN_MAGNITUDE = -32768
 
 
 def _record_to_wire(
@@ -1864,8 +1871,7 @@ class I18nExtension(Extension):
         if type(value) is int:
             return str(value)
         if type(value) is Decimal and value.is_finite():
-            text = format(value, "f")
-            return "0" if Decimal(text).is_zero() else text
+            return _plain_decimal_text(value, "A number passed to an i18n formatter")
         raise TypeError("i18n numeric formatters require an exact int or finite Decimal.")
 
     def make_context(
@@ -2391,10 +2397,9 @@ class I18nExtension(Extension):
         if isinstance(value, Decimal):
             if not value.is_finite():
                 raise ValueError(f"i18n argument {name!r} must be a finite Decimal.")
-            text = format(value, "f")
-            if value.is_zero():
-                text = "0"
-            return {"type": "decimal", "value": text}
+            # An untyped Fluent parameter writes these digits straight into the
+            # page, so the size check must run here and not only in the formatter.
+            return {"type": "decimal", "value": _plain_decimal_text(value, f"i18n argument {name!r}")}
         if isinstance(value, datetime):
             if value.tzinfo is None or value.utcoffset() is None:
                 raise ValueError(f"i18n argument {name!r} must be an aware datetime.")
@@ -2444,3 +2449,28 @@ def _isolate_bidi_paragraphs(value: str, *, direction: str) -> str:
     if paragraph:
         parts.extend((isolate, paragraph, _PDI))
     return "".join(parts)
+
+
+def _plain_decimal_text(value: Decimal, subject: str) -> str:
+    """Write a finite Decimal as plain digits, refusing one the number formatter cannot take."""
+    # Zero comes first: `0e-999999999` is still zero, but its exponent alone
+    # would fail the bounds check below.
+    if value.is_zero():
+        return "0"
+    sign_digits_exponent = value.as_tuple()
+    # Callers pass only finite values, whose tuple exponent is always an int.
+    # The `int` check is for the type checker: `as_tuple()` types the
+    # exponent as `int | Literal["n", "N", "F"]` to cover NaN and infinity.
+    last = sign_digits_exponent.exponent
+    # `adjusted()` is the power of ten of the first digit and the tuple
+    # exponent that of the last one, so both are known without writing any
+    # digits out.
+    if not isinstance(last, int) or value.adjusted() > _DECIMAL_MAX_MAGNITUDE or last < _DECIMAL_MIN_MAGNITUDE:
+        # The message gives the size, never the value, so a refused number
+        # cannot become a huge log line.
+        raise ValueError(
+            f"{subject} must be a Decimal whose digits all lie between 10**{_DECIMAL_MIN_MAGNITUDE} "
+            f"and 10**{_DECIMAL_MAX_MAGNITUDE}; got a value with {len(sign_digits_exponent.digits)} "
+            f"digit(s) and exponent {last}."
+        )
+    return format(value, "f")

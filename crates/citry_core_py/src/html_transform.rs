@@ -120,20 +120,46 @@ pub fn browser_fragment_matches_nodes(
 /// The browser parses the block inside a `<template>` element, so table
 /// parts stay where they are written. Vue needs this count to adopt the
 /// block's nodes when the server already wrote them into the page.
+///
+/// Raises `ValueError` when the HTML is over a size limit: a tag with more
+/// than 1,024 attributes, more than 16 start tags of one of `html`, `head`
+/// and `body`, more than 512 elements open at once, or formatting tags such
+/// as `<b>` left open or misnested so often that the parser would copy more
+/// than 250,000 elements and attributes.
 #[pyfunction]
-pub fn static_html_node_count(html: &str) -> usize {
+pub fn static_html_node_count(html: &str) -> PyResult<usize> {
     with_enough_stack_where_measurable(|| static_html_node_count_rust(html))
+        .map_err(|error| PyValueError::new_err(error.to_string()))
 }
 
+/// Check that `html` is one strict, self-contained HTML fragment.
+///
+/// Raises `ValueError` when it is not. The message starts with
+/// `opaque HTML has the HTML parse error ` and the standard's name for the
+/// error. When the HTML is over a size limit, it starts with
+/// `opaque HTML has a tag with more than` for a tag with more than 1,024
+/// attributes, `opaque HTML has more than` for more than 16 start tags of
+/// one of `html`, `head` and `body`, `opaque HTML keeps more than` for more
+/// than 512 elements open at once, or `opaque HTML leaves formatting tags`
+/// for formatting tags left open or misnested so often that the parser
+/// would copy more than 250,000 elements and attributes.
 #[pyfunction]
 pub fn validate_html_fragment_boundary(html: &str) -> PyResult<()> {
     with_enough_stack_where_measurable(|| validate_html_fragment_boundary_rust(html))
         .map_err(PyValueError::new_err)
 }
 
+/// Return the facts of each start tag in `html`.
+///
+/// Raises `ValueError` when the HTML is over a size limit: a tag with more
+/// than 1,024 attributes, more than 16 start tags of one of `html`, `head`
+/// and `body`, more than 512 elements open at once, or formatting tags such
+/// as `<b>` left open or misnested so often that the parser would copy more
+/// than 250,000 elements and attributes.
 #[pyfunction]
 pub fn scan_output_html(py: Python, html: &str) -> PyResult<Py<PyAny>> {
     let output = with_enough_stack_where_measurable(|| scan_output_html_rust(html))
+        .map_err(|error| PyValueError::new_err(error.to_string()))?
         .into_iter()
         .map(|tag| {
             let item = PyDict::new(py);
@@ -354,8 +380,13 @@ fn javascript_mode(value: Option<&str>) -> PyResult<Option<JavascriptMode>> {
 /// Offsets are UTF-8 byte offsets.
 ///
 /// Raises `ValueError` for an unknown `javascript` mode, and
-/// `ValueError("citry output check failed: ...")` if the check panics.
-/// A string with a lone surrogate raises `UnicodeEncodeError`.
+/// `ValueError("citry output check failed: ...")` if the check panics or
+/// the page is too large for Citry to read (a tag with more than 1,024
+/// attributes, more than 16 start tags of one of `html`, `head` and `body`,
+/// more than 512 elements open at once, or formatting tags such as `<b>`
+/// left open or misnested so often that the parser would copy more than
+/// 250,000 elements and attributes). A string with a lone surrogate raises
+/// `UnicodeEncodeError`.
 #[pyfunction(name = "_check_output_html")]
 #[pyo3(signature = (html, *, pre_extension, csp, javascript, marker_prefix, trusted_tag_starts, omit_handler_marker))]
 pub fn check_output_html(
@@ -386,6 +417,7 @@ pub fn check_output_html(
     let report = catch_panic(|| {
         with_enough_stack_where_measurable(|| check_output_html_rust(html, &options))
     })
+    .and_then(|read| read.map_err(|error| error.to_string()))
     .map_err(|detail| PyValueError::new_err(format!("citry output check failed: {detail}")))?;
     let events = PyList::empty(py);
     for event in report.events {

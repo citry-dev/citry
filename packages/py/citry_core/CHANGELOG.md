@@ -38,6 +38,24 @@
 - A comprehension variable that is an attribute, an item, a list, or a
   starred name, such as `[x for a.b in items]`, now raises `SyntaxError`
   instead of stopping the process with a Rust panic.
+- `html_transform.scan_output_html()`,
+  `validate_html_fragment_boundary()`,
+  `browser_fragment_matches_nodes()`, and
+  `browser_fragment_matches_elements()` no longer end the Python process
+  for HTML with a tag that has thousands of attributes. These functions,
+  `static_html_node_count()`, and the output checks now refuse HTML with
+  more than 1,024 attributes on one tag or more than 16 start tags of any
+  one of `<html>`, `<head>` and `<body>`, which could take seconds to read:
+  `scan_output_html()`, `validate_html_fragment_boundary()` and
+  `static_html_node_count()` raise `ValueError`, and the two
+  `browser_fragment_matches_*()` functions return `False`.
+- The same functions and the output checks now also refuse HTML that keeps
+  more than 512 elements open at once, or that leaves formatting tags such
+  as `<b>` and `<i>` open or misnested so often that the parser would copy
+  more than 250,000 elements and attributes. Reading such HTML could take
+  minutes or gigabytes of memory. They refuse it the same way as the limits
+  above, and `validate_html_fragment_boundary()` starts its message with
+  `opaque HTML keeps more than` or `opaque HTML leaves formatting tags`.
 - `parse_template()` no longer rejects Vue-only syntax inside `v-pre`, such
   as `v-once`, `<transition>`, or `@click.bogus`, because Vue reads it as
   plain HTML there. `<c-*>` tags inside `v-pre` keep their checks.

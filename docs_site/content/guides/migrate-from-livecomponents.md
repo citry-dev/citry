@@ -116,7 +116,7 @@ render itself:
 With `_storage = "server"`, Citry keeps the State values in its cache and
 sends the browser a reference instead of a token that holds them.
 
-Two settings need attention in this step:
+Three things need attention in this step:
 
 - **`_public` decides what browser code can read.** Fields listed in
   `_public` still reach the browser, for templates and bindings, even with
@@ -127,6 +127,14 @@ Two settings need attention in this step:
   one process's memory, which suits development. With several workers,
   configure a shared backend such as Redis so every request finds the same
   State. See [Cache backends](/performance/cache-backends/).
+- **Stored State has limits.** Each stored copy expires after 24 hours
+  unless `_max_age` sets another lifetime, and a browser write that would
+  make the State larger than `_max_bytes` (64 KiB by default) is refused
+  with a 422. Raise `_max_bytes`, or set it to `None`, if the browser
+  writes larger values. The default in-memory cache counts this State
+  against a 64 MiB budget and drops the copy used longest ago when full;
+  see
+  [Server-stored State](/performance/cache-backends/#server-stored-state).
 
 ## Step 2: signed State
 

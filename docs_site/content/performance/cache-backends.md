@@ -50,7 +50,7 @@ assert isinstance(app.cache, InMemoryCache)
 ```
 
 The store is safe to use from several threads and has no size limit by
-default. Set `max_entries` to cap it. When the store is full, it drops
+default for ordinary entries. Set `max_entries` to cap them. When the store is full, it drops
 the entry that was used longest ago:
 
 ```python
@@ -59,8 +59,50 @@ app = Citry(cache=backend)
 ```
 
 `max_entries` must be a positive `int` or `None`; any other value raises
-`ValueError`. The limit counts every value in the store, not only
-rendered output.
+`ValueError`. The limit counts every value in the store except Events
+State kept on the server, which has its own limit (below).
+
+An entry written with a lifetime is removed once it expires, at the next
+write to the store, even if nothing reads it again.
+
+### Server-stored State { #server-stored-state }
+
+Events State kept on the server (`State._storage = "server"`) adds one
+entry for every render and every State change. Each lasts 24 hours unless
+`State._max_age` sets another lifetime. `InMemoryCache` keeps these
+entries apart from everything else, under a budget of 64 MiB by default:
+
+```python
+backend = InMemoryCache(state_max_bytes=256 * 1024 * 1024)
+app = Citry(cache=backend)
+```
+
+When the budget is full, the store drops the State entry used longest
+ago. The visitor whose entry was dropped sees their next call fail with
+`stale_state`, and the page asks them to reload. Other entries, such as
+the scripts and styles that open pages load, never make room for State,
+so many State writes cannot push them out.
+
+The budget counts the memory each entry's text takes in Python, plus 256
+bytes for the objects that hold it. Text such as emoji takes up to four
+bytes per character, so it uses the budget faster. An entry larger than
+the whole budget is not stored, so the call that would use it also fails
+with `stale_state`, and Citry logs a warning. Reloading makes the same
+entry again, so the call keeps failing until you raise
+`state_max_bytes`.
+`state_max_bytes` must be a positive `int` or `None`; any other value
+raises `ValueError`. `None` removes the budget, and Citry then logs a
+warning once when it stores such State.
+
+64 MiB holds about 1,000 entries of the largest plain-text size a browser
+write can make (64 KiB, the default `State._max_bytes`), or about 100,000
+of the few-hundred-byte entries a page view usually writes. Raise it when
+many visitors keep pages open for hours, and lower it on a small worker.
+
+The budget keeps one client from filling the worker's memory, but such a
+client can still push out other visitors' State by sending many calls.
+Those visitors then see a reload prompt. Rate-limit the Events routes if
+that matters for your app.
 
 ## Share a store
 

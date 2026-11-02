@@ -27,3 +27,13 @@ const NEW_SEGMENT: usize = 1024 * 1024;
 pub(crate) fn with_enough_stack<T>(work: impl FnOnce() -> T) -> T {
     stacker::maybe_grow(RED_ZONE, NEW_SEGMENT, work)
 }
+
+/// Run `work` with at least `reserve` bytes of stack available, on a new
+/// segment of `reserve` plus `NEW_SEGMENT` bytes when the thread has less.
+///
+/// A tokenizer run (see `tokenizer`) keeps a larger reserve than
+/// `RED_ZONE`, because it cannot check the stack between html5gum's calls.
+/// The same rule applies: the work must not call into Python.
+pub(crate) fn with_stack_reserve<T>(reserve: usize, work: impl FnOnce() -> T) -> T {
+    stacker::maybe_grow(reserve, reserve + NEW_SEGMENT, work)
+}

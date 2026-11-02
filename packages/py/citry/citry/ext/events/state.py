@@ -61,6 +61,11 @@ STATE_META_NAMES = ("_public", "_model", "_storage", "_max_bytes", "_max_age")
 
 _STORAGE_VALUES = ("signed", "server")
 _DEFAULT_MAX_BYTES = 8192
+# Server storage exists for State too large to send with every call, so its
+# cap is higher. It is checked only after browser writes: each change stores
+# a new cache entry, and without a cap one call could make that entry as
+# large as the request body.
+_DEFAULT_SERVER_MAX_BYTES = 65536
 
 # Descriptor-shaped values (methods and friends) are allowed under any
 # underscore name: State may carry private helpers just like it carries the
@@ -88,15 +93,19 @@ class StateMeta:
             ``public``.
         storage: Where the round-trip State lives: ``"signed"`` (in the
             client token) or ``"server"``.
-        max_bytes: Mint-time cap on the serialized State, in bytes.
-        max_age: Optional token expiry; ``None`` means tokens do not expire.
+        max_bytes: Cap on the serialized State, in bytes. Signed storage
+            checks it each time it makes a token. Server storage checks it
+            after the browser's writes and before the handler runs, and
+            ``None`` turns that check off.
+        max_age: Optional token expiry. With ``None``, signed tokens never
+            expire and server-stored entries expire after 24 hours.
 
     """
 
     public: tuple[str, ...]
     model: tuple[str, ...]
     storage: str
-    max_bytes: int
+    max_bytes: int | None
     max_age: timedelta | None
 
 
@@ -648,7 +657,13 @@ def check_replaced_state(component_class: type, nearest: NestedClassDeclaration,
     consequences = {
         "_public": "browser code can now read every field",
         "_model": "browser code can now change every field it can read",
-        "_max_age": "its values never expire",
+        # A server-stored State without `_max_age` still expires, on the
+        # 24-hour default, so the warning must not say it never does.
+        "_max_age": (
+            "its values expire after the 24-hour default"
+            if state_setting(declared, "_storage", "signed") == "server"
+            else "its values never expire"
+        ),
     }
     for setting, consequence in consequences.items():
         if state_setting(parent_schema, setting) is not None and not has_state_setting(declared, setting):
@@ -684,7 +699,7 @@ def resolve_state_meta(comp_name: str, user_cls: type, state_cls: type) -> State
     ``_model`` defaults to ``_public``, which defaults to all fields;
     ``_model`` must be a subset of ``_public``. ``_storage``, ``_max_bytes``,
     and ``_max_age`` are stored with their defaults
-    (``"signed"``, ``8192``, ``None``).
+    (``"signed"``, ``8192`` or ``65536`` for server storage, ``None``).
     """
     field_names = state_field_names(state_cls)
 
@@ -716,8 +731,17 @@ def resolve_state_meta(comp_name: str, user_cls: type, state_cls: type) -> State
         )
         raise ValueError(msg)
 
-    max_bytes = state_setting(user_cls, "_max_bytes", _DEFAULT_MAX_BYTES)
-    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
+    default_max_bytes = _DEFAULT_SERVER_MAX_BYTES if storage == "server" else _DEFAULT_MAX_BYTES
+    max_bytes = state_setting(user_cls, "_max_bytes", default_max_bytes)
+    # Only server storage may turn the cap off: signed State travels inside
+    # the page and every call, so it always needs one.
+    if max_bytes is None and storage != "server":
+        msg = (
+            f"Component {comp_name}: State._max_bytes = None turns the size cap off, which only"
+            f' _storage = "server" allows. Signed State travels in every page and call; set a positive int (bytes).'
+        )
+        raise ValueError(msg)
+    if max_bytes is not None and (isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0):
         msg = f"Component {comp_name}: State._max_bytes must be a positive int (bytes); got {max_bytes!r}."
         raise ValueError(msg)
 

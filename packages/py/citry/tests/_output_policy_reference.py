@@ -103,7 +103,7 @@ class ReferenceCspValidator(_CspRenderValidator):
             template = scan_output_html(html)
         except Exception as error:  # noqa: BLE001 - strict mode must fail closed on ambiguous output
             self._add(
-                f"the settled HTML could not be parsed for CSP validation ({error})",
+                f"the settled HTML could not be parsed for CSP validation ({_unreadable_page_detail(error)})",
                 "settled render output",
                 None,
                 None,
@@ -302,7 +302,8 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
                 raise ValueError("Citry omission handler metadata remained in unparseable settled HTML") from error
             self._add(
                 "unparseable-output",
-                f"settled HTML could not be parsed for JavaScript policy validation ({error})",
+                "settled HTML could not be parsed for JavaScript policy validation"
+                f" ({_unreadable_page_detail(error)})",
                 "settled render output",
             )
             return html
@@ -592,6 +593,21 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
                     inherited_component=component,
                     inherited_instance=own_instance,
                 )
+
+
+def _unreadable_page_detail(error: Exception) -> str:
+    """
+    Return the reason the Rust check gives when it cannot read the page.
+
+    The Rust binding starts the ValueError it raises with
+    ``citry output check failed:``, including the one for a page over a size
+    limit (`html_limits.rs`), so the reference reports it the same way. A
+    lone surrogate raises a UnicodeEncodeError (also a ValueError) before
+    the page reaches Rust, and keeps its own text.
+    """
+    if isinstance(error, ValueError) and not isinstance(error, UnicodeError):
+        return f"citry output check failed: {error}"
+    return str(error)
 
 
 def _node_html(html: str, node: Any) -> str:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -236,6 +237,10 @@ def loads_strict_json(data: str | bytes | bytearray) -> Any:
             raise ValueError(f"JSON integer out of browser range: {raw}")
         return value
 
+    # The depth is checked on the text, before Python's parser runs: in a
+    # thread with a small stack, CPython 3.12 and 3.13 can crash the whole
+    # process on deep text instead of raising RecursionError.
+    check_json_depth(data)
     try:
         value = json.loads(data, parse_constant=reject_constant, parse_float=finite_float, parse_int=finite_int)
     except RecursionError as err:
@@ -299,3 +304,50 @@ def _copy_json_unchecked(value: Any) -> Any:
             else:
                 target[key] = item
     return copied
+
+
+# A JSON string, with its escapes. Brackets inside one are text, not nesting,
+# so they are removed before counting. A string with no closing quote runs to
+# the end of the text, so every match from a quote succeeds and each
+# character is read once.
+_JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"?', re.DOTALL)
+_JSON_BRACKET = re.compile(r"[\[\]{}]")
+
+
+def check_json_depth(data: str | bytes | bytearray, limit: int = MAX_JSON_DEPTH) -> None:
+    """
+    Refuse JSON text that nests arrays and objects more than ``limit`` levels, before parsing it.
+
+    The check reads the text with two regular expressions and a counter, so it
+    uses no recursion and needs no more stack for deeper text. It counts only
+    brackets and braces outside strings. Bytes are first decoded the way
+    ``json.loads`` decodes them (UTF-8, UTF-16 or UTF-32), so the check sees
+    the same characters as the parser. Text that is not valid JSON may pass
+    or fail here; the parser that runs next reports it either way.
+
+    Raises:
+        JsonNestingError: The text nests more than ``limit`` levels deep.
+        UnicodeDecodeError: The bytes are not text in the encoding
+            ``json.loads`` would read them in.
+
+    """
+    if isinstance(data, (bytes, bytearray)):
+        raw = bytes(data)
+        text = raw.decode(json.detect_encoding(raw), "surrogatepass")
+    elif isinstance(data, str):
+        text = data
+    else:
+        # Not JSON text at all; the parser that runs next refuses it.
+        return
+    # Text with no more opening brackets than the limit cannot be deeper, so
+    # most requests skip the scan below.
+    if text.count("[") + text.count("{") <= limit:
+        return
+    depth = 0
+    for match in _JSON_BRACKET.finditer(_JSON_STRING.sub("", text)):
+        if match.group() in "[{":
+            depth += 1
+            if depth > limit:
+                raise JsonNestingError
+        else:
+            depth -= 1

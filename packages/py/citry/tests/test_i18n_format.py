@@ -2,6 +2,8 @@
 
 # ruff: noqa: RUF001
 
+import logging
+import tracemalloc
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
@@ -29,6 +31,7 @@ from citry import (
     TimeSegments,
     UnitFormat,
 )
+from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.i18n import I18nRuntimeUnavailableError
 
 
@@ -692,3 +695,183 @@ def test_registry_defensively_copies_and_validates_profiles() -> None:
         DateTimeInput(mode="segments", two_digit_year_start=9_901)
     with pytest.raises(ValueError, match="width"):
         UnitFormat(width="verbose")
+
+
+# A Decimal keeps its exponent apart from its digits, so these few bytes
+# stand for numbers that would take ten million characters to write out.
+# A larger exponent costs nothing more once the check runs, and this size
+# keeps the test cheap if the check is ever missing.
+_HUGE_DECIMALS = ("1e10000000", "-1e10000000", "1e-10000000", "123e9999999")
+
+
+def _english_formatters():
+    i18n = configured_app().extensions.get_extension("i18n")
+    return i18n.for_context(i18n.make_context(locale="en-US")).format
+
+
+def _formatter_calls(fmt, value):
+    return {
+        "number": lambda: fmt.number(value, format="measurement"),
+        "percent": lambda: fmt.percent(value, format="completion"),
+        "currency": lambda: fmt.currency(value, "EUR", format="money"),
+        "unit": lambda: fmt.unit(value, "meter", format="measurement"),
+        "relative_time": lambda: fmt.relative_time(value, unit="day", format="short"),
+    }
+
+
+@pytest.mark.parametrize("text", _HUGE_DECIMALS)
+@pytest.mark.parametrize("formatter", ["number", "percent", "currency", "unit", "relative_time"])
+def test_a_decimal_outside_the_formatter_range_is_refused_before_its_digits_are_written(
+    text: str, formatter: str
+) -> None:
+    fmt = _english_formatters()
+    call = _formatter_calls(fmt, Decimal(text))[formatter]
+    tracemalloc.start()
+    try:
+        with pytest.raises(ValueError, match="digits all lie between") as caught:
+            call()
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 1_000_000
+    # The message gives the size, so a refused value cannot flood a log.
+    assert len(str(caught.value)) < 300
+
+
+def test_zero_with_a_huge_exponent_formats_as_zero_without_writing_its_digits() -> None:
+    fmt = _english_formatters()
+    tracemalloc.start()
+    try:
+        assert fmt.number(Decimal("0e-10000000"), format="measurement") == "0"
+        assert fmt.number(Decimal("-0e10000000"), format="measurement") == "0"
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 1_000_000
+
+
+@pytest.mark.parametrize(
+    ("text", "accepted"),
+    [
+        # The first digit may sit at 10^32767 at most.
+        ("1e32767", True),
+        ("9.99e32767", True),
+        ("1e32768", False),
+        # The last digit may sit at 10^-32768 at least, trailing zeros included.
+        ("1e-32768", True),
+        ("1.00e-32766", True),
+        ("1.5e-32768", False),
+        ("1.000e-32766", False),
+        ("1e-32769", False),
+    ],
+)
+def test_the_python_bounds_match_what_the_formatter_accepts(text: str, *, accepted: bool) -> None:
+    fmt = _english_formatters()
+    if accepted:
+        assert fmt.number(Decimal(text), format="measurement")
+    else:
+        with pytest.raises(ValueError, match="digits all lie between"):
+            fmt.number(Decimal(text), format="measurement")
+
+
+def test_many_digits_inside_the_range_still_format() -> None:
+    value = Decimal("9" * 30000 + "." + "9" * 30000)
+    assert len(_english_formatters().number(value, format="measurement")) > 60000
+
+
+def _total_components(app: Citry) -> dict[str, type[Component]]:
+    # Without a `@param` type, Fluent writes the value's digits straight into
+    # the page; with one, the number formatter writes them.
+    class PlainTotal(Component):
+        citry = app
+
+        class Kwargs:
+            amount: Decimal
+
+        template = """
+            {{ tr("plain-total", amount=amount) }}
+        """
+
+        messages = """
+            plain-total = Total { $amount }
+        """
+
+    class NumberTotal(Component):
+        citry = app
+
+        class Kwargs:
+            amount: Decimal
+
+        template = """
+            {{ tr("number-total", amount=amount) }}
+        """
+
+        messages = """
+            # @param {Decimal} $amount
+            number-total = Total { NUMBER($amount, profile: "measurement") }
+        """
+
+    return {"plain": PlainTotal, "number": NumberTotal}
+
+
+@pytest.mark.parametrize("kind", ["plain", "number"])
+def test_a_tr_argument_outside_the_formatter_range_is_refused(kind: str) -> None:
+    total = _total_components(configured_app())[kind]
+    with pytest.raises(ValueError, match="i18n argument 'amount' must be a Decimal") as caught:
+        str(total(amount=Decimal("1e10000000")))
+    # The render error adds the template excerpt, but never the digits.
+    assert len(str(caught.value)) < 1000
+    assert "0000000000" not in str(caught.value)
+
+
+@pytest.mark.parametrize("kind", ["plain", "number"])
+def test_a_tr_argument_inside_the_range_renders(kind: str) -> None:
+    total = _total_components(configured_app())[kind]
+    assert "Total \u206812.5\u2069" in str(total(amount=Decimal("12.5")))
+    assert "Total \u20680\u2069" in str(total(amount=Decimal("0e-10000000")))
+
+
+def test_an_events_handler_showing_a_submitted_huge_decimal_logs_a_short_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Showing a submitted amount in the reply is an ordinary pattern, and the
+    # form's text becomes a Decimal with whatever exponent it names.
+    app = configured_app()
+    app.set_mounted_prefix("/citry")
+
+    class AmountIn:
+        amount: Decimal
+
+    class Echo(Component):
+        citry = app
+
+        class Kwargs:
+            amount: Decimal = Decimal(0)
+
+        class Events:
+            def show(self, data: AmountIn) -> Component:
+                return Echo(amount=data.amount)
+
+        template = """
+            {{ fmt.number(amount, format="measurement") }}
+        """
+
+    call = {
+        "componentClassId": Echo.class_id,
+        "handlerName": "show",
+        "callerRenderId": "e1",
+        "args": {"amount": "1e10000000"},
+        "argsSource": "form",
+    }
+    envelope = {"protocol": "citry-events/1", "requestId": "r1", "calls": [call]}
+    with caplog.at_level("ERROR", logger="citry"):
+        result = EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=app))
+    [item] = result["results"]
+    assert item["ok"] is False
+    assert item["error"]["code"] == "handler_error"
+    # The logged error, traceback included, must not repeat the digits.
+    formatter = logging.Formatter()
+    assert caplog.records
+    logged = [formatter.format(record) for record in caplog.records]
+    assert any("digits all lie between" in text for text in logged)
+    assert all(len(text) < 20_000 for text in logged)

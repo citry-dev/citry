@@ -31,7 +31,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 license = "MIT"
-license-files = ["LICENSE", "LICENSE-vize"]
+license-files = ["LICENSE", "LICENSE-vize", "LICENSE-html5gum"]
 dependencies = []
 
 [dependency-groups]
@@ -82,4 +82,6 @@ cache-keys = [
     { file = "../../../third_party/rust/vize_atelier_core/Cargo.toml" },
     { file = "../../../third_party/rust/vize_s1_to_s2/**/*.rs" },
     { file = "../../../third_party/rust/vize_s1_to_s2/Cargo.toml" },
+    { file = "../../../third_party/rust/html5gum/**/*.rs" },
+    { file = "../../../third_party/rust/html5gum/Cargo.toml" },
 ]

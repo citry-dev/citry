@@ -202,7 +202,8 @@ class URLRoute:
     server hold a large body in memory. ``request.body`` then holds at most
     the limit plus one byte, and the handler must reject a body longer than
     the limit, because that body was cut short. ``None`` (the default) reads
-    the whole body. The limit applies to this route only, not to its
+    the whole body. No adapter reads the body of a GET, HEAD or OPTIONS
+    request, whatever the limit. The limit applies to this route only, not to its
     ``children``. A function that returns something other than an ``int``
     of 0 or more makes each request fail with an error, which the web
     framework answers with status 500.
@@ -280,6 +281,12 @@ def sent_content_type(response: RouteResponse) -> str:
     if not isinstance(response.content, str) or not lowered.startswith("text/") or "charset=" in lowered:
         return response.content_type
     return f"{response.content_type}; charset=utf-8"
+
+
+# Methods whose requests carry no body a route can use. Every adapter skips
+# reading the body for them, so Citry reads none of a large body sent with a
+# GET, whatever limit the route sets.
+BODYLESS_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def body_read_limit(route: URLRoute) -> int | None:

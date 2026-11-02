@@ -86,6 +86,8 @@ from citry.ext.events.tokens import (
     StateUpdateError,
     apply_state_updates,
     mint_state_token,
+    server_state_bytes,
+    server_state_growth_error,
     verify_state_token,
 )
 from citry.extension import _as_list_of_items
@@ -843,12 +845,28 @@ class EventsDispatcher:
             _restore_json_tuples(state, info.state_cls)
             state_fingerprint = _state_fingerprint(state)
             if updates and info.state_meta is not None:
+                meta = info.state_meta
+                # Server storage keeps every changed State in the cache, so a
+                # browser write must not make it larger than the cap. The
+                # check runs here, before the handler, so a refused call has
+                # no side effects.
+                capped = meta.storage == "server" and meta.max_bytes is not None
+                size_before = server_state_bytes(state, comp_cls.class_id) if capped else None
                 try:
-                    apply_state_updates(state, updates, model_fields=info.state_meta.model)
+                    apply_state_updates(state, updates, model_fields=meta.model)
                 except StateUpdateError as err:
                     return build_error_result(build_error(422, "invalid_args", err.message, err.fields), send_sequence)
                 # A browser update for a tuple field also arrives as a list.
                 _restore_json_tuples(state, info.state_cls)
+                if capped:
+                    too_large = server_state_growth_error(
+                        before=size_before,
+                        after=server_state_bytes(state, comp_cls.class_id),
+                        max_bytes=meta.max_bytes,
+                        component_name=comp_cls.__name__,
+                    )
+                    if too_large is not None:
+                        return build_error_result(build_error(422, "invalid_args", too_large), send_sequence)
 
         # Args validation against the handler's data schema (design 3.3, WP9).
         args = call.get("args") or {}
@@ -1288,16 +1306,9 @@ class EventsDispatcher:
         meta = plan.info.state_meta
         if meta is None:  # pragma: no cover - a state instance implies its meta
             return wire_actions
-        token = mint_state_token(
-            plan.state,
-            class_id=plan.comp_cls.class_id,
-            secret=ctx.citry.settings.secret,
-            max_age=meta.max_age,
-            max_bytes=meta.max_bytes,
-            storage=meta.storage,
-            cache=ctx.citry.cache,
-            component_name=plan.comp_cls.__name__,
-        )
+        # Both checks below come before the token is made: for server storage,
+        # making one writes a cache entry, and an entry no client receives is
+        # never read, so it would only fill the cache.
         if plan.instance_id is None:
             # No instance, no client registry entry to refresh; the caller is
             # an API client or a plain form (design 4.2).
@@ -1314,6 +1325,16 @@ class EventsDispatcher:
                 f" capabilities exclude the 'state' action; the State refresh is dropped."
             )
             return wire_actions
+        token = mint_state_token(
+            plan.state,
+            class_id=plan.comp_cls.class_id,
+            secret=ctx.citry.settings.secret,
+            max_age=meta.max_age,
+            max_bytes=meta.max_bytes,
+            storage=meta.storage,
+            cache=ctx.citry.cache,
+            component_name=plan.comp_cls.__name__,
+        )
         # The browser shows public State through `$state` and State bindings, and
         # nothing else will refresh them: the caller is not rendered again here.
         state_action = build_state_action(plan.instance_id, token, public_state_values(plan.state, meta))

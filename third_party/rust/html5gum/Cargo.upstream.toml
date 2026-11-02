@@ -1,0 +1,91 @@
+[package]
+name = "html5gum"
+authors = ["Markus Unterwaditzer <markus-honeypot@unterwaditzer.net>"]
+description = "A WHATWG-compliant HTML5 tokenizer and tag soup parser."
+edition = "2018"
+readme = "README.md"
+keywords = ["html", "html5", "whatwg", "parser", "tokenizer"]
+categories = [ "parser-implementations", "web-programming" ]
+license = "MIT"
+repository = "https://github.com/untitaker/html5gum"
+version = "0.8.4"
+include = ["src/**/*", "LICENSE", "README.md", "benches"]
+
+[dev-dependencies]
+pretty_assertions = "1.0.0"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.71"
+test-generator = "0.3.0"
+serde_bytes = "0.11.5"
+glob = "0.3.0"
+libtest-mimic = "0.8.1"
+# https://github.com/bheisler/iai/issues/34
+# need to have cache simulation running because of bencher.dev
+iai = { git = "https://github.com/sigaloid/iai", rev = "d56a597" }
+markup5ever_rcdom = "0.5.0-unofficial"
+# required for examples/scraper.rs
+scraper = "0.21.0"
+argh = "0.1.12"
+annotate-snippets = "0.11.5"
+
+[features]
+# By default this crate depends on the jetscii library for best performance.
+# Disabling this feature will leave you with 100% safe Rust and no dependencies.
+# This may come in handy if you encounter packaging/build problems.
+default = ["jetscii"]
+
+# The tree-builder feature contains utilities to use html5ever's DOM and tree
+# builder with html5gum's tokenizer.
+tree-builder = ["html5ever"]
+
+# Features for guided fuzzing using IJON: https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/IJON.md
+afl-ijon = ["afl"]
+
+[dependencies]
+html5ever = { version = "0.29.0", optional = true }
+jetscii = { version = "0.5.1", optional = true }
+afl = { version = "0.17.0", optional = true }
+
+[[bench]]
+name = "patterns"
+harness = false
+
+[[bench]]
+name = "files"
+harness = false
+
+[[test]]
+name = "html5lib-tokenizer"
+path = "tests/html5lib_tokenizer.rs"
+harness = false
+
+[[test]]
+name = "html5lib-tree-builder"
+path = "tests/html5lib_tree_builder.rs"
+required-features = ["tree-builder"]
+harness = false
+
+[[test]]
+name = "test_spans"
+path = "tests/test_spans.rs"
+harness = false
+
+[[example]]
+name = "build_tree"
+required-features = ["tree-builder"]
+
+[[example]]
+name = "custom_emitter"
+
+[[example]]
+name = "callback_emitter"
+
+[[example]]
+name = "scraper"
+required-features = ["tree-builder"]
+
+[[example]]
+name = "spans"
+
+[lib]
+bench = false

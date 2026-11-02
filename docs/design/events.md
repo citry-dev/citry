@@ -969,8 +969,8 @@ declarations and no State on the subclass fail at definition, the same as
   | `_public` | tuple of field names | all fields | Which fields templates and client bindings may touch, and the only fields whose plain values ship client-side (4.4, 7.2). Omission from `_public` is how a field becomes server-only. |
   | `_model` | tuple of field names | same as `_public` | Which public fields the client may write, through two-way bindings or `$state`; declare it only to clamp down. Must be a subset of `_public` (7.2). |
   | `_storage` | `"signed"` \| `"server"` | `"signed"` | Where the round-trip State lives: signed into the client token (7.1), or, opt-in, a server-side store keyed by an opaque token (the livecomponents migration's step one, 10). |
-  | `_max_bytes` | `int` | `8192` | Mint-time cap on the serialized State; a design-smell canary, not a technical limit (7.1). |
-  | `_max_age` | `timedelta` | none | Optional token expiry; expired tokens answer `stale_state` and degrade per component, not per page (7.1). |
+  | `_max_bytes` | `int`, or `None` with server storage | `8192`; `65536` with server storage | Signed storage: mint-time cap on the serialized State, a design-smell canary, not a technical limit (7.1). Server storage: browser writes may not grow the stored State past it; the call answers 422 `invalid_args` before the handler runs. `None` turns that check off, and is a definition error for signed storage. |
+  | `_max_age` | `timedelta` | none; 24 hours with server storage | Optional token expiry; expired tokens answer `stale_state` and degrade per component, not per page (7.1). Server storage uses it as the cache entry's lifetime. |
 
   Details and the security doctrine in 7.2.
 - State may carry methods; they survive the dataclass conversion. The
@@ -4338,7 +4338,8 @@ Rules, each closing a named prior-art hole:
 
 On each call the order is: verify token (cheapest rejection first), check
 the class id against the route, rebuild `cls.State(**s)`, apply `stateUpdates`
-to `_model` fields (7.2), validate args, run `_context`, run guards, run the
+to `_model` fields (7.2), refuse the call with 422 when those writes grow
+server-stored State past `_max_bytes`, validate args, run `_context`, run guards, run the
 handler. After the handler, a mutated State is re-signed and returned
 (inside the fragment manifest when a render action exists, as a `state`
 action otherwise, each carrying the public State values beside the
@@ -4362,6 +4363,36 @@ fragments already document, and the prior art that led with server-held
 state grew the worst failure modes (session TTL storms, Redis in dev).
 The protocol does not change either way; that is the point of the
 opaque token.
+
+Server storage writes a new cache entry each time it makes a token: at
+every render, and after every call that changes State. It writes one only
+when a client receives the token, so a call with no caller instance, or
+from a client that does not accept the `state` action, stores nothing.
+The caller instance is a value the client sends, so this rule saves only
+honest traffic; it does not limit a client that names a made-up instance.
+
+Each entry expires after `_max_age`, or 24 hours when that is unset, and
+browser writes may not grow the stored State past `_max_bytes` (64 KiB by
+default). Citry never deletes an old entry when it makes a new one,
+because a call that times out in the browser can still commit on the
+server, and the browser would then hold a token whose entry is gone. A
+deployment therefore sizes its cache for the number of renders and State
+changes within that lifetime.
+
+The default `InMemoryCache` keeps State entries in a store of their own,
+under a byte budget (`state_max_bytes`, 64 MiB by default), and drops the
+entry used longest ago when the budget is full. The budget counts the
+memory CPython uses for each entry's strings plus a fixed 256 bytes. This
+bounds the memory a client can fill whatever caller instances it names,
+and the separate store means State never pushes out page assets. The cost
+moves to other visitors instead: one client that sends many calls can push
+their State out, and they then see a reload prompt, so rate-limit the
+Events routes where that matters. A dropped entry answers `stale_state`
+(409) on its next use, the same as an expired one. An entry larger than
+the whole budget is not stored, and Citry logs a warning.
+`state_max_bytes=None` turns the budget off, and Citry then warns once
+when it stores server State there. Shared backends apply their own
+limits.
 
 #### Why signing is the default, and where encryption fits
 

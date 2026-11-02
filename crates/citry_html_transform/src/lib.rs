@@ -5,6 +5,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
+mod html_limits;
 pub mod hydration_nesting;
 pub mod hydration_structure;
 pub mod marker;
@@ -12,9 +13,14 @@ pub mod output_policy;
 pub mod output_scanner;
 mod stack;
 pub mod static_html;
+mod tokenizer;
 pub mod transformer;
 
 // Re-export the types and functions that users need
+pub use html_limits::{
+    HtmlTooLarge, MAX_ATTRIBUTES_PER_TAG, MAX_DOCUMENT_TAGS, MAX_OPEN_ELEMENTS,
+    MAX_REOPENED_FORMATTING_ELEMENTS,
+};
 pub use hydration_nesting::{tokens_nest_in_browser, NestingToken};
 pub use hydration_structure::{
     browser_fragment_matches_elements, browser_fragment_matches_nodes, ExpectedElementEvent,

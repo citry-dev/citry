@@ -63,11 +63,64 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   (html5gum with html5ever's tree builder choosing the tokenizer state) and
   returns each start tag's facts; `scan_output_html_with` hands them to a
   callback instead of keeping them.
+- `src/tokenizer.rs` - the one function every html5gum run goes through
+  (`run_tokenizer`). It keeps the run on enough stack, whatever thread
+  calls it, and returns whether the run stayed within the size limits.
+- `src/html_limits.rs` - the size limits every parse applies before
+  html5ever builds a tree: 1,024 attributes on one tag, 16 start tags of
+  each of `html`, `head` and `body`, 512 elements held open at once, and
+  250,000 formatting elements and attributes reopened. html5ever's cost
+  grows with the square of an attribute count, of a repeated `<html>` or
+  `<body>` count, and of the nesting depth. When formatting tags such as
+  `<b>` are closed out of order, html5ever keeps them on a list and opens
+  a copy of each at the next text or tag, so the tree grows by the input
+  size times the length of that list. After each token, `after_token`
+  counts the elements the tree builder holds (it lists them through
+  `trace_handles`) and compares the formatting elements the scan's tree
+  sink saw created (`TrackingSink`, the DOM every scan builds into) with
+  the formatting start tags it was given.
 - `src/static_html.rs` - checks that a finished piece of HTML (a `<c-raw>`
   block, or the HTML the server writes inside a shell) keeps its own
   `<template>` parse where the page puts it, and counts the top-level nodes
   Vue's static vnode needs to adopt it.
 - `tests/marker.rs`, `tests/transformer.rs` - the tests.
+- `tests/attribute_runs.rs` - runs each entry point on a tag with 100,000
+  attributes on a 128 KiB and an 8 MiB stack, in a child process, because a stack overflow
+  cannot be caught. Each entry point refuses the tag, but html5gum still
+  reads all of it.
+- `tests/html_limits.rs` - each entry point at and just over each size
+  limit, and the inputs that were slow before the limits.
+
+## Gotchas
+
+- **html5gum is a patched copy.** The workspace builds
+  `third_party/rust/html5gum` (0.8.4 with one line changed; its
+  `README.citry.md` says which and why). Upstream 0.8.4 nests a few calls
+  for each `name="value"` attribute in a row, so one tag with about 50,000
+  of them overflows the 8 MiB main-thread stack in a release build (about
+  3,000 on a 512 KiB thread) and aborts the process. A stack guard around
+  our own code cannot stop that, because the calls are inside html5gum.
+  When you upgrade html5gum, carry the change over unless upstream has
+  fixed it; `tests/attribute_runs.rs` fails if it is lost.
+- **Start html5gum only through `run_tokenizer`** (test helpers aside), so
+  every run gets the same stack reserve and the same size limits. Build a
+  fragment's tree with `output_scanner::parse_fragment_in`, not
+  html5ever's own `parse_fragment`, so the limits count in the context the
+  tree is built in.
+- **Build every scan's tree into `TrackingSink`.** It counts the formatting
+  elements the parser makes, and the limit on reopened ones reads that
+  count after each token. A scan that built into another sink would never
+  refuse a page for reopening.
+- **The nesting limit counts the parser's own elements.** It is 512
+  elements held at once. A page scan holds `<html>`, `<body>` and the
+  `<head>` pointer, so it fits 509 nested elements; a `<template>`
+  fragment holds the root `<html>` and the context element, so it fits 510
+  (`tests/html_limits.rs` locks both). `tests/deep_nesting.rs` runs the
+  recursive checks over the deepest tree these limits allow.
+- **The Python wrappers pick a hint by the start of each limit's message**
+  (`packages/py/citry/citry/_vue/opaque_html.py`). Give a new limit a
+  message that starts with words no other limit's message starts with, and
+  add its hint there.
 
 ## Who depends on it
 

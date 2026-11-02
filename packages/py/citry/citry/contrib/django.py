@@ -65,6 +65,7 @@ from citry._path_checks import PathLookup, register_path_checker
 from citry._sub_path import normalize_sub_path
 from citry.contrib._path_lookup import files_beside, path_below
 from citry.util.routing import (
+    BODYLESS_METHODS,
     RouteHeaders,
     RouteRequest,
     body_read_limit,
@@ -145,12 +146,16 @@ def _read_body(request: Any, limit: int | None) -> bytes:
 def _build_request(request: Any, body_limit: int | None = None) -> RouteRequest:
     """Read Django's ``HttpRequest`` into a framework-neutral request."""
     headers = RouteHeaders(request.headers.items())
+    # A GET, HEAD or OPTIONS body is never read, as on the other adapters:
+    # Citry routes take no body from these methods, so reading one would
+    # only cost memory.
+    body = b"" if request.method in BODYLESS_METHODS else _read_body(request, body_limit)
     return RouteRequest(
         method=request.method,
         path=request.path,
         query={key: tuple(values) for key, values in request.GET.lists()},
         headers=headers,
-        body=_read_body(request, body_limit),
+        body=body,
         content_type=headers.get("content-type", ""),
         native=request,
     )
