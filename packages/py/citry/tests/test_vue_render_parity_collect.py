@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from citry._vue.compiler import NativeCompiler
 from scripts.vue_render_parity.collect import render_code
+
+from citry._vue.compiler import NativeCompiler
 
 
 def test_the_parity_collector_cuts_the_render_code_out_of_a_compiled_definition() -> None:
