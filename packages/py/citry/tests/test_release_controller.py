@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import gzip
+import hashlib
 import json
+import re
+import zipfile
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import Self
 
 import pytest
+import yaml  # type: ignore[import-untyped]
 from scripts import release
 from scripts.release import (
     GitHubClient,
@@ -15,9 +21,6 @@ from scripts.release import (
     verify_producer_run,
     verify_qualification,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_python_manifest(path: Path, *, name: str, version: str, dependencies: tuple[str, ...] = ()) -> None:
@@ -417,3 +420,615 @@ def test_a_failed_job_lookup_still_reports_the_run_failure(monkeypatch: pytest.M
     with pytest.raises(ReleaseError) as raised:
         _wait(monkeypatch, client)
     assert str(raised.value) == "Qualify citry for candidate 1 failed: https://example.test/runs/7"
+
+
+# Restart and retry. Every registry answer below is a synthetic payload; no
+# test reaches PyPI, the Marketplace, Open VSX, or GitHub.
+
+_COMMIT = "a" * 40
+_WHEEL = "citry_core-1.7.0-cp311-abi3-manylinux_2_17_x86_64.whl"
+_SDIST = "citry_core-1.7.0.tar.gz"
+_VSIX = "citry-0.1.3.vsix"
+
+
+def _qualification_archive(path: Path, files: dict[str, bytes], *, inventory: dict[str, str] | None = None) -> str:
+    """Write a qualification zip like the workers retain, and return its artifact digest."""
+    recorded = inventory or {name: hashlib.sha256(body).hexdigest() for name, body in files.items()}
+    with zipfile.ZipFile(path, "w") as bundle:
+        for name, body in files.items():
+            bundle.writestr(name, body)
+        bundle.writestr(
+            "release-inventory.json",
+            json.dumps({"artifacts": [{"name": name, "sha256": digest} for name, digest in recorded.items()]}),
+        )
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _pypi_json(files: dict[str, bytes]) -> bytes:
+    urls = [
+        {"filename": name, "digests": {"sha256": hashlib.sha256(body).hexdigest()}} for name, body in files.items()
+    ]
+    return json.dumps({"urls": urls}).encode()
+
+
+class _Registry:
+    """Answer registry URLs from a fixed table; any other URL is a 404."""
+
+    def __init__(self, answers: dict[str, bytes]) -> None:
+        self.answers = answers
+        self.requested: list[str] = []
+
+    def get(self, url: str) -> tuple[int, bytes]:
+        self.requested.append(url)
+        return (200, self.answers[url]) if url in self.answers else (404, b"")
+
+
+class _ReleaseGitHub:
+    """Serve the GitHub calls `publish_candidate` makes, from fixed state."""
+
+    def __init__(
+        self,
+        tmp_path: Path,
+        *,
+        tags: dict[str, str],
+        releases: dict[str, dict[str, object]],
+        archives: dict[int, bytes],
+    ) -> None:
+        self.repository = "citry-dev/citry"
+        self.tmp_path = tmp_path
+        self.tags = tags
+        self.releases = releases
+        self.archives = archives
+        self.dispatched: list[str] = []
+
+    def request(self, _method: str, path: str) -> dict[str, object]:
+        if path.endswith("/jobs?per_page=100"):
+            return {"jobs": []}
+        return {**_producer_run(), "path": ".github/workflows/repo--release-candidate.yml"}
+
+    def tag_commit(self, tag: str) -> str | None:
+        return self.tags.get(tag)
+
+    def release(self, tag: str) -> dict[str, object] | None:
+        return self.releases.get(tag)
+
+    def download_artifact(self, artifact_id: int, destination: Path) -> None:
+        destination.write_bytes(self.archives[artifact_id])
+
+    def dispatch(self, *, workflow: str, ref: str, inputs: dict[str, str]) -> None:
+        assert ref == "main"
+        assert inputs["operation"] == "promote"
+        self.dispatched.append(workflow)
+
+    def workflow_runs(self, workflow: str) -> list[dict[str, object]]:
+        # Each dispatched worker finishes at once, so the layer can advance.
+        key = next(spec.key for spec in release.PACKAGE_SPECS if spec.workflow == workflow)
+        return [
+            {
+                "id": 50,
+                "display_title": f"Publish {key} for candidate 3",
+                "created_at": "2999-01-01T00:00:00Z",
+                "status": "completed",
+                "conclusion": "success",
+                "html_url": "https://example.test/runs/50",
+            }
+        ]
+
+
+def _core_candidate(tmp_path: Path, core_files: dict[str, bytes]) -> tuple[dict[str, object], dict[int, bytes]]:
+    """Build a two-layer candidate (citry-core, then citry) with a real core archive."""
+    candidate = build_plan(
+        _repo(tmp_path / "repo"),
+        commit=_COMMIT,
+        selected=("citry-core", "citry"),
+        existing_tags=frozenset(),
+    )
+    archive = tmp_path / "core.zip"
+    digest = _qualification_archive(archive, core_files)
+    candidate["candidate_id"] = "1"
+    candidate["qualifications"] = [
+        {"package": "citry-core", "run_id": 10, "artifact_id": 11, "artifact_digest": digest},
+        {"package": "citry", "run_id": 20, "artifact_id": 21, "artifact_digest": "sha256:" + "e" * 64},
+    ]
+    return candidate, {11: archive.read_bytes()}
+
+
+_CORE_FILES = {_WHEEL: b"wheel bytes", _SDIST: b"sdist bytes"}
+_CORE_PYPI = "https://pypi.org/pypi/citry-core/1.7.0/json"
+
+
+def _github_release(tmp_path: Path, files: dict[str, bytes], *, extra: tuple[str, ...] = ()) -> dict[str, object]:
+    """Build the GitHub Release a finished citry-core worker leaves, from the archive it promoted."""
+    with zipfile.ZipFile(tmp_path / "core.zip") as bundle:
+        inventory = bundle.read("release-inventory.json")
+    bodies = {**files, "release-inventory.json": inventory, "qualification-provenance.json": b"{}"}
+    bodies.update({name: b"x" for name in extra})
+    return {
+        "draft": False,
+        "tag_name": "citry-core@1.7.0",
+        "assets": [
+            {"name": name, "state": "uploaded", "digest": "sha256:" + hashlib.sha256(body).hexdigest()}
+            for name, body in bodies.items()
+        ],
+    }
+
+
+def _finished_core(tmp_path: Path, archives: dict[int, bytes], **release_options: object) -> _ReleaseGitHub:
+    """Serve a citry-core whose annotated tag and GitHub Release an earlier run created."""
+    return _ReleaseGitHub(
+        tmp_path,
+        tags={"citry-core@1.7.0": _COMMIT},
+        releases={"citry-core@1.7.0": _github_release(tmp_path, _CORE_FILES, **release_options)},  # type: ignore[arg-type]
+        archives=archives,
+    )
+
+
+def _publish(client: _ReleaseGitHub, registry: _Registry, candidate: dict[str, object]) -> None:
+    publish_candidate(
+        candidate,
+        client=client,  # type: ignore[arg-type]
+        ref="main",
+        publication_id="3",
+        candidate_run_id=1,
+        registry=registry,  # type: ignore[arg-type]
+    )
+
+
+def test_restart_skips_a_package_already_published_from_the_same_bytes(tmp_path: Path) -> None:
+    # The first run published citry-core and stopped later. A restart must not
+    # send citry-core to its worker again, and must go on to the next layer.
+    candidate, archives = _core_candidate(tmp_path, _CORE_FILES)
+    client = _finished_core(tmp_path, archives)
+    registry = _Registry({_CORE_PYPI: _pypi_json(_CORE_FILES)})
+
+    _publish(client, registry, candidate)
+
+    assert client.dispatched == ["py--citry--publish.yml"]
+    assert registry.requested == [_CORE_PYPI]
+
+
+def test_restart_stops_when_the_registry_holds_different_bytes(tmp_path: Path) -> None:
+    candidate, archives = _core_candidate(tmp_path, _CORE_FILES)
+    client = _finished_core(tmp_path, archives)
+    registry = _Registry({_CORE_PYPI: _pypi_json({**_CORE_FILES, _WHEEL: b"other wheel bytes"})})
+
+    with pytest.raises(ReleaseError, match=rf"citry-core 1\.7\.0 on PyPI: .*changed=\['{re.escape(_WHEEL)}'\]"):
+        _publish(client, registry, candidate)
+    # Nothing is dispatched once a public file is known to be wrong.
+    assert client.dispatched == []
+
+
+def test_restart_sends_a_partly_uploaded_package_back_to_its_worker(tmp_path: Path) -> None:
+    # Only the sdist reached PyPI. The worker uploads the wheel with
+    # skip-existing and then checks every file, so the controller must not
+    # count the package as published.
+    candidate, archives = _core_candidate(tmp_path, _CORE_FILES)
+    client = _finished_core(tmp_path, archives)
+    registry = _Registry({_CORE_PYPI: _pypi_json({_SDIST: _CORE_FILES[_SDIST]})})
+
+    _publish(client, registry, candidate)
+
+    assert client.dispatched == ["py--citry-core--publish.yml", "py--citry--publish.yml"]
+
+
+def test_restart_sends_a_package_without_its_tag_to_the_worker_that_creates_it(tmp_path: Path) -> None:
+    # PyPI already serves the files, but the tag job failed. Only the worker
+    # holds the release App's write access, so it must run again; it skips
+    # the upload and creates the tag and GitHub Release. The controller does
+    # not read the registry or the archive on this path.
+    candidate, archives = _core_candidate(tmp_path, _CORE_FILES)
+    client = _ReleaseGitHub(tmp_path, tags={}, releases={}, archives=archives)
+    registry = _Registry({_CORE_PYPI: _pypi_json(_CORE_FILES)})
+
+    _publish(client, registry, candidate)
+
+    assert client.dispatched == ["py--citry-core--publish.yml", "py--citry--publish.yml"]
+    assert registry.requested == []
+
+
+def test_restart_sends_a_tag_without_its_github_release_back_to_the_worker(tmp_path: Path) -> None:
+    candidate, archives = _core_candidate(tmp_path, _CORE_FILES)
+    client = _ReleaseGitHub(tmp_path, tags={"citry-core@1.7.0": _COMMIT}, releases={}, archives=archives)
+
+    _publish(client, _Registry({_CORE_PYPI: _pypi_json(_CORE_FILES)}), candidate)
+
+    assert client.dispatched == ["py--citry-core--publish.yml", "py--citry--publish.yml"]
+
+
+def test_restart_rejects_a_tag_on_another_commit(tmp_path: Path) -> None:
+    candidate, archives = _core_candidate(tmp_path, _CORE_FILES)
+    client = _ReleaseGitHub(tmp_path, tags={"citry-core@1.7.0": "b" * 40}, releases={}, archives=archives)
+
+    with pytest.raises(ReleaseError, match=r"citry-core@1\.7\.0 names commit b+, not the candidate commit"):
+        _publish(client, _Registry({}), candidate)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "extra asset",
+        "missing asset",
+        "other wheel bytes",
+        "draft",
+        "asset still uploading",
+        "other tag",
+    ],
+)
+def test_restart_sends_a_package_whose_github_release_is_not_exact_back_to_the_worker(
+    tmp_path: Path, change: str
+) -> None:
+    # A Release whose final check failed must not count as finished: the
+    # worker runs again, and its own Release check names the problem.
+    candidate, archives = _core_candidate(tmp_path, _CORE_FILES)
+    client = _finished_core(tmp_path, archives, extra=("notes.txt",) if change == "extra asset" else ())
+    github_release = client.releases["citry-core@1.7.0"]
+    assets = github_release["assets"]
+    assert isinstance(assets, list)
+    if change == "missing asset":
+        assets.pop(0)
+    elif change == "other wheel bytes":
+        assets[0]["digest"] = "sha256:" + "0" * 64
+    elif change == "draft":
+        github_release["draft"] = True
+    elif change == "asset still uploading":
+        assets[0]["state"] = "starter"
+    elif change == "other tag":
+        github_release["tag_name"] = "citry-core@1.6.0"
+
+    _publish(client, _Registry({_CORE_PYPI: _pypi_json(_CORE_FILES)}), candidate)
+
+    assert client.dispatched == ["py--citry-core--publish.yml", "py--citry--publish.yml"]
+
+
+def test_a_lightweight_tag_is_not_a_release_tag(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The tag job accepts only annotated tags, so the controller must not
+    # count a hand-made lightweight tag as one.
+    client = GitHubClient(repository="citry-dev/citry", token="test-token")  # noqa: S106 - synthetic credential
+    monkeypatch.setattr(client, "request_if_present", lambda _path: {"object": {"type": "commit", "sha": _COMMIT}})
+
+    with pytest.raises(ReleaseError, match="not an annotated release tag"):
+        client.tag_commit("citry-core@1.7.0")
+
+
+def test_an_annotated_tag_resolves_to_its_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = GitHubClient(repository="citry-dev/citry", token="test-token")  # noqa: S106 - synthetic credential
+    monkeypatch.setattr(client, "request_if_present", lambda _path: {"object": {"type": "tag", "sha": "9" * 40}})
+    requested: list[str] = []
+
+    def request(_method: str, path: str) -> dict[str, object]:
+        requested.append(path)
+        return {"object": {"type": "commit", "sha": _COMMIT}}
+
+    monkeypatch.setattr(client, "request", request)
+
+    assert client.tag_commit("citry-core@1.7.0") == _COMMIT
+    assert requested == ["/git/tags/" + "9" * 40]
+
+
+def test_qualified_files_rejects_an_archive_with_another_digest(tmp_path: Path) -> None:
+    archive = tmp_path / "core.zip"
+    _qualification_archive(archive, _CORE_FILES)
+
+    with pytest.raises(ReleaseError, match="does not match digest"):
+        release.qualified_files(archive, "sha256:" + "0" * 64)
+
+
+def test_qualified_files_rejects_an_inventory_that_does_not_match_its_files(tmp_path: Path) -> None:
+    # The inventory claims a hash the archived wheel does not have, so it
+    # cannot be used to vouch for the registry's copy.
+    archive = tmp_path / "core.zip"
+    digest = _qualification_archive(
+        archive, _CORE_FILES, inventory={_WHEEL: "f" * 64, _SDIST: hashlib.sha256(b"sdist bytes").hexdigest()}
+    )
+
+    with pytest.raises(ReleaseError, match=rf"qualified file {re.escape(_WHEEL)} does not match"):
+        release.qualified_files(archive, digest)
+
+
+_MARKETPLACE = (
+    "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/citry-dev/vsextensions/citry/0.1.3/vspackage"
+)
+_OPEN_VSX = "https://open-vsx.org/api/citry-dev/citry/0.1.3"
+_OPEN_VSX_FILE = "https://open-vsx.org/api/citry-dev/citry/0.1.3/file/citry-dev.citry-0.1.3.vsix"
+
+
+def _vscode_answers(*, marketplace: bytes | None, open_vsx: bytes | None) -> dict[str, bytes]:
+    answers: dict[str, bytes] = {}
+    if marketplace is not None:
+        answers[_MARKETPLACE] = marketplace
+    if open_vsx is not None:
+        answers[_OPEN_VSX] = json.dumps({"files": {"download": _OPEN_VSX_FILE}}).encode()
+        answers[_OPEN_VSX_FILE] = open_vsx
+    return answers
+
+
+@pytest.mark.parametrize(
+    ("marketplace", "open_vsx", "state"),
+    [
+        (b"vsix", b"vsix", "complete"),
+        # Open VSX answers 404 while it reviews a new version.
+        (b"vsix", None, "partial"),
+        (None, None, "absent"),
+    ],
+)
+def test_extension_state_needs_both_registries_to_serve_the_qualified_vsix(
+    marketplace: bytes | None, open_vsx: bytes | None, state: str
+) -> None:
+    registry = _Registry(_vscode_answers(marketplace=marketplace, open_vsx=open_vsx))
+    expected = {_VSIX: hashlib.sha256(b"vsix").hexdigest()}
+
+    assert release.registry_state("vscode-citry", "0.1.3", expected, registry) == state  # type: ignore[arg-type]
+
+
+def test_extension_state_names_the_registry_that_serves_other_bytes() -> None:
+    registry = _Registry(_vscode_answers(marketplace=b"vsix", open_vsx=b"other"))
+    expected = {_VSIX: hashlib.sha256(b"vsix").hexdigest()}
+
+    with pytest.raises(ReleaseError, match=rf"vscode-citry 0\.1\.3 on Open VSX: .*changed=\['{re.escape(_VSIX)}'\]"):
+        release.registry_state("vscode-citry", "0.1.3", expected, registry)  # type: ignore[arg-type]
+
+
+def _job(conclusion: str, *failed_steps: str) -> dict[str, object]:
+    return {
+        "name": "Promote qualified bytes and release",
+        "conclusion": conclusion,
+        "steps": [{"name": "Download the immutable qualification archive", "conclusion": "success"}]
+        + [{"name": step, "conclusion": "failure"} for step in failed_steps],
+    }
+
+
+@pytest.mark.parametrize(
+    ("jobs", "retries_used", "retry"),
+    [
+        # The 0.7.0 failure: sigstore answered 502 inside the publish action.
+        ([_job("failure", "Publish to PyPI")], 0, True),
+        ([_job("failure", "Attest the promotion of the qualified bytes")], 1, True),
+        ([_job("failure", "Publish the same VSIX to Open VSX")], 0, True),
+        # Every retry is spent.
+        ([_job("failure", "Publish to PyPI")], 2, False),
+        # A hash check gives the same answer every time.
+        ([_job("failure", "Accept only absent, partly uploaded, or byte-identical public state")], 0, False),
+        ([_job("failure", "Publish to PyPI"), _job("failure", "Create or verify the final annotated tag")], 0, False),
+        # One job where the upload failed and a check failed too: the check
+        # would fail again, so the whole job is not retried.
+        ([_job("failure", "Publish to PyPI", "Verify the exact public artifact pair")], 0, False),
+        # Someone cancelled the run, or a job ran out of time.
+        ([_job("cancelled")], 0, False),
+        ([_job("timed_out", "Publish to PyPI")], 0, False),
+        # A failed job without step details is not understood well enough.
+        ([{"name": "release", "conclusion": "failure"}], 0, False),
+        ([], 0, False),
+    ],
+)
+def test_retry_decision(jobs: list[dict[str, object]], retries_used: int, retry: bool) -> None:
+    assert release.should_retry(jobs, retries_used=retries_used, max_retries=2) is retry
+
+
+def test_every_retryable_step_is_a_step_of_a_publish_workflow() -> None:
+    # A renamed step would silently turn its retry off, so tie the names to
+    # the workflows.
+    workflows = Path(release.__file__).resolve().parents[1] / ".github/workflows"
+    steps: set[str] = set()
+    for spec in release.PACKAGE_SPECS:
+        for job in yaml.safe_load((workflows / spec.workflow).read_text(encoding="utf-8"))["jobs"].values():
+            steps.update(str(step.get("name")) for step in job.get("steps", []))
+    assert steps >= release.RETRYABLE_STEPS
+
+
+class _RetriedRun:
+    """Serve one publish run that fails in a retryable step, then succeeds on its second attempt."""
+
+    def __init__(self, states: list[tuple[int, str, str | None]] | None = None) -> None:
+        # Poll 1 sees attempt 1 fail and schedules the retry; poll 2 sends the
+        # rerun request. GitHub still shows the failed attempt 1 on poll 3,
+        # which must not schedule a second retry. Attempt 2 then succeeds.
+        self.states: list[tuple[int, str, str | None]] = states or [
+            (1, "completed", "failure"),
+            (1, "completed", "failure"),
+            (1, "completed", "failure"),
+            (2, "in_progress", None),
+            (2, "completed", "success"),
+        ]
+        self.reruns: list[int] = []
+
+    def workflow_runs(self, _workflow: str) -> list[dict[str, object]]:
+        attempt, status, conclusion = self.states.pop(0) if len(self.states) > 1 else self.states[0]
+        return [
+            {
+                "id": 7,
+                "run_attempt": attempt,
+                "display_title": "Publish citry-lsp for candidate 3",
+                "created_at": "2026-01-01T00:00:00Z",
+                "status": status,
+                "conclusion": conclusion,
+                "html_url": "https://example.test/runs/7",
+            }
+        ]
+
+    def request(self, _method: str, _path: str) -> dict[str, object]:
+        return {"jobs": [_job("failure", "Publish to PyPI")]}
+
+    def rerun_failed_jobs(self, run_id: int) -> None:
+        self.reruns.append(run_id)
+
+
+def test_a_failed_publish_step_is_retried_and_the_old_attempt_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(release, "POLL_SECONDS", 0)
+    monkeypatch.setattr(release, "RETRY_DELAY_SECONDS", 0)
+    client = _RetriedRun()
+
+    # One allowed retry: if the stale attempt-1 failure on poll 3 were read
+    # as a new failure, it would use up the retry and stop the release.
+    runs = release._wait_for_runs(
+        client,  # type: ignore[arg-type]
+        {"citry-lsp": ("py--citry-lsp--publish.yml", "Publish citry-lsp for candidate 3")},
+        started_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        timeout_seconds=60,
+        max_retries=1,
+    )
+
+    assert client.reruns == [7]
+    assert runs["citry-lsp"]["run_attempt"] == 2
+
+
+def test_qualification_waits_do_not_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Only publication passes `max_retries`; a failed qualification is a
+    # result to read, not an outage to wait out.
+    monkeypatch.setattr(release, "POLL_SECONDS", 0)
+    client = _RetriedRun()
+
+    with pytest.raises(ReleaseError, match="failed in jobs Promote qualified bytes and release"):
+        release._wait_for_runs(
+            client,  # type: ignore[arg-type]
+            {"citry-lsp": ("py--citry-lsp--publish.yml", "Publish citry-lsp for candidate 3")},
+            started_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            timeout_seconds=60,
+        )
+    assert client.reruns == []
+
+
+def test_a_run_restarted_by_hand_during_the_delay_is_not_restarted_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Someone re-ran the failed jobs while the controller waited out the
+    # delay. A second rerun request would fail on a running run, so the
+    # controller follows the newer attempt.
+    # A fake clock keeps the one-hour delay from passing during the test, so
+    # only a hand-started attempt can move the run on.
+    clock = {"now": 0.0}
+    monkeypatch.setattr(release.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(release.time, "sleep", lambda _seconds: clock.update(now=clock["now"] + 10))
+    monkeypatch.setattr(release, "RETRY_DELAY_SECONDS", 3600)
+    client = _RetriedRun([(1, "completed", "failure"), (2, "in_progress", None), (2, "completed", "success")])
+
+    runs = release._wait_for_runs(
+        client,  # type: ignore[arg-type]
+        {"citry-lsp": ("py--citry-lsp--publish.yml", "Publish citry-lsp for candidate 3")},
+        started_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        timeout_seconds=60,
+        max_retries=2,
+    )
+
+    assert client.reruns == []
+    assert runs["citry-lsp"]["run_attempt"] == 2
+
+
+def test_a_failure_near_the_time_limit_still_gets_its_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The run fails 18 minutes into a 20-minute limit. The five-minute delay
+    # ends after the original limit, so the limit must grow when the retry
+    # is scheduled, not only when it starts.
+    clock = {"now": 0.0}
+    monkeypatch.setattr(release.time, "monotonic", lambda: clock["now"])
+
+    def sleep(_seconds: float) -> None:
+        clock["now"] += 60
+
+    monkeypatch.setattr(release.time, "sleep", sleep)
+    monkeypatch.setattr(release, "JOB_CHECK_SECONDS", 10**6)
+    states = [(1, "in_progress", None)] * 18 + [(1, "completed", "failure")] * 7
+    client = _RetriedRun([*states, (2, "completed", "success")])
+
+    runs = release._wait_for_runs(
+        client,  # type: ignore[arg-type]
+        {"citry-lsp": ("py--citry-lsp--publish.yml", "Publish citry-lsp for candidate 3")},
+        started_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        timeout_seconds=20 * 60,
+        max_retries=2,
+    )
+
+    assert client.reruns == [7]
+    assert runs["citry-lsp"]["run_attempt"] == 2
+
+
+class _Response:
+    def __init__(self, body: bytes, encoding: str) -> None:
+        self.body = body
+        self.status = 200
+        self.headers = {"Content-Encoding": encoding}
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.body
+
+
+@pytest.mark.parametrize("encoding", ["", "gzip"])
+def test_the_registry_client_hashes_the_file_not_its_transfer_encoding(
+    monkeypatch: pytest.MonkeyPatch, encoding: str
+) -> None:
+    # The Marketplace may send the VSIX gzip-compressed; the hash must be of
+    # the VSIX itself, or a correct upload would look like different bytes.
+    body = gzip.compress(b"vsix") if encoding == "gzip" else b"vsix"
+    monkeypatch.setattr(release.urllib.request, "urlopen", lambda *_args, **_kwargs: _Response(body, encoding))
+
+    assert release.RegistryClient().get("https://example.test/vsix") == (200, b"vsix")
+
+
+def test_the_registry_client_refuses_plain_http() -> None:
+    with pytest.raises(ReleaseError, match="must use HTTPS"):
+        release.RegistryClient().get("http://example.test/vsix")
+
+
+def test_restart_skips_an_extension_both_registries_serve(tmp_path: Path) -> None:
+    # The extension Release also holds the worker's registry record, and both
+    # registries must serve the qualified VSIX before the package is skipped.
+    candidate = build_plan(
+        _repo(tmp_path / "repo"), commit=_COMMIT, selected=("vscode-citry",), existing_tags=frozenset()
+    )
+    archive = tmp_path / "vsix.zip"
+    digest = _qualification_archive(archive, {_VSIX: b"vsix"})
+    candidate["candidate_id"] = "1"
+    candidate["qualifications"] = [
+        {"package": "vscode-citry", "run_id": 10, "artifact_id": 11, "artifact_digest": digest},
+    ]
+    with zipfile.ZipFile(archive) as bundle:
+        inventory = bundle.read("release-inventory.json")
+    bodies = {
+        _VSIX: b"vsix",
+        "release-inventory.json": inventory,
+        "qualification-provenance.json": b"{}",
+        "registry-verification.json": b"{}",
+    }
+    github_release = {
+        "draft": False,
+        "tag_name": "vscode-citry@0.1.3",
+        "assets": [
+            {"name": name, "state": "uploaded", "digest": "sha256:" + hashlib.sha256(body).hexdigest()}
+            for name, body in bodies.items()
+        ],
+    }
+    client = _ReleaseGitHub(
+        tmp_path,
+        tags={"vscode-citry@0.1.3": _COMMIT},
+        releases={"vscode-citry@0.1.3": github_release},
+        archives={11: archive.read_bytes()},
+    )
+    registry = _Registry(_vscode_answers(marketplace=b"vsix", open_vsx=b"vsix"))
+
+    _publish(client, registry, candidate)
+    assert client.dispatched == []
+
+    # Without the registry record the Release is not the one a finished
+    # worker leaves, so the worker runs again.
+    assets = github_release["assets"]
+    assert isinstance(assets, list)
+    github_release["assets"] = [asset for asset in assets if asset["name"] != "registry-verification.json"]
+    _publish(client, registry, candidate)
+    assert client.dispatched == ["vscode--citry--publish.yml"]
+
+
+def test_an_open_vsx_download_that_fails_stops_the_restart() -> None:
+    # Open VSX listed the version but its file did not download, so nothing
+    # proves the bytes; the restart stops rather than guessing.
+    answers = _vscode_answers(marketplace=b"vsix", open_vsx=b"vsix")
+    del answers[_OPEN_VSX_FILE]
+
+    with pytest.raises(ReleaseError, match="could not download the Open VSX VSIX"):
+        release.registry_state(
+            "vscode-citry",
+            "0.1.3",
+            {_VSIX: hashlib.sha256(b"vsix").hexdigest()},
+            _Registry(answers),  # type: ignore[arg-type]
+        )

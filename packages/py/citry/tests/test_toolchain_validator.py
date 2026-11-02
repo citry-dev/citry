@@ -234,3 +234,21 @@ def test_a_setup_that_names_its_toolchain_in_the_ref_must_select_it(root):
     job = "\n  pinned:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: dtolnay/rust-toolchain@1.97.0\n"
     workflow.write_text(workflow.read_text() + job)
     assert any("job pinned" in error and "'1.97.0'" in error for error in selected_toolchain_errors(root))
+
+
+_SKIP_MESSAGE = "citry-core release retries must stop rather than replace artifacts"
+
+
+def test_the_guarded_skip_existing_passes():
+    assert not [error for error in toolchain.check() if _SKIP_MESSAGE in error]
+
+
+def test_an_unguarded_skip_existing_fails(tmp_path, monkeypatch):
+    # Skipping files without the public-state check would let a retry pass
+    # over a file nobody compared with the qualified bytes.
+    workflow = tmp_path / "py--citry-core--publish.yml"
+    shutil.copy(toolchain._PUBLISH_WORKFLOW, workflow)
+    _replace_once(workflow, toolchain._GUARDED_SKIP_EXISTING, "skip-existing: true")
+    monkeypatch.setattr(toolchain, "_PUBLISH_WORKFLOW", workflow)
+
+    assert any(_SKIP_MESSAGE in error for error in toolchain.check())

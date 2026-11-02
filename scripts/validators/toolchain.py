@@ -25,6 +25,9 @@ _PLAYGROUND_RUNTIME = REPO_ROOT / "docs_site" / "static" / "playground" / "runti
 _PYODIDE_BUILDER = REPO_ROOT / "scripts" / "build_citry_core_pyodide_wheel.py"
 _DISTRIBUTION_VERIFIER = REPO_ROOT / "scripts" / "verify_citry_core_distribution.py"
 _PLAYGROUND_RELEASE_VERIFIER = REPO_ROOT / "scripts" / "verify_playground_release.py"
+# The only skip-existing setting a publish step may carry: on when the
+# public-state check found some qualified files already on PyPI.
+_GUARDED_SKIP_EXISTING = "skip-existing: ${{ steps.public-state.outputs.skip_existing == 'true' }}"
 _DOCS_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--docs-release.yml"
 _RELEASE_CANDIDATE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--release-candidate.yml"
 _RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--release.yml"
@@ -284,8 +287,14 @@ def check() -> list[str]:
         if script_path.read_text(encoding="utf-8").count(profile_setting) != 1:
             script_label = script_path.relative_to(REPO_ROOT).as_posix()
             errors.append(f"{script_label} must select the release-wheel profile once")
-    if "skip-existing" in publish or "--clobber" in publish:
-        errors.append("citry-core release retries must fail closed instead of replacing or skipping artifacts")
+    # A retry may skip a file only when the check before the upload found it on
+    # PyPI with the qualified hash, which is what this one expression reads.
+    # The strict check after the upload then proves every file again.
+    if publish.replace(_GUARDED_SKIP_EXISTING, "", 1).count("skip-existing") or "--clobber" in publish:
+        errors.append(
+            "citry-core release retries must stop rather than replace artifacts or "
+            "skip files the public-state check did not prove"
+        )
     for marker in (
         "operation:",
         "if: ${{ inputs.operation == 'promote' }}",
@@ -383,8 +392,8 @@ def check() -> list[str]:
     if "gh workflow run repo--docs-release.yml" not in release_workflow:
         errors.append("The release controller must start site updates after publishing all packages")
     for marker in (
-        "python scripts/release.py plan",
-        "python scripts/release.py qualify",
+        "python -m scripts.release plan",
+        "python -m scripts.release qualify",
         "name: release-candidate",
     ):
         if marker not in candidate_workflow:
@@ -392,7 +401,7 @@ def check() -> list[str]:
     for marker in (
         "candidate_run_id:",
         "name: release-candidate",
-        "python scripts/release.py publish",
+        "python -m scripts.release publish",
     ):
         if marker not in release_workflow:
             errors.append(f"mandatory release workflow is missing {marker!r}")

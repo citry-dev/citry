@@ -38,7 +38,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
         run: >-
-          python scripts/release.py publish
+          python -m scripts.release publish
           --candidate candidate/release-candidate.json
           --repository "$GITHUB_REPOSITORY"
           --publication-id "$GITHUB_RUN_ID"
