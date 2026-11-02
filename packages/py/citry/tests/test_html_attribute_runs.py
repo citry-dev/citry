@@ -11,11 +11,17 @@ stack overflow cannot be caught, so every case runs in a child Python
 process, on a thread with a small stack, and the test reads what the child
 printed.
 
-Citry also refuses a tag with more than 1,024 attributes, and HTML with
-more than 16 `<html>`, `<head>` or `<body>` start tags of one name, because
-html5ever, which builds the tree, takes time that grows with the square of
-both (`crates/citry_html_transform/src/html_limits.rs`). html5gum still
-reads the whole input, so the long tags below still test the patched copy.
+Citry also refuses a tag with more than 1,024 attributes, HTML with more
+than 16 `<html>`, `<head>` or `<body>` start tags of one name, HTML that
+keeps more than 512 elements open at once, and HTML that leaves formatting
+tags such as `<b>` open or misnested so often that the parser would copy
+more than 250,000 elements and attributes. html5ever, which builds the
+tree, takes time that grows with the square of an attribute count, of a
+repeated `<html>` or `<body>` count and of the nesting depth, and builds a
+tree the size of the input times the length of its formatting list when
+formatting tags are misnested
+(`crates/citry_html_transform/src/html_limits.rs`). html5gum still reads
+the whole input, so the long tags below still test the patched copy.
 """
 
 from __future__ import annotations
@@ -39,6 +45,8 @@ MANY = 20000
 # The limits in `html_limits.rs`; the Rust tests pin the constants.
 ATTRIBUTE_LIMIT = 1024
 DOCUMENT_TAG_LIMIT = 16
+OPEN_ELEMENT_LIMIT = 512
+REOPEN_LIMIT = 250_000
 
 # Runs inside the child. `body` defines `result` as a JSON-serializable value.
 _CHILD = """
@@ -259,6 +267,53 @@ for name in ("html", "head", "body"):
             " an interactive component, Vue inserts this HTML as one block, and Citry reads it first to"
             " check it. A fragment needs no <html>, <head> or <body> tag, so remove them."
         )
+
+
+def test_elements_nested_too_deep_are_refused_with_the_limit_named() -> None:
+    result = _run_in_child(
+        f"""
+from citry._vue.opaque_html import reject_cross_boundary_html
+
+depth = {OPEN_ELEMENT_LIMIT + 1}
+html = "<div>" * depth + "</div>" * depth
+try:
+    reject_cross_boundary_html(html, origin="A Markup value")
+    result = "accepted"
+except ValueError as error:
+    result = str(error)
+"""
+    )
+    assert result == (
+        "A Markup value is not accepted. HTML keeps more than"
+        f" {OPEN_ELEMENT_LIMIT} elements open at once; Citry reads at most {OPEN_ELEMENT_LIMIT}. Inside an"
+        " interactive component, Vue inserts this HTML as one block, and Citry reads it first to check it."
+        " Nest the elements less deeply."
+    )
+
+
+def test_formatting_tags_that_the_parser_reopens_too_often_are_refused_with_the_limit_named() -> None:
+    # Each `<div><b a="i"></div>` leaves a `<b>` the parser reopens at the
+    # next text or tag, and each `<div>x</div>` after them reopens all of
+    # the 25 that are waiting.
+    result = _run_in_child(
+        """
+from citry._vue.opaque_html import reject_cross_boundary_html
+
+html = "".join(f'<div><b a="{i}"></div>' for i in range(25)) + "<div>x</div>" * 6000
+try:
+    reject_cross_boundary_html(html, origin="A Markup value")
+    result = "accepted"
+except ValueError as error:
+    result = str(error)
+"""
+    )
+    assert result == (
+        "A Markup value is not accepted. HTML leaves formatting tags such as <b> and <i> open or misnested"
+        f" so often that the parser would copy more than {REOPEN_LIMIT} elements and attributes; Citry reads"
+        f" at most {REOPEN_LIMIT}. Inside an interactive component, Vue inserts this HTML as one block, and"
+        " Citry reads it first to check it. Close each formatting tag such as <b>, <i> or <a> inside the element"
+        " where it was opened, so the browser does not have to reopen it."
+    )
 
 
 def test_a_tag_hidden_from_a_document_parse_is_refused_where_vue_parses_it() -> None:

@@ -245,10 +245,14 @@ class html_transform:
 
         Raises `ValueError` when it is not. The message starts with
         `opaque HTML has the HTML parse error ` and the standard's name for
-        the error, with `opaque HTML has a tag with more than` when a tag
-        holds more than 1,024 attributes, or with `opaque HTML has more than`
-        when it has more than 16 start tags of one of `html`, `head` and
-        `body`.
+        the error. When the HTML is over a size limit, it starts with
+        `opaque HTML has a tag with more than` for a tag with more than 1,024
+        attributes, `opaque HTML has more than` for more than 16 start tags
+        of one of `html`, `head` and `body`, `opaque HTML keeps more than`
+        for more than 512 elements open at once, or
+        `opaque HTML leaves formatting tags` for formatting tags left open or
+        misnested so often that the parser would copy more than 250,000
+        elements and attributes.
         """
     @staticmethod
     def static_html_node_count(html: str) -> int:
@@ -260,18 +264,22 @@ class html_transform:
         parts stay where they are written. Vue needs this count to adopt the
         block's nodes when the server already wrote them into the page.
 
-        Raises `ValueError` when a tag holds more than 1,024 attributes, or
-        the HTML has more than 16 start tags of one of `html`, `head` and
-        `body`.
+        Raises `ValueError` when the HTML is over a size limit: a tag with
+        more than 1,024 attributes, more than 16 start tags of one of `html`,
+        `head` and `body`, more than 512 elements open at once, or formatting
+        tags such as `<b>` left open or misnested so often that the parser
+        would copy more than 250,000 elements and attributes.
         """
     @staticmethod
     def scan_output_html(html: str) -> list[dict[str, object]]:
         """
         Return the facts of each start tag in `html`.
 
-        Raises `ValueError` when a tag holds more than 1,024 attributes, or
-        the HTML has more than 16 start tags of one of `html`, `head` and
-        `body`.
+        Raises `ValueError` when the HTML is over a size limit: a tag with
+        more than 1,024 attributes, more than 16 start tags of one of `html`,
+        `head` and `body`, more than 512 elements open at once, or formatting
+        tags such as `<b>` left open or misnested so often that the parser
+        would copy more than 250,000 elements and attributes.
         """
     @staticmethod
     def _check_output_html(
@@ -300,9 +308,12 @@ class html_transform:
 
         Raises `ValueError` for an unknown `javascript` mode, and when the
         check fails inside Rust (the message starts with
-        `citry output check failed:`). A page with a tag that holds more
-        than 1,024 attributes, or with more than 16 start tags of one of
-        `html`, `head` and `body`, fails this way too, without being checked.
+        `citry output check failed:`). A page over a size limit fails this
+        way too, without being checked: a tag with more than 1,024
+        attributes, more than 16 start tags of one of `html`, `head` and
+        `body`, more than 512 elements open at once, or formatting tags such
+        as `<b>` left open or misnested so often that the parser would copy
+        more than 250,000 elements and attributes.
         """
     @staticmethod
     def _script_type_is_executable(value: str) -> bool:

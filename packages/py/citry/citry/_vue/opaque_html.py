@@ -17,7 +17,16 @@ _PARSE_ERROR_PREFIX = "opaque HTML has the HTML parse error "
 _TOO_LARGE_HINTS = {
     "opaque HTML has a tag with more than ": " Spread the attributes over several elements.",
     "opaque HTML has more than ": " A fragment needs no <html>, <head> or <body> tag, so remove them.",
+    "opaque HTML keeps more than ": " Nest the elements less deeply.",
+    "opaque HTML leaves formatting tags ": (
+        " Close each formatting tag such as <b>, <i> or <a> inside the element where it was opened, so the browser"
+        " does not have to reopen it."
+    ),
 }
+# How `scan_output_html` and `static_html_node_count` start their message
+# when one tag has too many attributes (`validate_html_fragment_boundary`
+# puts "opaque " before it). Keep in step with `html_limits.rs`.
+_ATTRIBUTE_LIMIT_PREFIX = "HTML has a tag with more than "
 # The parse errors a '<' that does not start a tag causes.
 _STRAY_LESS_THAN_ERRORS = frozenset(
     {"invalid-first-character-of-tag-name", "eof-before-tag-name", "missing-end-tag-name"}
@@ -108,10 +117,14 @@ def mark_opaque_html(html: str, markers: tuple[tuple[str, object], ...]) -> str:
         elements = scan_output_html(marked).elements
         static_html_node_count(marked.replace(f' {sentinel}=""', replacement))
     except ValueError as error:
-        msg = (
-            f"{error}. Citry adds {len(markers)} attribute(s) to each root element of this HTML to mark it,"
-            " so a root element can hold one attribute fewer for each marker."
-        )
+        msg = f"{error}."
+        # Only the limit on one tag's attributes depends on the markers
+        # added to each root element; the other limits are not about them.
+        if str(error).startswith(_ATTRIBUTE_LIMIT_PREFIX):
+            msg += (
+                f" Citry adds {len(markers)} attribute(s) to each root element of this HTML to mark it,"
+                " so a root element can hold one attribute fewer for each marker."
+            )
         raise ValueError(msg) from error
     for element in elements:
         identities = {_html_attr_identity(attr.key.content) for attr in element.start_tag.attrs}

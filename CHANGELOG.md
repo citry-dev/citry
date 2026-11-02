@@ -375,6 +375,14 @@
   `<body>`, which could take seconds to read: the output checks report the
   page as unreadable, `Markup` and `<c-raw>` HTML in an interactive
   component raise `ValueError`, and hydration leaves the server HTML out.
+- The same checks now also refuse HTML that keeps more than 512 elements
+  open at once (about 510 nested elements), or that leaves formatting tags
+  such as `<b>` and `<i>` open or misnested so often that the parser would
+  copy more than 250,000 elements and attributes. Reading such HTML could
+  take minutes or gigabytes of memory. The checks react as they do to the
+  limits above. A template that nests about 510 elements or more makes a
+  page over the 512-element limit, so the output checks report it as
+  unreadable.
 - The i18n number formatters and `tr()` raise `ValueError` for a
   `Decimal` with more than 32,768 digits before or after the decimal point,
   before writing any digits.

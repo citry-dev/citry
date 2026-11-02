@@ -159,9 +159,10 @@ pub struct OutputPolicyReport {
 /// The scan follows the browser's parser state, so text inside
 /// `<title>` or a comment is not read as tags. Malformed HTML is read the
 /// way a browser recovers from it. The only page it refuses is one over a
-/// limit in `html_limits` (too many attributes on one tag, or too many
-/// `html`, `head` or `body` start tags): it returns [`HtmlTooLarge`] and
-/// reports nothing, so the caller treats the page as one it could not check.
+/// limit in `html_limits` (too many attributes on one tag, too many `html`,
+/// `head` or `body` start tags, elements nested too deep, or too many
+/// formatting elements reopened): it returns [`HtmlTooLarge`] and reports
+/// nothing, so the caller treats the page as one it could not check.
 pub fn check_output_html(
     html: &str,
     options: &OutputPolicyOptions<'_>,

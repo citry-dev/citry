@@ -17,7 +17,10 @@ mod tokenizer;
 pub mod transformer;
 
 // Re-export the types and functions that users need
-pub use html_limits::{HtmlTooLarge, MAX_ATTRIBUTES_PER_TAG, MAX_DOCUMENT_TAGS};
+pub use html_limits::{
+    HtmlTooLarge, MAX_ATTRIBUTES_PER_TAG, MAX_DOCUMENT_TAGS, MAX_OPEN_ELEMENTS,
+    MAX_REOPENED_FORMATTING_ELEMENTS,
+};
 pub use hydration_nesting::{tokens_nest_in_browser, NestingToken};
 pub use hydration_structure::{
     browser_fragment_matches_elements, browser_fragment_matches_nodes, ExpectedElementEvent,

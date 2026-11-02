@@ -668,8 +668,11 @@ and styles to `Component.js`, `Component.css`, or structured
 - `TypeError` when a dependency is not a structured `Script` or `Style`.
 
 Citry's HTML checks refuse HTML that has a tag with more than 1,024
-attributes, or more than 16 start tags of any one of `<html>`, `<head>`
-and `<body>`. No ordinary page comes close. Both output checks (`security_csp` and
+attributes, more than 16 start tags of any one of `<html>`, `<head>` and
+`<body>`, more than 512 elements open at once (about 510 nested
+elements), or formatting tags such as `<b>` and `<i>` left open or
+misnested so often that the parser would copy more than 250,000 elements
+and attributes. No ordinary page comes close. Both output checks (`security_csp` and
 `security_javascript`) report such a page as one they could not read:
 the `"warn"` modes warn and still return the page, and the other modes
 raise `ValueError`. In an interactive component, `Markup` HTML or a

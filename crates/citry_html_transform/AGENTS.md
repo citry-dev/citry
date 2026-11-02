@@ -45,9 +45,18 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   (`run_tokenizer`). It keeps the run on enough stack, whatever thread
   calls it, and returns whether the run stayed within the size limits.
 - `src/html_limits.rs` - the size limits every parse applies before
-  html5ever builds a tree (1,024 attributes on one tag, 16 start tags of
-  each of `html`, `head` and `body`), because html5ever's cost grows with
-  the square of both.
+  html5ever builds a tree: 1,024 attributes on one tag, 16 start tags of
+  each of `html`, `head` and `body`, 512 elements held open at once, and
+  250,000 formatting elements and attributes reopened. html5ever's cost
+  grows with the square of an attribute count, of a repeated `<html>` or
+  `<body>` count, and of the nesting depth. When formatting tags such as
+  `<b>` are closed out of order, html5ever keeps them on a list and opens
+  a copy of each at the next text or tag, so the tree grows by the input
+  size times the length of that list. After each token, `after_token`
+  counts the elements the tree builder holds (it lists them through
+  `trace_handles`) and compares the formatting elements the scan's tree
+  sink saw created (`TrackingSink`, the DOM every scan builds into) with
+  the formatting start tags it was given.
 - `src/static_html.rs` - checks that a finished piece of HTML (a `<c-raw>`
   block, or the HTML the server writes inside a shell) keeps its own
   `<template>` parse where the page puts it, and counts the top-level nodes
@@ -76,6 +85,20 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   fragment's tree with `output_scanner::parse_fragment_in`, not
   html5ever's own `parse_fragment`, so the limits count in the context the
   tree is built in.
+- **Build every scan's tree into `TrackingSink`.** It counts the formatting
+  elements the parser makes, and the limit on reopened ones reads that
+  count after each token. A scan that built into another sink would never
+  refuse a page for reopening.
+- **The nesting limit counts the parser's own elements.** It is 512
+  elements held at once. A page scan holds `<html>`, `<body>` and the
+  `<head>` pointer, so it fits 509 nested elements; a `<template>`
+  fragment holds the root `<html>` and the context element, so it fits 510
+  (`tests/html_limits.rs` locks both). `tests/deep_nesting.rs` runs the
+  recursive checks over the deepest tree these limits allow.
+- **The Python wrappers pick a hint by the start of each limit's message**
+  (`packages/py/citry/citry/_vue/opaque_html.py`). Give a new limit a
+  message that starts with words no other limit's message starts with, and
+  add its hint there.
 
 ## Who depends on it
 
