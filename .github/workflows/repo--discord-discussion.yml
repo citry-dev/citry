@@ -6,6 +6,10 @@ on:
   discussion:
     types: [created]
 
+# The job posts through the webhook URL secret and never uses the workflow's
+# token, so it gets no repository access.
+permissions: {}
+
 jobs:
   notify:
     runs-on: ubuntu-latest

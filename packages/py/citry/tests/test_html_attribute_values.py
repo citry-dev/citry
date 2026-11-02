@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 from scripts.generate_html_attribute_values import (
     OUTPUT_PATH,
+    _keywords,
     build_aria_attributes,
     build_attribute_names,
     build_boolean_attributes,
@@ -101,6 +104,31 @@ def test_build_table_keeps_closed_keyword_sets_only():
     # The hand-added sets the index names only in words are present.
     assert "email" in table["type"]["input"]
     assert "no-referrer" in table["referrerpolicy"]["img"]
+
+
+def test_keywords_reads_closed_cells_and_rejects_open_ones():
+    assert _keywords('"true"; "false"') == ("true", "false")
+    # The standard's cells can leave out the semicolon or end with one.
+    assert _keywords('"a" "b";') == ("a", "b")
+    assert _keywords('"until-found"; "hidden"; the empty string') == ("until-found", "hidden", "")
+    assert _keywords('ASCII case-insensitive match for "UTF-8"') == ("UTF-8",)
+    assert _keywords('"any"; a positive number') is None
+
+
+def test_keywords_rejects_a_long_open_cell_quickly():
+    # A run of spaces between keywords must match in only one way. If it could
+    # match in several, the time to reject a cell like this one would multiply
+    # with every keyword added, and this cell would take minutes.
+    cell = '"a"     ' * 12 + "x"
+
+    started = time.perf_counter()
+    result = _keywords(cell)
+    elapsed = time.perf_counter() - started
+
+    assert result is None
+    # The match takes microseconds; the bound only has to be far below the
+    # minutes that a match in several ways would need.
+    assert elapsed < 1
 
 
 def test_build_attribute_names_splits_global_element_and_custom_element_names():

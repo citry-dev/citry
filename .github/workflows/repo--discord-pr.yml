@@ -15,6 +15,12 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'push' }}
+
+# The job posts through the webhook URL secret and never uses the workflow's
+# token, so it gets no repository access. This matters most here, because
+# `pull_request_target` runs with secrets for pull requests from forks.
+permissions: {}
+
 jobs:
   notify:
     runs-on: ubuntu-latest
