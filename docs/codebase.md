@@ -1990,8 +1990,10 @@ Land the fixes in this order, as for 0.7.0:
 2. Move `main` to the last commit of that chain with a fast-forward, so every
    commit keeps its hash and no merge commit is added. The rulesets in
    [Main branch and release permissions](#main-branch-and-release-permissions)
-   block a direct push to `main`, so the maintainer has to lift that block for
-   this push and restore it afterwards.
+   block a direct push to `main`. For 0.7.0 the maintainer set **Require
+   checks for main** and **Require pull requests for main** to Disabled,
+   pushed, and set both back to Active straight away. Check afterwards that
+   their bypass lists match what that section describes.
 3. Close each advisory's fork pull request. GitHub does not publish an
    advisory while its fork pull request is open, so close these before you
    publish the advisories.
