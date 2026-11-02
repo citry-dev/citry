@@ -385,7 +385,11 @@ class _DefinitionListReader(HTMLParser):
 # A value cell that is only quoted keywords and "the empty string", separated
 # by semicolons, describes a closed set. Anything else allows open text.
 _KEYWORD = re.compile(r'"([^"]*)"|the empty string')
-_CLOSED_CELL = re.compile(r'^(?:(?:"[^"]*"|the empty string)\s*;?\s*)+$')
+# The spaces after an item and the optional `;` that follows them are matched in
+# one fixed order. With two `\s*` runs side by side, a run of spaces could be
+# split between them in many ways, and the matcher would try every way again for
+# each later item in a cell that fails to match.
+_CLOSED_CELL = re.compile(r'^(?:(?:"[^"]*"|the empty string)\s*(?:;\s*)?)+$')
 # One row of the index can say "ASCII case-insensitive match for "UTF-8"".
 _CASE_INSENSITIVE_MATCH = re.compile(r'^ASCII case-insensitive match for "([^"]+)"$')
 

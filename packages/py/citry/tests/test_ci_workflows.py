@@ -102,6 +102,22 @@ def test_pull_request_workflows_cancel_only_stale_runs() -> None:
     }
 
 
+def test_every_job_states_its_token_permissions() -> None:
+    # Without a `permissions` block, a job gets the repository's default token
+    # permissions, which can include write access. CodeQL reports the gap as
+    # `actions/missing-workflow-permissions`. An empty `permissions:` line has
+    # no value, so it counts as missing; `permissions: {}` is a block that
+    # grants nothing.
+    missing = [
+        f"{name}: {job_name}"
+        for name, workflow in _workflows()
+        for job_name, job in workflow["jobs"].items()
+        if workflow.get("permissions") is None and job.get("permissions") is None
+    ]
+
+    assert missing == []
+
+
 def _runs_on_push_to_main(events: object) -> bool:
     """Whether these `on:` events start a run when someone pushes to main."""
     if isinstance(events, str):

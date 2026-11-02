@@ -38,6 +38,11 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'push' }}
+
+# The tests check out and read the repository and write nothing back.
+permissions:
+  contents: read
+
 jobs:
   test:
     if: github.event.action != 'closed'

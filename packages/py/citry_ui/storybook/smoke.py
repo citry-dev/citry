@@ -152,8 +152,18 @@ def _static_proxy(port: int, directory: Path) -> Iterator[ThreadingHTTPServer]:
 
             self.send_response(response.status)
             for name, value in response.getheaders():
-                if name.lower() not in _PROXY_HEADERS and name.lower() != "content-length":
-                    self.send_header(name, value)
+                if name.lower() in _PROXY_HEADERS or name.lower() == "content-length":
+                    continue
+                # send_header writes the text as it is. An upstream header
+                # folded over several lines carries CR and LF in its value, so
+                # drop it rather than pass those characters to the browser.
+                # The stripped copies are what get sent, which makes it plain
+                # that no line break can reach the output.
+                clean_name = name.replace("\r", "").replace("\n", "")
+                clean_value = value.replace("\r", "").replace("\n", "")
+                if clean_name != name or clean_value != value:
+                    continue
+                self.send_header(clean_name, clean_value)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

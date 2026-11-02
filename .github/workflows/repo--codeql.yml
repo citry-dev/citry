@@ -77,6 +77,7 @@ jobs:
               - packages/editors/vscode/out
               - benchmarks
               - docs/design
+              - third_party
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
