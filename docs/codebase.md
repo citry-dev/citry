@@ -2730,58 +2730,80 @@ files and requires their SHA-256 to match the candidate. The GitHub Release
 carries the VSIX, exact-byte inventory, qualification provenance, and
 public-registry verification.
 
-First-release registry setup is external to the repository. Complete it before
-promotion; candidate qualification does not need either publishing secret.
+Registry setup happens outside the repository. Complete it before promotion;
+candidate qualification does not talk to either registry.
 
-#### Visual Studio Marketplace identity and credential
+The workflow stores no registry token. Each registry trusts a single GitHub
+Actions identity: the repository `citry-dev/citry`, the workflow file
+`vscode--citry--publish.yml`, and the GitHub environment `vscode-marketplaces`.
+The promotion job has `id-token: write`, so it can ask GitHub for a short-lived
+sign-in token (an OpenID Connect, or OIDC, token) that names those three
+things. Each registry client sends that token to its registry and gets back a
+publishing credential that expires within minutes. The job checks that it can
+request a sign-in token before it installs the clients. Each registry needs its
+own setup; the PyPI trusted publisher does not cover them.
+
+Both registry forms mark the environment field as optional. Fill it in anyway.
+Without it, any job in this workflow file can publish, including the
+qualification job, which also has `id-token: write` for its attestation and
+runs no environment rule.
+
+#### Visual Studio Marketplace identity and trusted publishing
 
 1. Sign in to [Manage Publishers & Extensions](https://marketplace.visualstudio.com/manage/publishers/)
    with the Microsoft account that will own releases. Create or confirm the
    publisher ID `citry-dev` (display name `Citry.dev`) and ensure that account
    is an Owner or Contributor. The immutable ID must match `package.json`.
-2. In [Azure DevOps](https://dev.azure.com/), open **User settings -> Personal
-   access tokens -> New Token**. This is an Azure DevOps PAT, not a GitHub PAT.
-   Select **All accessible organizations**, the shortest practical expiration,
-   **Custom defined** scopes, then **Marketplace -> Manage** and no unrelated
-   scopes. Copy the value when it is shown; it cannot be recovered later.
-3. Open the repository's [GitHub environment settings](https://github.com/citry-dev/citry/settings/environments),
-   select `vscode-marketplaces`, and add the value as the environment secret
-   `VSCE_PAT`. Do not use a repository-level secret, commit it, paste it into an
-   issue/chat, or put it in a local release command.
+2. Open the `citry-dev` publisher, select **Trusted Publishing**, expand
+   **Create**, and enter a policy name such as `vscode-citry release`,
+   repository owner `citry-dev`, repository `citry`, workflow
+   `vscode--citry--publish.yml`, and environment `vscode-marketplaces`. Select
+   **Create**.
 
-The release pins `@vscode/vsce` 4.1.0, whose `vsce publish --help` lists
-both `--oidc`, the GitHub-native option for
-[trusted publishing](https://github.com/microsoft/vscode-vsce#trusted-publishing),
-and `--azure-credential`. The release workflow uses the narrowly scoped
-`VSCE_PAT`. Global Azure DevOps PATs are
-[retired on 1 December 2026](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#secure-automated-publishing-to-visual-studio-marketplace),
-so before then, move the workflow to `--oidc`, or implement Microsoft's fuller Entra workload-identity flow with
-`--azure-credential`.
-Neither route reuses the PyPI trusted-publisher configuration.
+The workflow runs `vsce publish --oidc`, which `@vscode/vsce` has had since
+4.0.0; the lockfile pins 4.1.0. The Marketplace credential it receives lasts 15
+minutes, and each GitHub sign-in token can be exchanged only once. `--oidc`
+never falls back to an access token, so a missing or mistyped policy fails the
+publish step. See the
+[Marketplace publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)
+for the policy fields.
 
-#### Open VSX identity and credential
+#### Open VSX identity and trusted publishing
 
 1. Create an Eclipse account whose GitHub username matches the GitHub identity
    used at Open VSX. Sign in to [Open VSX](https://open-vsx.org/), link the
    Eclipse account from profile settings, and sign the Eclipse **Publisher
    Agreement** (not the separate Contributor Agreement).
-2. From Open VSX **Settings -> Access Tokens**, create a token dedicated to this
-   GitHub Actions environment and copy it when shown. Follow the
+2. Follow the
    [Open VSX publishing guide](https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions)
-   to create the `citry-dev` namespace. The creator is immediately a namespace
-   contributor and can publish; the separate public ownership claim controls
-   whether the namespace is shown as verified and may remain pending.
-3. Store the token in the same `vscode-marketplaces` GitHub environment as
-   `OVSX_PAT`. The publishing job runs the `ovsx` client that the extension's
-   devDependencies pin in `pnpm-lock.yaml`, so the client that receives the
-   token is the one the lockfile records.
+   to create the `citry-dev` namespace. Creating it makes you a contributor;
+   claim ownership as that guide describes before step 3. Open VSX accepts a
+   trusted publisher only for an extension that already has a published
+   version, so the first version of a brand-new extension must be published by
+   hand (`ovsx publish -p <token>`) outside this workflow. `citry-dev.citry`
+   already has published versions.
+3. As an owner of the `citry-dev` namespace (a contributor cannot do this),
+   open [**Settings -> Trusted Publishers**](https://open-vsx.org/user-settings/trusted-publishers),
+   select the namespace, choose GitHub Actions, and enter owner `citry-dev`,
+   repository `citry`, workflow `vscode--citry--publish.yml`, and environment
+   `vscode-marketplaces`. An extension can have only one trusted publisher,
+   and a registration cannot be edited; delete it and create it again to
+   change it.
 
-In that GitHub environment, choose **Selected branches and tags**, allow the
-`main` branch, and retain any desired reviewer gate. Promotion is a controlled
-workflow dispatch whose release checkout is separately pinned to the candidate
-commit. The job fails closed if either secret or the deployment policy is
-missing. Rotate or revoke tokens after suspected exposure and before their
-configured expiry.
+The workflow runs `ovsx publish --trusted-publishing`, which `ovsx` has had
+since 1.2.0; the lockfile pins 1.3.0. With that flag `ovsx` fails when it
+cannot get a GitHub sign-in token. `ovsx` uses an access token instead whenever
+one is given through `--pat` or `OVSX_PAT`, so the job must not set either. See
+the [Open VSX trusted publishing guide](https://github.com/eclipse-openvsx/openvsx/wiki/Trusted-Publishing).
+
+#### The `vscode-marketplaces` environment
+
+In the repository's [GitHub environment settings](https://github.com/citry-dev/citry/settings/environments),
+give `vscode-marketplaces` **Selected branches and tags**, allow the `main`
+branch, and keep any required reviewers you want. Neither registry's policy
+names a branch, so this environment rule, together with the environment field
+in both registrations, is what limits publishing to `main`. A maintainer starts
+promotion by hand, and the job checks out the exact candidate commit.
 
 Both registry clients use `--skip-duplicate` only to recover from a partial
 two-registry publish. A rerun of the same candidate still selects and verifies
