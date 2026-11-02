@@ -346,12 +346,14 @@ jobs:
       EXTENSION_VERSION: ${{ needs.verify-version.outputs.version }}
       RELEASE_COMMIT: ${{ inputs.release_commit }}
       RELEASE_TAG: vscode-citry@${{ needs.verify-version.outputs.version }}
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      OVSX_PAT: ${{ secrets.OVSX_PAT }}
     permissions:
       actions: read
       attestations: write
       contents: read
+      # Both registries trust this repository, this workflow file, and the
+      # vscode-marketplaces environment, and accept a GitHub sign-in token in
+      # place of a stored access token. The attestation steps use the same
+      # permission.
       id-token: write
     outputs:
       closeout_id: ${{ steps.closeout.outputs.artifact-id }}
@@ -391,13 +393,16 @@ jobs:
             --arg head_sha '${{ needs.select-qualification.outputs.head_sha }}' \
             '{run_id: $run_id, run_url: $run_url, artifact_digest: $artifact_digest, head_sha: $head_sha}' \
             > verified/qualification-provenance.json
-      - name: Require registry credentials and read GitHub Release state
+      - name: Require GitHub sign-in tokens and read GitHub Release state
         id: public-state
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test -n "$VSCE_PAT" || { echo "::error::VSCE_PAT is not configured"; exit 1; }
-          test -n "$OVSX_PAT" || { echo "::error::OVSX_PAT is not configured"; exit 1; }
+          # GitHub sets these only when the job may request a sign-in token.
+          # Stop here, before either upload, so a lost permission cannot leave
+          # one registry published and the other not.
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" && test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" \
+            || { echo "::error::this job cannot request a GitHub sign-in token; it needs id-token: write"; exit 1; }
           release_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer $GH_TOKEN" \
@@ -417,15 +422,23 @@ jobs:
           cache: pnpm
       - name: Install the locked registry clients
         run: pnpm install --frozen-lockfile
+      # --oidc trades a GitHub sign-in token for a Marketplace credential that
+      # lasts 15 minutes. It never falls back to an access token, so a missing
+      # trusted publishing policy fails this step.
       - name: Publish the qualified VSIX to Visual Studio Marketplace
         run: >-
           pnpm --dir "$EXTENSION_DIR" exec vsce publish
+          --oidc
           --packagePath "$GITHUB_WORKSPACE/verified/${{ needs.verify-version.outputs.filename }}"
           --skip-duplicate
+      # --trusted-publishing makes ovsx fail when it cannot get a GitHub sign-in
+      # token. ovsx prefers an access token whenever one is given, so this job
+      # must not set OVSX_PAT.
       - name: Publish the same VSIX to Open VSX
         run: >-
           pnpm --dir "$EXTENSION_DIR" exec ovsx publish
           "$GITHUB_WORKSPACE/verified/${{ needs.verify-version.outputs.filename }}"
+          --trusted-publishing
           --skip-duplicate
       - name: Verify both public registry versions
         run: |
