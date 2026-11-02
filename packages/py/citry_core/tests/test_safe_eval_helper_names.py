@@ -188,7 +188,10 @@ def test_the_runtime_defines_every_name_the_generated_code_reads():
     # `_sx_context` is the function's own local, so it is not a global read.
     assert read == set(GENERATED_NAMES) - {"_sx_context"}
     assert read <= set(generated.__globals__)
-    assert "_sx_context" in generated.__code__.co_varnames
+    # Python 3.11 runs the comprehension as its own function, so the value it reads
+    # becomes a shared cell; 3.12 and later inline it as a plain local.
+    code = generated.__code__
+    assert "_sx_context" in code.co_varnames + code.co_cellvars
 
 
 class TestUnsupportedComprehensionTargets:
