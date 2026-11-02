@@ -835,11 +835,15 @@ class CTag(LibraryComponent):
         }
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+        provided = self.inject(_TAG_CONTEXT_KEY, None)
         return {
             "serverDefaults": {
                 "disabled": bool(kwargs.disabled),
                 "textValue": _plain("CTag text_value", kwargs.text_value, optional=True),
             },
+            # The `$c-tr` binding reads this flag and returns `null` when it is
+            # false, which keeps the group's own remove label.
+            "catalogRemoveLabel": provided is not None and provided.context.catalog_remove_label,
         }
 
     template = """
@@ -892,7 +896,7 @@ class CTag(LibraryComponent):
               <span
                 class="cui-tag__remove-text"
                 c-id="remove_text_id"
-                c-$c-tr:citry-ui-tag-remove="True if catalog_remove_label else None"
+                $c-tr:citry-ui-tag-remove="catalogRemoveLabel ? {} : null"
               >{{ tr('citry-ui-tag-remove') if catalog_remove_label else remove_label }}</span>
               <span aria-hidden="true">&#215;</span>
             </button>

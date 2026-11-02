@@ -226,8 +226,7 @@ _COMMON_ATTR_RULES = [
     (r"(/?)(\s*)(>)", bygroups(Punctuation, Text, Punctuation), "#pop"),
 ]
 _WS_RULE = (r"\s+", Text)
-# `$c-tr` values are Vue named-value expressions. Its c-prefixed form is
-# still matched by `_C_ATTR_RULE` and therefore remains a Python expression.
+# `$c-tr` values are Vue named-value expressions, written in the template.
 _CLIENT_I18N_ATTR_RULE = (
     rf"(\$c-tr(?=[:.\[]){_ATTR_TAIL})(\s*)(=)(\s*)",
     bygroups(Name.Attribute, Text, Operator, Text),

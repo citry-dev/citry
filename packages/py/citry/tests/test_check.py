@@ -748,6 +748,28 @@ class TestRegistryMode:
 
         assert [finding.code for finding in report.findings] == ["citry.i18n.argument-invalid"]
 
+    @pytest.mark.parametrize(
+        "template",
+        [
+            '<span c-$c-tr:known="value"></span>',
+            """<span c-bind="{'$c-tr:known': True}"></span>""",
+        ],
+    )
+    def test_python_supplied_c_tr_bindings_are_check_errors(self, tmp_path, template):
+        engine = Citry(autodiscover=False)
+
+        class Host(Component):
+            citry = engine
+            template_data = staticmethod(lambda _kwargs, _slots: {"value": "x"})
+
+        Host.template = template
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        codes = [finding.code for finding in report.findings]
+        assert "citry.i18n.argument-invalid" in codes
+        assert any("Python data may not set" in finding.message for finding in report.findings)
+
     def test_dynamic_trans_values_spread_defers_argument_checks_to_runtime(self, tmp_path):
         engine = Citry(
             autodiscover=False,

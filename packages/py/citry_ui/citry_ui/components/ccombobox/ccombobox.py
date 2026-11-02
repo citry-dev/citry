@@ -484,6 +484,12 @@ class CCombobox(LibraryComponent):
             "catalogRequiredMessage": messages["catalog_required_message"],
             "catalogOpenLabel": messages["catalog_open_label"],
             "catalogCloseLabel": messages["catalog_close_label"],
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
+            "catalogClearLabel": messages["catalog_clear_label"],
+            "catalogLoadingLabel": messages["catalog_loading_label"],
+            "catalogEmptyLabel": messages["catalog_empty_label"],
+            "catalogErrorLabel": messages["catalog_error_label"],
             "listboxId": f"{input_id}-listbox",
             "externalDescribedBy": caller_input_attrs.get("aria-describedby"),
             "externalErrorMessage": caller_input_attrs.get("aria-errormessage"),
@@ -582,7 +588,7 @@ class CCombobox(LibraryComponent):
             class="cui-combobox__clear"
             type="button"
             c-aria-label="tr('citry-ui-combobox-clear') if catalog_clear_label else clear_label"
-            c-$c-tr:citry-ui-combobox-clear[aria-label]="True if catalog_clear_label else None"
+            $c-tr:citry-ui-combobox-clear[aria-label]="catalogClearLabel ? {} : null"
             c-hidden="not show_clear"
             tabindex="-1"
             data-citry-combobox-clear
@@ -658,7 +664,7 @@ class CCombobox(LibraryComponent):
               <c-slot name="loading" />
             </c-if>
             <c-else>
-              <span c-$c-tr:citry-ui-combobox-loading="True if catalog_loading_label else None">{{ tr('citry-ui-combobox-loading') if catalog_loading_label else loading_label }}</span>
+              <span $c-tr:citry-ui-combobox-loading="catalogLoadingLabel ? {} : null">{{ tr('citry-ui-combobox-loading') if catalog_loading_label else loading_label }}</span>
             </c-else>
           </div>
           <div
@@ -671,7 +677,7 @@ class CCombobox(LibraryComponent):
               <c-slot name="empty" />
             </c-if>
             <c-else>
-              <span c-$c-tr:citry-ui-combobox-empty="True if catalog_empty_label else None">{{ tr('citry-ui-combobox-empty') if catalog_empty_label else empty_label }}</span>
+              <span $c-tr:citry-ui-combobox-empty="catalogEmptyLabel ? {} : null">{{ tr('citry-ui-combobox-empty') if catalog_empty_label else empty_label }}</span>
             </c-else>
           </div>
           <div
@@ -683,7 +689,7 @@ class CCombobox(LibraryComponent):
               <c-slot name="error" />
             </c-if>
             <c-else>
-              <span c-$c-tr:citry-ui-combobox-error="True if catalog_error_label else None">{{ tr('citry-ui-combobox-error') if catalog_error_label else error_label }}</span>
+              <span $c-tr:citry-ui-combobox-error="catalogErrorLabel ? {} : null">{{ tr('citry-ui-combobox-error') if catalog_error_label else error_label }}</span>
             </c-else>
           </div>
         </div>

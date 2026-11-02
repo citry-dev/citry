@@ -168,7 +168,9 @@ def _reject_reserved_events_attr(name: str, *, tag_name: str) -> None:
 
 def _reject_dynamic_translation_binding(name: Any, *, tag_name: str) -> None:
     """Keep `$c-tr` on literal final plain HTML elements after spreads resolve."""
-    if isinstance(name, str) and name.lower().startswith("$c-tr:"):
+    # The same family test as the binding parser, so `$c-tr`, `$C-TR.x`, or
+    # `$c-tr[title]` cannot pass as an ordinary name.
+    if isinstance(name, str) and looks_like_i18n_binding(name):
         raise RuntimeError(
             f"{name!r} resolved on <{tag_name}>, but $c-tr is valid only on a literal final plain HTML element."
         )
@@ -1409,20 +1411,9 @@ class ElementAttrsNode(Node):
                     # The key is rejected whatever its value: even `None`
                     # would remove a listener written in the template. A key
                     # that passes is cached below, so repeat renders skip this.
+                    # This also rejects a `$c-tr` key, whose value would be browser code.
                     reject_vue_code_attr_name(resolved_key, tag_name=self.tag_name, origin="c-bind")
                     reject_script_capable_attr_name(resolved_key, tag_name=self.tag_name, where="c-bind")
-                    if looks_like_i18n_binding(resolved_key):
-                        if context._simple_scope is not None:
-                            msg = (
-                                f"Component {context._simple_scope.component_class.__name__} uses simple=True; "
-                                "$c-tr bindings are unsupported."
-                            )
-                            raise TypeError(msg)
-                        raise RuntimeError(
-                            f"{resolved_key!r} resolved on <{self.tag_name}> through c-bind, but no active "
-                            "i18n catalog consumed it. Configure i18n or declare component messages before "
-                            "rendering a dynamic $c-tr binding."
-                        )
                     _reject_reserved_events_attr(resolved_key, tag_name=self.tag_name)
                     if cacheable_key and len(self._validated_spread_keys) < 64:
                         self._validated_spread_keys.add(resolved_key)

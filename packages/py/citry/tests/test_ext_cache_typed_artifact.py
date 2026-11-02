@@ -17,8 +17,10 @@ from citry._vue.capture import (
     PreparedDynamicElementOpen,
     PreparedElementOpen,
     PreparedStaticRun,
+    PreparedStaticRunNode,
     PreparedTextValue,
     PreparedVerbatimHtml,
+    PreparedVerbatimHtmlNode,
     StaticRunOpening,
     StaticRunStructure,
     is_authenticated_browser_binding,
@@ -70,6 +72,7 @@ from citry.ext.cache.replay import (
 )
 from citry.ext.events.cache import stage_events_cache
 from citry.ext.events.emission import EXTRA_KEY as EVENTS_EXTRA_KEY
+from citry.ext.i18n import bindings as i18n_bindings
 from citry.extension import OnRenderCacheStageContext, RenderCacheWrite, StagedRenderCacheContribution
 
 
@@ -123,6 +126,8 @@ def test_typed_codec_is_version_one_and_keeps_source_separate_from_values() -> N
 
 
 def test_verbatim_html_cache_replay_keeps_origin_and_opaque_bytes() -> None:
+    # A compiled template makes this node; the cache replays only spans one wrote.
+    PreparedVerbatimHtmlNode("<c-raw>a < b {{ x }}</c-raw>", (7, 20), "a < b {{ x }}")
     value = PreparedVerbatimHtml("<c-raw>a < b {{ x }}</c-raw>", (7, 20), "a < b {{ x }}")
     assert _replay_typed_leaf(_export_typed_leaf(value)) == value
 
@@ -261,6 +266,8 @@ def test_typed_codec_rejects_invalid_static_run_offsets() -> None:
 
 
 def test_static_run_tag_transitions_survive_cache_codec_and_replay() -> None:
+    # A compiled template makes this node; the cache replays only runs that one made.
+    PreparedStaticRunNode("<section><textarea>x</textarea></section>")
     value = PreparedStaticRun(
         "<section><textarea>x</textarea></section>",
         StaticRunStructure(
@@ -1657,7 +1664,9 @@ def test_i18n_cache_hit_rebinds_typed_binding_marker_to_fresh_occurrence() -> No
     assert operands == markers
 
 
-def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None:
+def test_prepared_browser_bindings_round_trip_with_data_and_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    # As if a template in this process had written this values expression.
+    monkeypatch.setattr(i18n_bindings, "_AUTHORED_VALUES_EXPRESSIONS", {"state.value"})
     assert is_authenticated_browser_binding(
         prepared_browser_binding(helper="$probe_helper", operand="valid", target="text")
     )
@@ -1688,6 +1697,7 @@ def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None
         target="attribute",
         name="title",
         values_expression="state.value",
+        fallback='server "title" <b>',
     )
     text = prepared_browser_binding(helper="$probe", operand="binding-2", target="text")
     opening = PreparedElementOpen(
@@ -1706,6 +1716,9 @@ def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None
     replayed_value = _replay_typed_leaf(_export_typed_leaf(value))
 
     assert replayed_opening.browser_bindings[0].operand == attribute.operand
+    assert replayed_opening.browser_bindings[0].fallback == 'server "title" <b>'
+    with pytest.raises(ValueError, match="fallback text needs a values expression"):
+        prepared_browser_binding(helper="$probe", operand="x", target="text", fallback="server")
     assert replayed_value.browser_binding is not None
     assert replayed_value.browser_binding.operand == "binding-2"
     assert is_authenticated_browser_binding(replayed_opening.browser_bindings[0])

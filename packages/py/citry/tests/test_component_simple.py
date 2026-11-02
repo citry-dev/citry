@@ -12,6 +12,7 @@ from citry import (
     LibraryComponent,
     OnTemplateCompiledContext,
     Slot,
+    VueCodeError,
 )
 
 
@@ -77,7 +78,9 @@ def test_simple_rejects_translation_binding_in_later_attribute_spread() -> None:
         """
 
     assert "first</span>" in Label(attrs={"title": "ok"}, text="first").render().serialize()
-    with pytest.raises(TypeError, match=r"Label uses simple=True; \$c-tr bindings are unsupported"):
+    # A spread `$c-tr` key is Python data choosing browser code, so it fails
+    # the same way in a simple component as anywhere else.
+    with pytest.raises(VueCodeError, match=r"sets '\$c-tr:save\[title\]'"):
         Label(attrs={"$c-tr:save[title]": False}, text="second").render()
 
 
@@ -118,7 +121,7 @@ def test_simple_spread_keeps_callers_translation_bindings_separate() -> None:
     binding_ids = re.findall(r'"id":"([^"]+~i18n-[^"]+)"', html)
     assert len(binding_ids) == 2
     assert len(set(binding_ids)) == 2
-    with pytest.raises(TypeError, match=r"Label uses simple=True; \$c-tr bindings are unsupported"):
+    with pytest.raises(VueCodeError, match=r"sets '\$c-tr:save\[title\]'"):
         Page(attrs={"$c-tr:save[title]": False}).render()
 
 

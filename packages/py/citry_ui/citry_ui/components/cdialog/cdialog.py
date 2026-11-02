@@ -167,7 +167,10 @@ class CDialog(LibraryComponent):
                 "initialFocus": kwargs.initial_focus,
                 "size": kwargs.size,
                 "scroll": kwargs.scroll,
-            }
+            },
+            # The close button's `$c-tr` binding reads this flag and returns `null` when it is false,
+            # which keeps a caller's own label.
+            "catalogCloseLabel": uses_catalog_default(self, "close_label"),
         }
 
     template = """
@@ -215,7 +218,7 @@ class CDialog(LibraryComponent):
                 class="cui-dialog__close"
                 type="button"
                 c-aria-label="tr('citry-ui-dialog-close') if catalog_close_label else close_label"
-                c-$c-tr:citry-ui-dialog-close[aria-label]="True if catalog_close_label else None"
+                $c-tr:citry-ui-dialog-close[aria-label]="catalogCloseLabel ? {} : null"
                 c-hidden="not dismissible"
                 data-citry-dialog-close
                 data-citry-dialog-built-in-close

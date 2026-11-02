@@ -1138,3 +1138,135 @@ probe-greeting = Hello
     assert read(1)["live"] == "cs"
     assert read(1)["watched"] == "cs"
     assert faults == []
+
+
+@pytest.mark.parametrize("start_translated", [False, True], ids=["starts-null", "starts-object"])
+def test_null_values_keep_the_server_text_through_runtime_transitions(
+    page: Any, wait_for_citry_ready: Any, *, start_translated: bool
+) -> None:
+    engine = Citry(
+        autodiscover=False,
+        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
+    )
+
+    class Page(Component):
+        citry = engine
+        template = """
+          <c-i18n c-client="True" tag="main">
+            <output
+              id="custom"
+              $c-tr:save="on ? {} : null"
+            >{{ label }}</output>
+            <button
+              id="custom-attr"
+              c-title="label"
+              $c-tr:save[title]="on ? {} : null"
+            >x</button>
+            <output
+              id="server"
+              $c-tr:greeting="on ? { name } : null"
+            >{{ tr("greeting", name="Server") }}</output>
+            <button
+              id="server-attr"
+              c-title="tr('greeting', name='Server')"
+              $c-tr:greeting[title]="on ? { name } : null"
+            >x</button>
+            <button
+              id="toggle"
+              @click="on = !on"
+            >toggle</button>
+          </c-i18n>
+        """
+        messages = "save = Save\n# @param {str} $name\ngreeting = Hello { $name }"
+        js = "$component({data(){return {on: " + ("true" if start_translated else "false") + ", name: 'Ada'}}});"
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"label": "Mine & yours"}
+
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on("console", lambda message: faults.append(message.text) if message.type == "error" else None)
+    html = Page().render().serialize()
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.goto("http://citry.test/", wait_until="commit")
+    # The server text, with the isolation marks Fluent puts around a
+    # variable, is what `null` must keep.
+    server_text = "Hello \u2068Server\u2069"
+    assert f">{server_text}</output>" in html
+    assert f'title="{server_text}"' in html
+    wait_for_citry_ready()
+
+    def read() -> tuple[str | None, ...]:
+        return (
+            page.locator("#custom").text_content(),
+            page.locator("#custom-attr").get_attribute("title"),
+            page.locator("#server").text_content(),
+            page.locator("#server-attr").get_attribute("title"),
+        )
+
+    kept = ("Mine & yours", "Mine & yours", server_text, server_text)
+    translated = ("Save", "Save", "Hello \u2068Ada\u2069", "Hello \u2068Ada\u2069")
+    states = [translated, kept, translated, kept] if start_translated else [kept, translated, kept, translated]
+    assert read() == states[0], (faults, page.content())
+    for expected in states[1:]:
+        page.locator("#toggle").click()
+        page.wait_for_function(
+            "expected => document.querySelector('#custom')?.textContent === expected",
+            arg=expected[0],
+        )
+        assert read() == expected
+    assert faults == []
+
+
+@pytest.mark.parametrize("mode", ["development", "production"])
+def test_only_null_is_a_deliberate_way_to_keep_the_server_text(
+    page: Any, wait_for_citry_ready: Any, *, mode: str
+) -> None:
+    engine = Citry(
+        autodiscover=False,
+        mode=mode,  # type: ignore[arg-type]
+        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
+    )
+
+    class Page(Component):
+        citry = engine
+        template = """
+          <c-i18n c-client="True" tag="main">
+            <output
+              id="null"
+              $c-tr:greeting="greetingValues"
+            >{{ tr("greeting", name="Server") }}</output>
+            <output
+              id="undefined"
+              $c-tr:greeting="on ? { name } : undefined"
+            >{{ tr("greeting", name="Server") }}</output>
+            <output
+              id="misspelled"
+              $c-tr:greeting="greetingValuez"
+            >{{ tr("greeting", name="Server") }}</output>
+          </c-i18n>
+        """
+        messages = "# @param {str} $name\ngreeting = Hello { $name }"
+        js = "$component({data(){return {on: false, name: 'Ada', greetingValues: null}}});"
+
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    html = Page().render().serialize()
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.goto("http://citry.test/", wait_until="commit")
+    wait_for_citry_ready()
+
+    # Every element keeps the server text: `null` on purpose, and the other
+    # two because a non-object is a mistake whose safe side is no change.
+    for element_id in ("null", "undefined", "misspelled"):
+        assert page.locator(f"#{element_id}").text_content() == "Hello \u2068Server\u2069"
+    binding_errors = [error for error in errors if "i18n binding for message greeting" in error]
+    if mode == "development":
+        # The deliberate `null` is silent; `undefined`, written out or read
+        # from a misspelled name, is reported with the element to look at.
+        assert len(binding_errors) == 2, errors
+        assert all("returned undefined" in error for error in binding_errors)
+        assert all('[data-citry-i18n-binding~="' in error for error in binding_errors)
+    else:
+        assert binding_errors == [], errors

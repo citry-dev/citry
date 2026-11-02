@@ -426,6 +426,17 @@ def test_c_tr_malformed_owned_names_are_lsp_errors(tmp_path):
     assert any("non-empty Fluent attribute" in item.message for item in invalid)
 
 
+def test_python_supplied_c_tr_bindings_are_lsp_errors(tmp_path):
+    project, _app_file, _source = _i18n_project(tmp_path)
+    source = """<div c-$c-tr:known="value" c-bind="{'$c-tr:known[title]': True}"></div>"""
+    document = _document(source, project)
+
+    findings = browser_diagnostics(document, project)
+
+    invalid = [item for item in findings if item.code == "citry.i18n.argument-invalid"]
+    assert ["Python data may not set" in item.message for item in invalid] == [True, True]
+
+
 def test_i18n_bind_literal_message_and_output_navigate_to_fluent_definition(tmp_path):
     project, app_file, source = _i18n_project(tmp_path)
     authored = source.replace(
@@ -995,7 +1006,7 @@ def test_component_input_completion_includes_static_and_dynamic_spellings(tmp_pa
     assert by_label["c-client"].text_edit.new_text == 'c-client="$1"'
 
 
-def test_plain_html_attribute_completion_includes_translation_binding_forms(tmp_path):
+def test_plain_html_attribute_completion_offers_the_template_translation_binding(tmp_path):
     project, _app_file, _source = _i18n_project(tmp_path)
     source = "<button $c"
     document = _document(source, project)
@@ -1003,7 +1014,9 @@ def test_plain_html_attribute_completion_includes_translation_binding_forms(tmp_
     result = completion_result(document, _position(source, "$c", 2), project)
     by_label = {item.label: item for item in result.items}
 
-    assert {"$c-tr:", "c-$c-tr:"} <= set(by_label)
+    assert "$c-tr:" in by_label
+    # A binding's values expression is browser code written in the template.
+    assert "c-$c-tr:" not in by_label
     assert by_label["$c-tr:"].insert_text == '\\$c-tr:${1:message}="${2:{}}"'
 
 
@@ -4606,8 +4619,8 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
         "#c-key",
         "#c-ignore",
         "$c-tr:",
-        "c-$c-tr:",
     } <= set(plain_by_label)
+    assert "c-$c-tr:" not in plain_by_label
     assert plain_by_label["c-for"].insert_text == 'c-for="${1:item} in ${2:items}"'
     assert plain_by_label["#c-key"].insert_text == '#c-key="${1:key}"'
     assert {item.label for item in conditional} == {"cond"}

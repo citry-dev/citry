@@ -150,6 +150,13 @@ value in the object changes, such as `toast.title`.
 Leave out the value when the message has no variables that change in
 the browser.
 
+The text or attribute must be exactly what `tr()` returns for the same
+message. Anything else makes the render fail.
+
+A `$c-tr` binding is always written in the template, because its value
+is browser JavaScript. It goes on a plain HTML element that holds the
+text or attribute itself, not on a component tag.
+
 Citry checks the variables: a missing or unknown one is an error, and so
 is a value whose type Citry can tell is wrong.
 
@@ -313,20 +320,78 @@ Empty names, empty or unclosed brackets, extra punctuation, uppercase
 spellings, and other HTML attributes are errors. Rendering,
 `citry check`, and the editor all report them.
 
-### Add `$c-tr` from Python
+### Keep a caller's text { #keep-the-server-text }
 
-To decide during the server render whether to add the binding, use the
-`c-` prefix, `c-$c-tr:...="python_expression"`, or return a `$c-tr:...`
-key from `c-bind`. The Python value must be:
+When a caller passes its own label, the browser should leave it alone
+after a language switch. Write the binding in the template as usual,
+and make its values expression return `null` when the caller supplied
+the text. Decide which case applies in Python and send the decision to
+both the template and
+[`js_data()`](/vue/component-options/#seed-browser-data-from-python):
 
-- a string, which is the browser expression for the variables object;
-- `True`, for a binding without variables (an empty string means the
-  same);
-- `None` or `False`, for no binding.
+```citry
+class CloseButton(Component):
+    class Kwargs:
+        label: str | None = None
 
-Any other value raises `TypeError`. The binding must be on a plain HTML
-element that holds the text or attribute itself, not on a component
-tag.
+    def template_data(self, kwargs, slots):
+        return {
+            "use_catalog": kwargs.label is None,
+            "label": kwargs.label,
+        }
+
+    def js_data(self, kwargs, slots):
+        return {"useCatalog": kwargs.label is None}
+
+    template = """
+      <button
+        c-aria-label="
+          tr('my-app-close') if use_catalog else label
+        "
+        $c-tr:my-app-close[aria-label]="
+          useCatalog ? {} : null
+        "
+      >
+        &times;
+      </button>
+    """
+
+    messages = """
+      my-app-close = Close
+    """
+```
+
+`{}` means the message has no variables. The value is needed here only
+so that it can return `null`.
+
+While the value is `null`, the element keeps the text or attribute the
+server rendered. When it returns an object again, the browser
+translates as usual.
+
+- Write `null` in the expression itself, as in `useCatalog ? {} : null`.
+  Only then may the element hold text that `tr()` did not produce, such
+  as the caller's label. A `null` that comes from a variable does not
+  count: the render then fails on the caller's label.
+- Return `null` on purpose. Any other value that is not an object, such
+  as `undefined` from a misspelled name or `false` from `flag && {}`,
+  also keeps the server text. In development mode the browser console
+  reports it, naming the message and a selector for the element.
+- If the element renders no such attribute at all, for example because
+  the caller labels it with `aria-labelledby`, a binding with `null` is
+  skipped. Without `null`, the render fails.
+- For text, the kept server text must be plain text. A body that
+  renders HTML makes the render fail.
+
+A component with no `js` or `js_data()` can use two elements instead:
+`c-if` on the one with the binding, and `c-else` on the one with the
+caller's text.
+
+Python data cannot add a `$c-tr` binding. Rendering raises
+`VueCodeError` for a `c-$c-tr:` attribute (the `c-` prefix makes its
+value a Python expression), for a `$c-tr` key in a `c-bind` mapping,
+and for one an extension hook adds. `citry check` and the editor report
+a `c-$c-tr:` attribute, and a `$c-tr` key in a dict written directly in
+`c-bind`.
 
 ### Avoid `v-text` with `$c-tr`
 

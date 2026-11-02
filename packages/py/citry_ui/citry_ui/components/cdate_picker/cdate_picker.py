@@ -537,7 +537,7 @@ class CDatePicker(LibraryComponent):
             </c-fill>
             <c-fill name="title">
               <span
-                c-$c-tr:citry-ui-date-picker-label="True if catalog_picker_label else None"
+                $c-tr:citry-ui-date-picker-label="catalog.picker_label ? {} : null"
               >{{ tr('citry-ui-date-picker-label') if catalog_picker_label else picker_label }}</span>
             </c-fill>
             <c-fill name="default">
@@ -572,7 +572,7 @@ class CDatePicker(LibraryComponent):
             class="cui-date-picker__clear"
             type="button"
             c-aria-label="tr('citry-ui-date-picker-clear') if catalog_clear_label else clear_label"
-            c-$c-tr:citry-ui-date-picker-clear[aria-label]="True if catalog_clear_label else None"
+            $c-tr:citry-ui-date-picker-clear[aria-label]="catalog.clear_label ? {} : null"
             c-hidden="not clearable or required or not value"
             c-disabled="disabled or readonly"
             data-citry-ui-part="clear"

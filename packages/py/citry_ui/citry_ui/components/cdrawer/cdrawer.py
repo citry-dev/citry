@@ -179,6 +179,9 @@ class CDrawer(LibraryComponent):
                 "size": kwargs.size,
                 "scroll": kwargs.scroll,
             },
+            # The close button's `$c-tr` binding reads this flag and returns `null` when it is false,
+            # which keeps a caller's own label.
+            "catalogCloseLabel": uses_catalog_default(self, "close_label"),
         }
 
     template = """
@@ -214,7 +217,7 @@ class CDrawer(LibraryComponent):
                 class="cui-drawer__close"
                 type="button"
                 c-aria-label="tr('citry-ui-drawer-close') if catalog_close_label else close_label"
-                c-$c-tr:citry-ui-drawer-close[aria-label]="True if catalog_close_label else None"
+                $c-tr:citry-ui-drawer-close[aria-label]="catalogCloseLabel ? {} : null"
                 c-hidden="not dismissible"
                 data-citry-drawer-close
                 data-citry-drawer-built-in-close

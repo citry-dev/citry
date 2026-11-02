@@ -25,6 +25,10 @@
   source's `srcset`) accept only a relative URL or an `http:`,
   `https:`, `blob:`, or `data:image/` URL. To link to another scheme,
   such as an app's own scheme, write the `<a>` in your template.
+- Citry UI components work with the next Citry release, which accepts
+  `$c-tr` translation bindings only when they are written in the
+  template. Earlier Citry UI releases fail to render under that release,
+  so upgrade Citry UI and Citry together.
 - Writing an empty value in a template for a text input, such as
   `<c-CButtonGroup label="">` or `<c-CContextMenu aria_label="">`, raises
   the component's own `ValueError` saying the text is empty, not a
@@ -77,6 +81,8 @@
   busy for minutes or longer during a render, and a client `srcset`
   prop with a long run of spaces or commas could freeze the browser
   tab.
+- `CPagination` control labels and `CTable`'s status announcement now
+  follow a language switch in the browser.
 - `CTagsInput` no longer holds up the page for seconds when a typed or
   pasted tag has a long run of spaces inside it, and `CNumberInput`,
   `CSlider`, and `CImage` no longer slow down in Safari on a value with a

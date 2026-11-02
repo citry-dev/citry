@@ -303,7 +303,7 @@ class CColorPicker(LibraryComponent):
           c-aria-controls="popup_id"
           c-aria-expanded="'true' if open else 'false'"
           c-title="tr('citry-ui-color-picker-open') if catalog['open'] else labels['open']"
-          c-$c-tr:citry-ui-color-picker-open[title]="True if catalog['open'] else None"
+          $c-tr:citry-ui-color-picker-open[title]="serverDefaults.catalog.open ? {} : null"
           data-citry-ui-part="trigger"
         ><span c-style="{'background-color':value}" aria-hidden="true" data-citry-ui-part="preview"></span><span c-id="value_id" data-citry-ui-part="value">{{ value }}</span></button>
         <div
@@ -321,13 +321,13 @@ class CColorPicker(LibraryComponent):
             c-aria-valuenow="brightness"
             c-aria-valuetext="f'{saturation}% saturation, {brightness}% brightness, {value}'"
             c-aria-label="tr('citry-ui-color-picker-area') if catalog['area'] else labels['area']"
-            c-$c-tr:citry-ui-color-picker-area[aria-label]="True if catalog['area'] else None"
+            $c-tr:citry-ui-color-picker-area[aria-label]="serverDefaults.catalog.area ? {} : null"
             c-style="{'--_cui-color-picker-hue':f'hsl({hue} 100% 50%)','--_cui-color-picker-saturation':f'{saturation}%','--_cui-color-picker-brightness':f'{100-brightness}%'}"
             data-citry-color-picker-area
             data-citry-ui-part="area"
           ><span aria-hidden="true" data-citry-ui-part="area-thumb"></span></div>
-          <label data-citry-ui-part="hue"><span c-$c-tr:citry-ui-color-picker-hue="True if catalog['hue'] else None">{{ tr('citry-ui-color-picker-hue') if catalog['hue'] else labels['hue'] }}</span><input type="range" min="0" max="359" step="1" c-value="hue" /></label>
-          <div data-citry-ui-part="fields"><label><span c-$c-tr:citry-ui-color-picker-format="True if catalog['format'] else None">{{ tr('citry-ui-color-picker-format') if catalog['format'] else labels['format'] }}</span><select c-disabled="disabled or readonly" data-citry-ui-part="format"><option value="hex" c-selected="format == 'hex'">HEX</option><option value="rgb" c-selected="format == 'rgb'">RGB</option><option value="hsl" c-selected="format == 'hsl'">HSL</option></select></label><label><span c-$c-tr:citry-ui-color-picker-value="True if catalog['value'] else None">{{ tr('citry-ui-color-picker-value') if catalog['value'] else labels['value'] }}</span><input type="text" c-value="value" c-disabled="disabled" c-readonly="readonly" data-citry-ui-part="input" /></label></div>
+          <label data-citry-ui-part="hue"><span $c-tr:citry-ui-color-picker-hue="serverDefaults.catalog.hue ? {} : null">{{ tr('citry-ui-color-picker-hue') if catalog['hue'] else labels['hue'] }}</span><input type="range" min="0" max="359" step="1" c-value="hue" /></label>
+          <div data-citry-ui-part="fields"><label><span $c-tr:citry-ui-color-picker-format="serverDefaults.catalog.format ? {} : null">{{ tr('citry-ui-color-picker-format') if catalog['format'] else labels['format'] }}</span><select c-disabled="disabled or readonly" data-citry-ui-part="format"><option value="hex" c-selected="format == 'hex'">HEX</option><option value="rgb" c-selected="format == 'rgb'">RGB</option><option value="hsl" c-selected="format == 'hsl'">HSL</option></select></label><label><span $c-tr:citry-ui-color-picker-value="serverDefaults.catalog.value ? {} : null">{{ tr('citry-ui-color-picker-value') if catalog['value'] else labels['value'] }}</span><input type="text" c-value="value" c-disabled="disabled" c-readonly="readonly" data-citry-ui-part="input" /></label></div>
           <ul c-if="swatches" data-citry-ui-part="swatches"><c-for each="swatch in swatches"><li><button type="button" c-disabled="disabled or readonly" c-aria-label="swatch['label']" c-data-value="swatch['value']" c-style="{'--cui-color-swatch':swatch['value']}" data-citry-color-swatch data-citry-ui-part="swatch"><span aria-hidden="true"></span></button></li></c-for></ul>
         </div>
         <span

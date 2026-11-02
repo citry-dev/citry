@@ -30,6 +30,7 @@ interface PreparedSnapshot {
 }
 interface PluginHost {
   readonly vue: typeof import("vue");
+  readonly development?: boolean;
   occurrence(id: string): Occurrence | null;
   occurrenceId(component: ComponentPublicInstance): string | null;
 }
@@ -89,7 +90,7 @@ interface PreparedStage extends ActivationState {
     readonly configuration: RuntimeConfiguration | null;
     readonly definitions: Map<string, ProviderDefinition>;
     readonly requirements: Map<string, Requirement[]>;
-    readonly bindingValues: Map<string, Readonly<Record<string, unknown>>>;
+    readonly bindingValues: Map<string, Readonly<Record<string, unknown>> | null>;
     readonly mounted: Map<
       string,
       {
@@ -198,7 +199,9 @@ interface PluginGlobal extends Window {
       const cells = new Map<string, ComputedRef<I18nService | null>>();
       const parentCells = new Map<string, ShallowRef<ComputedRef<I18nService | null> | null>>();
       let activeRequirements = new Map<string, Requirement[]>();
-      const bindingValues = new Map<string, Readonly<Record<string, unknown>>>();
+      // The last values each `$c-tr` binding rendered with, or `null` when its
+      // values expression last asked to keep the server text.
+      const bindingValues = new Map<string, Readonly<Record<string, unknown>> | null>();
       let disposed = false;
 
       function fail(code: string, message: string): never {
@@ -664,29 +667,71 @@ interface PluginGlobal extends Window {
         viewState.value = Object.freeze({ providers: stage.providers, barriers: stage.barriers });
       }
 
-      function renderBinding(id: unknown, values: (() => unknown) | undefined): string {
+      // The server sends a bare binding ID, or `{ id, fallback }` when the
+      // template wrote a values expression; `fallback` is the server-rendered
+      // text, sent as data, which a `null` result keeps.
+      function bindingOperand(operand: unknown): { readonly id: string; readonly fallback: string | undefined } {
+        if (typeof operand === "string") return { id: operand, fallback: undefined };
+        if (operand && Object.getPrototypeOf(operand) === Object.prototype) {
+          const record = operand as Record<string, unknown>;
+          const keys = Object.keys(record).sort();
+          if (
+            keys.length === 2 &&
+            keys[0] === "fallback" &&
+            keys[1] === "id" &&
+            typeof record.id === "string" &&
+            typeof record.fallback === "string"
+          ) {
+            return { id: record.id, fallback: record.fallback };
+          }
+        }
+        fail("I18N_BINDING_INVALID", "binding helper requires a binding ID.");
+      }
+
+      function renderBinding(operand: unknown, values: (() => unknown) | undefined): string {
         if (disposed) fail("I18N_BINDING_INVALID", "binding helper belongs to a disposed plugin.");
-        if (typeof id !== "string") fail("I18N_BINDING_INVALID", "binding helper requires a binding ID.");
+        const { id, fallback } = bindingOperand(operand);
         const definition = runtimeState.bindingDefinitions.get(id);
         if (!definition) fail("I18N_BINDING_INVALID", `binding ${id} is not active.`);
         const service = serviceFor(definition.provider);
         if (!service) fail("I18N_BINDING_INVALID", `binding ${id} has no mounted provider.`);
+        const options = definition.output === undefined ? {} : { attr: definition.output };
         if (values !== undefined) {
           try {
             const candidate = values();
+            const keepsServerText =
+              candidate === null || (fallback !== undefined && (!candidate || typeof candidate !== "object"));
+            if (keepsServerText) {
+              // `null` asks to keep the server-rendered text: show it on the
+              // first render and whenever the value returns to `null`, until
+              // the expression returns an object again.
+              if (fallback === undefined) fail("I18N_BINDING_INVALID", `binding ${id} has no server text to keep.`);
+              if (candidate !== null && host.development === true) {
+                // Any other non-object, most often `undefined` from a name no
+                // Vue instance defines, is a mistake. It keeps the server text
+                // too, the safe side, but the author should hear about it.
+                console.error(
+                  `[Citry] i18n binding for message ${definition.message} on ` +
+                    `[data-citry-i18n-binding~="${id}"] returned ${candidate === undefined ? "undefined" : typeof candidate}; ` +
+                    "return an object of values, or null to keep the server-rendered text.",
+                );
+              }
+              bindingValues.set(id, null);
+              return fallback;
+            }
             const normalized = Object.freeze({ ...plain(candidate, `binding ${id} values`) });
-            const translated = service.tr(definition.message, normalized, {
-              ...(definition.output === undefined ? {} : { attr: definition.output }),
-            });
+            const translated = service.tr(definition.message, normalized, options);
             bindingValues.set(id, normalized);
             return translated;
           } catch (error) {
             console.error(`[Citry] i18n binding ${id} values failed:`, error);
           }
         }
-        return service.tr(definition.message, bindingValues.get(id) ?? definition.values, {
-          ...(definition.output === undefined ? {} : { attr: definition.output }),
-        });
+        // A failed expression keeps the last good result: the server text
+        // when it last returned `null`, otherwise its last values.
+        const previous = bindingValues.get(id);
+        if (previous === null && fallback !== undefined) return fallback;
+        return service.tr(definition.message, previous ?? definition.values, options);
       }
 
       function translateRevision(payload: unknown, resolveOccurrenceId: (id: string) => string): unknown {

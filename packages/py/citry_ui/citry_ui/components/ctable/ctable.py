@@ -1,7 +1,5 @@
 """Styled semantic Table component family."""
 
-# ruff: noqa: E501 - Citry text bindings require one exact expression body.
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -481,19 +479,36 @@ class CTable(LibraryComponent):
         data-citry-ui-part="root"
       >
         <span
+          c-if="state == 'loading' and catalog_loading_label"
           class="cui-table-announcer"
           role="status"
           aria-live="polite"
           aria-atomic="true"
-          c-$c-tr:citry-ui-table-loading="True if state == 'loading' and catalog_loading_label else None"
-          c-$c-tr:citry-ui-table-error="True if state == 'error' and catalog_error_label else None"
-          c-$c-tr:citry-ui-table-empty="True if is_empty and catalog_empty_label else None"
-        >{{
-            tr('citry-ui-table-loading') if state == 'loading' and catalog_loading_label
-            else tr('citry-ui-table-error') if state == 'error' and catalog_error_label
-            else tr('citry-ui-table-empty') if is_empty and catalog_empty_label
-            else announcement
-          }}</span>
+          $c-tr:citry-ui-table-loading
+        >{{ tr('citry-ui-table-loading') }}</span>
+        <span
+          c-elif="state == 'error' and catalog_error_label"
+          class="cui-table-announcer"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          $c-tr:citry-ui-table-error
+        >{{ tr('citry-ui-table-error') }}</span>
+        <span
+          c-elif="is_empty and catalog_empty_label"
+          class="cui-table-announcer"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          $c-tr:citry-ui-table-empty
+        >{{ tr('citry-ui-table-empty') }}</span>
+        <span
+          c-else
+          class="cui-table-announcer"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >{{ announcement }}</span>
         <table
           class="cui-table"
           c-aria-busy="aria_busy"
@@ -537,7 +552,11 @@ class CTable(LibraryComponent):
                 >
                   <div data-citry-ui-part="loading">
                     <c-slot name="loading">
-                      <span c-$c-tr:citry-ui-table-loading="True if catalog_loading_label else None">{{ tr('citry-ui-table-loading') if catalog_loading_label else loading_label }}</span>
+                      <span
+                        c-if="catalog_loading_label"
+                        $c-tr:citry-ui-table-loading
+                      >{{ tr('citry-ui-table-loading') }}</span>
+                      <span c-else>{{ loading_label }}</span>
                     </c-slot>
                   </div>
                 </td>
@@ -551,7 +570,11 @@ class CTable(LibraryComponent):
                 >
                   <div data-citry-ui-part="error">
                     <c-slot name="error">
-                      <span c-$c-tr:citry-ui-table-error="True if catalog_error_label else None">{{ tr('citry-ui-table-error') if catalog_error_label else error_label }}</span>
+                      <span
+                        c-if="catalog_error_label"
+                        $c-tr:citry-ui-table-error
+                      >{{ tr('citry-ui-table-error') }}</span>
+                      <span c-else>{{ error_label }}</span>
                     </c-slot>
                   </div>
                 </td>
@@ -565,7 +588,11 @@ class CTable(LibraryComponent):
                 >
                   <div data-citry-ui-part="empty">
                     <c-slot name="empty">
-                      <span c-$c-tr:citry-ui-table-empty="True if catalog_empty_label else None">{{ tr('citry-ui-table-empty') if catalog_empty_label else empty_label }}</span>
+                      <span
+                        c-if="catalog_empty_label"
+                        $c-tr:citry-ui-table-empty
+                      >{{ tr('citry-ui-table-empty') }}</span>
+                      <span c-else>{{ empty_label }}</span>
                     </c-slot>
                   </div>
                 </td>

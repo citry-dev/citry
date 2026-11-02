@@ -190,6 +190,22 @@
 
 ### Changed
 
+- **Breaking:** write a `$c-tr` translation binding and its values in the
+  template. A binding that comes from Python data, through `c-$c-tr:...`,
+  a `$c-tr` key in a `c-bind` mapping, or an `on_attrs_resolved` hook, now
+  raises `VueCodeError`, because its value is browser JavaScript. To let
+  the server decide whether the browser translates an element, return a
+  flag from `js_data()` and make the binding's values expression return
+  `null` where the server-rendered text should stay
+  ([details](https://citry.dev/i18n/browser/#keep-the-server-text)):
+
+  ```citry-html
+  <!-- Before -->
+  <span c-$c-tr:my-app-save="True if use_catalog else None">
+  <!-- After: useCatalog comes from js_data() -->
+  <span $c-tr:my-app-save="useCatalog ? {} : null">
+  ```
+
 - Citry now checks and converts each key and value of a `dict[K, V]`
   field in an Events `data` class, as it already did for each item of a
   list. A key such as `"3"` fills a `dict[int, ...]` field as the number
@@ -653,6 +669,11 @@
   references correctly too, and a dynamic slot name that is not
   JavaScript, such as `#[x&amp;y]`, now reports Vue's invalid-expression
   error instead of compiling to broken JavaScript.
+- A render cache entry is reused only when the templates running in this
+  process wrote the same template text, `$c-tr` bindings, and values
+  expressions, so an entry left by a different version of a template is
+  rendered again. After a restart, a cached component may render once more
+  before its entry is used.
 - Printing a slot's result in a component and also passing it to a child
   component tag that prints it now raises "This content is printed in more
   than one place", naming the component that prints it the second time,

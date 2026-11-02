@@ -3185,6 +3185,8 @@
     const pluginHost = Object.freeze({
       appId,
       vue: V,
+      // Plugins report authoring mistakes only on a page Citry(mode="development") rendered.
+      development: configuration.development === true,
       occurrenceId(component) {
         const record = instanceRecords.get(component);
         return record?.app.id === appId ? record.occurrenceId : null;

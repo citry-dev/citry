@@ -1,10 +1,7 @@
 """Persistent Toast queue, viewport, timers, focus access, and announcers."""
 
-# ruff: noqa: E501 - Citry template expressions stay on their owning attribute lines.
-
 from __future__ import annotations
 
-import json
 import string
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -291,6 +288,9 @@ class CToastRegion(LibraryComponent):
         # caller supplies a mutable or side-effecting public Sequence.
         self._toast_messages = messages
         self._toast_i18n_data = {
+            # The region's `$c-tr` binding reads this flag and returns `null` when it is false,
+            # which keeps a caller's own label.
+            "catalogLabel": catalog_label,
             "catalogDismiss": catalog_dismiss,
             "catalogActionAnnouncement": catalog_action_announcement,
             "dismissPattern": dismiss_pattern,
@@ -309,12 +309,6 @@ class CToastRegion(LibraryComponent):
                 "titleId": f"{region_id}-title-{index}",
                 "descriptionId": f"{region_id}-description-{index}",
                 "translationTitle": inline_translation_value(cast("str", message["title"])),
-                "dismissValuesExpression": "{ title: "
-                + json.dumps(
-                    inline_translation_value(cast("str", message["title"])),
-                    ensure_ascii=False,
-                )
-                + " }",
             }
             for index, message in enumerate(messages[: kwargs.limit])
         )
@@ -343,6 +337,9 @@ class CToastRegion(LibraryComponent):
             **self._toast_i18n_data,
         }
 
+    # On the catalog branch, the dismiss button's bare `$c-tr` binding
+    # translates again in the browser with the `title` the server passed to
+    # tr(). A caller's own label renders the c-elif button, which has no binding.
     template = """
       <section
         ref="root"
@@ -350,7 +347,7 @@ class CToastRegion(LibraryComponent):
         c-id="region_id"
         c-bind="attrs"
         c-aria-label="tr('citry-ui-toast-region') if catalog_label else label"
-        c-$c-tr:citry-ui-toast-region[aria-label]="True if catalog_label else None"
+        $c-tr:citry-ui-toast-region[aria-label]="catalogLabel ? {} : null"
         c-data-placement="placement"
         role="region"
         tabindex="-1"
@@ -408,15 +405,23 @@ class CToastRegion(LibraryComponent):
                       {{ message['actionLabel'] }}
                     </button>
                   </c-if>
-                  <c-if cond="message['dismissible']">
+                  <c-if cond="message['dismissible'] and catalog_dismiss">
                     <button
                       type="button"
-                      c-aria-label="tr('citry-ui-toast-dismiss', title=message['translationTitle']) if catalog_dismiss else message['dismissLabel']"
-                      c-$c-tr:citry-ui-toast-dismiss[aria-label]="message['dismissValuesExpression'] if catalog_dismiss else None"
+                      c-aria-label="tr('citry-ui-toast-dismiss', title=message['translationTitle'])"
+                      $c-tr:citry-ui-toast-dismiss[aria-label]
                       data-citry-toast-dismiss
                       data-citry-ui-part="dismiss"
                     >&times;</button>
                   </c-if>
+                  <c-elif cond="message['dismissible']">
+                    <button
+                      type="button"
+                      c-aria-label="message['dismissLabel']"
+                      data-citry-toast-dismiss
+                      data-citry-ui-part="dismiss"
+                    >&times;</button>
+                  </c-elif>
                 </div>
               </c-if>
             </div>

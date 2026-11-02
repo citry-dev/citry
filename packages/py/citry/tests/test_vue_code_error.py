@@ -104,8 +104,8 @@ class TestHtmlElement:
         assert message == (
             "c-bind on <div> sets '@click', which Vue would read as code. Python data from c-bind, "
             "c-* attributes, and extension hooks may not set a name that starts with v-, :, ., ^, @, or #, "
-            "even on a page that does not use Vue. Write Vue directives, bindings, and listeners directly "
-            "in the template."
+            "or name a $c-tr binding, even on a page that does not use Vue. Write Vue directives, bindings, and "
+            "listeners directly in the template."
         )
 
     def test_citry_events_binding_from_c_bind_is_not_vue_code(self) -> None:
@@ -201,6 +201,17 @@ class TestComponentTag:
         # only the forms it lets through reach the render.
         page = _page(f'<div><c-child c-{key}="value" /></div>', {"value": "go()"}, vue=vue)
         assert f"'c-{key}' on <c-child> sets {key!r}" in str(_render_error(page))
+
+    @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
+    @pytest.mark.parametrize(
+        "template",
+        ['<div><c-child c-bind="attrs" /></div>', '<div><c-child c-$c-tr:save="value" /></div>'],
+    )
+    def test_translation_binding_fails_at_render(self, template: str, vue: bool) -> None:
+        page = _page(template, {"attrs": {"$c-tr:save": "{ x: 1 }"}, "value": "{ x: 1 }"}, vue=vue)
+        message = str(_render_error(page))
+        assert "sets '$c-tr:save', which Vue would read as code." in message
+        assert "js_data()" in message
 
     @pytest.mark.parametrize(
         ("key", "hint"),
@@ -324,9 +335,17 @@ class TestExtensionHook:
         assert message == (
             "An on_attrs_resolved extension hook sets '@click' on <div>, which Vue would read as code. "
             "Python data from c-bind, c-* attributes, and extension hooks may not set a name that starts with "
-            "v-, :, ., ^, @, or #, even on a page that does not use Vue. Return only plain attribute names "
-            "from the hook, and write Vue directives, bindings, and listeners directly in the template."
+            "v-, :, ., ^, @, or #, or name a $c-tr binding, even on a page that does not use Vue. Return only plain "
+            "attribute names from the hook, and write Vue directives, bindings, and listeners directly in the "
+            "template."
         )
+
+    def test_hook_that_adds_a_translation_binding_fails(self) -> None:
+        def add(_self: Any, ctx: Any) -> None:
+            ctx.attrs["$c-tr:save[title]"] = "{ x: 1 }"
+
+        page = _page('<div c-title="title">x</div>', {"title": "t"}, vue=False, app=self._app(add))
+        assert "extension hook sets '$c-tr:save[title]' on <div>" in str(_render_error(page))
 
     def test_hook_that_changes_a_written_vue_binding_fails(self) -> None:
         def change(_self: Any, ctx: Any) -> dict[str, Any]:
