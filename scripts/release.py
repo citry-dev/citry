@@ -68,6 +68,12 @@ RETRYABLE_STEPS: Final = frozenset(
 )
 FAILED_CONCLUSIONS: Final = frozenset({"failure", "cancelled", "timed_out"})
 FULL_SHA: Final = re.compile(r"[0-9a-f]{40}")
+# The workflow that runs `publish` and the input that names the candidate. A
+# publication that stops with an error prints the command that starts it
+# again with the same candidate; packages/py/citry/tests/test_release_controller.py
+# checks that both still exist in the workflow file.
+RELEASE_WORKFLOW: Final = "repo--release.yml"
+RELEASE_CANDIDATE_INPUT: Final = "candidate_run_id"
 
 
 class ReleaseError(RuntimeError):
@@ -1250,6 +1256,23 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def restart_hint(repository: str, candidate_run_id: int) -> str:
+    """
+    Return the text that tells a person how to start a stopped release again.
+
+    A person reading a failed release log should not have to search the docs
+    for the command, or for the rule that every publish run must finish first.
+    """
+    return (
+        "To run this release again, wait until every publish run it started has finished, "
+        "then start the release with the same candidate:\n"
+        f"  gh workflow run {RELEASE_WORKFLOW} --repo {repository} -f {RELEASE_CANDIDATE_INPUT}={candidate_run_id}\n"
+        "If the failure is not a short outage, such as a hash mismatch or a candidate run that is not valid, "
+        "starting again fails the same way until its cause is fixed. "
+        'See "When a release stops partway" in docs/codebase.md.\n'
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the release controller."""
     args = _parser().parse_args(argv)
@@ -1286,13 +1309,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             _write_json(args.output, candidate)
             return 0
 
-        publish_candidate(
-            _load_json(args.candidate),
-            client=client,
-            ref=args.ref,
-            publication_id=args.publication_id,
-            candidate_run_id=args.candidate_run_id,
-        )
+        candidate = _load_json(args.candidate)
+        try:
+            publish_candidate(
+                candidate,
+                client=client,
+                ref=args.ref,
+                publication_id=args.publication_id,
+                candidate_run_id=args.candidate_run_id,
+            )
+        except ReleaseError as error:
+            # Publication can start again with the same candidate after any
+            # failure, and a person reading the log should not have to look
+            # up how. A failure before `publish_candidate` is called (a
+            # missing token, an unreadable candidate file) has nothing to
+            # start again, and a failed qualification has no candidate yet,
+            # so only this call prints the command.
+            sys.stderr.write(f"release error: {error}\n")
+            sys.stderr.write(restart_hint(args.repository, args.candidate_run_id))
+            return 1
         return 0
     except ReleaseError as error:
         sys.stderr.write(f"release error: {error}\n")
