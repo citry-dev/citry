@@ -650,6 +650,8 @@ def test_restart_rejects_a_tag_on_another_commit(tmp_path: Path) -> None:
         "missing asset",
         "other wheel bytes",
         "draft",
+        "asset still uploading",
+        "other tag",
     ],
 )
 def test_restart_sends_a_package_whose_github_release_is_not_exact_back_to_the_worker(
@@ -668,6 +670,10 @@ def test_restart_sends_a_package_whose_github_release_is_not_exact_back_to_the_w
         assets[0]["digest"] = "sha256:" + "0" * 64
     elif change == "draft":
         github_release["draft"] = True
+    elif change == "asset still uploading":
+        assets[0]["state"] = "starter"
+    elif change == "other tag":
+        github_release["tag_name"] = "citry-core@1.6.0"
 
     _publish(client, _Registry({_CORE_PYPI: _pypi_json(_CORE_FILES)}), candidate)
 
@@ -963,3 +969,66 @@ def test_the_registry_client_hashes_the_file_not_its_transfer_encoding(
 def test_the_registry_client_refuses_plain_http() -> None:
     with pytest.raises(ReleaseError, match="must use HTTPS"):
         release.RegistryClient().get("http://example.test/vsix")
+
+
+def test_restart_skips_an_extension_both_registries_serve(tmp_path: Path) -> None:
+    # The extension Release also holds the worker's registry record, and both
+    # registries must serve the qualified VSIX before the package is skipped.
+    candidate = build_plan(
+        _repo(tmp_path / "repo"), commit=_COMMIT, selected=("vscode-citry",), existing_tags=frozenset()
+    )
+    archive = tmp_path / "vsix.zip"
+    digest = _qualification_archive(archive, {_VSIX: b"vsix"})
+    candidate["candidate_id"] = "1"
+    candidate["qualifications"] = [
+        {"package": "vscode-citry", "run_id": 10, "artifact_id": 11, "artifact_digest": digest},
+    ]
+    with zipfile.ZipFile(archive) as bundle:
+        inventory = bundle.read("release-inventory.json")
+    bodies = {
+        _VSIX: b"vsix",
+        "release-inventory.json": inventory,
+        "qualification-provenance.json": b"{}",
+        "registry-verification.json": b"{}",
+    }
+    github_release = {
+        "draft": False,
+        "tag_name": "vscode-citry@0.1.3",
+        "assets": [
+            {"name": name, "state": "uploaded", "digest": "sha256:" + hashlib.sha256(body).hexdigest()}
+            for name, body in bodies.items()
+        ],
+    }
+    client = _ReleaseGitHub(
+        tmp_path,
+        tags={"vscode-citry@0.1.3": _COMMIT},
+        releases={"vscode-citry@0.1.3": github_release},
+        archives={11: archive.read_bytes()},
+    )
+    registry = _Registry(_vscode_answers(marketplace=b"vsix", open_vsx=b"vsix"))
+
+    _publish(client, registry, candidate)
+    assert client.dispatched == []
+
+    # Without the registry record the Release is not the one a finished
+    # worker leaves, so the worker runs again.
+    assets = github_release["assets"]
+    assert isinstance(assets, list)
+    github_release["assets"] = [asset for asset in assets if asset["name"] != "registry-verification.json"]
+    _publish(client, registry, candidate)
+    assert client.dispatched == ["vscode--citry--publish.yml"]
+
+
+def test_an_open_vsx_download_that_fails_stops_the_restart() -> None:
+    # Open VSX listed the version but its file did not download, so nothing
+    # proves the bytes; the restart stops rather than guessing.
+    answers = _vscode_answers(marketplace=b"vsix", open_vsx=b"vsix")
+    del answers[_OPEN_VSX_FILE]
+
+    with pytest.raises(ReleaseError, match="could not download the Open VSX VSIX"):
+        release.registry_state(
+            "vscode-citry",
+            "0.1.3",
+            {_VSIX: hashlib.sha256(b"vsix").hexdigest()},
+            _Registry(answers),  # type: ignore[arg-type]
+        )

@@ -747,7 +747,10 @@ def already_published(
         expected_assets={**expected, "release-inventory.json": inventory_digest},
         other_assets=other_assets,
     ):
-        _log(f"{tag} has a GitHub Release that its publish worker has not finished checking; running the worker")
+        _log(
+            f"{tag} has a GitHub Release that does not hold exactly the qualified files; "
+            "running its worker to check it"
+        )
         return False
     _log(f"{tag} is already published from the qualified bytes; skipping it")
     return True

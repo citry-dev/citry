@@ -1939,19 +1939,20 @@ Packages without a dependency relationship publish together.
 
 PyPI, the extension registries, or sigstore can fail for a few minutes.
 Sigstore is the service that signs each uploaded file, so a user can check
-that the file came from this repository's CI. The controller handles a short
-outage in two ways, so a release can finish without anyone stepping in.
+that the file came from this repository's CI. The controller retries a short
+outage on its own; after a longer one, a person only has to start the release
+again.
 
 First, it retries a failed publish step. When a worker fails in a step that
 uploads to a registry or signs with sigstore, the controller waits five
 minutes and starts that run's failed jobs again, up to two times. The new
 attempt reads the registry first. When some qualified files are already
-there, it sends the files again with `skip-existing`, so a file PyPI already
-holds is passed over. The check after the upload then compares every public
+there, it sends the files again with `skip-existing`, so PyPI skips a file it
+already holds. The check after the upload then compares every public
 file's SHA-256 with the qualified bytes. A failure in any other step, such as
 a hash check, stops the release at once. Every attempt signs what it uploads:
 Citry never publishes a file without its attestation (the signed record of
-which workflow built it).
+which workflow published it).
 
 Second, you can start the whole release again. First wait until every
 publish run that the stopped release started has finished, so two runs do not
@@ -1971,7 +1972,8 @@ For each package, the controller first looks for its tag:
   PyPI lists its own hashes. For the VS Code extension, the controller
   downloads the VSIX from both the Marketplace and Open VSX. It also checks
   that the GitHub Release holds exactly the qualified files, with the same
-  SHA-256. When all of this matches, the package is skipped. When a registry
+  SHA-256, plus the worker's two small JSON records (checked for presence
+  only). When all of this matches, the package is skipped. When a registry
   is still missing files, or the GitHub Release holds anything else, the
   worker runs again and finishes or checks the rest.
 - The tag exists but the GitHub Release does not: the worker runs. It skips
@@ -2561,9 +2563,10 @@ An interrupted upload can be retried with the same candidate. The worker reads
 PyPI's complete file inventory: an absent version is uploaded, an exact
 filename and SHA-256 match is accepted, and a partial upload whose files all
 match is finished by uploading the rest. Any different or unknown public file
-stops the worker. It skips an existing file only after this check has matched
-its SHA-256, and it never overwrites a GitHub Release asset. Release-critical third-party actions are pinned to reviewed
-commits.
+stops the worker. It turns on skip-existing only when this check found the
+public files with the qualified SHA-256, and the check after the upload proves
+every file again. It never overwrites a GitHub Release asset. Release-critical
+third-party actions are pinned to reviewed commits.
 
 The permanent browser build tuple lives in
 `packages/py/citry_core/pyodide-build.json`. Its Pyodide and Python versions
@@ -2611,8 +2614,8 @@ The candidate retains `verified-citry-lsp-distributions` and its exact byte
 inventory for 30 days. Promotion receives that artifact's exact run, ID, and
 digest, safely extracts and re-verifies the pair against the release checkout,
 and publishes without rebuilding. An exact already-public PyPI inventory is a
-safe retry, a partial upload whose files match is finished, and any different
-file stops the worker.
+safe retry, the worker uploads the rest of a partial upload whose files match,
+and any different file stops the worker.
 
 For the first release, create a pending PyPI Trusted Publisher with this exact
 identity: project `citry-lsp`, owner `citry-dev`, repository `citry`, workflow
@@ -2645,8 +2648,9 @@ rows remain recorded honestly and must not be reported as passing evidence.
 The candidate retains `verified-citry-ui-distributions` and its exact byte
 inventory for 30 days. Promotion selects it by exact run, artifact ID, and
 digest, safely extracts and re-verifies the pair, and publishes without
-rebuilding. An exact already-public PyPI inventory is a safe retry, a partial
-upload whose files match is finished, and any different file stops the worker.
+rebuilding. An exact already-public PyPI inventory is a safe retry, the worker
+uploads the rest of a partial upload whose files match, and any different file
+stops the worker.
 
 The PyPI Trusted Publisher created for the first release uses project
 `citry-ui`, owner `citry-dev`, repository `citry`, workflow
