@@ -2,6 +2,7 @@
 
 # ruff: noqa: RUF001
 
+import importlib.util
 import logging
 import tracemalloc
 from datetime import date, datetime, time, timezone
@@ -774,6 +775,10 @@ def test_the_python_bounds_match_what_the_formatter_accepts(text: str, *, accept
             fmt.number(Decimal(text), format="measurement")
 
 
+# The pure-Python decimal module turns the digits into an int while it builds the
+# value, so Python's own 4300-digit string limit refuses it before Citry runs.
+# Some interpreter builds ship only that module.
+@pytest.mark.skipif(importlib.util.find_spec("_decimal") is None, reason="needs the C decimal module")
 def test_many_digits_inside_the_range_still_format() -> None:
     value = Decimal("9" * 30000 + "." + "9" * 30000)
     assert len(_english_formatters().number(value, format="measurement")) > 60000

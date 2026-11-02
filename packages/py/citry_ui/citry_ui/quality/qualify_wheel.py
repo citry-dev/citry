@@ -86,7 +86,9 @@ EXPECTED_RUNTIME_FILES = source_runtime_files(_PACKAGE_ROOT)
 EXPECTED_I18N_FILES = source_i18n_files(_PACKAGE_ROOT)
 _FORBIDDEN_SUFFIXES = {".html", ".json", ".md", ".png", ".svg"}
 _THIRD_PARTY_NOTICE_SHA256 = "0f1b152923fc9ff1181a9e6c87aa5877e258efe6d7dbc4c3198ab25e9dd3e8ad"
-MAX_WHEEL_BYTES = 800 * 1024
+# The 0.4.0 runtimes put the wheel at about 816 KiB; 1 MiB leaves room
+# for normal growth while still catching a wrongly bundled directory.
+MAX_WHEEL_BYTES = 1024 * 1024
 MAX_I18N_COMPRESSED_BYTES = 28 * 1024
 _WHEEL_NAME = re.compile(r"citry_ui-(?P<version>[0-9A-Za-z.!+_]+)-py3-none-any\.whl")
 
