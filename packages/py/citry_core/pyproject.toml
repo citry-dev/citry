@@ -82,6 +82,4 @@ cache-keys = [
     { file = "../../../third_party/rust/vize_atelier_core/Cargo.toml" },
     { file = "../../../third_party/rust/vize_s1_to_s2/**/*.rs" },
     { file = "../../../third_party/rust/vize_s1_to_s2/Cargo.toml" },
-    { file = "../../../third_party/rust/html5gum/**/*.rs" },
-    { file = "../../../third_party/rust/html5gum/Cargo.toml" },
 ]

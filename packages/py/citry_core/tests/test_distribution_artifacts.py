@@ -179,11 +179,6 @@ def test_wheel_verifier_requires_exact_upstream_license_attribution(tmp_path: Pa
 def test_patched_crate_inventory_closes_source_and_attribution() -> None:
     inventory = distribution_verifier.patched_crate_inventory()
 
-    assert "third_party/rust/html5gum/Cargo.toml" in inventory
-    assert "third_party/rust/html5gum/LICENSE" in inventory
-    assert "third_party/rust/html5gum/README.citry.md" in inventory
-    assert "third_party/rust/html5gum/src/machine.rs" in inventory
-
     assert "third_party/rust/vize_atelier_core/Cargo.toml" in inventory
     assert "third_party/rust/vize_atelier_core/LICENSE" in inventory
     assert "third_party/rust/vize_atelier_core/README.citry.md" in inventory
@@ -195,7 +190,6 @@ def test_patched_crate_inventory_closes_source_and_attribution() -> None:
     assert all(
         name.startswith(
             (
-                "third_party/rust/html5gum/",
                 "third_party/rust/vize_atelier_core/",
                 "third_party/rust/vize_s1_to_s2/",
             )
@@ -204,13 +198,28 @@ def test_patched_crate_inventory_closes_source_and_attribution() -> None:
     )
 
 
-def test_wheel_html5gum_license_is_the_patched_copy_license() -> None:
-    # The wheel ships compiled html5gum code but not its source, so the
-    # license file next to the package must stay the copy's own text.
-    package = ROOT / "packages" / "py" / "citry_core" / "LICENSE-html5gum"
-    copy = ROOT / "third_party" / "rust" / "html5gum" / "LICENSE"
+# The SHA-256 of the LICENSE file inside each html5gum release whose notice
+# has been compared with packages/py/citry_core/LICENSE-html5gum. To add a
+# release, read the LICENSE in its crates.io archive (in the cargo registry
+# source folder, or `tar -xzOf html5gum-X.Y.Z.crate html5gum-X.Y.Z/LICENSE`),
+# update LICENSE-html5gum if the text changed, and add the digest here.
+HTML5GUM_LICENSE_SHA256 = {
+    "0.9.1": "d8c0537cc294880316b3a28a7fd4eeccf1254fa955851582cac46fd048f9e8db",
+}
 
-    assert package.read_bytes() == copy.read_bytes()
+
+def test_wheel_html5gum_license_is_the_locked_crate_license() -> None:
+    # The wheel ships compiled html5gum code but not its source, so the
+    # license file next to the package must carry the notice of the html5gum
+    # release that Cargo.lock builds.
+    lock = distribution_verifier._loads_toml((ROOT / "Cargo.lock").read_text(encoding="utf-8"))
+    locked = {package["version"] for package in lock["package"] if package["name"] == "html5gum"}
+    package_license = ROOT / "packages" / "py" / "citry_core" / "LICENSE-html5gum"
+
+    assert locked, "Cargo.lock does not lock html5gum"
+    unchecked = sorted(locked - HTML5GUM_LICENSE_SHA256.keys())
+    assert not unchecked, f"html5gum {unchecked} is locked but its LICENSE is not in HTML5GUM_LICENSE_SHA256"
+    assert {hex_sha256(package_license.read_bytes())} == {HTML5GUM_LICENSE_SHA256[version] for version in locked}
 
 
 def test_pyproject_declares_attribution_and_tracks_patch_build_inputs() -> None:
@@ -225,8 +234,6 @@ def test_pyproject_declares_attribution_and_tracks_patch_build_inputs() -> None:
     assert "../../../third_party/rust/vize_atelier_core/Cargo.toml" in cache_files
     assert "../../../third_party/rust/vize_s1_to_s2/**/*.rs" in cache_files
     assert "../../../third_party/rust/vize_s1_to_s2/Cargo.toml" in cache_files
-    assert "../../../third_party/rust/html5gum/**/*.rs" in cache_files
-    assert "../../../third_party/rust/html5gum/Cargo.toml" in cache_files
 
 
 def test_wheel_verifier_rejects_a_recorded_installer_script(tmp_path: Path) -> None:

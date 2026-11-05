@@ -42,7 +42,6 @@ SMOKE_SCRIPT: Final = REPO_ROOT / "scripts" / "smoke_citry_core.py"
 # The patched third-party crates under third_party/rust, with the version
 # each copy declares. An sdist must carry every file of each one.
 PATCHED_CRATES: Final = {
-    "html5gum": "0.8.4+citry.1",
     "vize_atelier_core": "0.420.0+citry.7",
     "vize_s1_to_s2": "0.420.0+citry.7",
 }

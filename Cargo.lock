@@ -1055,10 +1055,11 @@ dependencies = [
 
 [[package]]
 name = "html5gum"
-version = "0.8.4+citry.1"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "469fd7ad11d167b79385adccbba0fae87a50a9adb0c081e8ce7b130faa51f3bb"
 dependencies = [
  "html5ever",
- "jetscii",
 ]
 
 [[package]]
@@ -1613,12 +1614,6 @@ name = "ixdtf"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ceaf4c6c48465bead8cb6a0b7c4ee0c86ecbb31239032b9c66ab9a08d2f3ee1"
-
-[[package]]
-name = "jetscii"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47f142fe24a9c9944451e8349de0a56af5f3e7226dc46f3ed4d4ecc0b85af75e"
 
 [[package]]
 name = "js-sys"
