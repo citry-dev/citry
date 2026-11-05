@@ -50,9 +50,6 @@ packages/py/citry_core/citry_core/**/*.pyi text eol=lf
 packages/py/citry_core/citry_core/py.typed text eol=lf
 packages/py/citry_core/LICENSE text eol=lf
 packages/py/citry_core/LICENSE-html5gum text eol=lf
-# The wheel's html5gum notice is compared byte for byte with the patched copy's
-# own license, so both sides stay on LF in a Windows checkout.
-third_party/rust/html5gum/LICENSE text eol=lf
 packages/py/citry_core/README.md text eol=lf
 packages/py/citry_core/pyproject.toml text eol=lf
 

@@ -2,14 +2,13 @@
 A tag with a very long run of attributes is refused, and the process keeps running.
 
 The HTML reader behind the output checks, the fragment check for `Markup`
-and `<c-raw>`, and the hydration checks is html5gum. Upstream html5gum 0.8.4
-nested a few calls for each attribute written as `name="value"`, so one tag
-with about 50,000 of them overflowed the 8 MiB main-thread stack in a release
-build and killed the whole process (about 3,000 on a 512 KiB thread). Citry
-builds a patched copy (`third_party/rust/html5gum`) that does not nest. A
-stack overflow cannot be caught, so every case runs in a child Python
-process, on a thread with a small stack, and the test reads what the child
-printed.
+and `<c-raw>`, and the hydration checks is html5gum. An html5gum release that
+nests a few calls for each attribute written as `name="value"` overflows the
+stack on a long tag and kills the whole process: version 0.8.4 did so at
+about 50,000 attributes on the 8 MiB main-thread stack in a release build
+(about 3,000 on a 512 KiB thread), and version 0.9.1 does not nest. A stack
+overflow cannot be caught, so every case runs in a child Python process, on a
+thread with a small stack, and the test reads what the child printed.
 
 Citry also refuses a tag with more than 1,024 attributes, HTML with more
 than 16 `<html>`, `<head>` or `<body>` start tags of one name, HTML that
@@ -21,7 +20,7 @@ repeated `<html>` or `<body>` count and of the nesting depth, and builds a
 tree the size of the input times the length of its formatting list when
 formatting tags are misnested
 (`crates/citry_html_transform/src/html_limits.rs`). html5gum still reads
-the whole input, so the long tags below still test the patched copy.
+the whole input, so the long tags below still test the tokenizer.
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ import pytest
 # 2.25 MiB segment.
 STACK_KIB = 512
 
-# More attributes than upstream html5gum read on that 2.25 MiB segment.
+# More attributes than html5gum 0.8.4 read on that 2.25 MiB segment.
 MANY = 20000
 
 # The limits in `html_limits.rs`; the Rust tests pin the constants.

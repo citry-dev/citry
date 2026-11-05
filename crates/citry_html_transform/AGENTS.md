@@ -93,15 +93,15 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
 
 ## Gotchas
 
-- **html5gum is a patched copy.** The workspace builds
-  `third_party/rust/html5gum` (0.8.4 with one line changed; its
-  `README.citry.md` says which and why). Upstream 0.8.4 nests a few calls
-  for each `name="value"` attribute in a row, so one tag with about 50,000
-  of them overflows the 8 MiB main-thread stack in a release build (about
-  3,000 on a 512 KiB thread) and aborts the process. A stack guard around
-  our own code cannot stop that, because the calls are inside html5gum.
-  When you upgrade html5gum, carry the change over unless upstream has
-  fixed it; `tests/attribute_runs.rs` fails if it is lost.
+- **html5gum must not nest for each attribute.** Since 0.9.1
+  ([pull request 158](https://github.com/untitaker/html5gum/pull/158)) it
+  returns to its main loop between two attributes, so a tag with any number
+  of attributes needs the same stack. A stack overflow aborts the
+  whole process, and a stack guard around our own code cannot stop it,
+  because the calls are inside html5gum. The workspace pins html5gum to an
+  exact version, so an upgrade is a deliberate step. Run
+  `tests/attribute_runs.rs` when you take it: it fails with a crash if a
+  release nests for each `name="value"` attribute again.
 - **Start html5gum only through `run_tokenizer`** (test helpers aside), so
   every run gets the same stack reserve and the same size limits. Build a
   fragment's tree with `output_scanner::parse_fragment_in`, not

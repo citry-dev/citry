@@ -1,17 +1,18 @@
 //! A tag with a very long run of attributes is read to its end on any
 //! stack, and refused.
 //!
-//! Upstream html5gum 0.8.4 nests a few calls for each `name="value"`
-//! attribute in a row, so one tag with about 50,000 of them overflowed the
-//! 8 MiB main-thread stack in a release build and killed the whole process
-//! (about 3,000 on a 512 KiB thread, and far fewer in a debug build). The
-//! patched copy in `third_party/rust/html5gum` returns to its main loop
-//! after each attribute. These tests fail with a crash if that patch is
-//! lost, for example when html5gum is upgraded.
+//! An html5gum release that nests a few calls for each `name="value"`
+//! attribute in a row overflows the stack on a long tag and kills the whole
+//! process. Version 0.8.4 did so at about 50,000 attributes on the 8 MiB
+//! main-thread stack in a release build (about 3,000 on a 512 KiB thread,
+//! and far fewer in a debug build). Version 0.9.1 returns to its main loop
+//! after each attribute (untitaker/html5gum pull request 158). These tests
+//! fail with a crash if a later release nests again, so run them when you
+//! upgrade html5gum.
 //!
 //! Every entry point refuses a tag with more than 1,024 attributes (see
 //! `src/html_limits.rs`), but html5gum still reads the rest of the input
-//! after the limit, so a tag of 100,000 still exercises the patch.
+//! after the limit, so a tag of 100,000 still exercises the tokenizer.
 //!
 //! A stack overflow cannot be caught, so each case runs in a child process:
 //! this test binary starts itself again with `--exact child` and an
@@ -37,7 +38,7 @@ const SHAPE: &str = "CITRY_ATTRIBUTE_RUN_SHAPE";
 const COUNT: &str = "CITRY_ATTRIBUTE_RUN_COUNT";
 const STACK_KIB: &str = "CITRY_ATTRIBUTE_RUN_STACK_KIB";
 
-/// Twice what upstream html5gum read on an 8 MiB stack in a release build.
+/// Twice what html5gum 0.8.4 read on an 8 MiB stack in a release build.
 const MANY: usize = 100_000;
 
 /// The smallest default thread stack Python code meets (musl Linux), and
