@@ -2021,12 +2021,11 @@ Land the fixes and publish the advisories in this order, as for 0.7.0:
    An advisory tells readers to upgrade, so the fixed versions must install
    first. For 0.7.0 that check was a fresh virtual environment, `pip install`
    of the released versions, and an import and render of a component. Publish
-   the advisories before you post your own announcement of the release, so a
-   reader of the announcement can find them. The Discord post that the release
-   workflow sends for each package goes out first and does not count as your
-   announcement. If you requested a CVE (a public ID for the vulnerability) on
-   an advisory, do not wait for it to be assigned before you publish: GitHub
-   assigns it separately.
+   the advisories before you post anything you write yourself about the
+   release, so a reader of that post can find them. The Discord post that the
+   release workflow sends for each package goes out a few minutes earlier, and
+   that is fine. If you requested a CVE (a public ID for the vulnerability) on
+   an advisory, do not wait for the ID before you publish.
 
 **Prepare release candidate** selects only packages whose version has no tag,
 so a push of fixes that leaves every version alone starts no qualification.
