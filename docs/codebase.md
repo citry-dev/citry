@@ -804,22 +804,28 @@ pygments-citry and runs their release verifiers with `--skip-install-smoke`.
 That checks the wheel, the sdist, and a wheel rebuilt from the sdist, leaving
 only the install smoke test to release qualification.
 
-That job starts with a size report, before the checks above. It runs
+That job starts with a size check, before the checks above. It runs
 [`scripts/check_package_sizes.py`](../scripts/check_package_sizes.py) on every
-wheel and source distribution the job built, prints each file's size next to
-its cap, and writes a GitHub Actions warning for a file at 90 percent of its
-cap or more. A pull request then shows that a cap needs raising before a
-release fails on it.
+wheel and source distribution the job built and prints each file's size next
+to its cap. It writes a GitHub Actions warning for a file at 90 percent of its
+cap or more. When a file is over its cap, it writes an error for that file and
+fails the step, so the pull request that grows a package fails here instead of
+the release failing. The release checks below stop at the first file they
+reject, but this step lists every file that is over its cap. When this step
+fails, the later checks in the job are skipped.
 
 The script reads each cap from the verifier that enforces it
 (`MAX_WHEEL_BYTES` or `MAX_SDIST_BYTES`), so no number is written twice, and
-the warning names the constant to raise. It only measures files, so it adds no
-build. It fails its step only when a file is missing or it has no cap for it;
-it never fails on size. The release checks do that for every wheel and for the
-LSP and Pygments source distributions. Only release qualification checks the
-citry-ui source distribution against its cap, so this warning is the one
-notice a pull request gives for it. The VS Code extension's file is not built
-in this job, so it has no warning.
+the warning and the error name the constant to raise. When the growth is
+expected, raise that constant in the pull request that causes it.
+
+A file of exactly the cap passes, as it does in the release checks. The script
+also fails its step when a file is missing or it has no cap for it. The release
+checks enforce the caps for every wheel and for the LSP and Pygments source
+distributions. Only release qualification runs the citry-ui source
+distribution through a verifier, so this step is the only check on that file's
+size before release qualification. The VS Code extension's file is not built in
+this job, so it has no size check here.
 
 The main test workflow has a separate i18n release-qualification job. It builds
 the native extension in release mode, runs `benchmarks/i18n.py`, checks the
@@ -1982,7 +1988,7 @@ from the web page or through the API, so the fixes reach `main` another way.
 Every change a person makes reaches `main` through a pull request (see
 [How changes reach `main`](#how-changes-reach-main)), except this one.
 
-Land the fixes in this order, as for 0.7.0:
+Land the fixes and publish the advisories in this order, as for 0.7.0:
 
 1. In the private forks, put the fixes in one chain of commits, so `main` can
    move to the last one in a single fast-forward. Each advisory's branch
@@ -1996,7 +2002,7 @@ Land the fixes in this order, as for 0.7.0:
    their bypass lists match what that section describes.
 3. Close each advisory's fork pull request. GitHub does not publish an
    advisory while its fork pull request is open, so close these before you
-   publish the advisories.
+   publish the advisories (step 7).
 4. Wait for the runs that push started on `main` to pass: **Check**,
    **Python tests**, **Rust tests**, and the example and docs runs that apply.
    A push to `main` that changes the paths in
@@ -2010,6 +2016,19 @@ Land the fixes in this order, as for 0.7.0:
 6. Raise the package versions and follow the release steps above. After any
    fix lands on `main`, prepare a new candidate, because a candidate built
    earlier does not contain it.
+7. Publish the advisories after every package of the release is on its
+   registry and you have checked that a clean install from the registry works.
+   An advisory tells readers to upgrade, so the fixed versions must install
+   first. For 0.7.0 the check created a fresh virtual environment, ran
+   `pip install` on the released versions, and imported and rendered a
+   component.
+
+   Publish the advisories before you post anything of your own about the
+   release, so the post can link to them. Each package's Discord post goes out
+   as soon as its GitHub Release exists, before the advisories. That is fine.
+
+   If you requested a CVE (a public ID for the vulnerability) on an advisory,
+   do not wait for the ID before you publish.
 
 **Prepare release candidate** selects only packages whose version has no tag,
 so a push of fixes that leaves every version alone starts no qualification.

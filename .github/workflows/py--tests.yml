@@ -483,11 +483,12 @@ jobs:
 
       # The release checks below each fail a file that is over its cap, and the
       # first failure hides the sizes of every package after it. This step runs
-      # before them and prints the size of every built file, with a warning
-      # for each file at 90 percent of its cap or more, so a pull request shows
-      # a cap that needs raising before a release finds it. It reads the caps
-      # from the verifiers and only measures files, so it adds no build.
-      - name: Report each package file's size against its release cap
+      # before them and prints the size of every built file. It warns about
+      # each file at 90 percent of its cap or more. It also fails if any file
+      # is over its cap, with one error per such file, so a pull request
+      # fails on a cap that needs raising before a release does. It reads the
+      # caps from the verifiers and only measures files, so it adds no build.
+      - name: Check each package file's size against its release cap
         run: >-
           python scripts/check_package_sizes.py
           dist/citry-[0-9]*.whl
