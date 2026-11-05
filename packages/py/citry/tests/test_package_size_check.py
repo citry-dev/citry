@@ -34,7 +34,17 @@ from scripts.check_package_sizes import (  # noqa: E402
 _SMALL_CAP = (CappedFile("pkg-*.whl", 100, "MAX_WHEEL_BYTES in scripts/verify_pkg.py"),)
 
 
+# Characters a Windows file name cannot hold. The CI matrix includes Windows, so
+# a test that needs a file with one of them would fail only there.
+_WINDOWS_FORBIDDEN_NAME_CHARACTERS = frozenset('<>:"/\\|?*')
+
+
 def _file(directory: Path, name: str, size: int) -> Path:
+    # This check runs on every system, so a name Windows refuses fails on a
+    # developer's machine too. A test of such a name builds a SizeRecord, or
+    # passes a missing path to `main()`, instead of writing a file.
+    assert name.isprintable()
+    assert not _WINDOWS_FORBIDDEN_NAME_CHARACTERS & set(name), f"{name!r} is not a file name on Windows"
     path = directory / name
     path.write_bytes(b"x" * size)
     return path
@@ -238,30 +248,32 @@ def test_a_file_is_over_its_cap_only_when_larger_than_it(tmp_path: Path, size: i
     assert any(line.startswith("::error ") for line in report_lines([record])) is over
 
 
-def test_a_file_name_cannot_start_a_second_workflow_command(tmp_path: Path) -> None:
+def test_a_file_name_cannot_start_a_second_workflow_command() -> None:
     # `%0A` is how GitHub spells a newline in a command, so the percent sign
-    # in a name must be escaped for the name to print as written.
-    records = measure([_file(tmp_path, "pkg-1%0A::error::x.whl", 95)], caps=_SMALL_CAP)
+    # in a name must be escaped for the name to print as written. The record
+    # is built without a file on disk: Windows does not allow `:` in a file name.
+    records = [SizeRecord("pkg-1%0A::error::x.whl", 95, _SMALL_CAP[0])]
 
-    warning = report_lines(records)[1]
+    lines = report_lines(records)
 
-    assert "pkg-1%250A::error::x.whl is at 95 percent" in warning
-    assert "\n" not in warning
+    # Both the listing line and the warning carry the name, so both escape it.
+    assert lines[0] == "pkg-1%250A::error::x.whl: 95 of 100 bytes (95 percent of its cap)"
+    assert "pkg-1%250A::error::x.whl is at 95 percent" in lines[1]
 
 
-def test_an_over_cap_file_name_cannot_start_a_second_workflow_command(tmp_path: Path) -> None:
+def test_an_over_cap_file_name_cannot_start_a_second_workflow_command() -> None:
     # The error line is the one a failed build shows, so it escapes the name too.
-    records = measure([_file(tmp_path, "pkg-1%0A::warning::x.whl", 101)], caps=_SMALL_CAP)
+    records = [SizeRecord("pkg-1%0A::warning::x.whl", 101, _SMALL_CAP[0])]
 
-    error = report_lines(records)[1]
+    lines = report_lines(records)
 
-    assert error.startswith("::error title=Package over its release cap::pkg-1%250A::warning::x.whl is 101 bytes")
-    assert "\n" not in error
+    assert lines[0] == "pkg-1%250A::warning::x.whl: 101 of 100 bytes (101 percent of its cap)"
+    assert lines[1].startswith("::error title=Package over its release cap::pkg-1%250A::warning::x.whl is 101 bytes")
 
 
 @pytest.mark.parametrize("size", [10, 95, 101])
 def test_a_file_name_with_a_newline_cannot_start_a_workflow_command_in_any_line(size: int) -> None:
-    # Built without a file on disk: a newline is not allowed in a Windows file name.
+    # Built without a file on disk: Windows does not allow a newline or `:` in a file name.
     record = SizeRecord("pkg-1\n::error::INJECTED.whl", size, _SMALL_CAP[0])
 
     output = "\n".join(report_lines([record])).splitlines()
