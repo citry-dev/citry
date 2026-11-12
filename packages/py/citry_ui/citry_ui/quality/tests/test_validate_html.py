@@ -270,6 +270,73 @@ def test_nu_result_rejects_an_invalid_min_inline_anchor_size_value():
         )
 
 
+_POSITION_VISIBILITY_KEYWORD_ERROR = (
+    "CSS: “position-visibility”: “anchors-visible” is not a “position-visibility” value."
+)
+_POSITION_VISIBILITY_OTHER_KEYWORD_ERROR = (
+    "CSS: “position-visibility”: “anchors-valid” is not a “position-visibility” value."
+)
+
+
+def test_nu_result_records_the_position_visibility_keyword_error():
+    # Shapes observed from Nu 26.11.4: the span of a `<style>` declaration
+    # covers the keyword, and the span of an inline `style` attribute covers
+    # the whole start tag.
+    style_line = "  position-visibility: anchors-visible;"
+    tag = '<div style="position-visibility: anchors-visible; anchor-name: --_cui-x;">y</div>'
+    keyword_start = style_line.index("anchors-visible") + 1
+    report = qualify_nu_result(
+        {
+            "version": "test",
+            "messages": [
+                {
+                    "type": "error",
+                    "lastLine": 1,
+                    "firstColumn": keyword_start,
+                    "lastColumn": keyword_start + len("anchors-visible") - 1,
+                    "message": _POSITION_VISIBILITY_KEYWORD_ERROR,
+                },
+                {
+                    "type": "error",
+                    "lastLine": 2,
+                    "firstColumn": 1,
+                    "lastColumn": tag.index(">") + 1,
+                    "message": _POSITION_VISIBILITY_KEYWORD_ERROR,
+                },
+            ],
+        },
+        scenario="split-button.states",
+        source=f"{style_line}\n{tag}",
+    )
+
+    assert report.css_anchor_features == ("position-visibility",)
+
+
+@pytest.mark.parametrize(
+    ("message", "declaration"),
+    [
+        # Nu names `anchors-visible`, but the declaration holds another value.
+        (_POSITION_VISIBILITY_KEYWORD_ERROR, "position-visibility: not-a-keyword;"),
+        # Nu 26.11.4 also rejects `anchors-valid`, and the tolerance covers
+        # only `anchors-visible`.
+        (_POSITION_VISIBILITY_OTHER_KEYWORD_ERROR, "position-visibility: anchors-valid;"),
+        # The declaration holds `anchors-visible`, but Nu names another keyword,
+        # so only the message can tell the two apart.
+        (_POSITION_VISIBILITY_OTHER_KEYWORD_ERROR, "position-visibility: anchors-visible;"),
+    ],
+)
+def test_nu_result_rejects_any_other_position_visibility_value(message: str, declaration: str):
+    with pytest.raises(HtmlQualificationError, match="position-visibility"):
+        qualify_nu_result(
+            {
+                "version": "test",
+                "messages": [{"type": "error", "lastLine": 1, "message": message}],
+            },
+            scenario="split-button.states",
+            source=declaration,
+        )
+
+
 def test_nu_result_rejects_an_unexpected_html_error():
     with pytest.raises(HtmlQualificationError, match="line 12: End tag"):
         qualify_nu_result(
