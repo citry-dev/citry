@@ -288,7 +288,7 @@ def test_python_tests_start_on_every_pull_request_and_skip_without_python_change
 
 
 # The files the wheel build job produces that have a size cap, as the
-# directory they are built into and a sample name. The report step must be
+# directory they are built into and a sample name. The size check step must be
 # given a pattern that matches each one.
 _CAPPED_BUILD_OUTPUTS = [
     ("dist", "citry-0.7.0-py3-none-any.whl"),
@@ -302,13 +302,14 @@ _CAPPED_BUILD_OUTPUTS = [
 ]
 
 
-def test_the_package_size_report_runs_after_every_build_and_before_every_release_check() -> None:
+def test_the_package_size_check_runs_after_every_build_and_before_every_release_check() -> None:
     workflow = _load_workflow("py--tests.yml")
     # A change to the script must start the job that runs it.
     assert "scripts/check_package_sizes.py" in workflow["on"]["push"]["paths"]
 
-    commands = [step.get("run", "") for step in workflow["jobs"]["citry-ui-wheel-build"]["steps"]]
-    report = next(index for index, command in enumerate(commands) if "scripts/check_package_sizes.py" in command)
+    steps = workflow["jobs"]["citry-ui-wheel-build"]["steps"]
+    commands = [step.get("run", "") for step in steps]
+    size_check = next(index for index, command in enumerate(commands) if "scripts/check_package_sizes.py" in command)
     # The job builds the five packages with `uv build --package`; the later
     # wheel rebuilt from an sdist does not use that flag.
     builds = [index for index, command in enumerate(commands) if "uv build --package" in command]
@@ -319,13 +320,17 @@ def test_the_package_size_report_runs_after_every_build_and_before_every_release
     ]
     assert builds
     assert checks
-    # Running first means one run lists every package's size even when the
-    # first release check then fails on a file that is over its cap.
-    assert max(builds) < report < min(checks)
+    # Running first means one run lists every package's size and names every
+    # file over its cap, where the first release check would stop at one.
+    assert max(builds) < size_check < min(checks)
 
     # Each argument is a shell pattern, so every built file must match one,
     # and no pattern may match nothing the job builds.
-    arguments = shlex.split(commands[report])[2:]
+    arguments = shlex.split(commands[size_check])[2:]
+
+    # The step only protects a pull request if its failure fails the job.
+    assert not steps[size_check].get("continue-on-error")
+    assert "||" not in commands[size_check]
     for directory, name in _CAPPED_BUILD_OUTPUTS:
         assert any(fnmatch.fnmatchcase(f"{directory}/{name}", argument) for argument in arguments), name
     for argument in arguments:
