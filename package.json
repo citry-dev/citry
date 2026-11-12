@@ -10,14 +10,14 @@
   },
   "packageManager": "pnpm@10.32.1",
   "devDependencies": {
-    "@lhci/cli": "0.15.1",
-    "@tailwindcss/cli": "4.3.3",
+    "@lhci/cli": "0.16.0",
+    "@tailwindcss/cli": "4.3.4",
     "axe-core": "4.14.0",
     "bootstrap": "5.3.8",
     "lightningcss": "1.33.0",
     "pyright": "1.1.414",
-    "tailwindcss": "4.3.3",
+    "tailwindcss": "4.3.4",
     "terser": "5.51.2",
-    "vnu-jar": "26.10.12"
+    "vnu-jar": "26.11.4"
   }
 }

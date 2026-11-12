@@ -35,7 +35,7 @@ license-files = ["LICENSE", "LICENSE-vize", "LICENSE-html5gum"]
 dependencies = []
 
 [dependency-groups]
-dev = ["maturin>=1.15.0", "pytest>=9.1.1"]
+dev = ["maturin>=1.16.0", "pytest>=9.1.1"]
 
 # See https://docs.pypi.org/project_metadata/#icons
 [project.urls]

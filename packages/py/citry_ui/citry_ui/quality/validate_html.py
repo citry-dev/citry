@@ -22,6 +22,12 @@ _CSS_ANCHOR_SIZE_VALUE_ERROR = re.compile(
     r"CSS: “(?P<property>min-inline-size)”: “anchor-size\(width\)” "
     r"is not a “(?P=property)” value\."
 )
+# Nu 26.11.4 knows the `position-visibility` property but not its
+# `anchors-visible` keyword, which the CSS Anchor Positioning spec defines.
+_CSS_ANCHOR_VISIBILITY_VALUE_ERROR = re.compile(
+    r"CSS: “(?P<property>position-visibility)”: “anchors-visible” "
+    r"is not a “(?P=property)” value\."
+)
 _CSS_ANCHOR_VALUES = {
     "anchor-name": re.compile(r"--_cui-[a-z0-9-]+"),
     "position-anchor": re.compile(r"(?:var\(\s*--_cui-[a-z0-9-]+\s*\)|--_cui-[a-z0-9-]+)"),
@@ -114,6 +120,11 @@ def _known_css_anchor_feature(finding: dict[str, Any], message: str, source: str
     elif (size_value_error := _CSS_ANCHOR_SIZE_VALUE_ERROR.fullmatch(message)) is not None:
         property_name = size_value_error.group("property")
         feature = "anchor-size()"
+    elif (visibility_error := _CSS_ANCHOR_VISIBILITY_VALUE_ERROR.fullmatch(message)) is not None:
+        # The message names the keyword, but the report line can hold other
+        # declarations, so the source check below still has to confirm it.
+        property_name = visibility_error.group("property")
+        feature = property_name
     else:
         return None
     value = _source_declaration_value(finding, source, property_name)
