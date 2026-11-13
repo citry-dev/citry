@@ -170,7 +170,9 @@ def without_shell_contents(html: str) -> str:
 
 def tokens(html: str) -> list[tuple[Any, ...]]:
     parser = _Tokens()
-    parser.feed(html)
+    # Citry writes ESC as this reference and Vue writes it raw. HTMLParser
+    # drops the reference, and a browser reads both as the same character.
+    parser.feed(html.replace("&#27;", "\x1b"))
     parser.close()
     return parser.tokens
 

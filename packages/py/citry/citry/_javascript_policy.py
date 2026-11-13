@@ -330,7 +330,7 @@ class _JavascriptPolicy:
             )
 
     def _replay_finding(self, event: tuple[Any, ...], component_classes: dict[str, str]) -> None:
-        rule, tag, attribute, start, end, token_start, cids = event
+        rule, tag, attribute, start, end, token_start, cids, case = event
         instance = _output_policy.own_instance(cids, component_classes)
         component = component_classes.get(instance or "", "settled render output")
         name = (attribute or "").translate(_ASCII_LOWER)
@@ -357,6 +357,20 @@ class _JavascriptPolicy:
             finding = "embedded-document"
             detail = f"{attribute!r} contains an embedded document with executable browser code"
             signature = ("embedded-document", tag, name, start)
+        elif rule == "js-page-encoding":
+            finding = "page-encoding"
+            detail = (
+                "this text can change the page's tags when a browser reads the page in another encoding, so "
+                "Citry cannot tell what the page runs; remove this text, or for CDATA write it as ordinary "
+                "escaped text, and send the page with charset=utf-8"
+            )
+            signature = ("page-encoding",)
+        elif rule == "js-parser-difference":
+            finding = "parser-difference"
+            # This rule reports a tag, and Rust names which difference it
+            # found there (`case`), which picks the advice.
+            detail = _parser_difference_detail(tag, case)
+            signature = ("parser-difference", tag, start)
         elif rule == "js-handler-only-control":
             finding = "handler-only-control"
             detail = "this control has a browser handler but no native navigation or submission fallback"
@@ -412,6 +426,70 @@ class _JavascriptPolicy:
                 origin=origin,
             )
         )
+
+
+# What to change for each case of a tag where browsers may build a
+# different page from the one Citry's check reads. Rust names the case (see
+# `DifferenceKind` in `output_scanner.rs`); `{tag}` is the tag's name, which
+# the page chose, so it is shown as a quoted string.
+_PARSER_DIFFERENCE_ADVICE = {
+    "annotation-xml-html": (
+        "browsers read the HTML inside an <annotation-xml> whose encoding is text/html or application/xhtml+xml "
+        "differently from Citry's check; remove the element or give it another encoding"
+    ),
+    "annotation-xml-end-tag": (
+        "this {tag} end tag is inside an open MathML <annotation-xml>, where browsers and Citry's check close "
+        "different elements; close the <annotation-xml> first"
+    ),
+    "reopened-formatting": (
+        "browsers reopen a formatting element such as <b>, which an earlier end tag closed, around this {tag} "
+        "element, and Citry's check does not; close formatting elements such as <b> before the element around "
+        "them ends"
+    ),
+    "formatting-end-tag-in-foreign": (
+        "this {tag} end tag is inside an SVG or MathML element that holds HTML, where browsers and Citry's check "
+        "close different elements; close formatting elements such as <b> before the element around them ends"
+    ),
+    "unclear-formatting": (
+        "four or more copies of one formatting element such as <b> with the same attributes were opened before "
+        "this {tag} end tag, so Citry's check cannot tell which formatting elements are still open; use fewer "
+        "copies, or give each copy different attributes"
+    ),
+    "isindex": "browsers build <isindex> as an ordinary element and Citry's check does not; remove the element",
+    "search": (
+        "this {tag} tag reaches past an open <search> to an element outside it: Chromium and Citry's check "
+        "close that element, and Firefox does not; close the <search> before this tag"
+    ),
+    "formatting-across-select": (
+        "a formatting element such as <b> is open across the start or end of a <select> at this {tag} tag, "
+        "which browsers and Citry's check build differently; close formatting elements such as <b> before the "
+        "<select> starts, and close the ones opened inside it before it ends"
+    ),
+    "select-closes-element": (
+        "inside a <select>, browsers close an element such as <p>, <li> or <dd> at this {tag} tag, and Citry's "
+        "check does not; close that element before this tag"
+    ),
+    "thead-outside-table": (
+        "a <thead> is open here with no <table> around it, which browsers and Citry's check close differently "
+        "at this {tag} tag; put table parts inside a <table>"
+    ),
+    "quirks-doctype-table": (
+        "this <table> starts inside an open <p> on a page whose doctype makes some browsers use quirks mode "
+        "where Citry's check does not; close the <p> before the <table>, or use <!DOCTYPE html>"
+    ),
+}
+
+
+def _parser_difference_detail(tag: str, case: str | None) -> str:
+    """Say why the check cannot follow browsers at this tag, and what to change."""
+    advice = _PARSER_DIFFERENCE_ADVICE.get(case or "")
+    if advice is None:
+        # A case Rust adds before this table names it still gets an answer.
+        advice = (
+            "browsers may build a different page from the one Citry's check reads at this {tag} tag; see "
+            "'Pages read several ways' on the security page of the docs for the cases and what to change"
+        )
+    return f"Citry cannot tell what the page runs: {advice.format(tag=repr(tag))}"
 
 
 def _is_reserved_manifest(script: Script) -> bool:

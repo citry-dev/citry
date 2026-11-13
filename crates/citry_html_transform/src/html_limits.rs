@@ -133,6 +133,41 @@ pub const MAX_OPEN_ELEMENTS: usize = 512;
 /// whether the elements have attributes or not.
 pub const MAX_REOPENED_FORMATTING_ELEMENTS: usize = 250_000;
 
+/// How much work the output check may spend reading one page every way
+/// browsers can read it, for each byte of the page, on top of
+/// [`CHECK_WORK_FLOOR`].
+///
+/// The check reads some pages more than once (one reading for each way a
+/// browser can build the page, see `for_each_reading` in
+/// `output_policy.rs`), up to 42 times for a page that holds every kind of
+/// markup that calls for another reading. After each token it counts what
+/// html5ever holds, and html5ever's own work for the token grows with that
+/// count too. The work is that count, added up over every token of every
+/// reading, nested documents included: one unit for each handle html5ever
+/// reports. html5ever reports a handle (a reference to one node: the
+/// document or an element) each time it holds that node. An open formatting
+/// element is held in the stack of open elements and on the list of
+/// formatting elements, so it counts twice.
+///
+/// Measured on 1 MB pages in a release build: an ordinary page holds a
+/// few dozen elements at a time, needs one or two readings, and spends 1
+/// to 3 units for each byte. A page that nests 60 `<div>` elements deep
+/// and holds a `<select>`, a `<noscript>` and a `<table>` inside a `<p>`
+/// spends about 140. One reading of the costliest page, which holds about
+/// 500 elements open across all of it, spends about 250. With a `<table>`
+/// inside a `<p>` it needs two readings and spends about 490, which
+/// passes. The same page with the markup that
+/// calls for all 42 readings would spend about 42 times what one reading
+/// does. Each unit costs 4 to 5 nanoseconds there, so the slowest page
+/// measured is refused after about 2.6 seconds per megabyte.
+pub const MAX_CHECK_WORK_PER_BYTE: usize = 512;
+
+/// The work the output check may spend on any page, however short (see
+/// [`MAX_CHECK_WORK_PER_BYTE`]), so a short page can take every reading it
+/// needs. At the slowest rate measured it takes about 0.09 seconds in a
+/// release build.
+pub const CHECK_WORK_FLOOR: usize = 16 * 1024 * 1024;
+
 /// Why a parse stopped reading a page.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HtmlTooLarge {
@@ -147,6 +182,10 @@ pub enum HtmlTooLarge {
     /// their attributes, more than [`MAX_REOPENED_FORMATTING_ELEMENTS`]
     /// times.
     ReopenedFormatting,
+    /// Reading the page every way browsers can read it would take more
+    /// work than [`MAX_CHECK_WORK_PER_BYTE`] for each byte plus
+    /// [`CHECK_WORK_FLOOR`] allows. Only the output check counts this.
+    CheckWork,
 }
 
 impl fmt::Display for HtmlTooLarge {
@@ -175,6 +214,12 @@ impl fmt::Display for HtmlTooLarge {
                 "HTML leaves formatting tags such as <b> and <i> open or misnested so often that \
                  the parser would copy more than {MAX_REOPENED_FORMATTING_ELEMENTS} elements and \
                  attributes; Citry reads at most {MAX_REOPENED_FORMATTING_ELEMENTS}"
+            ),
+            Self::CheckWork => write!(
+                f,
+                "HTML would take too long to check, because it keeps many elements open across \
+                 much of the page and also holds markup that browsers read in several ways, so \
+                 Citry reads it several times; close elements sooner or nest them less deeply"
             ),
         }
     }
@@ -234,9 +279,29 @@ pub(crate) struct HtmlLimits {
     // kept between calls so counting does not allocate each time.
     seen: RefCell<HashSet<usize, BuildHasherDefault<AddressHasher>>>,
     exceeded: Cell<Option<HtmlTooLarge>>,
+    // The work the output check may still spend on its readings of one
+    // page, shared by all of them (see `MAX_CHECK_WORK_PER_BYTE`), or
+    // `None` for every other parse.
+    work_left: Option<Rc<Cell<usize>>>,
 }
 
 impl HtmlLimits {
+    /// Limits that also spend from `work_left` (see
+    /// [`MAX_CHECK_WORK_PER_BYTE`]).
+    pub(crate) fn spending(work_left: Option<Rc<Cell<usize>>>) -> Self {
+        Self {
+            work_left,
+            ..Self::default()
+        }
+    }
+
+    /// The work the output check may spend on a page of `length` bytes.
+    pub(crate) fn check_work_for(length: usize) -> Rc<Cell<usize>> {
+        Rc::new(Cell::new(
+            CHECK_WORK_FLOOR.saturating_add(length.saturating_mul(MAX_CHECK_WORK_PER_BYTE)),
+        ))
+    }
+
     /// Record a start tag named `name`, which html5gum gives in lower case.
     pub(crate) fn start_tag(&self, name: &[u8]) {
         // The attribute count belongs to one tag, so it starts again here.
@@ -299,24 +364,41 @@ impl HtmlLimits {
     /// two steps: counting the reports settles the common case in one pass,
     /// and only a tree builder that reports more than [`MAX_OPEN_ELEMENTS`]
     /// handles is asked again, to count each element once by its address.
+    ///
+    /// Returns how many handles the tree builder reported, or `None` when
+    /// this token took the run over the limit on reopened formatting
+    /// elements (before the handles were counted) or over the output
+    /// check's work budget (after).
     pub(crate) fn after_token(
         &self,
         formatting_made: usize,
         trace: impl Fn(&dyn Tracer<Handle = Handle>),
-    ) {
+    ) -> Option<usize> {
         let made = formatting_made - self.made_seen.replace(formatting_made);
         let fed = self.formatting_fed.get() - self.fed_seen.replace(self.formatting_fed.get());
         self.reopened
             .set(self.reopened.get() + made.saturating_sub(fed));
         if self.reopened.get() > MAX_REOPENED_FORMATTING_ELEMENTS {
             self.exceed(HtmlTooLarge::ReopenedFormatting);
-            return;
+            return None;
         }
         let count = CountHandles::default();
         trace(&count);
+        let reported = count.0.get();
+        // The count is what this token cost, so the output check spends it.
+        if let Some(work_left) = &self.work_left {
+            match work_left.get().checked_sub(reported) {
+                Some(left) => work_left.set(left),
+                None => {
+                    work_left.set(0);
+                    self.exceed(HtmlTooLarge::CheckWork);
+                    return None;
+                }
+            }
+        }
         // The first handle is the document, which is no element.
-        if count.0.get().saturating_sub(1) <= MAX_OPEN_ELEMENTS {
-            return;
+        if reported.saturating_sub(1) <= MAX_OPEN_ELEMENTS {
+            return Some(reported);
         }
         self.seen.borrow_mut().clear();
         trace(&CollectAddresses {
@@ -326,6 +408,7 @@ impl HtmlLimits {
         if self.seen.borrow().len() > MAX_OPEN_ELEMENTS {
             self.exceed(HtmlTooLarge::OpenElements);
         }
+        Some(reported)
     }
 
     /// The first limit the run went over, if any.
@@ -349,7 +432,7 @@ impl HtmlLimits {
 
 /// A [`Tracer`] that counts the handles the tree builder reports.
 #[derive(Default)]
-struct CountHandles(Cell<usize>);
+pub(crate) struct CountHandles(pub(crate) Cell<usize>);
 
 impl Tracer for CountHandles {
     type Handle = Handle;

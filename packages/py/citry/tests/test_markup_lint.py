@@ -921,7 +921,6 @@ _CSP_AGREEMENT_SNIPPETS = [
     '<button @click="go()">x</button>',
     # The browser reads the content of these elements as text, so neither
     # check reads the tags written inside them.
-    '<noscript><div onclick="x"></div></noscript>',
     '<xmp><div onclick="x"></div></xmp>',
     '<iframe><div onclick="x"></div></iframe>',
     '<noembed><div onclick="x"></div></noembed>',
@@ -947,6 +946,10 @@ _CSP_DIFFERENCES = [
         [("raw-tag", "style")],
         [("native-event", "onclick"), ("raw-tag", "style")],
     ),
+    # The template check reads <noscript> content as text, as a loaded page
+    # does. The page check also reads it as markup, as Chromium does when Vue
+    # builds an opaque HTML block inside a <template>, so it finds the tags.
+    ('<noscript><div onclick="x"></div></noscript>', [], [("native-event", "onclick")]),
 ]
 
 

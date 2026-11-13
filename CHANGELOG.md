@@ -306,6 +306,87 @@ change.
   keeps its own status, any other error becomes a `handler_error` (500),
   and the request's other calls still run.
 
+## v0.8.0
+
+### Fixes
+
+- `security_javascript` now counts a `<script>` as running when its
+  `type` holds a character such as U+3000, and finds a `data:` URL in a
+  `<meta http-equiv="refresh">` padded the same way. Chromium skips these
+  characters, so it ran the script or opened the URL.
+- `security_javascript` now counts an HTML `data:` document as running
+  code when it holds anything outside plain ASCII, because a browser can
+  read such text in another encoding. Write such text as a character
+  reference with `&` and `#` percent-encoded, such as `%26%23233;` for `é`.
+- `security_javascript` now reports text that changes a page's tags when
+  a browser reads the page in another encoding: the escape bytes `ESC $`
+  and `ESC (`, non-ASCII text in a `<![CDATA[` section, and a `<` followed
+  by a NUL byte, which spells a tag when a response names UTF-16. A page
+  could use `<meta charset>` to hide a script from the check. Only text
+  Citry does not escape, such as `Markup`, can trigger this. Send pages
+  with `charset=utf-8` in the `Content-Type` header, so the browser reads
+  them the way Citry does.
+- `security_csp` and `security_javascript` now find more scripts and
+  event handlers in pages that browsers read differently from the way
+  Citry's check read them. A page in `Markup` could hide a script from
+  the check, and the browser would run it with no click:
+    - Inside `<select>`, current browsers keep tags such as `<style>` and
+      `<svg>`, and older ones drop them. Citry's check now reads such a
+      page both ways.
+    - Around SVG and MathML elements that hold HTML, such as an SVG
+      `<title>`, Citry's check closed elements that browsers keep open.
+    - Firefox and Chromium each differ from the HTML standard on a few
+      misplaced end tags, such as `</p>` in an SVG `<title>`. Citry's check
+      now also reads such a page the way each of them does.
+    - An `iframe srcdoc` document is now read in both quirks and standards
+      mode, because Chromium and Firefox pick different modes for it.
+    - Your app's own script can put HTML into the body of a page that is
+      already open, with `innerHTML` on an ordinary element such as a
+      `<div>`. Browsers build some tags differently there: a `<frameset>`
+      builds nothing, and the open page's doctype picks the mode. Citry's
+      check now also reads such HTML that way, in both quirks and
+      standards mode.
+    - In an interactive component, Vue inserts HTML such as `Markup` as one
+      block, which Chromium builds with the markup inside a `<noscript>` as
+      real elements. Citry's check now reports an event handler or script
+      inside a `<noscript>` too.
+
+    The check does not cover HTML that your own script inserts with
+    `innerHTML` into an element with special parsing rules, such as
+    `<svg>`, `<math>`, `<table>` and its parts, `<select>` or `<form>`.
+    Build such HTML in a `<template>` element and move its contents into
+    place instead (see the security page).
+
+- `security_javascript="forbid"` now raises `ValueError` for a page with
+  markup that browsers may build into a page that Citry's check does
+  not build, and `"warn"` and `"omit"` warn about it. A page that
+  passed before can now raise. Such markup is rare, and usually a
+  mistake, for example an `<svg>` or `<math>` right after a formatting
+  element that an outer end tag closed, as in `<p><b>Bold</p><svg>`
+  (close the `<b>` first). A valid MathML
+  `<annotation-xml encoding="text/html">` and a `<table>` inside an
+  unclosed `<p>` under a few old doctypes (see the security page) are
+  refused too. The error names what to change, and the security page
+  lists every case.
+- The output checks now refuse a page that keeps hundreds of elements open
+  across much of it while it also holds markup that Citry reads in several
+  ways, so that checking any page stays fast. No ordinary page comes
+  close.
+- Citry now writes the ESC character in an escaped value as `&#27;`, in
+  text and attributes, on normal and Vue pages. On a page read as
+  ISO-2022-JP, a raw ESC could change how the browser read the HTML after
+  it, so that ordinary escaped values could run code. Visitors see the
+  same text, except inside `<style>`, `<xmp>` and
+  `<script type="text/plain">`, which show `&#27;` as written, as they
+  already do for `&lt;`. `Markup.format()`, `%`, `+` and `join` use
+  MarkupSafe's own escaping, which keeps ESC.
+- `security_csp` and `security_javascript` now read a numeric reference
+  to a control character in an attribute value as the browser does, so
+  `java&#1;script:` is a relative link, not a `javascript:` URL, and
+  `Markup` in an attribute keeps such a character.
+- `citry preview` now sends `charset=utf-8` with text responses, as the
+  Django, ASGI and WSGI adapters do.
+
 ## v0.7.0
 
 Citry 0.7.0 catches more mistakes. A component input of the wrong type

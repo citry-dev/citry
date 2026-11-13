@@ -5,11 +5,27 @@ Rust runs these rules for `serialize()` (`citry/_output_policy.py`). This
 copy keeps the Python version they replaced, so a test can compare the two
 on the same input: `test_output_policy_differential.py` on generated pages,
 and, with `CITRY_OUTPUT_POLICY_DIFFERENTIAL=1`, every check that any test
-suite runs. Both comparisons go through `outcomes_match`, which allows only the
-two differences that reading the browser's tree makes on purpose. It
-reads tags with the Python wrapper of the same Rust tokenizer, because
-only the rules moved, and it keeps its own copy of every helper the rules
-use, so the comparison never checks Rust against itself.
+suite runs. Both comparisons first try `outcomes_match`, which allows only
+the two differences that reading the browser's tree makes on purpose, and
+then `rust_only_adds_findings` (below).
+
+This copy reads tags with the Python wrapper of the same Rust tokenizer,
+because only the rules moved, and it keeps its own copy of every helper the
+rules use, so the comparison never checks Rust against itself.
+
+That wrapper reads a page one way. Rust also reads a page under the other
+rules browsers follow and in the other places the page can end up
+(`BrowserRules` in `output_scanner.rs`), and reports tags where browsers
+may build a different tree (`ParserDifference`), which no Python code can
+do. So `rust_only_adds_findings` lets both comparisons pass an outcome
+where Rust reports every finding this copy reports and more, except that
+after a tag Rust reports that way, this copy's later findings may be
+missing. A generated page with an omit marker, whose tags change when
+`<select>` keeps what sits inside it, can hide that marker from this copy,
+so `select_rule_changes_tags` tells the generated comparison to leave it
+out. A generated page whose tags change when `<noscript>` contents are read
+as markup can hide whole findings from this copy, so
+`noscript_rule_changes_tags` leaves it out too.
 
 Do not edit this copy to match a Rust bug. When a rule changes on
 purpose, change both copies the same way, or delete this copy and its
@@ -19,7 +35,6 @@ comparison test.
 from __future__ import annotations
 
 import dataclasses
-import html as html_module
 import re
 import traceback
 from base64 import b64decode
@@ -48,10 +63,54 @@ _JAVASCRIPT_URL_RE = re.compile(
 _URL_ATTRIBUTES = frozenset({"action", "formaction", "href", "src", "xlink:href"})
 _ANIMATION_VALUE_ATTRIBUTES = frozenset({"to", "from", "by", "values"})
 _HTML_SPACE = " \t\n\r\x0c"
-# A decimal reference this short converts to an int directly: `&#` plus
-# twelve digits plus `;`.
-_MAX_PLAIN_DECIMAL_REFERENCE = 15
+# More significant digits than this name a value past U+10FFFF.
+_MAX_HEX_DIGITS = 6
+_MAX_DECIMAL_DIGITS = 7
 _LEADING_URL_SPACE = "".join(chr(codepoint) for codepoint in range(0x21))
+_ENCODING_ESCAPE_RE = re.compile(rb"\x1b[$(]")
+_SELECT_TAG_RE = re.compile(r"(</?)select", re.IGNORECASE)
+_NOSCRIPT_TAG_RE = re.compile(r"(</?)noscript", re.IGNORECASE)
+
+
+def _may_be_skipped_by_browser(char: str) -> bool:
+    """Whether a browser might skip `char` in a script type or a refresh: anything but printable ASCII."""
+    return not "\x21" <= char <= "\x7e"
+
+
+def _encoding_dependent_span(html: str) -> tuple[int, int] | None:
+    """The byte span of the first text whose tags depend on the encoding the browser reads the page in."""
+    raw = html.encode("utf8", "surrogatepass")
+    # In ISO-2022-JP these either make the browser read later ASCII bytes,
+    # such as a quote, as parts of other characters, or are removed, so the
+    # text on either side joins up.
+    escape = _ENCODING_ESCAPE_RE.search(raw)
+    if escape is not None:
+        return escape.span()
+    # A response that names UTF-16 reads two bytes as one character, so a tag
+    # spelled with NUL bytes needs a `<` beside one, in either byte order.
+    nul = raw.find(b"<\0")
+    if nul != -1:
+        return nul, nul + 2
+    # In Shift_JIS, Big5, GBK and GB18030 a UTF-8 character can take the next
+    # `]` with it, so a section with such text ends later in the browser.
+    cursor = 0
+    while (start := raw.find(b"<![CDATA[", cursor)) != -1:
+        close = raw.find(b"]]>", start)
+        end = len(raw) if close == -1 else close
+        if not raw[start:end].isascii():
+            return start, end
+        cursor = end
+    return None
+
+
+def _skip_may_be_skipped(text: str) -> str:
+    """Drop the leading characters `_may_be_skipped_by_browser` accepts."""
+    index = 0
+    while index < len(text) and _may_be_skipped_by_browser(text[index]):
+        index += 1
+    return text[index:]
+
+
 # Whole groups of four, then at most one group that ends in the padding its
 # length needs. Python 3.12 and later accept exactly this with
 # `b64decode(validate=True)`.
@@ -322,6 +381,19 @@ class ReferenceJavascriptPolicy(_JavascriptPolicy):
             omit_handler_spans=marker_spans,
             settled_bytes=settled_bytes,
         )
+        encoding_span = _encoding_dependent_span(html)
+        if encoding_span is not None:
+            self._add(
+                "page-encoding",
+                "this text can change the page's tags when a browser reads the page in another encoding, so "
+                "Citry cannot tell what the page runs; remove this text, or for CDATA write it as ordinary "
+                "escaped text, and send the page with charset=utf-8",
+                "settled render output",
+                range_kind="settled HTML",
+                start=encoding_span[0],
+                end=encoding_span[1],
+                key=self._site_key(None, ("page-encoding",)),
+            )
         if omit_handler_marker is None:
             return html
         merged_spans: list[tuple[int, int]] = []
@@ -647,7 +719,7 @@ def _decode_reference(raw: str, following: str) -> str | None:
     """Decode one reference, or return None when the browser keeps it as typed."""
     body = raw[1:]
     if body.startswith("#"):
-        return html_module.unescape(_bounded_decimal_reference(raw))
+        return _numeric_reference(raw)
     # A reference that ends with ";" and names an entity decodes in full.
     if body.endswith(";") and body in _html5_entities:
         return _html5_entities[body]
@@ -664,19 +736,28 @@ def _decode_reference(raw: str, following: str) -> str | None:
     return None
 
 
-def _bounded_decimal_reference(raw: str) -> str:
-    """Shorten a long decimal reference to one that names the same code point, or U+110000 when it is larger."""
-    # Python refuses to turn more than about 4,300 digits into an int, so a
-    # long reference would raise from html.unescape. Leading zeros do not
-    # change the code point, and any value with more than seven digits is
-    # already past U+10FFFF, which decodes to U+FFFD like 1114112 does.
-    if len(raw) <= _MAX_PLAIN_DECIMAL_REFERENCE or not raw.startswith("&#") or raw[2] in "xX":
-        return raw
-    semicolon = ";" if raw.endswith(";") else ""
-    digits = raw[2 : len(raw) - len(semicolon)].lstrip("0") or "0"
-    if len(digits) > 7:
-        digits = "1114112"
-    return f"&#{digits}{semicolon}"
+def _numeric_reference(raw: str) -> str:
+    """Decode one numeric reference by the HTML standard."""
+    digits = raw[2:].removesuffix(";")
+    is_hex = digits[:1] in {"x", "X"}
+    # Leading zeros do not change the code point, and dropping them keeps
+    # int() within Python's digit limit for any input length.
+    digits = (digits[1:] if is_hex else digits).lstrip("0") or "0"
+    if len(digits) > (_MAX_HEX_DIGITS if is_hex else _MAX_DECIMAL_DIGITS):
+        return "\ufffd"
+    code_point = int(digits, 16 if is_hex else 10)
+    if code_point == 0 or 0xD800 <= code_point <= 0xDFFF or code_point > 0x10FFFF:
+        return "\ufffd"
+    # U+0080 to U+009F read as Windows-1252. The five bytes Windows-1252
+    # leaves undefined, which Python's codec refuses, keep their own value.
+    if 0x80 <= code_point <= 0x9F:
+        try:
+            return bytes([code_point]).decode("cp1252")
+        except UnicodeDecodeError:
+            return chr(code_point)
+    # Every other code point stays, control characters and noncharacters
+    # included.
+    return chr(code_point)
 
 
 def _javascript_url(value: str) -> bool:
@@ -826,19 +907,23 @@ def _refresh_data_url(content: str) -> str | None:
     # optional `url=`, an optional quote, then the URL. The delay is
     # optional here and the text after a closing quote is kept, so this
     # reads at least what the browser opens.
+    # Every gap skips any character a browser may skip, more than any one
+    # browser does. `_payload_may_hide_markup` refuses a document whose
+    # bytes could spell such a character in another encoding.
     content = content.translate({0x09: None, 0x0A: None, 0x0D: None})
-    rest = content.lstrip(_HTML_SPACE).lstrip("0123456789.").lstrip(_HTML_SPACE)
+    rest = _skip_may_be_skipped(_skip_may_be_skipped(content).lstrip("0123456789."))
     rest = rest.removeprefix(";") if rest.startswith(";") else rest.removeprefix(",")
-    rest = rest.lstrip(_HTML_SPACE)
+    rest = _skip_may_be_skipped(rest)
     candidates = [rest]
     if rest[:3].translate(_ASCII_LOWER) == "url":
-        after = rest[3:].lstrip(_HTML_SPACE)
+        after = _skip_may_be_skipped(rest[3:])
         candidates.append(after.removeprefix("="))
     for candidate in candidates:
-        unspaced = candidate.lstrip(_HTML_SPACE)
+        unspaced = _skip_may_be_skipped(candidate)
         unquoted = unspaced[1:] if unspaced[:1] in {'"', "'"} else unspaced
-        # The URL parser drops leading control characters and spaces.
-        url = unquoted.lstrip(_LEADING_URL_SPACE)
+        # The URL parser drops leading control characters and spaces, and
+        # Chromium also drops Unicode spaces.
+        url = _skip_may_be_skipped(unquoted)
         if url[:5].translate(_ASCII_LOWER) == "data:":
             return url
     return None
@@ -912,9 +997,11 @@ def _data_url_is_base64(header: str) -> bool:
 
 
 def _payload_may_hide_markup(body: bytes) -> bool:
-    # UTF-16 (zero bytes) and ISO-2022-JP (the escape byte) are the
-    # encodings that could hide a tag from a UTF-8 reading.
-    return b"\x00" in body or b"\x1b" in body
+    # Every encoding browsers support reads the other ASCII bytes the same.
+    # UTF-16 needs zero bytes to spell markup, ISO-2022-JP changes the other
+    # three, and a byte above 0x7F depends on the encoding: in Shift_JIS,
+    # 0x81 0x40 is U+3000, which Chromium skips in a refresh.
+    return not body.isascii() or any(byte in body for byte in (b"\x00", b"\x0e", b"\x0f", b"\x1b"))
 
 
 def _decode_data_url_document(value: str) -> str | Literal[_DataUrlDocument.UNREAD] | None:
@@ -938,7 +1025,7 @@ def _decode_data_url_document(value: str) -> str | Literal[_DataUrlDocument.UNRE
         return _DataUrlDocument.UNREAD
     if _payload_may_hide_markup(body):
         return _DataUrlDocument.UNREAD
-    return body.decode("utf8", errors="replace")
+    return body.decode("ascii")
 
 
 def _decode_strict_base64(data: bytes) -> bytes:
@@ -954,6 +1041,9 @@ def _decode_strict_base64(data: bytes) -> bytes:
 
 def _html_document_requires_javascript(html: str, *, depth: int) -> bool:
     if depth >= 4:
+        return True
+    # The outer page's encoding reaches a `srcdoc` value too.
+    if _encoding_dependent_span(html) is not None:
         return True
     try:
         template = scan_output_html(html)
@@ -997,7 +1087,12 @@ def _is_executable(attrs: Mapping[str, object]) -> bool:
         return True
     if type(value) is not str:
         raise ValueError("A Script type attribute must be a string or boolean.")
-    normalized = value.strip(" \t\n\r\f").translate(_ASCII_LOWER)
+    trimmed = value.strip(" \t\n\r\f")
+    # A character some browser drops from the ends (Chromium drops U+000B
+    # and Unicode spaces) may make the type run, so any such leftover counts.
+    if any(_may_be_skipped_by_browser(char) and char not in _HTML_SPACE for char in trimmed):
+        return True
+    normalized = trimmed.translate(_ASCII_LOWER)
     essence = normalized.partition(";")[0].rstrip(" \t\n\r\f")
     if essence in {"module", "importmap", "speculationrules"}:
         return ";" not in normalized
@@ -1252,6 +1347,138 @@ def outcomes_match(
     return _matches(real, copy, _Pages(settled, pre_extension, component_classes or {}))
 
 
+def select_rule_changes_tags(html: str) -> bool:
+    """
+    Say whether a browser finds other tags in `html` when it keeps what sits inside `<select>`.
+
+    An `<applet>` keeps its contents, and its name has as many letters, so
+    reading the page with that name shows the same start tags at the same
+    offsets unless the choice of rule moves them.
+    """
+    if "<select" not in html.translate(_ASCII_LOWER):
+        return False
+
+    def starts(page: str) -> list[int] | None:
+        try:
+            return [node.start_tag.name.start_index for node in scan_output_html(page).elements]
+        except Exception:  # noqa: BLE001 - a page over a limit in one reading differs from the other
+            return None
+
+    return starts(html) != starts(_SELECT_TAG_RE.sub(r"\1applet", html))
+
+
+def noscript_rule_changes_tags(html: str) -> bool:
+    """
+    Say whether a browser finds other tags in `html` when it reads `<noscript>` contents as markup.
+
+    Rust also reads a page the way Chromium parses `template.innerHTML`,
+    with scripting off, which this copy cannot do. An unknown element with
+    a name as long keeps its contents as markup, so reading the page with
+    that name shows the same start tags at the same offsets unless the
+    choice moves them.
+    """
+    if "<noscript" not in html.translate(_ASCII_LOWER):
+        return False
+
+    def starts(page: str) -> list[int] | None:
+        try:
+            return [node.start_tag.name.start_index for node in scan_output_html(page).elements]
+        except Exception:  # noqa: BLE001 - a page over a limit in one reading differs from the other
+            return None
+
+    return starts(html) != starts(_NOSCRIPT_TAG_RE.sub(r"\1noscripx", html))
+
+
+def rust_only_adds_findings(
+    real: object,
+    copy: object,
+    settled: str,
+    pre_extension: str | None = None,
+    component_classes: Mapping[str, str] | None = None,
+) -> bool:
+    """
+    Say whether two outcomes differ only because Rust reports findings this copy lacks.
+
+    Every finding this copy reports must be among Rust's, in the same order,
+    and Rust must report at least one more. One exception: Rust reports a
+    `parser-difference` where browsers may build a different tree from the
+    one it reads, and past that tag its reading and this copy's may differ,
+    so a finding of this copy's that comes later may be missing. The
+    warnings and errors that list the findings are not compared, because
+    Rust's list the extra ones, and an error Rust raises where this copy
+    returns must be such a list.
+
+    Args:
+        real: What the Rust check returned, raised, or warned, as for
+            `outcomes_match`.
+        copy: The same for this copy.
+        settled: The page the settled-HTML offsets point into.
+        pre_extension: The page the pre-extension offsets point into,
+            when it differs from `settled`.
+        component_classes: The component names the checks were given.
+
+    """
+    pages = _Pages(settled, pre_extension, component_classes or {})
+    added = False
+
+    def contains(one: list[Any], other: list[Any]) -> bool:
+        # Rust's list must hold this copy's findings in order, except the
+        # ones Rust may leave out (see `outcomes_match`) or that come after
+        # a tag Rust reports as a parser difference.
+        nonlocal added
+        # Where Rust's reading may differ from this copy's.
+        difference_starts = [
+            (item.range_kind, item.start_index)
+            for item in one
+            if getattr(item, "rule", None) == "parser-difference" and item.start_index is not None
+        ]
+
+        def after_a_difference(item: Any) -> bool:
+            return any(
+                kind == item.range_kind and item.start_index is not None and start <= item.start_index
+                for kind, start in difference_starts
+            )
+
+        index = 0
+        for item in one:
+            while (
+                index < len(other)
+                and not _finding_matches(item, other[index], pages)
+                and (_finding_may_be_left_out(other[index], pages) or after_a_difference(other[index]))
+            ):
+                index += 1
+            if index < len(other) and _finding_matches(item, other[index], pages):
+                index += 1
+            else:
+                added = True
+        return all(_finding_may_be_left_out(item, pages) or after_a_difference(item) for item in other[index:])
+
+    def is_report(value: object) -> bool:
+        return isinstance(value, str) and value.startswith(_REPORT_PREFIXES)
+
+    def is_report_entry(value: object) -> bool:
+        return isinstance(value, tuple) and any(is_report(item) for item in value)
+
+    def walk(one: object, other: object) -> bool:
+        if isinstance(one, list) and isinstance(other, list):
+            if _is_findings(one) or _is_findings(other):
+                return contains(one, other)
+            if len(one) != len(other):
+                # A warning that lists the findings, which only one side has.
+                return all(is_report_entry(item) for item in [*one, *other])
+            return all(walk(item, other_item) for item, other_item in zip(one, other, strict=True))
+        if isinstance(one, tuple) and isinstance(other, tuple):
+            if len(one) != len(other):
+                # Rust raised the forbid error for its extra findings.
+                return one[:1] == ("error",) and is_report_entry(one)
+            return all(walk(item, other_item) for item, other_item in zip(one, other, strict=True))
+        if is_report(one) and is_report(other):
+            return True
+        return one == other
+
+    return walk(real, copy) and added
+
+
 def compare_calls(
     label: str,
     validator: Any,
@@ -1274,7 +1501,10 @@ def compare_calls(
     real_outcome, real_error = _outcome(real_call)
     real_new = validator._findings[real_before:]
     copy_new = copy._findings[copy_before:]
-    if not outcomes_match((real_outcome, real_new), (copy_outcome, copy_new), html, None, component_classes):
+    real_result, copy_result = (real_outcome, real_new), (copy_outcome, copy_new)
+    if not outcomes_match(real_result, copy_result, html, None, component_classes) and not rust_only_adds_findings(
+        real_result, copy_result, html, None, component_classes
+    ):
         stack = "".join(traceback.format_stack(limit=8))
         msg = (
             f"{label}: the Rust output check differs from the Python rules\n"
@@ -1336,4 +1566,6 @@ __all__ = [
     "install_differential_checks",
     "outcomes_match",
     "reference_server_copy_passes_csp",
+    "rust_only_adds_findings",
+    "select_rule_changes_tags",
 ]

@@ -13,21 +13,23 @@
 //!
 //! The rules copy the Python checks they replace exactly, including how
 //! they decode character references in attribute values (the browser's
-//! attribute-value rule, with Python's `html.unescape` handling numeric
-//! references) and how
+//! attribute-value rule) and how
 //! they compare letters in `javascript:` (Python's case-insensitive
 //! regular expression). `packages/py/citry/tests/_output_policy_reference.py`
 //! keeps the Python version, and a test compares the two on generated pages.
 
 use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use html5ever::data::NAMED_ENTITIES;
 
-use crate::html_limits::HtmlTooLarge;
+use crate::html_limits::{HtmlLimits, HtmlTooLarge};
 use crate::output_scanner::{
-    scan_output_html, scan_output_html_with, OutputAttribute, OutputTag, TagContext,
+    browser_rules_for, scan_output_html_under, scan_output_html_with, BrowserRules, EndTagRule,
+    Mode, OutputAttribute, OutputTag, Placement, ScanResult, TagContext,
 };
 
 /// Which of the two checks of one page runs.
@@ -69,7 +71,7 @@ pub struct OutputPolicyOptions<'a> {
 }
 
 /// A rule that reports one attribute or element.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Rule {
     CspNativeEvent,
     CspJavascriptUrl,
@@ -79,6 +81,8 @@ pub enum Rule {
     JsJavascriptUrl,
     JsEmbeddedDocument,
     JsHandlerOnlyControl,
+    JsPageEncoding,
+    JsParserDifference,
 }
 
 impl Rule {
@@ -93,6 +97,8 @@ impl Rule {
             Rule::JsJavascriptUrl => "js-javascript-url",
             Rule::JsEmbeddedDocument => "js-embedded-document",
             Rule::JsHandlerOnlyControl => "js-handler-only-control",
+            Rule::JsPageEncoding => "js-page-encoding",
+            Rule::JsParserDifference => "js-parser-difference",
         }
     }
 }
@@ -141,9 +147,18 @@ pub struct Finding {
     pub token_start: usize,
     /// As in [`RawElement::cids`].
     pub cids: Vec<String>,
+    /// For `Rule::JsParserDifference`, a code naming which difference was
+    /// found, such as `reopened-formatting` (see `DifferenceKind::code`),
+    /// so Python can say what to change. `None` for every other rule.
+    pub case: Option<&'static str>,
 }
 
-/// One entry of a report, in the order the start tags appear.
+/// One entry of a report, in the order the start tags appear. The check
+/// reads some pages more than once (see `for_each_reading`). Entries that
+/// only a later reading found come after the earlier readings' entries.
+/// Within each reading, the tags where browsers may build a different tree
+/// from the check's (`Rule::JsParserDifference`) come after that reading's
+/// other entries.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PolicyEvent {
     RawElement(RawElement),
@@ -164,43 +179,407 @@ pub struct OutputPolicyReport {
 /// `<title>` or a comment is not read as tags. Malformed HTML is read the
 /// way a browser recovers from it. The only page it refuses is one over a
 /// limit in `html_limits` (too many attributes on one tag, too many `html`,
-/// `head` or `body` start tags, elements nested too deep, or too many
-/// formatting elements reopened): it returns [`HtmlTooLarge`] and reports
-/// nothing, so the caller treats the page as one it could not check.
+/// `head` or `body` start tags, elements nested too deep, too many
+/// formatting elements reopened, or more work across all its readings than
+/// `MAX_CHECK_WORK_PER_BYTE` allows): it returns [`HtmlTooLarge`] and
+/// reports nothing, so the caller treats the page as one it could not
+/// check.
 pub fn check_output_html(
     html: &str,
     options: &OutputPolicyOptions<'_>,
 ) -> Result<OutputPolicyReport, HtmlTooLarge> {
     let marker = options.omit_handler_marker.map(str::to_lowercase);
+    // Every reading of the page, and of the documents inside it, spends
+    // from one budget, so the number of readings cannot multiply the cost
+    // without bound.
+    let work_left = HtmlLimits::check_work_for(html.len());
+    // Every reading meets the same embedded documents, so each one's answer
+    // is worked out once for the whole check.
+    let documents = EmbeddedDocuments {
+        work_left: Some(work_left.clone()),
+        ..EmbeddedDocuments::default()
+    };
+    // Browsers differ on some tree-building rules, the check cannot know
+    // the visitor's browser, and the page may be put into another page, so
+    // it reports what any reading finds.
+    let mut first_reading = None;
+    let mut marker_spans = Vec::new();
+    for_each_reading(html, PageKind::Page, |rules| {
+        let report = run_rules(
+            html,
+            options,
+            marker.as_deref(),
+            rules,
+            &documents,
+            &work_left,
+        )?;
+        match &mut first_reading {
+            Some(events) => add_new_events(events, report.events),
+            None => first_reading = Some(report.events),
+        }
+        marker_spans.extend(report.marker_spans);
+        Ok(report.needs)
+    })?;
+    let mut events = first_reading.unwrap_or_default();
+    // This reads the page's bytes, not its tags, so the result does not
+    // depend on the encoding the page declares or the response names. Only
+    // the JavaScript policy runs it: a strict Content Security Policy makes
+    // the browser block an inline script or handler this could hide.
+    if options.pass == PolicyPass::Settled && options.javascript.is_some() {
+        if let Some((start, end)) = encoding_dependent_span(html) {
+            events.push(PolicyEvent::Finding(Finding {
+                rule: Rule::JsPageEncoding,
+                tag: String::new(),
+                attribute: None,
+                start,
+                end,
+                token_start: start,
+                cids: Vec::new(),
+                case: None,
+            }));
+        }
+    }
+    let cleaned_html = remove_spans(html, marker_spans);
+    Ok(OutputPolicyReport {
+        events,
+        cleaned_html,
+    })
+}
+
+/// What the browser does with a page the check reads, which decides the
+/// readings it needs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PageKind {
+    /// The HTML `serialize()` returns. A browser may load it as a document,
+    /// Vue may build it inside a `<template>`, and an app may put it into
+    /// the body of its own page.
+    Page,
+    /// The document of an `<iframe srcdoc>`. Chromium 156 picks its mode
+    /// from its doctype as for a page it loads, so a document without a
+    /// doctype is in quirks mode, and Firefox 157 always reads it in
+    /// standards mode.
+    Srcdoc,
+    /// A document a `data:` URL opens, which takes its mode from its
+    /// doctype like a page the browser loads.
+    DataUrl,
+}
+
+/// What a reading found that can call for more readings.
+#[derive(Clone, Copy, Debug, Default)]
+struct ReadingNeeds {
+    /// See [`ScanResult::end_tag_rule_matters`].
+    end_tag_rule_matters: bool,
+    /// See [`ScanResult::mode_matters`].
+    mode_matters: bool,
+    /// See [`ScanResult::quirks`].
+    quirks: bool,
+    /// See [`ScanResult::template_matters`].
+    template_matters: bool,
+}
+
+impl ReadingNeeds {
+    fn of(scan: &ScanResult) -> Self {
+        Self {
+            end_tag_rule_matters: scan.end_tag_rule_matters,
+            mode_matters: scan.mode_matters,
+            quirks: scan.quirks,
+            template_matters: scan.template_matters,
+        }
+    }
+}
+
+/// Call `read` once for each reading of `html`: one scan of the page under
+/// one set of [`BrowserRules`]. A reading follows the parsing rules of one
+/// kind of browser, in one mode, with the markup in one place (see
+/// [`Placement`]).
+///
+/// The first reading follows the standard's end-tag rules and html5ever's
+/// `<select>` rule (see [`BrowserRules::keep_select_tags`]). It reads a page
+/// or a `data:` document the way html5ever reads a page the browser loads,
+/// and a `srcdoc` document in standards mode. More readings are added when
+/// something in the page makes them differ:
+///
+/// - the text `<select` anywhere adds the same reading with the standard's
+///   newer `<select>` rules;
+/// - for a page, the text `<frameset` anywhere adds a reading of the markup
+///   in the body of a page in standards mode. A whole document and the body
+///   of another page build the same tree, apart from a `<frameset>` and the
+///   mode;
+/// - for a page, a `<noscript>` that may hold a tag adds a reading of the
+///   markup inside a `<template>` with `<noscript>` contents read as
+///   markup, as Chromium builds an opaque HTML block for Vue (see
+///   [`BrowserRules::noscript_as_markup`] and [`noscript_may_hold_markup`]);
+/// - after a reading, `read` says what it met. An end tag that
+///   [`EndTagRule`] changes adds the readings of the two browsers that
+///   differ from the standard. A `<table>` start tag inside an open `<p>`
+///   adds the reading in the other mode: for a page, its markup in the body
+///   of a page in that mode, and for a `srcdoc` document, the document in
+///   the mode its doctype picks as Chromium reads it. A table part such as
+///   `<tr>` that html5ever ignored adds, for a page, the reading of its
+///   markup inside a `<template>`.
+///
+/// A page that holds none of these gets one reading.
+fn for_each_reading<E>(
+    html: &str,
+    kind: PageKind,
+    mut read: impl FnMut(BrowserRules) -> Result<ReadingNeeds, E>,
+) -> Result<(), E> {
+    let base = match kind {
+        PageKind::Page | PageKind::DataUrl => BrowserRules::default(),
+        PageKind::Srcdoc => BrowserRules {
+            mode: Mode::Standards,
+            ..BrowserRules::default()
+        },
+    };
+    let mut readings = browser_rules_for(html, base);
+    if kind == PageKind::Page && holds_text_ignoring_case(html, b"<frameset") {
+        readings.extend(browser_rules_for(
+            html,
+            BrowserRules {
+                placement: Placement::Body,
+                mode: Mode::Standards,
+                ..base
+            },
+        ));
+    }
+    if kind == PageKind::Page && noscript_may_hold_markup(html) {
+        readings.extend(browser_rules_for(
+            html,
+            BrowserRules {
+                placement: Placement::Template,
+                mode: Mode::Standards,
+                noscript_as_markup: true,
+                ..base
+            },
+        ));
+    }
+    let mut index = 0;
+    while let Some(&rules) = readings.get(index) {
+        index += 1;
+        let needs = read(rules)?;
+        let mut more = Vec::new();
+        if needs.end_tag_rule_matters && rules.end_tags == EndTagRule::Standard {
+            for end_tags in [EndTagRule::Firefox, EndTagRule::Chromium] {
+                more.push(BrowserRules { end_tags, ..rules });
+            }
+        }
+        if needs.mode_matters {
+            match kind {
+                // A `data:` document takes its mode from its doctype as
+                // html5ever does, apart from the doctypes the scan refuses a
+                // `<table>` under, so the other mode adds nothing.
+                PageKind::DataUrl => {}
+                // Firefox reads a `srcdoc` document in standards mode, and
+                // Chromium picks the mode from its doctype as for a page it
+                // loads, so no doctype means quirks mode, as it does for
+                // html5ever without `iframe_srcdoc`.
+                PageKind::Srcdoc => more.push(BrowserRules {
+                    mode: match rules.mode {
+                        Mode::Standards => Mode::FromDoctype,
+                        _ => Mode::Standards,
+                    },
+                    ..rules
+                }),
+                PageKind::Page => more.extend(rules.other_mode(needs.quirks)),
+            }
+        }
+        if needs.template_matters
+            && kind == PageKind::Page
+            && rules.placement != Placement::Template
+        {
+            let mode = match rules.mode {
+                Mode::FromDoctype if needs.quirks => Mode::Quirks,
+                Mode::FromDoctype => Mode::Standards,
+                mode => mode,
+            };
+            more.push(BrowserRules {
+                placement: Placement::Template,
+                mode,
+                ..rules
+            });
+        }
+        for rules in more {
+            if !readings.contains(&rules) {
+                readings.push(rules);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether a `<noscript>` in `html` may hold a tag, which only a reading
+/// with `<noscript>` contents read as markup can find. A page reads
+/// `<noscript>` contents as text up to the first `</noscript` that a space,
+/// `/` or `>` follows, or to its end, so a `<` there may start a tag when the
+/// contents are read as markup. Text without a `<` builds the same tree
+/// either way. This reads the bytes, not the tags, so a `<noscript` that is
+/// not a tag at all only adds a reading.
+fn noscript_may_hold_markup(html: &str) -> bool {
+    const START: &[u8] = b"<noscript";
+    const END: &[u8] = b"</noscript";
+    let bytes = html.as_bytes();
+    let at = |index: usize, needle: &[u8]| {
+        bytes
+            .get(index..index + needle.len())
+            .is_some_and(|window| window.eq_ignore_ascii_case(needle))
+    };
+    let mut index = 0;
+    while index < bytes.len() {
+        if !at(index, START) {
+            index += 1;
+            continue;
+        }
+        // The text after `<noscript`, start tag included, up to where the
+        // contents end.
+        let from = index + START.len();
+        let mut end = from;
+        while end < bytes.len()
+            && !(at(end, END)
+                && matches!(
+                    bytes.get(end + END.len()),
+                    Some(b' ' | b'\t' | b'\n' | b'\r' | b'\x0c' | b'/' | b'>')
+                ))
+        {
+            end += 1;
+        }
+        if bytes[from..end].contains(&b'<') {
+            return true;
+        }
+        index = end.max(from);
+    }
+    false
+}
+
+/// Whether `html` holds `needle`, which is lowercase, in any ASCII case.
+fn holds_text_ignoring_case(html: &str, needle: &[u8]) -> bool {
+    html.as_bytes()
+        .windows(needle.len())
+        .any(|window| window.eq_ignore_ascii_case(needle))
+}
+
+/// What the selected rules found in one reading of a page.
+struct ReadingReport {
+    events: Vec<PolicyEvent>,
+    /// The spans of the omit markers.
+    marker_spans: Vec<(usize, usize)>,
+    /// What calls for more readings (see [`for_each_reading`]).
+    needs: ReadingNeeds,
+}
+
+/// The answers [`html_document_requires_javascript`] has worked out during
+/// one check, by document, depth and kind. Each reading of the outer page
+/// meets the same `srcdoc` and `data:` documents, so without this a
+/// document nested a few levels deep would be read once for every
+/// combination of the readings around it.
+#[derive(Default)]
+struct EmbeddedDocuments {
+    answers: RefCell<HashMap<(String, usize, bool), bool>>,
+    /// The budget the outer page's readings spend from, which these
+    /// readings share. `None` in tests that read a document alone.
+    work_left: Option<Rc<Cell<usize>>>,
+}
+
+/// Run the selected rules over one reading of `html`.
+fn run_rules(
+    html: &str,
+    options: &OutputPolicyOptions<'_>,
+    marker: Option<&str>,
+    rules: BrowserRules,
+    documents: &EmbeddedDocuments,
+    work_left: &Rc<Cell<usize>>,
+) -> Result<ReadingReport, HtmlTooLarge> {
     let mut state = CheckState {
         options,
+        documents,
         source: html.as_bytes(),
-        marker: marker.as_deref(),
+        marker,
         events: Vec::new(),
         pending_raw: Vec::new(),
         marker_spans: Vec::new(),
         tag_cids: None,
     };
-    let raw_facts = scan_output_html_with(html, &mut |tag, raw_index, context| {
-        state.visit(tag, raw_index, context)
-    })?;
+    let scan = scan_output_html_with(
+        html,
+        rules,
+        &mut |tag, raw_index, context| state.visit(tag, raw_index, context),
+        Some(work_left.clone()),
+    )?;
     // A raw element's end tag arrives after its start tag was reported, so
     // the element's end is filled in once the whole page has been read.
     for (event_index, fact_index) in std::mem::take(&mut state.pending_raw) {
-        let fact = &raw_facts[fact_index];
+        let fact = &scan.tags[fact_index];
         if let PolicyEvent::RawElement(element) = &mut state.events[event_index] {
             element.element_end = fact.end.max(fact.element_end);
         }
     }
-    let cleaned_html = remove_spans(html, std::mem::take(&mut state.marker_spans));
-    Ok(OutputPolicyReport {
+    // Where browsers may build a different tree from the scan's, the check
+    // cannot tell what the page runs, so only the JavaScript policy reports
+    // it, as it reports text whose tags depend on the encoding.
+    if options.pass == PolicyPass::Settled && options.javascript.is_some() {
+        for difference in &scan.differences {
+            state.events.push(PolicyEvent::Finding(Finding {
+                rule: Rule::JsParserDifference,
+                tag: difference.tag.clone(),
+                // This rule reports a tag, not an attribute.
+                attribute: None,
+                start: difference.start,
+                end: difference.end,
+                token_start: difference.start,
+                cids: Vec::new(),
+                case: Some(difference.kind.code()),
+            }));
+        }
+    }
+    Ok(ReadingReport {
         events: state.events,
-        cleaned_html,
+        marker_spans: state.marker_spans,
+        needs: ReadingNeeds::of(&scan),
     })
+}
+
+/// Add what a later reading found and the earlier ones did not, so an entry
+/// that more than one reading found is reported once.
+fn add_new_events(events: &mut Vec<PolicyEvent>, later: Vec<PolicyEvent>) {
+    type Key<'e> = (usize, &'e str, Option<Rule>, Option<&'e str>, usize);
+    fn key(event: &PolicyEvent) -> Key<'_> {
+        match event {
+            PolicyEvent::RawElement(element) => (element.token_start, &element.tag, None, None, 0),
+            // The key leaves out `case`: two readings can find one tag where
+            // browsers differ under two cases, and the tag is still one place
+            // for the page author to fix, so the first reading's case is kept.
+            PolicyEvent::Finding(finding) => (
+                finding.token_start,
+                &finding.tag,
+                Some(finding.rule),
+                finding.attribute.as_deref(),
+                finding.start,
+            ),
+        }
+    }
+    let new: Vec<PolicyEvent> = {
+        let seen: HashSet<Key<'_>> = events.iter().map(key).collect();
+        later
+            .into_iter()
+            .filter(|event| {
+                // Only the first reading reports a control without a
+                // fallback. That rule is about a missing fallback, not about
+                // code that runs, and a later reading can tie a control to a
+                // form differently: it hands html5ever a `select` tag under
+                // another name, which html5ever does not tie to a form.
+                let about_fallback = matches!(
+                    event,
+                    PolicyEvent::Finding(finding) if finding.rule == Rule::JsHandlerOnlyControl
+                );
+                !about_fallback && !seen.contains(&key(event))
+            })
+            .collect()
+    };
+    events.extend(new);
 }
 
 struct CheckState<'a, 'o> {
     options: &'o OutputPolicyOptions<'a>,
+    documents: &'o EmbeddedDocuments,
     source: &'o [u8],
     marker: Option<&'o str>,
     events: Vec<PolicyEvent>,
@@ -404,6 +783,7 @@ impl CheckState<'_, '_> {
                     decoded.get_or_insert_with(|| decode_html_attribute(raw_value)),
                     facts,
                     0,
+                    self.documents,
                 )
             {
                 self.push_finding_in(
@@ -540,6 +920,7 @@ impl CheckState<'_, '_> {
             end,
             token_start: tag.start,
             cids,
+            case: None,
         }));
     }
 }
@@ -604,6 +985,23 @@ fn ascii_lower(value: &str) -> Cow<'_, str> {
 
 fn is_html_space(value: char) -> bool {
     matches!(value, ' ' | '\t' | '\n' | '\r' | '\x0c')
+}
+
+/// Whether a browser might skip `value` where it reads a `<script type>`
+/// or a `<meta http-equiv="refresh">` value: any character other than a
+/// printable ASCII character (U+0021 to U+007E).
+///
+/// Browsers do not agree here. In a type and around a refresh delay,
+/// Firefox 157 skipped only ASCII whitespace when this was written, while
+/// Chromium 156 also skipped U+000B and the Unicode spaces U+1680, U+2000
+/// to U+200A, U+2028, U+205F, and U+3000.
+/// The names the check compares against are all printable ASCII, so
+/// counting every other character as one a browser may skip can only make
+/// the check report more, never less. A `data:` document can spell these
+/// characters in another encoding, so [`payload_may_hide_markup`] counts
+/// any document that is not plain ASCII.
+fn may_be_skipped_by_browser(value: char) -> bool {
+    !value.is_ascii_graphic()
 }
 
 // ---------------------------------------------------------------------------
@@ -798,8 +1196,23 @@ pub const JAVASCRIPT_MIME_TYPES: [&str; 16] = [
 
 /// Whether a `<script>` whose `type` attribute holds `value` runs in the
 /// browser, judged by the type's MIME essence (the part before `;`).
+///
+/// After ASCII whitespace is trimmed, a value that still holds a character
+/// a browser may skip ([`may_be_skipped_by_browser`]), other than ASCII
+/// whitespace between words, counts as running. Chromium drops some of
+/// those characters from the ends of a type before it compares, so
+/// `"\u{b}text/javascript"` runs there, and no real data block needs one.
 pub fn script_type_is_executable(value: &str) -> bool {
-    let normalized = value.trim_matches(is_html_space).to_ascii_lowercase();
+    let trimmed = value.trim_matches(is_html_space);
+    // Count it as running rather than copy one browser's list of the
+    // characters it trims, which differs between browsers and can change.
+    if trimmed
+        .chars()
+        .any(|c| may_be_skipped_by_browser(c) && !is_html_space(c))
+    {
+        return true;
+    }
+    let normalized = trimmed.to_ascii_lowercase();
     let essence = normalized
         .split(';')
         .next()
@@ -977,17 +1390,20 @@ fn may_hold_document(tag: &str, name: &str, facts: DocumentFacts) -> bool {
 ///
 /// The delay is optional here although the browser needs one, and the text
 /// after the URL's closing quote is kept, so the check can only read more
-/// than the browser opens.
+/// than the browser opens. For the same reason every gap skips each
+/// character that [`may_be_skipped_by_browser`] accepts, although a browser
+/// skips fewer. Chromium skips U+000B and Unicode spaces around the delay
+/// and before the URL.
 fn refresh_data_url(content: &str) -> Option<String> {
     // The browser drops tabs and line breaks from a URL, so `da\tta:`
     // still starts one.
     let content = content.replace(['\t', '\n', '\r'], "");
     let rest = content
-        .trim_start_matches(is_html_space)
+        .trim_start_matches(may_be_skipped_by_browser)
         .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.')
-        .trim_start_matches(is_html_space);
+        .trim_start_matches(may_be_skipped_by_browser);
     let rest = rest.strip_prefix([';', ',']).unwrap_or(rest);
-    let rest = rest.trim_start_matches(is_html_space);
+    let rest = rest.trim_start_matches(may_be_skipped_by_browser);
     // After `url` the browser expects `=`; without one, both readings are
     // tried, so neither can hide a `data:` URL.
     let mut candidates = vec![rest];
@@ -995,14 +1411,15 @@ fn refresh_data_url(content: &str) -> Option<String> {
         .get(..3)
         .is_some_and(|word| word.eq_ignore_ascii_case("url"))
     {
-        let after = rest[3..].trim_start_matches(is_html_space);
+        let after = rest[3..].trim_start_matches(may_be_skipped_by_browser);
         candidates.push(after.strip_prefix('=').unwrap_or(after));
     }
     candidates.into_iter().find_map(|candidate| {
-        let candidate = candidate.trim_start_matches(is_html_space);
+        let candidate = candidate.trim_start_matches(may_be_skipped_by_browser);
         let candidate = candidate.strip_prefix(['"', '\'']).unwrap_or(candidate);
-        // The URL parser drops leading control characters and spaces.
-        let url = candidate.trim_start_matches(|c: char| c <= '\u{20}');
+        // The URL parser drops leading control characters and spaces, and
+        // Chromium also drops the Unicode spaces it trims elsewhere.
+        let url = candidate.trim_start_matches(may_be_skipped_by_browser);
         url.get(..5)
             .is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:"))
             .then(|| url.to_owned())
@@ -1019,13 +1436,14 @@ fn attribute_document_requires_javascript(
     value: &str,
     facts: DocumentFacts,
     depth: usize,
+    documents: &EmbeddedDocuments,
 ) -> bool {
     if tag == "iframe" && name == "srcdoc" {
-        return html_document_requires_javascript(value, depth);
+        return html_document_requires_javascript(value, depth, PageKind::Srcdoc, documents);
     }
     if facts.refreshes && name == "content" {
         return refresh_data_url(value)
-            .is_some_and(|url| data_url_requires_javascript(&url, depth));
+            .is_some_and(|url| data_url_requires_javascript(&url, depth, documents));
     }
     if !opens_document_url(tag, name, facts) {
         return false;
@@ -1035,9 +1453,9 @@ fn attribute_document_requires_javascript(
     if facts.animates_href && name == "values" {
         return value
             .split(';')
-            .any(|item| data_url_requires_javascript(item, depth));
+            .any(|item| data_url_requires_javascript(item, depth, documents));
     }
-    data_url_requires_javascript(value, depth)
+    data_url_requires_javascript(value, depth, documents)
 }
 
 /// Whether a `data:` URL loads a document with code the browser would run.
@@ -1050,10 +1468,10 @@ fn attribute_document_requires_javascript(
 /// that expand into a `<script>`, and XHTML builds elements inside
 /// `<title>`). It also covers types a browser reads as HTML on its own, such
 /// as `*/*` in Firefox, and spellings no browser was tested with.
-fn data_url_requires_javascript(value: &str, depth: usize) -> bool {
+fn data_url_requires_javascript(value: &str, depth: usize, documents: &EmbeddedDocuments) -> bool {
     match decode_data_url_document(value) {
         Some(DataUrlDocument::Html(document)) => {
-            html_document_requires_javascript(&document, depth)
+            html_document_requires_javascript(&document, depth, PageKind::DataUrl, documents)
         }
         Some(DataUrlDocument::Unread) => true,
         None => false,
@@ -1064,18 +1482,70 @@ fn data_url_requires_javascript(value: &str, depth: usize) -> bool {
 // counts as running code instead of being read further.
 const MAX_EMBEDDED_DEPTH: usize = 4;
 
-fn html_document_requires_javascript(html: &str, depth: usize) -> bool {
+/// Whether a document holds code the browser would run. `kind` says whether
+/// it is the document of an `<iframe srcdoc>` or of a `data:` URL, which
+/// browsers read in different modes (see [`PageKind`]).
+fn html_document_requires_javascript(
+    html: &str,
+    depth: usize,
+    kind: PageKind,
+    documents: &EmbeddedDocuments,
+) -> bool {
     if depth >= MAX_EMBEDDED_DEPTH {
         return true;
     }
+    let key = (html.to_owned(), depth, kind == PageKind::Srcdoc);
+    if let Some(&known) = documents.answers.borrow().get(&key) {
+        return known;
+    }
+    let requires_javascript = read_document_requires_javascript(html, depth, kind, documents);
+    documents
+        .answers
+        .borrow_mut()
+        .insert(key, requires_javascript);
+    requires_javascript
+}
+
+/// Read a document for [`html_document_requires_javascript`].
+fn read_document_requires_javascript(
+    html: &str,
+    depth: usize,
+    kind: PageKind,
+    documents: &EmbeddedDocuments,
+) -> bool {
+    // A browser decodes a `srcdoc` value with the outer page, so raw bytes in
+    // it depend on that page's encoding. A value written as `&#27;` reaches
+    // the document after decoding, but the check reads the value with its
+    // references decoded and cannot tell the two apart, so either counts as
+    // running code.
+    if encoding_dependent_span(html).is_some() {
+        return true;
+    }
+    // Browsers differ on some tree-building rules, and code that any reading
+    // finds counts.
+    let mut requires_javascript = false;
+    let finished = for_each_reading(html, kind, |rules| -> Result<ReadingNeeds, HtmlTooLarge> {
+        let scan = scan_output_html_under(html, rules, documents.work_left.clone())?;
+        // A tag where browsers may build a different tree counts as code,
+        // the same as on the page itself.
+        requires_javascript |=
+            !scan.differences.is_empty() || tags_require_javascript(&scan.tags, depth, documents);
+        Ok(ReadingNeeds::of(&scan))
+    });
     // A document the scan refuses cannot be shown to hold no script, so it
     // counts as running code, the same as one nested too deep.
-    let Ok(tags) = scan_output_html(html) else {
-        return true;
-    };
+    requires_javascript || finished.is_err()
+}
+
+/// Whether one reading of a document holds code the browser would run.
+fn tags_require_javascript(
+    tags: &[OutputTag],
+    depth: usize,
+    documents: &EmbeddedDocuments,
+) -> bool {
     for tag in tags {
         let name = ascii_lower(&tag.name);
-        if name == "script" && raw_script_is_executable(&tag) {
+        if name == "script" && raw_script_is_executable(tag) {
             return true;
         }
         let facts = DocumentFacts::of(&name, &tag.attributes);
@@ -1095,6 +1565,7 @@ fn html_document_requires_javascript(html: &str, depth: usize) -> bool {
                     &value,
                     facts,
                     depth + 1,
+                    documents,
                 )
             {
                 return true;
@@ -1155,20 +1626,82 @@ fn data_url_is_base64(header: &str) -> bool {
     ends_in_base64 || header.contains(";base64")
 }
 
-/// Whether a decoded payload may be in an encoding that is not ASCII
-/// compatible, so reading it as UTF-8 could miss a tag the browser sees.
+/// The byte span of the first text in `html` whose tags depend on the
+/// encoding the browser reads the page in, or `None` when there is none.
 ///
-/// UTF-16 spells every ASCII character with a zero byte, and ISO-2022-JP
-/// switches modes with the escape byte. The browser follows a `charset`
-/// parameter, a byte order mark, or a `<meta charset>`, and the check reads
-/// none of them, so it looks for these two bytes instead; a UTF-16 payload
-/// without a zero byte holds no ASCII markup. Other encodings browsers
-/// support read every byte below 0x40 (`<`, `>`, `/`, `=`, quotes, spaces)
-/// as ASCII. Where one reads a letter after a non-ASCII byte as part of one
-/// character, the UTF-8 reading also sees a non-ASCII character there, so
-/// it cannot see a tag the browser does not.
+/// The check reads the page as text and cannot know the encoding: a page
+/// can declare one in a `<meta charset>` or its response can name one, and
+/// the check sees neither reliably. Three things change the tags a browser
+/// finds, and this looks for them directly, whichever encoding is in use:
+///
+/// - An ISO-2022-JP escape: ESC `$` or ESC `(`. Citry writes ESC in an
+///   escaped value as `&#27;`, so this finds text Citry did not escape:
+///   `Markup`, inline `Script` or `Style` content, and the template's own
+///   text. Chromium 156 and Firefox 157
+///   act on five such sequences. ESC `$` `@`, ESC `$` `B` and ESC `(` `I`
+///   make the browser read later ASCII bytes as parts of other characters,
+///   so a quote or a `>` disappears. ESC `(` `B` and ESC `(` `J` are removed
+///   from the text, so the bytes on either side join up. Terminal colors use
+///   ESC `[`, which neither does.
+/// - Non-ASCII text in a CDATA section. In Shift_JIS, Big5, GBK and GB18030
+///   the last byte of a UTF-8 character can start a character that takes the
+///   next `]` with it, so `]]>` does not end the section there, and what the
+///   check reads as a comment after it can be live.
+///
+/// - A `<` followed by a NUL byte. A response header that names UTF-16 makes the
+///   browser read two bytes as one character, so ASCII text spelled with a
+///   NUL byte after or before each character is markup there. Any tag in
+///   such text starts with `<` and then a NUL byte, in both byte orders.
+///   Citry escapes `<` in a value, so this finds text Citry did not escape.
+///
+/// We found no other case. A probe decoded each character followed by each
+/// ASCII byte in every encoding browsers support, apart from UTF-16 and the
+/// `replacement` encodings: outside ISO-2022-JP a non-ASCII character took
+/// only a following byte of 0x40 or above with it and never made ASCII. The
+/// bytes that shape tags are below 0x40. When such a character takes a letter
+/// of a name, the character stays in the name, so the check and the browser
+/// both read a name that is not ASCII.
+fn encoding_dependent_span(html: &str) -> Option<(usize, usize)> {
+    let bytes = html.as_bytes();
+    for (index, _) in bytes.iter().enumerate().filter(|(_, byte)| **byte == 0x1b) {
+        if let [b'$' | b'(', ..] = &bytes[index + 1..] {
+            return Some((index, index + 2));
+        }
+    }
+    if let Some(index) = bytes.windows(2).position(|pair| pair == b"<\0") {
+        return Some((index, index + 2));
+    }
+    let mut cursor = 0;
+    while let Some(offset) = html[cursor..].find("<![CDATA[") {
+        let start = cursor + offset;
+        // An unended section runs to the end of the page in the browser too.
+        let end = html[start..]
+            .find("]]>")
+            .map_or(html.len(), |end| start + end);
+        if !html[start..end].is_ascii() {
+            return Some((start, end));
+        }
+        cursor = end;
+    }
+    None
+}
+
+/// Whether a browser may read a decoded payload differently from the check,
+/// because the browser may decode it in another encoding.
+///
+/// The browser follows a `charset` parameter, a byte order mark, a
+/// `<meta charset>`, or its own guess, and the check reads none of them.
+/// Every encoding browsers support reads ASCII bytes as the same ASCII text,
+/// apart from UTF-16 and four bytes: zero, 0x0E, 0x0F, and the escape byte.
+/// UTF-16 spells every ASCII character with a zero byte, so a payload
+/// without one holds no ASCII markup there, and ISO-2022-JP changes the
+/// other three. Any byte above 0x7F counts too, because its meaning
+/// depends on the encoding. In Shift_JIS the bytes 0x81 0x40 spell U+3000,
+/// which Chromium skips in a refresh, and which the check could not see.
+/// Counting these payloads means the check need not know each encoding.
 fn payload_may_hide_markup(body: &[u8]) -> bool {
-    body.iter().any(|&byte| byte == 0x00 || byte == 0x1b)
+    body.iter()
+        .any(|&byte| !byte.is_ascii() || matches!(byte, 0x00 | 0x0e | 0x0f | 0x1b))
 }
 
 /// Read the document a `data:` URL loads, or return `None` for a URL that
@@ -1209,9 +1742,12 @@ fn decode_data_url_document(value: &str) -> Option<DataUrlDocument> {
     if payload_may_hide_markup(&body) {
         return Some(DataUrlDocument::Unread);
     }
-    Some(DataUrlDocument::Html(
-        String::from_utf8_lossy(&body).into_owned(),
-    ))
+    // The check above accepted only ASCII, so this always succeeds; if it
+    // ever fails, the document counts as unread.
+    String::from_utf8(body)
+        .ok()
+        .map(DataUrlDocument::Html)
+        .or(Some(DataUrlDocument::Unread))
 }
 
 /// Replace each `%` followed by two hex digits with the byte they name, and
@@ -1290,10 +1826,10 @@ fn decode_strict_base64(input: &[u8]) -> Option<Vec<u8>> {
 /// browser does when it reads the value from an attribute.
 ///
 /// Each reference that matches `&(#[xX]hex+|#digits+|letter alnum+);?` is
-/// decoded. A numeric reference decodes as in text, with the changes
-/// Python's `html.unescape` makes: `&#128;` to `&#159;` map to
-/// Windows-1252, surrogates and values past U+10FFFF become U+FFFD, and
-/// some control and noncharacter code points are removed. A named
+/// decoded. A numeric reference decodes by the HTML standard: `&#0;`, a
+/// surrogate and a value past U+10FFFF become U+FFFD, `&#128;` to `&#159;`
+/// map to Windows-1252, and every other code point is kept, control
+/// characters and noncharacters included. A named
 /// reference decodes when it ends with `;` and names an entity. A legacy
 /// name without `;` (such as `&copy`) decodes only when the next source
 /// character is not `=` or an ASCII letter or digit; otherwise the browser
@@ -1413,8 +1949,8 @@ fn parse_code_point(digits: &str, radix: u32) -> u32 {
     value
 }
 
-// Python's `html._invalid_charrefs` for U+0080 to U+009F: Windows-1252,
-// except five code points that keep their own value.
+// The HTML standard's table for U+0080 to U+009F: Windows-1252, except five
+// code points that Windows-1252 leaves undefined and that keep their own value.
 const C1_CODE_POINTS: [u32; 32] = [
     0x20AC, 0x81, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160, 0x2039,
     0x0152, 0x8D, 0x017D, 0x8F, 0x90, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
@@ -1428,9 +1964,9 @@ fn numeric_reference(code_point: u32) -> String {
         0x80..=0x9F => char::from_u32(C1_CODE_POINTS[(code_point - 0x80) as usize])
             .map_or_else(String::new, String::from),
         0xD800..=0xDFFF | 0x110000.. => "\u{FFFD}".to_owned(),
-        // Python's `html._invalid_codepoints`: these decode to nothing.
-        0x01..=0x08 | 0x0B | 0x0E..=0x1F | 0x7F | 0xFDD0..=0xFDEF => String::new(),
-        _ if code_point & 0xFFFE == 0xFFFE => String::new(),
+        // The browser keeps every other code point, so a control character
+        // stays in the value: `&#27;` in a `data:` URL stays an escape byte
+        // that `payload_may_hide_markup` must see.
         _ => char::from_u32(code_point).map_or_else(String::new, String::from),
     }
 }
@@ -1494,6 +2030,7 @@ mod tests {
             end: span.1,
             token_start,
             cids: cids.iter().map(|cid| (*cid).to_owned()).collect(),
+            case: None,
         })
     }
 
@@ -1548,12 +2085,15 @@ mod tests {
             ("&#128;", "\u{20ac}"),
             ("&#129;", "\u{81}"),
             ("&#xD800;", "\u{fffd}"),
-            ("&#1;", ""),
+            ("&#1;", "\u{1}"),
+            ("&#27;", "\u{1b}"),
+            ("&#11;", "\u{b}"),
+            ("&#xFDD0;", "\u{fdd0}"),
             ("&#0;", "\u{fffd}"),
             ("&#13;", "\u{d}"),
             ("&#x110000;", "\u{fffd}"),
-            ("&#xFFFE;", ""),
-            ("&#x1FFFF;", ""),
+            ("&#xFFFE;", "\u{fffe}"),
+            ("&#x1FFFF;", "\u{1ffff}"),
             ("&#;", "&#;"),
             ("&#x;", "&#x;"),
             ("&#xg", "&#xg"),
@@ -1632,6 +2172,651 @@ mod tests {
         for (value, expected) in cases {
             assert_eq!(script_type_is_executable(value), expected, "{value:?}");
         }
+    }
+
+    // Chromium 156 dropped each of these from either end of a JavaScript
+    // type and ran `<script type="\u{b}text/javascript">`. Firefox 157 did
+    // not. Neither dropped them around `module`, which the check counts
+    // anyway.
+    const CHROMIUM_TYPE_SPACES: [char; 16] = [
+        '\u{b}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}',
+        '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200a}', '\u{2028}',
+        '\u{205f}', '\u{3000}',
+    ];
+
+    #[test]
+    fn a_script_type_with_a_character_a_browser_may_skip_counts_as_running() {
+        for space in CHROMIUM_TYPE_SPACES {
+            for value in [
+                format!("{space}text/javascript"),
+                format!("text/javascript{space}"),
+                format!("{space}module"),
+            ] {
+                assert!(script_type_is_executable(&value), "{value:?}");
+            }
+        }
+        // No browser tested skips these, but the check does not track
+        // which characters each browser skips, so any of them counts.
+        for value in [
+            "\u{a0}application/json",
+            "application/json\u{85}",
+            "\u{feff}text/plain",
+            "text/x-template\u{0}",
+            "text/javascript\u{3000};x=1",
+            "text/java\u{200b}script",
+            "text/javascr\u{130}pt",
+        ] {
+            assert!(script_type_is_executable(value), "{value:?}");
+        }
+        // ASCII whitespace inside a data type is still a data type.
+        assert!(!script_type_is_executable(" application/json ; x=1 "));
+    }
+
+    #[test]
+    fn a_raw_script_type_with_a_character_a_browser_may_skip_is_reported() {
+        // At the top level, inside an embedded document, typed raw or as a
+        // reference, and raw U+000B, which the browser and this check both
+        // read from `&#11;`.
+        for space in CHROMIUM_TYPE_SPACES {
+            let reference = format!("&amp;#x{:x};", u32::from(space));
+            for html in [
+                format!("<iframe srcdoc=\"&lt;script type={space}text/javascript&gt;x()&lt;/script&gt;\"></iframe>"),
+                format!("<iframe srcdoc=\"&lt;script type='{reference}text/javascript'&gt;x()&lt;/script&gt;\"></iframe>"),
+            ] {
+                assert!(embedded_document_reported(&html), "{html:?}");
+            }
+            let html = format!("<script type=\"text/javascript{space}\">x()</script>");
+            let report = check(
+                &html,
+                PolicyPass::Settled,
+                false,
+                Some(JavascriptMode::Forbid),
+                None,
+                &[],
+                None,
+            );
+            assert!(
+                report.events.iter().any(|event| matches!(
+                    event,
+                    PolicyEvent::RawElement(raw) if raw.executable
+                )),
+                "{html:?}"
+            );
+        }
+    }
+
+    /// The rule codes the JavaScript policy reports for `html`.
+    fn javascript_rules(html: &str) -> Vec<&'static str> {
+        check(
+            html,
+            PolicyPass::Settled,
+            false,
+            Some(JavascriptMode::Forbid),
+            None,
+            &[],
+            None,
+        )
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            PolicyEvent::Finding(finding) => Some(finding.rule.code()),
+            _ => None,
+        })
+        .collect()
+    }
+
+    #[test]
+    fn text_whose_tags_depend_on_the_encoding_is_reported() {
+        for (html, span) in [
+            // Each ISO-2022-JP escape Chromium 156 and Firefox 157 act on.
+            // The first three take later bytes, and the last two are removed.
+            ("<p title='\u{1b}$B'>x</p>", (10, 12)),
+            ("<p title='\u{1b}$@'>x</p>", (10, 12)),
+            ("<p title='\u{1b}(I'>x</p>", (10, 12)),
+            ("<scr\u{1b}(Bipt>x()</script>", (4, 6)),
+            ("<scr\u{1b}(Jipt>x()</script>", (4, 6)),
+            // Non-ASCII text in a CDATA section, which Shift_JIS, Big5, GBK
+            // and GB18030 can read as a longer section.
+            ("<svg><![CDATA[\u{3041}]]></svg>", (5, 17)),
+            ("<svg><![CDATA[a]]><![CDATA[\u{e9}]]></svg>", (18, 29)),
+            ("<svg><![CDATA[\u{e9}", (5, 16)),
+        ] {
+            assert!(
+                javascript_rules(html).contains(&"js-page-encoding"),
+                "{html:?}"
+            );
+            assert_eq!(encoding_dependent_span(html), Some(span), "{html:?}");
+        }
+        for html in [
+            "<p>plain</p>",
+            // Terminal colors, and an escape at the end of the page.
+            "<pre>\u{1b}[31mred\u{1b}[0m\u{1b}</pre>\u{1b}",
+            // ASCII in a section, and non-ASCII outside one.
+            "<svg><![CDATA[a]]></svg><p>\u{3041}]]></p>",
+            "<p>[caf\u{e9}]</p>",
+        ] {
+            assert_eq!(encoding_dependent_span(html), None, "{html:?}");
+        }
+    }
+
+    #[test]
+    fn a_tag_spelled_with_nul_bytes_is_reported() {
+        for page in [
+            "<\0s\0c\0r\0i\0p\0t\0>\0",
+            "\0<\0s\0c\0r\0i\0p\0t\0>",
+            "<p>abc</p><\0b\0>\0",
+        ] {
+            assert_eq!(javascript_rules(page), ["js-page-encoding"], "{page:?}");
+        }
+        for page in [
+            "<p>\0</p>",
+            "<p title=\"\0\">x</p>",
+            "a\0b",
+            "<p>&lt;\0</p>",
+        ] {
+            assert_eq!(javascript_rules(page), Vec::<&str>::new(), "{page:?}");
+        }
+    }
+
+    #[test]
+    fn code_only_one_reading_of_a_select_finds_is_reported() {
+        for page in [
+            "<select><style><!-- </style><img onerror=x><!-- --></select>",
+            "<select><svg><![CDATA[><!-- ]]><img onerror=x><!-- --></select>",
+            // The tags of the first `<select>` decide what the second reads.
+            "<select><button></button><svg></select><select><style><!-- </style><img onerror=x>",
+        ] {
+            assert_eq!(javascript_rules(page), ["js-native-handler"], "{page:?}");
+            let srcdoc = format!("<iframe srcdoc='{page}'></iframe>");
+            assert!(embedded_document_reported(&srcdoc), "{srcdoc}");
+        }
+    }
+
+    #[test]
+    fn code_only_chromium_finds_after_an_end_tag_with_an_svg_name_is_reported() {
+        let page = "<clippath><svg></clippath><style><img onerror=x></style>";
+        assert_eq!(javascript_rules(page), ["js-native-handler"]);
+        let srcdoc = format!("<iframe srcdoc='{page}'></iframe>");
+        assert!(embedded_document_reported(&srcdoc), "{srcdoc}");
+    }
+
+    #[test]
+    fn code_past_an_svg_or_mathml_element_that_holds_html_is_reported() {
+        for page in [
+            "<span><math><mtext></span><![CDATA[><!-- ]]><img onerror=x><!-- -->",
+            "<li><svg><desc><li></li><![CDATA[><!-- ]]><img onerror=x><!-- -->",
+        ] {
+            assert_eq!(javascript_rules(page), ["js-native-handler"], "{page:?}");
+        }
+    }
+
+    #[test]
+    fn code_only_firefox_finds_after_a_stray_end_tag_is_reported() {
+        for page in [
+            "<svg><a><title></p></a><style><!-- </style><img onerror=x><!-- -->",
+            "<svg><a><desc></br></a><style><!-- </style><img onerror=x><!-- -->",
+            // The select and end tag rules can each hide the code on its own.
+            "<select><svg><a><title></p></a><style><!-- </style><img onerror=x><!-- -->",
+        ] {
+            assert_eq!(javascript_rules(page), ["js-native-handler"], "{page:?}");
+            let srcdoc = format!("<iframe srcdoc='{page}'></iframe>");
+            assert!(embedded_document_reported(&srcdoc), "{srcdoc}");
+        }
+    }
+
+    #[test]
+    fn a_select_both_readings_agree_on_reports_a_tag_once() {
+        assert_eq!(
+            javascript_rules("<select onchange=x><option onclick=y></select>"),
+            ["js-native-handler", "js-native-handler"]
+        );
+    }
+
+    /// The findings on a page under `forbid`, as (rule, case or attribute).
+    fn javascript_findings(html: &str) -> Vec<(&'static str, Option<String>)> {
+        check(
+            html,
+            PolicyPass::Settled,
+            false,
+            Some(JavascriptMode::Forbid),
+            None,
+            &[],
+            None,
+        )
+        .events
+        .into_iter()
+        .filter_map(|event| match event {
+            PolicyEvent::Finding(finding) => Some((
+                finding.rule.code(),
+                finding.case.map(str::to_owned).or(finding.attribute),
+            )),
+            _ => None,
+        })
+        .collect()
+    }
+
+    /// Every page here runs its `<img onerror>` in Chromium 156, Firefox
+    /// 157, or both, while html5ever 0.29.0 alone hides it, as checked in
+    /// those browsers. The check refuses the tag where the trees differ,
+    /// with the case that names the fix, on the page and in `srcdoc` and
+    /// `data:` documents.
+    #[test]
+    fn pages_browsers_read_another_way_are_refused() {
+        const IMG: &str = "<img src=x onerror=\"document.title=1\">";
+        let cdata = format!("<![CDATA[><!-- ]]>{IMG}<!-- -->");
+        let style = format!("<style><!--</style>{IMG}<!-- -->");
+        let pages = [
+            (format!("<math><annotation-xml encoding=text/html></br>{cdata}"), "annotation-xml-html"),
+            (format!("<math><annotation-xml encoding=text/html></p>{cdata}"), "annotation-xml-html"),
+            (
+                format!("<foreignObject><a></foreignobject><math></a><noscript><!-- </noscript>{IMG}"),
+                "reopened-formatting",
+            ),
+            (format!("<p><b></p><svg></b>{style}"), "reopened-formatting"),
+            (format!("<p><math><annotation-xml encoding=text/html><div></p></div>{cdata}"), "annotation-xml-html"),
+            (format!("<select><math><annotation-xml encoding=text/html></select>{cdata}"), "annotation-xml-html"),
+            (format!("<select></b><math><annotation-xml></select></noscript>{cdata}"), "annotation-xml-end-tag"),
+            (format!("<math><annotation-xml encoding=text/html><svg><br>{cdata}"), "annotation-xml-html"),
+            (format!("<math><annotation-xml encoding=text/html><svg><p></p>{cdata}"), "annotation-xml-html"),
+            (format!("<svg><desc><span><isindex></span>{cdata}"), "isindex"),
+            (format!("<svg><desc><b><isindex></b>{cdata}"), "isindex"),
+            (format!("<svg><desc><span><search></span></desc>{style}"), "search"),
+            (format!("<svg><desc><b><search></b></desc>{style}"), "search"),
+            (format!("<svg><desc><li><search><li></li></desc>{style}"), "search"),
+            (format!("<select><option><dd><option><svg><g></dd>{cdata}"), "select-closes-element"),
+            (format!("<select><option><dd><hr><svg><g></dd>{cdata}"), "select-closes-element"),
+            (format!("<select><optgroup><dd><optgroup><svg><g></dd>{cdata}"), "select-closes-element"),
+            (format!("<select><b></select>x<svg></b>{style}"), "formatting-across-select"),
+            (
+                format!(
+                    "<div><template shadowrootmode=\"open\"><thead><caption><svg><g></caption>{style}</template></div>"
+                ),
+                "thead-outside-table",
+            ),
+            (
+                format!(
+                    "<!DOCTYPE html PUBLIC \"+//Silmaril//dtd html Pro v0r11 19970101//\"><span><p><table></table><svg><g></span>{cdata}"
+                ),
+                "quirks-doctype-table",
+            ),
+            (
+                format!(
+                    "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"\"><span><p><table></table><svg><g></span>{cdata}"
+                ),
+                "quirks-doctype-table",
+            ),
+            (format!("<svg><desc><p><b></p></b></desc></svg>x<svg><g></b>{cdata}"), "formatting-end-tag-in-foreign"),
+        ];
+        for (page, case) in &pages {
+            let findings = javascript_findings(page);
+            assert!(
+                findings.contains(&("js-parser-difference", Some((*case).to_owned()))),
+                "{page}: {findings:?}"
+            );
+            let attribute = page.replace('&', "&amp;").replace('"', "&quot;");
+            assert!(
+                embedded_document_reported(&format!("<iframe srcdoc=\"{attribute}\"></iframe>")),
+                "{page}"
+            );
+            let encoded: String = page.bytes().map(|byte| format!("%{byte:02X}")).collect();
+            assert!(
+                embedded_document_reported(&format!(
+                    "<iframe src=\"data:text/html,{encoded}\"></iframe>"
+                )),
+                "{page}"
+            );
+        }
+        // `warn` mode reports the same tags.
+        let warned = check(
+            "<p><b></p><svg></svg>",
+            PolicyPass::Settled,
+            false,
+            Some(JavascriptMode::Warn),
+            None,
+            &[],
+            None,
+        );
+        assert_eq!(
+            warned.events,
+            [PolicyEvent::Finding(Finding {
+                rule: Rule::JsParserDifference,
+                tag: "svg".to_owned(),
+                attribute: None,
+                start: 10,
+                end: 15,
+                token_start: 10,
+                cids: Vec::new(),
+                case: Some("reopened-formatting"),
+            })]
+        );
+        // The CSP check alone does not.
+        let csp_only = check(
+            "<p><b></p><svg></svg>",
+            PolicyPass::Settled,
+            true,
+            None,
+            None,
+            &[],
+            None,
+        );
+        assert_eq!(csp_only.events, []);
+    }
+
+    /// Two readings of each page find one tag under two cases. The tag is
+    /// one place to fix, so it is reported once, under the case of the first
+    /// reading that found it.
+    #[test]
+    fn a_tag_two_readings_find_is_reported_once() {
+        for (page, tag, start, case) in [
+            (
+                "<thead><select><i><i><th><i><i></i><i><math><form><annotation-xml encoding=text/html></select></x><table><tr></p><svg>",
+                "select",
+                85,
+                "formatting-across-select",
+            ),
+            (
+                "<colgroup><b><button></b><b><select><col><em id=x><b></b><a></td><math><a><annotation-xml encoding=text/html></b>",
+                "b",
+                109,
+                "formatting-end-tag-in-foreign",
+            ),
+            (
+                "<tr><i><i><select><caption><i><i></i><b><svg><caption><desc><foreignObject></b><form></p>",
+                "b",
+                75,
+                "formatting-end-tag-in-foreign",
+            ),
+        ] {
+            let report = check(
+                page,
+                PolicyPass::Settled,
+                false,
+                Some(JavascriptMode::Warn),
+                None,
+                &[],
+                None,
+            );
+            let cases: Vec<_> = report
+                .events
+                .iter()
+                .filter_map(|event| match event {
+                    PolicyEvent::Finding(finding)
+                        if finding.rule == Rule::JsParserDifference
+                            && finding.tag == tag
+                            && finding.start == start =>
+                    {
+                        finding.case
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(cases, [case], "{page}");
+        }
+    }
+
+    /// In these pages html5ever 0.29.0 alone could misread the open
+    /// `<form>` or the closed `<b>`, and the check reads them as browsers do,
+    /// so it reports the `<img onerror>` itself.
+    #[test]
+    fn an_open_form_or_a_closed_formatting_element_does_not_hide_a_script() {
+        const IMG: &str = "<img src=x onerror=\"document.title=1\">";
+        let cdata = format!("<![CDATA[><!-- ]]>{IMG}<!-- -->");
+        for page in [
+            format!("<math><mtext><form></form>{cdata}"),
+            format!("<svg><desc><p><b></p></desc><style>{IMG}</style>"),
+        ] {
+            assert!(
+                javascript_rules(&page).contains(&"js-native-handler"),
+                "{page}"
+            );
+        }
+    }
+
+    /// The same markup can build a different tree where the browser puts it, so
+    /// the check also reads a page as markup inside another page's body (as
+    /// an app's own `innerHTML` puts it there) in either mode, and inside a
+    /// `<template>` as Chromium parses it for Vue. Each page here hides its
+    /// script from a reading of the whole document and runs it in Chromium
+    /// 156, Firefox 157, or both, when put into a body or a template.
+    #[test]
+    fn a_script_hidden_only_in_a_whole_document_is_reported() {
+        const IMG: &str = "<img src=x onerror=\"document.title=1\">";
+        for page in [
+            // A `<frameset>` builds nothing inside a body, so the
+            // `<textarea>` holds only the comment start.
+            format!("<frameset><textarea><!-- </textarea>{IMG}<!-- -->"),
+            format!("<FRAMESET><noframes></noframes><textarea><!-- </textarea>{IMG}<!-- -->"),
+            // Without a doctype a document is in quirks mode, where the
+            // `<table>` leaves the `<p>` open; a host page in standards mode
+            // closes it.
+            format!("<span><p><table></table><svg><g></span><style><!--</style>{IMG}<!-- -->"),
+            // With a doctype it is the other way round, for a host page in
+            // quirks mode.
+            format!("<!DOCTYPE html><span><p><table></table><svg><g></span><style><!--</style>{IMG}<!-- -->"),
+            // Chromium parses `template.innerHTML`, which Vue uses for an
+            // opaque HTML block, with scripting off, so `<noscript>` holds
+            // real elements there.
+            format!("<noscript>{IMG}</noscript>"),
+            format!("<NOSCRIPT><p title=\"</noscript>\">{IMG}</NOSCRIPT>"),
+        ] {
+            assert!(
+                javascript_rules(&page).contains(&"js-native-handler"),
+                "{page}"
+            );
+        }
+        // Ordinary pages with the same tags get no finding.
+        for page in [
+            "<!DOCTYPE html><html><head><title>t</title></head><body><p>Text<table><tr><td>1</td></tr></table></body></html>",
+            "<p>Text<table><tr><td>1</td></tr></table>",
+            "<frameset><frame src=a></frameset>",
+            "<html><head></head><body><p>x</p></body></html>",
+            "<noscript><p>Turn on JavaScript.</p><img src=pixel.gif alt=\"\"></noscript>",
+        ] {
+            assert_eq!(javascript_rules(page), Vec::<&str>::new(), "{page}");
+        }
+    }
+
+    /// Only a `<noscript>` whose contents may hold a `<` asks for the reading
+    /// that reads `<noscript>` contents as markup.
+    #[test]
+    fn only_a_noscript_that_may_hold_a_tag_asks_for_its_reading() {
+        for html in [
+            "<noscript><img src=pixel.gif></noscript>",
+            "<NOSCRIPT>a <b>b</b></NOSCRIPT>",
+            "<noscript>a</noscriptx><img></noscript>",
+            "<noscript>a<b>",
+            "<noscript title='<'>a</noscript>",
+            "<p>x</p><noscript>Turn it on</noscript><noscript>a<i>b</i></noscript>",
+        ] {
+            assert!(noscript_may_hold_markup(html), "{html}");
+        }
+        for html in [
+            "<p>noscript</p>",
+            "<noscript>Turn on JavaScript.</noscript><p>x</p>",
+            "<noscript>a &amp; b</noscript >",
+            "<noscript>a</NOSCRIPT/>",
+        ] {
+            assert!(!noscript_may_hold_markup(html), "{html}");
+        }
+    }
+
+    /// Every reading of a page spends from one budget, so a page that
+    /// holds every kind of markup that calls for another reading cannot
+    /// make the check read a deep page dozens of times. The same deep page
+    /// needs one reading and passes.
+    #[test]
+    fn a_page_that_needs_every_reading_while_deep_is_refused() {
+        let deep: String = (0..450).map(|index| format!("<b id={index}>")).collect();
+        let triggers = "<select></select><!-- <frameset <noscript --><svg><title></p></title></svg><p><table></table><tr>";
+        let body = "<img>".repeat(6_000);
+        let check = |html: &str| {
+            let trusted = HashSet::new();
+            check_output_html(
+                html,
+                &OutputPolicyOptions {
+                    pass: PolicyPass::Settled,
+                    csp: false,
+                    javascript: Some(JavascriptMode::Forbid),
+                    marker_prefix: None,
+                    trusted_tag_starts: &trusted,
+                    omit_handler_marker: None,
+                },
+            )
+        };
+        assert_eq!(
+            check(&format!("{triggers}{deep}{body}")).map(|report| report.events.len()),
+            Err(HtmlTooLarge::CheckWork)
+        );
+        assert!(check(&format!("{deep}{body}")).is_ok());
+        // The security page quotes the start of this message, and the Python
+        // test `test_a_page_over_the_work_budget_gets_the_message_the_security_docs_quote`
+        // pins it from the other side.
+        assert!(HtmlTooLarge::CheckWork
+            .to_string()
+            .starts_with("HTML would take too long to check"));
+    }
+
+    /// Chromium 156 picks the mode of an `<iframe srcdoc>` document from its
+    /// doctype, with no doctype meaning quirks mode, and Firefox 157 always
+    /// reads it in standards mode, so the check reads it both ways. Each of
+    /// these ran its script in one of the two browsers.
+    #[test]
+    fn a_srcdoc_document_is_read_in_both_modes() {
+        let quirks_only = "<span><p><table></table><svg><g></span><![CDATA[><!-- ]]><img src=x onerror=\"parent.document.title=1\"><!-- -->";
+        let standards_only = "<span><p><table></table><svg><g></span><style><!--</style><img src=x onerror=\"parent.document.title=1\"><!-- -->";
+        for document in [
+            // Chromium: no doctype, or an odd one, so quirks mode.
+            quirks_only.to_owned(),
+            format!("<!DOCTYPE foo>{quirks_only}"),
+            // Firefox: standards mode whatever the doctype.
+            standards_only.to_owned(),
+            format!("<!DOCTYPE foo>{standards_only}"),
+            format!("<!DOCTYPE>{standards_only}"),
+            format!("<!DOCTYPE html PUBLIC \"-//IETF//DTD HTML//EN\">{standards_only}"),
+        ] {
+            let attribute = document.replace('&', "&amp;").replace('"', "&quot;");
+            assert!(
+                embedded_document_reported(&format!("<iframe srcdoc=\"{attribute}\"></iframe>")),
+                "{document}"
+            );
+        }
+        assert!(!embedded_document_reported(
+            "<iframe srcdoc=\"&lt;p&gt;Text&lt;table&gt;&lt;tr&gt;&lt;td&gt;1&lt;/table&gt;\"></iframe>"
+        ));
+        // With `<!DOCTYPE html>` both browsers use standards mode, where the
+        // `<table>` closes the `<p>` and the CDATA section hides the image.
+        let standards = format!("<!DOCTYPE html>{quirks_only}")
+            .replace('&', "&amp;")
+            .replace('"', "&quot;");
+        assert!(!embedded_document_reported(&format!(
+            "<iframe srcdoc=\"{standards}\"></iframe>"
+        )));
+    }
+
+    #[test]
+    fn a_srcdoc_whose_tags_depend_on_the_encoding_counts_as_running() {
+        assert!(embedded_document_reported(
+            "<iframe srcdoc=\"&lt;svg&gt;&lt;![CDATA[\u{3041}]]&gt;&lt;/svg&gt;\"></iframe>"
+        ));
+        assert!(!embedded_document_reported(
+            "<iframe srcdoc=\"&lt;svg&gt;&lt;![CDATA[a]]&gt;&lt;/svg&gt;\"></iframe>"
+        ));
+    }
+
+    #[test]
+    fn the_encoding_rule_belongs_to_the_javascript_policy_on_the_settled_page() {
+        let html = "<p title='\u{1b}$B'>x</p>";
+        for (pass, javascript) in [
+            (PolicyPass::PreExtension, Some(JavascriptMode::Forbid)),
+            (PolicyPass::Settled, None),
+        ] {
+            let report = check(html, pass, true, javascript, None, &[], None);
+            assert!(report.events.is_empty(), "{pass:?} {javascript:?}");
+        }
+    }
+
+    #[test]
+    fn a_data_document_that_is_not_plain_ascii_counts_as_running() {
+        // U+3000 in Shift_JIS, Big5, GBK, and EUC-JP, and U+2028 in GB18030.
+        // Chromium 156 decoded the Shift_JIS and Big5 spellings, skipped the
+        // U+3000, and opened the URL, when the document named its encoding
+        // by a `charset` parameter or a `<meta charset>`.
+        for (charset, space) in [
+            ("shift_jis", "%81%40"),
+            ("big5", "%A1%40"),
+            ("gbk", "%A1%A1"),
+            ("euc-jp", "%A1%A1"),
+            ("gb18030", "%816%A65"),
+        ] {
+            let target = "data:text/xml,x";
+            for content in [
+                format!("{space}0;url={target}"),
+                format!("0{space};url={target}"),
+                format!("0;url={space}{target}"),
+                format!("0;url='{space}{target}'"),
+                format!("0;{space}{target}"),
+            ] {
+                let document = format!("%3Cmeta http-equiv=refresh content=%22{content}%22%3E");
+                for html in [
+                    format!("<iframe src=\"data:text/html;charset={charset},{document}\"></iframe>"),
+                    format!("<iframe src=\"data:text/html,%3Cmeta charset={charset}%3E{document}\"></iframe>"),
+                ] {
+                    assert!(embedded_document_reported(&html), "{html:?}");
+                }
+            }
+        }
+        for html in [
+            // Base64 reaches the same rule. This is `<p>\x81@</p>`.
+            "<iframe src=\"data:text/html;base64,PHA+gUA8L3A+\"></iframe>",
+            // Text that is valid UTF-8 can still be read in another encoding.
+            "<iframe src=\"data:text/html,%3Cp%3E%C3%A9%3C/p%3E\"></iframe>",
+            "<iframe src=\"data:text/html,<p>\u{e9}</p>\"></iframe>",
+            // ISO-2022-JP reads these two bytes as U+FFFD.
+            "<iframe src=\"data:text/html,%3Cp%3E%0E%3C/p%3E\"></iframe>",
+            "<iframe src=\"data:text/html,%3Cp%3E%0F%3C/p%3E\"></iframe>",
+        ] {
+            assert!(embedded_document_reported(html), "{html:?}");
+        }
+        // Non-ASCII text written as a reference stays ASCII, so it is read.
+        assert!(!embedded_document_reported(
+            "<iframe src=\"data:text/html,%3Cp%3E%26%23233;%3C/p%3E\"></iframe>"
+        ));
+    }
+
+    #[test]
+    fn a_refresh_with_a_character_a_browser_may_skip_is_reported() {
+        let url = "data:text/html,%3Cscript%3Ex()%3C/script%3E";
+        for space in CHROMIUM_TYPE_SPACES {
+            // Chromium 156 skipped each of these around the delay and before
+            // the URL, quoted or not. The last two are gaps only the check
+            // reads past.
+            for content in [
+                format!("{space}0;url={url}"),
+                format!("0{space};url={url}"),
+                format!("0;url={space}{url}"),
+                format!("0;url='{space}{url}'"),
+                format!("0;{space}url={url}"),
+                format!("0;url{space}={url}"),
+            ] {
+                assert!(refresh_data_url(&content).is_some(), "{content:?}");
+                for html in [
+                    format!("<meta http-equiv=refresh content=\"{content}\">"),
+                    format!(
+                        "<iframe srcdoc=\"&lt;meta http-equiv=refresh content=&quot;{content}&quot;&gt;\"></iframe>"
+                    ),
+                ] {
+                    assert!(embedded_document_reported(&html), "{html:?}");
+                }
+            }
+        }
+        // A reference in an embedded document decodes to the same character.
+        assert!(embedded_document_reported(
+            "<iframe srcdoc=\"&lt;meta http-equiv=refresh content='0&amp;#x3000;;url=data:text/xml,x'&gt;\"></iframe>"
+        ));
+        // A refresh to a URL that runs nothing is still not reported.
+        assert!(!embedded_document_reported(
+            "<meta http-equiv=refresh content=\"0\u{3000};url=data:image/png,x\">"
+        ));
     }
 
     #[test]
@@ -1859,8 +3044,8 @@ mod tests {
             "<iframe srcdoc=\"&lt;iframe srcdoc=&quot;&amp;lt;b&amp;gt;&quot;&gt;\"></iframe>",
             // Padding after a complete group is not valid base64.
             "<iframe src=\"data:text/html;base64,PHA+aGk8L3A+=\"></iframe>",
-            // A byte that is not UTF-8 becomes U+FFFD, so this is no <script>.
-            "<object data='data:text/html,%3Cscr%ffipt%3Ex()%3C/script%3E'></object>",
+            // ASCII text that holds no script.
+            "<object data='data:text/html,%3Cp%3Ehi%3C/p%3E'></object>",
             "<embed src=' DATA:Text/HTML;charset=x,%3Cb onclick=1%3E'>",
         );
         let report = check(
@@ -1887,8 +3072,8 @@ mod tests {
                     Rule::JsEmbeddedDocument,
                     "embed",
                     Some("src"),
-                    (220, 263),
-                    208,
+                    (206, 249),
+                    194,
                     &[]
                 ),
             ]
@@ -2084,6 +3269,7 @@ mod tests {
                 &decode_html_attribute(&document[16..document.len() - 11]),
                 DocumentFacts::default(),
                 0,
+                &EmbeddedDocuments::default(),
             );
             assert_eq!(requires, depth >= 5, "depth {depth}");
         }
@@ -2509,10 +3695,18 @@ mod tests {
     #[test]
     fn an_animation_in_an_embedded_document_makes_it_run_code() {
         let document = "<svg><a><set attributeName=href to='javascript:x'></a></svg>";
-        assert!(html_document_requires_javascript(document, 0));
+        let documents = EmbeddedDocuments::default();
+        assert!(html_document_requires_javascript(
+            document,
+            0,
+            PageKind::DataUrl,
+            &documents
+        ));
         assert!(!html_document_requires_javascript(
             "<svg><a><set attributeName=href to='#x'></a></svg>",
-            0
+            0,
+            PageKind::DataUrl,
+            &documents
         ));
         assert!(embedded_document_reported(&format!(
             "<iframe srcdoc=\"{}\"></iframe>",

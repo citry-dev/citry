@@ -46,12 +46,88 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
     `attribute_document_requires_javascript` routes each attribute to it,
     at the top level and inside embedded documents. A `text/html` document
     is read as the browser reads the URL: tabs and line breaks dropped,
-    `; base64` accepted, and a payload in UTF-16 or ISO-2022-JP counted as
-    running code. A type in
+    `; base64` accepted, and any payload that is not plain ASCII, or that
+    holds 0x00, 0x0E, 0x0F, or 0x1B, counted as running code
+    (`payload_may_hide_markup`). A type in
     `is_inert_media_type` (text, images, media, fonts, PDF, downloads) runs
     nothing. Every other type, SVG and the other XML types included, counts
     as running code without being read. The Python reference keeps a
     matching copy.
+  - `may_be_skipped_by_browser` is the one rule for a character a browser
+    might skip in a `<script type>` or a refresh `content`: anything but
+    printable ASCII. Browsers differ here, so `script_type_is_executable`
+    counts a type that still holds such a character, ASCII whitespace
+    aside, as running, and `refresh_data_url` skips such characters in every
+    gap. Another encoding could spell such a character in a `data:`
+    document, which `payload_may_hide_markup` covers. The Python reference
+    keeps a matching copy.
+  - `BrowserRules` (in `src/output_scanner.rs`) names the tree-building
+    rules browsers differ on, the mode (`Mode`), and where the markup ends
+    up (`Placement`: a whole document, another page's body, or a
+    `<template>`, which is how Citry's browser runtime (through Vue) builds
+    an opaque HTML block, a piece of HTML that Vue does not read itself). No
+    reading follows `innerHTML` set on an element with special parsing
+    rules, such as an SVG or MathML element, a `<table>` or table part, a
+    `<select>` or a `<form>`, which browsers build differently from the
+    three placements. The check can scan a page more than once, each time
+    under one set of these rules; one such scan is a reading of the page.
+    `for_each_reading` (in `src/output_policy.rs`) runs the rules of this
+    check once per reading, at the top level and in embedded documents, so
+    code any reading finds counts. Its doc comment lists what adds a
+    reading: the text `<select` or `<frameset`, a `<noscript>` that may
+    hold a tag (Chromium reads
+    `template.innerHTML` with scripting off, see `noscript_as_markup`), an
+    end tag `EndTagRule` changes, a `<table>` start tag inside an open `<p>`
+    (the one step quirks mode changes), and a table part that html5ever
+    ignored. A page with none of these gets one reading. html5ever 0.29.0
+    keeps its old `<select>` rule and has neither browser's own end-tag
+    rule, so `feed` changes the tags it hands over and `VisibleNames`
+    changes the names `elem_name` gives. For markup that goes into another
+    page, `tree_builder_for` feeds the tags of an empty host page first, and
+    the `<noscript>` reading turns html5ever's scripting option off. Only this
+    check departs from html5ever: `scan_output_html` and the page parses
+    keep its rules. An `iframe srcdoc` document is read in standards mode
+    and, when the mode matters, in the mode its doctype picks, because
+    Firefox 157 reads it in standards mode and Chromium 156 picks the mode
+    from its doctype, with no doctype meaning quirks mode.
+    `EmbeddedDocuments` keeps each embedded document's answer for the whole
+    check, so the readings of the outer page do not multiply the readings of
+    the documents inside it.
+  - `ParserDifference` (in `src/output_scanner.rs`) records one tag where
+    browsers may build a different tree from every reading, and its doc
+    comment is the one list of the cases. The check does not try to build
+    the browser's tree there: it reports the tag under
+    `Rule::JsParserDifference` on the page, with the `DifferenceKind` code
+    in the finding's `case` field so Python can name the fix, and counts
+    an embedded document with one as running code.
+    `DifferenceKind::UnclearFormatting` arises on its own for an end tag
+    inside an SVG or MathML element that holds HTML (`<desc>`, `<mi>`) or a
+    `<search>`. A `<b>` start tag closes any other SVG or MathML element it
+    is inside, so `<svg><b><b><b><b>` never reaches it. The one other route,
+    an `<svg>` start tag after a closed formatting element, is reported as
+    `ReopenedFormatting`, and end tags after it can report both.
+    `note_parser_difference` and `end_tag_is_ignored` notice them from
+    `held_elements`, which reads html5ever's open elements and formatting
+    list apart (see `read_held`). It keeps a read while html5ever reports
+    the same handles, and brings it up to date when only the newest open
+    elements changed (`update_held`), so a tag costs at most a few passes
+    over what html5ever holds.
+  - The Python reference cannot read a page these ways, so
+    `rust_only_adds_findings` lets the comparison pass when Rust reports
+    every finding the copy reports and more, except after a tag Rust
+    reports as a parser difference, where the copy's later findings may be
+    missing. `select_rule_changes_tags` leaves a generated page with an
+    omit marker out when the `<select>` rule moves its tags, and
+    `noscript_rule_changes_tags` leaves a generated page out when reading
+    `<noscript>` contents as markup changes its tags.
+  - `encoding_dependent_span` is the one rule for text whose tags depend on
+    the encoding the browser picks. The check runs it on the settled page
+    (`Rule::JsPageEncoding`) and on every embedded document. Its doc comment
+    lists what was tested. The Python reference keeps a matching
+    copy. Escaped values write ESC as `&#27;`
+    (`packages/py/citry/citry/util/html.py` and the Vue server renderer's
+    `ESC_REFERENCE`), so this rule fires on text Citry did not escape,
+    including `Markup.format()` output.
   - `classify_dependency_attribute` (in `citry_core_py`) reads only
     structured `Script` and `Style` attributes, so it keeps calling
     `is_url_attribute` and `is_javascript_url` directly.
@@ -78,7 +154,11 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   counts the elements the tree builder holds (it lists them through
   `trace_handles`) and compares the formatting elements the scan's tree
   sink saw created (`TrackingSink`, the DOM every scan builds into) with
-  the formatting start tags it was given.
+  the formatting start tags it was given. The output check also spends that
+  count from one budget for all its readings of a page
+  (`MAX_CHECK_WORK_PER_BYTE` and `CHECK_WORK_FLOOR`, refused as
+  `HtmlTooLarge::CheckWork`), so the number of readings cannot multiply
+  the cost of a deep page without bound.
 - `src/static_html.rs` - checks that a finished piece of HTML (a `<c-raw>`
   block, or the HTML the server writes inside a shell) keeps its own
   `<template>` parse where the page puts it, and counts the top-level nodes
@@ -115,8 +195,24 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   elements held at once. A page scan holds `<html>`, `<body>` and the
   `<head>` pointer, so it fits 509 nested elements; a `<template>`
   fragment holds the root `<html>` and the context element, so it fits 510
-  (`tests/html_limits.rs` locks both). `tests/deep_nesting.rs` runs the
-  recursive checks over the deepest tree these limits allow.
+  (`tests/html_limits.rs` locks both). The output check's reading of a
+  page inside a `<template>` (see `Placement::Template`) holds that
+  `<template>` too, so it fits 508. The test
+  `each_placement_fits_the_nesting_its_host_elements_leave` locks all
+  three numbers. `tests/deep_nesting.rs` runs the recursive checks over
+  the deepest tree these limits allow.
+- **html5ever 0.29.0 does not read every page the way browsers do.** It
+  keeps the old `<select>` rule, which html5ever 0.40.1 has dropped. It
+  also leaves the SVG and MathML elements that hold HTML off its list of
+  special elements, in 0.40.1 too, which `end_tag_is_ignored` and
+  `FedTag::ListItem` make up for in the output check. The other gaps
+  found so far are listed on `ParserDifference`, and the check refuses a
+  page at them instead of building the browser's tree. Add a new gap there
+  the same way: notice the tag and refuse it. The hydration checks and the
+  Vue HTML scan still read such a page html5ever's way. An upgrade has to
+  keep the tree tests in `src/output_scanner.rs` passing, which pin these
+  rules to trees Chromium and Firefox built, and a change to these rules
+  needs a new look at what real browsers build.
 - **The Python wrappers pick a hint by the start of each limit's message**
   (`packages/py/citry/citry/_vue/opaque_html.py`). Give a new limit a
   message that starts with words no other limit's message starts with, and

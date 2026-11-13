@@ -4340,6 +4340,7 @@ fn static_text(output: &mut String, text: &str) {
             '&' => output.push_str("&amp;"),
             '<' => output.push_str("&lt;"),
             '>' => output.push_str("&gt;"),
+            '\u{1b}' => output.push_str(ESC_REFERENCE),
             // The parser drops NUL from text anyway.
             '\0' => {}
             other => output.push(other),
@@ -4364,6 +4365,12 @@ fn text_kept_as_written(tag: &str, text: &str) -> bool {
         && !(LEADING_NEWLINE_TAGS.contains(&tag) && text.starts_with('\n'))
 }
 
+/// How [`escape_text`], [`static_text`] and [`escape_attribute`] write ESC. On a page read as
+/// ISO-2022-JP, raw ESC bytes can switch the decoder so that a closing quote
+/// stops being a quote. The browser decodes the page before it reads a
+/// reference, so this cannot. Python's `citry.util.html` writes the same.
+const ESC_REFERENCE: &str = "&#27;";
+
 /// Escape text content. The parser turns a raw carriage return into a
 /// newline and drops NUL, so text holding either is left to the browser.
 fn escape_text(output: &mut String, text: &str) -> Result<(), &'static str> {
@@ -4372,6 +4379,7 @@ fn escape_text(output: &mut String, text: &str) -> Result<(), &'static str> {
             '&' => output.push_str("&amp;"),
             '<' => output.push_str("&lt;"),
             '>' => output.push_str("&gt;"),
+            '\u{1b}' => output.push_str(ESC_REFERENCE),
             '\r' | '\0' => return Err("text-value"),
             other => output.push(other),
         }
@@ -4385,6 +4393,7 @@ fn escape_attribute(output: &mut String, value: &str) {
         match character {
             '&' => output.push_str("&amp;"),
             '"' => output.push_str("&quot;"),
+            '\u{1b}' => output.push_str(ESC_REFERENCE),
             other => output.push(other),
         }
     }
@@ -4819,6 +4828,25 @@ mod tests {
         // read as usual.
         let paired = root(r#"<main><p v-text="'e\u00e9f'"></p></main>"#, json!({}));
         assert_eq!(html(&paired), "<main><p>e\u{e9}f</p></main>");
+    }
+
+    #[test]
+    fn esc_is_written_as_a_reference_in_text_and_attributes() {
+        // Raw ESC bytes would let a value switch a page read as ISO-2022-JP.
+        let value = json!({"t": "\u{1b}$B"});
+        let result = root(
+            r#"<p :title="$citryPrepared.t">{{ $citryPrepared.t }}</p>"#,
+            value,
+        );
+        assert_eq!(html(&result), r#"<p title="&#27;$B">&#27;$B</p>"#);
+        // Text in a shell, whose contents Vue builds in the browser, takes
+        // its own path through the writer.
+        let shell = root(
+            "<textarea>{{ $citryPrepared.t }}</textarea>",
+            json!({"t": "\u{1b}$B"}),
+        );
+        assert!(html(&shell).contains("&#27;$B"), "{:?}", html(&shell));
+        assert!(!html(&shell).contains('\u{1b}'), "{:?}", html(&shell));
     }
 
     #[test]

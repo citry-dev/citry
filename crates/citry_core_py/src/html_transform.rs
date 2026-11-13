@@ -371,8 +371,12 @@ fn javascript_mode(value: Option<&str>) -> PyResult<Option<JavascriptMode>> {
 /// - `("element", tag, token_start, name_start, name_end, element_end,
 ///   trusted, executable, has_manager_attribute, cids)` for every `script`
 ///   or `style` element a selected rule looks at;
-/// - `(rule, tag, attribute, start, end, token_start, cids)` for each
-///   attribute or element a rule reports.
+/// - `(rule, tag, attribute, start, end, token_start, cids, case)` for
+///   each attribute or element a rule reports. `attribute` is `None` for a
+///   rule that reports the element. `case` is `None` except for
+///   `js-parser-difference`, where it is a code naming which difference
+///   was found, such as `reopened-formatting`, so Python can say what to
+///   change.
 ///
 /// `cids` holds the element's own `data-cid-*` suffixes, then those of the
 /// elements the browser put around it, nearest first. `cleaned_html` is
@@ -383,10 +387,12 @@ fn javascript_mode(value: Option<&str>) -> PyResult<Option<JavascriptMode>> {
 /// `ValueError("citry output check failed: ...")` if the check panics or
 /// the page is too large for Citry to read (a tag with more than 1,024
 /// attributes, more than 16 start tags of one of `html`, `head` and `body`,
-/// more than 512 elements open at once, or formatting tags such as `<b>`
+/// more than 512 elements open at once, formatting tags such as `<b>`
 /// left open or misnested so often that the parser would copy more than
-/// 250,000 elements and attributes). A string with a lone surrogate raises
-/// `UnicodeEncodeError`.
+/// 250,000 elements and attributes, or so many elements held open, in a
+/// page that browsers can read in several ways and so Citry reads several
+/// times, that checking it would take too long). A string with a lone
+/// surrogate raises `UnicodeEncodeError`.
 #[pyfunction(name = "_check_output_html")]
 #[pyo3(signature = (html, *, pre_extension, csp, javascript, marker_prefix, trusted_tag_starts, omit_handler_marker))]
 pub fn check_output_html(
@@ -443,6 +449,7 @@ pub fn check_output_html(
                 finding.end,
                 finding.token_start,
                 PyTuple::new(py, finding.cids)?,
+                finding.case,
             )
                 .into_pyobject(py)?,
         };

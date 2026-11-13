@@ -21,6 +21,7 @@ from citry.util.routing import (
     call_maybe_sync,
     match_route,
     route_allows_method,
+    sent_content_type,
     sent_headers,
 )
 
@@ -88,7 +89,7 @@ def _is_local_request(scope: Scope) -> bool:
 
 async def _respond(send: Send, response: RouteResponse, *, head: bool = False) -> None:
     # Even errors must bypass caches: the command may serve edited examples next time.
-    headers = [(b"content-type", response.content_type.encode("latin-1")), (b"cache-control", b"no-store")]
+    headers = [(b"content-type", sent_content_type(response).encode("latin-1")), (b"cache-control", b"no-store")]
     headers.extend(
         (name.lower().encode("latin-1"), value.encode("latin-1"))
         for name, value in sent_headers(response)

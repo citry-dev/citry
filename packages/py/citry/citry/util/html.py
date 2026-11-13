@@ -16,6 +16,9 @@ same ``Markup`` class directly.
   ``__html__``) passes through without double-escaping.
 - ``escape`` escapes ``& < > ' "``. Escaping all five means the same output is
   safe in both HTML body text and double- or single-quoted attribute values.
+  It also writes the ESC control character as ``&#27;``. On a page read as
+  ISO-2022-JP, raw ESC bytes can switch the decoder so that a closing quote
+  stops being a quote, and a reference is read after the page is decoded.
 - ``escape_attribute_value(value)`` escapes a value for an HTML attribute.
   ``Markup`` says a string is safe to insert between tags, while an
   attribute value is plain text, so its HTML is decoded to the text a
@@ -37,7 +40,8 @@ from html.parser import HTMLParser
 from types import BuiltinFunctionType
 from typing import TYPE_CHECKING, Any
 
-from markupsafe import Markup, escape
+from markupsafe import Markup
+from markupsafe import escape as _markupsafe_escape
 
 from citry.util import deep_json
 
@@ -45,7 +49,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 # markupsafe's escaper that returns a plain ``str`` (the same function that
-# ``escape`` runs internally before wrapping the result in a ``Markup``).
+# ``markupsafe.escape`` runs internally before wrapping the result in a
+# ``Markup``).
 # it lives in the C ``_speedups`` module, with a pure-Python ``_native`` twin;
 # we resolve whichever is present and fall back to the public ``escape`` if a
 # future markupsafe drops the name, so this stays a one-line behaviour change.
@@ -59,6 +64,28 @@ except ImportError:  # pragma: no cover - depends on the installed wheel
     except ImportError:  # pragma: no cover - very old markupsafe
         # v2.X
         _escape_to_str_impl = None
+
+
+# The browser decodes the page's bytes before it reads references, so ESC
+# written this way cannot switch the page's encoding.
+_ESC = "\x1b"
+_ESC_REFERENCE = "&#27;"
+
+
+def escape(value: Any) -> Markup:
+    """
+    Escape ``value`` to ``Markup``, leaving a value with ``__html__`` as it is.
+
+    Same as ``markupsafe.escape``, except that ESC becomes ``&#27;`` (see the
+    module docstring). ``markupsafe`` leaves ESC in place, and
+    ``Markup.format``, ``%``, ``+`` and ``join`` still call it, so Citry's
+    own code passes data through here.
+    """
+    escaped = _markupsafe_escape(value)
+    # Trusted HTML stays exactly as written; the output check reads it.
+    if _ESC not in escaped or hasattr(value, "__html__"):
+        return escaped
+    return Markup(str.replace(escaped, _ESC, _ESC_REFERENCE))  # noqa: S704 - escaped above
 
 
 def escape_to_str(value: Any) -> str:
@@ -81,7 +108,9 @@ def escape_to_str(value: Any) -> str:
     # Instead, we call the internal escape function that returns a plain string.
     if _escape_to_str_impl is None:
         return str(escape(text))
-    return _escape_to_str_impl(text)
+    # ``replace`` returns the same string when there is no ESC, which is
+    # nearly always, and keeps this one call on the render hot path.
+    return _escape_to_str_impl(text).replace(_ESC, _ESC_REFERENCE)
 
 
 # One character reference, the same pattern Python's html.unescape uses.
@@ -167,10 +196,10 @@ def decode_character_references(html: str) -> str:
 def _decode_attribute_charref(match: re.Match[str]) -> str:
     """Decode one character reference the way a browser does inside an attribute value."""
     name = match.group(1)
-    # A numeric reference decodes as ``html.unescape`` reads it.
+    # A numeric reference decodes as in text. ``html.unescape`` would drop
+    # ESC, so ``java&#27;script:`` would read as a URL the value did not spell.
     if name[0] == "#":
-        reference = _short_numeric_reference(name)
-        return "\ufffd" if reference is None else unescape(reference)
+        return _decode_text_numeric_reference(name)
     # A name that matches exactly decodes as in text.
     if name in html5:
         return unescape(match.group(0))

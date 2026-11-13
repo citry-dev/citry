@@ -8,11 +8,19 @@ import json
 import re
 import warnings
 from typing import TYPE_CHECKING
+from urllib.parse import quote, quote_from_bytes
 
 import pytest
 
 from citry import Citry, Component, Extension, Markup
 from citry.ext.dependencies import Script, Style
+from citry.util.html import (
+    decode_attribute_entities,
+    decode_character_references,
+    escape,
+    escape_attribute_value,
+    escape_to_str,
+)
 from citry.util.routing import match_route
 
 if TYPE_CHECKING:
@@ -1218,6 +1226,8 @@ class TestJavascriptDeliveryPolicy:
             ('<button onclick="save()">Save</button>', "native inline event"),
             ('<a href="javascript:save()">Save</a>', "javascript: URL"),
             ('<script type="module">save()</script>', "raw executable"),
+            # Chromium drops U+2028 from the end of a type and runs this.
+            ('<script type="text/javascript&#x2028;">save()</script>', "raw executable"),
             ('<div v-unknown-plugin="value"></div>', "v-unknown-plugin"),
         ],
     )
@@ -1230,6 +1240,286 @@ class TestJavascriptDeliveryPolicy:
         Card.template = template
         with pytest.raises(ValueError, match=message):
             Card().render().serialize(deps_strategy="ignore")
+
+    # Chromium 156 decodes the Shift_JIS spelling of U+3000 in a data document
+    # that names the encoding, skips it, and opens the refresh URL.
+    @pytest.mark.parametrize("charset", [";charset=shift_jis", ";charset=shift_jis;base64"])
+    def test_forbid_rejects_a_refresh_padded_in_a_legacy_encoding(self, charset):
+        page = b'<meta http-equiv=refresh content="\x81\x400;url=data:text/xml,x">'
+        body = base64.b64encode(page).decode() if charset.endswith("base64") else quote_from_bytes(page)
+        c = Citry(security_javascript="forbid")
+
+        class Frame(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"page": Markup(f'<iframe src="data:text/html{charset},{body}"></iframe>')}  # noqa: S704 - a fixed test document
+
+            template = """
+                {{ page }}
+            """
+
+        with pytest.raises(ValueError, match="src"):
+            Frame().render().serialize(deps_strategy="ignore")
+
+    # Chromium 156 and Firefox 157 ran what follows these when the page was
+    # read in the encoding each needs, which the check cannot see.
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "<meta charset=iso-2022-jp><p title='\x1b$B'\x1b(B>x</p>",
+            "<meta charset=iso-2022-jp><scr\x1b(Bipt>save()</script>",
+            "<meta charset=shift_jis><svg><![CDATA[\u3041]]></svg>",
+        ],
+    )
+    def test_forbid_rejects_markup_whose_tags_depend_on_the_encoding(self, text):
+        c = Citry(security_javascript="forbid")
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"page": Markup(text)}  # noqa: S704 - a fixed test document
+
+            template = """
+                {{ page }}
+            """
+
+        with pytest.raises(ValueError, match="another encoding"):
+            Page().render().serialize(deps_strategy="ignore")
+
+    # Raw ESC bytes on a page read as ISO-2022-JP let a value take a closing
+    # quote with them, and ran code in Chromium 156 and Firefox 157. A value
+    # is written with `&#27;`, which the browser reads after it decodes the
+    # page, so the page stays safe and the check has nothing to report.
+    @pytest.mark.parametrize("value", ["\x1b$B", "\x1b(B", "\x1b(I", "a\x1b$@b"])
+    def test_forbid_keeps_an_escaped_value_that_holds_esc(self, value):
+        c = Citry(security_javascript="forbid")
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"note": value, "notes": [value, value], "extra": {"data-x": value}}
+
+            template = """
+                <p c-title="note" c-bind="extra">{{ note }}</p>
+                <ul>
+                    <li c-for="item in notes" c-title="item">{{ item }}</li>
+                </ul>
+            """
+
+        html = str(Page().render().serialize(deps_strategy="ignore"))
+
+        assert "\x1b" not in html
+        assert value.replace("\x1b", "&#27;") in html
+
+    # Repeated simple Vue leaves and slots each take their own fast path.
+    @pytest.mark.parametrize("strategy", ["ignore", "simple", "document", "fragment"])
+    def test_python_render_paths_write_no_raw_esc(self, strategy):
+        c = Citry()
+
+        class Leaf(Component):
+            citry = c
+            simple = "vue"
+
+            class Kwargs:
+                note: str
+
+            @staticmethod
+            def template_data(kwargs, _slots):
+                return {"note": kwargs.note}
+
+            template = """
+                <li c-title="note">{{ note }}</li>
+            """
+
+        class Box(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"note": "\x1b$B"}
+
+            template = """
+                <section c-title="note"><c-slot>{{ note }}</c-slot></section>
+            """
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"notes": ["\x1b$B"] * 3}
+
+            template = """
+                <ul><c-leaf c-for="note in notes" c-note="note" /></ul>
+                <c-box>{{ notes[0] }}</c-box>
+            """
+
+        html = str(Page().render().serialize(deps_strategy=strategy))
+
+        assert "\x1b" not in html
+        assert "&#27;$B" in html
+
+    # A hydrated page goes through the Vue server renderer in Rust, and its
+    # parse of the page must still accept what it wrote. A shell's text
+    # takes its own path.
+    @pytest.mark.parametrize("value", ["\x1b$B", "\x1b(B"])
+    def test_a_hydrated_page_writes_esc_as_a_reference(self, value):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"note": value}
+
+            def js_data(self, kwargs, slots):
+                return {"browser_note": value}
+
+            template = """
+                <main>
+                    <section>
+                        <b v-if="dragging">x</b>
+                        <p c-title="note">{{ note }}</p>
+                        <i :title="browser_note" v-text="browser_note"></i>
+                    </section>
+                </main>
+            """
+            js = """
+                $component({ data() { return { dragging: false }; } });
+            """
+
+        html = str(Page().render().serialize())
+
+        written = value.replace("\x1b", "&#27;")
+        assert '"hydrate":true' in html
+        assert "\x1b" not in html
+        assert f'title="{written}"' in html
+        assert f">{written}</p>" in html
+        assert f">{written}</i>" in html
+
+    # The check must see ESC in a value the browser reads from the reference,
+    # or a `data:` document that holds one stops counting as running.
+    @pytest.mark.parametrize("attribute", ['<iframe c-src="url"></iframe>', '<a c-href="url">x</a>'])
+    def test_forbid_rejects_a_data_url_value_that_holds_esc(self, attribute):
+        c = Citry(security_javascript="forbid")
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"url": "data:text/html;charset=iso-2022-jp,<scr\x1b(Bipt>x()</script>"}
+
+        Page.template = attribute
+        with pytest.raises(ValueError, match="embedded document"):
+            Page().render().serialize(deps_strategy="ignore")
+
+    # `slots["link"]()` hands the value on as escaped HTML, which an attribute
+    # decodes again; dropping ESC there would spell a URL the value did not.
+    def test_an_attribute_keeps_esc_from_an_escaped_value(self):
+        assert decode_attribute_entities("java&#27;script:x") == "java\x1bscript:x"
+        assert escape_attribute_value(escape("java\x1bscript:x")) == "java&#27;script:x"
+
+    def test_markup_format_keeps_esc_for_the_check_to_find(self):
+        c = Citry(security_javascript="forbid")
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"note": Markup("<p>{}</p>").format("\x1b$B")}
+
+            template = """
+                {{ note }}
+            """
+
+        with pytest.raises(ValueError, match="another encoding"):
+            Page().render().serialize(deps_strategy="ignore")
+
+    def test_forbid_still_rejects_esc_in_markup(self):
+        c = Citry(security_javascript="forbid")
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"note": Markup("\x1b$B")}
+
+            template = """
+                <p>{{ note }}</p>
+            """
+
+        with pytest.raises(ValueError, match="another encoding"):
+            Page().render().serialize(deps_strategy="ignore")
+
+    def test_escaping_writes_esc_as_a_reference_and_leaves_markup_alone(self):
+        assert escape("a\x1b$B<") == "a&#27;$B&lt;"
+        assert type(escape("\x1b")) is Markup
+        assert escape_to_str("a\x1b$B<") == "a&#27;$B&lt;"
+        assert escape_attribute_value('a\x1b$B"') == "a&#27;$B&#34;"
+        # Trusted HTML stays exactly as written; the check reads it.
+        assert escape(Markup("\x1b$B")) == "\x1b$B"
+        assert escape_to_str(Markup("\x1b$B")) == "\x1b$B"
+        # Vue reads the same text the browser does from the reference.
+        assert decode_character_references("&#27;") == "\x1b"
+
+    def test_forbid_keeps_terminal_output_that_stays_in_ascii(self):
+        c = Citry(security_javascript="forbid")
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"log": "\x1b[31mred\x1b[0m"}
+
+            template = """
+                <pre>{{ log }}</pre>
+            """
+
+        assert "&#27;[31m" in Page().render().serialize(deps_strategy="ignore")
+
+    # A document passed as Markup to `c-srcdoc` is checked like any other
+    # embedded document. The U+000B is typed raw and as `&#11;`, which a
+    # browser keeps and this check drops.
+    @pytest.mark.parametrize("space", ["\x0b", "&#11;", "&#x3000;"])
+    def test_forbid_rejects_a_markup_srcdoc_script_padded_with_a_character_a_browser_may_skip(self, space):
+        c = Citry(security_javascript="forbid")
+
+        class Frame(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"doc": Markup(f'<script type="{space}text/javascript">save()</script>')}  # noqa: S704 - a fixed test document
+
+            template = """
+                <iframe c-srcdoc="doc"></iframe>
+            """
+
+        with pytest.raises(ValueError, match="srcdoc"):
+            Frame().render().serialize(deps_strategy="ignore")
+
+    # Chromium 156 drops U+000B and these Unicode spaces from either end of
+    # a script type and runs the script. It keeps U+00A0, which the check
+    # counts anyway, because it does not track which characters each browser
+    # drops.
+    @pytest.mark.parametrize("space", ["\x0b", "\u1680", "\u2000", "\u200a", "\u2028", "\u205f", "\u3000", "\xa0"])
+    def test_forbid_rejects_a_script_type_padded_with_a_character_a_browser_may_skip(self, space):
+        class Block(Extension):
+            name = "block"
+
+            def on_dependencies(self, ctx):
+                ctx.scripts.append(Script(content="save()", attrs={"type": f"{space}text/javascript"}))
+
+        c = Citry(extensions=[Block], security_javascript="forbid")
+
+        class Card(Component):
+            citry = c
+            template = """
+                <p>card</p>
+            """
+
+        with pytest.raises(ValueError, match="executable"):
+            Card().render().serialize(deps_strategy="simple")
 
     def test_forbid_allows_attributes_no_citry_runtime_reads(self):
         # Only Vue directive spellings need the browser runtime. An x-* name
@@ -1798,6 +2088,281 @@ class TestJavascriptDeliveryPolicy:
 
         # No finding, so forbid serializes without raising.
         Card().render().serialize(deps_strategy="ignore")
+
+
+def _render_under_javascript_policy(mode: str, page_template: str, data: dict[str, object]) -> str:
+    app = Citry(security_javascript=mode)
+
+    class Page(Component):
+        citry = app
+        template = page_template
+
+        def template_data(self, kwargs, slots):
+            return data
+
+    return str(Page().render().serialize(deps_strategy="ignore"))
+
+
+class TestSelectContents:
+    """A browser may keep or drop the tags inside `<select>`, so the checks read a page both ways."""
+
+    _SCRIPT = "<script>console.log(1)</script>"
+    _HANDLER = '<img src="x" onerror="console.log(1)">'
+
+    @pytest.mark.parametrize(
+        "hidden",
+        [
+            "<style><!-- </style>{code}<!-- -->",
+            "<title><!-- </title>{code}<!-- -->",
+            "<xmp><!-- </xmp>{code}<!-- -->",
+            "<iframe><!-- </iframe>{code}<!-- -->",
+            "<noembed><!-- </noembed>{code}<!-- -->",
+            "<noframes><!-- </noframes>{code}<!-- -->",
+            "<noscript><!-- </noscript>{code}<!-- -->",
+            "<svg><![CDATA[><!-- ]]>{code}<!-- -->",
+            "<math><![CDATA[><!-- ]]>{code}<!-- -->",
+            '<svg><script type="text/plain">{code}</script></svg>',
+        ],
+    )
+    @pytest.mark.parametrize("around", ["<select>{}</select>", "<select><option>{}</option></select>"])
+    @pytest.mark.parametrize("code", [_SCRIPT, _HANDLER])
+    @pytest.mark.parametrize("route", ["markup", "srcdoc", "data"])
+    def test_forbid_rejects_code_only_a_browser_that_keeps_these_tags_sees(self, hidden, around, code, route):
+        page = around.format(hidden.format(code=code))
+        if route == "markup":
+            template, data = "{{ value }}", {"value": Markup(page)}  # noqa: S704 - a fixed test document
+        elif route == "srcdoc":
+            template, data = '<iframe c-srcdoc="value"></iframe>', {"value": page}
+        else:
+            template, data = '<iframe c-src="value"></iframe>', {"value": "data:text/html," + quote(page)}
+        with pytest.raises(ValueError, match="security_javascript='forbid'"):
+            _render_under_javascript_policy("forbid", template, data)
+
+    def test_strict_csp_reports_a_handler_only_a_browser_that_keeps_these_tags_sees(self):
+        class Page(Component):
+            citry = Citry(security_csp="strict")
+            template = """
+                {{ value }}
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"value": Markup(f"<select><style><!-- </style>{TestSelectContents._HANDLER}<!-- --></select>")}  # noqa: S704 - a fixed test document
+
+        with pytest.raises(ValueError, match="onerror"):
+            Page().render().serialize(deps_strategy="ignore")
+
+    def test_a_finding_only_one_reading_makes_is_reported_once(self):
+        page = Markup(f"<select><style><!-- </style>{self._SCRIPT}{self._HANDLER}<!-- --></select>")  # noqa: S704 - a fixed test document
+        with pytest.warns(RuntimeWarning) as caught:
+            _render_under_javascript_policy("warn", "{{ value }}", {"value": page})
+        message = str(caught[0].message)
+        assert message.count("raw executable <script>") == 1
+        assert message.count("event attribute 'onerror'") == 1
+
+    def test_a_script_both_readings_see_is_reported_once(self):
+        page = Markup(f"<select>{self._SCRIPT}</select>")  # noqa: S704 - a fixed test document
+        with pytest.warns(RuntimeWarning) as caught:
+            _render_under_javascript_policy("warn", "{{ value }}", {"value": page})
+        assert str(caught[0].message).count("raw executable <script>") == 1
+
+    @pytest.mark.parametrize(
+        "page",
+        [
+            '<select name="a"><option value="1" selected>One</option><option>Two</option></select>',
+            "<select><optgroup label='x'><option>One</option></optgroup><hr><option>Two</option></select>",
+            "<select><button><selectedcontent></selectedcontent></button><option>One</option></select>",
+            "<select><option><img src='flag.png' alt=''> <span>One</span></option></select>",
+            "<select><option><svg width='9'><circle r='4'/></svg> One</option></select>",
+            "<select><option>a < b</option></select>",
+            "<select><style>option { color: red }</style><option>One</option></select>",
+            "<SELECT><OPTION>One</OPTION></SELECT>",
+            "<table><tr><td><select><option>One</option></select></td></tr></table>",
+            "<form><select name='a'><option>One</option></select><input type='hidden' name='b'></form>",
+        ],
+    )
+    def test_forbid_passes_a_select_that_runs_no_code(self, page):
+        assert "ption" in _render_under_javascript_policy("forbid", "{{ value }}", {"value": Markup(page)}).lower()  # noqa: S704 - a fixed test document
+
+
+class TestBrowserDifferencesAroundSvgAndMathml:
+    """Browsers differ from html5ever, and from each other, on a few end tags in SVG and MathML."""
+
+    @pytest.mark.parametrize(
+        "page",
+        [
+            # Every browser keeps these elements open.
+            "<span><math><mtext></span><![CDATA[><!-- ]]><script>console.log(1)</script><!-- -->",
+            "<li><svg><desc><li></li><![CDATA[><!-- ]]><script>console.log(1)</script><!-- -->",
+            # Firefox leaves the SVG here, and Chromium stays in it.
+            "<svg><a><title></p></a><style><!-- </style><script>console.log(1)</script><!-- -->",
+            # Chromium stays in the SVG here, and Firefox leaves it.
+            "<clippath><svg></clippath><style><img src=x onerror=console.log(1)></style>",
+        ],
+    )
+    def test_forbid_rejects_code_a_browser_finds_there(self, page):
+        with pytest.raises(ValueError, match="security_javascript='forbid'"):
+            _render_under_javascript_policy("forbid", "{{ value }}", {"value": Markup(page)})  # noqa: S704 - a fixed test document
+
+    @pytest.mark.parametrize(
+        "page",
+        [
+            "<svg><title>A <b>bold</b> title</title><clipPath id='a'><rect/></clipPath></svg>",
+            "<svg><foreignObject><div><p>One<p>Two</div></foreignObject></svg>",
+            "<ul><li><svg><desc>x</desc></svg><li>Two</ul>",
+            "<span><svg><circle r='1'></svg></span>",
+            "<math><mi>x</mi><mo>=</mo><mn>1</mn></math><p>After</p>",
+        ],
+    )
+    def test_forbid_passes_ordinary_svg_and_mathml(self, page):
+        rendered = _render_under_javascript_policy("forbid", "{{ value }}", {"value": Markup(page)})  # noqa: S704 - a fixed test document
+        assert page[-8:] in rendered
+
+    # In Chromium 156, Firefox 157, or both, each page below builds a
+    # different tree from the one html5ever builds, and runs the script
+    # html5ever hides. The check refuses the tag where the trees differ, and
+    # the message names what to change there.
+    @pytest.mark.parametrize(
+        ("shape", "message"),
+        [
+            ("<math><annotation-xml encoding=text/html></br>{cdata}", "<annotation-xml> whose encoding"),
+            ("<math><annotation-xml encoding=application/xhtml+xml><svg><br>{cdata}", "<annotation-xml> whose"),
+            ("<select></b><math><annotation-xml></select>{cdata}", "'select' end tag is inside an open MathML"),
+            ("<p><b></p><svg></b>{style}", "around this 'svg' element"),
+            ("<foreignObject><a></foreignobject><math></a><noscript><!-- </noscript>{code}", "around this 'math'"),
+            ("<svg><desc><span><isindex></span>{cdata}", "<isindex> as an ordinary element"),
+            ("<svg><desc><span><search></span></desc>{style}", "'span' tag reaches past an open <search>"),
+            ("<select><option><dd><option><svg><g></dd>{cdata}", "browsers close an element such as <p>"),
+            ("<select><b></select>x<svg></b>{style}", "open across the start or end of a <select>"),
+            ("<svg><desc><p><b></p></b></desc></svg>x<svg><g></b>{cdata}", "'b' end tag is inside an SVG"),
+            ("<svg><desc><b><b><b><b>x</b></b></b></b></desc></svg>{cdata}", "four or more copies of one formatting"),
+            (
+                '<div><template shadowrootmode="open"><thead><caption><svg><g></caption>{style}</template></div>',
+                "a <thead> is open here with no <table>",
+            ),
+            (
+                '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" ""><span><p><table></table>'
+                "<svg><g></span>{cdata}",
+                "doctype makes some browsers use quirks mode",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("route", ["markup", "srcdoc"])
+    def test_forbid_rejects_a_tag_where_browsers_build_a_different_tree(self, shape, message, route):
+        code = '<img src="x" onerror="console.log(1)">'
+        page = shape.format(
+            cdata=f"<![CDATA[><!-- ]]>{code}<!-- -->",
+            style=f"<style><!-- </style>{code}<!-- -->",
+            code=code,
+        )
+        if route == "markup":
+            with pytest.raises(ValueError, match=re.escape(message)):
+                _render_under_javascript_policy("forbid", "{{ value }}", {"value": Markup(page)})  # noqa: S704 - a fixed test document
+        else:
+            with pytest.raises(ValueError, match="embedded document"):
+                _render_under_javascript_policy("forbid", '<iframe c-srcdoc="value"></iframe>', {"value": page})
+
+    # The check reads the open <form> and the closed <b> the way browsers
+    # do, so it finds the script itself.
+    @pytest.mark.parametrize(
+        "page",
+        [
+            "<math><mtext><form></form><![CDATA[><!-- ]]><script>console.log(1)</script><!-- -->",
+            "<svg><desc><p><b></p></desc><style><script>console.log(1)</script></style>",
+        ],
+    )
+    def test_forbid_rejects_code_after_a_form_or_a_closed_formatting_element(self, page):
+        with pytest.raises(ValueError, match="raw executable"):
+            _render_under_javascript_policy("forbid", "{{ value }}", {"value": Markup(page)})  # noqa: S704 - a fixed test document
+
+    # An app's own `innerHTML` puts the page into another page's body, and
+    # Vue builds an opaque HTML block inside a `<template>`. In both places
+    # the same markup can build a different tree. A whole document hides
+    # each script below. The first two run in a body in Chromium 156 and
+    # Firefox 157; the `<noscript>` page runs only in Chromium, inside a
+    # template.
+    @pytest.mark.parametrize(
+        "page",
+        [
+            '<frameset><textarea><!-- </textarea><img src="x" onerror="console.log(1)"><!-- -->',
+            '<span><p><table></table><svg><g></span><style><!--</style><img src="x" onerror="console.log(1)"><!-- -->',
+            # Chromium builds Vue's opaque HTML blocks with `template.innerHTML`, which reads `<noscript>`
+            # contents as markup.
+            '<noscript><img src="x" onerror="console.log(1)"></noscript>',
+        ],
+    )
+    def test_forbid_rejects_code_that_runs_when_the_page_is_put_into_a_body(self, page):
+        with pytest.raises(ValueError, match="native inline event attribute 'onerror'"):
+            _render_under_javascript_policy("forbid", "{{ value }}", {"value": Markup(page)})  # noqa: S704 - a fixed test document
+
+    def test_warn_reports_a_tag_where_browsers_build_a_different_tree(self):
+        page = Markup("<p><b>Bold</p><svg><circle r='1'/></svg>")
+        with pytest.warns(RuntimeWarning, match="around this 'svg' element"):
+            _render_under_javascript_policy("warn", "{{ value }}", {"value": page})
+
+    def test_warn_lists_a_tag_two_readings_find_once(self):
+        # Two readings of this page find the `<select>` start tag under two
+        # different cases. It is one place to fix, so it is listed once.
+        page = Markup(
+            "<thead><select><i><i><th><i><i></i><i><math><form><annotation-xml encoding=text/html></select></x>"
+            "<table><tr></p><svg>"
+        )
+        with pytest.warns(RuntimeWarning) as warned:
+            _render_under_javascript_policy("warn", "{{ value }}", {"value": page})
+        message = str(warned[0].message)
+        assert "found 5 client behavior requirement(s)" in message
+        assert sum("'select'" in line for line in message.splitlines()) == 1
+
+    def test_a_tag_name_in_the_message_is_quoted(self):
+        # The page chooses the tag name, so the message shows it as a quoted
+        # string, and a control character in it cannot reach a log as is.
+        page = Markup("<svg><desc><b><span><b><b><b></span></x\x1b[31mRED\x1b[0m>")
+        with pytest.raises(ValueError, match="cannot tell what the page runs") as raised:
+            _render_under_javascript_policy("forbid", "{{ value }}", {"value": page})
+        assert "\x1b" not in str(raised.value)
+        assert "\\x1b" in str(raised.value)
+        with pytest.warns(RuntimeWarning) as warned:
+            _render_under_javascript_policy("warn", "{{ value }}", {"value": page})
+        assert all("\x1b" not in str(warning.message) for warning in warned)
+
+    @pytest.mark.parametrize(
+        "page",
+        [
+            "<math><semantics><mi>x</mi><annotation-xml encoding='MathML-Content'><ci>x</ci></annotation-xml>"
+            "</semantics></math>",
+            "<p><b>Bold</b></p><svg><circle r='1'/></svg>",
+            "<p><b>Bold</p> <svg><circle r='1'/></svg>",
+            "<search><form><input name='q'><button><svg><path d='M0 0'/></svg></button></form></search>",
+            "<table><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>",
+            "<!DOCTYPE html><p>Before</p><table><tr><td>1</td></tr></table>",
+            "<!DOCTYPE html><p>Before<table><tr><td>1</td></tr></table>",
+            "<p>Before<table><tr><td>1</td></tr></table>",
+            '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" '
+            '"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><p>Text<table><tr><td>1</td></tr></table>',
+            '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">'
+            "<p>Text<table><tr><td>1</td></tr></table>",
+            "<html><head><title>T</title></head><body><p>Body</p></body></html>",
+            "<select><option>One<option>Two</select>",
+        ],
+    )
+    def test_forbid_passes_ordinary_markup_like_the_refused_pages(self, page):
+        rendered = _render_under_javascript_policy("forbid", "{{ value }}", {"value": Markup(page)})  # noqa: S704 - a fixed test document
+        assert page[-8:] in rendered
+
+
+class TestUtf16Text:
+    """A response that names UTF-16 makes text with NUL bytes into markup."""
+
+    _SCRIPT = "<script>console.log(1)</script>"
+
+    @pytest.mark.parametrize("spell", ["\0".join(_SCRIPT) + "\0", "\0" + "\0".join(_SCRIPT)])
+    def test_forbid_rejects_a_tag_spelled_with_nul_bytes(self, spell):
+        with pytest.raises(ValueError, match="another encoding"):
+            _render_under_javascript_policy("forbid", "{{ value }}", {"value": Markup(spell)})  # noqa: S704 - a fixed test document
+
+    @pytest.mark.parametrize("value", ["\0", "a\0", "\0a", "<\0s\0", "\0".join(_SCRIPT)])
+    @pytest.mark.parametrize("template", ["<p>{{ value }}</p>", '<p c-title="value">x</p>'])
+    def test_forbid_passes_an_escaped_value_that_holds_nul(self, template, value):
+        assert "<p" in _render_under_javascript_policy("forbid", template, {"value": value})
 
 
 class TestSvgAnimationUrls:

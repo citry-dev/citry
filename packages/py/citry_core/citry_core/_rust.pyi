@@ -299,8 +299,11 @@ class html_transform:
         tuple in start-tag order: `("element", tag, token_start, name_start,
         name_end, element_end, trusted, executable, has_manager_attribute,
         cids)` for a `script` or `style` element a selected rule looks at, or
-        `(rule, tag, attribute, start, end, token_start, cids)` for one
-        attribute or element a rule reports. `cids` holds the element's own
+        `(rule, tag, attribute, start, end, token_start, cids, case)` for
+        one attribute or element a rule reports. `case` is `None` except for
+        `js-parser-difference`, which reports a tag: there it is a code
+        naming which difference was found, such as `reopened-formatting`,
+        so Python can say what to change. `cids` holds the element's own
         `data-cid-*` suffixes, then those of the elements the browser put
         around it, nearest first. `cleaned_html` is the page with every omit
         marker removed, or `None` when there was none. Offsets are UTF-8 byte
@@ -311,9 +314,11 @@ class html_transform:
         `citry output check failed:`). A page over a size limit fails this
         way too, without being checked: a tag with more than 1,024
         attributes, more than 16 start tags of one of `html`, `head` and
-        `body`, more than 512 elements open at once, or formatting tags such
-        as `<b>` left open or misnested so often that the parser would copy
-        more than 250,000 elements and attributes.
+        `body`, more than 512 elements open at once, formatting tags such as
+        `<b>` left open or misnested so often that the parser would copy
+        more than 250,000 elements and attributes, or so many elements held
+        open, in a page that browsers can read in several ways and so Citry
+        reads several times, that checking it would take too long.
         """
     @staticmethod
     def _script_type_is_executable(value: str) -> bool:

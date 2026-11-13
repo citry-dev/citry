@@ -1193,13 +1193,32 @@ attributes, more than 16 start tags of any one of `<html>`, `<head>` and
 `<body>`, more than 512 elements open at once (about 510 nested
 elements), or formatting tags such as `<b>` and `<i>` left open or
 misnested so often that the parser would copy more than 250,000 elements
-and attributes. No ordinary page comes close. Both output checks (`security_csp` and
-`security_javascript`) report such a page as one they could not read:
-the `"warn"` modes warn and still return the page, and the other modes
-raise `ValueError`. In an interactive component, `Markup` HTML or a
-`<c-raw>` block over a limit raises `ValueError`. You cannot change these
-limits. If a page spreads a dict onto an element with `c-bind`, limit how
-many keys the dict can hold when its keys come from request data.
+and attributes. No ordinary page comes close.
+
+Citry's output checks also stop at a fixed amount of work for one page,
+because they may read a page several times (see
+[Pages read several ways](#pages-read-several-ways)). They refuse a page
+that keeps hundreds of elements open across much of it and also holds
+markup that browsers read in more than one way. The message says "HTML
+would take too long to check". Close elements sooner or nest them less
+deeply.
+
+Both output checks (`security_csp` and `security_javascript`) report a
+page over any of these limits, or over the work limit, as one they could
+not read. `"forbid"` and the CSP check's `"strict"` raise `ValueError`.
+The other modes warn and still return the page.
+
+The exception is the JavaScript check's `"omit"` mode. It marks each
+element that has an event or poll binding, so it can remove the binding
+later. If it cannot read the page, it cannot remove those marks, so it
+raises `ValueError` instead of returning a page that still holds them.
+
+In an interactive component, `Markup` HTML or a `<c-raw>` block over one
+of the size limits raises `ValueError`. The work limit applies only to the
+output checks. You cannot change these limits.
+
+If a page spreads a dict onto an element with `c-bind`, limit how many
+keys the dict can hold when its keys come from request data.
 
 You can pass `security_csp` to `serialize()` to override the mode for one
 render. Any other value raises `ValueError`, both in `Citry(...)` and in
@@ -1258,11 +1277,186 @@ browser runs the scripts of an SVG or other XML document. A data URL of
 plain text, CSS, CSV, JSON, an image, audio, video, a font, a PDF, or
 `application/octet-stream` does not count. An HTML data URL counts when
 it has a script or when Citry cannot read it, such as invalid base64 or
-UTF-16. A download link (`<a download>`) counts too, so give a file you
+any text outside plain ASCII, because a browser can read that text in
+another encoding. Write such text in the document as a percent-encoded
+reference, such as `%26%23233;` for `é`. A raw `#` would end the document.
+A download link (`<a download>`) counts too, so give a file you
 offer for download one of those types, such as
 `application/octet-stream`, or serve it from a URL. It checks dependencies
 and HTML after extensions have changed them. An `Events` method that no
 template calls does not count.
+
+A `<script>` whose `type` holds a control or non-ASCII character, other
+than ordinary whitespace, counts as executable, because browsers differ in
+which such characters they skip.
+
+Citry reads the page as text, but a browser reads it in the encoding the
+response or a `<meta charset>` names. Citry also reports text that would
+change the page's tags in another encoding: the ESC control character
+(U+001B) followed by `$` or `(`, which ISO-2022-JP, a Japanese encoding,
+uses to switch modes, non-ASCII text in a `<![CDATA[` section, and a `<`
+followed by a NUL byte, which spells a tag when a response names
+UTF-16.
+
+Citry writes the ESC character in an escaped value as `&#27;`, so a report
+like this points to text Citry does not escape: `Markup`, `<c-raw>`, the
+inline content of a `Script` or `Style`, and your template's own text. That
+includes a value you pass to `Markup.format()`, `%`, `+` or `join`, which
+call MarkupSafe's own escaping and leave ESC in place. A value can still fail
+`"forbid"` for another reason, such as a URL or script type that the check
+counts as code. Citry applies the same rule to the text inside an
+`iframe srcdoc`, after decoding the attribute, so an escaped value bound to
+`srcdoc` that holds `ESC $`, `ESC (`, non-ASCII text in a `<![CDATA[`
+section, or a `<` followed by a NUL byte counts as running code and
+fails `"forbid"`, even with no script in it.
+Remove such text from raw HTML, and write CDATA text as ordinary escaped
+text instead. `"warn"` and `"omit"` keep this text in the page and warn.
+
+Send every page with `Content-Type: text/html; charset=utf-8`, so the
+browser reads the page the way Citry does. Citry's Django, ASGI and WSGI
+adapters add this when a Citry route returns a text response whose body is
+a string. A view of your own must set this header itself.
+
+### Pages read several ways { #pages-read-several-ways }
+
+Browsers also differ from each other on a few parsing rules, and a page
+can hide a script behind that difference. Current browsers keep tags such
+as `<style>` and `<svg>` inside a `<select>`, and older browsers drop them,
+so the same bytes can be a running script in one browser and a comment in
+another. Firefox and Chromium also each handle a few misplaced end tags in
+SVG in their own way. For these, Citry's check reads the page once for
+each way browsers read it, and reports what any of those readings finds.
+Each such pass over the page is a reading. An ordinary `<select>` reads
+the same every way, so this changes nothing for it, even with images or
+icons in its options.
+
+The same HTML can also build a different page depending on where the
+browser puts it. Citry's check covers three places:
+
+- a whole document, which is how a browser loads your page;
+- HTML put into the body of a page that is already open (the host page),
+  by setting `innerHTML` on an ordinary element there, such as a `<div>`.
+  Your own script or a library can do this, for example to show a Vue
+  fragment response;
+- HTML built by setting `innerHTML` on a `<template>` element, which is
+  how Citry's browser runtime (through Vue) builds an HTML block. Your own
+  script can do the same.
+
+A Vue `v-html` binding, which sets `innerHTML`, already counts as needing
+JavaScript.
+
+Citry's check does not cover HTML that your own script inserts with
+`innerHTML` into an element with special parsing rules, such as `<svg>`,
+`<math>`, `<table>` and its parts (`<tbody>`, `<tr>`, `<td>`),
+`<select>` or `<form>`. A browser reads the HTML by that element's own
+rules, the check does not follow them, and so it cannot report code in
+such HTML. To insert a fragment into one of these, set it on a
+`<template>` element first, which builds it the way Citry's check reads
+it, then move the template's contents into place:
+
+```javascript
+// html: the HTML string to insert
+// tbody: the element to insert it into
+const template = document.createElement("template");
+template.innerHTML = html;
+tbody.append(template.content);
+```
+
+To add shapes to an `<svg>` or `<math>` element, wrap the HTML in an
+outer `<svg>` or `<math>` tag first, because a template reads a bare
+`<circle>` as an ordinary HTML element. Then move the wrapper's
+children: `svg.append(...template.content.firstChild.childNodes)`.
+
+In the host page's body, a `<frameset>` builds nothing, so the markup after
+it is read as ordinary HTML. The host page's doctype, not yours, also
+decides whether the browser uses quirks mode (an older way of reading HTML
+that some doctypes, or no doctype, switch on, as opposed to standards
+mode). In quirks mode a `<table>`
+inside an open `<p>` leaves the `<p>` open, which can change where later
+elements end. So Citry's check also reads a page that holds a `<frameset>`
+or a `<table>` inside an open `<p>` as markup in the host page's body, in
+both quirks and standards mode, and reports what any reading finds.
+
+An `iframe srcdoc` document gets the same two readings of its mode:
+Chromium picks the mode from the document's doctype, with no doctype
+meaning quirks mode, and Firefox always reads it in standards mode.
+
+In an interactive component, Vue inserts some HTML, such as `Markup` or a
+`<c-raw>` block, as one opaque HTML block: a piece of HTML that Vue does
+not read itself. Vue builds that block in the browser inside a
+`<template>`. Chromium reads the HTML inside a `<noscript>` there as real
+elements, which load and run once Vue moves them into the page. So
+Citry's check also reads a page with tags inside a `<noscript>` that way,
+and reports a handler or script there. Remove the handler or script from
+the `<noscript>`.
+
+If a reading reports a script or handler that you wrote on purpose, move
+it into `Component.js`, or into structured
+[`Dependencies`][citry.Component.Dependencies], instead of writing it in
+HTML that Citry does not escape.
+
+For a few other kinds of markup, the parser behind Citry's check builds a
+different page from the one browsers build, and the check does not try to
+rebuild the browser's page. `"forbid"` raises `ValueError` instead, and
+`"warn"` and `"omit"` warn. Each message gives the byte range of the tag
+in the page, such as `settled HTML bytes 10:15`, then says "Citry cannot
+tell what the page runs" and names what to change. Pages rarely need such
+markup, and most of it is a mistake:
+
+- a MathML `<annotation-xml>` whose `encoding` is `text/html` or
+  `application/xhtml+xml`. This is valid MathML, but it makes the element
+  hold HTML, which browsers read differently from Citry's check. Remove
+  the element or give it another encoding;
+- a `</select>` or `</form>` end tag inside an open `<annotation-xml>`.
+  Close the `<annotation-xml>` first;
+- an `<svg>` or `<math>` that starts while a formatting element was closed
+  by the end of the element around it, as in `<p><b>Bold</p><svg>`.
+  Browsers open a new `<b>` around the `<svg>`. Close the `<b>` before the
+  `</p>`, or put text between the `</p>` and the `<svg>`;
+- a misplaced formatting end tag such as `</b>` inside an SVG `<title>`,
+  `<desc>` or `<foreignObject>`, or inside a MathML `<mi>`, `<mo>`, `<mn>`,
+  `<ms>`, `<mtext>` or `<annotation-xml>`. Close the formatting element
+  before the element around it ends;
+- an end tag inside an SVG or MathML element that holds HTML (such as
+  `<desc>` or `<mi>`) or inside a `<search>` element, after the page
+  opened four or more copies of one formatting element with the same
+  attributes, as in `<svg><desc><b><b><b><b>x</b></b></b></b>`. Citry's
+  check cannot then tell which formatting elements are still open. Use
+  fewer copies, or give each copy different attributes;
+- an end tag, or a `<li>`, `<dd>` or `<dt>` start tag, that reaches past an
+  open `<search>` to close an element outside it. Chromium closes that
+  element and Firefox does not. Close the `<search>` first;
+- an `<isindex>`. Remove it;
+- a formatting element that is open across the start or end of a
+  `<select>`, or one that an earlier end tag closed while a `<select>`
+  starts, and an `<input>` that closes such a `<select>`. Close formatting
+  elements before the `<select>` starts, and close the ones opened inside
+  it before it ends;
+- an `<option>`, `<optgroup>` or `<hr>` that closes a `<p>`, `<li>`,
+  `<dd>` or the like inside a `<select>`. Close that element first;
+- a `<thead>` in a `<template>` with no `<table>` around it, followed by
+  another table part or by `</table>`. Put table parts inside a `<table>`;
+- a `<table>` that starts inside an open `<p>` on a page whose doctype
+  makes a browser use quirks mode where Citry's check does not. Chromium
+  and Firefox both do this for a doctype whose public identifier (the first
+  quoted text after `PUBLIC`) starts with
+  `+//Silmaril//dtd html Pro v0r11 19970101//`. Chromium also does it for
+  an HTML 4.01 Frameset or Transitional public identifier with an empty
+  system identifier (the second quoted text), as in
+  `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "">`.
+  Close the `<p>` first, or use `<!DOCTYPE html>`.
+
+A formatting element, in this list, is one of the tags `<a>`, `<b>`,
+`<big>`, `<code>`, `<em>`, `<font>`, `<i>`, `<nobr>`, `<s>`, `<small>`,
+`<strike>`, `<strong>`, `<tt>` and `<u>`, which a browser opens again at
+the next tag or text after an end tag closed it early.
+
+These cases apply to HTML Citry does not escape, such as `Markup`. In an
+`iframe srcdoc` or a `data:` document, such markup counts as running code.
+They belong to `security_javascript`; `security_csp` does not report
+them. Citry's check does not run the page in a browser, so it covers only
+the differences found so far. A difference not yet found, or a parsing
+change in a later browser version, can still hide a script.
 
 ### What `"omit"` leaves
 

@@ -1067,8 +1067,12 @@ an attribute, when it renders the page. Vue bindings such as `:href` and
 It skips attributes on component tags, including a capitalized tag such
 as `<Card>` that may be a Vue component. It also skips the content of
 `<noscript>`, `<iframe>`, `<xmp>`, `<noembed>`, `<noframes>`, and
-`<plaintext>`, which the browser reads as text, and markup inside an SVG
-`<title>` or `<style>`, which Citry's template parser reads as text.
+`<plaintext>`, which a browser reads as text (a browser with scripting on
+does so for `<noscript>`), and markup inside an SVG `<title>` or
+`<style>`, which Citry's template parser reads as text. The check that
+`security_csp` runs when Citry renders the page still reports an event
+handler inside a `<noscript>`, because Chromium builds those tags as real
+elements inside a Vue block. Remove the handler from the `<noscript>`.
 
 The rule follows your app's `security_csp` setting, so it has no `rule_*`
 setting, and a component's `Lint` class cannot change it. It reports

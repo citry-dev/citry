@@ -145,7 +145,7 @@ class _CspRenderValidator:
         self._add_raw_tag(tag, component, instance, name_start, name_end)
 
     def _replay_attribute(self, event: _output_policy.OutputEvent, component_classes: dict[str, str]) -> None:
-        rule, tag, attribute, start, end, _, cids = event
+        rule, tag, attribute, start, end, _, cids, _ = event
         instance = _output_policy.own_instance(cids, component_classes)
         component = component_classes.get(instance or "", "settled render output")
         name = (attribute or "").translate(_ASCII_LOWER)

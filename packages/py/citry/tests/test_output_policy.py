@@ -317,6 +317,19 @@ def test_an_internal_error_in_the_output_check_reports_the_page_as_unreadable(
     assert "kept</p>" in html
 
 
+def test_a_page_over_the_work_budget_gets_the_message_the_security_docs_quote() -> None:
+    # The security page quotes the start of this message, so a rewording
+    # here has to reach the page too.
+    deep = "".join(f"<b id={index}>" for index in range(450))
+    # Every kind of markup that makes the check read the page again, so
+    # the deep page costs the whole budget.
+    triggers = "<select></select><!-- <frameset <noscript --><svg><title></p></title></svg><p><table></table><tr>"
+    page = f"{triggers}{deep}{'<img>' * 6_000}"
+    check = _output_policy.check_output_html(page, javascript="forbid")
+    assert check.error is not None
+    assert str(check.error).startswith("citry output check failed: HTML would take too long to check")
+
+
 def test_a_caller_error_is_raised_not_reported_as_an_unreadable_page() -> None:
     with pytest.raises(ValueError, match="unknown security_javascript mode"):
         _output_policy.check_output_html("<p>x</p>", javascript="sometimes")  # type: ignore[arg-type]

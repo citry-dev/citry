@@ -1,5 +1,64 @@
 # Release notes
 
+## v1.9.1
+
+### Fixed
+
+- The JavaScript output check now counts a `<script>` as running when,
+  after ASCII whitespace is trimmed, its `type` still holds a character
+  other than printable ASCII or ASCII whitespace, such as U+000B or
+  U+3000. Chromium skips some of these characters and runs the script.
+  The check also finds a `data:` URL in a `<meta http-equiv="refresh">`
+  that has such a character around its delay or before its URL.
+- The JavaScript output check now counts an HTML `data:` document as
+  running code when it holds anything outside plain ASCII, because a
+  browser can read such text in another encoding.
+- The JavaScript output check now reports text that changes a page's tags
+  when a browser reads the page in another encoding, under the new rule
+  `js-page-encoding`. That covers the escape bytes `ESC $` and `ESC (`,
+  non-ASCII text in a `<![CDATA[` section, and a `<` followed by a NUL
+  byte, which spells a tag when a response names UTF-16.
+- The output checks now find more scripts and event handlers that a
+  browser's parser sees and html5ever does not. Where browsers can read a
+  page in more than one way, the checks now read it each way and report
+  what any reading finds. They now read a page each of these ways:
+    - `<select>` both as current browsers do, keeping tags such as
+      `<style>` and `<svg>` inside it, and as older browsers do;
+    - misplaced end tags around SVG and MathML the way Firefox and Chromium
+      each do;
+    - an `iframe srcdoc` document in both quirks and standards mode, as
+      Chromium and Firefox differ there;
+    - a page with a `<frameset>` or a `<table>` inside an open `<p>` as
+      markup inside another page's body, where an app's own `innerHTML` on
+      an ordinary element such as a `<div>` can put it, in both modes;
+    - a page with tags inside a `<noscript>` as the contents of a
+      `<template>`, with those tags read as markup. Vue builds HTML that it
+      inserts as one block, such as `Markup`, this way, and Chromium then
+      builds the tags.
+
+    An SVG or MathML element that holds HTML now also stops an end tag from
+    closing what is around it, as in every browser. A page that passed the
+    check before can now be reported because of one of these readings. The
+    checks do not read HTML that a script inserts with `innerHTML` into an
+    element with special parsing rules, such as `<svg>`, `<math>`,
+    `<table>` and its parts, `<select>` or `<form>`.
+
+- The JavaScript output check now reports, under the new rule
+  `js-parser-difference`, a tag where browsers build a different tree from
+  the one the HTML parser Citry uses (html5ever) builds, such as an `<svg>`
+  or `<math>` right after a formatting element that an outer end tag
+  closed, as in `<p><b>Bold</p><svg>`. A `srcdoc` or `data:` document with
+  such a tag counts as running code. A page that passed the check before
+  can now be reported.
+- The output checks now refuse a page that would take too long to read
+  every way: one that keeps hundreds of elements open across much of it
+  while it also holds markup that browsers read in several ways.
+- The output checks now keep a numeric reference to a character the browser
+  keeps, such as `&#27;`, in an attribute value, as the browser does.
+- The Vue server renderer now writes the ESC character in text and
+  attribute values as `&#27;`. On a page read as ISO-2022-JP, a raw ESC
+  could change how the browser read the HTML after it.
+
 ## v1.9.0
 
 ### Changed

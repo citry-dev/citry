@@ -272,11 +272,23 @@ def test_check_output_html_returns_only_what_the_rules_report() -> None:
         omit_handler_marker="data-m",
     )
     assert events == [
-        ("csp-native-event", "p", "onclick", 15, 22, 0, ("a1",)),
-        ("js-native-handler", "p", "onclick", 15, 22, 0, ("a1",)),
+        ("csp-native-event", "p", "onclick", 15, 22, 0, ("a1",), None),
+        ("js-native-handler", "p", "onclick", 15, 22, 0, ("a1",), None),
         ("element", "script", 35, 36, 42, 71, False, True, False, ()),
     ]
     assert cleaned == '<p data-cid-a1 onclick="go()">x</p><script type="module">run()</script><b>y</b>'
+    # A tag where browsers may build a different tree has no attribute, and
+    # the last field names which difference was found there.
+    events, _cleaned = _check_output_html(
+        "<p><b></p><svg></svg>",
+        pre_extension=False,
+        csp=False,
+        javascript="warn",
+        marker_prefix=None,
+        trusted_tag_starts=frozenset(),
+        omit_handler_marker=None,
+    )
+    assert events == [("js-parser-difference", "svg", None, 10, 15, 10, (), "reopened-formatting")]
     with pytest.raises(ValueError, match="unknown security_javascript mode"):
         _check_output_html(
             "",

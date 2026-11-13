@@ -35,8 +35,10 @@ DIFFERENTIAL_ENVIRONMENT_VARIABLE = "CITRY_OUTPUT_POLICY_DIFFERENTIAL"
 
 # Each event is a tuple, in the order the start tags appear. One reported
 # attribute or element is
-#     (rule, tag, attribute, start, end, token_start, cids)
-# and one script or style element is
+#     (rule, tag, attribute, start, end, token_start, cids, case)
+# where case is None except for `js-parser-difference`, where it names
+# which difference was found, such as `reopened-formatting`. One script or
+# style element is
 #     ("element", tag, token_start, name_start, name_end, element_end,
 #      trusted, executable, has_manager_attribute, cids)
 # where cids are the element's own `data-cid-*` suffixes in attribute order,

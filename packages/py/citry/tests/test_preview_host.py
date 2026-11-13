@@ -88,6 +88,15 @@ def test_request_translation_head_methods_and_unknown_paths():
     assert _request(app, "/citry/ext/preview/missing", method="HEAD")[::2] == (404, b"")
 
 
+def test_a_text_response_names_its_charset():
+    # A page sent with no charset leaves the browser to take the encoding from
+    # the page itself, and a `<meta charset>` can then change how it reads.
+    routes = (URLRoute("page", handler=lambda _request: RouteResponse("<p>x</p>", content_type="text/html")),)
+    app = preview_app(Citry(), routes)
+    assert _request(app, "/citry/ext/preview/page")[1][b"content-type"] == b"text/html; charset=utf-8"
+    assert _request(app, "/citry/ext/preview/missing")[1][b"content-type"] == b"text/plain; charset=utf-8"
+
+
 def test_every_response_carries_nosniff_once():
     routes = (URLRoute("catalog", handler=lambda _request: RouteResponse("catalog", content_type="application/json")),)
     app = preview_app(Citry(), routes)

@@ -31,8 +31,11 @@ from citry._output_html import scan_output_html
 from ._output_policy_reference import (
     ReferenceCspValidator,
     ReferenceJavascriptPolicy,
+    noscript_rule_changes_tags,
     outcomes_match,
     reference_server_copy_passes_csp,
+    rust_only_adds_findings,
+    select_rule_changes_tags,
 )
 
 if TYPE_CHECKING:
@@ -57,6 +60,17 @@ _SCRIPT_TYPES = [
     None, "", "module", "Module ;x", "module;x", " text/javascript ", "TEXT/JavaScript", "application/json",
     "importmap", "speculationrules", "speculationrules;x", "text/plain", "text/javascript;charset=utf-8",
     "text/livescript", "\ttext/x-javascript\n", "&#116;ext/javascript", "&#x6D;odule",
+    # Chromium drops U+000B and some Unicode spaces from the ends of a type.
+    "\x0btext/javascript", "&#11;text/javascript", "text/javascript\u3000", "&#x2028;module",
+    "\u00a0application/json", "text/plain&#x205f;",
+]  # fmt: skip
+# Text whose tags depend on the encoding the browser picks, and near misses
+# that do not.
+_ENCODING_TEXT = [
+    "<p title='\x1b$B'>x</p>", "<p>\x1b$@</p>", "<p>\x1b(I</p>", "<p>\x1b(B</p>", "<p>\x1b(J</p>",
+    "<svg><![CDATA[\u3041]]></svg>", "<svg><![CDATA[a]]><![CDATA[\xe9]]></svg>", "<svg><![CDATA[\xe9",
+    "<pre>\x1b[0m\x1b</pre>", "<svg><![CDATA[a]]></svg>", "<p>[caf\xe9]]></p>",
+    "<p>a<\0b</p>", "<\0s\0v\0g\0>\0", "\0<\0s\0v\0g\0>", "<p>\0</p>", "<p title='\0'>x</p>",
 ]  # fmt: skip
 _ACTIVATION = [
     "v-if", "v-for", "v-show", "v-text", "v-html", "v-show.x", ":hidden", "v-bind:hidden", ":href",
@@ -177,6 +191,8 @@ def _document(rng: random.Random, depth: int) -> str:
         pieces.append("<title><script>inert()</script></title>")
     elif roll < 0.9:
         pieces.append(_animation(rng))
+    if rng.random() < 0.1:
+        pieces.append(rng.choice(_ENCODING_TEXT))
     return "".join(pieces)
 
 
@@ -233,14 +249,28 @@ def _data_url(rng: random.Random, document: str) -> str:
     if roll < 0.5:
         return f"{header}{rng.choice(['', ';base64'])}"
     if roll < 0.6:
-        # Bytes that are not valid UTF-8 decode to U+FFFD, also inside a
-        # tag name, where dropping them instead would make a <script>. A
-        # zero byte or an escape byte marks an encoding the check does not
-        # read.
-        broken = rng.choice(["%ff", "%fe", "%C3%28", "%ed%a0%80", "%F0%9F%98", "%c0%af", "%e2%82", "%00", "%1b(B"])
-        # Those two bytes matter only in an HTML document, so they get an
-        # HTML header half the time.
-        if broken in {"%00", "%1b(B"} and rng.random() < 0.5:
+        # Bytes outside plain ASCII, and the four ASCII bytes an encoding
+        # changes, mark a document the check does not read. `%81%40` is
+        # U+3000 in Shift_JIS.
+        broken = rng.choice(
+            [
+                "%ff",
+                "%C3%28",
+                "%ed%a0%80",
+                "%F0%9F%98",
+                "%c0%af",
+                "%e2%82",
+                "%00",
+                "%1b(B",
+                "%81%40",
+                "%0e",
+                "%0f",
+                "%C3%A9",
+            ]
+        )
+        # These bytes matter only in an HTML document, so they get an HTML
+        # header half the time.
+        if rng.random() < 0.5:
             header = "data:text/html"
         return f"{header},%3Cp%3E{broken}%3C/p%3E%3Cscr{broken}ipt%3Ex()%3C/script%3E{quote(document)}"
     return f"{header},{quote(document, safe=rng.choice(['', '<>/= ']))}%%41%4%zz"
@@ -271,6 +301,9 @@ def _value(rng: random.Random, name: str, tag: str) -> str:
         # `data:` URL or a plain one.
         lead = rng.choice([
             "0;url=", "0; URL='", "1, ", "0;url=da\tta:", "", " .5 ; url = ", "0;url=https://x/?next=", "0 url",
+            # Chromium skips U+000B and some Unicode spaces around the delay
+            # and before the URL.
+            "0\x0b;url=", "\u3000 0;url=", "0;url=\u2028", "0; url='\u205f", "0&#x1680;;url=", "0;&#11;url=",
         ])  # fmt: skip
         target = _data_url(rng, _document(rng, 0)) if roll < 0.7 else "/next"
         return lead + (target.removeprefix("data:") if lead.endswith("da\tta:") else target)
@@ -390,6 +423,8 @@ def _piece(rng: random.Random, depth: int, marker: bool) -> str:
         return "<!DOCTYPE html>"
     if roll < 0.9:
         return _animation(rng)
+    if roll < 0.95:
+        return rng.choice(_ENCODING_TEXT)
     return rng.choice(["<br>", "<img src=x onerror=y>", "<svg><script/></svg>", "<svg><style>s</style></svg>"])
 
 
@@ -614,11 +649,27 @@ def _differences(
 ) -> list[tuple[object, ...]]:
     # The copy reads tags as a flat list, so the comparison allows the two
     # differences that reading the browser's tree makes (see
-    # `outcomes_match`), and nothing else.
+    # `outcomes_match`). Rust also reads a page under rules the copy lacks,
+    # so it may report more findings, and fewer only after a tag it reports
+    # as a parser difference (see `rust_only_adds_findings`).
     differences = []
+    # The copy cannot read a page the way a browser that keeps what sits
+    # inside `<select>` reads it. Rust removes an omit marker that only that
+    # reading finds, and the copy fails on it, so a page with a marker that
+    # this choice changes is left out.
+    pages = [page for page in (settled, pre_extension) if page]
+    if any(MARKER in page and select_rule_changes_tags(page) for page in pages):
+        return differences
+    # Rust also reads `<noscript>` contents as markup, as Chromium does
+    # inside a `<template>`, and can find whole tags there that the copy
+    # never sees, so a page that choice changes is left out.
+    if any(noscript_rule_changes_tags(page) for page in pages):
+        return differences
     for result in results:
         *label, real, copy = result
-        if not outcomes_match(real, copy, settled, pre_extension, component_classes):
+        if not outcomes_match(real, copy, settled, pre_extension, component_classes) and not rust_only_adds_findings(
+            real, copy, settled, pre_extension, component_classes
+        ):
             differences.append((*label, real, copy))
     return differences
 
