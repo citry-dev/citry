@@ -516,6 +516,104 @@ pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAna
     }
 }
 
+/// Whether a template may not bind `name` as a browser-side name.
+///
+/// Citry gives a component's Vue template, and every fill's slot function,
+/// names of its own, such as `$i18n`, `$citryPrepared`, and `citrySlotKey`.
+/// A `v-slot` or `v-for` name with the same prefix would hide one of them, and
+/// the template would read the wrong value without an error. Every check
+/// that rejects such a name calls this one function, so they agree on the
+/// prefixes.
+pub(crate) fn is_reserved_browser_name(name: &str) -> bool {
+    name.starts_with(['$', '_']) || name.starts_with("citry")
+}
+
+/// A name to suggest in place of a reserved one: the same name without the
+/// reserved prefix, or `item` when nothing is left.
+pub(crate) fn unreserved_name_suggestion(name: &str) -> String {
+    let mut rest = name;
+    // `citry` can follow `$` or `_` (as in `$citryPrepared`), so strip the
+    // prefixes until none is left.
+    loop {
+        if let Some(stripped) = rest.strip_prefix(['$', '_']) {
+            rest = stripped;
+        } else if let Some(stripped) = rest.strip_prefix("citry") {
+            rest = stripped;
+        } else {
+            break;
+        }
+    }
+    let mut chars = rest.chars();
+    match chars.next() {
+        // `citrySlotKey` reads best as `slotKey`, so the first letter goes
+        // back to lowercase once the prefix is gone.
+        Some(first) if first.is_alphabetic() => first.to_lowercase().chain(chars).collect(),
+        // A leftover such as `1` is not a JavaScript name on its own.
+        _ => "item".to_string(),
+    }
+}
+
+/// The names an element's `v-for="..."` value binds: the item, key, and
+/// index names, including the names inside a destructuring pattern.
+///
+/// Vue splits the value at its first ` in ` or ` of ` (whitespace on both
+/// sides), drops one `(` at the start and one `)` at the end of the left
+/// part, and reads what is left as a list of up to three names or patterns.
+/// That list has the same shape as an arrow function's parameters, so it is
+/// parsed the same way as a slot pattern. An empty list is returned for a
+/// value Vue could not read either; the template's other checks or Vue's own
+/// compiler report that value.
+pub(crate) fn v_for_alias_bindings(value: &str) -> Vec<BrowserReference> {
+    let Some(left) = v_for_left_side(value) else {
+        return Vec::new();
+    };
+    let trimmed = left.trim();
+    let inner = trimmed.strip_prefix('(').unwrap_or(trimmed);
+    let inner = inner.strip_suffix(')').unwrap_or(inner).trim();
+    if inner.is_empty() {
+        return Vec::new();
+    }
+    let analysis = analyze_browser_binding_pattern(inner);
+    if analysis.valid {
+        analysis.bindings
+    } else {
+        Vec::new()
+    }
+}
+
+/// The part of a `v-for` value before Vue's ` in ` or ` of ` separator.
+///
+/// This follows Vue's `forAliasRE` (`/([\s\S]*?)\s+(?:in|of)\s+(\S[\s\S]*)/`):
+/// the earliest whitespace run followed by `in` or `of`, more whitespace, and
+/// at least one more character wins, even inside brackets, so the names read
+/// here are the names Vue binds.
+fn v_for_left_side(value: &str) -> Option<&str> {
+    let skip_space = |from: usize| {
+        value[from..]
+            .char_indices()
+            .find(|(_, c)| !c.is_whitespace())
+            .map_or(value.len(), |(offset, _)| from + offset)
+    };
+    for (start, c) in value.char_indices() {
+        if !c.is_whitespace() {
+            continue;
+        }
+        let keyword = skip_space(start);
+        let rest = &value[keyword..];
+        if !(rest.starts_with("in") || rest.starts_with("of")) {
+            continue;
+        }
+        let after = keyword + 2;
+        if !value[after..].starts_with(char::is_whitespace) {
+            continue;
+        }
+        if skip_space(after) < value.len() {
+            return Some(&value[..start]);
+        }
+    }
+    None
+}
+
 /// One name destructured from the `$component` initializer context.
 ///
 /// `name` is the context field, one of `COMPONENT_CONTEXT_NAMES`;
@@ -2407,6 +2505,39 @@ impl<'a> Visit<'a> for InstanceMemberVisitor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn v_for_alias_bindings_follow_vues_split() {
+        let names = |value: &str| {
+            v_for_alias_bindings(value)
+                .into_iter()
+                .map(|binding| binding.name)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names("item in items"), ["item"]);
+        assert_eq!(names("( row ,\ti )\tof rows"), ["row", "i"]);
+        assert_eq!(names("({ a, b: [c] }, k, i) in obj"), ["a", "c", "k", "i"]);
+        // `index` and `items` hold `in` but are not the separator.
+        assert_eq!(names("index in items"), ["index"]);
+        // Without whitespace and a value after `in`, Vue reads no alias.
+        assert!(names("item in ").is_empty());
+        assert!(names("item").is_empty());
+        // Vue drops a lone `(` too, so it still binds `a`.
+        assert_eq!(names("(a in b"), ["a"]);
+    }
+
+    #[test]
+    fn unreserved_name_suggestion_drops_every_reserved_prefix() {
+        assert_eq!(unreserved_name_suggestion("$i18n"), "i18n");
+        assert_eq!(unreserved_name_suggestion("$citryPrepared"), "prepared");
+        assert_eq!(unreserved_name_suggestion("citrySlotKey"), "slotKey");
+        assert_eq!(unreserved_name_suggestion("__row"), "row");
+        assert_eq!(unreserved_name_suggestion("_"), "item");
+        assert_eq!(unreserved_name_suggestion("_1"), "item");
+        assert!(!is_reserved_browser_name(&unreserved_name_suggestion(
+            "_citry_x"
+        )));
+    }
 
     #[test]
     fn expression_analysis_reports_only_free_identifiers() {

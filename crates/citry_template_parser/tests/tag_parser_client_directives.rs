@@ -1133,6 +1133,110 @@ mod tests {
     }
 
     #[test]
+    fn v_for_aliases_with_a_reserved_prefix_are_rejected() {
+        assert_parse_error(
+            r#"<li v-for="$i18n in items">x</li>"#,
+            "'v-for' on <li> (line 1, column 5) binds the reserved name '$i18n': names that start with '$', '_', or 'citry' belong to the values Citry gives the template, such as '$i18n', and inside the loop '$i18n' would hide one of them. Rename it, for example to 'i18n'.",
+        );
+        // The item, key and index names, the names inside a destructuring
+        // pattern, the `of` form, and an element inside `<c-element>`.
+        for (input, name, suggestion) in [
+            (
+                r#"<li v-for="citrySlotKey in keys">x</li>"#,
+                "citrySlotKey",
+                "slotKey",
+            ),
+            (r#"<li v-for="(row, _i) in rows">x</li>"#, "_i", "i"),
+            (r#"<li v-for="(_, index) in rows">x</li>"#, "_", "item"),
+            (
+                r#"<li v-for="(v, k, $index) of obj">x</li>"#,
+                "$index",
+                "index",
+            ),
+            (
+                r#"<li v-for="{ $citryPrepared } in rows">x</li>"#,
+                "$citryPrepared",
+                "prepared",
+            ),
+            (
+                r#"<li v-for="({ id, label: _l }, i) in rows">x</li>"#,
+                "_l",
+                "l",
+            ),
+            (r#"<li v-for="[a, [citryB]] in rows">x</li>"#, "citryB", "b"),
+            (
+                r#"<template v-for="_row in rows"><b>x</b></template>"#,
+                "_row",
+                "row",
+            ),
+            (
+                r#"<c-element c-is="tag"><li v-for="$t in items">x</li></c-element>"#,
+                "$t",
+                "t",
+            ),
+            (
+                r#"<c-element c-is="tag" v-for="$x in items">x</c-element>"#,
+                "$x",
+                "x",
+            ),
+        ] {
+            assert_parse_error(
+                input,
+                &format!(
+                    "binds the reserved name '{name}': names that start with '$', '_', or 'citry' belong to the values Citry gives the template, such as '$i18n', and inside the loop '{name}' would hide one of them. Rename it, for example to '{suggestion}'."
+                ),
+            );
+        }
+    }
+
+    #[test]
+    fn element_slot_patterns_with_a_reserved_prefix_are_rejected() {
+        // A Vue component or `<template>` slot pattern binds browser names
+        // the same way a `<c-fill v-slot>` pattern does.
+        for (input, attribute, name) in [
+            (
+                r#"<my-list v-slot="{ $i18n }">x</my-list>"#,
+                "v-slot",
+                "$i18n",
+            ),
+            (
+                r##"<my-list><template #item="{ row: _row }">x</template></my-list>"##,
+                "#item",
+                "_row",
+            ),
+            (
+                r#"<my-list><template v-slot:item="citryProps">x</template></my-list>"#,
+                "v-slot:item",
+                "citryProps",
+            ),
+        ] {
+            assert_parse_error(input, &format!("'{attribute}' on <"));
+            assert_parse_error(input, &format!("binds the reserved name '{name}'"));
+            assert_parse_error(input, "inside the slot");
+        }
+    }
+
+    #[test]
+    fn v_for_and_slot_names_without_a_reserved_prefix_still_parse() {
+        for input in [
+            r#"<li v-for="item in items">x</li>"#,
+            r#"<li v-for="(item, index) in items">x</li>"#,
+            r#"<li v-for="({ id, label }, key, index) of obj">x</li>"#,
+            // A reserved name in the iterated value is read, not bound.
+            r#"<li v-for="row in $citryPrepared.rows">x</li>"#,
+            r#"<li v-for="i in 5">x</li>"#,
+            // A name that only contains a reserved prefix is fine.
+            r#"<li v-for="my_citry in items">x</li>"#,
+            r##"<my-list><template #item="{ row }">x</template></my-list>"##,
+            // Vue binds no names inside `v-pre`, so nothing is hidden.
+            r#"<div v-pre><li v-for="$i18n in items">x</li></div>"#,
+        ] {
+            parse_template(input, None, None)
+                .unwrap_or_else(|error| panic!("{input} should parse: {error}"));
+        }
+    }
+
+    #[test]
     fn element_model_argument_and_v_is_are_rejected() {
         assert_parse_error(
             r#"<input v-model:title="q" />"#,

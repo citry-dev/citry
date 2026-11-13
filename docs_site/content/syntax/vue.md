@@ -91,6 +91,18 @@ for every directive and modifier.
     and `v-If` as a custom directive named `If`. Names that start with `v-c-`
     or `v-citry-` fail too, because Citry keeps them for its own use.
 
+### Loop and slot names { #reserved-browser-names }
+
+A `v-for` or `v-slot` creates names, such as `item` and `index` in
+`v-for="(item, index) in items"` or `row` in `#item="{ row }"`. These
+names, including the names inside a pattern such as `{ id, label }`,
+cannot start with `$`, `_`, or `citry`. Citry gives the template its
+own names with these prefixes, such as `$i18n`, and a loop or slot name
+would hide one of them, so the template would read the wrong value.
+The template fails when it loads, and the message suggests another
+name. For an index you do not use, write a plain name such as `index`
+rather than `_`.
+
 ## Extra listener modifiers { #listener-modifiers }
 
 Some listeners need to react to events outside their element, or should

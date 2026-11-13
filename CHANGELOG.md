@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- A name that a `v-for` or a Vue component's `v-slot` binds now fails
+  when the template loads if it starts with `$`, `_`, or `citry`, as in
+  `v-for="(_, index) in items"`. Such a name hid a value Citry gives the
+  template, such as `$i18n`. Rename it; the error suggests a name.
+
 ### Fixes
 
 - **Citry imports on Pyodide again:** Citry 0.8.0 failed to import on

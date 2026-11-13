@@ -2725,6 +2725,21 @@ def test_registry_check_keeps_parser_owned_mark_syntax_rejections(tmp_path: Path
     assert message_fragment in report.findings[0].message
 
 
+@pytest.mark.parametrize(
+    ("source", "alias"),
+    [
+        ('<ul><li v-for="$i18n in items">x</li></ul>', "$i18n"),
+        ('<ul><li v-for="({ citryKey }, _i) in items">x</li></ul>', "citryKey"),
+        ('<my-list v-slot="{ _row }">x</my-list>', "_row"),
+    ],
+)
+def test_registry_check_reports_browser_names_with_a_reserved_prefix(tmp_path: Path, source: str, alias: str):
+    report = _check_mark_template(tmp_path, source)
+
+    assert [finding.code for finding in report.findings] == ["citry.parse.syntax"]
+    assert f"binds the reserved name '{alias}'" in report.findings[0].message
+
+
 def test_registry_check_reports_leftover_alpine_attributes_with_component_severities(tmp_path):
     engine = Citry(autodiscover=False, lint=LintSettings(rule_alpine_cloak="warning"))
 
