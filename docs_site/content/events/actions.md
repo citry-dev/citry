@@ -267,15 +267,13 @@ or any other scheme raises `ValueError` when you create the action.
 A relative URL, such as `"?page=2"` or `"next"`, is relative to the page
 the visitor is on, with or without JavaScript. Without JavaScript, the
 server reads that page's address from the `Referer` header, which browsers
-send by default. Use a path that starts with `/` instead when your page:
-
-- sets a `Referrer-Policy` that stops the browser sending the full address.
-  With no `Referer`, the visitor lands next to the handler's URL, usually on
-  a "not found" page, and for a form that posts, the server logs a warning.
-  With only the site's address, the URL resolves against the home page,
-  with no warning.
-- sets `<base href>`, which changes what the browser resolves against but
-  not what it sends.
+send by default. A `<base href>` element on the page does not change
+where a relative URL leads. Use a path that starts with `/` instead when
+your page sets a `Referrer-Policy` that stops the browser sending the full
+address. With no `Referer`, the visitor lands next to the handler's URL,
+usually on a "not found" page, and for a form that posts, the server logs
+a warning. With only the site's address, the URL resolves against the
+home page, with no warning.
 
 !!! warning "Check a URL that comes from the request"
 

@@ -580,6 +580,36 @@ const basicHost = (resolve = () => contextFor()) => ({
   updateUrl() {},
 });
 
+// Run `body` as if the bridge were on a browser page. The bridge resolves an event URL against
+// `location.href`, compares it with `window.origin`, and falls back to `document.baseURI` only
+// for a document whose address cannot be a base. Node has none of these, so a test sets them.
+const onPage = async ({ href = "http://app.test/page/", origin, baseURI = href, cookie = "" } = {}, body) => {
+  const saved = ["location", "origin", "document"].map((name) => [
+    name,
+    Object.getOwnPropertyDescriptor(globalThis, name),
+  ]);
+  const address = new URL(href);
+  Object.defineProperty(globalThis, "location", {
+    value: { href, origin: address.origin },
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "origin", {
+    value: origin ?? address.origin,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "document", { value: { baseURI, cookie }, configurable: true, writable: true });
+  try {
+    return await body();
+  } finally {
+    for (const [name, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else delete globalThis[name];
+    }
+  }
+};
+
 test("Vue Events emits the complete lifecycle around a committed render", async () => {
   const source = { stableId: "board", generation: 1 };
   const lifecycle = [];
@@ -1171,14 +1201,16 @@ test("page configuration is read for each Vue Events bridge send", async () => {
     },
   });
   const source = { stableId: "board", generation: 1 };
-  await bridge.send({ source, handler: "move" });
-  configuration = { url: "/second/ext/events/", csrf: { token: "second" }, timeout: 2000 };
-  await bridge.send({ source, handler: "move" });
+  await onPage({}, async () => {
+    await bridge.send({ source, handler: "move" });
+    configuration = { url: "/second/ext/events/", csrf: { token: "second" }, timeout: 2000 };
+    await bridge.send({ source, handler: "move" });
+  });
   assert.deepEqual(
     requests.map((request) => [request.url, request.init.headers["X-CSRFToken"]]),
     [
-      ["/first/ext/events/call", "first"],
-      ["/second/ext/events/call", "second"],
+      ["http://app.test/first/ext/events/call", "first"],
+      ["http://app.test/second/ext/events/call", "second"],
     ],
   );
 });
@@ -1368,15 +1400,17 @@ test("custom transports receive the request context the fetch transport sends", 
       },
     });
   const source = { stableId: "board", generation: 1 };
-  await create({
-    send(envelope, request) {
-      sent.push(request);
-      // A transport may add its own headers without changing later calls.
-      request.headers["X-Bridge"] = "1";
-      return result(envelope);
-    },
-  }).send({ source, handler: "move" });
-  await create(null).send({ source, handler: "move" });
+  await onPage({}, async () => {
+    await create({
+      send(envelope, request) {
+        sent.push(request);
+        // A transport may add its own headers without changing later calls.
+        request.headers["X-Bridge"] = "1";
+        return result(envelope);
+      },
+    }).send({ source, handler: "move" });
+    await create(null).send({ source, handler: "move" });
+  });
 
   assert.equal(sent.length, 1);
   const [request] = sent;
@@ -1384,9 +1418,15 @@ test("custom transports receive the request context the fetch transport sends", 
   assert.equal(request.signal.aborted, false);
   const { "X-Bridge": added, ...forwarded } = request.headers;
   assert.equal(added, "1");
-  // Same URL, method and headers as the built-in fetch transport, including
-  // the Vue app, occurrence and revision headers the server needs for Render.
-  assert.deepEqual({ url: request.url, method: request.method, headers: forwarded }, fetched[0]);
+  // Same method and headers as the built-in fetch transport, including the Vue app, occurrence
+  // and revision headers the server needs for Render. The transport gets the URL as configured,
+  // and fetch gets it resolved against the page's address.
+  assert.deepEqual(
+    { method: request.method, headers: forwarded },
+    { method: fetched[0].method, headers: fetched[0].headers },
+  );
+  assert.equal(request.url, "/events");
+  assert.equal(fetched[0].url, "http://app.test/events");
   assert.equal(forwarded["X-Citry-Vue-App"], "app-1");
   assert.equal(forwarded["X-Citry-Vue-Occurrence"], "board");
   assert.equal(forwarded["X-Citry-Vue-Revision"], "0");
@@ -1554,8 +1594,8 @@ test("isolated PUT and DELETE use their declared methods and per-event routes", 
         return resultResponse(JSON.parse(init.body));
       },
     });
-    await bridge.send({ source: { stableId: `board-${method}`, generation: 1 }, handler: "change" });
-    assert.equal(requested.url, "/events/e/Board_1/change");
+    await onPage({}, () => bridge.send({ source: { stableId: `board-${method}`, generation: 1 }, handler: "change" }));
+    assert.equal(requested.url, "http://app.test/events/e/Board_1/change");
     assert.equal(requested.init.method, method);
     assert.equal(requested.init.headers["X-CSRFToken"], "csrf-token");
     assert.equal(JSON.parse(requested.init.body).calls[0].handlerName, "change");
@@ -3087,4 +3127,99 @@ test("latestCallWins on a detached handler supersedes across queued and wait: fa
   moveGate.open();
   await move;
   assert.equal(peeks, 1);
+});
+
+// Event calls carry the CSRF token, the State token and the call's arguments, so the fetch
+// path resolves their URL against the page's own address, whatever the base URL says, and
+// attaches the CSRF token only on the page's origin.
+const recordingBridge = (requests, overrides = {}) =>
+  bridgeModule.createVueEventsBridge({
+    endpoint: "/citry/ext/events/call",
+    eventBaseUrl: "/citry/ext/events/e/",
+    host: basicHost(),
+    csrf: { token: "page-token" },
+    fetch: async (url, init) => {
+      requests.push({ url, init });
+      return resultResponse(JSON.parse(init.body));
+    },
+    ...overrides,
+  });
+
+test("an event call ignores a base URL that points at another site", async () => {
+  const requests = [];
+  await onPage({ href: "http://app.test/shop/cart", baseURI: "http://other.test/" }, () =>
+    recordingBridge(requests).send({ source: { stableId: "board", generation: 1 }, handler: "move" }),
+  );
+  assert.equal(requests[0].url, "http://app.test/citry/ext/events/call");
+  assert.equal(requests[0].init.headers["X-CSRFToken"], "page-token");
+});
+
+test("an event call keeps the sub-path the server put in its URL", async () => {
+  const requests = [];
+  await onPage({ href: "http://app.test/shop/cart?x=1" }, () =>
+    recordingBridge(requests, { endpoint: "/shop/citry/ext/events/call" }).send({
+      source: { stableId: "board", generation: 1 },
+      handler: "move",
+    }),
+  );
+  assert.equal(requests[0].url, "http://app.test/shop/citry/ext/events/call");
+  assert.equal(requests[0].init.headers["X-CSRFToken"], "page-token");
+});
+
+test("an event URL on another origin gets no CSRF token, even one set explicitly", async () => {
+  for (const url of [
+    "http://other.test/citry/ext/events/",
+    "//other.test/citry/ext/events/",
+    "/\\other.test/citry/ext/events/",
+    "http://app.test:8080/citry/ext/events/",
+    "https://app.test/citry/ext/events/",
+  ]) {
+    const requests = [];
+    await onPage({}, () =>
+      recordingBridge(requests, { runtimeConfig: () => ({ url, csrf: { token: "explicit" } }) }).send({
+        source: { stableId: "board", generation: 1 },
+        handler: "move",
+      }),
+    );
+    assert.notEqual(new URL(requests[0].url).origin, "http://app.test", url);
+    assert.equal(requests[0].init.headers["X-CSRFToken"], undefined, url);
+  }
+});
+
+test("a sandboxed page, whose origin is null, sends no CSRF token", async () => {
+  const requests = [];
+  await onPage({ origin: "null" }, () =>
+    recordingBridge(requests).send({ source: { stableId: "board", generation: 1 }, handler: "move" }),
+  );
+  assert.equal(requests[0].url, "http://app.test/citry/ext/events/call");
+  assert.equal(requests[0].init.headers["X-CSRFToken"], undefined);
+});
+
+test("an about:srcdoc page uses its inherited base URL only on its own origin", async () => {
+  const requests = [];
+  const source = { stableId: "board", generation: 1 };
+  await onPage({ href: "about:srcdoc", origin: "http://app.test", baseURI: "http://app.test/page" }, () =>
+    recordingBridge(requests).send({ source, handler: "move" }),
+  );
+  assert.equal(requests[0].url, "http://app.test/citry/ext/events/call");
+  assert.equal(requests[0].init.headers["X-CSRFToken"], "page-token");
+  await onPage({ href: "about:srcdoc", origin: "http://app.test", baseURI: "http://other.test/" }, () =>
+    assert.rejects(recordingBridge(requests).send({ source, handler: "move" }), /this page's origin/),
+  );
+  assert.equal(requests.length, 1);
+});
+
+test("an event call does not follow a redirect and reports it as a failed call", async () => {
+  const requests = [];
+  const bridge = recordingBridge(requests, {
+    fetch: async (url, init) => {
+      requests.push({ url, init });
+      // What fetch answers for a redirect when `redirect` is "manual".
+      return { type: "opaqueredirect", ok: false, status: 0, headers: { get: () => null } };
+    },
+  });
+  await onPage({}, () =>
+    assert.rejects(bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }), /redirect/),
+  );
+  assert.equal(requests[0].init.redirect, "manual");
 });

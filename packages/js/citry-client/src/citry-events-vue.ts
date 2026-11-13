@@ -19,7 +19,7 @@ import {
 export { collectFormArgs } from "./citry-events-shared";
 // Page markup can hide `document.cookie` or `document.createElement` behind a named element,
 // so the bridge reads the document's members through `pageDocument`.
-import { pageDocument } from "./page-dom";
+import { onPageOrigin, pageDocument, resolveOnPage } from "./page-dom";
 
 /** Validate and copy a public action list before a caller can apply any item. */
 export const assertValidActionList = (actions: unknown): EventAction[] => assertProtocolActionList(actions);
@@ -273,6 +273,23 @@ const configuredEventRoutes = (url: string, endpoint: string, eventBaseUrl: stri
     return { endpoint: `${normalized.slice(0, -2)}call`, eventBaseUrl: normalized };
   }
   return { endpoint: `${normalized}call`, eventBaseUrl: `${normalized}e/` };
+};
+
+/**
+ * Where an event call sent with fetch goes, and whether that address is on the page's own origin.
+ *
+ * The call's URL is resolved against the page's own address, not against `document.baseURI`
+ * (see `resolveOnPage`), so a `<base>` element does not move the call, its arguments, its State
+ * token or its CSRF token to another site. The CSRF token is attached only when the resolved
+ * address is on the page's origin, compared the same way `csrfHeaders` in `_vue/client.js`
+ * compares it for other Citry requests.
+ */
+const eventRequestTarget = (url: string): { href: string; sameOrigin: boolean } => {
+  const target = resolveOnPage(url);
+  // Outside a browser (the unit tests' plain Node realm) there is no page to compare with, so
+  // the URL goes out as given and no token is attached.
+  if (target === null) return { href: url, sameOrigin: false };
+  return { href: target.href, sameOrigin: onPageOrigin(target) };
 };
 
 const readCookie = (name: string): string => {
@@ -803,8 +820,18 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       "X-Citry-Vue-Revision": String(committedRevision),
     };
     const selectedTransport = options.transport?.() ?? null;
+    // The Vue bridge currently serializes queued jobs and emits one-call
+    // envelopes. `allowBatching` therefore selects the per-event route for
+    // isolated handlers; it does not yet implement same-tick multi-call
+    // envelope/dependency scheduling.
+    const isolated = useGet || handlerOptions.allowBatching === false;
+    const endpoint = isolated ? eventUrl(routes.eventBaseUrl ?? "", context, input.handler) : routes.endpoint;
+    // The fetch path sends to the address resolved against the page itself, and attaches the
+    // token only when that address is on the page's origin. A custom transport is page code that
+    // picks its own destination, so it gets the URL as configured and the configured token.
+    const target = selectedTransport ? { href: endpoint, sameOrigin: true } : eventRequestTarget(endpoint);
     const csrf = runtimeConfig.csrf ?? options.csrf;
-    if (!useGet && csrf) {
+    if (!useGet && csrf && target.sameOrigin) {
       // A custom transport gets a token only from `csrf.token`; the page-wide
       // default supplies one that reads the cookie. The playground transport
       // runs inside an opaque sandbox where reading document.cookie throws, so
@@ -819,19 +846,13 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
           : readCookie(csrf.cookie ?? "csrftoken");
       if (token) headers[csrf.header ?? "X-CSRFToken"] = token;
     }
-    // The Vue bridge currently serializes queued jobs and emits one-call
-    // envelopes. `allowBatching` therefore selects the per-event route for
-    // isolated handlers; it does not yet implement same-tick multi-call
-    // envelope/dependency scheduling.
-    const isolated = useGet || handlerOptions.allowBatching === false;
-    const endpoint = isolated ? eventUrl(routes.eventBaseUrl ?? "", context, input.handler) : routes.endpoint;
     // `send` replaced the caller's options with the checked copy.
     const callTimeout = (input.options as { timeout?: number } | undefined)?.timeout;
     const timeoutMs = callTimeout ?? runtimeConfig.timeout ?? options.timeoutMs ?? 30_000;
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("Vue Events timeoutMs must be positive.");
     const controller = new AbortController();
     job.controller = controller;
-    let requestUrl = endpoint;
+    let requestUrl = target.href;
     if (useGet) {
       const query = flatQuery(input.args ?? {});
       query.append("_citry_protocol", envelope.protocol);
@@ -870,6 +891,11 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       const requestInit: RequestInit = {
         method: requestMethod,
         credentials: "same-origin",
+        // A redirect would repeat the call, with the CSRF header, to whatever address the
+        // response names, possibly on another site. The bridge stops at the redirect instead and
+        // reports it as a failed call; a handler that wants the page to move returns a redirect
+        // action.
+        redirect: "manual",
         headers: requestHeaders,
         ...(useGet ? {} : { body: JSON.stringify(envelope) }),
         signal: controller.signal,
@@ -879,6 +905,11 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         response = await fetchImpl(requestUrl, requestInit);
       } catch (error) {
         if (error !== null && typeof error === "object") reportableFailures.add(error);
+        throw error;
+      }
+      if (response.type === "opaqueredirect") {
+        const error = new Error("The server answered the event call with a redirect, which event calls do not follow.");
+        reportableFailures.add(error);
         throw error;
       }
       const disposition = response.headers?.get?.("Content-Disposition") ?? null;

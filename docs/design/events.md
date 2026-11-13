@@ -1732,9 +1732,11 @@ the template.
 the events runtime; the wire itself is always a 200 envelope** (only
 per-call `error.status` mirrors onto the per-event route's HTTP status so
 logs and middleware read correctly). Nothing user-facing is expressed as
-HTTP semantics: a redirect is an action, not a 30x, both because `fetch`
-follows redirects transparently and because actions must mean the same
-thing arriving over WebSocket or SSE. Action application is observable and
+HTTP semantics: a redirect is an action, not a 30x. A 30x answer to
+`fetch` cannot move the page, and the runtime refuses to follow one
+(`redirect: "manual"`), so the request and its CSRF header never reach the
+address the 30x names. Actions must also mean the same thing arriving over
+WebSocket or SSE. Action application is observable and
 interceptable client-side: each action fires its `citry:events:*`
 lifecycle event first, and `Citry.events.applyActions` is a public entry
 point, so a page can override what any action does for its instances.
@@ -4654,10 +4656,12 @@ absolute result. When the request has no `Referer` from the same host, the
 URL goes out unchanged, the browser resolves it against the handler URL,
 and the server logs a warning that names the fix (a path starting with
 `/`). It logs this once per handler and URL, and never for `GET`, because
-a `GET` handler URL opened directly is itself the page. Two cases resolve differently from the
+a `GET` handler URL opened directly is itself the page. The runtime
+resolves a relative redirect against the page's own address too, so a
+`<base href>` changes neither path. One case resolves differently from the
 runtime and cannot be detected: a `Referrer-Policy` that sends only the
-origin (resolved against the site root) and a page with `<base href>`.
-The user docs ask those pages to use a path starting with `/`.
+origin (resolved against the site root). The user docs ask such pages to
+use a path starting with `/`.
 After resolving, the server percent-encodes the URL, because Citry's
 adapters send header text as Latin-1 and a browser expects UTF-8 escapes.
 It encodes spaces and every character outside printable ASCII as UTF-8,

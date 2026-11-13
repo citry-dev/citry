@@ -689,14 +689,12 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     When the request has no Referer, or one from another host, the URL also
     passes through unchanged and the browser resolves it against the handler
     URL. That is right when someone opens a ``GET`` handler URL directly, so
-    only other methods log a warning that names the fix. Two cases resolve
-    differently from ``location.assign()`` and cannot be detected here, so
-    the docs ask those pages to use a path that starts with ``/``:
-
-    - a ``Referrer-Policy`` that sends only the origin gives a Referer of
-      ``https://host/``, which looks like a page at the site root;
-    - a ``<base href>`` changes what the browser resolves against, but the
-      Referer still names the page's own URL.
+    only other methods log a warning that names the fix. One case resolves
+    differently from the browser runtime, which resolves against the page's
+    own address, and cannot be detected here, so the docs ask such pages to
+    use a path that starts with ``/``: a ``Referrer-Policy`` that sends
+    only the origin gives a Referer of ``https://host/``, which looks like a
+    page at the site root.
     """
     stripped = url.lstrip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
     if _URL_SCHEME.match(stripped) or stripped.startswith(("/", "\\")):

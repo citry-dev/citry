@@ -356,7 +356,8 @@ class Redirect(Action):
     no ``Referer`` from the same host arrives, the visitor lands relative
     to the handler URL, usually on a "not found" page, and the server logs
     a warning. Use a path that starts with ``/`` on a page that sends no
-    ``Referer`` or only the site's origin, or that sets ``<base href>``.
+    ``Referer`` or only the site's origin. A ``<base href>`` element does
+    not change where a relative URL leads.
 
     The action checks the scheme only, not where the URL leads. A URL such
     as ``//other.example`` or ``/\other.example`` has no scheme, yet the
@@ -410,8 +411,9 @@ class PushUrl(Action):
 
     Attributes:
         url: The same-origin URL to place in browser history. Relative URLs,
-            query strings, and fragments are accepted; the browser resolves
-            them against the current document.
+            query strings, and fragments are accepted; Citry resolves them
+            against the page's own address, and a ``<base>`` element does
+            not change them.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
 
@@ -438,8 +440,9 @@ class ReplaceUrl(Action):
 
     Attributes:
         url: The same-origin URL to place in browser history. Relative URLs,
-            query strings, and fragments are accepted; the browser resolves
-            them against the current document.
+            query strings, and fragments are accepted; Citry resolves them
+            against the page's own address, and a ``<base>`` element does
+            not change them.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
 

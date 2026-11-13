@@ -252,6 +252,11 @@ Every event call that is not a `GET` must pass these checks:
 
 These checks cannot be turned off, not even with `csrf=False`.
 
+Citry's built-in requests send the CSRF token only to the page's own
+origin, and event calls sent by the built-in transport do not follow HTTP
+redirects. See
+[`Citry.configure`](/reference/browser-apis/#citry-configure).
+
 ### Use Django's token { #use-djangos-token }
 
 Django's `CsrfViewMiddleware` checks Citry's routes like any other view, so

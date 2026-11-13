@@ -138,6 +138,28 @@
     const match = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(text);
     return match ? match[1].toLowerCase() : null;
   };
+  // Resolve a URL from an action against the page's own address. The browser resolves a relative
+  // URL against `document.baseURI`, which a `<base href>` element in the page sets, so a redirect
+  // or URL action resolved that way could go to the site that element names; the no-JavaScript
+  // form path resolves a redirect against the page's address too. A document whose address cannot
+  // serve as a base (`about:srcdoc`, `about:blank`) takes the base URL of the page that created
+  // it, used only when it is on the document's own origin; otherwise this throws. The same rule as
+  // `resolveOnPage` in packages/js/citry-client/src/page-dom.ts; keep the two in step.
+  const resolveOnPage = url => {
+    try {
+      return new URL(url, global.location.href);
+    } catch {
+      const inherited = new URL(url, pageDocument.baseURI);
+      const pageOrigin = typeof global.origin === "string" ? global.origin : global.location.origin;
+      if (inherited.origin === "null" || inherited.origin !== pageOrigin)
+        throw new Error("[Citry] refused a URL that does not resolve to this page's origin.");
+      return inherited;
+    }
+  };
+  // `pushState` and `replaceState` take the URL resolved against the page's address, for the same
+  // reason. The browser itself refuses one on another origin.
+  const updateHistory = (mode, state, url) =>
+    global.history[mode === "push" ? "pushState" : "replaceState"](state, "", resolveOnPage(url).href);
   const navigateToRedirect = url => {
     // A non-string has no text to read a scheme from, so it gets its own message instead of
     // being reported as a URL with an empty scheme.
@@ -151,7 +173,14 @@
         " scheme; a redirect follows only http: and https: URLs and URLs with no scheme.");
       return;
     }
-    global.location.assign(url);
+    let target;
+    try {
+      target = resolveOnPage(url);
+    } catch (error) {
+      console.error(error.message);
+      return;
+    }
+    global.location.assign(target.href);
   };
 
   const apps = new Map();
@@ -269,10 +298,18 @@
     },
     configure(options = {}) {
       plain(options, "Citry.events.configure options");
-      if (options.csrf !== undefined) plain(options.csrf, "Citry.events.configure csrf");
-      Object.assign(publicEventsConfig, options);
-      if (options.csrf !== undefined)
-        publicEventsConfig.csrf = {...options.csrf};
+      // Copy first and check the copy, so a getter on the caller's object cannot pass the checks
+      // with one value and store another.
+      const {csrf: given, ...rest} = options;
+      const csrf = given === undefined ? undefined : {...plain(given, "Citry.events.configure csrf")};
+      // The same header checks as `Citry.configure`, so a header name fetch would reject, or one
+      // Citry or the browser sets itself, fails here rather than on every later call.
+      if (csrf?.header !== undefined && (typeof csrf.header !== "string" || !HEADER_NAME.test(csrf.header)))
+        throw new TypeError("Citry.events.configure csrf.header must be an HTTP header name");
+      if (csrf?.header !== undefined && reservedCsrfHeader(csrf.header))
+        throw new TypeError("Citry.events.configure csrf.header names a header Citry or the browser reserves");
+      Object.assign(publicEventsConfig, rest);
+      if (csrf !== undefined) publicEventsConfig.csrf = csrf;
     },
     registerTransport(name, implementation) {
       if (typeof name !== "string" || name.length === 0) throw new TypeError("Citry.events.registerTransport needs a non-empty name");
@@ -517,7 +554,7 @@
         await new Promise(resolve => setTimeout(resolve, action.delay * 1000));
       if (action.action === "data") data = action.value;
       else if (action.action === "redirect") navigateToRedirect(action.url);
-      else if (action.action === "url") global.history[action.mode === "push" ? "pushState" : "replaceState"](global.history.state, "", action.url);
+      else if (action.action === "url") updateHistory(action.mode, global.history.state, action.url);
       else if (action.action === "event") {
         if (action.target !== undefined) throw new Error("Citry.events.applyActions needs a mounted component for targeted Event actions.");
         pageDocument.dispatchEvent(new CustomEvent(action.eventName, {detail: action.detail, bubbles: true}));
@@ -4127,7 +4164,7 @@
       },
       promptReload,
       redirect(url) { navigateToRedirect(url); },
-      updateUrl(url, mode) { global.history[mode === "push" ? "pushState" : "replaceState"]({}, "", url); },
+      updateUrl(url, mode) { updateHistory(mode, {}, url); },
       takePendingState(source, handlerName) {
         const mounted = ownedApp.mounted.get(source.stableId);
         if (!mounted || mounted.record.generation !== source.generation) return undefined;

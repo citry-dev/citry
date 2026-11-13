@@ -91,3 +91,51 @@ export const documentMembers = (currentDocument: () => Document): Document => {
 
 /** The page's document read through {@link documentMembers}. */
 export const pageDocument: Document = documentMembers(() => globalThis.document);
+
+/**
+ * The page's origin, or null outside a browser.
+ *
+ * It is `window.origin`, which is "null" in a document sandboxed without `allow-same-origin`
+ * even when its address is real, so such a document never matches any URL's origin.
+ */
+export const pageOrigin = (): string | null => {
+  const scope = globalThis as { location?: { origin?: unknown }; origin?: unknown };
+  if (scope.location === undefined) return null;
+  return typeof scope.origin === "string" ? scope.origin : String(scope.location.origin);
+};
+
+/** Whether `target` is on the page's own origin; never true for an opaque ("null") origin. */
+export const onPageOrigin = (target: URL): boolean => {
+  const origin = pageOrigin();
+  return origin !== null && target.origin !== "null" && target.origin === origin;
+};
+
+/**
+ * Resolve a URL that Citry's browser code requests or navigates to against the page's own address.
+ *
+ * The browser resolves a relative URL against `document.baseURI`, which a `<base href>` element in
+ * the page sets, so a request or navigation resolved that way could go to the site the element
+ * names. Resolving against `location.href` keeps a relative URL on the page that the server
+ * wrote it for. A document whose address cannot serve as a base, such as `about:srcdoc` or
+ * `about:blank`, takes its base URL from the page that created it, so there the base URL is
+ * used, and only when it is on the document's own origin; otherwise this throws.
+ *
+ * Returns null outside a browser (no `location`), where there is no page to resolve against.
+ * `_vue/client.js` keeps a copy of this rule for the redirect and URL actions; keep the two in step.
+ */
+export const resolveOnPage = (url: string): URL | null => {
+  const location = (globalThis as { location?: { href?: unknown } }).location;
+  if (location === undefined || typeof location.href !== "string") return null;
+  try {
+    return new URL(url, location.href);
+  } catch {
+    let inherited: URL;
+    try {
+      inherited = new URL(url, pageDocument.baseURI);
+    } catch {
+      throw new Error(`Citry cannot resolve the URL ${JSON.stringify(url.slice(0, 80))}.`);
+    }
+    if (!onPageOrigin(inherited)) throw new Error("Citry refused a URL that does not resolve to this page's origin.");
+    return inherited;
+  }
+};

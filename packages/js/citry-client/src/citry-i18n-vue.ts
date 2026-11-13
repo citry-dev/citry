@@ -16,6 +16,10 @@ import {
   type RuntimeConfiguration,
 } from "./citry-i18n-runtime";
 import type { ComponentOptions, ComponentPublicInstance, ComputedRef, SetupContext, ShallowRef } from "vue";
+import { resolveOnPage } from "./page-dom";
+
+// The message URL resolved against the page's own address; as given outside a browser.
+const pageAddress = (url: string): string => resolveOnPage(url)?.href ?? url;
 
 declare const __CITRY_I18N_BUILD_ID__: string;
 interface Occurrence {
@@ -239,12 +243,15 @@ interface PluginGlobal extends Window {
       }
       const tree = createProviderTreeCore<ProviderInternal, Requirement, MessageRuntime>(runtimeState, fail, treeRoot, {
         createMessageRuntime: wire.createMessageRuntime,
-        fetch: globalThis.fetch.bind(globalThis),
+        // Both the request and the token check use the URL resolved against the page's own
+        // address, so a `<base>` element cannot send the request elsewhere, and the check always
+        // looks at the address the request really goes to.
+        fetch: (url, init) => globalThis.fetch(pageAddress(url), init),
         // The message request is a POST, so a host with a CSRF token check (Django's
         // CsrfViewMiddleware) rejects it without the page's token. The core runtime owns that token
         // for every extension and hands it out through the plugin host; a host without
         // `csrfHeaders` (such as a test double) leaves the request without one.
-        csrfHeaders: (url) => (typeof host.csrfHeaders === "function" ? host.csrfHeaders(url) : {}),
+        csrfHeaders: (url) => (typeof host.csrfHeaders === "function" ? host.csrfHeaders(pageAddress(url)) : {}),
       });
       function artifactsAgree(left: MessageRuntime, right: MessageRuntime): boolean {
         for (const [message, entry] of Object.entries(left.artifact.messages)) {

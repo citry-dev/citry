@@ -111,6 +111,18 @@ test("Citry.configure rejects a CSRF setting it would otherwise ignore or send b
   citry.configure(realm({}));
 });
 
+test("Citry.events.configure checks the CSRF header name like Citry.configure", () => {
+  const { publicEvents, realm } = runtime();
+  for (const header of ["bad header", "content-type", "X-Citry-Events", "Cookie", "Sec-Token", 1]) {
+    assert.throws(
+      () => publicEvents.configure(realm({ csrf: { header } })),
+      (error) => error.name === "TypeError",
+      String(header),
+    );
+  }
+  publicEvents.configure(realm({ csrf: { header: "X-App-Token", token: "t" } }));
+});
+
 test("a page that already defines Citry.configure stops the runtime before it installs anything", () => {
   const existing = { configure() {} };
   assert.throws(() => runtime(existing), /Citry\.configure name is already taken/);

@@ -22,10 +22,17 @@ const document = {
   addEventListener() {},
   removeEventListener() {},
   dispatchEvent: () => true,
+  // A `<base>` element that points at another site. Redirects resolve against the page's own
+  // address (`location.href` below), so this value must never show up in a followed URL.
+  baseURI: "http://other.test/",
 };
 const context = {
   document,
-  location: { assign: (url) => assigned.push(url) },
+  location: {
+    href: "http://app.test/shop/list?x=1",
+    origin: "http://app.test",
+    assign: (url) => assigned.push(url),
+  },
   history: { state: null, pushState() {}, replaceState() {} },
   console: { error: (...args) => errors.push(args.join(" ")), warn() {}, log() {} },
   MutationObserver: class {
@@ -40,6 +47,8 @@ const context = {
   clearTimeout,
   structuredClone,
   btoa,
+  // Redirects resolve their URL with the URL parser, which a vm realm does not have on its own.
+  URL,
 };
 context.globalThis = context;
 context.window = context;
@@ -81,19 +90,41 @@ for (const [name, url] of Object.entries(REFUSED)) {
   });
 }
 
+// Each URL and the address the page goes to: relative ones resolve against the page's own
+// address, as the browser would without a `<base>` element and as the no-JavaScript form path does.
 const FOLLOWED = {
-  "absolute path": "/a",
-  "relative path": "a/b",
-  "query only": "?x=1",
-  "fragment only": "#top",
-  https: "https://example.com/",
-  "uppercase http": "HTTP://example.com/",
+  "absolute path": ["/a", "http://app.test/a"],
+  "relative path": ["a/b", "http://app.test/shop/a/b"],
+  "query only": ["?x=2", "http://app.test/shop/list?x=2"],
+  "fragment only": ["#top", "http://app.test/shop/list?x=1#top"],
+  https: ["https://example.com/", "https://example.com/"],
+  "uppercase http": ["HTTP://example.com/", "http://example.com/"],
 };
 
-for (const [name, url] of Object.entries(FOLLOWED)) {
-  test(`a redirect to http(s) or a URL with no scheme is followed unchanged: ${name}`, async () => {
+test("a redirect in an about:srcdoc frame uses the inherited base URL only on its own origin", async () => {
+  const saved = { ...context.location };
+  const savedBase = document.baseURI;
+  Object.assign(context.location, { href: "about:srcdoc" });
+  context.origin = "http://app.test";
+  try {
+    document.baseURI = "http://app.test/parent/";
+    await redirect("next");
+    assert.deepEqual(assigned, ["http://app.test/parent/next"]);
+    document.baseURI = "http://other.test/";
+    await redirect("next");
+    assert.deepEqual(assigned, []);
+    assert.match(errors[0], /does not resolve to this page's origin/);
+  } finally {
+    Object.assign(context.location, saved);
+    document.baseURI = savedBase;
+    delete context.origin;
+  }
+});
+
+for (const [name, [url, landing]] of Object.entries(FOLLOWED)) {
+  test(`a redirect to http(s) or a URL with no scheme is followed against the page's address: ${name}`, async () => {
     await redirect(url);
-    assert.deepEqual(assigned, [url]);
+    assert.deepEqual(assigned, [landing]);
     assert.deepEqual(errors, []);
   });
 }
@@ -130,11 +161,17 @@ const releasedScheme = (url) => {
 
 test("a redirect is followed or refused exactly as the released scheme rule decides", async () => {
   // A small fixed-seed generator, so a failure names the same URL on every run.
+  // The multiplier keeps every product below 2^53, so JavaScript numbers hold it exactly and each
+  // piece gets picked.
   let seed = 4285;
   const next = (limit) => {
-    seed = (seed * 1103515245 + 12345) % 2147483648;
+    seed = (seed * 48271) % 2147483647;
     return seed % limit;
   };
+  // Counts of each outcome, so a generator that stops reaching one fails the test.
+  let followed = 0;
+  let unresolvable = 0;
+  let refused = 0;
   const pieces = [
     "\u0000",
     "\u0001",
@@ -162,14 +199,31 @@ test("a redirect is followed or refused exactly as the released scheme rule deci
     const scheme = releasedScheme(url);
     await redirect(url);
     if (scheme === null || scheme === "http" || scheme === "https") {
-      assert.deepEqual(assigned, [url], JSON.stringify(url));
-      assert.deepEqual(errors, [], JSON.stringify(url));
+      // A followed URL goes to its address resolved against the page's own address. One the URL
+      // parser cannot resolve there (such as `http://` with no host) is refused for its origin.
+      let landing = null;
+      try {
+        landing = new URL(url, context.location.href).href;
+      } catch {}
+      if (landing === null) {
+        unresolvable++;
+        assert.deepEqual(assigned, [], JSON.stringify(url));
+        assert.equal(errors.length, 1, JSON.stringify(url));
+        // The scheme rule let it through; only the page-address resolution refused it.
+        assert.ok(!errors[0].includes("scheme"), JSON.stringify(url));
+      } else {
+        followed++;
+        assert.deepEqual(assigned, [landing], JSON.stringify(url));
+        assert.deepEqual(errors, [], JSON.stringify(url));
+      }
     } else {
+      refused++;
       assert.deepEqual(assigned, [], JSON.stringify(url));
       assert.equal(errors.length, 1, JSON.stringify(url));
       assert.ok(errors[0].includes(`the ${JSON.stringify(scheme)} scheme`), JSON.stringify(url));
     }
   }
+  assert.ok(followed >= 100 && refused >= 100, `followed ${followed}, refused ${refused}`);
 });
 
 test("a redirect URL with a long run of spaces inside is checked quickly", async () => {

@@ -158,7 +158,7 @@ def _record_message_posts(page: Any) -> list[dict[str, Any]]:
 
     def on_response(response: Any) -> None:
         if response.url.endswith("/citry/ext/i18n/messages"):
-            posts.append({"status": response.status, "headers": response.request.headers})
+            posts.append({"status": response.status, "headers": response.request.headers, "url": response.url})
 
     page.on("response", on_response)
     return posts
@@ -191,6 +191,38 @@ def test_locale_switch_on_django_sends_the_cookie_token(
     assert posts[0]["headers"]["x-csrftoken"] == cookie
     assert posts[0]["headers"]["content-type"] == "application/json"
     assert faults == []
+
+
+def test_locale_switch_ignores_a_base_href_that_points_elsewhere(
+    page: Any, serve_django: Any, open_citry_page: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The message request resolves its URL against the page's own address, so
+    # a <base> element pointing at another address (here a port nothing
+    # listens on) does not move the request or its token.
+    engine = _engine(_write_catalog(tmp_path, monkeypatch))
+    page_cls = _switching_page(engine)
+
+    def render(request: Any) -> str:
+        get_token(request)
+        return page_cls().render().serialize()
+
+    posts = _record_message_posts(page)
+    base = serve_django(engine, render)
+    open_citry_page(base + "/")
+    page.wait_for_function("document.querySelector('#label')?.textContent === 'Save'")
+    page.evaluate(
+        """() => {
+          const element = document.createElement('base');
+          element.href = 'http://127.0.0.1:9/';
+          document.head.prepend(element);
+        }"""
+    )
+
+    page.locator("#switch").click()
+    page.wait_for_function("document.querySelector('#label')?.textContent === 'Uložit'")
+
+    assert [(post["status"], post["url"]) for post in posts] == [(200, base + "/citry/ext/i18n/messages")]
+    assert posts[0]["headers"]["x-csrftoken"]
 
 
 def test_locale_switch_on_django_uses_the_token_from_citry_configure(

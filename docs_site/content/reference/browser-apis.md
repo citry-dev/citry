@@ -358,6 +358,14 @@ replaces the earlier one as a whole, and requests sent afterwards use it.
 When the token is empty, or the cookie is missing, Citry sends no token
 header.
 
+Citry's own requests (event calls sent by the built-in `fetch` transport,
+and the message request) send the token only to an address on the page's
+own origin: the same scheme, host, and port as the page. A request to any
+other address goes without it, even when you set `token` yourself. A
+[custom transport](#citry-events-register-transport) gets the token
+whatever address it sends to. A page in an iframe sandboxed without
+`allow-same-origin` has no origin of its own, so it sends no token.
+
 If your `token` function throws, the request that needed it fails: the
 event call rejects, or the language switch fails and the old language
 stays.
@@ -433,7 +441,7 @@ Citry.events.configure({
 | `csrf` | Where the CSRF token for event calls comes from: `{token}` with a string or a function that returns one, or `{cookie}` with a cookie name. `header` names the request header, `X-CSRFToken` by default. It replaces the page-wide [`Citry.configure`](#citry-configure) setting for event calls only. |
 | `timeout` | Milliseconds before a call rejects. The default is `30000`. A call's own `timeout` option wins. |
 | `transport` | The name of a transport added with [`registerTransport`](#citry-events-register-transport). The default is `"fetch"`. |
-| `url` | The base URL of the event routes. Citry normally reads it from the page. |
+| `url` | The base URL of the event routes. Citry normally reads it from the page. Citry resolves a relative URL against the page's own address and ignores a `<base>` element. |
 
 Each call merges its options into the earlier ones. Citry reads them each
 time it sends a call, so calls made afterwards use the new values. A new
@@ -445,8 +453,18 @@ cookie, it does so for every transport, including a custom one. Once you pass `c
 here, Citry reads `csrf.cookie` only for the built-in `fetch` transport,
 and a custom transport gets a token only from `csrf.token`.
 
+The built-in `fetch` transport sends the CSRF token only when the call's
+URL is on the page's own origin, as described under
+[`Citry.configure`](#citry-configure). It does not follow an HTTP
+redirect: when the server answers an event call with one, the call fails
+and its Promise rejects. To send the visitor to another page, return
+[`actions.Redirect`][citry.ext.events.actions.Redirect] from the
+handler.
+
 The argument and its `csrf` value must be plain objects, or the call throws
-a `TypeError`. Citry ignores an unknown option. When `transport` names a
+a `TypeError`. It also throws a `TypeError` for a `csrf.header` that
+[`Citry.configure`](#citry-configure) would reject. Citry ignores an
+unknown option. When `transport` names a
 transport that was never registered, every later event call fails with
 "Citry Events transport is not registered".
 

@@ -296,6 +296,39 @@ the page's origin (including a URL that cannot be parsed). The i18n plugin
 adds those headers to its message request. No extension reads another
 extension's browser state.
 
+The Events bridge applies the same origin rule to every call it sends with
+the built-in `fetch` transport, whichever setting supplied the token:
+
+1. It resolves the call's URL against the page's own address
+   (`location.href`), so a `<base>` element in the page does not move the
+   call. A document whose address cannot be a base (`about:srcdoc`,
+   `about:blank`) takes its base URL from the page that created it; the
+   bridge uses that base only when it resolves to the document's own
+   origin, and otherwise rejects the call before sending it.
+2. It adds the token header only when the resolved URL has the page's
+   origin. The page's origin is `window.origin`, which is `"null"` in a
+   document sandboxed without `allow-same-origin`, so such a document sends
+   no token.
+3. It sends the request with `redirect: "manual"`. A redirect answer makes
+   the call fail with a transport error, so the browser never repeats the
+   request, with its headers, at the address the redirect names. A handler
+   that wants the visitor elsewhere returns a Redirect action.
+
+A custom transport registered with `Citry.events.registerTransport` is page
+code that chooses its own destination. It receives the URL as configured and
+the token from `csrf.token`, and the rules above do not apply to it.
+`Citry.events.configure({csrf: {header}})` checks the header name as
+`Citry.configure` does.
+
+`host.csrfHeaders(url)` resolves a relative URL against
+`document.baseURI`, as `fetch` does, so a plugin passes it the exact URL it
+requests and the check sees the address the request goes to.
+The i18n plugin resolves its message URL against the page's address in
+the same way before it asks `host.csrfHeaders(url)` for the token and
+sends the request, so the check and the request see the same address.
+The redirect and URL actions also resolve a relative URL against the
+page's address, as the no-JavaScript form path does for its redirect.
+
 `Citry.configure` rejects an unknown option, an empty `cookie`, a `header`
 that is not an HTTP header name or that names a header Citry uses
 (`Content-Type`, a name that starts with `X-Citry-`) or the browser does not

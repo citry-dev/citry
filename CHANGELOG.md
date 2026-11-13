@@ -404,6 +404,16 @@ change.
 - After you change a component's `State._storage`, a page rendered before
   the change gets a `stale_state` error on its next event call, and the
   visitor is asked to reload.
+- Event calls sent by the built-in transport now send the CSRF token only
+  to the page's own origin, and a redirect answer makes the call fail
+  instead of being followed. Return `actions.Redirect` to send the visitor
+  to another page. `Citry.events.configure({csrf})` now rejects a header
+  name that `Citry.configure` rejects.
+- Event calls, `$i18n` message requests, and the `Redirect`, `PushUrl`,
+  and `ReplaceUrl` actions now resolve a relative URL against the page's
+  own address, so a `<base>` element no longer changes where they go. If
+  your page sets `<base href>` on purpose, write these URLs as paths that
+  start with `/`.
 
 ## v0.7.0
 
