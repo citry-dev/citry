@@ -372,6 +372,16 @@ mod tests {
                 r#"<c-fill name="row" v-slot="{ row: citryRow }">x</c-fill>"#,
                 "uses a reserved name",
             ),
+            // A fill's shorthand gets a plain rename, and the suggestion
+            // skips the fill's Python names.
+            (
+                r#"<c-fill name="row" v-slot="{ _id }">x</c-fill>"#,
+                "'_id' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill, and no '<c-slot>' prop can use them. Rename it, for example to 'id'.",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row: _p }" data="p">x</c-fill>"#,
+                "Rename it, for example to 'props'.",
+            ),
             (
                 r#"<c-fill name="row" v-slot="{ row }" data="{ row }">x</c-fill>"#,
                 "'row' is named by both 'v-slot' and the Python 'data' or 'fallback'",
@@ -1156,7 +1166,7 @@ mod tests {
             (
                 r#"<li v-for="(_i, i) in rows">x</li>"#,
                 "v-for",
-                "Rename it, for example to 'i2'.",
+                "Rename it, for example to 'item'.",
             ),
             // With nothing left after the prefix, the position names it.
             (
@@ -1198,7 +1208,7 @@ mod tests {
             (
                 r#"<li v-for="_class in rows">x</li>"#,
                 "v-for",
-                "Rename it, for example to 'class2'.",
+                "Rename it, for example to 'item'.",
             ),
             (
                 r#"<li v-for="(, $i) in rows">x</li>"#,

@@ -96,8 +96,8 @@ for every directive and modifier.
 A name you create in a `v-for` or a `v-slot` cannot start with `$`, `_`,
 or `citry`. Citry keeps these prefixes for the values it gives the
 template, such as `$i18n`, and a loop or slot name with one could hide
-such a value. The template fails to load with an error that names the
-alias and suggests another name. `citry check` and the editor report
+such a value. The template fails to load with an error that names it
+and suggests another name. `citry check` and the editor report
 the same error.
 
 ```citry-html
@@ -109,13 +109,12 @@ the same error.
 ```
 
 The rule covers the item, key, and index of a `v-for`, and every name
-inside an object or array pattern, such as `{ id, label }`. A name you
-take from an object keeps its property when you rename it: write
-`{ _id: id }`, not `{ id }`, which would read a property named `id`.
+inside an object or array pattern, such as `{ id, label }`. When the
+name is an object shorthand such as `{ _id }`, rename only the variable:
+write `{ _id: id }`. Writing `{ id }` would read a different property.
 
-The same rule applies to the slot props a fill reads, as in
-`<c-fill name="item" v-slot="{ row }">`, and to the `v-slot` on a Vue
-component.
+The same rule applies to the `v-slot` on a Vue component and to the
+names a `<c-fill v-slot="...">` reads.
 
 ## Extra listener modifiers { #listener-modifiers }
 

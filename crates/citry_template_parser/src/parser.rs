@@ -2623,7 +2623,8 @@ fn validate_fill_tag_vue_directives(
     Ok(())
 }
 
-/// The sentence that tells the author how to rename a reserved browser name.
+/// The sentence that tells the author how to rename a reserved name in a
+/// `v-for` or a Vue component's `v-slot`.
 ///
 /// A name from an object shorthand, as in `{ _id }`, also names the property
 /// it reads, so the fix keeps the property and renames only the variable.
@@ -2702,11 +2703,15 @@ fn validate_fill_slot_pattern(
         })
         .flatten()
         .collect();
-    if let Some(reserved) = crate::browser::find_reserved_binding(&[(value, "props")]) {
+    // No `<c-slot>` prop can carry a reserved prefix, so a shorthand such as
+    // `{ _id }` reads nothing the author passed, and the fix is a plain
+    // rename rather than keeping the property.
+    if let Some(reserved) =
+        crate::browser::find_reserved_binding(&[(value, "props")], &python_names)
+    {
         return fail(format!(
-            "'{}' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill. {}",
-            reserved.name,
-            reserved_binding_fix(&reserved)
+            "'{}' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill, and no '<c-slot>' prop can use them. Rename it, for example to '{}'.",
+            reserved.name, reserved.suggestion
         ));
     }
     for binding in &analysis.bindings {
@@ -2937,11 +2942,12 @@ fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Resu
         let directive = &name[..name.find([':', '.']).unwrap_or(name.len())];
         if let Some(value) = attr.inner_value.as_ref() {
             let reserved = if directive == "v-for" {
-                crate::browser::find_reserved_binding(&crate::browser::v_for_alias_parts(
-                    &value.content,
-                ))
+                crate::browser::find_reserved_binding(
+                    &crate::browser::v_for_alias_parts(&value.content),
+                    &[],
+                )
             } else if directive == "v-slot" || name.starts_with('#') {
-                crate::browser::find_reserved_binding(&[(value.content.as_str(), "props")])
+                crate::browser::find_reserved_binding(&[(value.content.as_str(), "props")], &[])
             } else {
                 None
             };

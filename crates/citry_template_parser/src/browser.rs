@@ -549,8 +549,13 @@ pub(crate) struct ReservedBinding {
 /// to suggest when the reserved name has nothing left once its prefix is
 /// gone (`item`, `key`, or `index` for the three `v-for` aliases). A part
 /// that is not valid JavaScript binds nothing here; Vue's compiler or the
-/// directive's own checks report it.
-pub(crate) fn find_reserved_binding(parts: &[(&str, &str)]) -> Option<ReservedBinding> {
+/// directive's own checks report it. `also_taken` lists names the template
+/// already uses beside the directive, such as a fill's Python `data` names,
+/// so the suggestion avoids them too.
+pub(crate) fn find_reserved_binding(
+    parts: &[(&str, &str)],
+    also_taken: &[&str],
+) -> Option<ReservedBinding> {
     let parsed: Vec<(Vec<(String, bool)>, &str)> = parts
         .iter()
         .map(|(source, fallback)| (bound_names(source).unwrap_or_default(), *fallback))
@@ -560,6 +565,7 @@ pub(crate) fn find_reserved_binding(parts: &[(&str, &str)]) -> Option<ReservedBi
     let taken: Vec<&str> = parsed
         .iter()
         .flat_map(|(names, _)| names.iter().map(|(name, _)| name.as_str()))
+        .chain(also_taken.iter().copied())
         .collect();
     parsed.iter().find_map(|(names, fallback)| {
         names
@@ -703,9 +709,9 @@ const JAVASCRIPT_RESERVED_WORDS: &[&str] = &[
 /// A name to suggest in place of a reserved one.
 ///
 /// The first choice is the same name without the reserved prefix, as
-/// `i18n` for `$i18n` or `slotKey` for `citrySlotKey`. When nothing usable is
-/// left, `fallback` is next. A choice that is reserved, a JavaScript keyword,
-/// or already in `taken` gets a number appended until it is free.
+/// `i18n` for `$i18n` or `slotKey` for `citrySlotKey`. When that is not a
+/// usable JavaScript name (empty, a keyword, or already in `taken`),
+/// `fallback` is next, with a number appended until it is free.
 fn unreserved_name_suggestion(name: &str, fallback: &str, taken: &[&str]) -> String {
     let mut rest = name.to_string();
     // Lowercasing the first letter can rebuild a prefix (`_Citry` becomes
@@ -725,7 +731,7 @@ fn unreserved_name_suggestion(name: &str, fallback: &str, taken: &[&str]) -> Str
         }
     }
     let usable = |candidate: &str| {
-        candidate.chars().next().is_some_and(char::is_alphabetic)
+        oxc_syntax::identifier::is_identifier_name(candidate)
             && !is_reserved_browser_name(candidate)
             && !JAVASCRIPT_RESERVED_WORDS.contains(&candidate)
             && !taken.contains(&candidate)
@@ -733,21 +739,12 @@ fn unreserved_name_suggestion(name: &str, fallback: &str, taken: &[&str]) -> Str
     if usable(&rest) {
         return rest;
     }
-    // A keyword such as `class` keeps its meaning with a number after it,
-    // while an empty or numeric leftover says nothing, so it gives way to
-    // the fallback.
-    let base = if rest.chars().next().is_some_and(char::is_alphabetic) {
-        rest
-    } else {
-        fallback.to_string()
-    };
-    if usable(&base) {
-        return base;
-    }
-    (2..)
-        .map(|number| format!("{base}{number}"))
+    // A plain word for the value's role reads better than a keyword or a
+    // taken name with a number after it.
+    std::iter::once(fallback.to_string())
+        .chain((2..).map(|number| format!("{fallback}{number}")))
         .find(|candidate| usable(candidate))
-        .unwrap_or(base)
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 /// The parameter lists an element's `v-for="..."` value binds, each with the
@@ -814,8 +811,11 @@ fn v_for_left_side(value: &str) -> Option<&str> {
     None
 }
 
-/// Split at commas outside brackets and strings, as vize's
-/// `split_top_level_aliases` does, trimming each piece.
+/// Split at commas outside brackets and strings, trimming each piece.
+///
+/// This is like vize's `split_top_level_aliases`, but with one depth
+/// counter for all bracket kinds; the two differ only on mismatched
+/// brackets, which do not parse as a pattern anyway.
 fn split_top_level_commas(input: &str) -> Vec<&str> {
     let mut pieces = Vec::new();
     let mut start = 0;
@@ -2772,7 +2772,7 @@ mod tests {
     #[test]
     fn reserved_bindings_report_shorthands_and_avoid_taken_names() {
         let found = |parts: &[(&str, &str)]| {
-            find_reserved_binding(parts).map(|r| (r.name, r.suggestion, r.shorthand))
+            find_reserved_binding(parts, &[]).map(|r| (r.name, r.suggestion, r.shorthand))
         };
         assert_eq!(found(&[("row", "item"), ("i", "key")]), None);
         assert_eq!(
@@ -2781,7 +2781,12 @@ mod tests {
         );
         assert_eq!(
             found(&[("_i", "item"), ("i", "key")]),
-            Some(("_i".to_string(), "i2".to_string(), false))
+            Some(("_i".to_string(), "item".to_string(), false))
+        );
+        // Names used beside the directive are taken too.
+        assert_eq!(
+            find_reserved_binding(&[("{ row: _p }", "props")], &["p"]).map(|r| r.suggestion),
+            Some("props".to_string())
         );
         // A value that does not parse binds nothing here.
         assert_eq!(found(&[("{ $a", "item")]), None);
@@ -2801,7 +2806,9 @@ mod tests {
         assert_eq!(suggest("$CitryPrepared"), "prepared");
         assert_eq!(suggest("citryCitryX"), "x");
         // A keyword cannot name a parameter.
-        assert_eq!(suggest("_if"), "if2");
+        assert_eq!(suggest("_if"), "item");
+        // A leftover that cannot start a JavaScript name gives way too.
+        assert_eq!(suggest("_\u{0345}x"), "item");
         assert_eq!(
             unreserved_name_suggestion("_", "index", &["index"]),
             "index2"

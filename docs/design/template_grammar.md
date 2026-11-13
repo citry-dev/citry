@@ -439,7 +439,7 @@ names that start with `c-`, `$`, `_`, or `citry`. A `v-slot` value must be
 one object pattern or one name. The rejected forms are listed in
 `docs_site/content/vue/slots.md` ("Slot syntax errors").
 
-The same prefix rule covers every name a template declares in the browser
+The same prefix rule covers the names a template declares in the browser
 on an HTML element, a Vue component tag, or `<c-element>`: the item, key,
 and index of a `v-for` (including names inside a pattern) and a `v-slot`
 pattern, with or without a modifier. The parser rejects such a name when
