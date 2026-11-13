@@ -20,18 +20,29 @@ on top of the mechanisms below, not instead of them: a structural change still
 goes through the prior-art header (Mechanism 1) and the `ExitPlanMode` plan
 (Mechanism 2).
 
+Keep the user informed when the actual cost is much higher than expected. If
+an unexpected problem adds more than 30 minutes, or the task takes more than
+twice the initial estimate, report what is consuming the time, which work is
+mandatory, which work is optional, and the fastest safe path forward before
+continuing.
+
 ## Delegating to subagents and workflows
 
 These rules apply whenever you spawn a subagent (the Agent tool) or run a
-Workflow. A delegated agent starts with none of this file in its context; it
-sees only the brief you write. So the brief carries the rules, or the work is
-done without them.
+Workflow. A delegated agent never sees your conversation, only the brief you
+write. General-purpose and saved agents load this file when they start, but
+Explore and Plan agents do not, and by default no agent loads the crate
+`AGENTS.md` files or the design docs for its area on its own. So the brief
+carries the rules, or the work is done without them.
 
-- **Every brief must tell the agent to read `CLAUDE.md` first** (and the
-  relevant crate's `AGENTS.md`, plus any linked design doc for the area it
-  touches). That is how the prior-art gate, the cross-binding audit
-  (Mechanism 4), the code conventions, and the house style travel with the
-  work. Name the files in the brief; do not assume the agent will find them.
+- **Every brief names the files the agent must read.** For every agent, name
+  the relevant crate's `AGENTS.md` and any linked design doc for the area it
+  touches. Tell Explore, Plan, and Workflow agents to read `CLAUDE.md` first;
+  the others already have it, so point them at the sections that matter for
+  the task rather than asking them to read the whole file again. That is how
+  the prior-art gate, the cross-binding audit (Mechanism 4), the code
+  conventions, and the house style travel with the work. Do not assume the
+  agent will find the files.
 - **Coding subagents also work in the `fable-mode` skill.** Any agent that
   writes or edits code runs the same map, delegate, verify loop you do (see
   Working mode above), so say so in the brief. A read-only research or
@@ -47,12 +58,28 @@ done without them.
   agent on the newest Sonnet model (`model: "sonnet"` on the Agent tool or a
   Workflow `agent()` call) instead of the main reasoning model: writing or
   updating tests, linting, formatting, renames, small fixes, and running
-  checks (`scripts/check.py`, CI reruns) and fixing what they report. The
-  main reasoning model keeps the work that needs judgement: design,
-  debugging an unknown cause, review, and anything in a high-risk area
-  below. A routine task that turns out to need a design decision or an
-  unclear root cause goes back to the main model rather than being guessed
-  at.
+  checks (`scripts/check.py`, CI reruns) and fixing what they report. Prose
+  passes and cold reads of docs also run on Sonnet; the saved
+  `docs-cold-reader` agent already does. The main reasoning model keeps the
+  work that needs judgement: design, debugging an unknown cause, technical
+  and security review, and anything in a high-risk area below. A routine task
+  that turns out to need a design decision or an unclear root cause goes back
+  to the main model rather than being guessed at.
+- **One agent per pull request or issue.** Give each pull request, issue, or
+  other self-contained code change its own fresh agent, using the saved
+  [`implementer`](.claude/agents/implementer.md) agent, with `model: "sonnet"`
+  when the change is routine work as described above. Do not send one agent
+  through several pull requests in a row. Every turn re-reads the agent's
+  whole conversation, so a long-lived agent pays again for its earlier pull
+  requests on every later turn. Pass what the next agent needs (what is done,
+  what is next, open decisions) in a short progress file named in its brief.
+  The measurements behind this rule are in
+  [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md#token-cost-of-long-running-agents).
+- **Find code with the `LSP` tool and read only the lines you need.** When
+  the `LSP` tool is available, use
+  it to find definitions and references rather than grepping and then reading
+  whole files. Read the line range you need rather than the whole file. Every
+  read stays in the agent's context and is re-read on each later turn.
 
 ## What this project is
 
@@ -213,8 +240,9 @@ it as done - a design or exploration report, a recommendation, a non-trivial
 change, any claim you are about to call settled - **dispatch a separate agent
 (or a Workflow review stage) to review it adversarially.** Brief the reviewer
 to hunt for holes, missed cases, untested assertions, and wrong claims, not to
-confirm; name the artifact and its sources; tell it to read `CLAUDE.md` first;
-run it at **high or greater** effort. Fold its findings back before delivery.
+confirm; name the artifact and its sources; point it at the parts of
+`CLAUDE.md` that apply (tell a Workflow review stage to read the whole file
+first); run it at **high or greater** effort. Fold its findings back before delivery.
 
 - **"Self-critique before delivery" means route the critique to a fresh
   agent**, not reread your own output. The fable-mode skill's final step is
@@ -249,7 +277,10 @@ Citry turns Python values into HTML, CSS, JavaScript, and browser actions, so
 a feature can let data run in the visitor's browser without anyone noticing.
 When a change adds or alters how a value reaches the page (template syntax,
 attribute or tag handling, a keyword argument, an extension hook, a cached
-render, or an Events action), check its security before delivery, as follows:
+render, or an Events action), check its security before delivery. First open
+[`docs/security/where-values-reach-the-browser.md`](docs/security/where-values-reach-the-browser.md)
+and note which of the places listed there the change touches; steps 1 to 3
+and the step 4 brief use that list. Then follow these steps:
 
 1. **Name who first supplies each new input.** For every value the change
    accepts, say where it first comes from: the template author, the app's
@@ -269,7 +300,7 @@ render, or an Events action), check its security before delivery, as follows:
    function, in the Rust crate when the logic lives there, that every path
    calls.
 4. **Give the independent reviewer (Mechanism 6) a separate security brief.**
-   In the brief, name the places from the list below that the change
+   In the brief, name the places from that list that the change
    touches. Ask the reviewer to list every route the new input can take
    to the page and to try to defeat each check in a real browser, with a
    harmless test value whose effect is easy to see. Its report names each
@@ -301,66 +332,9 @@ render, or an Events action), check its security before delivery, as follows:
    step 5 and [`SECURITY.md`](SECURITY.md) instead, and gets a record only
    after its fix is released and disclosed.
 
-**Places where a value reaches the browser.** When a change touches one
-of these places, check it with steps 1 to 3 and name it in the step 4
-brief:
-
-- **Text and markup.** `{{ }}` output, `Markup`, `<c-raw>`, slot content,
-  `v-html` and Vue bindings that set a DOM property, and the HTML a Vue
-  fragment or an Events `Render` action inserts after the page has
-  loaded. HTML that Citry parses and writes again must mean the same
-  after the rewrite.
-- **Attribute names, not only values.** A `c-bind` spread or a Citry UI
-  `attrs=` argument (and the other `*_attrs=` arguments) lets data choose
-  the name. A data-chosen name can add an `on*` handler, set a DOM
-  property such as `innerHTML`, or contain a form feed or other control
-  character, which the browser reads as the end of the name.
-- **URL attributes.** `href`, `src`, `action`, `formaction`, `srcset`,
-  `xlink:href`, the URL in `<meta http-equiv="refresh">`, and the `to`,
-  `from`, `by` or `values` of an SVG `<set>` or `<animate>` that changes a
-  link. A `javascript:` URL runs code, and a `data:` URL can open a
-  document that runs code.
-- **Embedded documents.** An `iframe srcdoc` value, or a `data:` document
-  opened in a frame, by a link or by a form, is a whole page with its own
-  scripts and its own embedded documents.
-- **Tag names.** `<c-element>` and the Citry UI components that take a
-  tag. A data-chosen `script`, `style`, `plaintext` or `iframe` changes
-  how the browser reads the element's content, and `base`, `meta` or
-  `link` changes how the page loads.
-- **CSS.** `css_data()` values, in the stylesheet Citry generates from
-  them and in inline `<style>`, and `:style` bindings. Citry must write
-  them so they read the same under any encoding the page declares.
-- **JavaScript and JSON.** `js_data()`, the JSON Citry writes into
-  `<script>` blocks (Events, i18n and Vue data), Events responses, and any
-  value that ends up in a Vue or `$c-tr` expression the browser compiles.
-- **Translated messages.** A translated message and the values put into
-  it, through `tr()`, `<c-trans>` and the browser i18n runtime.
-- **Markers for Citry's browser code.** Render ids, root markers and
-  hydration markers. Data must not be able to write one.
-- **Addresses and keys the browser code takes from the server.** Fragment
-  and definition scripts, Events request URLs, and State and locale
-  names, which the browser code must look up so that a name such as
-  `__proto__` reaches only its own entry.
-- **Navigation.** `Redirect`, `PushUrl` and `ReplaceUrl`, including the
-  `Location` header on the no-JavaScript form path, which must not hold a
-  control character.
-- **Element `id` and `name`.** Citry's browser code must read `window`,
-  `document` and form members so that a data-chosen `id` or `name` cannot
-  change what it gets.
-- **The CSP nonce.** Every path that gives the page's nonce to a script,
-  including fragments inserted after the page has loaded.
-- **The opt-in output checks** (the `security_csp` and
-  `security_javascript` settings).
-  They must read attribute values and URLs as the browser reads them. A
-  check that reads a value differently lets code through or refuses
-  harmless text.
-- **Responses Citry serves.** `Content-Type` and its charset,
-  `X-Content-Type-Options`, `Cache-Control`, `Content-Disposition` on a
-  `Download`, the text of error bodies, and error output shown in the
-  page, such as the error fallback.
-
-When a review finds a new place, add it to this list in the same change,
-or, for a hole in a released version, when its advisory is published.
+When a review finds a new place where a value reaches the browser, add it to
+that list in the same change, or, for a hole in a released version, when its
+advisory is published.
 
 ## Mechanism 8 - check library code against other frameworks' advisories
 
@@ -518,7 +492,10 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   over `suppress_restart=False`; double negatives (`not suppress_restart`)
   are harder to read than direct positives.
 - **New or changed behavior comes with tests.** Tests are the primary
-  evidence the change works and the guard against regressions.
+  evidence the change works and the guard against regressions. Prove each
+  rule once, at the boundary that owns it, with representative cases rather
+  than every combination; the full rule is "Design verification" in
+  [`docs/agent/delivery-loop.md`](docs/agent/delivery-loop.md).
 - **Avoid verification and benchmarking rabbit holes.** Match the evidence
   budget to the risk and reversibility of the decision. For UI, content,
   prototypes, and other work that can be inspected and adjusted quickly,
@@ -580,137 +557,6 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   ready for handoff, a pull request, or release. Subagents and reviewers report
   their focused evidence and do not start duplicate repository-wide gates unless
   they were explicitly assigned integration ownership.
-
-## Design verification for the whole delivery loop
-
-Treat the time and maintenance cost of every test, validator, generated file,
-CI job, qualification step, and release gate as part of its design. More
-verification is not automatically better. Before adding or expanding one,
-state:
-
-- the concrete user-facing contract or failure it protects;
-- the least expensive boundary that can prove that contract;
-- when it runs and how often;
-- its expected effect on the local feedback loop, ordinary CI, and the release
-  critical path;
-- which existing build output or evidence it can reuse; and
-- which independent work can run concurrently.
-
-Prefer one proof at the boundary that owns an invariant. Repeat a proof at the
-unit, integration, distribution, and release layers only when each layer can
-fail in a distinct way. Prefer representative boundary cases over an exhaustive
-cross-product when a parser, type checker, schema, or lower-level test already
-proves the general rule. Remove or combine scaffolding whose maintenance and
-runtime cost outweigh the failure it can catch.
-
-Prepare every knowable release value and generated surface in the release
-candidate before qualification, including versions, filenames, hashes, runtime
-tuples, and metadata. A source mutation after publication is exceptional: use
-it only for a value assigned by the registry that cannot be represented or
-resolved from information known before publication. Keep that work off the path
-to the final tag. Post-release checks confirm that registries and deployments
-serve the qualified bytes; they do not become the first place normal package
-correctness is proved.
-
-Before implementing a mandatory step expected to add more than one minute to
-the longest routine CI or release path, or any step that creates a publish,
-source-update, and requalification cycle, call out the cost in the plan and get
-the user's explicit agreement. A safety improvement is incomplete when it makes
-routine changes or releases disproportionately slow. Reuse work, narrow the
-proof, move it earlier, or run independent work concurrently until the wider
-workflow remains practical.
-
-## Keep integration and release loops bounded
-
-Do not use CI as a slow, one-failure-at-a-time debugger. Before promoting or
-releasing a large change, map the whole operation: the commits to promote, the
-packages and versions to publish, their dependency order, the required local
-gates, the required CI checks, and the final public verification. State any
-step expected to take significant time.
-
-When CI fails:
-
-1. Inspect every failed job and read each job's complete failure output.
-2. Group failures by root cause before editing.
-3. Reproduce locally where practical.
-4. Fix the complete known failure set in one coherent pass.
-5. Run focused checks for the affected surfaces.
-6. Send the settled candidate through the required full gate.
-
-Do not create and push a new commit for each newly observed symptom when the
-remaining CI results can reveal related failures. Wait for the useful results,
-collect them, and make one corrective pass.
-
-While waiting on CI or release runs, wake up on the first failure, not only
-when every run has finished. A background command that polls `gh run` until
-every run finishes hides an early failure behind the slowest run. So the
-background command must:
-
-- exit as soon as any run or job finishes with a failure, a cancellation, or a
-  timeout; and
-- also exit after at most 20 minutes, even when nothing has changed, so the
-  agent wakes and checks a slow or stuck run.
-
-When you wake, read the failed jobs right away, even inside runs that are still
-going (`gh run view <run-id> --job <job-id> --log-failed`), rather than waiting
-for the whole workflow to finish. Then start a new background command on the
-runs that are still going, and keep going until every run that can still reveal
-a related failure has finished or a failure already makes the rest moot. Use
-that wait to group the failures and reproduce them locally. Waking up early
-does not mean fixing each failure as it appears: still make one corrective pass
-as described above.
-
-Run expensive repository-wide checks only at meaningful stage boundaries.
-During implementation and CI repair, use focused checks. Run the full local
-gate once the integrated candidate has settled, and run the required exact-SHA
-CI gate on the final release candidate. A small follow-up should rerun the
-checks its risk requires and any mandatory final gate, but should not
-automatically repeat unrelated qualification work that already passed.
-
-Before beginning a release, prefer one clean release candidate over a chain of
-incremental release commits. Separate these stages clearly:
-
-1. Stabilize the complete source change.
-2. Pass the local integration gate.
-3. Promote the settled candidate.
-4. Pass the required exact-SHA CI checks.
-5. Publish packages in dependency order.
-6. Verify each published artifact once from a clean consumer environment.
-7. Run exceptional post-release source updates in one non-blocking batch, only
-   when their values could not be prepared in the qualified candidate.
-
-Treat release evidence as belonging to one exact dependency closure, not merely
-to a commit that once passed locally:
-
-- **Prove the exact dependency closure before the first tag.** The candidate
-  must pass distribution qualification in a clean environment that installs
-  built artifacts, never workspace or editable installs. Resolve an unselected
-  dependency from its public registry. When the dependency is selected in the
-  same release, qualify against wheels built from that exact release commit so
-  independent builds can run concurrently. During promotion, publish and
-  verify the selected dependency's retained candidate bytes before starting
-  the dependent layer.
-- **Invalidate stale evidence after a late release correction.** If a package
-  version, dependency constraint, release lock, browser runtime tuple,
-  distribution verifier, or release-coupled test changes after a green gate,
-  stop before tagging. Recalculate the affected package/dependent closure and
-  rerun its focused checks plus every mandatory exact-SHA gate from the corrected
-  state. Do not cite the earlier full gate for files or dependency bytes it did
-  not test.
-- **Keep release-coupled values single-sourced.** Tests must derive versions,
-  ABI tags, and artifact filenames from the owning manifest, runtime manifest,
-  or build metadata, then validate their relationships and immutable public
-  artifacts. Do not copy the current version or wheel URL into a second test
-  literal. When public-registry evidence is required, fetch it in the release
-  workflow and pass it into a deterministic validator; unit tests use synthetic
-  registry payloads instead of network access.
-
-Keep the user informed when the actual cost diverges materially from the
-expected cost. If an unexpected problem adds more than 30 minutes, or the task
-takes more than twice the initial estimate, report what is consuming the time,
-which work is mandatory, which work is optional, and the fastest safe path
-forward before continuing.
-
 - **Read the gate's own report, not the shell's exit code.** Two things about
     `scripts/check.py` cost a wasted run every time they are forgotten:
   - **A failing phase carries its output in its `details` field.** With
@@ -805,6 +651,17 @@ forward before continuing.
   too); an unknown key silently drops to plain text. Full guidance is the
   "Writing docstrings" section of
   [`docs_site/content/community/development.md`](docs_site/content/community/development.md).
+
+## CI, releases, and new verification steps
+
+Three kinds of work follow the rules in
+[`docs/agent/delivery-loop.md`](docs/agent/delivery-loop.md). Read that
+file before you start any of them:
+
+- adding or widening a test suite, validator, generated file, CI job, or
+  release gate;
+- waiting on CI or release runs, or fixing a CI failure;
+- promoting a change to `main` or publishing a release.
 
 ## House style
 
@@ -921,47 +778,14 @@ doc or comment, reframe in terms of what is there now.
 (`RATIONALE.md` post-mortems are the narrow exception, and even there prefer
 abstract framing of the failure mode.)
 
-## What belongs in the CHANGELOG
+## Changelog entries
 
-Each published package owns its release notes. The root `CHANGELOG.md` belongs
-only to the Python `citry` package. Auxiliary distributions keep a
-`CHANGELOG.md` in their own package directory, for example
-`packages/py/citry_core/CHANGELOG.md`,
-`packages/py/pygments_citry/CHANGELOG.md`, and
-`packages/editors/vscode/CHANGELOG.md`. Record a release entry exactly once,
-in the changelog owned by that package.
-
-The owning changelog is read by **end users deciding whether to upgrade**, not
-by contributors auditing the diff. The test: *"does a user of the package
-need to know this, or do anything differently?"* If not, leave it out; the
-commit history already records it.
-
-- **Add an entry** when the change is observable from outside the package: a
-  fix to documented or relied-on behavior, a new or changed public API, a
-  behavior or default change, a deprecation, or a performance change a user
-  would notice.
-- **Skip the entry** for internal refactors, test-only changes,
-  CI/tooling/dependency bumps, and docstring/comment edits.
-- **When unsure**, try to phrase the entry as "you can now ..." or "X no
-  longer happens when you ..." where *you* is an ordinary user of the
-  package. If the only honest *you* is "you, a maintainer", it's not a
-  changelog entry. (A batch of internal fixes can still earn one high-level
-  line, e.g. "various caching leaks fixed", without detail.)
-
-### How to write a changelog entry
-
-- Lead with the outcome: what users can now do, what behaves differently, or
-  what they must change when upgrading.
-- Keep one user-visible change to one sentence when practical. Group related
-  implementation work under that sentence instead of listing every internal
-  capability, type, dependency, or edge case.
-- Use only the API names and keywords a reader needs to recognize the affected
-  feature. Put exhaustive technical detail in the commit, issue, or design
-  document.
-- Use a small before/after example when it communicates the difference faster
-  than prose. Show only the lines that change.
-- Give breaking changes enough space for the required migration. Ordinary
-  additions and fixes should remain easy to scan in the full release list.
+Each published package owns its `CHANGELOG.md`, which users read to decide
+whether to upgrade. Before you finish any change to code under `crates/` or
+`packages/`, read
+[`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md#write-changelog-entries)
+to decide whether the change needs an entry, which changelog owns it, and how
+to phrase it.
 
 ## Pointers
 
@@ -969,6 +793,8 @@ commit history already records it.
 - Cross-crate architecture -> [`docs/agent/INDEX.md`](docs/agent/INDEX.md)
 - Why the rules exist -> [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md)
 - Monorepo dev / build / release -> [`docs/codebase.md`](docs/codebase.md)
+- CI, releases, and new verification steps ->
+  [`docs/agent/delivery-loop.md`](docs/agent/delivery-loop.md)
 - Writing user-facing text ->
   [`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md)
 - Brand assets (the C3 logo, favicons, icons) ->

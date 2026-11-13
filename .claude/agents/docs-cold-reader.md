@@ -2,7 +2,7 @@
 name: docs-cold-reader
 description: Reviews user-facing Citry text (docs pages, READMEs, docstrings, error messages) as a first-time reader. Reports unclear passages, jargon, wrong order, dense paragraphs, long headings, and facts changed against a base revision, then runs a separate prose pass. Use after writing or rewriting user-facing text, before calling it done. Give it the files to review and the base revision. It reports and never edits.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: sonnet
 ---
 
 You review user-facing text in the Citry repository. You read it the way a
@@ -11,8 +11,9 @@ edit any file.
 
 ## Before you start
 
-1. Read `CLAUDE.md` in full, especially the House style section and the
-   "Substantive prose gets its own review pass" bullet of Mechanism 6.
+1. `CLAUDE.md` is already in your context. Reread its House style section
+   and the "Substantive prose gets its own review pass" bullet of
+   Mechanism 6.
 2. Read `docs/best-practices/writing-docs.md`. It is the standard you
    review against.
 3. Read the model page, `docs_site/content/events/actions.md`, so you know

@@ -102,10 +102,40 @@ During the 0.6.0 release, the agent started one background command that polled
 every CI and release run and exited only once all of them had finished. The
 `Check` workflow and the browser tests on main had already failed, but release
 qualification kept running for another hour, so nobody looked at the failures
-until it ended. The rule in CLAUDE.md ("Keep integration and release loops
-bounded") followed: a watcher exits on the first failure and on a timer of at
-most 20 minutes, and the agent reads failed jobs inside runs that are still
-going.
+until it ended. The rule in [`delivery-loop.md`](delivery-loop.md) ("Keep
+integration and release loops bounded") followed: a watcher exits on the first
+failure and on a timer of at most 20 minutes, and the agent reads failed jobs
+inside runs that are still going.
+
+## Token cost of long-running agents
+
+In November 2026 we measured seven weeks of local Claude Code transcripts
+for this repository: 143,618 model requests, priced at Anthropic's list
+prices. Three findings shaped the rules on delegation and the project
+settings:
+
+- **Long-lived agents cost the most.** Each model request re-sends the
+  agent's whole conversation, and the cached part is billed again on every
+  turn. Agents that ran 150 or more turns, often one agent working through
+  several pull requests, were 47% of all spend, and their context grew to
+  about 967,000 tokens before Claude Code compacted it. Replaying the
+  transcripts with compaction at 400,000 tokens cut the total by an
+  estimated 13 to 21%. This estimate leaves out any work lost when
+  compaction drops detail. That is why we use one agent per pull request and
+  set `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in
+  [`.claude/settings.json`](../../.claude/settings.json). The variable also
+  overrides any `autoCompactWindow` a saved agent sets.
+- **Subagent caches expired while agents waited.** A subagent's prompt cache
+  lasts five minutes. About 1,260 times an agent waited longer (on a build,
+  CI, or another agent) and wrote its whole context to the cache again. A
+  one-hour cache costs more to write, so it pays only for agents that wait.
+  Giving it to the agents with 150 or more turns saved more in the replay
+  than giving it to every subagent. The
+  [`implementer`](../../.claude/agents/implementer.md) agent is the one that
+  runs that long, so only it sets the one-hour cache.
+- **File reads fill the context.** Reading files was about half of all tool
+  output, and test or CI output about 1%. That is why agents find code with
+  the `LSP` tool and read only the lines they need.
 
 ## What the industry has observed
 
