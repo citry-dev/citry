@@ -56,8 +56,8 @@ Do not review your own substantive work by rereading it: you re-read with the sa
 assumptions that produced it, so you miss the same things (this is not hypothetical, it
 is how superficial reviews happen). Dispatch a SEPARATE agent (or a Workflow review
 stage) to review the output adversarially, briefed to hunt for holes, missed cases,
-untested assertions, and wrong claims (not to confirm), told to read CLAUDE.md first, run
-at max effort. Fold its findings back before presenting. See CLAUDE.md Mechanism 6. A
+untested assertions, and wrong claims (not to confirm), pointed at the parts of CLAUDE.md
+that apply, run at max effort. Fold its findings back before presenting. See CLAUDE.md Mechanism 6. A
 claim that a mechanism "is enough" or "is not needed" is a hypothesis until an edge case
 has tried to break it. (Trivial or conversational tasks are exempt; a design, a
 recommendation, or a non-trivial change is not.)

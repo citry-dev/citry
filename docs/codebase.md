@@ -254,6 +254,55 @@ pip install uv
    cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_native_render -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
    ```
 
+### Setting up Claude Code
+
+The repository's [`.claude/settings.json`](../.claude/settings.json) sets
+up Claude Code the same way for everyone who works here. The measurements
+behind these settings are in
+[`docs/agent/RATIONALE.md`](agent/RATIONALE.md#token-cost-of-long-running-agents).
+
+- **`CLAUDE_CODE_AUTO_COMPACT_WINDOW` is 400000.** Claude Code compacts a
+  conversation (replaces its history with a summary) once its context reaches
+  400,000 tokens, in the main session and in every subagent. On a model with
+  a 1M-token context window it otherwise waits until about 967,000 tokens,
+  and every turn re-sends, and pays for, the whole context.
+- **The settings enable two code intelligence plugins**, `rust-analyzer-lsp`
+  and `pyright-lsp` from Anthropic's official marketplace. They give Claude an
+  `LSP` tool that finds definitions and references by symbol, and report type
+  errors after each edit. Claude Code installs the plugins, but not the
+  language servers they start. Install those once:
+
+  ```bash
+  # rust-analyzer for the pinned nightly; run it again after moving
+  # the nightly date, because rustup installs components per toolchain
+  rustup component add rust-analyzer
+
+  # pyright at the version package.json pins for the check gate
+  npm install -g "pyright@$(node -p \
+    "require('./package.json').devDependencies.pyright")"
+  ```
+
+  A missing server does not stop the session. Claude falls back to grep and
+  whole-file reads, and the plugin reports the problem only under
+  `/plugin` > **Errors**. So a SessionStart hook,
+  [`check-lsp-servers.py`](../.claude/hooks/check-lsp-servers.py), checks
+  both servers each time a session starts. When one is missing, does not
+  start, or (for pyright) differs from the pinned version, it shows a
+  warning with the command that fixes it, and tells Claude that the `LSP`
+  tool will fail for that language.
+- **The PostToolUse hook** in [`.claude/hooks/`](../.claude/hooks/) warns
+  Claude when an edit adds an em dash, or a word that the house style in
+  `CLAUDE.md` bans.
+
+The saved agents in [`.claude/agents/`](../.claude/agents/) carry their own
+settings. `docs-cold-reader` runs on Sonnet. `implementer` keeps its prompt
+cache (the copy of its context that the model can reuse cheaply between
+turns) for one hour instead of five minutes, because it often waits on
+builds and CI for longer than that. Claude Code ignores the one-hour setting
+while a subscription is drawing on usage credits, and the
+`subagentPromptCacheTtl` setting or the
+`CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL` variable overrides it.
+
 ## Common Development Tasks
 
 **Note**: Codebase-wide tools (like `uv sync`, `uv run pytest`, `uv run ruff`) should be run from the **repository root directory**, as they read the root [`pyproject.toml`](../pyproject.toml) for configuration.
@@ -1788,13 +1837,13 @@ and monorepo infrastructure do not need user-facing release notes.
 Use clear user-facing language, include migration instructions for breaking
 changes, and link relevant issues when helpful. Record each release exactly
 once in its owning changelog. The content test and exclusions are defined in
-[`CLAUDE.md`](../CLAUDE.md#what-belongs-in-the-changelog).
+[`docs/best-practices/writing-docs.md`](best-practices/writing-docs.md#what-belongs-in-a-changelog).
 
 Write each item as one outcome-first sentence when practical. Group related
 implementation work, keep only the API names and keywords users need, and use
 a small before/after example when it is faster to understand than prose.
 Breaking migrations may be longer. The complete writing rules live in
-[`CLAUDE.md`](../CLAUDE.md#how-to-write-a-changelog-entry).
+[`docs/best-practices/writing-docs.md`](best-practices/writing-docs.md#how-to-write-a-changelog-entry).
 
 ## Versioning, tags and releases
 
