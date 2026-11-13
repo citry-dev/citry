@@ -386,6 +386,11 @@ change.
   `Markup` in an attribute keeps such a character.
 - `citry preview` now sends `charset=utf-8` with text responses, as the
   Django, ASGI and WSGI adapters do.
+- With the `Debug` extension on, a render whose HTML starts with many
+  comments, such as a comment inside a `<c-for>` over a long list, could
+  take minutes. It now takes time in step with the length of the HTML.
+  The same fix applies to third-party extensions that, like `Debug`, skip
+  their wrapper around a whole HTML document.
 
 ## v0.7.0
 

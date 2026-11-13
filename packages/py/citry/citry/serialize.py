@@ -88,8 +88,18 @@ _VALUED_MARKER_RE = re.compile(r'^[^\s"\'=<>/]+="[^"<>]*"$')
 _DEPS_STRATEGIES = get_args(DepsStrategy)
 _DEPS_POSITIONS = get_args(DepsPosition)
 _CSP_NONCE_RE = re.compile(r"^[A-Za-z0-9+/_-]+={0,2}$")
+# Matches HTML that starts like a whole document: optional whitespace and a
+# byte order mark, optional leading comments, then a doctype or `<html>`.
+# The leading comments are read as one span, from the first `<!--` to a
+# `-->` that the doctype or `<html>` follows, so the regex engine tries each
+# `-->` once and the time grows in step with the length of the HTML. Keep it
+# one span: a pattern that matches the comments one at a time lets the
+# engine try every way of splitting a run of comments, and the time doubles
+# with each comment. Rendered HTML reaches this check when an extension asks
+# for it (the Debug extension does), and a comment inside a `<c-for>`
+# repeats once per data item.
 _DOCUMENT_ROOT_RE = re.compile(
-    r"\A\s*(?:\ufeff\s*)?(?:(?:<!--.*?-->)\s*)*(?:<!doctype\s+html(?:\s[^>]*)?>|<html(?:\s|>))",
+    r"\A\s*(?:\ufeff\s*)?(?:<!--.*-->\s*)?(?:<!doctype\s+html(?:\s[^>]*)?>|<html(?:\s|>))",
     flags=re.IGNORECASE | re.DOTALL,
 )
 _TEXTAREA_OPEN_RE = re.compile(r"<textarea(?:\s|>)", re.IGNORECASE)
