@@ -1850,6 +1850,43 @@ not shown." Messages for other fields, and the fields of an
 `EventError`, are always listed in full. The error still has only the
 protocol's fixed keys.
 
+The validators name each field with a pair of its parent's path and one
+more key, and write the text only for the messages they keep, so a long
+dict key over many items costs about the same to check as a short one.
+Two paths with the same text share one message, even when a key that
+holds dots made one of them.
+
+Pydantic writes the whole path text into each error it reports, before
+Citry sees any of them, so the same pairs cannot help there. Before each
+Pydantic call, Citry adds the path text of the payload to a running
+total for the whole validation. Each object counts its path once for
+each field it may lack. Citry takes that number from the model with the
+most required fields, or from the longest NamedTuple if it has more
+positions. Each list counts its path once per position of the longest
+fixed tuple or NamedTuple. In a model with a `Json` field, each string
+counts by its tokens, and a string that may hold more `Json` text is
+decoded and counted the same way. Pydantic's parser and Python's
+disagree on repeated keys and on depth, so the count does not use a
+parser on the whole text.
+
+Each member of a union without a discriminator reports its own errors,
+so the total for the whole payload, fields outside the union included,
+is multiplied by the number of members of the union. Nested unions add
+up inside that. Unions in different fields do not multiply: the code
+takes the larger count. An attempt at a union in Citry's own validators
+adds to the same total.
+
+When the total is over 16 MiB, or about 32 times the size of the
+payloads if that is larger, Citry refuses that object with a 422 and one
+message. The message goes on the object's own path for `data` (`_args`
+at the top level), or on `_state` for State writes. A Pydantic dataclass
+is measured the same way, and its errors become a 422 with field
+messages. A Pydantic dataclass State is measured before Citry writes to
+it, with or without `validate_assignment`. This also refuses a payload
+that would have been valid, because Citry cannot tell before Pydantic
+runs. It cannot see inside a string that a validator of the app parses
+itself.
+
 ### 4.4 How the state token reaches the client
 
 On an interactive page the server puts this manifest into the prepared Vue

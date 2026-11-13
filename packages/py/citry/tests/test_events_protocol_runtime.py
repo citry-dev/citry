@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tracemalloc
 from collections import UserDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -482,3 +483,19 @@ def test_rejected_call_envelope_without_a_request_id_refuses_a_non_edge_code(raw
     # for another code refuses, whatever shape the raw envelope had.
     with pytest.raises(events.ProtocolValueError):
         events.build_rejected_call_envelope(raw, status=404, code="not_found", message="Missing.")
+
+
+def test_a_strict_json_problem_names_its_pointer_without_copying_keys() -> None:
+    # A value that is not JSON sits beside a long key over many items. The
+    # walk writes the pointer once, for the problem, so this takes no memory
+    # to speak of; writing one per item took 3 GB at this size.
+    value: dict[str, Any] = {"a/b~c": [1, {"x": [object()]}], "z": {"k" * 112_000: [1] * 28_000}}
+    tracemalloc.start()
+    try:
+        issue = events.validate_strict_json(value, "/calls/0")
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert issue is not None
+    assert issue.path == "/calls/0/a~1b~0c/1/x/0"
+    assert peak < 16_000_000

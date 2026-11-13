@@ -8,7 +8,7 @@ import math
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Literal, TypeAlias, cast
+from typing import Any, Literal, TypeAlias, cast
 
 from citry._component_introspection import _installed_citry_version
 from citry._vue.compiler import HELPER_CONTRACT
@@ -434,39 +434,46 @@ def _validate_root_marker(marker: object, path: str) -> None:
 
 def _validate_frozen_json(root: object, path: str) -> None:
     """Validate immutable strict JSON without collapsing duplicate object keys."""
-    pending: list[tuple[object, int, str]] = [(root, 0, path)]
+    # Each place is a pair of its parent's place and one step, as in
+    # `_validate_json_shape`, and its text is written only for an error.
+    pending: list[tuple[object, int, tuple[Any, str | int] | None]] = [(root, 0, None)]
     records = 0
     while pending:
-        value, depth, value_path = pending.pop()
+        value, depth, place = pending.pop()
         if depth > _MAX_ARTIFACT_DEPTH:
             raise CacheArtifactError(
                 f"Cached render artifact exceeds the {_MAX_ARTIFACT_DEPTH} level structural depth limit at"
-                f" {value_path}."
+                f" {_shape_path(path, place)}."
             )
         if type(value) is FrozenJsonObject:
             records += 1
             items = value.items
             if type(items) is not tuple:
-                raise CacheArtifactError(f"{value_path}.items must be an immutable tuple.")
+                raise CacheArtifactError(f"{_shape_path(path, place)}.items must be an immutable tuple.")
             keys: list[str] = []
             for index, pair in enumerate(items):
                 if type(pair) is not tuple or len(pair) != 2 or type(pair[0]) is not str:
-                    raise CacheArtifactError(f"{value_path}.items[{index}] is not a string-keyed pair.")
-                _validate_utf8_text(pair[0], f"{value_path}.items[{index}][0]")
+                    raise CacheArtifactError(f"{_shape_path(path, place)}.items[{index}] is not a string-keyed pair.")
+                # The path text is written only for a key that fails; see _is_utf8_text.
+                if not _is_utf8_text(pair[0]):
+                    _validate_utf8_text(pair[0], f"{_shape_path(path, place)}.items[{index}][0]")
                 keys.append(pair[0])
-                pending.append((pair[1], depth + 1, f"{value_path}.{pair[0]}"))
+                pending.append((pair[1], depth + 1, (place, pair[0])))
             if keys != sorted(keys) or len(keys) != len(set(keys)):
-                raise CacheArtifactError(f"{value_path} keys must be unique and sorted.")
+                raise CacheArtifactError(f"{_shape_path(path, place)} keys must be unique and sorted.")
         elif type(value) is tuple:
             records += 1
-            pending.extend((item, depth + 1, f"{value_path}[{index}]") for index, item in enumerate(value))
+            pending.extend((item, depth + 1, (place, index)) for index, item in enumerate(value))
         elif type(value) is float:
             if not math.isfinite(value):
-                raise CacheArtifactError(f"{value_path} contains a non-finite number.")
+                raise CacheArtifactError(f"{_shape_path(path, place)} contains a non-finite number.")
         elif type(value) is str:
-            _validate_utf8_text(value, value_path)
+            if not _is_utf8_text(value):
+                _validate_utf8_text(value, _shape_path(path, place))
         elif value is not None and type(value) not in (bool, int, str):
-            raise CacheArtifactError(f"{value_path} contains unsupported frozen JSON value {type(value).__name__}.")
+            raise CacheArtifactError(
+                f"{_shape_path(path, place)} contains unsupported frozen JSON value {type(value).__name__}."
+            )
         if records > _MAX_ARTIFACT_RECORDS:
             raise CacheArtifactError(
                 f"Cached render artifact exceeds the {_MAX_ARTIFACT_RECORDS:,} structural record limit."
@@ -489,12 +496,17 @@ def _reject_json_constant(value: str) -> object:
 def _validate_json_shape(root: object, path: str = "artifact") -> None:
     """Enforce structural limits iteratively before typed conversion."""
     state = _ShapeState()
-    pending: list[tuple[object, int, str]] = [(root, 0, path)]
+    # Each entry names its place by a pair of its parent's place and its own
+    # step, and the text is written only for an error. Render data can hold a
+    # long key over many items, and copying the key per item would use memory
+    # growing with the square of the data's size.
+    pending: list[tuple[object, int, tuple[Any, str | int] | None]] = [(root, 0, None)]
     while pending:
-        value, depth, path = pending.pop()
+        value, depth, place = pending.pop()
         if depth > _MAX_ARTIFACT_DEPTH:
             raise CacheArtifactError(
-                f"Cached render artifact exceeds the {_MAX_ARTIFACT_DEPTH} level structural depth limit at {path}."
+                f"Cached render artifact exceeds the {_MAX_ARTIFACT_DEPTH} level structural depth limit at "
+                f"{_shape_path(path, place)}."
             )
         if type(value) in (list, dict):
             state.records += 1
@@ -503,21 +515,53 @@ def _validate_json_shape(root: object, path: str = "artifact") -> None:
                     f"Cached render artifact exceeds the {_MAX_ARTIFACT_RECORDS:,} structural record limit."
                 )
         if type(value) is list:
-            pending.extend((item, depth + 1, f"{path}[{index}]") for index, item in enumerate(value))
+            pending.extend((item, depth + 1, (place, index)) for index, item in enumerate(value))
         elif type(value) is dict:
             for key, item in cast("dict[object, object]", value).items():
                 if type(key) is not str:
-                    raise CacheArtifactError(f"{path} contains a non-string object key.")
-                _validate_utf8_text(key, f"{path} object key")
-                pending.append((item, depth + 1, f"{path}.{key}"))
+                    raise CacheArtifactError(f"{_shape_path(path, place)} contains a non-string object key.")
+                # The path text is written only for a key that fails; see _is_utf8_text.
+                if not _is_utf8_text(key):
+                    _validate_utf8_text(key, f"{_shape_path(path, place)} object key")
+                pending.append((item, depth + 1, (place, key)))
         elif type(value) is float and not math.isfinite(value):
-            raise CacheArtifactError(f"Cached render artifact contains a non-finite number at {path}.")
+            raise CacheArtifactError(
+                f"Cached render artifact contains a non-finite number at {_shape_path(path, place)}."
+            )
         elif type(value) is str:
-            _validate_utf8_text(value, path)
+            if not _is_utf8_text(value):
+                _validate_utf8_text(value, _shape_path(path, place))
         elif value is not None and type(value) not in (bool, int, float, str):
             raise CacheArtifactError(
-                f"Cached render artifact contains unsupported JSON value {type(value).__name__} at {path}."
+                "Cached render artifact contains unsupported JSON value "
+                f"{type(value).__name__} at {_shape_path(path, place)}."
             )
+
+
+def _shape_path(path: str, place: tuple[Any, str | int] | None) -> str:
+    """Write the text of a place in the render data walkers: a list index in brackets, a key after a dot."""
+    steps: list[str] = []
+    while place is not None:
+        step = place[1]
+        steps.append(f"[{step}]" if type(step) is int else f".{step}")
+        place = place[0]
+    return path + "".join(reversed(steps))
+
+
+def _is_utf8_text(value: str) -> bool:
+    """
+    Return whether ``value`` can be written as UTF-8.
+
+    :func:`_validate_frozen_json` and :func:`_validate_json_shape` call this
+    before :func:`_validate_utf8_text`, which needs the value's path text for
+    its message. Writing that text for every string would copy a long parent
+    key once per item, so they write it only for the value that fails.
+    """
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _artifact_to_wire(artifact: CachedRenderArtifact) -> dict[str, object]:
@@ -1235,26 +1279,26 @@ def _freeze_json_value(value: object, path: str) -> FrozenJsonValue:
     return _freeze_json(value, path)
 
 
-def _freeze_json(value: object, path: str) -> FrozenJsonValue:
+def _freeze_json(value: object, path: str, place: tuple[Any, str | int] | None = None) -> FrozenJsonValue:
     if value is None or type(value) in (bool, int, str):
         return cast("None | bool | int | str", value)
     if type(value) is float:
         if not math.isfinite(value):
-            raise CacheArtifactError(f"{path} contains a non-finite number.")
+            raise CacheArtifactError(f"{_shape_path(path, place)} contains a non-finite number.")
         return value
     if type(value) is list:
-        return tuple(_freeze_json(item, f"{path}[{index}]") for index, item in enumerate(value))
+        return tuple(_freeze_json(item, path, (place, index)) for index, item in enumerate(value))
     if type(value) is dict:
         mapping = cast("dict[object, object]", value)
         keys = list(mapping)
         for key in keys:
             if type(key) is not str:
-                raise CacheArtifactError(f"{path} contains a non-string object key.")
+                raise CacheArtifactError(f"{_shape_path(path, place)} contains a non-string object key.")
         items: list[tuple[str, FrozenJsonValue]] = []
         for key in sorted(cast("list[str]", keys)):
-            items.append((key, _freeze_json(mapping[key], f"{path}.{key}")))
+            items.append((key, _freeze_json(mapping[key], path, (place, key))))
         return FrozenJsonObject(tuple(items))
-    raise CacheArtifactError(f"{path} contains unsupported JSON value {type(value).__name__}.")
+    raise CacheArtifactError(f"{_shape_path(path, place)} contains unsupported JSON value {type(value).__name__}.")
 
 
 def _thaw_json(value: FrozenJsonValue) -> object:

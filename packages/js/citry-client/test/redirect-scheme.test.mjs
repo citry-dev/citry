@@ -118,3 +118,67 @@ test("a redirect whose URL is not a string is refused with its own message", asy
     context.CitryVueEvents = protocolEvents;
   }
 });
+
+// The scheme rule of Citry 0.7.0 and earlier, kept here as the reference the shipped rule must agree
+// with. It trims with a regex, which takes seconds on a long run of spaces inside a URL.
+const releasedScheme = (url) => {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the released rule, copied as written.
+  const text = url.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, "");
+  const match = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(text);
+  return match ? match[1].toLowerCase() : null;
+};
+
+test("a redirect is followed or refused exactly as the released scheme rule decides", async () => {
+  // A small fixed-seed generator, so a failure names the same URL on every run.
+  let seed = 4285;
+  const next = (limit) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % limit;
+  };
+  const pieces = [
+    "\u0000",
+    "\u0001",
+    " ",
+    "\t",
+    "\n",
+    "\r",
+    "!",
+    " ",
+    "a",
+    "Z",
+    "j",
+    ":",
+    "+",
+    ".",
+    "-",
+    "/",
+    "http",
+    "s",
+  ];
+  for (let index = 0; index < 3000; index++) {
+    let url = "";
+    const length = 1 + next(12);
+    for (let part = 0; part < length; part++) url += pieces[next(pieces.length)];
+    const scheme = releasedScheme(url);
+    await redirect(url);
+    if (scheme === null || scheme === "http" || scheme === "https") {
+      assert.deepEqual(assigned, [url], JSON.stringify(url));
+      assert.deepEqual(errors, [], JSON.stringify(url));
+    } else {
+      assert.deepEqual(assigned, [], JSON.stringify(url));
+      assert.equal(errors.length, 1, JSON.stringify(url));
+      assert.ok(errors[0].includes(`the ${JSON.stringify(scheme)} scheme`), JSON.stringify(url));
+    }
+  }
+});
+
+test("a redirect URL with a long run of spaces inside is checked quickly", async () => {
+  // The released rule took about 3 s on this URL; walking in from the ends takes well under 1 ms.
+  for (const url of [`/a${" ".repeat(100_000)}b`, `javascript:${" ".repeat(100_000)}x`]) {
+    const started = performance.now();
+    await redirect(url);
+    assert.ok(performance.now() - started < 500, `took ${performance.now() - started} ms`);
+  }
+  // Only the javascript: URL is refused, and it is the last one checked.
+  assert.equal(errors.length, 1);
+});

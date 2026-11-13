@@ -6,11 +6,14 @@ per-field errors, Pydantic wholesale delegation, and the neutral
 UploadedFile type (docs/design/events.md sections 3.3 and 6.2).
 """
 
+import gc
 import io
+import json
 import subprocess
 import sys
 import textwrap
 import typing
+import weakref
 from collections.abc import Mapping
 from dataclasses import dataclass, is_dataclass
 from dataclasses import field as dataclass_field
@@ -18,6 +21,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum, IntEnum
 from pathlib import Path
+from time import perf_counter
 from types import MappingProxyType
 from typing import Any, Literal, Protocol, TypedDict, TypeVar
 from uuid import UUID
@@ -26,12 +30,15 @@ import pytest
 import typing_extensions
 
 from citry.ext.events import schemas as schemas_module
+from citry.ext.events.errors import FieldErrors, PydanticTotal
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.schemas import (
+    PATHS_TOO_LONG_MESSAGE,
     StringArgs,
     ValidationResult,
     convert_schema_class,
     declared_field_names,
+    pydantic_can_report,
     validate_args,
 )
 
@@ -1643,6 +1650,50 @@ class TestPydanticItemErrorLimit:
         result = validate_args(Scores, {"scores": {"1" * 5000: "x"}})
         assert list(result.fields) == ["scores." + "1" * 5000]
 
+    def test_marking_the_lists_of_deep_errors_takes_time_in_step_with_their_depth(self):
+        class Node(pydantic.BaseModel):
+            c: "list[Node]" = []
+
+        Node.model_rebuild(_types_namespace={"Node": Node})
+
+        def best_time(depth: int) -> float:
+            # Every error passes through `depth` lists. The best of three
+            # runs keeps one slow run of a busy machine out of the ratio.
+            best = float("inf")
+            for _run in range(3):
+                value: dict[str, Any] = {"c": [1] * 3_000}
+                for _level in range(depth - 1):
+                    value = {"c": [value]}
+                started = perf_counter()
+                result = validate_args(Node, value)
+                best = min(best, perf_counter() - started)
+                # The innermost list still lists only twenty messages.
+                assert len(result.fields) == 20
+                assert result.unlisted_fields == 2_980
+            return best
+
+        # Writing the text of each list for each error made the time grow
+        # with the square of the depth: five times the depth took about 19
+        # times as long. Reading each error once takes about 5 times as long,
+        # and the bound leaves room for a slow machine.
+        assert best_time(200) < 10 * best_time(40)
+
+    @pytest.mark.parametrize("data_class", ["top", "nested"])
+    def test_a_list_field_with_an_empty_alias_is_limited(self, data_class):
+        class Empty(pydantic.BaseModel):
+            v: list[int] = pydantic.Field(alias="")
+
+        @dataclass
+        class Outer:
+            o: Empty
+
+        if data_class == "top":
+            result = validate_args(Empty, {"": ["x"] * 500})
+        else:
+            result = validate_args(Outer, {"o": {"": ["x"] * 500}})
+        assert len(result.fields) == 20
+        assert result.unlisted_fields == 480
+
 
 def test_a_very_long_digit_key_is_an_ordinary_unexpected_field():
     result = validate_args(TagsList, {"tags": [], "1" * 5000: 1})
@@ -1652,3 +1703,449 @@ def test_a_very_long_digit_key_is_an_ordinary_unexpected_field():
 def test_digit_segments_sort_in_number_order_with_leading_zeros_apart():
     result = validate_args(TagsList, {"tags": [], "10": 1, "9": 1, "09": 1, "x": 1})
     assert list(result.fields) == ["09", "9", "10", "x"]
+
+
+@requires_pydantic
+class TestPydanticPathText:
+    """Pydantic writes each field's path into its errors, so Citry adds up the paths before calling it."""
+
+    class Model(pydantic.BaseModel if pydantic else object):  # type: ignore[misc]
+        pass
+
+    def _passes(self, payload, model=None):
+        return pydantic_can_report(payload, model or self.Model, FieldErrors())
+
+    def test_short_paths_pass(self):
+        assert self._passes({"tags": ["x"] * 100_000})
+
+    def test_a_long_key_over_many_items_does_not_pass(self):
+        assert not self._passes({"tags": {"a" * 56_000: ["x"] * 14_000}})
+
+    def test_the_total_runs_across_a_validation(self):
+        # One object is under the limit; four of them together are not.
+        errors = FieldErrors()
+
+        # Held in a list, as a request's payload is held: the total reads ids.
+        payloads = [{"tags": {"a" * 40_000: ["x"] * 120}} for _ in range(4)]
+        assert [pydantic_can_report(payload, self.Model, errors) for payload in payloads] == [True, True, True, False]
+
+    def test_each_union_attempt_counts_the_same_payload_again(self):
+        class First(pydantic.BaseModel):
+            pass
+
+        class Second(pydantic.BaseModel):
+            pass
+
+        errors = FieldErrors()
+        scratch = FieldErrors(shares_total_with=errors)
+        # One payload object, as Citry's own union hands to each of its members.
+        payload = {"tags": {"a" * 40_000: ["x"] * 400}}
+        assert pydantic_can_report(payload, First, scratch)
+        size = errors.pydantic_total.size
+        assert not pydantic_can_report(payload, Second, errors)
+        # Reading it twice adds paths, and does not make the payload larger.
+        assert errors.pydantic_total.size == size
+
+    @pytest.mark.parametrize(("rows", "reaches_costly"), [(1, True), (10, True), (100, True), (1_000, False)])
+    def test_a_citry_union_of_pydantic_models_is_held_to_the_limit(self, rows, reaches_costly):
+        class Cheap(pydantic.BaseModel):
+            other: int
+
+        row = pydantic.create_model("Row", **{f"f{index:02d}": (int, ...) for index in range(40)})
+        checked: list[object] = []
+
+        class Costly(pydantic.BaseModel):
+            rows: dict[str, list[row]]  # type: ignore[valid-type]
+
+            # Runs only when Pydantic checks this member.
+            @pydantic.model_validator(mode="before")
+            @classmethod
+            def note(cls, value: object) -> object:
+                checked.append(value)
+                return value
+
+        @dataclass
+        class Data:
+            value: Cheap | Costly
+
+        # Each empty row lacks 40 fields under Costly and one under Cheap,
+        # so only Costly's count is over the limit. Citry tries Cheap first,
+        # and must still count the same object again for Costly. With fewer
+        # rows the count stays under the limit, so Costly runs: that shows
+        # `checked` is empty at 1,000 rows because of the limit.
+        payload = {"rows": {"a" * 500: [{} for _ in range(rows)]}}
+        result = validate_args(Data, {"value": payload})
+        assert not result.ok
+        assert bool(checked) is reaches_costly
+
+    def test_the_limit_follows_the_size_of_a_large_payload(self):
+        # The same paths pass when the payload holds enough other text, so
+        # an app that raises its body limit is not caught by the fixed amount.
+        tight = {"tags": {"a" * 20_000: ["x"] * 1_000}}
+        assert not self._passes(tight)
+        assert self._passes({**tight, "note": "n" * 1_000_000})
+
+    def test_a_large_grid_of_short_numbers_passes(self):
+        # Long lists of short numbers under one field are the valid shape
+        # nearest the limit. Through JSON, as a request's data is, so no
+        # list is shared.
+        grid = json.loads(json.dumps({"measurement_grid_values_x": [[1] * 700] * 700}))
+        assert self._passes(grid)
+
+    def test_a_value_that_holds_itself_ends_the_walk(self):
+        cycle: dict[str, Any] = {}
+        cycle["self"] = cycle
+        assert self._passes(cycle)
+
+    @pytest.mark.parametrize(
+        "shape",
+        [
+            pytest.param('{"K": [ITEMS]}', id="plain"),
+            # A parser that keeps the last repeated key would see nothing here.
+            pytest.param('{"K": [ITEMS], "K": []}', id="repeated-key"),
+            # Python's parser and Pydantic's stop at different depths.
+            pytest.param('{"K": [ITEMS], "x": ' + "[" * 201 + "]" * 201 + "}", id="deep-sibling"),
+            pytest.param('{"K": [NaN, ITEMS]}', id="not-strict-json"),
+            pytest.param('{"K": [ITEMS]', id="unclosed"),
+        ],
+    )
+    def test_the_paths_inside_a_json_field_count(self, shape):
+        class WithJson(pydantic.BaseModel):
+            data: pydantic.Json[dict[str, list[int]]]
+
+        text = shape.replace("K", "a" * 56_000).replace("ITEMS", ",".join(['"x"'] * 14_000))
+        assert self._passes({"data": text})
+        assert not self._passes({"data": text}, WithJson)
+
+    def test_many_short_json_strings_add_up(self):
+        class WithJson(pydantic.BaseModel):
+            data: dict[str, list[pydantic.Json[list[str]]]]
+
+        text = "[" + ",".join(['"x"'] * 100) + "]"
+        payload = {"data": {"a" * 200_000: [text] * 1_000}}
+        assert not self._passes(json.loads(json.dumps(payload)), WithJson)
+
+    def test_text_that_ends_in_a_backslash_is_read_in_one_pass(self):
+        class WithJson(pydantic.BaseModel):
+            data: pydantic.Json[list[str]]
+
+        started = perf_counter()
+        self._passes({"data": '\\"' * 100_000 + "\\"}, WithJson)
+        assert perf_counter() - started < 0.5
+
+    def test_json_text_inside_json_text_counts(self):
+        class Twice(pydantic.BaseModel):
+            data: dict[str, pydantic.Json[pydantic.Json[list[int]]]]
+
+        inner = json.dumps(json.dumps(["x"] * 14_000))
+        assert not self._passes({"data": {"a" * 56_000: inner}}, Twice)
+
+    def test_json_text_under_a_long_key_in_json_text_counts_the_key(self):
+        class Nested(pydantic.BaseModel):
+            data: pydantic.Json[dict[str, pydantic.Json[list[int]]]]
+
+        text = json.dumps({"a" * 56_000: json.dumps(["x"] * 14_000)})
+        assert not self._passes({"data": text}, Nested)
+
+    def test_a_string_of_nested_quotes_is_read_in_a_few_passes(self):
+        class WithJson(pydantic.BaseModel):
+            data: pydantic.Json[list[str]]
+
+        started = perf_counter()
+        self._passes({"data": '"[\\"' * 40_000}, WithJson)
+        assert perf_counter() - started < 1
+
+    @pytest.mark.parametrize(
+        "quote",
+        ["\\u0022", '\\"'],
+        ids=["unicode-escape", "backslash-escape"],
+    )
+    def test_a_long_key_written_with_escaped_quotes_counts(self, quote):
+        class Nested(pydantic.BaseModel):
+            data: pydantic.Json[pydantic.Json[dict[str, list[int]]]]
+
+        items = ",".join(["[]"] * 17_000)
+        text = f'"{{{quote}{"a" * 48_000}{quote}:[{items}]}}"'
+        assert not self._passes({"data": text}, Nested)
+
+    def test_a_key_that_holds_a_quote_hides_nothing(self):
+        class Nested(pydantic.BaseModel):
+            data: pydantic.Json[pydantic.Json[dict[str, list[int]]]]
+
+        # Reading the text without decoding it would turn this key's quote
+        # into the start of a string that swallows everything after it.
+        inner = json.dumps({'z"': [], "a" * 48_000: [[]] * 17_000}, separators=(",", ":"))
+        assert not self._passes({"data": json.dumps(inner)}, Nested)
+
+    def test_json_text_nested_five_levels_counts(self):
+        class Deep(pydantic.BaseModel):
+            data: pydantic.Json[pydantic.Json[pydantic.Json[pydantic.Json[pydantic.Json[dict[str, list[int]]]]]]]
+
+        text = json.dumps({"a" * 48_000: [[]] * 17_000}, separators=(",", ":"))
+        for _ in range(4):
+            text = json.dumps(text)
+        assert not self._passes({"data": text}, Deep)
+
+    def test_a_bracket_written_as_an_escape_is_still_read(self):
+        class Deep(pydantic.BaseModel):
+            data: pydantic.Json[pydantic.Json[pydantic.Json[dict[str, list[int]]]]]
+
+        # After one decoding the text holds a quote and no bracket, because
+        # the bracket is still escaped.
+        inner = '{"' + "a" * 48_000 + '":[' + ",".join(["[]"] * 17_000) + "]}"
+        hidden = json.dumps(inner).replace("{", "\\u007b").replace("[", "\\u005b")
+        assert not self._passes({"data": json.dumps(hidden)}, Deep)
+
+    def test_an_empty_object_counts_the_fields_it_may_lack(self):
+        class Row(pydantic.BaseModel):
+            a0: int
+            a1: int
+            a2: int
+            a3: int
+            a4: int
+            a5: int
+            a6: int
+            a7: int
+
+        class Rows(pydantic.BaseModel):
+            rows: dict[str, list[Row]]
+
+        payload = json.loads(json.dumps({"rows": {"a" * 25_000: [{}] * 100}}))
+        assert self._passes(payload)
+        payload = json.loads(json.dumps({"rows": {"a" * 25_000: [{}] * 200}}))
+        assert not self._passes(payload, Rows)
+
+    def test_required_positions_of_a_fixed_tuple_count_for_lists(self):
+        class Shapes(pydantic.BaseModel):
+            fixed: tuple[int, int, int, int]
+
+        assert schemas_module._model_costs(Shapes).list_items == 4
+
+    def test_required_positions_of_a_named_tuple_count_for_lists_and_objects(self):
+        class Point(typing.NamedTuple):
+            x: int
+            y: int
+            z: int
+
+        class Shapes(pydantic.BaseModel):
+            named: Point
+
+        costs = schemas_module._model_costs(Shapes)
+        assert costs.list_items == 3
+        assert costs.object_fields == 3
+
+    def test_a_list_of_one_type_counts_no_positions(self):
+        class Row(pydantic.BaseModel):
+            a: int
+            b: int
+
+        class Rows(pydantic.BaseModel):
+            rows: list[Row]
+
+        assert schemas_module._model_costs(Rows).list_items == 0
+
+    def test_nested_pydantic_dataclasses_count_each_object_once(self):
+        @pydantic.dataclasses.dataclass
+        class Inner:
+            note: str
+
+        @pydantic.dataclasses.dataclass
+        class Outer:
+            inner: Inner
+
+        errors = FieldErrors()
+        result = validate_args(Outer, {"inner": {"note": "n" * 1_000}})
+        assert result.ok
+        assert pydantic_can_report({"note": "x"}, Inner, errors)
+        payload = {"inner": {"note": "n" * 1_000}}
+        pydantic_can_report(payload["inner"], Inner, errors)
+        size_after_inner = errors.pydantic_total.size
+        pydantic_can_report(payload["inner"], Outer, errors)
+        assert errors.pydantic_total.size == size_after_inner
+
+    def test_optional_fields_do_not_count(self):
+        class Row(pydantic.BaseModel):
+            a: int
+            b: int = 0
+            c: int | None = None
+
+        assert schemas_module._model_costs(Row).object_fields == 1
+
+    def test_ordinary_rows_of_a_wide_model_pass(self):
+        class Row(pydantic.BaseModel):
+            field_a: int = 0
+            field_b: int = 0
+            field_c: int = 0
+            field_d: int = 0
+            field_e: int = 0
+            field_f: int = 0
+            field_g: int = 0
+            field_h: int = 0
+            field_i: int = 0
+            field_j: int = 0
+
+        class Rows(pydantic.BaseModel):
+            rows: list[Row]
+
+        row = {f"field_{letter}": 1 for letter in "abcdefghij"}
+        assert self._passes(json.loads(json.dumps({"rows": [row] * 8_000})), Rows)
+
+    def test_an_unfinished_model_is_rebuilt_before_it_is_measured(self):
+        class Later(pydantic.BaseModel):
+            text: pydantic.Json[list[int]] = []
+
+        rebuilt = []
+
+        def rebuild(**kwargs):
+            rebuilt.append(kwargs)
+            Later.__pydantic_complete__ = True
+
+        Later.__pydantic_complete__ = False
+        Later.model_rebuild = rebuild
+        assert schemas_module._model_costs(Later).parses_json
+        assert rebuilt == [{"raise_errors": False}]
+
+    def test_required_object_fields_are_not_counted_for_lists(self):
+        class Form(pydantic.BaseModel):
+            pairs: list[tuple[float, float]]
+            name: str
+            mail: str
+            city: str
+            zip_code: str
+
+        costs = schemas_module._model_costs(Form)
+        assert (costs.object_fields, costs.list_items) == (5, 2)
+        pairs = json.loads(json.dumps({"pairs": [[1.25, 2.25]] * 80_000}))
+        assert self._passes(pairs, Form)
+
+    def test_a_float_counts_a_flat_size(self):
+        class Filled(pydantic.BaseModel):
+            values: list[float]
+
+        costs = schemas_module._model_costs(Filled)
+        _, size = schemas_module._measure_paths({"values": [1e15] * 1_000}, costs, Filled, PydanticTotal())
+        assert size < 6_500
+
+    def test_a_schema_of_many_nested_models_can_be_read(self):
+        inner: Any = int
+        for _ in range(300):
+            inner = pydantic.create_model("Level", value=(inner, ...))
+        assert schemas_module._model_costs(inner).reports_per_value == 1
+
+    def test_a_list_of_long_numbers_counts_their_real_size(self):
+        class Filled(pydantic.BaseModel):
+            values: list[int]
+
+        costs = schemas_module._model_costs(Filled)
+        _, size = schemas_module._measure_paths({"values": [123_456_789] * 1_000}, costs, Filled, PydanticTotal())
+        assert 9_000 < size < 11_000
+
+    def test_a_union_counts_once_per_member(self):
+        class Plain(pydantic.BaseModel):
+            value: dict[str, list[int] | list[bool] | list[float] | list[date]]
+
+        class Tagged(pydantic.BaseModel):
+            value: int
+
+        assert schemas_module._model_costs(Plain).reports_per_value == 4
+        assert schemas_module._model_costs(Tagged).reports_per_value == 1
+        payload = {"value": {"a" * 16_000: ["x"] * 500}}
+        assert self._passes(payload, Tagged)
+        assert not self._passes(payload, Plain)
+
+    def test_nested_unions_add_up_and_a_tagged_union_reports_one_member(self):
+        class Cat(pydantic.BaseModel):
+            kind: Literal["cat"]
+
+        class Dog(pydantic.BaseModel):
+            kind: Literal["dog"]
+
+        class Nested(pydantic.BaseModel):
+            value: list[int | str] | dict[str, int | str] | None
+
+        class Tagged(pydantic.BaseModel):
+            pet: Cat | Dog = pydantic.Field(discriminator="kind")
+
+        assert schemas_module._model_costs(Nested).reports_per_value == 4
+        assert schemas_module._model_costs(Tagged).reports_per_value == 1
+
+    def test_a_recursive_model_has_an_answer(self):
+        class Tree(pydantic.BaseModel):
+            kids: "list[Tree | int]" = []
+
+        Tree.model_rebuild(_types_namespace={"Tree": Tree})
+        assert schemas_module._model_costs(Tree).reports_per_value >= 1
+
+    def test_a_class_made_at_run_time_can_be_freed(self):
+        made = pydantic.create_model("Made", value=(int, 0))
+        schemas_module._model_costs(made)
+        assert made in schemas_module._MODEL_COSTS
+        reference = weakref.ref(made)
+        del made
+        gc.collect()
+        assert reference() is None
+
+    def test_a_json_field_in_a_tagged_union_counts(self):
+        class Tagged(pydantic.BaseModel):
+            value: typing.Annotated[
+                typing.Annotated[pydantic.Json[list[int]], pydantic.Tag("text")]
+                | typing.Annotated[int, pydantic.Tag("number")],
+                pydantic.Discriminator(lambda value: "text" if isinstance(value, str) else "number"),
+            ]
+
+        assert schemas_module._model_costs(Tagged).parses_json
+
+    def test_a_pydantic_dataclass_reports_field_messages(self):
+        @pydantic.dataclasses.dataclass
+        class Limits:
+            size: int = pydantic.Field(gt=0)
+
+        result = validate_args(Limits, {"size": -1})
+        assert result.fields == {"size": "Input should be greater than 0"}
+
+    def test_a_bug_in_a_pydantic_dataclass_validator_stays_in_its_call(self):
+        @pydantic.dataclasses.dataclass
+        class Broken:
+            size: int
+
+            @pydantic.field_validator("size")
+            @classmethod
+            def check(cls, _value):
+                raise RuntimeError
+
+        result = validate_args(Broken, {"size": 1})
+        assert result.fields == {"_args": "The value could not be checked."}
+
+    def test_a_pydantic_dataclass_is_held_to_the_limit(self):
+        @pydantic.dataclasses.dataclass
+        class Scores:
+            scores: dict[str, list[typing.Annotated[int, pydantic.Field(gt=0)]]]
+
+        result = validate_args(Scores, {"scores": {"a" * 56_000: [-1] * 14_000}})
+        assert result.fields == {"_args": PATHS_TOO_LONG_MESSAGE}
+
+    def test_a_nested_model_over_the_limit_is_reported_on_its_own_path(self):
+        class Row(pydantic.BaseModel):
+            tags: list[int]
+
+        @dataclass
+        class Data:
+            rows: dict[str, Row]
+
+        result = validate_args(Data, {"rows": {"a": {"tags": {"b" * 56_000: ["x"] * 14_000}}}})
+        assert result.fields == {"rows.a": PATHS_TOO_LONG_MESSAGE}
+
+    def test_many_nested_models_share_the_limit(self):
+        class Row(pydantic.BaseModel):
+            scores: dict[str, list[int]]
+
+        @dataclass
+        class Data:
+            rows: list[Row]
+
+        rows = [{"scores": {"." * 1_000: ["x"] * 2_000}} for _ in range(100)]
+        started = perf_counter()
+        result = validate_args(Data, {"rows": rows})
+        assert perf_counter() - started < 1
+        # Rows past the running total get one refusal each, not 2,000 messages.
+        assert len(result.fields) + result.unlisted_fields < 100 * 2_000

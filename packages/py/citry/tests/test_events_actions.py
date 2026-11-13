@@ -12,6 +12,8 @@ fragment HTML is byte-stable within a test.
 """
 
 import logging
+import random
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -21,11 +23,13 @@ from citry._vue.events import default_events_producer
 from citry.citry_render import CitryRender
 from citry.ext.events import actions
 from citry.ext.events.errors import (
+    MAX_ITEM_ERRORS,
     MAX_UNEXPECTED_FIELDS,
     EventError,
+    FieldErrors,
     invalid_args_error,
-    limit_item_errors,
     limit_unexpected_fields,
+    trimmed_path,
     unlisted_fields_note,
     wire_error,
 )
@@ -1043,21 +1047,127 @@ class TestDebugTracking:
         assert _citry_records(caplog) == []
 
 
-class TestItemErrorLimit:
+def _limited(fields, containers=(), unexpected=()):
+    """Run path texts through `FieldErrors`, in the order of ``fields``."""
+    errors = FieldErrors()
+    for name, message in fields.items():
+        if name in unexpected:
+            errors.add_unexpected((None, name), message)
+        else:
+            errors.add((None, name), message)
+    for container in containers:
+        errors.add_container((None, container))
+    return errors.limited()
+
+
+class TestFieldErrors:
     def test_messages_outside_every_container_are_kept(self):
-        fields = {f"tags.{index}": "Bad." for index in range(25)} | {"name": "Bad."}
-        kept, dropped = limit_item_errors(fields, {"tags"})
-        assert list(kept) == [*(f"tags.{index}" for index in range(20)), "name"]
+        fields = {f"tags.{index}": "Bad." for index in range(25)} | {"title": "Bad."}
+        kept, dropped = _limited(fields, {"tags"})
+        assert list(kept) == [*(f"tags.{index}" for index in range(20)), "title"]
         assert dropped == 5
 
     def test_a_nested_container_counts_toward_the_outer_one(self):
         # Two inner lists of 15 messages: each inner list is under its own
         # limit, but together they pass the outer list's limit.
         fields = {f"rows.{row}.{col}": "Bad." for row in range(2) for col in range(15)}
-        kept, dropped = limit_item_errors(fields, {"rows", "rows.0", "rows.1"})
+        kept, dropped = _limited(fields, {"rows", "rows.0", "rows.1"})
         assert len(kept) == 20
         assert dropped == 10
 
     def test_no_containers_keeps_everything(self):
-        fields = {f"f{index}": "Bad." for index in range(30)}
-        assert limit_item_errors(fields, set()) == (fields, 0)
+        fields = {f"f{index:02d}": "Bad." for index in range(30)}
+        assert _limited(fields) == (fields, 0)
+
+    def test_list_indexes_sort_in_number_order(self):
+        fields = {"tags.10": "Bad.", "tags.9": "Bad.", "tags.a": "Bad.", "tags": "Bad."}
+        assert list(_limited(fields)[0]) == ["tags", "tags.9", "tags.10", "tags.a"]
+
+    def test_two_paths_with_the_same_text_share_the_first_message(self):
+        errors = FieldErrors()
+        errors.add((None, "a.b"), "First.")
+        errors.add(((None, "a"), "b"), "Second.")
+        assert errors.limited() == ({"a.b": "First."}, 0)
+
+    def test_set_unexpected_replaces_an_earlier_message_with_the_same_text(self):
+        errors = FieldErrors()
+        errors.add(((None, "a"), "b"), "First.")
+        errors.set_unexpected((None, "a.b"), "Not writable.")
+        assert errors.limited() == ({"a.b": "Not writable."}, 0)
+
+    def test_a_trimmed_path_loses_the_dots_at_the_end_of_its_text(self):
+        errors = FieldErrors()
+        errors.add(trimmed_path((None, "a..")), "Trimmed.")
+        errors.add(trimmed_path((None, ".."), "_args"), "Named.")
+        assert errors.limited() == ({"_args": "Named.", "a": "Trimmed."}, 0)
+
+    @staticmethod
+    def _released_limit(fields, containers, unexpected):
+        # The sort and the two limits as Citry 0.7.0 applied them: the
+        # expected answer for the random test below.
+        def order(item):
+            parts = []
+            for part in item[0].split("."):
+                if part.isascii() and part.isdigit():
+                    digits = part.lstrip("0")
+                    parts.append((0, len(digits), digits, part))
+                else:
+                    parts.append((1, 0, part, part))
+            return tuple(parts)
+
+        ordered = dict(sorted(fields.items(), key=order))
+        ordered, dropped = limit_unexpected_fields(ordered, unexpected)
+        listed, kept = {}, {}
+        for name, message in ordered.items():
+            parts = name.split(".")
+            starts = (".".join(parts[:end]) for end in range(1, len(parts)))
+            inside = [start for start in starts if start in containers]
+            if any(listed.get(start, 0) >= MAX_ITEM_ERRORS for start in inside):
+                dropped += 1
+                continue
+            for start in inside:
+                listed[start] = listed.get(start, 0) + 1
+            kept[name] = message
+        return kept, dropped
+
+    def test_it_keeps_exactly_the_released_messages_on_random_fields(self):
+        rng = random.Random(4285)  # noqa: S311 - test data, not secrets
+        segments = ["", "a", "b", "0", "1", "10", "007", "x.y", "é"]
+
+        def path(count):
+            return ".".join(rng.choice(segments) for _ in range(count))
+
+        for _ in range(3_000):
+            containers = {path(rng.randint(1, 3)) for _ in range(rng.randint(1, 5))}
+            fields = {}
+            for _ in range(rng.randint(0, 70)):
+                fields[f"{rng.choice(sorted(containers))}.{path(rng.randint(1, 3))}"] = str(rng.random())
+            fields |= {path(2): "Bad." for _ in range(3)}
+            unexpected = {name for name in fields if rng.random() < 0.5}
+            got = _limited(fields, containers, unexpected)
+            expected = self._released_limit(fields, containers, unexpected)
+            assert got == expected, (containers, fields)
+            assert list(got[0]) == list(expected[0])
+
+    def test_a_path_with_many_dots_is_limited_quickly(self):
+        # A dict key from the request can hold any number of dots. Citry
+        # 0.7.0 took 2.6 s on this one key.
+        fields = {f"scores.{'.' * 40_000}": "Bad."} | {f"scores.{index}": "Bad." for index in range(24)}
+        started = time.perf_counter()
+        kept, dropped = _limited(fields, {"scores"})
+        assert time.perf_counter() - started < 0.5
+        assert (len(kept), dropped) == (20, 5)
+
+    def test_a_long_key_under_many_messages_is_read_once(self):
+        # Every message shares the pair of its dict key, so the key's text is
+        # written only for the kept messages.
+        errors = FieldErrors()
+        key_path = ((None, "scores"), "a" * 100_000)
+        errors.add_container((None, "scores"))
+        errors.add_container(key_path)
+        for index in range(100_000):
+            errors.add((key_path, index), "Bad.")
+        started = time.perf_counter()
+        kept, dropped = errors.limited()
+        assert time.perf_counter() - started < 1
+        assert (len(kept), dropped) == (20, 99_980)

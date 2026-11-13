@@ -20,6 +20,7 @@ from dataclasses import dataclass, field, make_dataclass
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
 
 import pytest
@@ -27,6 +28,7 @@ import typing_extensions
 
 from citry.cache import InMemoryCache
 from citry.ext.events import tokens
+from citry.ext.events.schemas import PATHS_TOO_LONG_MESSAGE
 from citry.ext.events.tokens import (
     InvalidStateError,
     SigningSecretError,
@@ -1518,3 +1520,78 @@ class TestPydanticStateItemErrors:
         assert len([name for name in caught.value.fields if name.startswith("tags.")]) == 20
         assert len([name for name in caught.value.fields if name.startswith("scores.")]) == 20
         assert caught.value.message.endswith(" 2 more field errors are not shown.")
+
+    def test_marking_the_lists_of_deep_errors_in_a_write_takes_time_in_step_with_their_depth(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        class Node(pydantic.BaseModel):
+            c: list[Node] = []
+
+        Node.model_rebuild(_types_namespace={"Node": Node})
+
+        class Board(pydantic.BaseModel):
+            tree: Node = Node()
+
+        def best_time(depth: int) -> float:
+            # Every error passes through `depth` lists. The best of three
+            # runs keeps one slow run of a busy machine out of the ratio.
+            best = float("inf")
+            for _run in range(3):
+                value: dict[str, typing.Any] = {"c": [1] * 10_000}
+                for _level in range(depth - 1):
+                    value = {"c": [value]}
+                started = perf_counter()
+                with pytest.raises(StateUpdateError) as caught:
+                    apply_state_updates(Board(), {"tree": value}, model_fields={"tree"})
+                best = min(best, perf_counter() - started)
+                assert len(caught.value.fields) == 20
+                assert caught.value.message.endswith(" 9,980 more field errors are not shown.")
+            return best
+
+        # Writing the text of each list for each error made the time grow
+        # with the square of the depth: 8 times the depth took about 24
+        # times as long. Reading each error once takes about 5 times as long,
+        # and the bound leaves room for a slow machine. The deepest value
+        # here, 80 lists, is within the nesting Pydantic reads back from a
+        # State's JSON.
+        assert best_time(80) < 14 * best_time(10)
+
+
+class TestPydanticDataclassState:
+    """A Pydantic dataclass State with `validate_assignment` runs Pydantic on each write."""
+
+    @staticmethod
+    def _state_class():
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass(config=pydantic.ConfigDict(validate_assignment=True))
+        class Board:
+            scores: dict[str, list[typing.Annotated[int, pydantic.Field(gt=0)]]] = pydantic.Field(default_factory=dict)
+            title: str = ""
+
+        # This file defers its annotations, and `pydantic` is local here.
+        pydantic.dataclasses.rebuild_dataclass(Board, _types_namespace={"pydantic": pydantic, "typing": typing})
+        return Board
+
+    def test_a_good_write_is_applied(self):
+        state = self._state_class()()
+        applied = apply_state_updates(state, {"scores": {"a": [1]}}, model_fields=("scores", "title"))
+        assert applied == ("scores",)
+        assert state.scores == {"a": [1]}
+
+    def test_a_refused_value_rejects_the_whole_batch_and_changes_nothing(self):
+        state = self._state_class()()
+        updates = {"scores": {"a": [-1]}, "title": "new"}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, updates, model_fields=("scores", "title"))
+        assert list(caught.value.fields) == ["scores.a.0"]
+        assert state.title == ""
+        assert state.scores == {}
+
+    def test_a_write_with_long_paths_is_refused_before_pydantic_runs(self):
+        state = self._state_class()()
+        # Small enough that a regression fails on the message, not on memory.
+        updates = {"scores": {"a" * 8_000: [-1] * 4_000}}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, updates, model_fields=("scores",))
+        assert caught.value.fields == {"_state": PATHS_TOO_LONG_MESSAGE}

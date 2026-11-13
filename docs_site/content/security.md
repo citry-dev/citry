@@ -406,6 +406,37 @@ State token gets the 403 for a malformed token, and an i18n request gets
 a 400. Citry also refuses to make a State token from State nested that
 deep. You cannot change this limit.
 
+Pydantic writes a field's whole path, such as `scores.alice.3`, into
+each error it reports, so one very long dict key over many items could
+use gigabytes of memory. Before Citry passes a call's data or State
+updates to a Pydantic model or a Pydantic dataclass, it adds up the
+length of every field path in them, including those inside a `Json`
+field. When the total is over 16 MiB, or about 32 times the size of the
+data if that is larger, the call fails with a 422 error and Pydantic
+does not run. You cannot change this limit.
+
+This can refuse a valid call, because Citry cannot tell before Pydantic
+runs. Requests with short keys usually stay below the limit, even large
+ones. These can reach it:
+
+- A dict key of a few kilobytes over thousands of items.
+- A large call to a model with a union. The whole call counts once per
+  member type of that union, even fields outside it. Give the union a
+  discriminator, so that Pydantic tries one member and the call counts
+  once.
+- A large call to a model with many required fields. Citry counts every
+  object in the data as if it lacked all the required fields of the
+  model with the most of them. For example, a call to a model with 30
+  required fields and a list of `{x, y}` points is refused from about
+  37,600 points (about 680 KB written as `{"x":1.5,"y":2.5}`), and with
+  100 required fields, from about 12,400 points (about 220 KB).
+- A long text with thousands of `[` that never close, in a model with
+  any `Json` field. Citry counts every string as if it held JSON, even
+  one in an unrelated field.
+
+The count leaves out a string that your own validator parses, so check
+that string's length first.
+
 Citry stops reading a body once it passes `_max_body_bytes`, even when the
 request's `Content-Length` is wrong or missing. A request over either
 limit fails with the error code `payload_too_large`: an event call made

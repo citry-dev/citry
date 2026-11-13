@@ -57,6 +57,7 @@ import inspect
 import io
 import posixpath
 import re
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -69,7 +70,9 @@ from citry.util.routing import (
     RouteHeaders,
     RouteRequest,
     body_read_limit,
+    compile_route_pattern,
     flatten_routes,
+    match_route_pattern,
     normalize_mount_prefix,
     route_allows_method,
     sent_content_type,
@@ -250,17 +253,15 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
                 "make the handler a plain 'def'."
             )
             raise TypeError(msg)
-        # Django route syntax cannot express two parameters in one path
-        # segment (the cache routes separate them with dots), so use re_path
-        # via the compiled citry pattern when the segment-wise conversion
-        # would be ambiguous. Plain `path()` covers parameter-free routes.
+        # A route with parameters gets a pattern class that keeps the citry
+        # route's regex for `reverse()` and Django's URL checks, but matches
+        # each request the way Citry's own adapters do. Plain `path()` covers
+        # parameter-free routes.
         if "{" in full_path:
-            from django.urls import re_path  # noqa: PLC0415
+            from django.urls import URLPattern  # noqa: PLC0415
 
-            from citry.util.routing import compile_route_pattern  # noqa: PLC0415
-
-            pattern = compile_route_pattern(full_path, route.dotless_params).pattern
-            patterns.append(re_path(pattern, _make_view(route), name=route.name))
+            route_pattern = _citry_route_pattern_class()(full_path, route.dotless_params, name=route.name)
+            patterns.append(URLPattern(route_pattern, _make_view(route), None, route.name))
         else:
             patterns.append(django_path(full_path, _make_view(route), name=route.name))
 
@@ -274,6 +275,35 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
     # rejected call leaves the instance without a checker too.
     register_path_checker(citry_instance, _django_path_checker(), host=_DJANGO_PROJECT)
     return patterns
+
+
+@cache
+def _citry_route_pattern_class() -> type[Any]:
+    """
+    Return a Django URL pattern class that matches a request the way Citry's own adapters do.
+
+    Django would match a request against the route's regex, which can take
+    time that grows much faster than the path's length when one path segment
+    holds several parameters. This class keeps the regex, so ``reverse()``
+    and Django's URL checks work as for ``re_path()``, but matches a request
+    with :func:`citry.util.routing.match_route_pattern`, which gives the
+    same result in time that grows in step with the path's length. It is
+    built on first use because this module must import without Django.
+    """
+    from django.urls.resolvers import RegexPattern  # noqa: PLC0415
+
+    class CitryRoutePattern(RegexPattern):  # type: ignore[misc]
+        def __init__(self, route_path: str, dotless_params: frozenset[str], *, name: str | None) -> None:
+            super().__init__(compile_route_pattern(route_path, dotless_params).pattern, name=name, is_endpoint=True)
+            self._citry_route = (route_path, dotless_params)
+
+        def match(self, path: str) -> tuple[str, tuple[()], dict[str, str]] | None:
+            params = match_route_pattern(*self._citry_route, path)
+            # The same shape RegexPattern.match returns for an endpoint: the
+            # whole path is used up, and named parameters go in as kwargs.
+            return None if params is None else ("", (), params)
+
+    return CitryRoutePattern
 
 
 def _django_sub_path() -> str:

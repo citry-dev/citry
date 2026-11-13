@@ -5,7 +5,8 @@ A handler's ``data`` parameter is annotated with a schema class, and the
 whole wire ``args`` payload is validated against it before the handler runs.
 This module owns that machinery: the class-side conversion (a plain annotated
 class gets the same dataclass treatment as ``State``; a dataclass is used
-as-is; a Pydantic model is delegated wholesale to Pydantic), and the payload
+as-is; a Pydantic model is delegated to Pydantic, unless its error paths
+would be too costly: see ``pydantic_can_report``), and the payload
 validation with its deliberately small coercion table. Validation returns a
 structured :class:`ValidationResult` rather than raising, so the dispatcher
 can map failures onto the per-field 422 error object. Design:
@@ -43,7 +44,9 @@ their own models).
 
 from __future__ import annotations
 
+import json
 import math
+import re
 import sys
 import threading
 from collections.abc import Iterable, Mapping, Sequence
@@ -59,16 +62,18 @@ from typing import (
     Literal,
     NamedTuple,
     Union,
+    cast,
     get_args,
     get_origin,
     get_type_hints,
 )
 from uuid import UUID
+from weakref import WeakKeyDictionary
 
 import typing_extensions
 
 from citry._nested_declarations import _is_plain_field_family, convert_plain_declaration
-from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, limit_item_errors, limit_unexpected_fields
+from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, FieldErrors, PydanticTotal, trimmed_path
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.state import convert_state_class
@@ -260,8 +265,8 @@ def validate_args(
     field and an unexpected key are each a per-field error), coerces the
     values per the module's coercion table, and constructs the schema
     instance. Nested annotated classes validate recursively from objects;
-    a Pydantic-model schema is validated by Pydantic wholesale (its own
-    rules, its own messages).
+    a Pydantic-model schema is validated by Pydantic (its own rules, its
+    own messages), unless ``pydantic_can_report`` refuses the payload first.
 
     Args:
         schema_cls: The schema class (converted or not;
@@ -290,65 +295,20 @@ def validate_args(
         bind_strings = isinstance(args, StringArgs)
     if not isinstance(args, Mapping):
         return ValidationResult(value=None, fields={"": f"Expected an object, got {_value_type_name(args)}."})
-    errors = _FieldErrors()
-    instance = _validate_object(schema_cls, args, "", errors, bind_strings=bind_strings)
+    errors = FieldErrors()
+    instance = _validate_object(schema_cls, args, None, errors, bind_strings=bind_strings)
     if instance is _INVALID:
         # The payload alone decides how many undeclared keys and how many
-        # list or dict items it sends, so only those messages are limited;
-        # the sort first keeps the same names listed on every call.
-        ordered = dict(sorted(errors.items(), key=_field_path_order))
-        fields, unexpected_dropped = limit_unexpected_fields(ordered, errors.unexpected)
-        fields, items_dropped = limit_item_errors(fields, errors.containers)
-        return ValidationResult(value=None, fields=fields, unlisted_fields=unexpected_dropped + items_dropped)
+        # list or dict items it sends, so only those messages are limited,
+        # in path order so the same names are listed on every call.
+        fields, unlisted = errors.limited()
+        return ValidationResult(value=None, fields=fields, unlisted_fields=unlisted)
     return ValidationResult(value=instance, fields={})
 
 
 ################################################
 # SCHEMA-OBJECT VALIDATION
 ################################################
-
-
-def _field_path_order(item: tuple[str, str]) -> tuple[tuple[int, int, str, str], ...]:
-    """
-    Sort one ``(field path, message)`` pair by its path, with list indexes in number order.
-
-    Only the first 20 item messages of a list are kept, so ``tags.2`` must
-    come before ``tags.10`` for the earliest items to be the ones kept.
-    """
-    # An all-digit segment sorts by its length without leading zeros, then
-    # by its digits, which is number order without converting it: a key
-    # the request sends can be thousands of digits long. Text segments sort
-    # after numbers, so the two kinds are never compared directly.
-    order: list[tuple[int, int, str, str]] = []
-    for part in item[0].split("."):
-        if part.isascii() and part.isdigit():
-            digits = part.lstrip("0")
-            order.append((0, len(digits), digits, part))
-        else:
-            order.append((1, 0, part, part))
-    return tuple(order)
-
-
-class _FieldErrors(dict[str, str]):
-    """The per-field messages of one validation, plus which paths name undeclared keys or containers."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.unexpected: set[str] = set()
-        # The paths of the list and dict fields the payload filled, so the
-        # messages for their items can be limited per field.
-        self.containers: set[str] = set()
-
-
-def _record_unexpected(errors: dict[str, str], path: str, message: str) -> None:
-    """Record a message for a key the schema does not declare, and mark it as one."""
-    if path in errors:
-        return
-    errors[path] = message
-    # Only validate_args passes the marking dict; a plain dict just keeps
-    # the message.
-    if isinstance(errors, _FieldErrors):
-        errors.unexpected.add(path)
 
 
 class _FieldSpec(NamedTuple):
@@ -470,29 +430,29 @@ def json_value_error(annotation: Any, value: Any, *, bind_strings: bool = False)
     rules of a form post, because the browser sends ``@c-*`` arguments as
     JSON. ``bind_strings`` applies those rules, as for a GET query string.
     """
-    errors: dict[str, str] = {}
-    if _coerce(value, annotation, "", errors, bind_strings=bind_strings) is not _INVALID:
+    errors = FieldErrors()
+    if _coerce(value, annotation, (None, ""), errors, bind_strings=bind_strings) is not _INVALID:
         return None
-    return next(iter(errors.values()), None)
+    return errors.first_message()
 
 
 def _validate_object(
     schema_cls: type,
     mapping: Mapping[str, Any],
-    prefix: str,
-    errors: dict[str, str],
+    parent: Any,
+    errors: FieldErrors,
     *,
     bind_strings: bool,
 ) -> Any:
     """
     Validate one payload object against one schema class.
 
-    Records failures in ``errors`` under ``prefix``-ed field paths and
-    returns the schema instance, or ``_INVALID`` when anything in this
-    object's subtree failed.
+    Records failures in ``errors`` under field paths that start at
+    ``parent`` (``None`` for the top level) and returns the schema instance,
+    or ``_INVALID`` when anything in this object's subtree failed.
     """
     if _is_pydantic_model(schema_cls):
-        return _validate_pydantic(schema_cls, mapping, prefix, errors)
+        return _validate_pydantic(schema_cls, mapping, parent, errors)
 
     converted, specs = _schema_info(schema_cls)
     accepted = {spec.name for spec in specs}
@@ -500,59 +460,410 @@ def _validate_object(
 
     for key in mapping:
         if key not in accepted:
-            _record_unexpected(errors, prefix + str(key), _EXTRA_MESSAGE)
+            errors.add_unexpected((parent, str(key)), _EXTRA_MESSAGE)
             ok = False
 
     values: dict[str, Any] = {}
     for spec in specs:
         if spec.name in mapping:
             coerced = _coerce(
-                mapping[spec.name], spec.annotation, prefix + spec.name, errors, bind_strings=bind_strings
+                mapping[spec.name], spec.annotation, (parent, spec.name), errors, bind_strings=bind_strings
             )
             if coerced is _INVALID:
                 ok = False
             else:
                 values[spec.name] = coerced
         elif spec.required:
-            errors.setdefault(prefix + spec.name, _REQUIRED_MESSAGE)
+            errors.add((parent, spec.name), _REQUIRED_MESSAGE)
             ok = False
 
     if not ok:
         return _INVALID
-    return converted(**values)
+    if not _is_pydantic_dataclass(converted):
+        return converted(**values)
+    # A Pydantic dataclass checks its fields when it is built, so this call
+    # costs what a Pydantic model's does, and can fail the way one does.
+    if not pydantic_can_report(mapping, converted, errors):
+        errors.add(trimmed_path(parent, "_args"), PATHS_TOO_LONG_MESSAGE)
+        return _INVALID
+    try:
+        return converted(**values)
+    except pydantic.ValidationError as err:
+        _record_pydantic_errors(err, converted, parent, errors)
+        return _INVALID
+    except Exception:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
+        logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
+        errors.add(trimmed_path(parent, "_args"), "The value could not be checked.")
+        return _INVALID
 
 
-def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], prefix: str, errors: dict[str, str]) -> Any:
+def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], parent: Any, errors: FieldErrors) -> Any:
     """Delegate one payload object to Pydantic, mapping its errors onto field paths."""
+    if not pydantic_can_report(mapping, schema_cls, errors):
+        errors.add(trimmed_path(parent, "_args"), PATHS_TOO_LONG_MESSAGE)
+        return _INVALID
     # ``model_validate`` is Pydantic v2; ``parse_obj`` the v1 spelling.
     validate = getattr(schema_cls, "model_validate", None) or schema_cls.parse_obj  # type: ignore[attr-defined]
     try:
         return validate(dict(mapping))
     except pydantic.ValidationError as err:
-        entries = err.errors()
-        if isinstance(errors, _FieldErrors):
-            for container in pydantic_container_paths(schema_cls, (entry["loc"] for entry in entries)):
-                errors.containers.add(prefix + container)
-        for entry in entries:
-            location = ".".join(str(part) for part in entry["loc"])
-            key = prefix + location if location else prefix.rstrip(".")
-            if entry.get("type") in PYDANTIC_EXTRA_TYPES:
-                _record_unexpected(errors, key, str(entry["msg"]))
-            else:
-                errors.setdefault(key, str(entry["msg"]))
+        _record_pydantic_errors(err, schema_cls, parent, errors)
         return _INVALID
     except Exception:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
         # Pydantic turns only ValueError and AssertionError in a validator
         # into a ValidationError; another exception is the author's bug, and
         # answers this one call 422 rather than failing the whole envelope.
         logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
-        errors.setdefault(prefix.rstrip(".") or "_args", "The value could not be checked.")
+        errors.add(trimmed_path(parent, "_args"), "The value could not be checked.")
         return _INVALID
 
 
-def pydantic_container_paths(model_cls: type, locations: Iterable[Sequence[Any]]) -> set[str]:
+def _record_pydantic_errors(err: Any, schema_cls: type, parent: Any, errors: FieldErrors) -> None:
+    """Record each error of a Pydantic ``ValidationError`` under ``parent``."""
+    entries = err.errors()
+    shared: dict[tuple[int, Any], Any] = {}
+    for container in pydantic_container_paths(schema_cls, (entry["loc"] for entry in entries), parent, shared):
+        errors.add_container(container)
+    for entry in entries:
+        location = entry["loc"]
+        # Only a location with no text has no field of its own.
+        has_text = location not in ((), ("",))
+        path = shared_location_path(parent, location, shared) if has_text else trimmed_path(parent)
+        if entry.get("type") in PYDANTIC_EXTRA_TYPES:
+            errors.add_unexpected(path, str(entry["msg"]))
+        else:
+            errors.add(path, str(entry["msg"]))
+
+
+def shared_location_path(parent: Any, location: Sequence[Any], shared: dict[tuple[int, Any], Any]) -> Any:
     """
-    Return the dotted paths of the list and dict fields that Pydantic error locations pass through.
+    Return the field path of a Pydantic error location, reusing the pairs of earlier errors.
+
+    Pydantic gives every error its own copy of each key, so errors under one
+    long key would otherwise be split at the key's dots once each. ``shared``
+    holds the pairs made for one Pydantic call.
+    """
+    path = parent
+    for part in location:
+        slot = (id(path), part)
+        pair = shared.get(slot)
+        if pair is None:
+            pair = shared[slot] = (path, str(part))
+        path = pair
+    return path
+
+
+# Pydantic writes the whole path of a field into each error it reports, in
+# its own compiled code, before Citry sees any of them. So a long dict key
+# over many bad items costs time and memory growing with the square of the
+# request's size, and the only place to stop it is before Pydantic runs.
+# These bound the total text of the paths in one validation's payloads: the
+# larger of a fixed amount, which is about 335,000 paths of 50 characters, and
+# a multiple of the payloads' own size, so a large request with short keys
+# still reaches Pydantic. A union counts once per member, because each member
+# reports its own errors.
+MAX_PYDANTIC_PATH_TEXT = 16 * 1024 * 1024
+MAX_PYDANTIC_PATH_TEXT_PER_CHARACTER = 32
+PATHS_TOO_LONG_MESSAGE = (
+    "The field paths in this data are too long in total to check. Send shorter keys or fewer items."
+)
+_NESTED_JSON_TYPES = frozenset({dict, list, tuple})
+# The tokens that matter in the text a `Json` field reads. An unclosed string
+# runs to the end of the text, so a bad text takes one pass like a good one.
+_JSON_TOKEN = re.compile(r""""(?:[^"\\]|\\.)*+(?:"|\\?\Z)|[\[\]{},]""", re.DOTALL)
+
+
+class _ModelCosts(NamedTuple):
+    """What a Pydantic model can add to a payload's error paths."""
+
+    # Whether a `Json` field reads a payload out of a string.
+    parses_json: bool
+    # The most required fields of any one model: an empty object reports each
+    # of them as missing, with the object's own path.
+    object_fields: int
+    # The most required positions of a fixed tuple or NamedTuple, which an
+    # empty list reports the same way.
+    list_items: int
+    # How many times one bad value can be reported: each member of a union
+    # that has no discriminator tries the value and reports its own errors.
+    reports_per_value: int
+
+
+_MODEL_COSTS: WeakKeyDictionary[type, _ModelCosts] = WeakKeyDictionary()
+
+
+def pydantic_can_report(payload: Any, schema_cls: type, errors: FieldErrors) -> bool:
+    """
+    Add the path text of ``payload`` to this validation's total and return whether Pydantic may check it.
+
+    Args:
+        payload: The JSON-decoded value about to go to Pydantic.
+        schema_cls: The Pydantic model that will check it.
+        errors: The validation's collector, which keeps the running total.
+
+    Returns:
+        ``False`` when this validation's paths are too long to pass to Pydantic.
+
+    """
+    costs = _model_costs(schema_cls)
+    total = errors.pydantic_total
+    path_text, size = _measure_paths(payload, costs, schema_cls, total)
+    total.path_text += path_text * costs.reports_per_value
+    total.size += size
+    return total.path_text <= max(MAX_PYDANTIC_PATH_TEXT, MAX_PYDANTIC_PATH_TEXT_PER_CHARACTER * total.size)
+
+
+def _measure_paths(payload: Any, costs: _ModelCosts, schema_cls: type, total: PydanticTotal) -> tuple[int, int]:
+    """
+    Return the total length of the paths in ``payload``, and about how many characters it takes to write it.
+
+    A container's paths count once per model that checks it, so each member
+    of a union in Citry's own validators counts, and a nested Pydantic dataclass
+    of one class counts once at any depth. Its size counts once whatever
+    checks it, because a payload read twice is no larger, and only the size
+    can raise the limit. The ids stay valid because the payload lives until
+    the validation ends.
+    """
+    path_text = 0
+    size = 0
+    # Each value counts, valid or not: a payload's values could all fail.
+    stack: list[tuple[Any, int]] = [(payload, 0)]
+
+    def measure_item(item: Any, length: int) -> None:
+        nonlocal path_text, size
+        # Exact types first: this runs on every value of every Pydantic
+        # request, and JSON only makes these types. The extra 1 is its comma.
+        item_type = type(item)
+        if item_type is str:
+            size += len(item) + 1
+            if costs.parses_json:
+                path_text += _json_text_paths(item, length, costs)
+        elif item_type in _NESTED_JSON_TYPES or isinstance(item, Mapping):
+            size += 1
+            stack.append((item, length))
+        elif item_type is int:
+            # About 0.3 digits per bit, without writing a number that can
+            # be longer than Python agrees to write.
+            size += (item.bit_length() * 77 >> 8) + 2
+        else:
+            # A flat guess for a float or a literal: `repr` is no measure of
+            # the request's text, which can write 1e15 in four characters.
+            size += 5
+
+    while stack:
+        value, length = stack.pop()
+        place = (id(value), schema_cls)
+        if place in total.measured:
+            continue
+        total.measured.add(place)
+        size_before = size
+        if isinstance(value, Mapping):
+            path_text += costs.object_fields * length
+            for key, item in value.items():
+                key_length = len(key) if type(key) is str else len(str(key))
+                size += key_length
+                item_length = length + key_length + 1
+                path_text += item_length
+                if costs.parses_json and type(key) is str:
+                    path_text += _json_text_paths(key, item_length, costs)
+                measure_item(item, item_length)
+        elif isinstance(value, (list, tuple)):
+            path_text += costs.list_items * length
+            # Every index in a list counts at the width of the largest.
+            item_length = length + len(str(len(value))) + 1
+            path_text += item_length * len(value)
+            for item in value:
+                measure_item(item, item_length)
+        if id(value) in total.sized:
+            size = size_before
+        total.sized.add(id(value))
+    return path_text, size
+
+
+def _json_text_paths(text: str, length: int, costs: _ModelCosts) -> int:
+    """
+    Return about how much path text a ``Json`` field could make from ``text``.
+
+    This counts tokens and parses nothing but each string, so it needs no
+    agreement with Pydantic's parser: a repeated key counts each time, any
+    depth is fine, and text no parser accepts just costs a little more. Each
+    item costs the length of the path it sits at, each string adds its own
+    length, and each bracket counts its path once per required field. A
+    string can hold more ``Json`` text, which counts the same way. Every such
+    level doubles the escapes the text needs, so a long string has few levels
+    and this reads the text only a few times.
+    """
+    total = 0
+    # The path length at each open bracket, and the last string seen, which
+    # is the key when a bracket opens right after it.
+    lengths = [length]
+    last_string = 0
+    for token in _JSON_TOKEN.finditer(text):
+        character = text[token.start()]
+        if character == '"':
+            # A string right after another is a value under that key.
+            own_length = lengths[-1] + last_string + 1
+            last_string = token.end() - token.start()
+            total += lengths[-1] + last_string
+            inner = _json_string_value(token.group())
+            # A quote matters too: it can open a string that holds brackets
+            # only after another level of decoding.
+            if inner is not None and ("[" in inner or "{" in inner or '"' in inner):
+                total += _json_text_paths(inner, own_length, costs)
+        elif character == "[":
+            lengths.append(lengths[-1] + last_string + 1)
+            total += costs.list_items * lengths[-1]
+            last_string = 0
+        elif character == "{":
+            lengths.append(lengths[-1] + last_string + 1)
+            total += costs.object_fields * lengths[-1]
+            last_string = 0
+        elif character in "]}":
+            if len(lengths) > 1:
+                lengths.pop()
+        else:
+            total += lengths[-1]
+            last_string = 0
+    return total
+
+
+def _json_string_value(token: str) -> str | None:
+    """Return the text a JSON string token stands for, or ``None`` when it is not a valid string."""
+    # No parser reads inside a string that is not valid, and the raw token
+    # has been counted.
+    if len(token) < 2 or not token.endswith('"'):
+        return None
+    if "\\" not in token:
+        return token[1:-1]
+    try:
+        return cast("str", json.loads(token, strict=False))
+    except ValueError:
+        return None
+
+
+def _model_costs(schema_cls: type) -> _ModelCosts:
+    """Return what a Pydantic model can add to its error paths, read once from its core schema."""
+    cached = _MODEL_COSTS.get(schema_cls)
+    if cached is not None:
+        return cached
+    # A class with an unresolved forward reference holds a stand-in schema.
+    # Pydantic would rebuild it on the first call anyway, and that first call
+    # must be measured against the real schema.
+    rebuild = getattr(schema_cls, "model_rebuild", None)
+    if not getattr(schema_cls, "__pydantic_complete__", True) and rebuild is not None:
+        rebuild(raise_errors=False)
+    costs = _read_model_costs(schema_cls)
+    if getattr(schema_cls, "__pydantic_complete__", True):
+        _MODEL_COSTS[schema_cls] = costs
+    return costs
+
+
+def _read_model_costs(schema_cls: type) -> _ModelCosts:
+    # A Pydantic v1 model has no core schema, and it holds each error's
+    # location as a tuple of the same key objects, so its errors copy no
+    # key text.
+    root = getattr(schema_cls, "__pydantic_core_schema__", None)
+    pending: list[Any] = [root]
+    parses_json = False
+    object_fields = 0
+    list_items = 0
+    # Maps each definition's name to its schema, so a reference can find it.
+    definitions: dict[str, dict[str, Any]] = {}
+    # An author's own metadata in the schema can hold itself.
+    seen: set[int] = set()
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        # The stand-in schema is a Mapping but not a dict, and is not walked.
+        if type(node) is dict:
+            parses_json = parses_json or node.get("type") == "json"
+            fields = _required_entries(node, "fields")
+            object_fields = max(object_fields, fields)
+            # A NamedTuple reads a list or an object, and either one reports
+            # each position it lacks.
+            if node.get("type") == "named-tuple":
+                list_items = max(list_items, fields)
+            positions = _required_entries(node, "arguments_schema")
+            object_fields = max(object_fields, positions)
+            list_items = max(list_items, positions)
+            # A homogeneous list keeps one schema here, not a list of them.
+            if type(node.get("items_schema")) is list:
+                list_items = max(list_items, _required_entries(node, "items_schema"))
+            if isinstance(node.get("ref"), str):
+                definitions[node["ref"]] = node
+            pending.extend(node.values())
+        elif type(node) in (list, tuple):
+            pending.extend(node)
+    return _ModelCosts(parses_json, object_fields, list_items, _reports_per_value(root, definitions))
+
+
+def _reports_per_value(root: Any, definitions: dict[str, dict[str, Any]]) -> int:
+    """
+    Return how many times one bad value can be reported under a core schema node.
+
+    A union without a discriminator reports once per member, so its members
+    add up, and nested unions add up inside that. A tagged union reports one
+    member. The walk stops at a definition it has already entered, which ends
+    the walk on a recursive schema. The walk uses its own stack, because a
+    schema of nested models can be deeper than Python's recursion limit, and
+    a failure here would fail every call to the model.
+    """
+    # A node on the way down holds 1, so a reference back to it counts once.
+    known: dict[int, int] = {}
+    # False to enter a node, True to add up its children.
+    stack: list[tuple[Any, bool]] = [(root, False)]
+    while stack:
+        node, leaving = stack.pop()
+        if leaving:
+            reports = [known.get(id(child), 1) for child in _schema_children(node, definitions)]
+            is_union = type(node) is dict and node.get("type") == "union"
+            known[id(node)] = sum(reports) if is_union else max(reports, default=1)
+        elif type(node) in (dict, list, tuple) and id(node) not in known:
+            known[id(node)] = 1
+            stack.append((node, True))
+            stack.extend((child, False) for child in _schema_children(node, definitions))
+    return known.get(id(root), 1)
+
+
+def _schema_children(node: Any, definitions: dict[str, dict[str, Any]]) -> list[Any]:
+    """Return what a core schema node leads to: its members for a union, the definition for a reference."""
+    if type(node) is not dict:
+        return list(node)
+    if node.get("type") == "definition-ref":
+        return [definitions.get(node.get("schema_ref", ""))]
+    if node.get("type") == "union":
+        return list(node.get("choices", ()))
+    return list(node.values())
+
+
+def _required_entries(node: dict[str, Any], name: str) -> int:
+    """Return how many required entries a core schema node holds under ``name``."""
+    # Model and TypedDict fields are a dict and dataclass fields a list. A
+    # fixed tuple keeps its positions under `items_schema`, and a NamedTuple
+    # under `fields` or `arguments_schema`.
+    fields = node.get(name)
+    if not isinstance(fields, (dict, list)):
+        return 0
+    entries = fields.values() if isinstance(fields, dict) else fields
+    return sum(1 for entry in entries if _is_required_entry(entry))
+
+
+def _is_required_entry(entry: Any) -> bool:
+    if type(entry) is not dict or entry.get("required") is False:
+        return False
+    # A field with a default wraps its schema in a `default` node, and a
+    # tuple position is the schema itself.
+    schema = entry.get("schema", entry)
+    return type(schema) is dict and schema.get("type") != "default"
+
+
+def pydantic_container_paths(
+    model_cls: type, locations: Iterable[Sequence[Any]], parent: Any, shared: dict[tuple[int, Any], Any]
+) -> list[Any]:
+    """
+    Return the field paths of the list and dict fields that Pydantic error locations pass through.
 
     Pydantic reports a list item as ``("tags", 3)``, so a whole-number part
     always means the parts before it are a list. A dict value is
@@ -561,8 +872,13 @@ def pydantic_container_paths(model_cls: type, locations: Iterable[Sequence[Any]]
     annotations along the location. The walk follows field names and
     aliases, ``Optional`` and ``Annotated``, and the member tag Pydantic
     adds for a union with exactly one dict member; anything else ends it.
+
+    The paths are made under ``parent`` from the pairs in ``shared``, which
+    :func:`shared_location_path` also uses, and each container is returned
+    once.
     """
-    containers: set[str] = set()
+    containers: list[Any] = []
+    returned: set[int] = set()
     # Many locations share one shape (rows.0.x, rows.1.x, ...), so the walk
     # runs once per shape, with list indexes replaced by a marker.
     walked: dict[tuple[Any, ...], tuple[int, ...]] = {}
@@ -571,9 +887,21 @@ def pydantic_container_paths(model_cls: type, locations: Iterable[Sequence[Any]]
         depths = walked.get(shape)
         if depths is None:
             depths = walked[shape] = _container_depths(model_cls, shape)
+        # A deep location passes through a container at many depths, so the
+        # path is extended from one depth to the next. Building each
+        # container's path from the start would read the location once per
+        # container, which grows with the square of its depth.
+        path = parent
+        reached = 0
         for depth in depths:
-            containers.add(".".join(str(part) for part in location[:depth]))
-    containers.discard("")
+            path = shared_location_path(path, location[reached:depth], shared)
+            reached = depth
+            # Depth 0 is the model itself, which is no list or dict field.
+            if depth == 0:
+                continue
+            if id(path) not in returned:
+                returned.add(id(path))
+                containers.append(path)
     return containers
 
 
@@ -652,12 +980,17 @@ def _is_pydantic_model(schema_cls: type) -> bool:
     return pydantic is not None and isinstance(schema_cls, type) and issubclass(schema_cls, pydantic.BaseModel)
 
 
+def _is_pydantic_dataclass(schema_cls: type) -> bool:
+    """Whether ``schema_cls`` is a dataclass that Pydantic checks when it is built."""
+    return pydantic is not None and pydantic.dataclasses.is_pydantic_dataclass(schema_cls)
+
+
 ################################################
 # VALUE COERCION
 ################################################
 
 
-def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, bind_strings: bool) -> Any:
+def _coerce(value: Any, annotation: Any, path: Any, errors: FieldErrors, *, bind_strings: bool) -> Any:
     """
     Coerce one payload value to its annotated type.
 
@@ -856,7 +1189,7 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
         if isinstance(value, annotation):
             return value
         if isinstance(value, Mapping):
-            return _validate_object(annotation, value, path + ".", errors, bind_strings=bind_strings)
+            return _validate_object(annotation, value, path, errors, bind_strings=bind_strings)
         return _fail(errors, path, f"Expected an object, got {_value_type_name(value)}.")
 
     # Any other class: accept an instance (values constructed server-side),
@@ -873,7 +1206,7 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
     return _fail(errors, path, _mismatch(_type_name(annotation), value))
 
 
-def _coerce_isoformat(value: Any, annotation: type, path: str, errors: dict[str, str]) -> Any:
+def _coerce_isoformat(value: Any, annotation: type, path: Any, errors: FieldErrors) -> Any:
     """Coerce a ``datetime`` / ``date`` / ``time`` field from an ISO-format string."""
     if isinstance(value, annotation):
         return value
@@ -885,7 +1218,7 @@ def _coerce_isoformat(value: Any, annotation: type, path: str, errors: dict[str,
     return _fail(errors, path, _mismatch(annotation.__name__, value))
 
 
-def _coerce_union(value: Any, annotation: Any, path: str, errors: dict[str, str], *, bind_strings: bool) -> Any:
+def _coerce_union(value: Any, annotation: Any, path: Any, errors: FieldErrors, *, bind_strings: bool) -> Any:
     """Coerce a union-annotated value: ``None`` when allowed, else the first member that fits."""
     members = get_args(annotation)
     non_none = [member for member in members if member is not type(None)]
@@ -895,7 +1228,7 @@ def _coerce_union(value: Any, annotation: Any, path: str, errors: dict[str, str]
         # Optional[X]: the member's own message (and nested paths) apply directly.
         return _coerce(value, non_none[0], path, errors, bind_strings=bind_strings)
     for member in non_none:
-        scratch: dict[str, str] = {}
+        scratch = FieldErrors(shares_total_with=errors)
         coerced = _coerce(value, member, path, scratch, bind_strings=bind_strings)
         if coerced is not _INVALID:
             return coerced
@@ -903,7 +1236,7 @@ def _coerce_union(value: Any, annotation: Any, path: str, errors: dict[str, str]
     return _fail(errors, path, f"Expected {names}, got {_value_type_name(value)}.")
 
 
-def _coerce_literal(value: Any, annotation: Any, path: str, errors: dict[str, str], *, bind_strings: bool) -> Any:
+def _coerce_literal(value: Any, annotation: Any, path: Any, errors: FieldErrors, *, bind_strings: bool) -> Any:
     """Coerce a ``Literal[...]`` value: it must equal one of the listed values, with that value's type."""
     members = get_args(annotation)
     for member in members:
@@ -912,7 +1245,7 @@ def _coerce_literal(value: Any, annotation: Any, path: str, errors: dict[str, st
         expected = member.value if isinstance(member, Enum) else member
         # Each listed value is read by its own type's rule, so a form post's
         # "2" still binds to `Literal[1, 2]`, as for a plain field of that type.
-        scratch: dict[str, str] = {}
+        scratch = FieldErrors()
         coerced = _coerce(value, type(expected), path, scratch, bind_strings=bind_strings)
         # Python counts True == 1, so the type is compared too: JSON keeps
         # `true` and `1` apart, and so does the field.
@@ -935,7 +1268,7 @@ def _literal_value_text(value: Any) -> str:
 
 
 def _coerce_container(
-    value: Any, annotation: Any, origin: type, path: str, errors: dict[str, str], *, bind_strings: bool
+    value: Any, annotation: Any, origin: type, path: Any, errors: FieldErrors, *, bind_strings: bool
 ) -> Any:
     """Coerce a parametrized ``list`` / ``tuple`` / ``set`` field, element by element."""
     args = get_args(annotation)
@@ -962,12 +1295,11 @@ def _coerce_container(
     else:
         element_annotations = [args[0]] * len(value)
 
-    if isinstance(errors, _FieldErrors):
-        errors.containers.add(path)
+    errors.add_container(path)
     items = []
     ok = True
     for index, (item, element_annotation) in enumerate(zip(value, element_annotations, strict=True)):
-        coerced = _coerce(item, element_annotation, f"{path}.{index}", errors, bind_strings=bind_strings)
+        coerced = _coerce(item, element_annotation, (path, index), errors, bind_strings=bind_strings)
         if coerced is _INVALID:
             ok = False
         else:
@@ -985,7 +1317,7 @@ def _coerce_container(
 
 
 def _coerce_mapping(
-    value: Mapping[Any, Any], annotation: Any, path: str, errors: dict[str, str], *, bind_strings: bool
+    value: Mapping[Any, Any], annotation: Any, path: Any, errors: FieldErrors, *, bind_strings: bool
 ) -> Any:
     """Coerce a parametrized ``dict`` / ``Mapping`` field, key by key and value by value."""
     args = get_args(annotation)
@@ -997,19 +1329,18 @@ def _coerce_mapping(
     if key_annotation in (str, Any, object) and value_annotation in (Any, object):
         return value
 
-    if isinstance(errors, _FieldErrors):
-        errors.containers.add(path)
+    errors.add_container(path)
     items: dict[Any, Any] = {}
     ok = True
     for key, item in value.items():
-        item_path = f"{path}.{key}"
+        item_path = (path, key)
         # A JSON object key is always a string, as a form value is, so the
         # key binds by the string-transport rule: "3" fills a `dict[int, ...]`.
-        key_errors: dict[str, str] = {}
+        key_errors = FieldErrors()
         coerced_key = _coerce(key, key_annotation, item_path, key_errors, bind_strings=True)
         if coerced_key is _INVALID:
             ok = False
-            _fail(errors, item_path, f"Invalid key: {next(iter(key_errors.values()), 'Invalid value.')}")
+            _fail(errors, item_path, f"Invalid key: {key_errors.first_message() or 'Invalid value.'}")
             continue
         coerced = _coerce(item, value_annotation, item_path, errors, bind_strings=bind_strings)
         if coerced is _INVALID:
@@ -1026,9 +1357,9 @@ def _coerce_mapping(
 ################################################
 
 
-def _fail(errors: dict[str, str], path: str, message: str) -> Any:
-    """Record the first message for ``path`` and return the invalid marker."""
-    errors.setdefault(path, message)
+def _fail(errors: FieldErrors, path: Any, message: str) -> Any:
+    """Record the message for ``path`` and return the invalid marker."""
+    errors.add(path, message)
     return _INVALID
 
 

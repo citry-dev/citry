@@ -80,23 +80,21 @@ from citry._class_introspection import _static_class_namespace_copy
 from citry._protocol.events import MAX_JSON_DEPTH, JsonNestingError, check_json_depth
 from citry._vue.json_data import _secret_key_path
 from citry.cache import STATE_KEY_PREFIX, InMemoryCache
-from citry.ext.events.errors import (
-    PYDANTIC_EXTRA_TYPES,
-    limit_item_errors,
-    limit_unexpected_fields,
-    unlisted_fields_note,
-)
+from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, FieldErrors, unlisted_fields_note
 from citry.ext.events.schemas import (
-    _field_path_order,
+    PATHS_TOO_LONG_MESSAGE,
+    _is_pydantic_dataclass,
     _literal_value_text,
     generic_label,
+    pydantic_can_report,
     pydantic_container_paths,
+    shared_location_path,
 )
 from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable, Sequence
+    from collections.abc import Iterable, Sequence
 
     from citry.cache import CitryCache
 
@@ -874,51 +872,69 @@ def apply_state_updates(
     if state_model_kind(type(state)) is not None:
         return _apply_model_state_updates(state, updates, writable)
     hints = _resolve_hints(type(state))
-    errors: dict[str, str] = {}
-    unwritable: set[str] = set()
-    # The paths of the list and dict values checked item by item, so the
-    # messages for their items are limited per field like the args ones.
-    containers: set[str] = set()
+    errors = FieldErrors()
     to_apply: list[tuple[str, Any]] = []
     # Sorted iteration keeps the applied list the same whatever order the
     # browser sent the names in.
     for name in sorted(updates):
         value = updates[name]
         if name not in writable:
-            errors[name] = _UNWRITABLE_MESSAGE
-            unwritable.add(name)
+            errors.set_unexpected((None, name), _UNWRITABLE_MESSAGE)
             continue
-        if not _check_value(value, hints.get(name), name, errors, containers):
+        if not _check_value(value, hints.get(name), (None, name), errors):
             continue
         to_apply.append((name, value))
     if errors:
-        raise _rejected_updates(errors, unwritable, containers)
-    for name, value in to_apply:
-        setattr(state, name, value)
+        raise _rejected_updates(errors)
+    if _is_pydantic_dataclass(type(state)):
+        _set_on_pydantic_dataclass(state, to_apply, errors)
+    else:
+        for name, value in to_apply:
+            setattr(state, name, value)
     return tuple(name for name, _ in to_apply)
+
+
+def _set_on_pydantic_dataclass(state: Any, to_apply: list[tuple[str, Any]], errors: FieldErrors) -> None:
+    """
+    Write browser values to a Pydantic dataclass State, which may check them as it is assigned.
+
+    With ``validate_assignment`` each ``setattr`` runs Pydantic, and a value
+    it refuses rejects the whole batch. Without it, the next call runs
+    Pydantic when it restores the State. Either way the writes are held to
+    the same limit as a Pydantic model.
+    """
+    if not pydantic_can_report(dict(to_apply), type(state), errors):
+        errors.add((None, "_state"), PATHS_TOO_LONG_MESSAGE)
+        raise _rejected_updates(errors)
+    # A field with `init=False` can still be unset, and has nothing to restore.
+    before = {name: getattr(state, name) for name, _ in to_apply if hasattr(state, name)}
+    for name, value in to_apply:
+        try:
+            setattr(state, name, value)
+        except ValueError as error:
+            _record_model_errors(error, errors, type(state))
+    if errors:
+        # A failed batch leaves the State as it was, as for every other State.
+        for name, value in before.items():
+            object.__setattr__(state, name, value)
+        raise _rejected_updates(errors)
 
 
 _UNWRITABLE_MESSAGE = "This field cannot be written from the client (it is not in the State _model set)."
 
 
-def _rejected_updates(
-    errors: dict[str, str], unwritable: Collection[str], containers: Collection[str] = ()
-) -> StateUpdateError:
+def _rejected_updates(errors: FieldErrors) -> StateUpdateError:
     """
     Build the error for a rejected batch of browser writes.
 
     The browser decides how many names outside ``_model`` it sends, and how
     many items a list or dict field holds, so only the first few of those
     messages are listed and the message counts the rest. Other messages
-    about writable fields are all kept.
+    about writable fields are all kept. The messages are in path order, so
+    the ones kept do not depend on the order the browser sent a dict's keys
+    in, for a dataclass and a Pydantic State alike.
     """
-    # Sorted by path, with list indexes in number order, so the messages kept
-    # under the limits do not depend on the order the browser sent a dict's
-    # keys in, for a dataclass and a Pydantic State alike.
-    ordered = dict(sorted(errors.items(), key=_field_path_order))
-    fields, unexpected_dropped = limit_unexpected_fields(ordered, unwritable)
-    fields, items_dropped = limit_item_errors(fields, containers)
-    unlisted = unexpected_dropped + items_dropped
+    fields, unlisted = errors.limited()
     message = "Some state updates were rejected; see the field messages." + unlisted_fields_note(unlisted)
     return StateUpdateError(message, fields=fields)
 
@@ -937,42 +953,60 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
             message for each field it names.
 
     """
-    errors = {name: _UNWRITABLE_MESSAGE for name in sorted(updates) if name not in writable}
+    errors = FieldErrors()
+    for name in sorted(updates):
+        if name not in writable:
+            errors.add_unexpected((None, name), _UNWRITABLE_MESSAGE)
     if errors:
-        raise _rejected_updates(errors, errors.keys())
+        raise _rejected_updates(errors)
+    if not pydantic_can_report(updates, type(state), errors):
+        errors.add((None, "_state"), PATHS_TOO_LONG_MESSAGE)
+        raise _rejected_updates(errors)
     # The writes are JSON, as the token is, so they are merged into the
     # token's form and read back the same way a restore reads them.
     merged = {**state_wire_values(state), **updates}
     try:
         checked = restore_state(type(state), merged)
     except ValueError as error:
-        found = getattr(error, "errors", None)
-        # A nested model that forbids extra keys reports one error per key
-        # the browser sent, so those are limited like names outside _model.
-        extra: set[str] = set()
-        for item in found() if callable(found) else ():
-            location = item.get("loc", ()) if isinstance(item, dict) else ()
-            # A field name never starts with an underscore, so a model-level
-            # error cannot share its key with a field.
-            name = ".".join(str(part) for part in location) or "_state"
-            if name not in errors and item.get("type") in PYDANTIC_EXTRA_TYPES:
-                extra.add(name)
-            errors.setdefault(name, str(item.get("msg", "Invalid value.")))
-        if not errors:
-            errors["_state"] = str(error)
-        locations = [item.get("loc", ()) for item in (found() if callable(found) else ()) if isinstance(item, dict)]
-        raise _rejected_updates(errors, extra, pydantic_container_paths(type(state), locations)) from error
+        _record_model_errors(error, errors, type(state))
+        raise _rejected_updates(errors) from error
     except Exception as error:
         # A validator that fails with another exception is the author's bug,
         # but it must not take down the whole envelope.
         logger.exception(f"A State validator raised while checking browser writes to {type(state).__qualname__}.")
-        errors["_state"] = "The State could not be checked."
-        raise StateUpdateError("Some state updates were rejected; see the field messages.", fields=errors) from error
+        raise StateUpdateError(
+            "Some state updates were rejected; see the field messages.",
+            fields={"_state": "The State could not be checked."},
+        ) from error
     # Every field takes the checked model's value, so a value a validator
     # derives from a written field is current too. The values are copied
     # without assignment validation, which already ran.
     state.__dict__.update({name: checked.__dict__[name] for name in state_field_names(type(state))})
     return tuple(sorted(updates))
+
+
+def _record_model_errors(error: ValueError, errors: FieldErrors, state_cls: type) -> None:
+    """Record each field Pydantic names in ``error``, or the whole error when it names none."""
+    found = getattr(error, "errors", None)
+    items = found() if callable(found) else ()
+    shared: dict[tuple[int, Any], Any] = {}
+    for item in items:
+        location = item.get("loc", ()) if isinstance(item, dict) else ()
+        # A field name never starts with an underscore, so a model-level
+        # error cannot share its key with a field.
+        has_text = location not in ((), ("",))
+        path = shared_location_path(None, location, shared) if has_text else (None, "_state")
+        # A nested model that forbids extra keys reports one error per key
+        # the browser sent, so those are limited like names outside _model.
+        if item.get("type") in PYDANTIC_EXTRA_TYPES:
+            errors.add_unexpected(path, str(item.get("msg", "Invalid value.")))
+        else:
+            errors.add(path, str(item.get("msg", "Invalid value.")))
+    if not errors:
+        errors.add((None, "_state"), str(error))
+    locations = [item.get("loc", ()) for item in items if isinstance(item, dict)]
+    for container in pydantic_container_paths(state_cls, locations, None, shared):
+        errors.add_container(container)
 
 
 def _resolve_hints(state_cls: type) -> dict[str, Any]:
@@ -1057,7 +1091,7 @@ def _resolve_annotation(annotation: Any, global_ns: dict[str, Any], local_ns: di
     return get_type_hints(_carrier, globalns=global_ns, localns=local_ns)["field"]
 
 
-def _check_value(value: Any, hint: Any, path: str, errors: dict[str, str], containers: set[str]) -> bool:
+def _check_value(value: Any, hint: Any, path: Any, errors: FieldErrors) -> bool:
     """
     Check a JSON value against a field's declared type, without converting it.
 
@@ -1077,8 +1111,8 @@ def _check_value(value: Any, hint: Any, path: str, errors: dict[str, str], conta
         # An optional field checks a value against its one other type
         # directly, so a wrong list item is named, not the whole list.
         if value is not None and len(others) == 1 and len(others) < len(arms):
-            return _check_value(value, others[0], path, errors, containers)
-        if any(_check_value(value, arm, path, {}, set()) for arm in arms):
+            return _check_value(value, others[0], path, errors)
+        if any(_check_value(value, arm, path, FieldErrors()) for arm in arms):
             return True
         return _fail(errors, path, hint, value)
     if origin is Literal:
@@ -1099,7 +1133,7 @@ def _check_value(value: Any, hint: Any, path: str, errors: dict[str, str], conta
         if not isinstance(value, list):
             return _fail(errors, path, hint, value)
         item_hint = get_args(hint)[0] if get_args(hint) else Any
-        return _check_items(value, [item_hint] * len(value), path, errors, containers)
+        return _check_items(value, [item_hint] * len(value), path, errors)
     if hint is tuple or origin is tuple:
         # JSON has no tuple: the browser sends a list for a tuple field.
         if not isinstance(value, (list, tuple)):
@@ -1113,11 +1147,11 @@ def _check_value(value: Any, hint: Any, path: str, errors: dict[str, str], conta
         # ``tuple[()]`` has no arguments either, but declares an empty tuple,
         # so it falls through to the length check below.
         if len(args) == 2 and args[1] is Ellipsis:
-            return _check_items(value, [args[0]] * len(value), path, errors, containers)
+            return _check_items(value, [args[0]] * len(value), path, errors)
         if len(value) != len(args):
-            errors.setdefault(path, f"Expected a list of {len(args)} items, got {len(value)}.")
+            errors.add(path, f"Expected a list of {len(args)} items, got {len(value)}.")
             return False
-        return _check_items(value, list(args), path, errors, containers)
+        return _check_items(value, list(args), path, errors)
     if hint is dict or origin is dict or origin is Mapping:
         if not isinstance(value, dict):
             return _fail(errors, path, hint, value)
@@ -1128,10 +1162,10 @@ def _check_value(value: Any, hint: Any, path: str, errors: dict[str, str], conta
         value_hint = args[1] if len(args) == 2 else Any
         if value_hint is Any or value_hint is object:
             return True
-        containers.add(path)
+        errors.add_container(path)
         ok = True
         for key, item in value.items():
-            ok = _check_value(item, value_hint, f"{path}.{key}", errors, containers) and ok
+            ok = _check_value(item, value_hint, (path, key), errors) and ok
         return ok
     # A TypedDict is a plain dict at runtime and isinstance() refuses it, so
     # the value is checked only as an object. typing_extensions also
@@ -1159,23 +1193,21 @@ def _check_value(value: Any, hint: Any, path: str, errors: dict[str, str], conta
 
 def _value_matches(value: Any, hint: Any) -> bool:
     """Whether a JSON value fits a field's declared type, the check ``_check_value`` makes, without messages."""
-    return _check_value(value, hint, "", {}, set())
+    return _check_value(value, hint, (None, ""), FieldErrors())
 
 
-def _check_items(
-    items: Sequence[Any], hints: list[Any], path: str, errors: dict[str, str], containers: set[str]
-) -> bool:
+def _check_items(items: Sequence[Any], hints: list[Any], path: Any, errors: FieldErrors) -> bool:
     """Check each item of a list value against its type, recording a message per item."""
     if all(hint is Any or hint is object for hint in hints):
         return True
-    containers.add(path)
+    errors.add_container(path)
     ok = True
     for index, (item, hint) in enumerate(zip(items, hints, strict=True)):
-        ok = _check_value(item, hint, f"{path}.{index}", errors, containers) and ok
+        ok = _check_value(item, hint, (path, index), errors) and ok
     return ok
 
 
-def _check_literal(value: Any, hint: Any, path: str, errors: dict[str, str]) -> bool:
+def _check_literal(value: Any, hint: Any, path: Any, errors: FieldErrors) -> bool:
     """Check a value against a ``Literal[...]`` type: it must equal one listed value and have its type."""
     members = get_args(hint)
     for member in members:
@@ -1185,7 +1217,7 @@ def _check_literal(value: Any, hint: Any, path: str, errors: dict[str, str]) -> 
         if _same_json_value(value, expected):
             return True
     listed = ", ".join(_literal_value_text(member.value if isinstance(member, Enum) else member) for member in members)
-    errors.setdefault(path, f"Expected one of {listed}, got {_literal_value_text(value)}.")
+    errors.add(path, f"Expected one of {listed}, got {_literal_value_text(value)}.")
     return False
 
 
@@ -1196,9 +1228,9 @@ def _same_json_value(value: Any, expected: Any) -> bool:
     return same_type and value == expected
 
 
-def _fail(errors: dict[str, str], path: str, hint: Any, value: Any) -> bool:
+def _fail(errors: FieldErrors, path: Any, hint: Any, value: Any) -> bool:
     """Record the type-mismatch message for ``path`` and report the value as not fitting."""
-    errors.setdefault(path, f"Expected {_type_label(hint)}, got {type(value).__name__}.")
+    errors.add(path, f"Expected {_type_label(hint)}, got {type(value).__name__}.")
     return False
 
 

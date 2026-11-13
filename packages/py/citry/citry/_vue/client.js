@@ -128,7 +128,13 @@
   // trailing control characters and spaces are stripped and tab, CR, and LF are removed anywhere
   // first.
   const redirectScheme = url => {
-    const text = url.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, "");
+    // Walking in from each end reads each character at most once, so a long run of spaces inside
+    // the URL costs no more than its length.
+    let start = 0;
+    let end = url.length;
+    while (start < end && url.charCodeAt(start) <= 0x20) start++;
+    while (end > start && url.charCodeAt(end - 1) <= 0x20) end--;
+    const text = url.slice(start, end).replace(/[\t\n\r]/g, "");
     const match = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(text);
     return match ? match[1].toLowerCase() : null;
   };

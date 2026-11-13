@@ -449,8 +449,11 @@ _whitespace_re = re.compile(r"\s+")
 # Matches a quoted string, a backslash escape, or a `/* ... */` comment,
 # tried in that order. `parse_string_style` keeps the first two and removes
 # comments, as Vue's `parseStringStyle` does, so comment-like text inside a
-# quoted value stays.
-_style_comment_re = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|\\.|/\*.*?\*/", re.DOTALL)
+# quoted value stays. A comment with no `*/` runs to the end of the text and
+# is kept: otherwise the regex would search to the end again from every later
+# `/*`, which takes time growing with the square of the length. Only a match
+# that captured its closing `*/` (group 1) is a comment to remove.
+_style_comment_re = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|\\.|/\*.*?(?:(\*/)|\Z)", re.DOTALL)
 # Splits one CSS declaration into name and value on the first `:`.
 _style_property_re = re.compile(r":(.+)", re.DOTALL)
 
@@ -643,7 +646,7 @@ def parse_string_style(css_text: str) -> dict[str, Any]:
     # regex passes below get a real str; the slices they produce are then
     # plain str too.
     css_text = _underlying(css_text)
-    css_text = _style_comment_re.sub(lambda match: "" if match.group().startswith("/*") else match.group(), css_text)
+    css_text = _style_comment_re.sub(lambda match: "" if match.group(1) else match.group(), css_text)
 
     res: dict[str, Any] = {}
     for declaration in _split_style_declarations(css_text):

@@ -150,13 +150,35 @@ def _is_strict_json_iterative(value: Any) -> bool:
     return True
 
 
+def _pointer_at(path: str, place: tuple[Any, str | int] | None) -> str:
+    """
+    Return the JSON Pointer of ``place`` below ``path``.
+
+    A place is ``None`` for ``path`` itself. Below it, a place is a pair of
+    its parent's place and one more member, which is a key or a list index.
+    """
+    members: list[str | int] = []
+    while place is not None:
+        members.append(place[1])
+        place = place[0]
+    for member in reversed(members):
+        path = pointer(path, member)
+    return path
+
+
 def _strict_json_issue(value: Any, path: str) -> ValidationIssue:
-    """Locate the first strict-JSON problem after the fast path rejects."""
-    stack: list[tuple[Any, str, bool]] = [(value, path, False)]
+    """
+    Locate the first strict-JSON problem after the fast path rejects.
+
+    Each entry on the stack holds a pair of its parent's place and its own
+    member, and the pointer text is written only for the problem found. A
+    long key over many items would otherwise be copied once per item.
+    """
+    stack: list[tuple[Any, tuple[Any, str | int] | None, bool]] = [(value, None, False)]
     ancestors: set[int] = set()
 
     while stack:
-        current, current_path, leaving = stack.pop()
+        current, place, leaving = stack.pop()
         if leaving:
             ancestors.remove(id(current))
             continue
@@ -169,28 +191,30 @@ def _strict_json_issue(value: Any, path: str) -> ValidationIssue:
                 finite = False
             if finite:
                 continue
-            return ValidationIssue(current_path, "strict_json", "The integer is outside the browser JSON range.")
+            return ValidationIssue(
+                _pointer_at(path, place), "strict_json", "The integer is outside the browser JSON range."
+            )
         if isinstance(current, float):
             if math.isfinite(current):
                 continue
-            return ValidationIssue(current_path, "strict_json", "The value contains a non-finite number.")
+            return ValidationIssue(_pointer_at(path, place), "strict_json", "The value contains a non-finite number.")
         if not isinstance(current, (dict, list)):
-            return ValidationIssue(current_path, "strict_json", "The value contains a non-JSON value.")
+            return ValidationIssue(_pointer_at(path, place), "strict_json", "The value contains a non-JSON value.")
 
         identity = id(current)
         if identity in ancestors:
-            return ValidationIssue(current_path, "strict_json", "The value contains a cycle.")
+            return ValidationIssue(_pointer_at(path, place), "strict_json", "The value contains a cycle.")
         ancestors.add(identity)
-        stack.append((current, current_path, True))
+        stack.append((current, place, True))
         if isinstance(current, list):
             for index in range(len(current) - 1, -1, -1):
-                stack.append((current[index], pointer(current_path, index), False))
+                stack.append((current[index], (place, index), False))
             continue
         for key in current:
             if not isinstance(key, str):
-                return ValidationIssue(current_path, "strict_json", "A JSON object has a non-string key.")
+                return ValidationIssue(_pointer_at(path, place), "strict_json", "A JSON object has a non-string key.")
         for key in sorted(current, key=utf16_key, reverse=True):
-            stack.append((current[key], pointer(current_path, key), False))
+            stack.append((current[key], (place, key), False))
     raise AssertionError("strict JSON diagnostic ran for a valid value")
 
 

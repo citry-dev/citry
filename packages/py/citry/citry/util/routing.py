@@ -385,7 +385,11 @@ def compile_route_pattern(path: str, dotless_params: frozenset[str] = frozenset(
     """
     Compile a route path into a regex: ``{name}`` matches any characters except ``/``.
 
-    A parameter named in ``dotless_params`` also excludes ``.``.
+    A parameter named in ``dotless_params`` also excludes ``.``. When one
+    path segment holds several parameters, Python's regex engine can take
+    time that grows much faster than the path's length to match this regex, so
+    :func:`match_route_pattern` matches such a route without it and gives the
+    same result.
     """
     pattern = ""
     last_end = 0
@@ -396,6 +400,170 @@ def compile_route_pattern(path: str, dotless_params: frozenset[str] = frozenset(
         last_end = match.end()
     pattern += re.escape(path[last_end:])
     return re.compile(f"^{pattern}$")
+
+
+@dataclass(frozen=True, slots=True)
+class _RouteSegment:
+    """
+    The part of a route path between two ``/``, split at its parameters.
+
+    ``literals`` holds the fixed text around the parameters, one more entry
+    than ``params``: the text before the first parameter, the text between
+    each pair, and the text after the last. Each entry of ``params`` is the
+    parameter's name and whether it is dotless (excludes ``.``).
+    """
+
+    literals: tuple[str, ...]
+    params: tuple[tuple[str, bool], ...]
+
+
+@cache
+def _segments_to_scan(path: str, dotless_params: frozenset[str]) -> tuple[_RouteSegment, ...] | None:
+    """
+    Split a route path into segments when its regex could be slow, else return ``None``.
+
+    The regex tries every place a parameter could end. That costs nothing
+    extra when each parameter that is followed by another one in the same
+    segment is dotless and the text after it starts with ``.``, because the
+    parameter can then only end at the first ``.``. Citry's own routes are
+    all of that shape. Any other segment with two or more parameters makes
+    the regex retry the rest of the segment from each place the earlier
+    parameters could end, so such a route is matched by
+    :func:`_match_segments` instead.
+    """
+    segments: list[_RouteSegment] = []
+    literals = [""]
+    params: list[tuple[str, bool]] = []
+
+    def add_text(text: str) -> None:
+        # A `/` in the fixed text ends the current segment; parameters never
+        # hold a `/`, so the request path's segments line up with these.
+        pieces = text.split("/")
+        literals[-1] += pieces[0]
+        for piece in pieces[1:]:
+            segments.append(_RouteSegment(tuple(literals), tuple(params)))
+            literals[:] = [piece]
+            params.clear()
+
+    last_end = 0
+    for match in _PARAM_RE.finditer(path):
+        add_text(path[last_end : match.start()])
+        params.append((match.group(1), match.group(1) in dotless_params))
+        literals.append("")
+        last_end = match.end()
+    add_text(path[last_end:])
+    segments.append(_RouteSegment(tuple(literals), tuple(params)))
+
+    def regex_is_quick(segment: _RouteSegment) -> bool:
+        # Every parameter but the last must stop at a `.` that the next text starts with.
+        return all(
+            dotless and segment.literals[index + 1].startswith(".")
+            for index, (_name, dotless) in enumerate(segment.params[:-1])
+        )
+
+    if all(regex_is_quick(segment) for segment in segments):
+        return None
+    return tuple(segments)
+
+
+def _match_segments(segments: tuple[_RouteSegment, ...], path: str) -> dict[str, str] | None:
+    """Match a request path against a route split by :func:`_segments_to_scan`."""
+    pieces = path.split("/")
+    # Parameters never hold a `/`, so the path must have exactly as many
+    # segments as the route.
+    if len(pieces) != len(segments):
+        return None
+    params: dict[str, str] = {}
+    for segment, text in zip(segments, pieces, strict=True):
+        if not _match_segment(segment, text, params):
+            return None
+    return params
+
+
+def _match_segment(segment: _RouteSegment, text: str, params: dict[str, str]) -> bool:
+    """
+    Match one path segment and add its parameters to ``params``.
+
+    This gives the same answer and the same values as the route's regex.
+    The regex lets each parameter take as many characters as it can while
+    the rest of the segment still matches, the earlier parameter first. So
+    this first works out, from the end of the segment backwards, where the
+    rest can start, and then lets each parameter in turn take the longest
+    run that leaves a match for the rest. Each step looks at each character
+    of the segment once per parameter, so the time grows in step with the
+    segment's length.
+    """
+    literals, names = segment.literals, segment.params
+    if not names:
+        return text == literals[0]
+    head, tail = literals[0], literals[-1]
+    # Each parameter takes at least one character.
+    if len(text) < len(head) + len(tail) + len(names) or not text.startswith(head) or not text.endswith(tail):
+        return False
+    # The text before the first parameter and after the last is fixed, so
+    # only the middle is split between the parameters.
+    middle = text[len(head) : len(text) - len(tail)]
+    size = len(middle)
+
+    # next_dot[j] is the first `.` at or after j (or the end): where a
+    # dotless parameter starting at j has to stop.
+    next_dot = [size] * (size + 1)
+    for index in range(size - 1, -1, -1):
+        next_dot[index] = index if middle[index] == "." else next_dot[index + 1]
+
+    def run_end(start: int, dotless: bool) -> int:
+        return next_dot[start] if dotless else size
+
+    # can_start[j]: the parameters from the current one on can match middle[j:].
+    # The last parameter runs to the end of the middle.
+    last_dotless = names[-1][1]
+    can_start = [start < size and run_end(start, last_dotless) == size for start in range(size + 1)]
+    # latest_ends[i][x]: the furthest place at or before x where parameter i
+    # can end, so that the text after it and the later parameters match; -1
+    # when there is none.
+    latest_ends: list[list[int]] = [[] for _ in names[:-1]]
+    for index in range(len(names) - 2, -1, -1):
+        between = literals[index + 1]
+        latest = [-1] * (size + 1)
+        for end in range(1, size + 1):
+            resume = end + len(between)
+            fits = resume <= size and can_start[resume] and middle.startswith(between, end)
+            latest[end] = end if fits else latest[end - 1]
+        latest_ends[index] = latest
+        dotless = names[index][1]
+        can_start = [start < size and latest[run_end(start, dotless)] > start for start in range(size + 1)]
+    if not can_start[0]:
+        return False
+
+    # Each parameter takes its longest run that leaves a match for the rest.
+    start = 0
+    for index, (name, dotless) in enumerate(names[:-1]):
+        end = latest_ends[index][run_end(start, dotless)]
+        params[name] = middle[start:end]
+        start = end + len(literals[index + 1])
+    params[names[-1][0]] = middle[start:]
+    return True
+
+
+def match_route_pattern(route_path: str, dotless_params: frozenset[str], request_path: str) -> dict[str, str] | None:
+    """
+    Match a request path against one route path and return its parameters, or ``None``.
+
+    The result is the same as ``compile_route_pattern(route_path,
+    dotless_params).fullmatch(request_path)`` would give, in time that grows
+    in step with the request path's length.
+    """
+    # Compiled first, so a route the regex rejects (such as a repeated
+    # parameter name) raises the same error on every path.
+    pattern = compile_route_pattern(route_path, dotless_params)
+    segments = _segments_to_scan(route_path, dotless_params)
+    if segments is not None:
+        return _match_segments(segments, request_path)
+    # fullmatch, because the pattern's `$` also matches just before a
+    # final newline, so `call%0a` would otherwise reach the `call` route
+    # while a host rule comparing the exact path lets it through.
+    match = pattern.fullmatch(request_path)
+    return None if match is None else match.groupdict()
 
 
 def match_path_below_mount(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
@@ -444,12 +612,9 @@ def match_route(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
     prepares the request path first.
     """
     for full_path, route in flatten_routes(routes):
-        # fullmatch, because the pattern's `$` also matches just before a
-        # final newline, so `call%0a` would otherwise reach the `call` route
-        # while a host rule comparing the exact path lets it through.
-        match = compile_route_pattern(full_path, route.dotless_params).fullmatch(path)
-        if match is not None:
-            return MatchedRoute(route=route, full_path=full_path, params=match.groupdict())
+        params = match_route_pattern(full_path, route.dotless_params, path)
+        if params is not None:
+            return MatchedRoute(route=route, full_path=full_path, params=params)
     return None
 
 

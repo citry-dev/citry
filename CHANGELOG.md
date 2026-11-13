@@ -23,6 +23,27 @@
 - `$i18n.switchLocale()` no longer fails with status 403 on Django: the
   request that loads the new locale's messages now sends the page's CSRF
   token, the same way event calls do.
+- A few kinds of long input no longer take seconds or more to handle:
+  a `style` value with many unclosed `/*` comments, a request path for
+  a route with several parameters in one path segment (such as
+  `{name}-{version}`, which an extension can add), and, in the
+  browser, a `Redirect` URL with a long run of spaces. Each now takes
+  time in step with its length and gives the same result as before.
+- When an event call's arguments or State updates hold a very long
+  dict key, or a dict key with many dots, Citry no longer copies that
+  key into the field path of every item below it, which took seconds or
+  gigabytes of memory. The field messages are the same as before.
+- With a Pydantic model or Pydantic dataclass, Citry now answers an
+  event call with a 422 before Pydantic runs when the call's field
+  paths (such as `scores.alice.3`) add up to too much text. This can
+  refuse a valid call. That happens most often with a large call to a
+  model with many required fields, or to a model with a union that has
+  no discriminator, because Citry counts the whole call once for each
+  member type of that union
+  ([details](https://citry.dev/security/#limit-event-request-sizes)).
+- A call with bad input to a Pydantic dataclass `data` class, or to a
+  Pydantic dataclass State with `validate_assignment`, now gets a 422
+  with field messages, not a server error.
 
 ## v0.7.0
 

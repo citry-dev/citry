@@ -11,6 +11,8 @@ come from packages/protocol/events/v1/tests/.
 
 import asyncio
 import json
+import time
+import tracemalloc
 from decimal import Decimal
 from urllib.parse import quote, urlsplit
 
@@ -34,7 +36,7 @@ from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
 from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
 from citry.ext.events.routes import _encode_location, _join_like_a_browser, get_event_url
-from citry.ext.events.schemas import StringArgs
+from citry.ext.events.schemas import PATHS_TOO_LONG_MESSAGE, StringArgs
 from citry.ext.events.tokens import mint_state_token
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
 
@@ -1002,6 +1004,162 @@ class TestPerEventRoute:
         error = response.json()["results"][0]["error"]
         assert error["code"] == "payload_too_large"
         assert "larger than 64 bytes" in error["message"]
+
+    @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
+    @pytest.mark.parametrize("field", ["args", "state_updates"])
+    def test_a_dict_key_full_of_dots_is_rejected_quickly(self, adapter, field):
+        # A dict key is part of a field path, so a key full of dots makes a
+        # path with tens of thousands of segments. In Citry 0.7.0 the limit
+        # on item messages per field took 2.6 s for this key.
+        c = _citry()
+
+        class ScoresIn:
+            scores: dict[str, int]
+
+        class BoardState:
+            scores: dict[str, int] | None = None
+
+        class Board(Component):
+            citry = c
+            State = BoardState
+
+            class Events:
+                def save(self, data: ScoresIn, state):
+                    state.scores = data.scores
+
+            template = """
+                <p>board</p>
+            """
+
+        key = "." * 40_000
+        if field == "args":
+            call = {"args": {"scores": {key: "many"}}, "stateToken": _token(Board)}
+        else:
+            call = {"args": {"scores": {}}, "stateToken": _token(Board), "stateUpdates": {"scores": {key: "many"}}}
+        client = _landing_client(c, adapter)
+
+        started = time.perf_counter()
+        response = _post_call(client, Board, "save", call)
+        elapsed = time.perf_counter() - started
+
+        error = response.json()["results"][0]["error"]
+        assert error["status"] == 422
+        assert error["fieldErrors"] == {f"scores.{key}": "Expected int, got str."}
+        assert elapsed < 1
+
+    @staticmethod
+    def _board(c, *, schema):
+        """A component with a `dict[str, list[int]]` field in its `data` class and its State."""
+        if schema == "dataclass":
+
+            class ScoresIn:
+                scores: dict[str, list[int]]
+
+            class BoardState:
+                scores: dict[str, list[int]] | None = None
+
+        else:
+            pydantic = pytest.importorskip("pydantic")
+
+            class ScoresIn(pydantic.BaseModel):
+                scores: dict[str, list[int]]
+
+            class BoardState(pydantic.BaseModel):
+                scores: dict[str, list[int]] = {}
+
+        class Board(Component):
+            citry = c
+            State = BoardState
+
+            class Events:
+                def save(self, data: ScoresIn, state):
+                    return None
+
+            template = """
+                <p>board</p>
+            """
+
+        return Board
+
+    @staticmethod
+    def _long_key_call(board, field, value):
+        if field == "args":
+            return {"args": {"scores": value}, "stateToken": _token(board)}
+        return {"args": {"scores": {}}, "stateToken": _token(board), "stateUpdates": {"scores": value}}
+
+    @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
+    @pytest.mark.parametrize("field", ["args", "state_updates"])
+    @pytest.mark.parametrize("schema", ["dataclass", "pydantic"])
+    def test_a_long_key_over_many_bad_items_costs_little(self, adapter, field, schema):
+        # Citry 0.7.0 wrote the key into the path of every item, so the time
+        # and memory grew with the square of the body. The memory check is
+        # the exact one: it uses a 56 KB body, about 400 MB on 0.7.0, and runs
+        # on its own because tracing slows the call. The time bound is loose,
+        # and a larger body would take gigabytes if this regressed.
+        c = _citry()
+        board = self._board(c, schema=schema)
+        client = _landing_client(c, adapter)
+
+        call = self._long_key_call(board, field, {"a" * 56_000: ["x"] * 14_000})
+        started = time.perf_counter()
+        response = _post_call(client, board, "save", call)
+        elapsed = time.perf_counter() - started
+        assert elapsed < 1
+
+        error = response.json()["results"][0]["error"]
+        assert error["status"] == 422
+        if schema == "pydantic":
+            name = "_args" if field == "args" else "_state"
+            assert error["fieldErrors"] == {name: PATHS_TOO_LONG_MESSAGE}
+        else:
+            assert len(error["fieldErrors"]) == 20
+            assert error["message"].endswith(" 13,980 more field errors are not shown.")
+
+        call = self._long_key_call(board, field, {"a" * 28_000: ["x"] * 7_000})
+        tracemalloc.start()
+        try:
+            _post_call(client, board, "save", call)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        assert peak < 32_000_000
+
+    @pytest.mark.parametrize("field", ["args", "state_updates"])
+    def test_a_dotted_key_under_the_pydantic_limit_is_split_once(self, field):
+        # Under the limit, so Pydantic runs and its messages are listed. Each
+        # of its errors has its own copy of the key, and this body would need
+        # 6 million tree steps if each copy were split at its dots.
+        c = _citry()
+        board = self._board(c, schema="pydantic")
+        call = self._long_key_call(board, field, {"." * 3_000: ["x"] * 2_000})
+        started = time.perf_counter()
+        response = _post_call(_landing_client(c, "wsgi"), board, "save", call)
+        assert time.perf_counter() - started < 0.3
+        error = response.json()["results"][0]["error"]
+        assert len(error["fieldErrors"]) == 20
+        assert error["message"].endswith(" 1,980 more field errors are not shown.")
+
+    @pytest.mark.parametrize("field", ["args", "state_updates"])
+    def test_a_long_key_over_many_good_items_is_accepted_quickly(self, field):
+        c = _citry()
+        board = self._board(c, schema="dataclass")
+        call = self._long_key_call(board, field, {"a" * 500_000: [1] * 100_000})
+        client = _landing_client(c, "wsgi")
+        started = time.perf_counter()
+        response = _post_call(client, board, "save", call)
+        assert time.perf_counter() - started < 0.5
+        assert "error" not in response.json()["results"][0]
+
+    @pytest.mark.parametrize("field", ["args", "state_updates"])
+    def test_pydantic_checks_an_ordinary_large_request(self, field):
+        # Thousands of short paths stay well below the limit on path text, so
+        # Pydantic's own messages reach the browser.
+        c = _citry()
+        board = self._board(c, schema="pydantic")
+        call = self._long_key_call(board, field, {f"key{index}": ["x"] for index in range(30_000)})
+        error = _post_call(_landing_client(c, "wsgi"), board, "save", call).json()["results"][0]["error"]
+        assert list(error["fieldErrors"])[:2] == ["scores.key0.0", "scores.key1.0"]
+        assert error["message"].endswith(" 29,980 more field errors are not shown.")
 
 
 class TestGetHandlers:

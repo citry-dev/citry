@@ -232,6 +232,8 @@ each one:
   the page ([details](/reference/browser-apis/#events-fired-around-each-call)).
 - **When the browser writes a field.** The call fails with `invalid_args`
   (422) before the handler runs, with Pydantic's message for each field.
+  A write with [very long field paths](/security/#limit-event-request-sizes)
+  gets one message from Citry instead.
 - **After a handler changes State.** If a new value does not fit, such as
   `state.page = "two"` or a wrong-typed item appended to a list, the call
   fails with `handler_error` (500), the page keeps its old State, and the

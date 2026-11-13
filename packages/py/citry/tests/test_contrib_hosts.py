@@ -1,8 +1,11 @@
 """Tests for the Flask mount, the Django adapter, and the cache adapters (``citry/contrib/``)."""
 
+import time
+
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, Extension
+from citry.util.routing import RouteResponse, URLRoute, compile_route_pattern
 
 
 class _FakeWsgiHost:
@@ -139,8 +142,8 @@ class TestDjangoAdapter:
 
     def test_pattern_resolves_dotted_params(self):
         # The cache routes carry two parameters in one path segment, which
-        # Django's `path()` syntax cannot express; the adapter falls back to
-        # `re_path` there. Resolve through the generated pattern directly.
+        # Django's `path()` syntax cannot express; the adapter builds a regex
+        # pattern there. Resolve through the generated pattern directly.
         from citry.contrib.django import urlpatterns
 
         c = Citry()
@@ -149,6 +152,43 @@ class TestDjangoAdapter:
         assert match is not None
         assert match.kwargs == {"class_id": "Table_a1b2c3", "vars_hash": "0ab12c", "script_type": "js"}
         assert by_name["citry_cached_script_vars"].resolve("cache/Table_a1b2c3.js") is None
+
+    def test_pattern_with_several_parameters_in_one_segment_resolves_quickly(self):
+        # Django would match the route's regex, which tries every way to
+        # split a long segment between the parameters. The adapter's pattern
+        # matches the way Citry's own adapters do, and reverse() still reads
+        # the regex.
+        from django.urls import reverse
+
+        from citry.contrib.django import urlpatterns
+
+        class Probe(Extension):
+            name = "probe"
+            urls = [
+                URLRoute(
+                    "pkg/{name}-{version}-{build}",
+                    handler=lambda _request, **_params: RouteResponse(),
+                    name="probe_pkg",
+                )
+            ]
+
+        c = Citry(extensions=[Probe])
+        by_name = {p.name: p for p in urlpatterns(c)}
+        pattern = by_name["probe_pkg"]
+        match = pattern.resolve("ext/probe/pkg/my-lib-1.2-3")
+        assert match is not None
+        assert match.kwargs == {"name": "my-lib", "version": "1.2", "build": "3"}
+        assert pattern.pattern.regex.pattern == compile_route_pattern("ext/probe/pkg/{name}-{version}-{build}").pattern
+
+        started = time.perf_counter()
+        assert pattern.resolve("ext/probe/pkg/" + "-" * 1_500 + "/") is None
+        assert time.perf_counter() - started < 0.5
+
+        urlconf = type("Urlconf", (), {"urlpatterns": list(by_name.values())})
+        assert (
+            reverse("probe_pkg", urlconf=urlconf, kwargs={"name": "a", "version": "b", "build": "c"})
+            == "/ext/probe/pkg/a-b-c"
+        )
 
     def test_django_cache_adapter(self):
         from django.core.cache.backends.locmem import LocMemCache

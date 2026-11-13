@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gc
 import json
+import tracemalloc
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import field, replace
@@ -40,6 +41,7 @@ from citry._vue.leaf_program import LEAF_TEMPLATE_CONTRACT_DESCRIPTOR
 from citry.citry_context import CitryContext
 from citry.citry_render import CitryRender
 from citry.component_registry import NotRegistered
+from citry.ext.cache import artifact as artifact_module
 from citry.ext.cache import component_cache_key
 from citry.ext.cache.artifact import (
     _RENDER_CONTRACT,
@@ -1777,3 +1779,34 @@ def test_polling_prepared_element_uses_live_render_until_cache_schema_supports_i
     )
     with pytest.raises(_UnsupportedTypedCachePart, match=r"polling bindings.*artifact version 1"):
         _export_typed_leaf(opening)
+
+
+def test_render_data_with_a_long_key_is_checked_without_copying_the_key() -> None:
+    # Render data can come from a request. Writing a path for each item would
+    # copy the key each time: 800 MB for this value.
+    value = {"a" * 48_000: [1] * 17_000}
+    tracemalloc.start()
+    try:
+        artifact_module._validate_json_shape(value, "data")
+        frozen = artifact_module._freeze_json(value, "data")
+        artifact_module._validate_frozen_json(frozen, "data")
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 16_000_000
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ({"k": [1, {"x.y": float("inf")}]}, "at data.k[1].x.y."),
+        ({"k": [{"a": object()}]}, "at data.k[0].a."),
+        ({"k": {1: 2}}, "data.k contains a non-string object key."),
+        ({"k": ["\ud800"]}, "data.k[0] must be valid UTF-8 text"),
+        ({"k\ud800": 1}, "data object key must be valid UTF-8 text"),
+    ],
+)
+def test_a_bad_value_in_render_data_is_named_by_its_path(value: object, message: str) -> None:
+    with pytest.raises(CacheArtifactError) as caught:
+        artifact_module._validate_json_shape(value, "data")
+    assert message in str(caught.value)

@@ -17,7 +17,7 @@ messages as ``fieldErrors``.
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from citry._protocol.events import build_error
 
@@ -162,41 +162,311 @@ def limit_unexpected_fields(fields: Mapping[str, str], unexpected: Collection[st
     return kept, len(unexpected) - listed
 
 
-def limit_item_errors(fields: Mapping[str, str], containers: Collection[str]) -> tuple[dict[str, str], int]:
+class FieldErrors:
     """
-    Keep at most ``MAX_ITEM_ERRORS`` messages inside each list or dict field, and drop the rest.
+    Collect the per-field messages of one validation, and limit them when it fails.
 
-    A message is inside a container when its path starts with the
-    container's path and a dot (``"tags.3"`` is inside ``"tags"``). In a
-    nested container, a message counts toward every container it is
-    inside. Messages outside every container are all kept, and "first"
-    follows the order of ``fields``.
+    A validator walks the payload and calls this for each part that does
+    not fit. It names a part by a field path: a pair of the parent's path
+    and one more key or list index, with ``None`` above the top level, so
+    ``(((None, "scores"), "alice"), 3)`` written out as text is
+    ``scores.alice.3``. A pair shares its parent with its siblings, so a
+    long dict key over many list items is held once. Writing the text for
+    each item would copy that key once per item, which takes time and
+    memory growing with the square of the request's size.
 
-    Args:
-        fields: The per-field messages.
-        containers: The paths of the list and dict fields in the payload.
-
-    Returns:
-        The kept messages, and how many were dropped.
-
+    The text is written in :meth:`limited`, only for the messages it keeps.
     """
-    if not containers:
-        return dict(fields), 0
-    listed: dict[str, int] = {}
+
+    __slots__ = ("_containers", "_records", "pydantic_total")
+
+    def __init__(self, *, shares_total_with: FieldErrors | None = None) -> None:
+        self._records: list[tuple[Any, str, int]] = []
+        self._containers: list[Any] = []
+        # A validation can call Pydantic once per nested object, and only a
+        # running total bounds the cost. A scratch collector for one attempt
+        # at a union shares its parent's.
+        self.pydantic_total: PydanticTotal = (
+            PydanticTotal() if shares_total_with is None else shares_total_with.pydantic_total
+        )
+
+    def __bool__(self) -> bool:
+        return bool(self._records)
+
+    def add(self, path: Any, message: str) -> None:
+        """Record ``message``, unless an earlier message has the same path text."""
+        self._records.append((path, message, _KEEP_FIRST))
+
+    def add_unexpected(self, path: Any, message: str) -> None:
+        """Record a message for a field the request should not have sent, which counts toward the limit on those."""
+        self._records.append((path, message, _KEEP_FIRST_UNEXPECTED))
+
+    def set_unexpected(self, path: Any, message: str) -> None:
+        """Record a message for a field the request should not have sent, over any earlier one with the same text."""
+        self._records.append((path, message, _REPLACE_UNEXPECTED))
+
+    def add_container(self, path: Any) -> None:
+        """Mark the path of a list or dict field whose items the request decides the number of."""
+        self._containers.append(path)
+
+    def first_message(self) -> str | None:
+        """Return the first message recorded, or ``None``."""
+        return self._records[0][1] if self._records else None
+
+    def limited(self) -> tuple[dict[str, str], int]:
+        """
+        Return the messages to send, and how many were left out.
+
+        The messages are sorted by path, with list indexes in number order.
+        At most ``MAX_UNEXPECTED_FIELDS`` messages for unexpected fields are
+        kept, and at most ``MAX_ITEM_ERRORS`` inside each list or dict
+        field. A message is inside a container when its path text starts
+        with the container's path text and a dot (``tags.3`` is inside
+        ``tags``), and in a nested container it counts toward every
+        container it is inside. "First" follows the sorted order.
+
+        Returns:
+            The kept messages by path text, and how many were dropped.
+
+        """
+        root, unexpected_count = self._build_tree()
+        return _walk_path_tree(root, limit_unexpected=unexpected_count > MAX_UNEXPECTED_FIELDS)
+
+    def _build_tree(self) -> tuple[_PathNode, int]:
+        """Place every record in one tree, and return its root and the number of unexpected fields."""
+        tree = _PathTree()
+        unexpected_count = 0
+        for path, message, kind in self._records:
+            node = tree.place(path)
+            # Two paths with the same text reach the same node, however a
+            # dotted key split them, so the first of them keeps its message.
+            is_first = node.message is None
+            if is_first or kind == _REPLACE_UNEXPECTED:
+                node.message = message
+                if kind != _KEEP_FIRST and not node.unexpected:
+                    node.unexpected = True
+                    unexpected_count += 1
+        for path in self._containers:
+            tree.place(path).container = True
+        return tree.root, unexpected_count
+
+
+class PydanticTotal:
+    """What one validation has handed to Pydantic so far."""
+
+    __slots__ = ("measured", "path_text", "size", "sized")
+
+    def __init__(self) -> None:
+        self.path_text = 0
+        self.size = 0
+        # Each container's id with each model that measured it, and the ids
+        # of the containers already in `size`.
+        self.measured: set[tuple[int, type]] = set()
+        self.sized: set[int] = set()
+
+
+# How FieldErrors treats a record whose path text already has a message.
+_KEEP_FIRST = 0
+_KEEP_FIRST_UNEXPECTED = 1
+_REPLACE_UNEXPECTED = 2
+
+
+class _TrimmedPath(NamedTuple):
+    """A field path with the dots at the end of its text removed; see :func:`trimmed_path`."""
+
+    path: Any
+    empty_name: str | None
+
+
+def trimmed_path(path: Any, empty_name: str | None = None) -> _TrimmedPath:
+    """
+    Name the part at ``path`` when its text may end in dots.
+
+    A model-level message from Pydantic has no field of its own, so it goes
+    on the path of the object it describes, with any dots at the end of that
+    path's text removed. ``empty_name`` is used when no text is left.
+    """
+    return _TrimmedPath(path, empty_name)
+
+
+class _PathNode:
+    """One dot-separated segment of a path's text, with what was recorded for the path that ends here."""
+
+    __slots__ = (
+        "children",
+        "container",
+        "listed",
+        "message",
+        "only_child",
+        "segment",
+        "trimmed",
+        "unexpected",
+    )
+
+    def __init__(self, segment: str, trimmed: _PathNode | None) -> None:
+        self.segment = segment
+        # The node of this path's text without the dots at its end, or None
+        # when the text does not end in a dot.
+        self.trimmed = trimmed
+        # A key full of dots makes a long chain of nodes with one child each,
+        # so one child is held directly and a dict is made for the second.
+        self.only_child: _PathNode | None = None
+        self.children: dict[str, _PathNode] | None = None
+        self.message: str | None = None
+        self.unexpected = False
+        self.container = False
+        self.listed = 0
+
+    def child(self, segment: str, *, root: _PathNode) -> _PathNode:
+        """Return the node for one more segment, created on first use."""
+        only_child = self.only_child
+        if only_child is not None and only_child.segment == segment:
+            return only_child
+        node = None if self.children is None else self.children.get(segment)
+        if node is None:
+            # Only an empty segment below the first means the text ends in a dot.
+            node = _PathNode(segment, (self.trimmed or self) if segment == "" and self is not root else None)
+            if only_child is None and self.children is None:
+                self.only_child = node
+            else:
+                if self.children is None:
+                    assert only_child is not None  # noqa: S101 - the branch above holds the first child
+                    self.children = {only_child.segment: only_child}
+                    self.only_child = None
+                self.children[segment] = node
+        return node
+
+    def ordered_children(self) -> list[_PathNode]:
+        """Return the children in path order."""
+        if self.children is None:
+            return [] if self.only_child is None else [self.only_child]
+        return sorted(self.children.values(), key=_segment_order)
+
+
+class _PathTree:
+    """
+    The tree that gives each path text one node, read one dot-separated segment at a time.
+
+    A dict key may itself hold dots, so ``a.b`` as one key and ``b`` nested
+    inside ``a`` have the same text and must share one message. Splitting
+    every key at its dots makes them reach the same node. Each field path
+    pair is placed once and shares its parent's node, so a long key is
+    split once however many items sit under it.
+    """
+
+    __slots__ = ("_placed", "root")
+
+    def __init__(self) -> None:
+        self.root = _PathNode("", None)
+        # By identity: FieldErrors keeps every pair alive, and hashing a pair
+        # would walk all its parents.
+        self._placed: dict[int, _PathNode] = {}
+
+    def place(self, path: Any) -> _PathNode:
+        """Return the node of a field path, or of a path from :func:`trimmed_path`."""
+        if isinstance(path, _TrimmedPath):
+            return self._place_trimmed(path)
+        root = self.root
+        if path is None:
+            return root.child("", root=root)
+        placed = self._placed
+        waiting = []
+        pair = path
+        # Climb to the nearest parent already placed, so that a shared parent
+        # is read once.
+        while pair is not None and id(pair) not in placed:
+            waiting.append(pair)
+            pair = pair[0]
+        node = root if pair is None else placed[id(pair)]
+        for pair in reversed(waiting):
+            for segment in f"{pair[1]}".split("."):
+                node = node.child(segment, root=root)
+            placed[id(pair)] = node
+        return node
+
+    def _place_trimmed(self, path: _TrimmedPath) -> _PathNode:
+        node = self.place(path.path)
+        node = node.trimmed or node
+        root = self.root
+        if path.empty_name is not None and node is root.child("", root=root):
+            return root.child(path.empty_name, root=root)
+        return node
+
+
+def _segment_order(node: _PathNode) -> tuple[int, int, str, str]:
+    """
+    Sort a path segment, with list indexes in number order.
+
+    Only the first 20 item messages of a list are kept, so ``tags.2`` must
+    come before ``tags.10`` for the earliest items to be the ones kept.
+    """
+    part = node.segment
+    # An all-digit segment sorts by its length without leading zeros, then
+    # by its digits, which is number order without converting it: a key
+    # the request sends can be thousands of digits long. Text segments sort
+    # after numbers, so the two kinds are never compared directly.
+    if part.isascii() and part.isdigit():
+        digits = part.lstrip("0")
+        return (0, len(digits), digits, part)
+    return (1, 0, part, part)
+
+
+def _walk_path_tree(root: _PathNode, *, limit_unexpected: bool) -> tuple[dict[str, str], int]:
+    """
+    Visit the tree in path order and return the kept messages and how many were dropped.
+
+    A path sorts before the longer paths that start with it, so a node's
+    message comes before its children, and the children go in segment
+    order. The walk uses its own stack because a key full of dots makes a
+    tree far deeper than Python's recursion limit.
+    """
     kept: dict[str, str] = {}
     dropped = 0
-    for name, message in fields.items():
-        # Each prefix of the path that is a container is one the message
-        # sits inside; checking the prefixes keeps this one pass over the
-        # messages however many containers there are.
-        parts = name.split(".")
-        inside = [prefix for prefix in (".".join(parts[:end]) for end in range(1, len(parts))) if prefix in containers]
-        if any(listed.get(prefix, 0) >= MAX_ITEM_ERRORS for prefix in inside):
-            dropped += 1
+    unexpected_listed = 0
+    # The text of the current path, one segment each. Written out only for a
+    # kept message, and the limits keep few of those.
+    segments: list[str] = []
+    # The containers the walk is inside, and how many of them are full. A
+    # message under a full container is dropped without looking at the rest.
+    open_containers: list[_PathNode] = []
+    full_containers = 0
+
+    # False to enter a node, True to leave it after its children.
+    stack: list[tuple[_PathNode, bool]] = []
+
+    stack.extend((child, False) for child in reversed(root.ordered_children()))
+    while stack:
+        node, leaving = stack.pop()
+        if leaving:
+            segments.pop()
+            if node.container:
+                open_containers.pop()
+                if node.listed >= MAX_ITEM_ERRORS:
+                    full_containers -= 1
             continue
-        for prefix in inside:
-            listed[prefix] = listed.get(prefix, 0) + 1
-        kept[name] = message
+        # A trimmed link points back up the tree, so clearing it lets the tree
+        # be freed at once, without waiting for the garbage collector.
+        node.trimmed = None
+        segments.append(node.segment)
+        message = node.message
+        if message is not None:
+            if node.unexpected and limit_unexpected and unexpected_listed >= MAX_UNEXPECTED_FIELDS:
+                dropped += 1
+            else:
+                unexpected_listed += node.unexpected
+                if full_containers:
+                    dropped += 1
+                else:
+                    kept[".".join(segments)] = message
+                    for container in open_containers:
+                        container.listed += 1
+                        if container.listed == MAX_ITEM_ERRORS:
+                            full_containers += 1
+        # A message counts toward the containers around it, not its own.
+        if node.container:
+            open_containers.append(node)
+        stack.append((node, True))
+        stack.extend((child, False) for child in reversed(node.ordered_children()))
     return kept, dropped
 
 

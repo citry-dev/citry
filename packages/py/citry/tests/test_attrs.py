@@ -26,7 +26,7 @@ from citry import (
     normalize_style,
     parse_string_style,
 )
-from citry.attrs import _split_style_declarations, validate_html_attr_name
+from citry.attrs import _split_style_declarations, _style_property_re, validate_html_attr_name
 from citry.nodes import ElementKeyNode
 
 
@@ -457,6 +457,98 @@ class TestStyleDeclarationSplit:
         for component in (Plain, Interactive):
             started = time.perf_counter()
             html = str(component(attrs={"style": style}))
+            assert time.perf_counter() - started < 1
+            assert "width: 1px" in html
+
+
+class TestStyleCommentRemoval:
+    """
+    Comments are removed from a style string in one pass, with the same result as before.
+
+    ``_RELEASED_COMMENT_RE`` is the comment regex of Citry 0.7.0 and earlier:
+    it removes each ``/* ... */`` and keeps quoted strings and escapes. On
+    text with many ``/*`` and no ``*/`` it searches to the end again from
+    every ``/*``, which took over 2 s for a 60,000-character style from data.
+    """
+
+    _RELEASED_COMMENT_RE = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|\\.|/\*.*?\*/", re.DOTALL)
+
+    def _released_parse(self, text):
+        # parse_string_style's steps with the released comment regex.
+        text = self._RELEASED_COMMENT_RE.sub(
+            lambda match: "" if match.group().startswith("/*") else match.group(), text
+        )
+        result = {}
+        for declaration in _split_style_declarations(text):
+            parts = _style_property_re.split(declaration)
+            if len(parts) > 1:
+                result[parts[0].strip()] = parts[1].strip()
+        return result
+
+    def test_it_parses_exactly_as_the_released_regex_on_random_text(self):
+        rng = random.Random(4321)  # noqa: S311 - test data, not secrets
+        pieces = ["/*", "*/", "/", "*", '"', "'", "\\", "a", ";", ":", "(", ")", " ", "\n", "é"]
+        for _ in range(20_000):
+            text = "".join(rng.choice(pieces) for _ in range(rng.randint(0, 30)))
+            assert parse_string_style(text) == self._released_parse(text), text
+
+    @pytest.mark.parametrize(
+        ("css_text", "expected"),
+        [
+            # An unclosed comment stays, and so does any later `/*`.
+            ("a: 1; b: 2 /* x /* y", {"a": "1", "b": "2 /* x /* y"}),
+            # `/*/` does not close itself.
+            ("a: 1 /*/ b: 2", {"a": "1 /*/ b: 2"}),
+            ("a: 1 /*/ x */; b: 2", {"a": "1", "b": "2"}),
+            ("a: 1 /**/; b: 2", {"a": "1", "b": "2"}),
+            ("a: 1; /* x */ /* y", {"a": "1"}),
+        ],
+    )
+    def test_closed_and_unclosed_comments(self, css_text, expected):
+        assert parse_string_style(css_text) == self._released_parse(css_text)
+        assert parse_string_style(css_text) == expected
+
+    # Every unit opens a comment that nothing closes; the released regex took
+    # 1.3 s to 2.8 s on each of these texts.
+    @pytest.mark.parametrize("unit", ["/* ", "/*a", "/*\n", "/* ;", "/*(", '"/*', "'/*", '/*"'])
+    def test_many_unclosed_comments_parse_quickly(self, unit):
+        text = "a: 1; b: " + unit * (60_000 // len(unit))
+        started = time.perf_counter()
+        result = parse_string_style(text)
+        assert time.perf_counter() - started < 0.5
+        assert result["a"] == "1"
+
+    def test_a_style_from_data_with_unclosed_comments_renders_quickly(self):
+        app = Citry(secret="s" * 40)
+
+        class Plain(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"style": kwargs["style"]}
+
+            template = """
+                <div style="color: red" c-style="style">p</div>
+            """
+
+        class Interactive(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"style": kwargs["style"]}
+
+            template = """
+                <div style="color: red" c-style="style">v</div>
+            """
+
+            js = """
+                $component({})
+            """
+
+        style = "width: 1px; " + "/* " * 20_000
+        for component in (Plain, Interactive):
+            started = time.perf_counter()
+            html = str(component(style=style))
             assert time.perf_counter() - started < 1
             assert "width: 1px" in html
 
