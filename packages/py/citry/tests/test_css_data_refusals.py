@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import random
 import string
 from typing import TYPE_CHECKING
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, InMemoryCache
+from citry._vue.events import hold_page_assets
 from citry.contrib.wsgi import wsgi_app
+from citry.ext.cache.errors import CacheArtifactError
+from citry.ext.dependencies.extension import _capture_from_wire
+from citry.ext.dependencies.scripts import gen_cache_key
+from citry.ext.dependencies.types import Style
+from citry.util import css as css_module
 from citry.util.css import _escape_beyond_printable_ascii, serialize_css_var_value, validate_css_var_value
 
 if TYPE_CHECKING:
@@ -105,6 +113,15 @@ _REFUSED_VALUES = {
     "null_in_unquoted_url": ("url(a\x00b)", r"url\(\)|null character"),
     "control_character_in_unquoted_url": ("url(a\x01b)", r"url\(\)"),
     "delete_character_in_unquoted_url": ("url(a\x7fb)", r"url\(\)"),
+    # The serializer writes a control character as a hex escape, which the
+    # browser reads as part of a name, so outside a string the check refuses
+    # it rather than read the value differently from the browser.
+    "control_character_before_url": ("\x01url(a)", "control character"),
+    "delete_character_before_url": ("\x7furl(a)", "control character"),
+    "escape_character_between_names": ("a\x1bb", "control character"),
+    "unit_separator_before_url": ("\x1furl(a)", "control character"),
+    "control_character_before_a_comment_in_url": ('\x08url(/*)"*/)"', "control character"),
+    "control_character_after_a_bracket": ("f(\x0e)", "control character"),
 }
 
 
@@ -223,7 +240,8 @@ def test_css_data_still_accepts_ordinary_values(value: str) -> None:
 # What the rules refuse, beyond what the CSS tokenizer calls a parse error:
 # a comment, a brace, a `<` or a backslash outside a string and url(), a
 # top-level `;` or `!`, an unbalanced bracket, a string or url() that is
-# malformed or left unclosed, a null or surrogate character, and `</style`
+# malformed or left unclosed, a control character outside a string and
+# url(), a null or surrogate character, and `</style`
 # or `<!--` anywhere. Neither side checks that a value suits a property (the
 # function is "not a full property validator"), so both accept `1 2 3`.
 # ---------------------------------------------------------------------------
@@ -259,9 +277,12 @@ def _is_non_printable(char: str) -> bool:
 class _Reader:
     """A cursor over the text with the look-ahead the CSS tokenizer needs."""
 
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, *, escapes_in_names: bool = False) -> None:
         self.text = text
         self.pos = 0
+        # The value as checked has no backslash outside a string. The text the
+        # serializer writes can hold hex escapes, which CSS reads as name characters.
+        self.escapes_in_names = escapes_in_names
 
     def peek(self, ahead: int = 0) -> str:
         """The character `ahead` places past the cursor, or an empty string past the end."""
@@ -283,11 +304,18 @@ class _Reader:
     def at_quote(self, ahead: int = 0) -> bool:
         return self.peek(ahead) != "" and self.peek(ahead) in _QUOTES
 
+    def at_escape(self, ahead: int = 0) -> bool:
+        """Whether a backslash that starts an escape sits `ahead` places past the cursor, when escapes are read."""
+        return self.escapes_in_names and self.peek(ahead) == "\\" and self.peek(ahead + 1) not in {"", "\n"}
+
+    def at_name_char(self, ahead: int = 0) -> bool:
+        return _is_name_char(self.peek(ahead)) or self.at_escape(ahead)
+
     def at_ident_start(self, ahead: int = 0) -> bool:
         first, second = self.peek(ahead), self.peek(ahead + 1)
         if first == "-":
-            return _is_name_start(second) or second == "-"
-        return _is_name_start(first)
+            return _is_name_start(second) or second == "-" or self.at_escape(ahead + 1)
+        return _is_name_start(first) or self.at_escape(ahead)
 
     def at_number_start(self) -> bool:
         first, second, third = self.peek(), self.peek(1), self.peek(2)
@@ -355,11 +383,13 @@ def _read_url(reader: _Reader) -> None:
 
 def _read_name(reader: _Reader) -> str:
     start = reader.pos
-    while _is_name_char(reader.peek()):
-        reader.take()
+    while reader.at_name_char():
+        if reader.take() == "\\":
+            _read_escape(reader)
     if reader.peek() == "\\":
         raise _Refused("backslash")
-    return reader.text[start : reader.pos].lower()
+    # Decode escapes, so `\75 rl(` is compared as the name `url`.
+    return _decode_css_escapes(reader.text[start : reader.pos]).lower()
 
 
 def _read_number(reader: _Reader) -> None:
@@ -392,9 +422,14 @@ def _read_ident_like(reader: _Reader) -> str:
     return "url"
 
 
-def _tokenize(text: str) -> list[str]:
-    """Split `text` into token kinds; brackets, `;` and `!` keep their own character as the kind."""
-    reader = _Reader(text)
+def _tokenize(text: str, *, escapes_in_names: bool = False, refuse_controls: bool = True) -> list[str]:
+    """
+    Split `text` into token kinds; brackets, `;` and `!` keep their own character as the kind.
+
+    With `refuse_controls` off, a control character outside a string reads
+    as a one-character token, as CSS reads it, so two readings can be compared.
+    """
+    reader = _Reader(text, escapes_in_names=escapes_in_names)
     tokens: list[str] = []
     while reader.peek() != "":
         char = reader.peek()
@@ -407,7 +442,7 @@ def _tokenize(text: str) -> list[str]:
             tokens.append("string")
         elif char == "#":
             reader.take()
-            if _is_name_char(reader.peek()):
+            if reader.at_name_char():
                 _read_name(reader)
             tokens.append("hash")
         elif char == "@":
@@ -422,8 +457,10 @@ def _tokenize(text: str) -> list[str]:
             raise _Refused("brace")
         elif char == "<":
             raise _Refused("less-than sign")
-        elif char == "\\":
+        elif char == "\\" and not reader.at_ident_start():
             raise _Refused("backslash")
+        elif _is_non_printable(char) and refuse_controls:
+            raise _Refused("control character")
         elif char == "/":
             reader.take()
             if reader.peek() == "*":
@@ -683,7 +720,7 @@ def _random_value_with_other_characters(rng: random.Random) -> str:
 def test_css_data_escape_keeps_every_character_and_leaves_only_printable_ascii_and_css_whitespace() -> None:
     rng = random.Random(4_417)  # noqa: S311 - test data, not secrets
     changed = 0
-    for _ in range(40_000):
+    for _ in range(60_000):
         value = _random_value_with_other_characters(rng)
         if not _implementation_accepts(value):
             continue
@@ -734,3 +771,205 @@ def test_css_data_renders_the_same_ascii_text_inline_and_in_the_linked_styleshee
     body = b"".join(wsgi_app(app)(environ, lambda _status, _headers: None))
     assert body.isascii()
     assert b'--x: "\\8868 \\";}.evil{--evil:1}";' in body
+
+
+def test_css_data_escape_leaves_the_browser_reading_the_tokens_the_check_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The check reads the value as written and the browser reads the escaped
+    # text, so both must split it into the same tokens. Were a control
+    # character before `url(` escaped, the two would split differently: the
+    # check would read a URL and the browser a function call, so text the
+    # check accepted inside the URL would become live CSS.
+    # Text with whitespace is quoted before the check, so record the exact
+    # text the check is given rather than repeat the quoting rule here.
+    checked: list[str] = []
+
+    def recording_check(text: str) -> None:
+        checked.append(text)
+        validate_css_var_value(text)
+
+    monkeypatch.setattr(css_module, "validate_css_var_value", recording_check)
+    rng = random.Random(9_113)  # noqa: S311 - test data, not secrets
+    changed = 0
+    for _ in range(60_000):
+        value = _random_value_with_other_characters(rng)
+        checked.clear()
+        try:
+            escaped = serialize_css_var_value(value)
+        except ValueError:
+            continue
+        as_checked = _tokenize(_normalize_newlines(checked[-1]), refuse_controls=False)
+        as_read = _tokenize(_normalize_newlines(escaped), escapes_in_names=True)
+        assert as_read == as_checked, repr(value)
+        changed += escaped != value
+
+    # The comparison means something only if many values were escaped.
+    assert changed > 1_000
+
+
+def _normalize_newlines(text: str) -> str:
+    # The CSS input stage turns every kind of line break into one newline.
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\f", "\n")
+
+
+# ---------------------------------------------------------------------------
+# A shared cache can hold a css_data() stylesheet that an older Citry wrote.
+# The route builds it again from the stored values with this version's
+# checks, so it never serves text those checks would refuse.
+# ---------------------------------------------------------------------------
+
+
+def _fetch_css_data_stylesheet(app: Citry, class_id: str, variables_hash: str) -> tuple[str, bytes]:
+    environ = {
+        "REQUEST_METHOD": "GET",
+        "PATH_INFO": f"/cache/{class_id}.{variables_hash}.css",
+        "SCRIPT_NAME": "",
+        "QUERY_STRING": "",
+        "wsgi.input": io.BytesIO(b""),
+    }
+    statuses: list[str] = []
+    body = b"".join(wsgi_app(app)(environ, lambda status, _headers: statuses.append(status)))
+    return statuses[0], body
+
+
+def _stored_entry(class_id: str, source: str | None, content: str) -> str:
+    entry: dict[str, object] = {
+        "kind": "variables",
+        "content": content,
+        "url": None,
+        "attrs": {},
+        "origin_class_id": class_id,
+    }
+    if source is not None:
+        entry["source"] = source
+    return json.dumps(entry)
+
+
+def _source_and_hash(data: dict[str, object]) -> tuple[str, str]:
+    # The same canonical JSON and hash a render writes for these values.
+    source = json.dumps(data, allow_nan=False, separators=(",", ":"))
+    return source, hashlib.sha256(source.encode()).hexdigest()[:32]
+
+
+def _cached_widget() -> tuple[Citry, type[Component]]:
+    app = Citry(cache=InMemoryCache())
+    app.set_mounted_prefix("/citry")
+
+    class Widget(Component):
+        citry = app
+        template = """
+            <span class="w">w</span>
+        """
+        css = """
+            .w { color: var(--x); }
+        """
+
+        def css_data(self, kwargs, slots):
+            return {"x": kwargs["x"]}
+
+    return app, Widget
+
+
+def test_css_data_stylesheet_from_the_cache_is_built_again_from_its_values() -> None:
+    app, widget = _cached_widget()
+    rendered = widget(x="red").render()
+    rendered.serialize(deps_strategy="fragment")
+    record = next(item for item in rendered.context.extra["dependencies"] if item.class_id == widget.class_id)
+    status, body = _fetch_css_data_stylesheet(app, widget.class_id, record.css_vars_hash)
+    assert status.startswith("200")
+    assert b"--x: red;" in body
+
+    # Text another version stored beside the same values is not what is served.
+    key = gen_cache_key(widget.class_id, "css", record.css_vars_hash)
+    source, _hash = _source_and_hash({"x": "red"})
+    app.cache.set(key, _stored_entry(widget.class_id, source, "html{background:green}"))
+    status, body = _fetch_css_data_stylesheet(app, widget.class_id, record.css_vars_hash)
+    assert status.startswith("200")
+    assert b"--x: red;" in body
+    assert b"background" not in body
+
+
+@pytest.mark.parametrize(
+    ("data", "store_source"),
+    [
+        # An entry from a version that stored only the text.
+        pytest.param({"x": "red"}, False, id="no_stored_values"),
+        # Values this version refuses.
+        pytest.param({"x": "\x01url(a)"}, True, id="values_the_current_check_refuses"),
+    ],
+)
+def test_css_data_stylesheet_from_the_cache_is_missing_when_it_cannot_be_built_again(
+    data: dict[str, object], *, store_source: bool
+) -> None:
+    app, widget = _cached_widget()
+    source, variables_hash = _source_and_hash(data)
+    key = gen_cache_key(widget.class_id, "css", variables_hash)
+    content = f"[data-ccss-{variables_hash}] {{\n  --x: red;\n}}\nhtml{{background:green}}"
+    app.cache.set(key, _stored_entry(widget.class_id, source if store_source else None, content))
+    status, body = _fetch_css_data_stylesheet(app, widget.class_id, variables_hash)
+    assert status.startswith("404")
+    assert b"background" not in body
+
+
+def test_css_data_stylesheet_from_the_cache_must_match_the_hash_in_its_url() -> None:
+    app, widget = _cached_widget()
+    other_source, _other_hash = _source_and_hash({"x": "blue"})
+    _source, variables_hash = _source_and_hash({"x": "red"})
+    key = gen_cache_key(widget.class_id, "css", variables_hash)
+    app.cache.set(key, _stored_entry(widget.class_id, other_source, "--x: blue;"))
+    status, _body = _fetch_css_data_stylesheet(app, widget.class_id, variables_hash)
+    assert status.startswith("404")
+
+
+def test_an_inlined_css_data_stylesheet_comes_from_the_render_not_the_cache() -> None:
+    # During a rolling deploy, a worker of an earlier version can rewrite the
+    # shared entry between this render and its serialize step. The page
+    # inlines the stylesheet the render built, so it still gets its variables.
+    app, widget = _cached_widget()
+    rendered = widget(x="red").render()
+    record = next(item for item in rendered.context.extra["dependencies"] if item.class_id == widget.class_id)
+    key = gen_cache_key(widget.class_id, "css", record.css_vars_hash)
+    app.cache.set(key, _stored_entry(widget.class_id, None, "html{background:green}"))
+    html = rendered.serialize(deps_strategy="document")
+    assert "--x: red;" in html
+    assert "background:green" not in html
+
+
+def test_css_data_stylesheet_from_this_process_is_served_from_its_stored_values() -> None:
+    # Without a configured cache the stylesheet lives in this process's
+    # store. That store refuses other bytes for a key it holds, so this test
+    # checks only that the read, which now builds from the stored values,
+    # still serves the stylesheet.
+    app = Citry()
+    app.set_mounted_prefix("/citry")
+
+    class Widget(Component):
+        citry = app
+        template = """
+            <span class="w">w</span>
+        """
+        css = """
+            .w { color: var(--x); }
+        """
+
+        def css_data(self, kwargs, slots):
+            return {"x": "\u8868"}
+
+    rendered = Widget().render()
+    with hold_page_assets(app, rendered):
+        record = next(item for item in rendered.context.extra["dependencies"] if item.class_id == Widget.class_id)
+        status, body = _fetch_css_data_stylesheet(app, Widget.class_id, record.css_vars_hash)
+    assert status.startswith("200")
+    assert b"--x: \\8868 ;" in body
+
+
+def test_a_render_cache_entry_with_a_stylesheet_from_an_earlier_version_is_refused() -> None:
+    # A component cache entry keeps the stylesheet text beside its values.
+    # Text that does not match what this version builds is refused, and the
+    # caller treats the entry as a miss and renders the component again.
+    source, variables_hash = _source_and_hash({"x": "red"})
+    content = f"/* w */\n[data-ccss-{variables_hash}] {{\n  --x: red;\n}}"
+    # The exact value an earlier version wrote: the stylesheet with no values beside it.
+    earlier_value = json.dumps(Style(kind="variables", content=content, origin_class_id="w").to_json())
+    wire = {"hash": variables_hash, "source": source, "value": earlier_value}
+    with pytest.raises(CacheArtifactError, match="canonical source"):
+        _capture_from_wire(wire, path="artifact.css", class_id="w")

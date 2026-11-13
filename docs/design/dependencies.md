@@ -387,11 +387,19 @@ The mechanism ports from DJC conceptually unchanged:
   strings, and comments. This is a structural containment check, not a full
   CSS grammar validator. After the check, the serializer writes each non-ASCII
   character and each control character other than tab, newline, carriage
-  return, and form feed as a CSS hex escape, so the stylesheet is plain ASCII
-  and does not depend on its `Content-Type`. Citry also serves every
-  JavaScript and CSS file with `charset=utf-8`; a text or JavaScript content
-  type that does not say so raises `ValueError` when Citry builds the served
-  file.
+  return, and form feed as a CSS hex escape, so each value is plain ASCII
+  and does not depend on its `Content-Type`. The browser reads an escape as
+  part of a name such as `url`, so an escape outside a string may only
+  stand for a character the check also reads as part of a name: the check
+  refuses control characters outside a quoted string and accepts non-ASCII
+  ones. A stored stylesheet keeps the values it was built from, and the
+  serving route builds it again from them with the current check, so a
+  shared cache serves only text built with the current check. An entry
+  with no stored values, values the check refuses, or values that do not
+  match the URL's hash counts as missing; the next render stores it again.
+  Citry also serves every JavaScript and CSS file with `charset=utf-8`; a
+  text or JavaScript content type that does not say so raises `ValueError`
+  when Citry builds the served file.
 - **JS variables** travel inside the page's Vue payload: each component
   occurrence carries its own `js_data()` result as a JSON object, and the
   browser runtime hands it to that instance. They are not written to the

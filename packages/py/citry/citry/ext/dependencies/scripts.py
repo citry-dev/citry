@@ -695,7 +695,12 @@ def get_cached_component_script(
 def get_script(
     script_type: ScriptType, comp_cls: type[Component], variables_hash: str | None = None
 ) -> Script | Style | None:
-    """Read one cached object, validating class-level content against the current class."""
+    """
+    Read one cached object, validating class-level content against the current class.
+
+    A ``css_data()`` stylesheet is built again from its stored values with
+    the current check (see ``_rebuild_css_data_stylesheet``).
+    """
     if variables_hash is None:
         class_cached = _cache_component_script(script_type, comp_cls)
         return None if class_cached is None else class_cached[0]
@@ -714,7 +719,36 @@ def get_script(
     if serialized is None:
         return None
     data = json.loads(serialized)
-    return Script.from_json(data) if script_type == "js" else Style.from_json(data)
+    if script_type == "js":
+        return Script.from_json(data)
+    return _rebuild_css_data_stylesheet(comp_cls.class_id, variables_hash, data)
+
+
+def _rebuild_css_data_stylesheet(class_id: str, variables_hash: str, data: object) -> Style | None:
+    """
+    Build a stored ``css_data()`` stylesheet again from its stored values, or return None when that is not possible.
+
+    A shared cache can hold a stylesheet that an older Citry wrote, and the
+    browser fetches it by URL long after the render. Serving the stored text
+    would skip the checks this version applies to each value, so the values
+    go through ``serialize_css_var_value`` again here, as they do in a
+    render. An entry with no stored values, values the current check
+    refuses, or values that do not match the hash in the URL counts as
+    missing; the next render that uses those values stores the stylesheet
+    again.
+    """
+    # An earlier version stored only the text, so there is nothing to build from.
+    if type(data) is not dict or type(data.get("source")) is not str:
+        return None
+    # A value the current check refuses must not reach the browser.
+    try:
+        rebuilt = _css_vars_capture(class_id, data["source"])
+    except (TypeError, ValueError):
+        return None
+    # The URL names the values it was made for; an entry for other values is not this stylesheet.
+    if rebuilt.variables_hash != variables_hash:
+        return None
+    return Style.from_json(json.loads(rebuilt.cache_value))
 
 
 def get_component_script(script_type: ScriptType, comp_cls: type[Component]) -> Script | Style | None:
@@ -808,7 +842,10 @@ def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCaptur
     return _VariablesScriptCapture(
         source_json=source_json,
         variables_hash=variables_hash,
-        cache_value=json.dumps(style.to_json()),
+        # The stored entry keeps the values it was built from, so a read
+        # can build the stylesheet again with this version's checks rather
+        # than trust text that another version wrote.
+        cache_value=json.dumps({**style.to_json(), "source": source_json}),
     )
 
 

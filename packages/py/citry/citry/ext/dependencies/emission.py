@@ -258,6 +258,7 @@ def emit_dependencies(
             records,
             with_client_js=with_client_js,
             script_security=script_security,
+            captures=ctx.context.extra.get(EXTRA_KEY),
         )
         scripts, styles = resolved.scripts, resolved.styles
         has_component_calls = resolved.has_component_calls
@@ -399,6 +400,7 @@ def _emit_without_javascript(
         with_client_js=True,
         as_urls=False,
         script_security=script_security,
+        captures=ctx.context.extra.get(EXTRA_KEY),
     )
     hook_ctx = OnDependenciesContext(
         citry=citry,
@@ -523,7 +525,11 @@ def _resolve_records(
 
     With ``as_urls`` on, component and variables assets become URL entries,
     each bound to the exact bytes the route serves so its tag can carry their
-    hash. ``captures`` holds the ``css_data()`` stylesheet each render produced.
+    hash.
+
+    ``captures`` is the render's own record-to-capture map. A ``css_data()``
+    stylesheet, linked or inlined, comes from it when present, so a page does
+    not depend on what another worker last wrote to the shared cache.
     """
     mounted = citry.mounted_prefix is not None
 
@@ -648,7 +654,16 @@ def _resolve_records(
             if as_urls:
                 instance_styles.append(_variables_style(comp_cls, record, captures))
             else:
-                vars_css = get_script("css", comp_cls, record.css_vars_hash)
+                # The render built this stylesheet a moment ago, so use that
+                # copy; the cache can hold an entry that another Citry
+                # version wrote, which reads as missing here.
+                capture = None if captures is None else captures.get(record)
+                css_capture = None if capture is None else capture.css
+                vars_css: Script | Style | None
+                if css_capture is not None and css_capture.variables_hash == record.css_vars_hash:
+                    vars_css = Style.from_json(json.loads(css_capture.cache_value))
+                else:
+                    vars_css = get_script("css", comp_cls, record.css_vars_hash)
                 if vars_css is not None:
                     if mounted:
                         variables_url = script_url(comp_cls, "css", record.css_vars_hash)

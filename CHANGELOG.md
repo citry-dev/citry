@@ -278,6 +278,16 @@ change.
 
 ### Fixes
 
+- `css_data()` now raises `ValueError` for a value with a control
+  character outside a quoted string, so the browser reads the value the
+  way Citry checked it. Tab, newline, carriage return and form feed are
+  still allowed. Remove the character, or keep it inside a quoted string.
+- A `css_data()` stylesheet in a configured cache is now built again from
+  its stored values each time it is served. One stored by an earlier
+  version returns 404 until a page with the same values renders again,
+  and a cached component with `css_data()` values renders again once.
+  Upgrade every process that shares the cache: one on an earlier
+  version keeps writing entries that the new version does not serve.
 - `$i18n.switchLocale()` no longer fails with status 403 on Django: the
   request that loads the new locale's messages now sends the page's CSRF
   token, the same way event calls do.

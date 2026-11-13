@@ -99,8 +99,9 @@ def validate_css_var_value(value: str) -> None:
     custom-property value cannot close the generated declaration, start a new
     rule, or end the ``<style>`` element the browser builds it into. It
     rejects a malformed string or ``url()`` token (the browser's bad-string
-    and bad-url cases), a comment, an unbalanced bracket, a brace, a ``<`` or
-    backslash outside a string or ``url()``, a null or surrogate character,
+    and bad-url cases), a comment, an unbalanced bracket, a brace, a ``<``,
+    a backslash, DEL, or a control character other than whitespace outside
+    a string or ``url()``, a null or surrogate character,
     ``</style``, or ``<!--`` anywhere, and a top-level ``;`` or ``!``. It is
     not a full property-type validator.
     """
@@ -137,6 +138,19 @@ def validate_css_var_value(value: str) -> None:
         # here rather than judge what follows it.
         if char == "<":
             raise ValueError(f"CSS value contains '<' at offset {index}.")
+
+        # The serializer writes a control character as a hex escape, which
+        # the browser reads as part of a name. The check reads a control
+        # character as ending a name, so the two would split the value
+        # differently (a `url(` after it is a URL to the check and a function
+        # to the browser). Inside a string the escape stays string text, so
+        # only this branch, outside strings and url(), refuses it.
+        if _is_css_control(char):
+            msg = (
+                f"CSS value contains the control character {char!r} at offset {index}; "
+                "Citry allows it only inside a quoted string. Remove it, or quote the text."
+            )
+            raise ValueError(msg)
 
         if char in {'"', "'"}:
             index = _scan_css_string(value, index)
@@ -203,6 +217,12 @@ def validate_css_var_value(value: str) -> None:
         raise ValueError(f"CSS value has an unclosed block at offset {opening_index}; expected {expected!r}.")
 
 
+def _is_css_control(char: str) -> bool:
+    """Whether ``char`` is an ASCII control character: U+0001 to U+001F or U+007F, except tab, newline, CR and FF."""
+    code = ord(char)
+    return 0x01 <= code <= 0x08 or code in {0x0B, 0x7F} or 0x0E <= code <= 0x1F
+
+
 def _scan_css_string(value: str, start: int) -> int:
     """Return the index after a well-formed CSS string, or reject a bad-string token."""
     quote = value[start]
@@ -251,8 +271,7 @@ def _scan_css_url(value: str, start: int) -> int:
         # a control character other than tab, newline, form feed and carriage
         # return) makes the browser's bad-url token, which drops the rest of
         # the value up to the next `)`.
-        code = ord(char)
-        if char in "\"'(" or code <= 0x08 or code in {0x0B, 0x7F} or 0x0E <= code <= 0x1F:
+        if char in "\"'(" or _is_css_control(char):
             # A quote inside the URL still needs a backslash after the URL is quoted.
             advice = " A quote inside a quoted URL needs a backslash before it." if char in "\"'" else ""
             msg = (
@@ -297,6 +316,14 @@ def _escape_beyond_printable_ascii(value: str) -> str:
     already checked, so escaping changes how each character is written, not
     which characters the CSS holds. The escaped text is not meant to be checked
     again: ``validate_css_var_value`` refuses a backslash outside a string.
+
+    The escape must also leave the browser splitting the value into the same
+    tokens the check saw. An escape reads as part of a name, so outside a
+    string it may only stand for a character the check already reads as part
+    of a name. The check reads non-ASCII characters as part of a name and
+    refuses control characters outside a string, so the two readings agree.
+    A character the browser reads differently once escaped must be refused by
+    the check, not escaped here.
     """
     if all(char in _CSS_WHITESPACE or " " <= char <= "~" for char in value):
         return value
@@ -333,7 +360,8 @@ def serialize_css_var_value(value: object) -> str:
 
     The text that is returned holds only printable ASCII and CSS whitespace:
     any other character is written as a CSS hex escape, which means the same
-    thing to the browser.
+    thing to the browser. A control character is accepted only inside a
+    quoted string, where its escape stays part of the string.
 
     Booleans and structured values are rejected rather than serialized with
     Python ``str()`` representations.
