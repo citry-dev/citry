@@ -19,8 +19,10 @@ from typing import Any
 
 import pytest
 
-from citry import Citry, Component, Extension, VueCodeError
+from citry import Citry, Component, Extension, VueCodeError, nodes
 from citry._vue import leaf_program
+from citry.attrs import is_vue_code_attr_name
+from citry.client_directives import unsupported_slot_tag_directive_message
 
 # One key per Vue prefix, plus an uppercase spelling: HTML names ignore case.
 VUE_KEYS = ["v-if", ":title", ".prop", "^title", "@click", "#item", "V-ON:click"]
@@ -32,6 +34,37 @@ TRANSLATION_KEYS = ["$c-tr:title", "$C-TR.x", "$c-tr[title]", "$c-tr"]
 PLAIN_KEYS = ["x-on:click", "x-bind:class", "data-v-x", "aria-label", "hx-on:click", "hx-on::after-request"]
 
 _I18N = {"i18n": {"source_locale": "en-US", "locales": ("en-US", "cs-CZ")}}
+
+
+class _Disguised(str):
+    """A key whose methods deny its real text, so a check that trusts them lets it through."""
+
+    __slots__ = ()
+
+    def casefold(self) -> str:
+        return "title"
+
+    def startswith(self, *_args: object, **_kwargs: object) -> bool:
+        return False
+
+
+class _EqualityLiar(str):
+    """A key that never equals anything, so a comparison that trusts it takes the key for another name."""
+
+    __slots__ = ()
+
+    def __eq__(self, _other: object) -> bool:
+        return False
+
+    __hash__ = str.__hash__
+
+
+class _Key(str, Enum):
+    """Ordinary enum keys, which must keep working wherever a `str` key does."""
+
+    ITEM = "item"
+    NAME = "name"
+    TITLE = "title"
 
 
 def _page(
@@ -254,6 +287,24 @@ class TestComponentTag:
         assert "sets '$c-tr:save', which Vue would read as code." in message
         assert "js_data()" in message
 
+    def test_an_enum_key_still_renders(self) -> None:
+        page = _page('<div><c-child c-bind="attrs" /></div>', {"attrs": {_Key.TITLE: "go"}}, vue=False)
+        assert "child" in page().render().serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize(
+        ("key", "match"),
+        [
+            (":c-value", "State binding ':c-value' is not valid on the <c-child> component boundary"),
+            ("x-on:click", "Alpine binding 'x-on:click' was removed"),
+        ],
+    )
+    def test_str_subclass_cannot_hide_a_refused_key(self, key: str, match: str) -> None:
+        # These keys are not Vue code, but the tag refuses them by their
+        # text, so a subclass that hides its text must not get one through.
+        page = _page('<div><c-child c-bind="attrs" /></div>', {"attrs": {_Disguised(key): "go"}}, vue=False)
+        with pytest.raises(RuntimeError, match=match):
+            page().render()
+
     @pytest.mark.parametrize(
         ("key", "hint"),
         [
@@ -288,7 +339,7 @@ class TestDynamicElement:
 
 class TestSlotTag:
     @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
-    @pytest.mark.parametrize("key", [*VUE_KEYS, "v-slot", "V-SLOT"])
+    @pytest.mark.parametrize("key", [*VUE_KEYS, "v-slot", "V-SLOT", "."])
     def test_c_bind_key_fails_at_render(self, key: str, vue: bool) -> None:
         page = _slot_page(
             child='<c-slot c-bind="attrs" />',
@@ -319,34 +370,94 @@ class TestSlotTag:
         )
         assert f"{key!r} resolved on <c-slot>" in str(_render_error(page))
 
-    def test_citry_events_name_is_not_vue_code(self) -> None:
-        # A slot has no use for an Events binding, so it refuses one, but
-        # `@c-*` is Citry's own syntax and not Vue code, so the error is
-        # `RuntimeError`, not `VueCodeError`.
+    @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
+    @pytest.mark.parametrize("key", ["$c-tr:title", "$C-TR.x", "$c-tr", "$c-tr[title]", "."])
+    def test_c_attribute_name_fails_at_render(self, key: str, vue: bool) -> None:
+        # A `c-*` attribute becomes slot data named without its `c-`, so
+        # `c-$c-tr:title` would have put a translation binding in the data.
+        # The parser already refuses the Vue directive spellings (`c-v-if`).
+        page = _slot_page(
+            child=f'<c-slot c-{key}="value" />',
+            page="<c-child>x</c-child>",
+            child_data={"value": "go()"},
+            vue=vue,
+        )
+        message = str(_render_error(page))
+        assert f"'c-{key}' on <c-slot> sets {key!r}, which Vue would read as code." in message
+        assert "Write the $c-tr binding on an HTML element in the template." in message
+
+    def test_a_plain_c_attribute_still_becomes_slot_data(self) -> None:
+        page = _slot_page(
+            child='<c-slot c-item="value" />',
+            page='<c-child><c-fill name="default" data="slot_data">{{ slot_data.item }}</c-fill></c-child>',
+            child_data={"value": "slot-value-123"},
+        )
+        assert "slot-value-123" in page().render().serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
+    @pytest.mark.parametrize("key", [":row", "@click", "v-if", "#item", ".prop", "$c-tr:title"])
+    def test_str_subclass_cannot_hide_its_text_from_the_check(self, key: str, vue: bool) -> None:
+        # A subclass that lies through `casefold` or `startswith` still names
+        # a Vue directive, so the check must read the real text.
         page = _slot_page(
             child='<c-slot c-bind="attrs" />',
             page="<c-child>x</c-child>",
-            child_data={"attrs": {"@c-click": "go"}},
+            child_data={"attrs": {_Disguised(key): "go()"}},
+            vue=vue,
         )
-        with pytest.raises(RuntimeError, match="not supported on '<c-slot>'") as caught:
-            page().render()
-        assert not isinstance(caught.value, VueCodeError)
+        assert f"{key!r}" in str(_render_error(page))
 
-    @pytest.mark.parametrize("key", ["item", *PLAIN_KEYS])
-    def test_plain_keys_still_become_slot_data(self, key: str) -> None:
-        # The fill reads the key back out of the slot data it receives.
+    @pytest.mark.parametrize(
+        "key",
+        [
+            prefix + rest
+            for prefix in ("v-", "V-", ":", "@", "#", ".", "^")
+            for rest in ("", "x", "x.y", ":a")
+            if is_vue_code_attr_name(prefix + rest)
+        ],
+    )
+    def test_every_vue_code_key_has_a_slot_message(self, key: str) -> None:
+        # A key Vue reads as code gets advice written for a slot, whatever
+        # its prefix, spelling, or letter case.
+        assert unsupported_slot_tag_directive_message(key) is not None
+        assert unsupported_slot_tag_directive_message(_Disguised(key)) is not None
+
+    def test_a_vue_code_key_without_a_slot_message_is_still_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The rule `is_vue_code_attr_name` decides, so a key that the slot
+        # message function skips can never become slot data.
+        monkeypatch.setattr(nodes, "unsupported_slot_tag_directive_message", lambda _key: None)
         page = _slot_page(
             child='<c-slot c-bind="attrs" />',
-            page='<c-child><c-fill name="default" data="slot_data">{{ slot_data[key] }}</c-fill></c-child>',
-            child_data={"attrs": {key: "slot-value-123"}},
-            page_data={"key": key},
+            page="<c-child>x</c-child>",
+            child_data={"attrs": {":row": "row"}},
+        )
+        message = str(_render_error(page))
+        assert "c-bind on <c-slot> sets ':row', which Vue would read as code." in message
+        assert "Remove the key from the mapping." in message
+
+    def test_a_key_that_lies_about_equality_still_sets_the_slot_name(self) -> None:
+        # The key is read as its real text, so `name` is the slot's name
+        # and not data, whatever `__eq__` says.
+        page = _slot_page(
+            child='<c-slot c-bind="attrs" />',
+            page='<c-child><c-fill name="item">filled</c-fill></c-child>',
+            child_data={"attrs": {_EqualityLiar("name"): "item"}},
+        )
+        assert "filled" in page().render().serialize(deps_strategy="ignore")
+
+    def test_an_enum_key_still_becomes_slot_data(self) -> None:
+        # A `str` mixin enum member is an ordinary key that must keep working.
+        page = _slot_page(
+            child='<c-slot c-bind="attrs" />',
+            page='<c-child><c-fill name="default" data="slot_data">{{ slot_data["item"] }}</c-fill></c-child>',
+            child_data={"attrs": {_Key.ITEM: "slot-value-123"}},
         )
         assert "slot-value-123" in page().render().serialize(deps_strategy="ignore")
 
 
 class TestFillTag:
     @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
-    @pytest.mark.parametrize("key", [*VUE_KEYS, "v-slot", "V-SLOT"])
+    @pytest.mark.parametrize("key", [*VUE_KEYS, "v-slot", "V-SLOT", "."])
     def test_c_bind_key_fails_at_render(self, key: str, vue: bool) -> None:
         page = _slot_page(
             child='<c-slot name="item" />',
@@ -407,6 +518,24 @@ class TestFillTag:
         with pytest.raises(RuntimeError, match=f"unsupported key {key!r}") as caught:
             page().render()
         assert not isinstance(caught.value, VueCodeError)
+
+    def test_a_key_that_lies_about_equality_still_sets_the_fill_name(self) -> None:
+        # The key is read as its real text, so `name` is accepted whatever
+        # `__eq__` says.
+        page = _slot_page(
+            child='<c-slot name="item" />',
+            page='<c-child><c-fill c-bind="attrs">filled</c-fill></c-child>',
+            page_data={"attrs": {_EqualityLiar("name"): "item"}},
+        )
+        assert "filled" in page().render().serialize(deps_strategy="ignore")
+
+    def test_an_enum_key_still_sets_the_fill_name(self) -> None:
+        page = _slot_page(
+            child='<c-slot name="item" />',
+            page='<c-child><c-fill c-bind="attrs">filled</c-fill></c-child>',
+            page_data={"attrs": {_Key.NAME: "item"}},
+        )
+        assert "filled" in page().render().serialize(deps_strategy="ignore")
 
     def test_the_recognized_keys_still_work(self) -> None:
         page = _slot_page(

@@ -292,9 +292,9 @@ their Python-kwarg meaning.
 Python `c-bind`, `c-*` evaluation, interpolation, hooks, and public fabricated
 metadata cannot create executable Vue `v-on` syntax. A name from `c-bind`, a
 `c-*` attribute, or an `on_attrs_resolved` hook fails while the template
-renders, on every page, with `citry.VueCodeError`, and so does such a key in a
-`c-bind` on `<c-slot>` or `<c-fill>`; interpolation in a written binding fails
-as a template error. Dynamic `<component :is>` calls remain
+renders, on every page, with `citry.VueCodeError`, and so does a name on
+`<c-slot>`, or a `c-bind` key on `<c-fill>`; interpolation in a written
+binding fails as a template error. Dynamic `<component :is>` calls remain
 outside this contract and continue to use the native compiler's existing
 rejection rules.
 

@@ -107,13 +107,14 @@ value is also a Python expression, and to a name that an extension's
 
 The check runs while the template renders, so `render()` raises
 `citry.VueCodeError`. It fails the same way on HTML elements, on
-component tags, and in a `c-bind` mapping on `<c-slot>` or `<c-fill>`,
+component tags, on `<c-slot>`, and in a `c-bind` mapping on `<c-fill>`,
 and on every page, even one that never starts Vue.
 `VueCodeError` is a `TypeError`, so code that already catches `TypeError`
 keeps working. On `<c-slot>` and `<c-fill>`, a `c-bind` key that starts
-with `@c-` or `:c-` is refused too, with `RuntimeError`. A `c-` spelling of a directive that a component tag never
-carries, such as `c-#item`, `c-.prop`, or `c-^title` on `<c-Card>`, fails
-earlier, when the template loads.
+with `@c-` or `:c-` is refused too, with `RuntimeError`. A `c-` spelling
+of a directive that a component tag never carries, such as `c-#item`,
+`c-.prop`, or `c-^title` on `<c-Card>`, fails earlier, when the template
+loads.
 
 [Keep Vue in templates](/advanced/html-attributes/#keep-vue-in-templates)
 covers the attribute mapping side of this rule.

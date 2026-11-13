@@ -105,11 +105,12 @@ class VueCodeError(TypeError):
     - an extension's `on_attrs_resolved` hook that adds such a name, or
       changes the value of one written in the template.
 
-    The check runs on HTML elements and component tags, on every page,
-    while the template renders. It runs even on a page that does not start
-    Vue, so the same template never works on one page and fails on another.
-    A `c-bind` mapping on `<c-slot>` or `<c-fill>` is checked the same way,
-    so a key such as `":row"` or `"v-slot"` raises this error there too.
+    The check runs while the template renders, on every page. It covers
+    HTML elements and component tags. On `<c-slot>` it covers a `c-bind`
+    key and a `c-*` attribute named like a `$c-tr` binding, such as
+    `c-$c-tr:x`, and on `<c-fill>` it covers a `c-bind` key such as
+    `"v-slot"`. It runs even on a page that does not start Vue, so the same
+    template never works on one page and fails on another.
     Citry's own `@c-*` event bindings and `:c-*` State bindings are not
     Vue code, so `c-bind` may still carry them on an HTML element.
     `<c-slot>` and `<c-fill>` refuse them with `RuntimeError`.
@@ -402,6 +403,25 @@ def _is_valid_exact_html_attr_name(name: str) -> bool:
     return bool(name) and _INVALID_HTML_ATTR_NAME_CHAR.search(name) is None and "{#" not in name
 
 
+def exact_str(name: str) -> str:
+    """
+    Return the text of ``name`` as an exact ``str``.
+
+    A ``str`` subclass (a StrEnum member, say) can override methods such as
+    ``startswith``, ``__eq__`` or ``__str__``. A name from Python data goes
+    through this first, so that every check after it reads the real text
+    and none can be fooled by an override.
+
+    Raises:
+        TypeError: When ``name`` is not a ``str``.
+
+    """
+    if type(name) is str:
+        return name
+    # A full slice copies the stored characters without calling any override.
+    return str.__getitem__(name, slice(None))
+
+
 def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str:
     """
     Validate a runtime-produced HTML attribute name.
@@ -414,11 +434,8 @@ def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str
     if not isinstance(name, str):
         msg = f"{where} must use string attribute names, got {type(name).__name__} key {name!r}."
         raise TypeError(msg)
-    if type(name) is not str:
-        # A ``str`` subclass (a StrEnum member) can override methods such as
-        # ``startswith`` or ``__str__``. Every later check and the written
-        # HTML must see the same text, so continue with an exact copy.
-        name = str.__getitem__(name, slice(None))
+    # Every later check and the written HTML must see the same text.
+    name = exact_str(name)
     is_valid = _is_valid_exact_html_attr_name(name)
     if not is_valid:
         msg = (

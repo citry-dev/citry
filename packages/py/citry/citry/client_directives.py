@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from citry.attrs import exact_str
 from citry.constness import const_value
 from citry.ext.dependencies.scripts import uses_component
 
@@ -327,12 +328,18 @@ def unsupported_slot_tag_directive_message(key: Any) -> str | None:
     """
     if not isinstance(key, str):
         return None
+    # A `str` subclass key could hide its text from the prefix checks below.
+    key = exact_str(key)
     # The `:` and `@` shorthands spell `v-bind` and `v-on`; `v-*` or `V-*`,
-    # `#name`, `.name`, and `^name` are named by the shared helper.
+    # `#name`, and `^name` are named by the shared helper.
     if key.startswith(":"):
         directive: str | None = "bind"
     elif key.startswith("@"):
         directive = "on"
+    elif key.startswith("."):
+        # Vue reads any name that starts with `.` as a DOM property binding,
+        # a bare `.` included, which the shared helper leaves out.
+        directive = "prop"
     else:
         directive = _vue_directive_name(key)
     if directive is None:

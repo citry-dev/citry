@@ -26,7 +26,7 @@ from citry import (
     normalize_style,
     parse_string_style,
 )
-from citry.attrs import _split_style_declarations, _style_property_re, validate_html_attr_name
+from citry.attrs import _split_style_declarations, _style_property_re, exact_str, validate_html_attr_name
 from citry.nodes import ElementKeyNode
 
 from ._growth import assert_grows_in_step
@@ -653,3 +653,24 @@ class TestElementKeyText:
                 return Markup('a"b<i>')
 
         assert ElementKeyNode(Attr()).render(None) == ' data-citry-key=":a&#34;b&lt;i&gt;"'
+
+
+class TestExactStr:
+    def test_an_exact_str_is_returned_as_is(self):
+        name = "@click"
+        assert exact_str(name) is name
+
+    def test_a_subclass_comes_back_as_an_exact_str_with_the_same_text(self):
+        class Disguised(str):
+            __slots__ = ()
+
+            def startswith(self, *_args, **_kwargs):
+                return False
+
+            def __str__(self):
+                return "title"
+
+        result = exact_str(Disguised("@click"))
+        assert type(result) is str
+        assert result == "@click"
+        assert result.startswith("@")
