@@ -192,6 +192,13 @@ for dependent in graph.dependents("price"):
 and `dependents()` lists each component whose template uses it. Each
 component appears once, however many times the template uses it.
 
+!!! warning "Experimental"
+
+    The component graph is experimental. Its methods, attributes, and
+    JSON output may change in a minor release without a deprecation
+    period. If your tool depends on them, pin it to one exact Citry
+    version, such as `citry==0.9.0`.
+
 To get every single use instead, such as each `<c-Price>` written in a
 template, with its file, line, and column, call `references_from()` and
 `references_to()`.

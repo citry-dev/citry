@@ -185,6 +185,9 @@ your components. Either:
 - Importing `citry.app` failed. **Citry: Show Language Server Status** shows
   the error. A common cause is a missing environment variable; see
   [`citry.envFile`](#load-an-env-file).
+- Your installed `citry` and `citry-lsp` come from different releases and
+  cannot read each other's editor data. The status names both versions
+  and the package to upgrade.
 
 ### Template file ignored
 

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- `Citry.inspect_component_graph()` and `ComponentGraph` are now marked
+  experimental: they and their JSON output may change in a minor release.
+- Upgrade citry-lsp together with this release. citry-lsp 0.3.0 and
+  earlier cannot read the editor data this release writes, so for every
+  project, even one without i18n, the editor falls back to checking
+  template syntax only.
+
 ### Fixes
 
 - **Citry imports on Pyodide again:** Citry 0.8.0 failed to import on

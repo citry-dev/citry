@@ -21,6 +21,7 @@ from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
     CATALOG_SCHEMA_VERSION,
     MINIMUM_CITRY_VERSION,
+    SERVER_VERSION,
     ProjectStatus,
 )
 
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
 
 WORKER_TIMEOUT_SECONDS = 15.0
 _SOURCE_ANALYSIS_VERSION = 1
-_I18N_ANALYSIS_VERSION = 2
+_I18N_ANALYSIS_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -1226,9 +1227,32 @@ def _project_from_worker_output(
             citry_version=catalog.citry_version,
             catalog_schema_version=catalog.schema_version,
         )
+    # A Citry and citry-lsp from different releases can disagree on the i18n
+    # index version even when Citry is new enough for MINIMUM_CITRY_VERSION.
+    # Name both package versions and which one to upgrade here, because the
+    # generic protocol-mismatch message below does not say which.
+    raw_extensions = payload.get("extensions")
+    raw_i18n = raw_extensions.get("i18n") if type(raw_extensions) is dict else None
+    raw_i18n_version = raw_i18n.get("version") if type(raw_i18n) is dict else None
+    if type(raw_i18n_version) is int and raw_i18n_version != _I18N_ANALYSIS_VERSION:
+        return _failure(
+            workspace,
+            app,
+            f"Citry {catalog.citry_version} and citry-lsp {SERVER_VERSION} come from different releases: "
+            f"Citry writes editor i18n data version {raw_i18n_version}, "
+            f"and this citry-lsp reads version {_I18N_ANALYSIS_VERSION}. "
+            + (
+                # A newer index means Citry moved ahead; an older one means citry-lsp did.
+                f"Upgrade citry-lsp to the release made for Citry {catalog.citry_version}."
+                if raw_i18n_version > _I18N_ANALYSIS_VERSION
+                else "Upgrade Citry to the release this citry-lsp supports."
+            ),
+            environment_file=environment_file,
+            citry_version=catalog.citry_version,
+            catalog_schema_version=catalog.schema_version,
+        )
     try:
         source_analysis = SourceAnalysisIndex(payload.get("source_analysis"), catalog)
-        raw_extensions = payload.get("extensions")
         if type(raw_extensions) is not dict or set(raw_extensions) != {"i18n", "events"}:
             raise ValueError("extension analysis envelope is invalid")
         i18n = I18nProjectIndex(raw_extensions.get("i18n"))

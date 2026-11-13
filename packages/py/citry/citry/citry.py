@@ -1414,6 +1414,11 @@ class Citry:
         and reverse-reference queries plus explicit unresolved targets and
         source problems.
 
+        Experimental:
+            The component graph is experimental. Its methods, attributes,
+            and JSON output may change in a minor release without a
+            deprecation period.
+
         Args:
             include_builtins: Include Citry's framework component definitions
                 and references to them.

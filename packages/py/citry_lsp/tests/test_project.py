@@ -791,6 +791,32 @@ def test_older_patch_versions_decline_registry_results(tmp_path, monkeypatch, ve
     assert f"requires Citry {minimum} or newer" in state.status.message
 
 
+@pytest.mark.parametrize(
+    ("written", "advice"),
+    [
+        (2, "Upgrade citry-lsp to the release made for Citry"),
+        (0, "Upgrade Citry to the release this citry-lsp supports"),
+    ],
+)
+def test_mismatched_i18n_index_version_names_the_package_to_upgrade(tmp_path, monkeypatch, written, advice):
+    # The real worker writes the index this server reads, so only the version
+    # field differs from what a Citry from another release would send.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "i18n_version_app.py").write_text(
+        "from citry import Citry\nengine = Citry(autodiscover=False)\n",
+        encoding="utf-8",
+    )
+    payload = app_worker._run("i18n_version_app:engine", tmp_path)
+    assert payload["extensions"]["i18n"]["version"] == 1
+    payload["extensions"]["i18n"]["version"] = written
+    state = project_module._project_from_worker_output(tmp_path, "i18n_version_app:engine", 0, json.dumps(payload), "")
+    assert state.status.mode == "syntax-only"
+    assert state.status.registry_ready is False
+    assert f"Citry writes editor i18n data version {written}" in state.status.message
+    assert "this citry-lsp reads version 1" in state.status.message
+    assert advice in state.status.message
+
+
 def test_runtime_compatibility_matches_the_declared_dependency_floor():
     requirements = [Requirement(value) for value in requires("citry-lsp")]
     requirement = next(value for value in requirements if value.name == "citry")

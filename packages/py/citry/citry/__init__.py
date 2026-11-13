@@ -6,10 +6,13 @@
 #
 # For the Rust-powered parser and compiler, see citry_core.
 #
-# API stability: the names exported HERE (listed in __all__) are the public
-# API, and only these are promised not to break between releases. Submodules
-# (citry.slots, citry.nodes, ...) may be imported from, but their contents
-# are internal and free to change between releases.
+# API stability: the public API is the names in `citry.__all__`, plus the
+# names in the `__all__` of each `citry.ext.<name>` package and each
+# `citry.contrib.<name>` module. Features marked experimental in their docs
+# and docstrings, such as `ComponentGraph`, may still change in a minor
+# release. Deeper modules (citry.ext.events.handlers, ...), other submodules
+# (citry.slots, citry.nodes, ...), and any name that starts with `_` are
+# internal and free to change between releases.
 
 from markupsafe import Markup
 

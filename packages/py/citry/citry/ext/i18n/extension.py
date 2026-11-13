@@ -1028,7 +1028,7 @@ class I18nExtension(Extension):
         with self._catalog_lock:
             catalog = self._compiled_catalog
             if catalog is None:
-                return {"version": 2, "available": False, "configured": self.configured}
+                return {"version": 1, "available": False, "configured": self.configured}
             artifact = cast("dict[str, object]", json.loads(catalog.artifact_json()))
         manifest = cast("dict[str, dict[str, dict[str, object]]]", artifact["manifest"])
         locale = self._effective_default_locale()
@@ -1076,7 +1076,7 @@ class I18nExtension(Extension):
             ),
         }
         return {
-            "version": 2,
+            "version": 1,
             "available": True,
             "configured": self.configured,
             "revision": self._catalog_revision,

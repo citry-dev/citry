@@ -1,6 +1,7 @@
 # Design: authored component dependencies
 
-**Status (2026-08-23): implemented.**
+**Status (2026-08-23): implemented. Marked experimental (2026-11-13): the
+API and its JSON output may change in a minor release.**
 
 Citry exposes a static graph of the component references written in registered
 components' primary templates. The graph helps tools answer two questions:

@@ -109,6 +109,10 @@ class ComponentGraphNode:
     Use ``name`` in templates and graph queries. ``aliases`` contains the other
     registered spellings that resolve to the same component.
 
+    Experimental:
+        Part of the experimental component graph, which may change in a
+        minor release. See [`ComponentGraph`][citry.ComponentGraph].
+
     Attributes:
         class_id: Stable identity for the component's Python route.
         engine_id: Runtime identity of the Citry instance that built the graph.
@@ -161,6 +165,10 @@ class ComponentGraphLocation:
     ``start_index`` and ``end_index`` are half-open UTF-8 byte offsets in the
     normalized root template. ``source_range`` carries the same span as
     zero-based UTF-16 positions for editors.
+
+    Experimental:
+        Part of the experimental component graph, which may change in a
+        minor release. See [`ComponentGraph`][citry.ComponentGraph].
 
     Attributes:
         origin: Human-readable template origin.
@@ -227,6 +235,10 @@ class ComponentGraphReference:
     [`ComponentGraph.dependencies`][citry.ComponentGraph.dependencies] when
     you need unique target components.
 
+    Experimental:
+        Part of the experimental component graph, which may change in a
+        minor release. See [`ComponentGraph`][citry.ComponentGraph].
+
     Attributes:
         source_definition_id: Exact component definition that owns the source.
         target_definition_id: Exact registered target definition.
@@ -265,6 +277,10 @@ class UnresolvedComponentReference:
 
     ``unknown-component`` retains the written name. ``dynamic-target`` uses
     ``authored_name=None`` because the runtime expression or spread chooses it.
+
+    Experimental:
+        Part of the experimental component graph, which may change in a
+        minor release. See [`ComponentGraph`][citry.ComponentGraph].
 
     Attributes:
         source_definition_id: Exact component definition that owns the source.
@@ -317,6 +333,10 @@ class ComponentGraphProblem:
     from unaffected components. ``component_definition_ids`` identifies every
     selected component that consumes the affected physical source.
 
+    Experimental:
+        Part of the experimental component graph, which may change in a
+        minor release. See [`ComponentGraph`][citry.ComponentGraph].
+
     Attributes:
         component_definition_ids: Sorted exact definitions affected.
         code: Stable graph-local problem category.
@@ -361,6 +381,11 @@ class ComponentGraph:
     [`Citry.inspect_component_graph()`][citry.Citry.inspect_component_graph].
     Query direct dependencies or reverse references by primary name, alias, or
     a node returned from the same graph.
+
+    Experimental:
+        The component graph, the classes it returns, and its JSON output
+        are experimental. They may change in a minor release without a
+        deprecation period.
 
     Attributes:
         schema_version: Graph JSON schema version.
