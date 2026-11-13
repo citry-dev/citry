@@ -2,12 +2,8 @@
 
 Status: proposal for review (issue
 [#145](https://github.com/citry-dev/citry/issues/145)). Nothing here is
-built yet. The recommendation targets 0.9.0, the last release before 1.0
-that may change behavior without a deprecation period.
-
-An independent reviewer checked the evidence and the recommendation in
-this document, including a separate prose pass. Its corrections are
-folded in.
+built yet. The recommendation targets 0.9.0, which the maintainer plans
+as the last release with breaking changes before 1.0.
 
 ## What this decides
 
@@ -93,13 +89,16 @@ means `packages/py/citry/citry/_vue/client.js`, and test paths are under
 
 Two words used below:
 
-- A **standalone page** is a full HTML document Citry writes, with the
-  component scripts as ordinary `<script>` tags in the page. The browser's
-  parser runs them in tag order.
-- A **mounted page** is one where Citry's browser code loads the scripts
-  itself, by adding `<script src>` elements one after another. Pages
-  embedded in another framework's document, and fragments, work this way.
-  A **fragment** is HTML that a page inserts after it has loaded, which
+- A **standalone page** is HTML Citry writes when no web integration
+  serves Citry's files (`citry.mounted_prefix` is not set), so every
+  script is written inline in the page. The browser's parser runs them in
+  tag order.
+- On a **mounted page**, a web integration (for example the FastAPI one)
+  serves Citry's files, and Citry's browser code adds each script itself
+  as a `<script src>` element, one after another
+  (`_vue/serialization.py:1215`, `:1265`). A full HTML document served by
+  such an app is a mounted page.
+- A **fragment** is HTML that a page inserts after it has loaded, which
   starts its own small Vue app.
 
 Labels in the "Status" column:
@@ -114,7 +113,8 @@ Labels in the "Status" column:
 
 | Behavior | Evidence | Status |
 |---|---|---|
-| The server writes the page's scripts in this order: scripts with `kind="core"` (Citry's runtime and extension early scripts), then `kind="extra"` (by default, `Dependencies` files), then `kind="component"` (component `js`). Inside each group, components appear in the order Citry first meets them while rendering, parent before children. | `_bucket` (`ext/dependencies/emission.py:1045-1053`), `_resolve_records` docstring (`emission.py:512-516`); records collected in `ext/dependencies/extension.py:204-257`, whose comment says the order "approximates document order"; tests `test_deps_emission.py::test_nested_url_dependencies_emit_once_in_first_seen_order`, `e2e/test_document_e2e.py::test_component_and_dependency_assets_execute_in_bucket_order` | `Dependencies` before component `js` is promised (`docs_site/content/advanced/dependency-files.md:9-13`). `ctx.scripts` "in the order they run" and early scripts first are promised (`advanced/extensions.md:264`, `:291-297`). Tested |
+| The server writes the page's scripts in this order: scripts with `kind="core"` (Citry's runtime and extension early scripts), then `kind="extra"` (by default, `Dependencies` files), then `kind="component"` and `kind="variables"` (component `js` and the
+browser variables from `js_data()`). Inside each group, components appear in the order Citry first meets them while rendering, parent before children. | `_bucket` (`ext/dependencies/emission.py:1045-1053`), `_resolve_records` docstring (`emission.py:512-516`); records collected in `ext/dependencies/extension.py:204-257`, whose comment says the order "approximates document order"; tests `test_deps_emission.py::test_nested_url_dependencies_emit_once_in_first_seen_order`, `e2e/test_document_e2e.py::test_component_and_dependency_assets_execute_in_bucket_order` | `Dependencies` before component `js` is promised (`docs_site/content/advanced/dependency-files.md:9-13`). `ctx.scripts` "in the order they run" and early scripts first are promised (`advanced/extensions.md:264`, `:291-297`). Tested |
 | Files listed in one `Dependencies` class load in the order listed. | `docs_site/content/advanced/dependency-files.md:37` | Promised. But Citry keeps only the first copy of a file several components list (`emission.py:707`), which can break the listed order across components (see below) |
 | An extension's or component's `on_dependencies` hook can reorder or add scripts after Citry builds the list. | `emission.py:287`, `:672`; `_vue/events.py:1028` | Promised as a feature (`advanced/extensions.md:264-296`) |
 | On a mounted page, scripts run one at a time. Citry adds the next `<script src>` only after the previous one fired `onload`. | `loadTypeScript` (`client.js:3049-3084`), loop in `primeInitialAssets` (`client.js:3171-3174`); test `e2e/test_vue_dynamic_element_e2e.py::test_initial_script_preloads_overlap_fetch_but_keep_serial_execution` | Tested |
@@ -148,17 +148,19 @@ exceptions:
 |---|---|---|
 | Vue hooks follow Vue: `setup` and `created` run parent first, `mounted` runs child first. Citry wraps these hooks but does not reorder them. | `typeOptions` (`client.js:2287-2591`) | Open (Vue's behavior, no Citry test) |
 | The first `onServerRender` runs after `mounted`, in the order the `mounted` hooks ran: children before their parent, and siblings in Vue's order. Every `mounted` hook of that render pass runs before the first callback, because each callback is queued as a Promise task and the built-in `onOccurrenceMounted` is synchronous. | `options.mounted` (`client.js:2534-2556`), `onOccurrenceMounted` (`client.js:4335-4342`) | "Children before their parent" is promised (`guides/upgrading-to-0-6-0.md:241-243`). One test checks it for one parent and one child on a hydrated page (`e2e/test_vue_events_default_e2e.py::test_static_physical_document_shell_hydrates_with_csr_parity` asserts `["leaf", "page"]`). Sibling order is not promised or tested |
-| After a server render, callbacks run in this order: (1) every component the response lists as updated, which includes new ones, in response order; (2) remounted components; (3) kept components that mount for the first time, for example when a `v-if` turns on, parent first; (4) components a browser plugin's update named. Citry awaits each callback's synchronous part before the next. | `applyEnvelope` (`client.js:5441-5465`); new components must be in `updatedIds` (`client.js:5032-5034`); first mounts (`client.js:5414-5415`) | Open. Not documented, not tested, and not the first-mount rule |
+| After a server render, callbacks run in this order: (1) every component the response lists as updated, which includes new ones, in response order; (2) remounted components; (3) kept components that mount for the first time, for example when a `v-if` turns on, parent first; (4) components that a browser plugin's update names. Citry awaits each callback's synchronous part before the next. | `applyEnvelope` (`client.js:5441-5465`); new components must be in `updatedIds` (`client.js:5032-5034`); first mounts (`client.js:5414-5415`) | Open. Not documented, not tested, and not the first-mount rule |
 | A callback that returns a Promise is not awaited. A rejection is logged and the page keeps going. | `runCallback` (`client.js:4826-4840`); test `e2e/test_vue_component_context_e2e.py::test_async_initializer_runs_beside_the_page_and_its_cleanup_still_runs` | Promised (`reference/browser-apis.md:128-133`). Tested |
 
 ### Fragments and server renders
 
 - On a server render, Citry loads new compiled templates first, then new
   component scripts one at a time, then new stylesheets in parallel
-  (`client.js:3943-3959`). The first load runs stylesheets, then scripts,
-  then compiled templates (`client.js:3165-3174`, `3262-3265`). A script
-  that reads computed styles while it runs sees the difference. It is not
-  documented.
+  (`client.js:3943-3959`). The first load of a mounted page runs
+  stylesheets, then scripts, then compiled templates
+  (`client.js:3165-3174`, `3262-3265`). A standalone page writes the
+  compiled templates as inline scripts before the component scripts
+  (`_vue/serialization.py:1299-1304`). A script that reads computed
+  styles while it runs sees these differences. None is documented.
 - Separate fragments start on their own
   (`packages/js/citry-client/src/citry-fragments.ts:47-110`). They have no
   order relative to each other, to the page's own startup, or to its
@@ -308,28 +310,53 @@ Choose **Option 1** now and keep Option 2 open for 1.x. Concretely:
    before any callback of that render. Both hold today.
 3. **Give `onServerRender` one order.** In 0.9.0, run callbacks after a
    server render in the same order as on the first mount: children before
-   their parent, siblings in the order Vue mounts them. Build the order
-   by walking the mounted Vue component tree depth-first and visiting
-   each parent after its children; the client already checks that each
-   occurrence's parent matches its Vue parent (`validateMountedParents`).
-   The page order of elements cannot serve, because Teleport and keyed
-   rows Vue reorders make it differ from the component tree, and neither
-   can the order of occurrences in the response. Use one failure rule as
-   well: when a synchronous callback throws, Citry runs no further
-   callbacks of that pass and stops the app. Promise sibling order in the
-   docs for the first time, and add browser tests for siblings, slot fills
-   and repeated components, on hydrated pages and on pages Vue mounts
-   without hydrating.
-4. **Make a throwing component script stop startup; log the others.**
-   Citry already wraps each inline component `js` in a function it
-   writes (`ext/dependencies/types.py:212`, `wrap=True`). In 0.9.0 that
-   wrapper catches an error thrown while the script runs and records it
-   for that component. Citry's existing registration check, which runs
-   before the app starts on both page kinds, then stops startup with an
-   error that names the component and carries the original error. For
-   `Dependencies` files, extension scripts and third-party files, keep
-   today's behavior: a throw is reported by the browser and the next
-   script runs. See "Alternatives for item 4" for why.
+   their parent, siblings in the order Vue mounts them. Neither the order
+   of elements on the page nor the order of occurrences in the response
+   gives this order: Teleport and keyed rows that Vue reorders make the
+   page order differ from the component tree.
+   - The parent of each component is known: the client already follows
+     `$parent` links to check that each occurrence's parent matches its
+     Vue parent (`validateMountedParents`, `client.js:4869-4878`).
+   - Sibling order is not. Vue 3 has no public list of a component's
+     children, so the walk needs either Vue's internal vnode tree
+     (`instance.subTree`, including Teleport, Suspense and KeepAlive
+     children) or a mount-order index Citry records itself in `mounted`.
+     The implementation must pick one; depending on Vue internals is a
+     maintenance cost.
+   - Use one failure rule as well: when a synchronous callback throws,
+     Citry runs no further callbacks of that pass and stops the app. On
+     the first mount this means one ordered loop over the mounted
+     components instead of one independent task per instance
+     (`client.js:2543-2554`).
+   - Promise sibling order in the docs for the first time, and add
+     browser tests for siblings, slot fills and repeated components, on
+     hydrated pages and on pages Vue mounts without hydrating.
+4. **Make a component script that does not finish stop the app; leave
+   the others as they are.** On the Vue path, every component `js` is
+   inline code that Citry wraps in a function it writes
+   (`ext/dependencies/types.py:212`, `:255-259`) and publishes as a
+   bundle (`_vue/events.py:1092-1104`), loaded by URL on a mounted page
+   and written inline on a standalone page. In 0.9.0:
+   - For `kind="component"` scripts only, the wrapper calls the
+     original function inside a `try` (nesting it, so a leading
+     `"use strict"` and function hoisting keep working), records any
+     error for that component, and records that the script finished.
+     It then reports a caught error again with `reportError`, so the
+     page's `error` event and error-monitoring tools still see it.
+   - A new check covers every component script, not only those that
+     call `$component` (today's registration checks run only for
+     scripts with `registersOptions`, `_vue/events.py:1111-1115`). A
+     script that did not record "finished", because it threw or failed
+     to parse, stops startup, or the server render that loaded it, with
+     an error that names the component and carries the original error
+     when there is one. On a mounted page the check runs in each
+     script's `onload`; on a standalone page it runs before the app
+     starts.
+   - For `Dependencies` files, extension scripts and third-party files,
+     keep today's behavior: the browser reports a throw and the next
+     script runs. See "Alternatives for item 4" for why.
+   - Pages without the Vue runtime (`deps_strategy="simple"`) are
+     unchanged: the browser runs those scripts on its own.
 5. **Leave fragments unordered** relative to each other, to the page's
    startup and to its server renders, and say so. Inside one fragment,
    the rules above apply.
@@ -354,9 +381,9 @@ Choose **Option 1** now and keep Option 2 open for 1.x. Concretely:
   missing today; this needs a design of its own.
 
 The recommended form works because the wrapper is part of the script's
-own bytes, so it needs no `error` listener and blames the right
-component. It applies to inline component `js` only; a component `js`
-that is an external URL with `wrap=False` keeps today's behavior.
+own bytes, so it needs no page-wide `error` listener and blames the
+right component. A script that fails to parse never runs the wrapper,
+and the missing "finished" record catches that case too.
 
 ### Why not Option 3
 
@@ -384,11 +411,17 @@ touches the page's scripts (Mechanism 7 in `CLAUDE.md`).
   The error text comes from the browser running it.
 - **Where the error appears.** In the browser console and in Citry's
   startup error. The error text must be written as text, never as HTML.
-- **Integrity and CSP hashes.** Citry computes the `integrity` hash and
-  any CSP hash over the bytes it serves, which already include the
-  wrapper and the `$component` rewrite. A wider wrapper changes those
-  bytes; the hashes must still be computed after it. An external script
-  with `integrity` is not wrapped, which is why item 4 leaves it alone.
+- **Integrity and CSP hashes.** On the Vue path, Citry computes the
+  `integrity` hash and any CSP hash over the bytes it serves, which
+  already include the wrapper and the `$component` rewrite. A wider
+  wrapper changes those bytes; the hashes must still be computed after
+  it. External and third-party scripts are not wrapped, which is one
+  reason item 4 leaves them alone.
+- **The "finished" records** live where page code could write them.
+  A page script that forges one only hides its own component's
+  failure; it gains nothing it could not do by catching the error
+  itself. The records must be kept per app and keyed by component, so
+  a name such as `__proto__` reaches only its own entry.
 - **The CSP nonce** is unchanged: Citry keeps applying it to every
   script it adds (`client.js:2875-2887`) and keeps refusing a nonce from
   the manifest (`client.js:2829`).
@@ -405,9 +438,10 @@ touches the page's scripts (Mechanism 7 in `CLAUDE.md`).
   timeout is out of scope here.
 - **A component script never calls `$component({...})`.** Unchanged: it
   stops startup.
-- **A component script throws while it runs.** Proposed: startup stops
-  with an error naming the component, on both page kinds. On a standalone
-  page, later tags have already run by then.
+- **A component script throws while it runs, or fails to parse.**
+  Proposed: startup (or the server render) stops with an error naming
+  the component, on both page kinds. On a standalone page, later tags
+  have already run by then.
 - **A `Dependencies`, extension or third-party script throws.**
   Unchanged: the browser reports it, and the next script runs.
 - **A synchronous `onServerRender` throws.** Proposed: no further
@@ -452,7 +486,8 @@ guide.
   building soon. If it saves more than half of that time, reconsider
   Option 3 before 1.0. The thresholds are a starting proposal for the
   maintainer to set.
-- **The callback order.** If walking the Vue component tree on every
+- **The callback order.** If finding sibling order needs Vue internals
+  that change between Vue minor releases, or walking the tree on every
   server render measurably slows large updates, keep today's order and
   document it instead.
 - **The throw rule.** If the example apps or the docs site ship a
