@@ -281,13 +281,15 @@ On both tags:
 - a `{{ ... }}` inside a `:` prop or a `v-slot` value, which would let
   Python text choose the browser's code;
 - a name that starts with `$`, `_`, or `citry`, which Citry keeps for its
-  own slot props (the names a `v-for` or a Vue component's `v-slot` binds
-  follow the same rule; see
-  [Loop and slot names](/syntax/vue/#reserved-browser-names));
+  own slot props;
 - one name used twice: two props such as `:row-data` and `:rowData` (Vue
   writes prop names in camelCase, so these are the same name), a Vue prop
   and Python slot data such as `:row` with `c-row`, or a `v-slot` name that
   the fill's `data="..."` or `fallback="..."` also names.
+
+A `v-for` alias or the `v-slot` on a Vue component has the same limit on
+`$`, `_`, and `citry`; see
+[Pick loop and slot names](/syntax/vue/#reserved-browser-names).
 
 ### Errors when rendering { #scoped-slot-limits }
 

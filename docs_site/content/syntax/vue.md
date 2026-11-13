@@ -91,17 +91,31 @@ for every directive and modifier.
     and `v-If` as a custom directive named `If`. Names that start with `v-c-`
     or `v-citry-` fail too, because Citry keeps them for its own use.
 
-### Loop and slot names { #reserved-browser-names }
+### Pick loop and slot names { #reserved-browser-names }
 
-A `v-for` or `v-slot` creates names, such as `item` and `index` in
-`v-for="(item, index) in items"` or `row` in `#item="{ row }"`. These
-names, including the names inside a pattern such as `{ id, label }`,
-cannot start with `$`, `_`, or `citry`. Citry gives the template its
-own names with these prefixes, such as `$i18n`, and a loop or slot name
-would hide one of them, so the template would read the wrong value.
-The template fails when it loads, and the message suggests another
-name. For an index you do not use, write a plain name such as `index`
-rather than `_`.
+A name you create in a `v-for` or a `v-slot` cannot start with `$`, `_`,
+or `citry`. Citry keeps these prefixes for the values it gives the
+template, such as `$i18n`, and a loop or slot name with one could hide
+such a value. The template fails to load with an error that names the
+alias and suggests another name. `citry check` and the editor report
+the same error.
+
+```citry-html
+{# Fails: `_` starts with a reserved prefix. #}
+<li v-for="(_, index) in rows">...</li>
+
+{# Works: name each alias plainly. #}
+<li v-for="(row, index) in rows">...</li>
+```
+
+The rule covers the item, key, and index of a `v-for`, and every name
+inside an object or array pattern, such as `{ id, label }`. A name you
+take from an object keeps its property when you rename it: write
+`{ _id: id }`, not `{ id }`, which would read a property named `id`.
+
+The same rule applies to the slot props a fill reads, as in
+`<c-fill name="item" v-slot="{ row }">`, and to the `v-slot` on a Vue
+component.
 
 ## Extra listener modifiers { #listener-modifiers }
 

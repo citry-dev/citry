@@ -4,10 +4,11 @@
 
 ### Changed
 
-- A name that a `v-for` or a Vue component's `v-slot` binds now fails
-  when the template loads if it starts with `$`, `_`, or `citry`, as in
-  `v-for="(_, index) in items"`. Such a name hid a value Citry gives the
-  template, such as `$i18n`. Rename it; the error suggests a name.
+- A template now fails to load when a `v-for` alias or the `v-slot` on a
+  Vue component uses a name that starts with `$`, `_`, or `citry`, as in
+  `v-for="(_, index) in items"`. Citry keeps those prefixes for the values
+  it gives the template, such as `$i18n`, and such a name could hide one.
+  Rename it; the error suggests a name.
 
 ### Fixes
 

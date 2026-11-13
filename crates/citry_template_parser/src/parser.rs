@@ -2623,6 +2623,19 @@ fn validate_fill_tag_vue_directives(
     Ok(())
 }
 
+/// The sentence that tells the author how to rename a reserved browser name.
+///
+/// A name from an object shorthand, as in `{ _id }`, also names the property
+/// it reads, so the fix keeps the property and renames only the variable.
+fn reserved_binding_fix(reserved: &crate::browser::ReservedBinding) -> String {
+    let (name, suggestion) = (&reserved.name, &reserved.suggestion);
+    if reserved.shorthand {
+        format!("Rename it and keep the property it reads, as in '{{ {name}: {suggestion} }}'.")
+    } else {
+        format!("Rename it, for example to '{suggestion}'.")
+    }
+}
+
 /// Check the value of `<c-fill v-slot="...">`.
 fn validate_fill_slot_pattern(
     node: &Node,
@@ -2689,13 +2702,15 @@ fn validate_fill_slot_pattern(
         })
         .flatten()
         .collect();
+    if let Some(reserved) = crate::browser::find_reserved_binding(&[(value, "props")]) {
+        return fail(format!(
+            "'{}' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill. {}",
+            reserved.name,
+            reserved_binding_fix(&reserved)
+        ));
+    }
     for binding in &analysis.bindings {
         let local = binding.name.as_str();
-        if crate::browser::is_reserved_browser_name(local) {
-            return fail(format!(
-                "'{local}' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill. Use a name without that prefix."
-            ));
-        }
         if python_names.contains(&local) {
             return fail(format!(
                 "'{local}' is named by both 'v-slot' and the Python 'data' or 'fallback' of this '<c-fill>'. Rename the Vue name or the Python name."
@@ -2886,14 +2901,16 @@ fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<()
 /// `v-if`, `v-else-if`, `v-for`, `v-model`, `v-html`, and `v-text` need an
 /// expression (an empty `v-html` would clear the element). `v-show` takes no
 /// argument or modifiers, `v-model` on an element takes no argument, and
-/// `v-is` has no element meaning in Vue 3. A `v-for` alias and a `v-slot`
-/// pattern may not bind a name with a prefix Citry reserves
-/// (`browser::is_reserved_browser_name`). Vue would otherwise drop these
+/// `v-is` has no element meaning in Vue 3. Vue would otherwise drop these
 /// silently or fail at render with a message that does not name the
 /// directive. Component tags and `<c-slot>` report the same mistakes through
 /// their own checks. A custom directive may use any case (`v-Tooltip`),
 /// because Vue looks it up by that name (and its camelCase and PascalCase
 /// forms), never in lowercase.
+///
+/// A `v-for` alias or a `v-slot` pattern may not bind a name that starts with
+/// `$`, `_`, or `citry`, because it could hide a value Citry gives the
+/// template (see `browser::is_reserved_browser_name`).
 fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
     if has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
@@ -2912,36 +2929,27 @@ fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Resu
             ))
         };
         // A `v-for` alias and a `v-slot` pattern (on a Vue component or a
-        // `<template>`) bind names in the browser, beside the names Citry
-        // gives the template. `#c-*` metadata was skipped above, so a `#`
-        // name here is Vue's slot shorthand.
-        let binds_names = if name == "v-for" {
-            Some(true)
-        } else if name == "v-slot" || name.starts_with("v-slot:") || name.starts_with('#') {
-            Some(false)
-        } else {
-            None
-        };
-        if let (Some(is_loop), Some(value)) = (binds_names, attr.inner_value.as_ref()) {
-            let bindings = if is_loop {
-                crate::browser::v_for_alias_bindings(&value.content)
+        // `<template>`) declare names in the browser, next to the names
+        // Citry gives the template. Vue's compiler binds them with or
+        // without modifiers, so only the part before `:` or `.` counts.
+        // `#c-*` metadata was skipped above, so a `#` name here is Vue's
+        // slot shorthand.
+        let directive = &name[..name.find([':', '.']).unwrap_or(name.len())];
+        if let Some(value) = attr.inner_value.as_ref() {
+            let reserved = if directive == "v-for" {
+                crate::browser::find_reserved_binding(&crate::browser::v_for_alias_parts(
+                    &value.content,
+                ))
+            } else if directive == "v-slot" || name.starts_with('#') {
+                crate::browser::find_reserved_binding(&[(value.content.as_str(), "props")])
             } else {
-                let analysis = crate::browser::analyze_browser_binding_pattern(&value.content);
-                if analysis.valid {
-                    analysis.bindings
-                } else {
-                    Vec::new()
-                }
+                None
             };
-            if let Some(reserved) = bindings
-                .iter()
-                .find(|binding| crate::browser::is_reserved_browser_name(&binding.name))
-            {
-                let local = reserved.name.as_str();
-                let suggestion = crate::browser::unreserved_name_suggestion(local);
-                let scope = if is_loop { "loop" } else { "slot" };
+            if let Some(reserved) = reserved {
+                let local = &reserved.name;
                 return fail(format!(
-                    "binds the reserved name '{local}': names that start with '$', '_', or 'citry' belong to the values Citry gives the template, such as '$i18n', and inside the {scope} '{local}' would hide one of them. Rename it, for example to '{suggestion}'."
+                    "uses the name '{local}', which starts with a prefix Citry reserves ('$', '_', or 'citry') for the values it gives the template, such as '$i18n'. A name like this could hide one of those values. {}",
+                    reserved_binding_fix(&reserved)
                 ));
             }
         }

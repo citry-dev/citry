@@ -2737,7 +2737,7 @@ def test_registry_check_reports_browser_names_with_a_reserved_prefix(tmp_path: P
     report = _check_mark_template(tmp_path, source)
 
     assert [finding.code for finding in report.findings] == ["citry.parse.syntax"]
-    assert f"binds the reserved name '{alias}'" in report.findings[0].message
+    assert f"uses the name '{alias}'" in report.findings[0].message
 
 
 def test_registry_check_reports_leftover_alpine_attributes_with_component_severities(tmp_path):

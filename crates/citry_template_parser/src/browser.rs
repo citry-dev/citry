@@ -516,102 +516,336 @@ pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAna
     }
 }
 
-/// Whether a template may not bind `name` as a browser-side name.
+/// Whether `name` is reserved: a template may not bind it as a browser-side
+/// name.
 ///
 /// Citry gives a component's Vue template, and every fill's slot function,
 /// names of its own, such as `$i18n`, `$citryPrepared`, and `citrySlotKey`.
-/// A `v-slot` or `v-for` name with the same prefix would hide one of them, and
-/// the template would read the wrong value without an error. Every check
+/// A `v-slot` or `v-for` name with the same prefix could hide one of them,
+/// and the template would read the wrong value without an error. Every check
 /// that rejects such a name calls this one function, so they agree on the
 /// prefixes.
 pub(crate) fn is_reserved_browser_name(name: &str) -> bool {
     name.starts_with(['$', '_']) || name.starts_with("citry")
 }
 
-/// A name to suggest in place of a reserved one: the same name without the
-/// reserved prefix, or `item` when nothing is left.
-pub(crate) fn unreserved_name_suggestion(name: &str) -> String {
-    let mut rest = name;
-    // `citry` can follow `$` or `_` (as in `$citryPrepared`), so strip the
-    // prefixes until none is left.
+/// A name a template binds with a reserved prefix, and what to write instead.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ReservedBinding {
+    /// The reserved name as written.
+    pub name: String,
+    /// A name to use instead: not reserved, not a JavaScript keyword, and not
+    /// bound anywhere else in the same directive.
+    pub suggestion: String,
+    /// Whether the name comes from an object pattern's shorthand, as in
+    /// `{ _id }`. Renaming it there to `{ id }` would read another property,
+    /// so the fix keeps the property name: `{ _id: id }`.
+    pub shorthand: bool,
+}
+
+/// The first reserved name that one directive binds, in source order.
+///
+/// `parts` holds each parameter list the directive binds, with a plain name
+/// to suggest when the reserved name has nothing left once its prefix is
+/// gone (`item`, `key`, or `index` for the three `v-for` aliases). A part
+/// that is not valid JavaScript binds nothing here; Vue's compiler or the
+/// directive's own checks report it.
+pub(crate) fn find_reserved_binding(parts: &[(&str, &str)]) -> Option<ReservedBinding> {
+    let parsed: Vec<(Vec<(String, bool)>, &str)> = parts
+        .iter()
+        .map(|(source, fallback)| (bound_names(source).unwrap_or_default(), *fallback))
+        .collect();
+    // A suggestion must not repeat a name bound elsewhere in the directive,
+    // because a repeated parameter name is a JavaScript syntax error.
+    let taken: Vec<&str> = parsed
+        .iter()
+        .flat_map(|(names, _)| names.iter().map(|(name, _)| name.as_str()))
+        .collect();
+    parsed.iter().find_map(|(names, fallback)| {
+        names
+            .iter()
+            .find(|(name, _)| is_reserved_browser_name(name))
+            .map(|(name, shorthand)| ReservedBinding {
+                name: name.clone(),
+                suggestion: unreserved_name_suggestion(name, fallback, &taken),
+                shorthand: *shorthand,
+            })
+    })
+}
+
+/// The names one parameter list binds, in source order, each with whether
+/// it is an object-pattern shorthand. `None` when the list does not parse.
+fn bound_names(source: &str) -> Option<Vec<(String, bool)>> {
+    use oxc_ast::ast::BindingPattern;
+    let wrapped = format!("({source}) => {{}}");
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &wrapped, SourceType::script()).parse();
+    if !parsed.diagnostics.is_empty() {
+        return None;
+    }
+    let [Statement::ExpressionStatement(statement)] = parsed.program.body.as_slice() else {
+        return None;
+    };
+    let Expression::ArrowFunctionExpression(function) = statement.expression.without_parentheses()
+    else {
+        return None;
+    };
+    // A value such as `a) => (b` would close the wrapper early.
+    if function.params.span().end as usize != source.len() + 2 {
+        return None;
+    }
+    // The pattern tree is walked with a work list, as the parser's other
+    // walks are, so a deeply nested pattern cannot exhaust the stack.
+    let mut pending: Vec<(&BindingPattern<'_>, bool)> = function
+        .params
+        .items
+        .iter()
+        .map(|parameter| (&parameter.pattern, false))
+        .chain(
+            function
+                .params
+                .rest
+                .iter()
+                .map(|rest| (&rest.rest.argument, false)),
+        )
+        .collect();
+    pending.reverse();
+    let mut names = Vec::new();
+    while let Some((pattern, shorthand)) = pending.pop() {
+        let mut children: Vec<(&BindingPattern<'_>, bool)> = Vec::new();
+        match pattern {
+            BindingPattern::BindingIdentifier(identifier) => {
+                names.push((identifier.name.to_string(), shorthand));
+            }
+            BindingPattern::ObjectPattern(object) => {
+                children.extend(
+                    object
+                        .properties
+                        .iter()
+                        .map(|property| (&property.value, property.shorthand)),
+                );
+                children.extend(object.rest.iter().map(|rest| (&rest.argument, false)));
+            }
+            BindingPattern::ArrayPattern(array) => {
+                children.extend(
+                    array
+                        .elements
+                        .iter()
+                        .flatten()
+                        .map(|element| (element, false)),
+                );
+                children.extend(array.rest.iter().map(|rest| (&rest.argument, false)));
+            }
+            // `{ _id = 0 }` is still a shorthand for the `_id` property.
+            BindingPattern::AssignmentPattern(assignment) => {
+                children.push((&assignment.left, shorthand));
+            }
+        }
+        pending.extend(children.into_iter().rev());
+    }
+    Some(names)
+}
+
+/// JavaScript words that cannot name a parameter, or that would hide a
+/// global the template reads.
+const JAVASCRIPT_RESERVED_WORDS: &[&str] = &[
+    "arguments",
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "enum",
+    "eval",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "implements",
+    "import",
+    "in",
+    "instanceof",
+    "interface",
+    "let",
+    "new",
+    "null",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "return",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "undefined",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
+];
+
+/// A name to suggest in place of a reserved one.
+///
+/// The first choice is the same name without the reserved prefix, as
+/// `i18n` for `$i18n` or `slotKey` for `citrySlotKey`. When nothing usable is
+/// left, `fallback` is next. A choice that is reserved, a JavaScript keyword,
+/// or already in `taken` gets a number appended until it is free.
+fn unreserved_name_suggestion(name: &str, fallback: &str, taken: &[&str]) -> String {
+    let mut rest = name.to_string();
+    // Lowercasing the first letter can rebuild a prefix (`_Citry` becomes
+    // `citry`), so strip and lowercase until neither changes the name.
     loop {
-        if let Some(stripped) = rest.strip_prefix(['$', '_']) {
-            rest = stripped;
-        } else if let Some(stripped) = rest.strip_prefix("citry") {
-            rest = stripped;
-        } else {
+        let before = rest.clone();
+        rest = rest.trim_start_matches(['$', '_']).to_string();
+        if let Some(stripped) = rest.strip_prefix("citry") {
+            rest = stripped.to_string();
+        }
+        let mut chars = rest.chars();
+        if let Some(first) = chars.next() {
+            rest = first.to_lowercase().chain(chars).collect();
+        }
+        if rest == before {
             break;
         }
     }
-    let mut chars = rest.chars();
-    match chars.next() {
-        // `citrySlotKey` reads best as `slotKey`, so the first letter goes
-        // back to lowercase once the prefix is gone.
-        Some(first) if first.is_alphabetic() => first.to_lowercase().chain(chars).collect(),
-        // A leftover such as `1` is not a JavaScript name on its own.
-        _ => "item".to_string(),
+    let usable = |candidate: &str| {
+        candidate.chars().next().is_some_and(char::is_alphabetic)
+            && !is_reserved_browser_name(candidate)
+            && !JAVASCRIPT_RESERVED_WORDS.contains(&candidate)
+            && !taken.contains(&candidate)
+    };
+    if usable(&rest) {
+        return rest;
     }
+    // A keyword such as `class` keeps its meaning with a number after it,
+    // while an empty or numeric leftover says nothing, so it gives way to
+    // the fallback.
+    let base = if rest.chars().next().is_some_and(char::is_alphabetic) {
+        rest
+    } else {
+        fallback.to_string()
+    };
+    if usable(&base) {
+        return base;
+    }
+    (2..)
+        .map(|number| format!("{base}{number}"))
+        .find(|candidate| usable(candidate))
+        .unwrap_or(base)
 }
 
-/// The names an element's `v-for="..."` value binds: the item, key, and
-/// index names, including the names inside a destructuring pattern.
+/// The parameter lists an element's `v-for="..."` value binds, each with the
+/// plain name to suggest for its position (`item`, `key`, `index`).
 ///
-/// Vue splits the value at its first ` in ` or ` of ` (whitespace on both
-/// sides), drops one `(` at the start and one `)` at the end of the left
-/// part, and reads what is left as a list of up to three names or patterns.
-/// That list has the same shape as an arrow function's parameters, so it is
-/// parsed the same way as a slot pattern. An empty list is returned for a
-/// value Vue could not read either; the template's other checks or Vue's own
-/// compiler report that value.
-pub(crate) fn v_for_alias_bindings(value: &str) -> Vec<BrowserReference> {
+/// This follows Citry's Vue compiler (vize's
+/// `parse_for_expression_with_options` in
+/// `third_party/rust/vize_atelier_core/src/steps/v_for.rs`), whose output the
+/// browser runs: it splits the value at its first `in` or `of` with
+/// whitespace on both sides, removes one pair of outer parentheses, splits
+/// what is left at its top-level commas, and reads the first three pieces as
+/// the item, key, and index. An empty piece keeps its position and binds
+/// nothing. An empty list is returned for a value the compiler rejects too.
+pub(crate) fn v_for_alias_parts(value: &str) -> Vec<(&str, &'static str)> {
     let Some(left) = v_for_left_side(value) else {
         return Vec::new();
     };
     let trimmed = left.trim();
-    let inner = trimmed.strip_prefix('(').unwrap_or(trimmed);
-    let inner = inner.strip_suffix(')').unwrap_or(inner).trim();
-    if inner.is_empty() {
-        return Vec::new();
-    }
-    let analysis = analyze_browser_binding_pattern(inner);
-    if analysis.valid {
-        analysis.bindings
-    } else {
-        Vec::new()
-    }
+    // Citry compiles Vue in standard mode, where an unmatched parenthesis
+    // is an error rather than something to drop.
+    let inner = match (trimmed.strip_prefix('('), trimmed.ends_with(')')) {
+        (Some(opened), true) => &opened[..opened.len() - 1],
+        (None, false) => trimmed,
+        _ => return Vec::new(),
+    };
+    split_top_level_commas(inner.trim())
+        .into_iter()
+        .zip(["item", "key", "index"])
+        .filter(|(piece, _)| !piece.is_empty())
+        .collect()
 }
 
-/// The part of a `v-for` value before Vue's ` in ` or ` of ` separator.
+/// The part of a `v-for` value before the compiler's `in` or `of` separator.
 ///
-/// This follows Vue's `forAliasRE` (`/([\s\S]*?)\s+(?:in|of)\s+(\S[\s\S]*)/`):
-/// the earliest whitespace run followed by `in` or `of`, more whitespace, and
-/// at least one more character wins, even inside brackets, so the names read
-/// here are the names Vue binds.
+/// This follows vize's `find_for_separator`: the first `in` or `of` with
+/// whitespace (Rust's `char::is_whitespace`) right before and right after it
+/// wins, even inside brackets or strings, and the value has no alias when
+/// nothing but whitespace follows that first match.
 fn v_for_left_side(value: &str) -> Option<&str> {
-    let skip_space = |from: usize| {
-        value[from..]
-            .char_indices()
-            .find(|(_, c)| !c.is_whitespace())
-            .map_or(value.len(), |(offset, _)| from + offset)
-    };
-    for (start, c) in value.char_indices() {
-        if !c.is_whitespace() {
+    let chars: Vec<(usize, char)> = value.char_indices().collect();
+    for index in 1..chars.len().saturating_sub(1) {
+        if !matches!(
+            (chars[index].1, chars[index + 1].1),
+            ('i', 'n') | ('o', 'f')
+        ) {
             continue;
         }
-        let keyword = skip_space(start);
-        let rest = &value[keyword..];
-        if !(rest.starts_with("in") || rest.starts_with("of")) {
+        let space_before = chars[index - 1].1.is_whitespace();
+        let space_after = chars.get(index + 2).is_some_and(|(_, c)| c.is_whitespace());
+        if !space_before || !space_after {
             continue;
         }
-        let after = keyword + 2;
-        if !value[after..].starts_with(char::is_whitespace) {
-            continue;
+        let mut alias_end = index;
+        while alias_end > 0 && chars[alias_end - 1].1.is_whitespace() {
+            alias_end -= 1;
         }
-        if skip_space(after) < value.len() {
-            return Some(&value[..start]);
-        }
+        // vize stops at the first match: with nothing after it, the whole
+        // value has no alias.
+        chars[index + 2..]
+            .iter()
+            .find(|(_, c)| !c.is_whitespace())?;
+        return Some(&value[..chars[alias_end].0]);
     }
     None
+}
+
+/// Split at commas outside brackets and strings, as vize's
+/// `split_top_level_aliases` does, trimming each piece.
+fn split_top_level_commas(input: &str) -> Vec<&str> {
+    let mut pieces = Vec::new();
+    let mut start = 0;
+    let mut depth = 0u32;
+    let mut quote: Option<u8> = None;
+    let mut escaped = false;
+    for (index, byte) in input.bytes().enumerate() {
+        if let Some(open) = quote {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == open {
+                quote = None;
+            }
+            continue;
+        }
+        match byte {
+            b'\'' | b'"' | b'`' => quote = Some(byte),
+            b'(' | b'{' | b'[' => depth += 1,
+            b')' | b'}' | b']' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 => {
+                pieces.push(input[start..index].trim());
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    pieces.push(input[start..].trim());
+    pieces
 }
 
 /// One name destructured from the `$component` initializer context.
@@ -2507,36 +2741,71 @@ mod tests {
     use super::*;
 
     #[test]
-    fn v_for_alias_bindings_follow_vues_split() {
-        let names = |value: &str| {
-            v_for_alias_bindings(value)
-                .into_iter()
-                .map(|binding| binding.name)
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(names("item in items"), ["item"]);
-        assert_eq!(names("( row ,\ti )\tof rows"), ["row", "i"]);
-        assert_eq!(names("({ a, b: [c] }, k, i) in obj"), ["a", "c", "k", "i"]);
+    fn v_for_alias_parts_follow_the_vue_compilers_split() {
+        let parts = v_for_alias_parts;
+        assert_eq!(parts("item in items"), [("item", "item")]);
+        assert_eq!(
+            parts("( row ,\ti )\tof rows"),
+            [("row", "item"), ("i", "key")]
+        );
+        assert_eq!(
+            parts("({ a, b: [c] }, k, i) in obj"),
+            [("{ a, b: [c] }", "item"), ("k", "key"), ("i", "index")]
+        );
+        // An empty piece keeps its position, and a fourth piece binds
+        // nothing, as in vize.
+        assert_eq!(parts("(, $i) in rows"), [("$i", "key")]);
+        assert_eq!(
+            parts("(a, b, c, $d) in rows"),
+            [("a", "item"), ("b", "key"), ("c", "index")]
+        );
         // `index` and `items` hold `in` but are not the separator.
-        assert_eq!(names("index in items"), ["index"]);
-        // Without whitespace and a value after `in`, Vue reads no alias.
-        assert!(names("item in ").is_empty());
-        assert!(names("item").is_empty());
-        // Vue drops a lone `(` too, so it still binds `a`.
-        assert_eq!(names("(a in b"), ["a"]);
+        assert_eq!(parts("index in items"), [("index", "item")]);
+        // Without whitespace and a value after `in`, there is no alias.
+        assert!(parts("item in ").is_empty());
+        assert!(parts("item").is_empty());
+        // vize rejects an unmatched `(`, so binding nothing here changes
+        // nothing.
+        assert!(parts("(a in b").is_empty());
+    }
+
+    #[test]
+    fn reserved_bindings_report_shorthands_and_avoid_taken_names() {
+        let found = |parts: &[(&str, &str)]| {
+            find_reserved_binding(parts).map(|r| (r.name, r.suggestion, r.shorthand))
+        };
+        assert_eq!(found(&[("row", "item"), ("i", "key")]), None);
+        assert_eq!(
+            found(&[("{ _id, name }", "item")]),
+            Some(("_id".to_string(), "id".to_string(), true))
+        );
+        assert_eq!(
+            found(&[("_i", "item"), ("i", "key")]),
+            Some(("_i".to_string(), "i2".to_string(), false))
+        );
+        // A value that does not parse binds nothing here.
+        assert_eq!(found(&[("{ $a", "item")]), None);
     }
 
     #[test]
     fn unreserved_name_suggestion_drops_every_reserved_prefix() {
-        assert_eq!(unreserved_name_suggestion("$i18n"), "i18n");
-        assert_eq!(unreserved_name_suggestion("$citryPrepared"), "prepared");
-        assert_eq!(unreserved_name_suggestion("citrySlotKey"), "slotKey");
-        assert_eq!(unreserved_name_suggestion("__row"), "row");
-        assert_eq!(unreserved_name_suggestion("_"), "item");
-        assert_eq!(unreserved_name_suggestion("_1"), "item");
-        assert!(!is_reserved_browser_name(&unreserved_name_suggestion(
-            "_citry_x"
-        )));
+        let suggest = |name: &str| unreserved_name_suggestion(name, "item", &[]);
+        assert_eq!(suggest("$i18n"), "i18n");
+        assert_eq!(suggest("$citryPrepared"), "prepared");
+        assert_eq!(suggest("citrySlotKey"), "slotKey");
+        assert_eq!(suggest("__row"), "row");
+        assert_eq!(suggest("_"), "item");
+        assert_eq!(suggest("_1"), "item");
+        // Lowercasing must not rebuild a prefix.
+        assert_eq!(suggest("_Citry"), "item");
+        assert_eq!(suggest("$CitryPrepared"), "prepared");
+        assert_eq!(suggest("citryCitryX"), "x");
+        // A keyword cannot name a parameter.
+        assert_eq!(suggest("_if"), "if2");
+        assert_eq!(
+            unreserved_name_suggestion("_", "index", &["index"]),
+            "index2"
+        );
     }
 
     #[test]

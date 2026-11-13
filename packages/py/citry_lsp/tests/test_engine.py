@@ -2288,7 +2288,7 @@ def test_v_for_alias_with_a_reserved_prefix_marks_the_attribute():
 
     (diagnostic,) = document.diagnostics
     assert diagnostic.code == "citry.parse.syntax"
-    assert "binds the reserved name '$index'" in diagnostic.message
+    assert "uses the name '$index'" in diagnostic.message
     assert diagnostic.range == types.Range(
         _position(source, attribute),
         _position(source, attribute, len(attribute)),
