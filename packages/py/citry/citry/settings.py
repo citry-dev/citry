@@ -47,6 +47,52 @@ SecurityScriptIntegrityMode = Literal["off", "citry"]
 _ALLOWED_SECURITY_SCRIPT_INTEGRITY_MODES: tuple[str, ...] = get_args(SecurityScriptIntegrityMode)
 
 
+def is_usable_secret(entry: object) -> bool:
+    """Whether one entry of the ``secret`` setting can serve as a signing key."""
+    # An empty key is what os.environ.get(name, "") gives for an unset
+    # variable, and a whitespace-only one is as easy to guess; anyone could
+    # sign with either. Anything that is not a plain str (bytes, None, a
+    # number, a str subclass that could change strip()) is a mistake.
+    return type(entry) is str and entry.strip() != ""
+
+
+def _validate_secret(value: object) -> list[str] | None:
+    """Return the ``secret`` setting as a fresh list of keys, or raise on any unusable entry."""
+    if value is None:
+        return None
+    # A bare string is one key. Only a str, list, or tuple is read: list()
+    # would split bytes into small integers and a dict into its keys.
+    if isinstance(value, str):
+        entries: list[object] = [value]
+    elif isinstance(value, (list, tuple)):
+        entries = list(value)
+    else:
+        msg = f"Citry secret must be a str, a list or tuple of str, or None, got {type(value).__name__}."
+        raise TypeError(msg)
+    # Every entry is checked here, once, because every entry verifies
+    # signed values: one empty entry would let anyone sign a value Citry
+    # then accepts.
+    for index, entry in enumerate(entries):
+        if type(entry) is not str:
+            where = "Citry secret" if isinstance(value, str) else f"Citry secret[{index}]"
+            msg = f"{where} must be a plain str, got {type(entry).__name__}."
+            raise TypeError(msg)
+        if not is_usable_secret(entry):
+            if isinstance(value, str):
+                msg = (
+                    "Citry secret is empty or only whitespace. Set a long random string, or pass"
+                    " None if no component uses signed State."
+                )
+            else:
+                msg = (
+                    f"Citry secret[{index}] is empty or only whitespace. Citry accepts a value signed"
+                    " with any entry of the list, so each entry must be a key nobody can guess."
+                    " Leave a key that is not set out of the list."
+                )
+            raise ValueError(msg)
+    return cast("list[str]", entries)
+
+
 def _validate_security_mode(name: str, value: object, allowed: tuple[str, ...]) -> str:
     """Validate one engine or per-serialization security mode."""
     if type(value) is not str or value not in allowed:
@@ -767,9 +813,13 @@ class CitrySettings:
             extension round-trips on each event call. A single string is the
             common form. A list means key rotation: the first entry signs new
             values, and a value signed by any entry still verifies, so
-            already-issued values stay valid while a new key rolls out. A bare
-            string is stored as a one-element list. ``None`` (the default)
-            means no secret is set. Django projects can reuse ``SECRET_KEY``
+            already-issued values stay valid while a new key rolls out. A
+            list or a tuple is accepted. Every entry must be a string with
+            at least one character that is not whitespace; ``Citry(...)``
+            raises ``ValueError`` otherwise, and ``TypeError`` for an entry
+            that is not a plain ``str``. A bare string is stored as a
+            one-element list. ``None`` (the default) means no
+            secret is set. Django projects can reuse ``SECRET_KEY``
             and any ``SECRET_KEY_FALLBACKS`` by passing
             ``citry.contrib.django.secret()``.
         event_result_resolvers: Result resolvers for the Events extension.
@@ -888,11 +938,10 @@ class CitrySettings:
 
         # A bare-string secret is stored as a one-element list, so readers
         # always see the rotation form: first entry signs, every entry verifies.
-        if isinstance(self.secret, str):
-            object.__setattr__(self, "secret", [self.secret])
-        elif self.secret is not None:
-            # A copy, so changing the caller's list cannot change these settings.
-            object.__setattr__(self, "secret", list(self.secret))
+        # The list is a copy, so changing the caller's list cannot change
+        # these settings, and its entries are checked here once for every
+        # reader.
+        object.__setattr__(self, "secret", _validate_secret(self.secret))
 
         # The resolver and codec sequences are copied into tuples of their own.
         object.__setattr__(self, "event_result_resolvers", tuple(self.event_result_resolvers))

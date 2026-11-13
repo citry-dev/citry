@@ -4737,7 +4737,10 @@ Rules, each closing a named prior-art hole:
   `CitrySettings.secret`, with a pointed error at first mint naming the
   one-line fix per host (Django users pass `SECRET_KEY` via the
   `citry.contrib.django.secret()` helper). The secret accepts a list for
-  rotation: first entry signs, all entries verify.
+  rotation: first entry signs, all entries verify. `CitrySettings` refuses
+  an empty, whitespace-only, or non-`str` entry when it is built. The
+  component's declared `_storage` picks how a token is checked, and a token
+  of the other form answers `stale_state`.
 - **JSON-safe values only, enforced at mint time** with an error naming
   the component and the State field. Kwargs are unconstrained; only State
   must serialize. No pickle, no rich-object revival, ever: verified state

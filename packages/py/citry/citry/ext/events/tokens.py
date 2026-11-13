@@ -25,10 +25,13 @@ way (it only stores and echoes the string):
   on the server between calls.
 - ``"server"``: the State lives in ``Citry.cache`` under
   ``citry:state:<key>``, where ``<key>`` is random and unguessable, and the
-  token is just ``ces1.<key>`` (a distinct prefix from the signed form so
-  verification can tell them apart). This is the opt-in mode for State
-  too large to ship on every call, State that must not be readable in the page
-  source, and step one of the livecomponents migration (design section 10).
+  token is just ``ces1.<key>``. Verification follows the component's
+  declared storage and refuses a token of the other form, so a
+  server-storage component reads its State only from the cache, never from
+  the token. This is
+  the opt-in mode for State too large to ship on every call, State that must
+  not be readable in the page source, and step one of the livecomponents
+  migration (design section 10).
   It needs a shared cache backend across workers, the same constraint the
   fragments feature already documents: one worker mints the key, another may
   serve the next call and must find the entry. Expiry rides the cache's own
@@ -94,6 +97,7 @@ from citry.ext.events.schemas import (
     shared_location_path,
 )
 from citry.ext.events.state import restore_state, state_field_names, state_model_kind, state_wire_values
+from citry.settings import is_usable_secret
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
@@ -114,8 +118,8 @@ __all__ = [
 ]
 
 # The two token prefixes. The signed prefix is the design-pinned wire format
-# (7.1); the server prefix is this binding's own choice, distinct so that
-# verification dispatches on it without ever having to guess the storage mode.
+# (7.1); the server prefix is this binding's own choice. Verification checks
+# that a token carries the prefix of the component's declared storage.
 _SIGNED_PREFIX = "cev1"
 _SERVER_PREFIX = "ces1"
 # Server-storage State lives in ``Citry.cache`` under this namespace, beside
@@ -612,7 +616,7 @@ def _normalize_secrets(secret: str | list[str] | None) -> list[str]:
     if secret is None:
         raise SigningSecretError(_NO_SIGNING_KEY_MSG)
     secrets_list = [secret] if isinstance(secret, str) else list(secret)
-    if not secrets_list or not all(isinstance(entry, str) and entry for entry in secrets_list):
+    if not secrets_list or not all(is_usable_secret(entry) for entry in secrets_list):
         raise SigningSecretError(_NO_SIGNING_KEY_MSG)
     return secrets_list
 
@@ -620,22 +624,27 @@ def _normalize_secrets(secret: str | list[str] | None) -> list[str]:
 # ----- Verifying -----
 
 
-def verify_state_token(token: str, *, cls: Any, secrets: list[str], cache: CitryCache | None = None) -> VerifiedState:
+def verify_state_token(
+    token: str, *, cls: Any, storage: str, secrets: list[str], cache: CitryCache | None = None
+) -> VerifiedState:
     """
     Verify an echoed token and return the State fields to rebuild it from.
 
-    Dispatches on the token's prefix, so the caller does not have to know the
-    component's storage mode. For a signed token it checks the HMAC against
-    every rotation secret in constant time and the expiry; for a server token it
-    loads the entry from the cache. Either way it then confirms the token was
-    minted for ``cls`` (the class-id binding), so a token for one component
-    cannot be replayed against another.
+    The component's declared storage mode decides how the token is read, and
+    a token of the other form is refused as malformed. For a signed token it
+    checks the HMAC against every rotation secret in constant time and the
+    expiry; for a server token it loads the entry from the cache. Either way
+    it then confirms the token was minted for ``cls`` (the class-id binding),
+    so a token for one component cannot be replayed against another.
 
     Args:
         token: The opaque token the client echoed back.
         cls: The component class the call dispatches to. Its ``class_id`` is the
             expected binding; the State is rebuilt from the result as
             ``cls.State(**verified.state_kwargs)`` by the caller.
+        storage: The component's declared ``_storage``: ``"signed"`` or
+            ``"server"``. It comes from the component, never from the
+            token, so a client cannot choose how its token is checked.
         secrets: All valid signing secrets (the rotation list); every one is
             tried so tokens signed by a still-listed key keep verifying. Unused
             for server-storage tokens.
@@ -649,8 +658,10 @@ def verify_state_token(token: str, *, cls: Any, secrets: list[str], cache: Citry
         InvalidStateError: The token is malformed (its payload cannot be read
             as a well-formed token: bad base64, bad JSON, a wrong protocol
             version, or missing fields), or it was minted for another
-            component (403).
-        StaleStateError: The token is stale (409): it expired, its signature
+            component, or ``storage`` is not a known mode (403).
+        StaleStateError: The token is stale (409): it is of the other
+            storage form (the component's ``_storage`` changed since the page
+            rendered), it expired, its signature
             matches no current secret while the payload is still well-formed
             (a rotated-out signing secret, or a tampered signature, which is
             indistinguishable from one), or a server token's cache entry is
@@ -663,11 +674,21 @@ def verify_state_token(token: str, *, cls: Any, secrets: list[str], cache: Citry
         # with no state field) is malformed, not a crash: map it like any other
         # unreadable token instead of letting an AttributeError reach the caller.
         raise InvalidStateError(_MALFORMED_MSG)
-    if token.startswith(_SERVER_PREFIX + "."):
+    # The component's storage picks the check, so a server-storage component
+    # only ever loads State from the cache, which the client cannot write.
+    if storage == "server":
+        _refuse_other_form(token, other=_SIGNED_PREFIX)
+        if not token.startswith(_SERVER_PREFIX + "."):
+            raise InvalidStateError(_MALFORMED_MSG)
         payload = _load_server_payload(token[len(_SERVER_PREFIX) + 1 :], cache)
-    elif token.startswith(_SIGNED_PREFIX + "."):
+    elif storage == "signed":
+        _refuse_other_form(token, other=_SERVER_PREFIX)
+        if not token.startswith(_SIGNED_PREFIX + "."):
+            raise InvalidStateError(_MALFORMED_MSG)
         payload = _verify_signed(token, secrets)
     else:
+        # A storage value Citry does not know is a caller bug; refusing the
+        # token keeps it from picking either check by accident.
         raise InvalidStateError(_MALFORMED_MSG)
 
     expected = cls.class_id
@@ -680,6 +701,19 @@ def verify_state_token(token: str, *, cls: Any, secrets: list[str], cache: Citry
         raise InvalidStateError(msg)
 
     return VerifiedState(state_kwargs=payload["s"], class_id=payload["c"])
+
+
+def _refuse_other_form(token: str, *, other: str) -> None:
+    """Answer stale for a token of the other storage form, so the browser offers a reload."""
+    # A page rendered before the component's _storage changed in a deploy
+    # still holds the other form. Nothing from the token is read; stale
+    # (409) is the answer the browser turns into a reload prompt.
+    if token.startswith(other + "."):
+        msg = (
+            "The state token is of the other storage form than this component declares (its"
+            " State._storage changed since the page rendered). Reload the page to get a new token."
+        )
+        raise StaleStateError(msg)
 
 
 def _verify_signed(token: str, secrets: list[str]) -> dict[str, Any]:
@@ -702,6 +736,10 @@ def _verify_signed(token: str, secrets: list[str]) -> dict[str, Any]:
         raise InvalidStateError(_MALFORMED_MSG) from err
 
     secrets_list = [secrets] if isinstance(secrets, str) else list(secrets) if secrets else []
+    # The settings refuse an unusable entry, but this function is also called
+    # directly, so it never tries an empty or whitespace-only key that anyone
+    # could sign with.
+    secrets_list = [entry for entry in secrets_list if is_usable_secret(entry)]
     matched = False
     for candidate in secrets_list:
         expected_sig = hmac.new(_state_token_key(candidate), payload_bytes, hashlib.sha256).digest()

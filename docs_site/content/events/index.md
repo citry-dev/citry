@@ -94,6 +94,21 @@ When you rotate Django's key with `SECRET_KEY_FALLBACKS`, Citry follows the
 rotation: `SECRET_KEY` signs new values, and a value signed with a fallback
 key still verifies, so pages that visitors already have open keep working
 until you remove the old key from the fallbacks.
+
+To rotate a secret of your own, pass a list: the first entry signs new
+values, and Citry checks values against every entry. Citry accepts a
+value signed with any entry, so an empty entry would let anyone sign one.
+`Citry(...)` raises an error for an entry that is empty or only
+whitespace, so leave out a key that is not set:
+
+```python
+keys = [
+    os.environ["CITRY_SECRET"],
+    os.environ.get("CITRY_OLD_SECRET"),
+]
+citry_app = Citry(secret=[key for key in keys if key])
+```
+
 [Web frameworks](/advanced/web-frameworks/) shows how to mount Citry in other
 frameworks.
 

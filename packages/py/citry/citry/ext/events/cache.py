@@ -11,6 +11,7 @@ from citry.extension import RenderCacheWrite, StagedRenderCacheContribution
 
 from .emission import EXTRA_KEY, EventInstanceEntry
 from .tokens import (
+    _SERVER_PREFIX,
     StateTokenError,
     _prepare_state_token_values,
     _resolve_hints,
@@ -41,7 +42,7 @@ def export_events_cache(
         state: dict[str, object] | None
         if entry.state_token:
             state = {
-                "storage": "server" if entry.state_token.startswith("ces1.") else "signed",
+                "storage": "server" if entry.state_token.startswith(_SERVER_PREFIX + ".") else "signed",
                 "token": entry.state_token,
                 "values": values,
             }
@@ -113,7 +114,7 @@ def stage_events_cache(
                 raise CacheArtifactError(f"{path}.state.storage is incompatible with current State metadata.")
             if type(token_value) is not str or not token_value:
                 raise CacheArtifactError(f"{path}.state.token must be a non-empty string.")
-            if (storage == "server") != token_value.startswith("ces1."):
+            if (storage == "server") != token_value.startswith(_SERVER_PREFIX + "."):
                 raise CacheArtifactError(f"{path}.state.token does not match its storage mode.")
             if type(public_value) is not dict:
                 raise CacheArtifactError(f"{path}.state.values must be a JSON object.")
@@ -122,6 +123,7 @@ def stage_events_cache(
                 verified = verify_state_token(
                     token_value,
                     cls=component_class,
+                    storage=info.state_meta.storage,
                     secrets=list(ctx.citry.settings.secret or []),
                     cache=ctx.citry.cache,
                 )

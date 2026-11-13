@@ -858,6 +858,59 @@ class TestPerEventRoute:
         assert response.status_code == 403
         assert response.json()["results"][0]["error"]["code"] == "invalid_state"
 
+    def test_state_token_must_match_the_component_storage(self):
+        # The component's declared storage decides how a token is checked,
+        # so a client cannot send a signed token to a server-storage
+        # component (whose State it must never write), nor the reverse.
+        c = _citry()
+        ran = []
+
+        class Owned(Component):
+            citry = c
+            template = """
+                <p>owned</p>
+            """
+
+            class State:
+                owner_id: int = 1
+                _storage = "server"
+
+            class Events:
+                def peek(self, state):
+                    ran.append(state.owner_id)
+
+        class Signed(Component):
+            citry = c
+            template = """
+                <p>signed</p>
+            """
+
+            class State:
+                owner_id: int = 1
+
+            class Events:
+                def peek(self, state):
+                    ran.append(state.owner_id)
+
+        client = _mounted(c)
+        signed_for_owned = mint_state_token(
+            Owned.State(owner_id=999), class_id=Owned.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=8192
+        )
+        server_for_signed = mint_state_token(
+            Signed.State(owner_id=999),
+            class_id=Signed.class_id,
+            secret=None,
+            max_age=None,
+            max_bytes=8192,
+            storage="server",
+            cache=c.cache,
+        )
+        for comp_cls, token in ((Owned, signed_for_owned), (Signed, server_for_signed)):
+            response = _post_call(client, comp_cls, "peek", {"stateToken": token})
+            assert response.status_code == 409
+            assert response.json()["results"][0]["error"]["code"] == "stale_state"
+        assert ran == []
+
     def test_url_vs_body_mismatch_is_rejected(self):
         c = _citry()
         greeter = _greeter(c)

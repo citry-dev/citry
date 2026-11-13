@@ -391,6 +391,19 @@ change.
   take minutes. It now takes time in step with the length of the HTML.
   The same fix applies to third-party extensions that, like `Debug`, skip
   their wrapper around a whole HTML document.
+- `Citry(secret=...)` now raises an error for a secret that is empty or
+  only whitespace, whether passed alone or as an entry of a list, and for
+  an entry that is not a plain `str`. Before, Citry accepted such a
+  secret, and a request could then send State signed with it. If your
+  secret can come out empty, for example
+  `[os.environ["NEW"], os.environ.get("OLD", "")]`, `Citry(...)` now
+  raises a `ValueError` that gives the entry's position; leave out keys
+  that are not set. `citry.contrib.django.secret()` skips such entries
+  for you. The setting takes a string, a list, or a tuple; pass any other
+  collection as a list.
+- After you change a component's `State._storage`, a page rendered before
+  the change gets a `stale_state` error on its next event call, and the
+  visitor is asked to reload.
 
 ## v0.7.0
 

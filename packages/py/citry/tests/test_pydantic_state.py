@@ -138,7 +138,9 @@ def test_a_changed_state_is_signed_into_the_state_action(kind: str) -> None:
     item = _dispatch(counter, "bump", callerRenderId="i1", stateToken=_token(counter, count=1))
 
     assert [action["action"] for action in item["actions"]] == ["state", "data"]
-    verified = verify_state_token(item["actions"][0]["stateToken"], cls=counter, secrets=[SIGNING_KEY])
+    verified = verify_state_token(
+        item["actions"][0]["stateToken"], cls=counter, storage="signed", secrets=[SIGNING_KEY]
+    )
     assert verified.state_kwargs == {"count": 11, "name": "Counter"}
     assert item["actions"][0]["publicState"] == {"count": 11, "name": "Counter"}
 
@@ -301,7 +303,7 @@ def test_an_in_place_list_change_counts_as_a_change() -> None:
 
     item = _dispatch(Card, "add", callerRenderId="i1", stateToken=_token(Card))
 
-    verified = verify_state_token(item["actions"][0]["stateToken"], cls=Card, secrets=[SIGNING_KEY])
+    verified = verify_state_token(item["actions"][0]["stateToken"], cls=Card, storage="signed", secrets=[SIGNING_KEY])
     assert verified.state_kwargs == {"items": ["new"]}
 
 
@@ -744,7 +746,9 @@ def test_a_computed_field_is_not_stored_and_does_not_count_as_a_change() -> None
         action["action"] for action in _dispatch(Card, "read", callerRenderId="i1", stateToken=token)["actions"]
     ] == ["data"]
     changed = _dispatch(Card, "bump", callerRenderId="i1", stateToken=token)
-    verified = verify_state_token(changed["actions"][0]["stateToken"], cls=Card, secrets=[SIGNING_KEY])
+    verified = verify_state_token(
+        changed["actions"][0]["stateToken"], cls=Card, storage="signed", secrets=[SIGNING_KEY]
+    )
     assert verified.state_kwargs == {"count": 1}
 
 
@@ -872,7 +876,7 @@ def test_a_set_changed_in_place_signs_whatever_its_order() -> None:
 
     item = _dispatch(card, "grow", callerRenderId="i1", stateToken=_token(card))
 
-    verified = verify_state_token(item["actions"][0]["stateToken"], cls=card, secrets=[SIGNING_KEY])
+    verified = verify_state_token(item["actions"][0]["stateToken"], cls=card, storage="signed", secrets=[SIGNING_KEY])
     assert sorted(verified.state_kwargs["items"]) == [0, 1, 64]
 
 
@@ -998,7 +1002,9 @@ def test_a_nested_computed_field_is_not_stored() -> None:
     first = _dispatch(card, "bump", callerRenderId="i1", stateToken=_token(card))
     second = _dispatch(card, "bump", callerRenderId="i1", stateToken=first["actions"][0]["stateToken"])
 
-    verified = verify_state_token(second["actions"][0]["stateToken"], cls=card, secrets=[SIGNING_KEY])
+    verified = verify_state_token(
+        second["actions"][0]["stateToken"], cls=card, storage="signed", secrets=[SIGNING_KEY]
+    )
     assert verified.state_kwargs == {"line": {"qty": 3}}
 
 

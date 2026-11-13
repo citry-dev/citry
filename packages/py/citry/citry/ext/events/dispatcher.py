@@ -824,11 +824,20 @@ class EventsDispatcher:
                 return build_error_result(error, send_sequence)
         elif token is not None or needs_state or updates:
             secrets = list(ctx.citry.settings.secret or [])
+            # The State class and its meta are resolved together, so the meta
+            # is always here; an empty storage would refuse every token.
+            storage = info.state_meta.storage if info.state_meta is not None else ""
             try:
                 # A call that needs state but carries no token verifies the
                 # empty string, which maps to the malformed 403 like any
                 # other unreadable token.
-                verified = verify_state_token(token or "", cls=comp_cls, secrets=secrets, cache=ctx.citry.cache)
+                verified = verify_state_token(
+                    token or "",
+                    cls=comp_cls,
+                    storage=storage,
+                    secrets=secrets,
+                    cache=ctx.citry.cache,
+                )
             except InvalidStateError as err:
                 logger.debug(err.message)
                 return build_error_result(build_error(403, "invalid_state", _MSG_INVALID_STATE), send_sequence)

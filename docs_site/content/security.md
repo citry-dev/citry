@@ -75,7 +75,9 @@ and Citry's browser code offers to reload the page. If you pass
 `citry.contrib.django.secret()`, that means changing Django's
 `SECRET_KEY` and not keeping the old key in `SECRET_KEY_FALLBACKS`. That
 also ends Django's sessions and signs every user out. Give Citry a secret
-of its own if you want to replace it separately.
+of its own if you want to replace it separately. Citry accepts a value
+signed with any entry of the secret list, so `Citry(...)` raises an error
+when the secret or an entry is empty or only whitespace.
 
 Two State settings narrow what the browser sees and changes. Neither one
 replaces the permission check:

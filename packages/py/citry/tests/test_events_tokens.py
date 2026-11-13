@@ -275,7 +275,7 @@ class TestMintGoldenVectors:
             max_age=None,
             max_bytes=8192,
         )
-        verified = verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+        verified = verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert verified.state_kwargs["label"] == "café ☕"
 
 
@@ -345,7 +345,7 @@ class TestMintGuards:
             ttl=None,
         )
         with pytest.raises(StaleStateError):
-            verify_state_token("ces1.user-key", cls=FakeCounter, secrets=[], cache=cache)
+            verify_state_token("ces1.user-key", cls=FakeCounter, storage="server", secrets=[], cache=cache)
 
     def test_missing_secret_raises_pointed_error(self):
         with pytest.raises(SigningSecretError) as exc_info:
@@ -528,7 +528,7 @@ class TestVerifyRoundTrip:
         token = mint_state_token(
             CounterState(count=7, label="x"), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=None, max_bytes=8192
         )
-        verified = verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+        verified = verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert isinstance(verified, VerifiedState)
         assert verified.state_kwargs == {"count": 7, "label": "x"}
         assert verified.class_id == CLASS_ID
@@ -548,14 +548,68 @@ class TestSigningKeyLabel:
         # removed secret.
         token = self._signed_with(SIGNING_KEY.encode("utf-8"))
         with pytest.raises(StaleStateError):
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
 
     def test_a_payload_signed_with_the_labelled_key_verifies(self):
         # The control for the test above: the same payload, signed with the
         # key derived from the label, is accepted.
         key = hmac.new(b"citry.events.state-token", SIGNING_KEY.encode("utf-8"), hashlib.sha256).digest()
-        verified = verify_state_token(self._signed_with(key), cls=FakeCounter, secrets=[SIGNING_KEY])
+        verified = verify_state_token(self._signed_with(key), cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert verified.state_kwargs == {"count": 3, "label": "hi"}
+
+
+class TestStorageAndUnusableKeys:
+    def _server_token(self, cache: InMemoryCache) -> str:
+        return mint_state_token(
+            CounterState(count=1),
+            class_id=CLASS_ID,
+            secret=None,
+            max_age=None,
+            max_bytes=8192,
+            storage="server",
+            cache=cache,
+        )
+
+    def _signed_token(self) -> str:
+        return mint_state_token(
+            CounterState(count=1), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=None, max_bytes=8192
+        )
+
+    def test_server_storage_refuses_a_correctly_signed_token(self):
+        # The client must never write a server-storage component's State, so
+        # even a token signed with the real key is the wrong form here. It is
+        # stale, so a page from before a _storage change offers a reload.
+        with pytest.raises(StaleStateError):
+            verify_state_token(
+                self._signed_token(), cls=FakeCounter, storage="server", secrets=[SIGNING_KEY], cache=InMemoryCache()
+            )
+
+    def test_signed_storage_refuses_a_server_token(self):
+        cache = InMemoryCache()
+        token = self._server_token(cache)
+        with pytest.raises(StaleStateError):
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY], cache=cache)
+
+    def test_an_unknown_storage_refuses_both_forms(self):
+        cache = InMemoryCache()
+        for token in (self._signed_token(), self._server_token(cache)):
+            with pytest.raises(InvalidStateError):
+                verify_state_token(token, cls=FakeCounter, storage="", secrets=[SIGNING_KEY], cache=cache)
+
+    @pytest.mark.parametrize("unusable", ["", " ", "\t\n"])
+    def test_an_empty_key_passed_directly_is_never_tried(self, unusable):
+        # Settings refuse such an entry, but a direct caller can still pass
+        # one; a token signed with it must not verify.
+        payload_bytes = tokens._b64url_decode(GOLDEN_NO_EXPIRY.split(".")[1])
+        signature = hmac.new(tokens._state_token_key(unusable), payload_bytes, hashlib.sha256).digest()
+        forged = f"cev1.{tokens._b64url_encode(payload_bytes)}.{tokens._b64url_encode(signature)}"
+        with pytest.raises(StaleStateError):
+            verify_state_token(forged, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY, unusable])
+
+    @pytest.mark.parametrize("secret", [[SIGNING_KEY, ""], [SIGNING_KEY, "  "], [SIGNING_KEY, None]])
+    def test_mint_refuses_a_list_with_an_unusable_entry(self, secret):
+        with pytest.raises(SigningSecretError):
+            mint_state_token(CounterState(count=1), class_id=CLASS_ID, secret=secret, max_age=None, max_bytes=8192)
 
 
 class TestRotation:
@@ -563,7 +617,7 @@ class TestRotation:
         old_token = mint_state_token(
             CounterState(count=5), class_id=CLASS_ID, secret=OLD_KEY, max_age=None, max_bytes=8192
         )
-        verified = verify_state_token(old_token, cls=FakeCounter, secrets=[NEW_KEY, OLD_KEY])
+        verified = verify_state_token(old_token, cls=FakeCounter, storage="signed", secrets=[NEW_KEY, OLD_KEY])
         assert verified.state_kwargs["count"] == 5
 
     def test_rotation_list_signs_with_first_entry(self):
@@ -571,14 +625,14 @@ class TestRotation:
             CounterState(count=5), class_id=CLASS_ID, secret=[NEW_KEY, OLD_KEY], max_age=None, max_bytes=8192
         )
         # Verifies under the new (first) key alone.
-        verified = verify_state_token(token, cls=FakeCounter, secrets=[NEW_KEY])
+        verified = verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[NEW_KEY])
         assert verified.state_kwargs["count"] == 5
         # Under only the retired key the signature matches nothing, and a
         # well-formed token that verifies against no current secret is stale
         # (409), not invalid: it looks exactly like a rotated-out token
         # (design 4.3).
         with pytest.raises(StaleStateError):
-            verify_state_token(token, cls=FakeCounter, secrets=[OLD_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[OLD_KEY])
 
 
 class TestInvalidState:
@@ -602,7 +656,7 @@ class TestInvalidState:
         tampered_payload = payload_b64[:-1] + ("A" if payload_b64[-1] != "A" else "B")
         tampered = f"{prefix}.{tampered_payload}.{sig}"
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(tampered, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(tampered, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
         assert exc_info.value.code == "invalid_state"
 
@@ -611,7 +665,7 @@ class TestInvalidState:
         # less than a well-formed token, so invalid_state (403) per 4.3.
         token = _forge_signed_token(b'{"v": 1, "c": ')
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
         assert exc_info.value.code == "invalid_state"
 
@@ -621,7 +675,7 @@ class TestInvalidState:
         payload = tokens._canonical_json({"v": 2, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None})
         token = _forge_signed_token(payload.encode("utf-8"))
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
         assert exc_info.value.code == "invalid_state"
 
@@ -634,7 +688,7 @@ class TestInvalidState:
         for payload in (missing_c, missing_s):
             token = _forge_signed_token(tokens._canonical_json(payload).encode("utf-8"))
             with pytest.raises(InvalidStateError) as exc_info:
-                verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+                verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
             assert exc_info.value.status == 403
             assert exc_info.value.code == "invalid_state"
 
@@ -646,7 +700,7 @@ class TestInvalidState:
         # crash.
         token = _forge_signed_token(b"\xff\xff\xff")
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
         assert exc_info.value.code == "invalid_state"
 
@@ -656,7 +710,7 @@ class TestInvalidState:
         # JSON: invalid_state (403), not a RecursionError escaping verify.
         token = _forge_signed_token(("[" * 20_000 + "]" * 20_000).encode())
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
         assert exc_info.value.code == "invalid_state"
 
@@ -669,13 +723,13 @@ class TestInvalidState:
         # classification's JSON parse; see test_bad_base64_malformed.)
         sig = tokens._b64url_encode(b"not-a-real-signature")
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(f"cev1.päyload.{sig}", cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(f"cev1.päyload.{sig}", cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
         assert exc_info.value.code == "invalid_state"
 
     def test_unknown_prefix_malformed(self):
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token("garbage-no-prefix", cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token("garbage-no-prefix", cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
         assert "malformed" in exc_info.value.message.lower()
 
@@ -684,7 +738,7 @@ class TestInvalidState:
         # so this reaches the signature check (which matches nothing) and gets
         # its 403 from the no-match classification: empty bytes are not JSON.
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token("cev1.!!!.###", cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token("cev1.!!!.###", cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
 
     def test_wrong_protocol_version_malformed(self):
@@ -694,13 +748,13 @@ class TestInvalidState:
         signature = hmac.new(tokens._state_token_key(SIGNING_KEY), payload_bytes, hashlib.sha256).digest()
         token = f"cev1.{tokens._b64url_encode(payload_bytes)}.{tokens._b64url_encode(signature)}"
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
 
     def test_class_id_mismatch(self):
         token = self._mint()
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=OtherComp, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=OtherComp, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
         message = exc_info.value.message
         assert "different component" in message
@@ -712,7 +766,7 @@ class TestInvalidState:
         # not raise AttributeError up to the dispatcher as a handler_error (500).
         for bad in (None, 12345, b"cev1.x.y", ""):
             with pytest.raises(InvalidStateError) as exc_info:
-                verify_state_token(bad, cls=FakeCounter, secrets=[SIGNING_KEY])
+                verify_state_token(bad, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
             assert exc_info.value.status == 403
             assert "malformed" in exc_info.value.message.lower()
 
@@ -729,10 +783,10 @@ class TestStaleState:
         prefix, payload_b64, sig_b64 = token.split(".")
         changed = f"{prefix}.{payload_b64}.{'A' if sig_b64[0] != 'A' else 'B'}{sig_b64[1:]}"
         with pytest.raises(StaleStateError):
-            verify_state_token(changed, cls=OtherComp, secrets=[SIGNING_KEY])
+            verify_state_token(changed, cls=OtherComp, storage="signed", secrets=[SIGNING_KEY])
         _pin_now(monkeypatch, FIXED_NOW + 61)
         with pytest.raises(StaleStateError):
-            verify_state_token(token, cls=OtherComp, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=OtherComp, storage="signed", secrets=[SIGNING_KEY])
 
     def test_signed_token_expiry(self, monkeypatch):
         _pin_now(monkeypatch, FIXED_NOW)
@@ -740,12 +794,15 @@ class TestStaleState:
             CounterState(count=1), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=timedelta(seconds=60), max_bytes=8192
         )
         # Before expiry it verifies.
-        assert verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY]).state_kwargs["count"] == 1
+        assert (
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY]).state_kwargs["count"]
+            == 1
+        )
         # After the clock passes the expiry it is stale (409), not invalid: the
         # signature is still valid, only the deadline passed.
         _pin_now(monkeypatch, FIXED_NOW + 61)
         with pytest.raises(StaleStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 409
         assert exc_info.value.code == "stale_state"
         assert "expired" in exc_info.value.message
@@ -765,7 +822,7 @@ class TestStaleState:
         tampered_sig = ("A" if sig_b64[0] != "A" else "B") + sig_b64[1:]
         tampered = f"{prefix}.{payload_b64}.{tampered_sig}"
         with pytest.raises(StaleStateError) as exc_info:
-            verify_state_token(tampered, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(tampered, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 409
         assert exc_info.value.code == "stale_state"
         assert "stale" in exc_info.value.message
@@ -778,11 +835,11 @@ class TestStaleState:
         # The minting secret is gone from the rotation list: the token no
         # longer verifies, but it is a well-formed token, so it is stale (409).
         with pytest.raises(StaleStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[NEW_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[NEW_KEY])
         assert exc_info.value.status == 409
         assert exc_info.value.code == "stale_state"
         # Relisting the old secret makes the very same token verify again.
-        verified = verify_state_token(token, cls=FakeCounter, secrets=[NEW_KEY, OLD_KEY])
+        verified = verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[NEW_KEY, OLD_KEY])
         assert verified.state_kwargs["count"] == 4
 
     def test_unverified_well_formed_payload_is_stale(self):
@@ -794,7 +851,7 @@ class TestStaleState:
         payload = tokens._canonical_json({"v": 1, "c": CLASS_ID, "s": {"count": 9}, "t": 0, "x": None})
         token = _forge_signed_token(payload.encode("utf-8"))
         with pytest.raises(StaleStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 409
         assert exc_info.value.code == "stale_state"
 
@@ -823,7 +880,7 @@ class TestProtocolFixtureConformance:
         token = call["calls"][0]["stateToken"]
         expected = result["results"][0]["error"]
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == expected["status"]
         assert exc_info.value.code == expected["code"]
 
@@ -837,7 +894,7 @@ class TestProtocolFixtureConformance:
             CounterState(count=0), class_id=CLASS_ID, secret=OLD_KEY, max_age=None, max_bytes=8192
         )
         with pytest.raises(StaleStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[NEW_KEY])
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[NEW_KEY])
         assert exc_info.value.status == expected["status"]
         assert exc_info.value.code == expected["code"]
 
@@ -855,7 +912,9 @@ class TestProtocolFixtureConformance:
         prefix, payload_b64, sig_b64 = token.split(".")
         changed_sig = ("A" if sig_b64[0] != "A" else "B") + sig_b64[1:]
         with pytest.raises(StaleStateError) as exc_info:
-            verify_state_token(f"{prefix}.{payload_b64}.{changed_sig}", cls=FakeCounter, secrets=[SIGNING_KEY])
+            verify_state_token(
+                f"{prefix}.{payload_b64}.{changed_sig}", cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY]
+            )
         assert exc_info.value.status == expected["status"]
         assert exc_info.value.code == expected["code"]
 
@@ -1282,7 +1341,7 @@ class TestServerStorage:
             cache=cache,
         )
         assert first.startswith("ces1.")
-        verified = verify_state_token(first, cls=FakeCounter, secrets=[], cache=cache)
+        verified = verify_state_token(first, cls=FakeCounter, storage="server", secrets=[], cache=cache)
         assert verified.state_kwargs == {"count": 1, "label": "a"}
 
         rebuilt = CounterState(**verified.state_kwargs)
@@ -1297,7 +1356,7 @@ class TestServerStorage:
             cache=cache,
         )
         assert second != first
-        assert verify_state_token(second, cls=FakeCounter, secrets=[], cache=cache).state_kwargs == {
+        assert verify_state_token(second, cls=FakeCounter, storage="server", secrets=[], cache=cache).state_kwargs == {
             "count": 2,
             "label": "a",
         }
@@ -1348,19 +1407,21 @@ class TestServerStorage:
             cache=cache,
         )
         # Fresh: verifies.
-        assert verify_state_token(token, cls=FakeCounter, secrets=[], cache=cache).state_kwargs == {
+        assert verify_state_token(token, cls=FakeCounter, storage="server", secrets=[], cache=cache).state_kwargs == {
             "count": 1,
             "label": "",
         }
         # Past the ttl the cache evicts, and verify maps the miss to stale.
         clock["t"] = 1031.0
         with pytest.raises(StaleStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, secrets=[], cache=cache)
+            verify_state_token(token, cls=FakeCounter, storage="server", secrets=[], cache=cache)
         assert exc_info.value.status == 409
 
     def test_cache_miss_stale_state_message(self):
         with pytest.raises(StaleStateError) as exc_info:
-            verify_state_token("ces1.nonexistent-key", cls=FakeCounter, secrets=[], cache=InMemoryCache())
+            verify_state_token(
+                "ces1.nonexistent-key", cls=FakeCounter, storage="server", secrets=[], cache=InMemoryCache()
+            )
         assert exc_info.value.status == 409
         assert exc_info.value.code == "stale_state"
         message = exc_info.value.message.lower()
@@ -1379,7 +1440,7 @@ class TestServerStorage:
             cache=cache,
         )
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=OtherComp, secrets=[], cache=cache)
+            verify_state_token(token, cls=OtherComp, storage="server", secrets=[], cache=cache)
         assert exc_info.value.status == 403
 
     def test_missing_server_state_is_stale_before_the_class_check(self):
@@ -1395,7 +1456,7 @@ class TestServerStorage:
             cache=InMemoryCache(),
         )
         with pytest.raises(StaleStateError):
-            verify_state_token(token, cls=OtherComp, secrets=[], cache=InMemoryCache())
+            verify_state_token(token, cls=OtherComp, storage="server", secrets=[], cache=InMemoryCache())
 
     def test_server_token_without_cache_is_invalid(self):
         cache = InMemoryCache()
@@ -1408,10 +1469,10 @@ class TestServerStorage:
             storage="server",
             cache=cache,
         )
-        # A signed-mode component (no cache passed) that receives a server-style
-        # token treats it as invalid rather than crashing.
+        # A server token checked with no cache to load it from is invalid
+        # rather than a crash.
         with pytest.raises(InvalidStateError):
-            verify_state_token(token, cls=FakeCounter, secrets=[])
+            verify_state_token(token, cls=FakeCounter, storage="server", secrets=[])
 
     def test_server_payload_wrong_version_rejected(self):
         # A server-store entry written under a future protocol version must be
@@ -1425,7 +1486,7 @@ class TestServerStorage:
             ttl=None,
         )
         with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(f"ces1.{key}", cls=FakeCounter, secrets=[], cache=cache)
+            verify_state_token(f"ces1.{key}", cls=FakeCounter, storage="server", secrets=[], cache=cache)
         assert exc_info.value.status == 403
         assert "malformed" in exc_info.value.message.lower()
 
@@ -1436,14 +1497,14 @@ class TestResignFlow:
         first = mint_state_token(
             CounterState(count=1, label="a"), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=None, max_bytes=8192
         )
-        verified = verify_state_token(first, cls=FakeCounter, secrets=[SIGNING_KEY])
+        verified = verify_state_token(first, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         rebuilt = CounterState(**verified.state_kwargs)
         applied = apply_state_updates(rebuilt, {"count": 9}, model_fields=("count", "label"))
         assert applied == ("count",)
         assert rebuilt.count == 9
         second = mint_state_token(rebuilt, class_id=CLASS_ID, secret=SIGNING_KEY, max_age=None, max_bytes=8192)
         assert second != first
-        assert verify_state_token(second, cls=FakeCounter, secrets=[SIGNING_KEY]).state_kwargs == {
+        assert verify_state_token(second, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY]).state_kwargs == {
             "count": 9,
             "label": "a",
         }

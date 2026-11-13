@@ -325,7 +325,7 @@ class TestHappyPaths:
         state_action, event_action, data_action = item["actions"]
         # The refreshed token carries the mutated state.
         assert state_action["targetRenderId"] == "c9zk1q00"
-        verified = verify_state_token(state_action["stateToken"], cls=counter, secrets=[SIGNING_KEY])
+        verified = verify_state_token(state_action["stateToken"], cls=counter, storage="signed", secrets=[SIGNING_KEY])
         assert verified.state_kwargs == {"count": 0, "name": "Tally"}
         assert state_action["publicState"] == {"count": 0, "name": "Tally"}
         # The handler did not address the dispatch, so the server
@@ -408,7 +408,9 @@ class TestStateResign:
         [item] = result["results"]
         kinds = [action["action"] for action in item["actions"]]
         assert kinds == ["state", "data"]
-        verified = verify_state_token(item["actions"][0]["stateToken"], cls=Bumper, secrets=[SIGNING_KEY])
+        verified = verify_state_token(
+            item["actions"][0]["stateToken"], cls=Bumper, storage="signed", secrets=[SIGNING_KEY]
+        )
         assert verified.state_kwargs["count"] == 11
         # The browser shows these values in `$state`; the token alone would leave it stale.
         assert item["actions"][0]["publicState"] == {"count": 11, "name": "Counter"}

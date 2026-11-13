@@ -65,6 +65,7 @@ from citry._django_startup import start_django
 from citry._path_checks import PathLookup, register_path_checker
 from citry._sub_path import normalize_sub_path
 from citry.contrib._path_lookup import files_beside, path_below
+from citry.settings import is_usable_secret
 from citry.util.routing import (
     BODYLESS_METHODS,
     RouteHeaders,
@@ -635,7 +636,7 @@ def secret() -> str | list[str]:
     follows the rotation: ``SECRET_KEY`` signs new values, and a value signed
     with any of the fallback keys still verifies, so values Citry already put
     in visitors' pages keep verifying until you remove the old key. Empty
-    fallback entries are skipped.
+    and whitespace-only fallback entries are skipped.
 
     The keys are read when this is called, so Django settings must be
     configured by then (in a normal Django startup they already are).
@@ -689,9 +690,10 @@ def secret() -> str | list[str]:
         if not isinstance(key, str):
             msg = f"Django's SECRET_KEY_FALLBACKS[{index}] must be a string, got {type(key).__name__}."
             raise TypeError(msg)
-        # An empty entry, such as an unset environment variable, is no key at
-        # all; Citry refuses empty keys, so skip it rather than fail every render.
-        if key:
+        # An empty or whitespace-only entry, such as an unset environment
+        # variable, is no key at all; Citry refuses such keys at startup, so
+        # skip it here, using the same rule.
+        if is_usable_secret(key):
             fallbacks.append(key)
     # A project without fallbacks gets the same plain string as before, so
     # code that treats the result as one key keeps working.

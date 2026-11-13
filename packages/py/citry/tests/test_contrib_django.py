@@ -280,9 +280,10 @@ def test_secret_skips_empty_fallbacks_and_reaches_the_citry_settings(monkeypatch
 
     from citry.contrib.django import secret
 
-    # An unset environment variable often turns into "", which is no key.
+    # An unset environment variable often turns into "" (or a stray space),
+    # which is no key.
     fresh = LazySettings()
-    fresh.configure(SECRET_KEY="current-key", SECRET_KEY_FALLBACKS=("", "old-key"))  # noqa: S106
+    fresh.configure(SECRET_KEY="current-key", SECRET_KEY_FALLBACKS=("", "old-key", "  "))  # noqa: S106
     monkeypatch.setattr("django.conf.settings", fresh)
 
     assert Citry(secret=secret()).settings.secret == ["current-key", "old-key"]
@@ -334,13 +335,15 @@ def test_secret_signs_with_the_current_key_and_verifies_a_fallback_token(monkeyp
 
     # A token minted before the rotation, with the key that is now a fallback,
     # still verifies, and so does a new one signed with the current key.
-    assert verify_state_token(mint("old-key"), cls=Owner, secrets=keys).state_kwargs == {"count": 3}
-    assert verify_state_token(mint(keys), cls=Owner, secrets=keys).state_kwargs == {"count": 3}
+    assert verify_state_token(mint("old-key"), cls=Owner, storage="signed", secrets=keys).state_kwargs == {"count": 3}
+    assert verify_state_token(mint(keys), cls=Owner, storage="signed", secrets=keys).state_kwargs == {"count": 3}
     # New tokens are signed with the current key alone: a list holding only
     # the current key verifies them, and one holding only the old key does not.
-    assert verify_state_token(mint(keys), cls=Owner, secrets=["current-key"]).state_kwargs == {"count": 3}
+    assert verify_state_token(mint(keys), cls=Owner, storage="signed", secrets=["current-key"]).state_kwargs == {
+        "count": 3
+    }
     with pytest.raises(StateTokenError):
-        verify_state_token(mint(keys), cls=Owner, secrets=["old-key"])
+        verify_state_token(mint(keys), cls=Owner, storage="signed", secrets=["old-key"])
 
 
 def test_secret_error_when_django_is_not_configured(monkeypatch):

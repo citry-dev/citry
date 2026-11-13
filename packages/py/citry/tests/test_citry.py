@@ -339,6 +339,14 @@ class TestCitryComponentAssignment:
         assert not c2.has("compa")
 
 
+class _LyingStr(str):
+    # A str subclass could report any strip() result, so settings refuse it.
+    __slots__ = ()
+
+    def strip(self, chars=None):
+        return "not empty"
+
+
 class TestSecretAndEventRegistries:
     def test_defaults(self):
         c = Citry()
@@ -357,6 +365,43 @@ class TestSecretAndEventRegistries:
 
     def test_secret_string_and_list_forms_are_equivalent(self):
         assert CitrySettings(secret="k1") == CitrySettings(secret=["k1"])  # noqa: S106 - a dummy test secret
+
+    def test_secret_tuple_is_stored_as_a_list(self):
+        assert CitrySettings(secret=("k1", "k2")).secret == ["k1", "k2"]
+
+    @pytest.mark.parametrize(
+        ("secret", "where"),
+        [
+            ("", "Citry secret "),
+            ("   ", "Citry secret "),
+            (["k1", ""], "Citry secret[1] "),
+            (["", "k1"], "Citry secret[0] "),
+            (["k1", " \t"], "Citry secret[1] "),
+        ],
+    )
+    def test_an_empty_secret_entry_is_refused(self, secret, where):
+        # Every entry verifies signed values, so an empty one (an unset
+        # environment variable) would let anyone sign a value Citry accepts.
+        with pytest.raises(ValueError, match="empty or only whitespace") as exc_info:
+            Citry(secret=secret)
+        assert str(exc_info.value).startswith(where)
+
+    @pytest.mark.parametrize(
+        ("secret", "where"),
+        [
+            (b"k1", "Citry secret must be a str, a list"),
+            (123, "Citry secret must be a str, a list"),
+            ({"k1": 1}, "Citry secret must be a str, a list"),
+            ((k for k in ["k1"]), "Citry secret must be a str, a list"),
+            (["k1", None], "Citry secret[1] must be a plain str, got NoneType"),
+            (["k1", b"k2"], "Citry secret[1] must be a plain str, got bytes"),
+            (["k1", _LyingStr("k2")], "Citry secret[1] must be a plain str, got _LyingStr"),
+        ],
+    )
+    def test_a_secret_that_is_not_text_is_refused(self, secret, where):
+        with pytest.raises(TypeError) as exc_info:
+            CitrySettings(secret=secret)
+        assert str(exc_info.value).startswith(where)
 
     def test_secret_list_is_copied_at_construction(self):
         # The settings hold their own copy: mutating the caller's list after
