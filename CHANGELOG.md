@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** a `c-bind` key such as `":row"` or `"v-slot"` on
+  `<c-slot>` or `<c-fill>` now raises `VueCodeError`, the error that
+  elements and component tags already raise for such a key, instead of
+  `RuntimeError`. The render failed before too. Code that catches
+  `RuntimeError` around it must catch `VueCodeError` or `TypeError`
+  as well.
+
 ### Fixes
 
 - **Citry imports on Pyodide again:** Citry 0.8.0 failed to import on

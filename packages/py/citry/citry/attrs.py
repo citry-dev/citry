@@ -108,8 +108,11 @@ class VueCodeError(TypeError):
     The check runs on HTML elements and component tags, on every page,
     while the template renders. It runs even on a page that does not start
     Vue, so the same template never works on one page and fails on another.
+    A `c-bind` mapping on `<c-slot>` or `<c-fill>` is checked the same way,
+    so a key such as `":row"` or `"v-slot"` raises this error there too.
     Citry's own `@c-*` event bindings and `:c-*` State bindings are not
-    Vue code, so `c-bind` may still carry them.
+    Vue code, so `c-bind` may still carry them on an HTML element.
+    `<c-slot>` and `<c-fill>` refuse them with `RuntimeError`.
 
     `VueCodeError` subclasses `TypeError`, so code that catches
     `TypeError` around a render keeps working.

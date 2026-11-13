@@ -5,8 +5,9 @@ A name starting with `v-`, `:`, `.`, `^`, `@`, or `#` (in any letter case)
 is a Vue directive, binding, listener, or slot. When such a name comes from a
 `c-bind` mapping, a `c-*` attribute, or an `on_attrs_resolved` hook, the
 template fails while it renders with `citry.VueCodeError`, on HTML elements
-and component tags, whether or not the page starts Vue. Every test calls
-`render()` only, so each proves the error comes before any serialization.
+and component tags, whether or not the page starts Vue. A `c-bind` mapping on
+`<c-slot>` or `<c-fill>` fails the same way. Every test calls `render()` only,
+so each proves the error comes before any serialization.
 """
 
 from __future__ import annotations
@@ -23,6 +24,9 @@ from citry._vue import leaf_program
 
 # One key per Vue prefix, plus an uppercase spelling: HTML names ignore case.
 VUE_KEYS = ["v-if", ":title", ".prop", "^title", "@click", "#item", "V-ON:click"]
+
+# `$c-tr` binding names, in the spellings the binding parser treats as one family.
+TRANSLATION_KEYS = ["$c-tr:title", "$C-TR.x", "$c-tr[title]", "$c-tr"]
 
 # Names that look close to Vue syntax but are plain attributes.
 PLAIN_KEYS = ["x-on:click", "x-bind:class", "data-v-x", "aria-label", "hx-on:click", "hx-on::after-request"]
@@ -59,6 +63,43 @@ def _page(
         body["simple"] = simple
     if messages is not None:
         body["messages"] = messages
+    return type("Page", (Component,), body)
+
+
+def _slot_page(
+    *,
+    child: str,
+    page: str,
+    child_data: dict[str, Any] | None = None,
+    page_data: dict[str, Any] | None = None,
+    vue: bool = False,
+) -> type[Component]:
+    """
+    Build a page whose template uses a ``Child`` component, for a ``<c-slot>`` or ``<c-fill>`` under test.
+
+    ``child`` and ``page`` are the two templates, and each component reads
+    its own data dict. ``vue`` adds component JS to the page so it starts Vue.
+    """
+    app = Citry(autodiscover=False)
+    child_values = dict(child_data or {})
+    page_values = dict(page_data or {})
+    # Creating the class registers it with `app`, so the page's `<c-child>` finds it.
+    type(
+        "Child",
+        (Component,),
+        {
+            "citry": app,
+            "template": child,
+            "template_data": staticmethod(lambda _kwargs, _slots: dict(child_values)),
+        },
+    )
+    body: dict[str, Any] = {
+        "citry": app,
+        "template": page,
+        "template_data": staticmethod(lambda _kwargs, _slots: dict(page_values)),
+    }
+    if vue:
+        body["js"] = "$component({})"
     return type("Page", (Component,), body)
 
 
@@ -243,6 +284,137 @@ class TestDynamicElement:
     def test_c_attribute_fails_at_render(self, key: str) -> None:
         page = _page(f'<div><c-element c-is="tag" c-{key}="value" /></div>', {"tag": "p", "value": "go()"}, vue=False)
         assert f"'c-{key}' on <c-element> sets {key!r}" in str(_render_error(page))
+
+
+class TestSlotTag:
+    @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
+    @pytest.mark.parametrize("key", [*VUE_KEYS, "v-slot", "V-SLOT"])
+    def test_c_bind_key_fails_at_render(self, key: str, vue: bool) -> None:
+        page = _slot_page(
+            child='<c-slot c-bind="attrs" />',
+            page="<c-child>x</c-child>",
+            child_data={"attrs": {key: "go()"}},
+            vue=vue,
+        )
+        assert f"Vue directive {key!r} is not supported on '<c-slot>'" in str(_render_error(page))
+
+    @pytest.mark.parametrize("removed", [None, False])
+    def test_c_bind_key_fails_even_with_a_removing_value(self, removed: object) -> None:
+        # The key is Python data naming Vue code, whatever its value.
+        page = _slot_page(
+            child='<c-slot c-bind="attrs" />',
+            page="<c-child>x</c-child>",
+            child_data={"attrs": {":row": removed}},
+        )
+        assert "Vue directive ':row' is not supported on '<c-slot>' through 'c-bind'" in str(_render_error(page))
+
+    @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
+    @pytest.mark.parametrize("key", TRANSLATION_KEYS)
+    def test_translation_binding_key_fails_at_render(self, key: str, vue: bool) -> None:
+        page = _slot_page(
+            child='<c-slot c-bind="attrs" />',
+            page="<c-child>x</c-child>",
+            child_data={"attrs": {key: "{ x: 1 }"}},
+            vue=vue,
+        )
+        assert f"{key!r} resolved on <c-slot>" in str(_render_error(page))
+
+    def test_citry_events_name_is_not_vue_code(self) -> None:
+        # A slot has no use for an Events binding, so it refuses one, but
+        # `@c-*` is Citry's own syntax and not Vue code, so the error is
+        # `RuntimeError`, not `VueCodeError`.
+        page = _slot_page(
+            child='<c-slot c-bind="attrs" />',
+            page="<c-child>x</c-child>",
+            child_data={"attrs": {"@c-click": "go"}},
+        )
+        with pytest.raises(RuntimeError, match="not supported on '<c-slot>'") as caught:
+            page().render()
+        assert not isinstance(caught.value, VueCodeError)
+
+    @pytest.mark.parametrize("key", ["item", *PLAIN_KEYS])
+    def test_plain_keys_still_become_slot_data(self, key: str) -> None:
+        # The fill reads the key back out of the slot data it receives.
+        page = _slot_page(
+            child='<c-slot c-bind="attrs" />',
+            page='<c-child><c-fill name="default" data="slot_data">{{ slot_data[key] }}</c-fill></c-child>',
+            child_data={"attrs": {key: "slot-value-123"}},
+            page_data={"key": key},
+        )
+        assert "slot-value-123" in page().render().serialize(deps_strategy="ignore")
+
+
+class TestFillTag:
+    @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
+    @pytest.mark.parametrize("key", [*VUE_KEYS, "v-slot", "V-SLOT"])
+    def test_c_bind_key_fails_at_render(self, key: str, vue: bool) -> None:
+        page = _slot_page(
+            child='<c-slot name="item" />',
+            page='<c-child><c-fill c-bind="attrs">x</c-fill></c-child>',
+            page_data={"attrs": {"name": "item", key: "go()"}},
+            vue=vue,
+        )
+        assert f"'c-bind' on <c-fill> got an unsupported key {key!r}." in str(_render_error(page))
+
+    @pytest.mark.parametrize("removed", [None, False])
+    def test_c_bind_key_fails_even_with_a_removing_value(self, removed: object) -> None:
+        page = _slot_page(
+            child='<c-slot name="item" />',
+            page='<c-child><c-fill c-bind="attrs">x</c-fill></c-child>',
+            page_data={"attrs": {"name": "item", "v-slot": removed}},
+        )
+        assert "'c-bind' on <c-fill> got an unsupported key 'v-slot'" in str(_render_error(page))
+
+    @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
+    @pytest.mark.parametrize("key", TRANSLATION_KEYS)
+    def test_translation_binding_key_fails_at_render(self, key: str, vue: bool) -> None:
+        page = _slot_page(
+            child='<c-slot name="item" />',
+            page='<c-child><c-fill c-bind="attrs">x</c-fill></c-child>',
+            page_data={"attrs": {"name": "item", key: "{ x: 1 }"}},
+            vue=vue,
+        )
+        assert f"{key!r} resolved on <c-fill>" in str(_render_error(page))
+
+    def test_str_subclass_cannot_hide_its_text_from_the_check(self) -> None:
+        # A subclass that lies through `casefold` or `startswith` still
+        # names `v-slot`, so the check must read the real text.
+        class Disguised(str):
+            __slots__ = ()
+
+            def casefold(self) -> str:
+                return "title"
+
+            def startswith(self, *_args: object, **_kwargs: object) -> bool:
+                return False
+
+        page = _slot_page(
+            child='<c-slot name="item" />',
+            page='<c-child><c-fill c-bind="attrs">x</c-fill></c-child>',
+            page_data={"attrs": {"name": "item", Disguised("v-slot"): "{ row }"}},
+        )
+        assert "unsupported key 'v-slot'" in str(_render_error(page))
+
+    @pytest.mark.parametrize("key", ["bogus", "@c-click", ":c-value"])
+    def test_a_key_that_is_not_vue_code_raises_runtime_error(self, key: str) -> None:
+        # An unknown key, or one of Citry's own binding names, is a mistake
+        # but not Vue code, so it raises `RuntimeError`, not `VueCodeError`.
+        page = _slot_page(
+            child='<c-slot name="item" />',
+            page='<c-child><c-fill c-bind="attrs">x</c-fill></c-child>',
+            page_data={"attrs": {"name": "item", key: "go"}},
+        )
+        with pytest.raises(RuntimeError, match=f"unsupported key {key!r}") as caught:
+            page().render()
+        assert not isinstance(caught.value, VueCodeError)
+
+    def test_the_recognized_keys_still_work(self) -> None:
+        page = _slot_page(
+            child='<c-slot name="item" />',
+            page='<c-child><c-fill c-bind="attrs">filled</c-fill></c-child>',
+            page_data={"attrs": {"name": "item"}},
+        )
+        assert "filled" in page().render().serialize(deps_strategy="ignore")
 
 
 class TestOtherRenderPaths:
