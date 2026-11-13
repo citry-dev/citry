@@ -76,6 +76,10 @@ When HTMX inserts a Citry response, Citry's runtime notices it, loads its
 CSS and JavaScript, and starts its components. HTMX needs no extension or
 helper script for this.
 
+The browser does not check the content of a `<script>` tag you write
+yourself. If your page has a Content Security Policy, add `base-uri 'self'`
+to it. See [Limit the `<base>` tag](/security/#limit-the-base-tag).
+
 In a Citry template, write a fixed HTMX attribute as plain HTML, such as
 `hx-target="#results"`. When the value comes from component data, add
 Citry's `c-` prefix: `c-hx-get="edit_url"`.

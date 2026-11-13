@@ -462,7 +462,7 @@ class TestMountedDocumentFlow:
         _widget(c)
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
         html = str(page())
-        assert '<script src="/citry/citry.js"></script>' in html
+        assert 'src="/citry/citry.js" integrity="sha384-' in html
         assert "client-side dependency manager" not in html  # not inlined
 
     def test_interactive_document_starts_native_vue_after_runtime_and_options(self):

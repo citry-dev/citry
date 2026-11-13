@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from base64 import b64encode
 from dataclasses import dataclass
 from email.message import Message
 from functools import cache, lru_cache
-from hashlib import sha256
+from hashlib import sha256, sha384
 from typing import TYPE_CHECKING
 
 from citry.util.routing import RouteResponse
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from citry.util.routing import RouteRequest
 
 PUBLIC_ASSET_CORS_HEADERS: tuple[tuple[str, str], ...] = (("Access-Control-Allow-Origin", "*"),)
@@ -122,6 +125,28 @@ class _OwnedResource:
         """Return the bytes sent by every Citry web adapter."""
         return self.content.encode() if isinstance(self.content, str) else self.content
 
+    @property
+    def integrity(self) -> str:
+        """Return the ``integrity`` value of this file's bytes."""
+        return _integrity(self.content)
+
+    def fetch_attrs(self, declared: Mapping[str, object]) -> dict[str, str]:
+        """
+        Return the attributes that make the browser refuse any other bytes at this URL.
+
+        ``declared`` holds the attributes the tag already has. HTML attribute
+        names ignore case, so a value set as ``CrossOrigin`` still counts and
+        stays as its author wrote it: writing a second spelling would make
+        the tag carry both.
+        """
+        names = {name.lower() for name in declared}
+        attrs: dict[str, str] = {}
+        if "integrity" not in names:
+            attrs["integrity"] = self.integrity
+        if "crossorigin" not in names:
+            attrs["crossorigin"] = OWNED_ASSET_CROSSORIGIN
+        return attrs
+
     def response(self) -> RouteResponse:
         """Build the route response without changing the content representation."""
         # Every owned resource is a public JS or CSS file, and the browser
@@ -159,6 +184,13 @@ class _OwnedResource:
         if request is not None and _etag_matches(request.headers.get("if-none-match", ""), etag):
             return RouteResponse(content=b"", content_type=self.content_type, status=304, headers=headers)
         return RouteResponse(content=self.content, content_type=self.content_type, headers=headers)
+
+
+@lru_cache(maxsize=256)
+def _integrity(content: str | bytes) -> str:
+    """Return the SHA-384 ``integrity`` value for one file, kept so each render does not hash the file again."""
+    body = content.encode() if isinstance(content, str) else content
+    return f"sha384-{b64encode(sha384(body).digest()).decode('ascii')}"
 
 
 @lru_cache(maxsize=64)

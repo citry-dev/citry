@@ -717,9 +717,14 @@ class CitrySettings:
             current behavior, ``"warn"`` inventories client requirements,
             ``"omit"`` leaves Citry-managed JavaScript out, and ``"forbid"``
             rejects rendered subtrees that require executable client behavior.
-        security_script_integrity: Script integrity policy. ``"off"`` does
-            not compute security digests; ``"citry"`` collects SHA-384
-            metadata for structured scripts whose bytes Citry can prove.
+        security_script_integrity: Whether Citry reports script hashes.
+            Under both values, the tags Citry writes for files it serves
+            carry ``integrity``, so the browser refuses a file with
+            different content. ``"off"`` reports no hashes. ``"citry"`` also
+            lists SHA-384 hashes of ``Script`` objects, inline ones included,
+            in [`SerializedSecurity`][citry.SerializedSecurity] when Citry
+            knows their exact content, and raises ``TypeError`` for a
+            ready-made tag, whose content it cannot read.
         ssr: Send each interactive Vue document's content in its HTML. On by
             default: the server writes the page for Vue to adopt
             ("hydrate"), and a page it cannot write that way carries Citry's

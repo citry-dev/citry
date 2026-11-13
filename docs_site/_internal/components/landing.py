@@ -982,7 +982,7 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
             "<li>Warning - Uses regular Vue, prints all incompatibilities, but doesn't block you. Use for development.</li>"
             "</ul>"
             "<br/>"
-            "<p>Optionally add verified SHA-384 integrity to the scripts.</p>"
+            "<p>Optionally get SHA-384 hashes of the scripts for your CSP header.</p>"
             "</div>",
         ),
         "file": "csp.py",

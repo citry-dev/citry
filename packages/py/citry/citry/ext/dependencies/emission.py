@@ -26,7 +26,7 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from citry._owned_resource import JAVASCRIPT_CONTENT_TYPE, OWNED_ASSET_CROSSORIGIN, _OwnedResource
+from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, OWNED_ASSET_CROSSORIGIN, _OwnedResource
 from citry.assets import HasHtml
 from citry.citry_render import CitryRender, selected_render_ids
 from citry.ext.dependencies.routes import RUNTIME_PATH, asset_content_type, runtime_url, script_url
@@ -44,11 +44,14 @@ from citry.ext.dependencies.types import Dependency, Script, Style
 from citry.util.html import Markup, script_json
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
     from citry.citry import Citry
     from citry.citry_context import CitryContext
     from citry.component import Component
+    from citry.ext.dependencies.extension import _DependencyCacheCapture
     from citry.ext.dependencies.types import DependencyRecord
     from citry.extension import OnSerializeContext
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
@@ -498,9 +501,9 @@ def _resolve_records(
     with_client_js: bool,
     prepared_vue: bool = False,
     as_urls: bool = False,
-    attach_owned_resources: bool = False,
     script_security: _ScriptSecurityMaterializer | None = None,
     allow_prerendered: bool = False,
+    captures: Mapping[DependencyRecord, _DependencyCacheCapture | None] | None = None,
 ) -> _Resolved:
     """
     Turn the collected records into the ``scripts`` / ``styles`` lists and
@@ -518,9 +521,9 @@ def _resolve_records(
     With ``with_client_js`` off (the "simple" strategy), JavaScript variables
     are skipped because they require the native Vue app.
 
-    With ``as_urls`` on, component and variables assets become URL entries.
-    ``attach_owned_resources`` binds JavaScript URLs to exact cached response
-    bytes for integrity-mode serialization.
+    With ``as_urls`` on, component and variables assets become URL entries,
+    each bound to the exact bytes the route serves so its tag can carry their
+    hash. ``captures`` holds the ``css_data()`` stylesheet each render produced.
     """
     mounted = citry.mounted_prefix is not None
 
@@ -582,28 +585,23 @@ def _resolve_records(
             if as_urls:
                 if has_component_asset("js", comp_cls):
                     cache_component_js(comp_cls)
-                    if attach_owned_resources:
-                        resource = _cached_js_resource(comp_cls)
-                        if resource is None:
-                            msg = f"Cannot prove the response bytes for Component.js of {comp_cls.class_id!r}."
-                            raise RuntimeError(msg)
-                        scripts.append(_owned_script(resource, kind="component", origin_class_id=comp_cls.class_id))
-                    else:
-                        scripts.append(
-                            Script(
-                                url=script_url(comp_cls, "js"),
-                                kind="component",
-                                origin_class_id=comp_cls.class_id,
-                            )
-                        )
+                    resource = _cached_js_resource(comp_cls)
+                    if resource is None:
+                        msg = f"Cannot prove the response bytes for Component.js of {comp_cls.class_id!r}."
+                        raise RuntimeError(msg)
+                    scripts.append(_owned_script(resource, kind="component", origin_class_id=comp_cls.class_id))
                 if has_component_asset("css", comp_cls):
                     cache_component_css(comp_cls)
+                    resource = _cached_css_resource(comp_cls)
+                    if resource is None:
+                        msg = f"Cannot prove the response bytes for Component.css of {comp_cls.class_id!r}."
+                        raise RuntimeError(msg)
                     styles.append(
-                        Style(
-                            url=script_url(comp_cls, "css"),
-                            attrs=css_class_attr,
+                        _owned_style(
+                            resource,
                             kind="component",
                             origin_class_id=comp_cls.class_id,
+                            attrs=css_class_attr,
                         )
                     )
             else:
@@ -648,13 +646,7 @@ def _resolve_records(
         # needs a shared cache backend.
         if record.css_vars_hash is not None:
             if as_urls:
-                instance_styles.append(
-                    Style(
-                        url=script_url(comp_cls, "css", record.css_vars_hash),
-                        kind="variables",
-                        origin_class_id=comp_cls.class_id,
-                    )
-                )
+                instance_styles.append(_variables_style(comp_cls, record, captures))
             else:
                 vars_css = get_script("css", comp_cls, record.css_vars_hash)
                 if vars_css is not None:
@@ -752,6 +744,59 @@ def _owned_script(
     return script
 
 
+def _owned_style(
+    resource: _OwnedResource,
+    *,
+    kind: Literal["component", "extra"],
+    origin_class_id: str | None = None,
+    attrs: dict[str, str | bool] | None = None,
+) -> Style:
+    style = Style(
+        kind=kind,
+        url=resource.url,
+        attrs={} if attrs is None else attrs,
+        origin_class_id=origin_class_id,
+    )
+    style._owned_resource = resource
+    return style
+
+
+def _cached_css_resource(comp_cls: type[Component]) -> _OwnedResource | None:
+    dependency = get_component_script("css", comp_cls)
+    if dependency is None:
+        return None
+    if not isinstance(dependency, Style) or dependency.content is None:
+        msg = f"Cached CSS for component {comp_cls.class_id!r} is not an inline Style."
+        raise TypeError(msg)
+    return _OwnedResource(
+        url=script_url(comp_cls, "css"),
+        content=dependency.content,
+        content_type=CSS_CONTENT_TYPE,
+    )
+
+
+def _variables_style(
+    comp_cls: type[Component],
+    record: DependencyRecord,
+    captures: Mapping[DependencyRecord, _DependencyCacheCapture | None] | None,
+) -> Style:
+    """Link one ``css_data()`` stylesheet, bound to the bytes this render produced."""
+    url = script_url(comp_cls, "css", record.css_vars_hash)
+    style = Style(url=url, kind="variables", origin_class_id=comp_cls.class_id)
+    # The render's own capture comes first: the store may have dropped the
+    # stylesheet since, and a lost entry must not leave the link without its hash.
+    capture = None if captures is None else captures.get(record)
+    if capture is not None and capture.css is not None:
+        content = json.loads(capture.css.cache_value)["content"]
+    else:
+        # A record added without a capture has only the store to read from.
+        stored = get_script("css", comp_cls, record.css_vars_hash)
+        content = None if stored is None else stored.content
+    if content is not None:
+        style._owned_resource = _OwnedResource(url=url, content=content, content_type=CSS_CONTENT_TYPE)
+    return style
+
+
 def _cached_js_resource(comp_cls: type[Component]) -> _OwnedResource | None:
     dependency = get_component_script("js", comp_cls)
     if dependency is None:
@@ -787,14 +832,10 @@ def _preloader_script(
     """
     resource = _runtime_resource(citry)
     url_literal = json.dumps(resource.url).replace("<", "\\u003c")
-    integrity_line = ""
-    if script_security is not None and script_security.integrity_enabled:
-        integrity = script_security.owned_integrity(resource)
-        # The browser checks integrity only on a CORS response, and Citry's
-        # runtime route sends the header that allows one.
-        integrity_line = (
-            f"  s.integrity = {json.dumps(integrity)};\n  s.crossOrigin = {json.dumps(OWNED_ASSET_CROSSORIGIN)};\n"
-        )
+    # The browser checks integrity only on a CORS response, and Citry's
+    # runtime route sends the header that allows one.
+    integrity_line = f"  s.integrity = {json.dumps(resource.integrity)};\n"
+    crossorigin_line = f"  s.crossOrigin = {json.dumps(OWNED_ASSET_CROSSORIGIN)};\n"
     nonce_line = ""
     if script_security is not None and script_security.csp_nonce is not None:
         nonce_line = f"  s.nonce = {json.dumps(script_security.csp_nonce)};\n"
@@ -810,6 +851,7 @@ def _preloader_script(
         '  var s = d.createElement.call(document, "script");\n'
         f"  s.src = {url_literal};\n"
         f"{integrity_line}"
+        f"{crossorigin_line}"
         f"{nonce_line}"
         '  member("head").appendChild(s);\n'
         "}\n"
@@ -861,9 +903,9 @@ def _emit_fragment(
             records,
             with_client_js=True,
             as_urls=True,
-            attach_owned_resources=script_security is not None and script_security.integrity_enabled,
             script_security=script_security,
             allow_prerendered=vue_mount is None,
+            captures=ctx.context.extra.get(EXTRA_KEY),
         )
     else:
         resolved = _Resolved(
@@ -1035,9 +1077,7 @@ def _copy_for_hooks(dependency: Dependency) -> Dependency:
     """
     Copy one dependency so a hook's in-place edits stay in this serialization.
 
-    ``copy`` keeps every field, including a Script's attached response bytes,
-    which ``dataclasses.replace`` would drop. ``attrs`` gets its own dict
-    because it is the field hooks edit in place.
+    ``attrs`` gets its own dict because it is the field hooks edit in place.
     """
     copied = copy(dependency)
     copied.attrs = dict(dependency.attrs)
@@ -1116,7 +1156,7 @@ def _entry_to_style(entry: Any, media_type: str, comp_cls: type[Component], *, f
     if isinstance(entry, Path):
         resource = _maybe_serve_local_file(entry, comp_cls)
         if resource is not None:
-            return Style(url=resource.url, attrs=media_attrs, kind="extra", origin_class_id=comp_cls.class_id)
+            return _owned_style(resource, kind="extra", origin_class_id=comp_cls.class_id, attrs=media_attrs)
         return Style(content=_read_asset(entry), attrs=media_attrs, kind="extra", origin_class_id=comp_cls.class_id)
     if isinstance(entry, HasHtml) and not isinstance(entry, str):
         return _prerendered(entry, comp_cls, fragment=fragment)

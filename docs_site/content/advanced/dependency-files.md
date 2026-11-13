@@ -248,4 +248,4 @@ trust.
 Prefer `Script` and `Style`: Citry's browser runtime cannot load a
 ready-made tag. Serialization raises `TypeError` for one on an interactive
 page, in an [HTML fragment](/advanced/html-fragments/), or when you serialize
-with a CSP nonce or script integrity checks.
+with a CSP nonce or `security_script_integrity="citry"`.

@@ -525,8 +525,9 @@ class CitryRender:
             security_csp: Override this render's engine-level CSP policy.
             security_javascript: Override this render's engine-level
                 JavaScript delivery policy.
-            security_script_integrity: Override this render's engine-level
-                script integrity policy.
+            security_script_integrity: Override
+                [`security_script_integrity`][citry.CitrySettings.security_script_integrity]
+                for this render.
             ssr: Override the engine's initial Vue HTML hydration setting.
                 ``None`` uses the [`ssr`][citry.CitrySettings.ssr] setting.
 

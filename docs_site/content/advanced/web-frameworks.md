@@ -400,8 +400,9 @@ every request, replacing any value the visitor sent. On Flask, wrap
 [Order WSGI middleware](#order-wsgi-middleware) shows. Otherwise a visitor
 can make the page load scripts from another path on your site, and a
 shared HTTP cache that ignores the header can serve that page to others.
-With [`security_script_integrity="citry"`](/security/#pin-citry-managed-scripts-with-sri),
-the browser also refuses a Citry script whose content does not match.
+On the tags Citry writes, the browser also checks each file against a hash
+and refuses different content. See
+[Pin files with SRI](/security/#pin-citry-managed-scripts-with-sri).
 
 A trailing `/` is ignored, and `/` (Flask's default `APPLICATION_ROOT`)
 means the site root. Citry ignores a sub-path that does not start with a
@@ -514,5 +515,6 @@ A missing file gets `404` with `no-store`, because another worker may
 store it a moment later.
 
 A CDN or proxy in front of your app should pass these headers through
-unchanged. If it stores a runtime anyway, visitors keep the old one after
-you upgrade Citry.
+unchanged. If it stores a runtime anyway, the browser refuses the old file
+after you upgrade Citry. See
+[Keep files unchanged](/security/#keep-files-unchanged).

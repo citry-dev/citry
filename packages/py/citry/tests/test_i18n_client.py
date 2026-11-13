@@ -289,7 +289,7 @@ def test_mounted_document_inlines_only_the_current_locale_partition() -> None:
 
     assert set(requirement["artifacts"]) == {"en-US"}
     assert manifest["messages_url"] == "/citry/ext/i18n/messages"
-    assert '<script src="/citry/ext/i18n/runtime.js"></script>' in html
+    assert 'src="/citry/ext/i18n/runtime.js" integrity="sha384-' in html
 
 
 def test_fragment_attaches_literal_client_roots_to_its_external_provider() -> None:

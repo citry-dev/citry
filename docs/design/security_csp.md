@@ -475,14 +475,16 @@ citry = Citry(
 )
 ```
 
-`security_script_integrity="citry"` asks Citry to collect SHA-384 digests for
-structured scripts. Inline digests are returned as CSP metadata. External
-Citry-owned digests are also emitted in matching `integrity` attributes. An
+Citry writes matching `integrity` attributes on every tag for a file it owns
+under both values, because a `<base>` element or a rewritten URL could
+otherwise point that tag at another file. `security_script_integrity="citry"`
+adds the reporting: Citry collects SHA-384 digests for structured scripts and
+returns inline digests as CSP metadata. An
 explicit integrity value on a Citry-owned resource is verified against the
 owned bytes; a mismatch is an error. An explicit value on a third-party URL is
 shape-checked and preserved, but reported as unverified because Citry does not
 fetch that resource. With the setting off, existing explicit attributes are
-still preserved, but Citry does not calculate or promise security metadata.
+still preserved, and Citry reports no security metadata.
 
 The trust and byte-ownership rules are:
 

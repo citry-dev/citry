@@ -15,7 +15,7 @@ leaves others to you:
 | Another site posts to your event routes | Rejects cross-site calls | Keep your framework's CSRF check on |
 | A template expression reads or calls something it should not | Runs expressions in a sandbox that refuses known unsafe names and calls | Put in the template context only objects that every template author may read and call |
 | A secret ends up in the page source | Refuses to send a value wrapped in `Secret` | Wrap each secret in `Secret` and read it on the server |
-| Injected scripts on the page | Nothing until you opt in | Send a Content Security Policy with a nonce |
+| Injected scripts on the page | Adds a hash to the tags of files it serves; the rest needs your opt-in | Send a [Content Security Policy](#apply-a-request-csp-nonce-centrally) with a nonce and `base-uri 'self'` |
 
 The first two rows apply to every app that uses
 [server events](/events/), and the next two to every app. The Content
@@ -1033,7 +1033,8 @@ serialized = page.render().serialize_result(csp_nonce=nonce)
 policy = (
     "default-src 'self'; "
     f"script-src 'self' 'nonce-{nonce}'; "
-    f"style-src 'self' 'nonce-{nonce}'"
+    f"style-src 'self' 'nonce-{nonce}'; "
+    "base-uri 'self'"
 )
 ```
 
@@ -1070,6 +1071,39 @@ directly in a template, so the browser blocks it. Move that code to
     When you cache a full response, cache its HTML and its CSP header as
     one unit. Cached HTML served with a new header carries the wrong nonce,
     and the browser blocks its scripts.
+
+### Limit the `<base>` tag { #limit-the-base-tag }
+
+Add `base-uri 'self'` to your policy, as the example above does. A nonce
+stops injected script tags, but it does not stop injected markup from
+changing where your own trusted tags load their files.
+
+A `<base>` tag changes where the browser looks for the relative URLs that
+follow it, even ones that start with `/`. A tag with a valid nonce still
+runs the file its URL now points to. The nonce says the tag is trusted. It
+does not say where the file comes from.
+
+`default-src` does not cover `<base>`. `base-uri 'self'` lets a `<base>`
+tag point only at your own site, so it can still move relative URLs within
+your site. If your pages have no `<base>` tag, use `base-uri 'none'`: the
+browser then ignores the address in any `<base>` tag.
+
+Citry [adds a hash to the tags it writes](#pin-citry-managed-scripts-with-sri)
+for files it serves. If a `<base>` tag moves one of those files, the browser
+refuses it and the page's scripts do not start. The wrong file does not run,
+but the page still breaks, so you still need `base-uri`. Citry adds no hash
+to these:
+
+- A file you list by URL, such as `Script(url="/static/app.js")` or a URL
+  in a [`Dependencies`][citry.Component.Dependencies] class. Put your own
+  `integrity` value in its `attrs`, as
+  [Third-party scripts](#third-party-scripts) shows for a file from another
+  site.
+- A `<script>` or `<link>` tag you write in a layout or template, including
+  a tag you write by hand for `/citry/citry.js`.
+- A tag that an `on_dependencies` hook points at another URL or builds as a
+  new `Script` or `Style`, because Citry keeps the file's hash on the
+  original object.
 
 ### Nonces in fragments { #html-fragments }
 
@@ -1493,12 +1527,20 @@ With `security_csp="strict"`, `"omit"` and `"forbid"` still report script
 markup written in templates, and still put the nonce on the inline styles
 they keep.
 
-## Pin scripts with SRI { #pin-citry-managed-scripts-with-sri }
+## Pin files with SRI { #pin-citry-managed-scripts-with-sri }
 
-Subresource Integrity (SRI) makes the browser run a script only when its
-bytes match a hash. With `security_script_integrity="citry"`, Citry
-computes SHA-384 hashes for the scripts it outputs and gives you the
-hashes to put in your CSP header:
+Subresource Integrity (SRI) makes the browser use a file only when its
+bytes match a hash. Citry adds an `integrity` attribute to the script and
+stylesheet tags it writes for files it serves, such as `/citry/citry.js`.
+You do not need a setting for this. Citry adds no hash to a file you list
+by URL, because it never downloads that file. You can add one yourself, as
+[Third-party scripts](#third-party-scripts) shows.
+
+### Get hashes for CSP
+
+With `security_script_integrity="citry"`, Citry also computes SHA-384
+hashes for the inline scripts it outputs and gives you these hashes, and
+those of its external scripts, to put in your CSP header:
 
 ```python
 app = Citry(security_script_integrity="citry")
@@ -1511,16 +1553,17 @@ script_sources = " ".join(
 )
 ```
 
-Citry adds an `integrity` attribute to external scripts it serves, and
-hashes each inline script in the exact form it is sent. `csp_script_hashes` lists the
-hashes, quoted, ready to add to `script-src`.
+Citry hashes each inline script in the exact form it is sent.
+`csp_script_hashes` lists the hashes, quoted, ready to add to `script-src`.
 `serialized.security.scripts` holds one record per script. Citry does not
 build the whole CSP header, because your app also owns layouts, analytics,
 and every resource outside the render.
 
-The option works together with `security_csp="strict"` but does not turn
-it on. The default is `"off"`. Any value other than `"off"` or `"citry"`
-raises `ValueError`, both in `Citry(...)` and in `serialize()`.
+`security_script_integrity` works together with `security_csp="strict"`
+but does not turn it on. The default is `"off"`, which reports no hashes
+and keeps the `integrity` attributes on Citry's own files. Any value other
+than `"off"` or `"citry"` raises `ValueError`, both in `Citry(...)` and in
+`serialize()`.
 
 ### Hash each response
 
@@ -1544,14 +1587,14 @@ hash only when the other site sends CORS headers.
 ## Keep the CORS header { #keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files }
 
 **Symptom:** the page shows its server-rendered HTML, but interactive
-components never start, and the browser console shows a CORS or
-Subresource Integrity error.
+components never start or styles are missing, and the browser console
+shows a CORS or Subresource Integrity error.
 
-Citry always adds `integrity` to the scripts and stylesheets it serves for
-interactive components, even without the option above. It loads them with
-`crossorigin="anonymous"`, and its file routes answer with
+Citry adds `integrity` to the scripts and stylesheets it serves. It writes
+those tags with `crossorigin="anonymous"`, and its file routes answer with
 `Access-Control-Allow-Origin: *`. These routes are `/citry/citry.js`, the
-component JS and CSS, and the compiled component code.
+component JS and CSS, the files a component serves with
+`local_files = "serve"`, and the compiled component code.
 
 A same-origin page needs no CORS header. Two setups make these requests
 cross-origin:
@@ -1568,3 +1611,22 @@ header through for Citry's file URLs, or to add it.
 The header is safe on these routes: they return the same public files to
 every caller and never read cookies. Citry's event, message, and preview
 routes do not send it.
+
+### Keep files unchanged
+
+The browser also refuses a file that changed after Citry sent it, even on a
+same-origin page. The file's hash in the page must match the file:
+
+- **A proxy that rewrites files.** Stop the proxy from minifying these files
+  or adding code to them, for every URL under your Citry prefix.
+- **A cache in front of Citry's files.** `/citry/citry.js` keeps its URL
+  across Citry upgrades, and Citry marks it `no-store`. A cache that ignores
+  this keeps serving the old file, so the browser refuses it until you clear
+  the cache.
+- **A cache of whole pages.** A page cached before an upgrade names the old
+  file's hash, so the browser refuses the new `citry.js`. Clear these caches
+  when you upgrade Citry.
+- **A rolling deploy.** A page from one version that loads `citry.js` from
+  another gets a file that does not match. The page's scripts do not start
+  until a reload reaches the same version. This ends when every process
+  runs the new version.

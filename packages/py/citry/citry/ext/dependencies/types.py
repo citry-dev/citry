@@ -121,9 +121,29 @@ class Dependency:
     """``class_id`` of the component class this dependency came from, when
     known. Used in error messages and for per-component hooks."""
 
+    _owned_resource: _OwnedResource | None = field(default=None, kw_only=True, repr=False, compare=False)
+    # The exact bytes Citry serves at `url`, when Citry serves that file. Rendering
+    # adds their hash to the tag, so the browser refuses another file at that URL.
+    # An init field, because `dataclasses.replace` drops a field that is not one,
+    # and an extension that rebuilt a tag that way would lose the hash unnoticed.
+
     def _render(self) -> tuple[str, dict[str, str | bool], str]:
         """Return ``(tag_name, all_attrs, content)``. Implemented by subclasses."""
         raise NotImplementedError
+
+    def _owned_fetch_attrs(self) -> dict[str, str]:
+        """
+        Return ``integrity`` and ``crossorigin`` for a file Citry serves.
+
+        Every way of writing this tag goes through ``_render()``, so this one
+        call covers documents, fragments, and the descriptors the browser
+        runtime reads. A hook that points the tag at another URL leaves the
+        attributes off, because Citry does not know the bytes at the new URL.
+        """
+        resource = self._owned_resource
+        if resource is None or self.url != resource.url:
+            return {}
+        return resource.fetch_attrs(self.attrs)
 
     def render(self) -> Markup:
         """Render as an HTML tag string."""
@@ -222,8 +242,6 @@ class Script(Dependency):
     type); ``module``/``importmap``/other types are never wrapped.
     """
 
-    _owned_resource: _OwnedResource | None = field(default=None, init=False, repr=False, compare=False)
-
     def to_json(self) -> dict[str, Any]:
         """Serialize for cache storage; ``from_json()`` reverses it."""
         return {
@@ -250,7 +268,7 @@ class Script(Dependency):
     def _render(self) -> tuple[str, dict[str, str | bool], str]:
         self._check_validity()
         if self.url:
-            all_attrs: dict[str, str | bool] = {**self.attrs, "src": self.url}
+            all_attrs: dict[str, str | bool] = {**self.attrs, "src": self.url, **self._owned_fetch_attrs()}
             content = ""
         else:
             all_attrs = self.attrs
@@ -298,7 +316,12 @@ class Style(Dependency):
     def _render(self) -> tuple[str, dict[str, str | bool], str]:
         self._check_validity()
         if self.url:
-            all_attrs: dict[str, str | bool] = {**self.attrs, "rel": "stylesheet", "href": self.url}
+            all_attrs: dict[str, str | bool] = {
+                **self.attrs,
+                "rel": "stylesheet",
+                "href": self.url,
+                **self._owned_fetch_attrs(),
+            }
             tag_name = "link"
             content = ""  # <link> has no content
         else:

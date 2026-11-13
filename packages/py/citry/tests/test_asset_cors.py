@@ -394,8 +394,9 @@ def test_integrity_mode_fragment_loader_requests_the_runtime_with_cors() -> None
     # when the browser starts the request.
     assert content.index("s.integrity") < content.index('s.crossOrigin = "anonymous"') < content.index("appendChild")
 
-    # Without integrity there is nothing to verify, so the request stays as it was.
-    assert "crossOrigin" not in (_preloader_script(app, None).content or "")
+    # The loader pins the runtime in every mode, so a page that has no
+    # script security settings gets the same two lines.
+    assert (_preloader_script(app, None).content or "") == content
 
 
 def test_integrity_mode_owned_script_tag_requests_cors_unless_declared() -> None:

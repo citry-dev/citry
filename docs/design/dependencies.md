@@ -836,8 +836,11 @@ and fragment-render actions over `Extension.urls`, as specified in
 ### 9.6 Letting any page read Citry's own JS and CSS
 
 Citry puts `integrity` on every definition, script, and stylesheet it serves
-itself, and `security_script_integrity="citry"` adds it to the runtime
-tag and component scripts. The browser checks a digest only on a response the
+itself, under every value of `security_script_integrity`, unless a hook moves
+or rebuilds the tag. A `Script` or `Style` that holds the served bytes (`_owned_resource`,
+which `dataclasses.replace` keeps) adds the attributes in
+`_render()`, so documents, fragments, and the descriptors the runtime reads
+all share that one step. The browser checks a digest only on a response the
 page may read. A page inside an iframe sandboxed without `allow-same-origin`
 has an opaque origin, so every request it makes counts as cross-origin, and
 without CORS the browser blocks the file and the page never mounts.
@@ -893,6 +896,21 @@ Error modes:
   Integrity error and the Vue app does not mount.
 - **Citry's mount sits on another origin that sends no header.** Same as
   above: integrity needs CORS from that host.
+- **A proxy changes the bytes, or a cache serves `citry.js` from an earlier
+  version.** The browser reports a Subresource Integrity error, even on a
+  same-origin page, and the file does not run or apply. A rolling deploy shows
+  the same error when a page from a new process loads `citry.js` from an old
+  one, until the visitor reloads.
+- **A cached page outlives a Citry upgrade.** The page names the old
+  `citry.js` hash at a URL that now serves the new file, so the browser refuses
+  it. The host must clear full-page caches on upgrade.
+- **A hook points an owned tag at another URL.** Citry leaves both attributes
+  off, because it does not know the bytes at the new URL. With
+  `security_script_integrity="citry"`, the same edit to a script raises.
+- **A record has no `css_data()` capture and the store has dropped the
+  stylesheet.** A static fragment links it without `integrity`, because Citry
+  holds no bytes to hash. Records from a render or a cached render always
+  carry the capture, so only a record built by hand can reach this.
 - **A third-party URL with `integrity`.** Citry does not add `crossorigin` or
   change it; the author sets it, and that host must send CORS headers.
 - **An author sets `crossorigin="use-credentials"` on an owned asset.** Citry

@@ -251,7 +251,7 @@ class _ScriptSecurityMaterializer:
         """Return SRI for a Citry-owned dynamic fetch without recording it yet."""
         if not self._collect_integrity:
             raise RuntimeError("Owned-resource integrity was requested while script integrity is disabled.")
-        return _digest(resource.body, "sha384")
+        return resource.integrity
 
     def record_owned_dynamic(
         self,
@@ -317,6 +317,10 @@ class _ScriptSecurityMaterializer:
 
         declared = _take_integrity(attrs)
         resource = dependency._owned_resource
+        # _render() pins a Citry-served file on its own, and that value is not
+        # one an author declared, so it must not be reported as verified.
+        if not any(name.lower() == "integrity" for name in dependency.attrs):
+            declared = None
         src = _canonicalize_html_attr(attrs, "src", "Script")
         _canonicalize_html_attr(attrs, "type", "Script")
 
@@ -367,7 +371,7 @@ class _ScriptSecurityMaterializer:
                 if not hmac.compare_digest(declared_bytes, expected_bytes):
                     msg = f"Integrity value {actual!r} does not match the Citry-owned bytes at {resource.url!r}."
                     raise ValueError(msg)
-            computed = _digest(resource.body, "sha384")
+            computed = resource.integrity
             declared_digests = tuple(f"{algorithm}-{encoded}" for algorithm, encoded, _, _ in declared_tokens)
             digests = declared_digests
             if not any(algorithm == "sha384" for algorithm, _, _, _ in declared_tokens):
@@ -377,9 +381,11 @@ class _ScriptSecurityMaterializer:
                 attrs["integrity"] = declared or computed
             # The browser checks integrity only on a CORS response. Citry's
             # own routes allow CORS reads, so ask for one; a crossorigin value the
-            # author set on purpose stays as written.
-            if _canonicalize_html_attr(attrs, "crossorigin", "Script") is None:
-                attrs["crossorigin"] = OWNED_ASSET_CROSSORIGIN
+            # author set on purpose stays as written. Writing it last keeps the
+            # attribute order of the tag that _render() produces in every mode.
+            crossorigin = _canonicalize_html_attr(attrs, "crossorigin", "Script")
+            attrs.pop("crossorigin", None)
+            attrs["crossorigin"] = OWNED_ASSET_CROSSORIGIN if crossorigin is None else crossorigin
             provenance: Literal["citry-computed", "declared-verified"] = (
                 "citry-computed" if declared is None else "declared-verified"
             )

@@ -69,6 +69,11 @@ the `<script src="/citry/citry.js">` tag and serialize the fragment with
 the same nonce. Otherwise the fragment does not start, and the browser
 console shows an error. See [Nonces in fragments](/security/#html-fragments).
 
+The browser does not check the content of a `<script>` tag you write
+yourself. If your page has a CSP, add `base-uri 'self'` to it, so that
+injected markup cannot point this tag at another site. See
+[Limit the `<base>` tag](/security/#limit-the-base-tag).
+
 ## Insert into other pages
 
 When the page has not loaded Citry, the fragment brings a small script that

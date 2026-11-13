@@ -264,6 +264,17 @@ change.
   you upgrade: an open page asks the visitor to reload on its next event
   call. During a rolling deploy, old and new processes reject each
   other's signed tokens until every process runs the new version.
+- Script and stylesheet tags that Citry writes for files it serves now
+  carry `integrity` and `crossorigin="anonymous"` at every
+  `security_script_integrity` value, including `/citry/citry.js` and
+  `local_files = "serve"` files. The browser now refuses a file that a
+  proxy or CDN changed, and a `citry.js` from a different version than the
+  page, so clear proxy, CDN, and whole-page caches when you upgrade. A CDN
+  that serves these files from another host must send
+  `Access-Control-Allow-Origin`. During a rolling deploy, a page can fail
+  until a reload reaches the same version.
+- The security guide now recommends `base-uri 'self'` in your Content
+  Security Policy.
 
 ### Fixes
 

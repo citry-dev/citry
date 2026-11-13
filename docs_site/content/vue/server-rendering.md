@@ -204,8 +204,8 @@ starts, or when the browser console reports a mismatch.
 
 Vue replaces the whole page's server HTML when the page:
 
-- uses a Content Security Policy, `security_javascript="warn"`, script
-  integrity, or a configured i18n extension;
+- uses a Content Security Policy, `security_javascript="warn"`,
+  `security_script_integrity="citry"`, or a configured i18n extension;
 - has a component with its own `on_dependencies()` method, or an extension
   that defines `on_dependencies()`, `on_serialize()`, `on_js_loaded()`, or
   a browser hook;
