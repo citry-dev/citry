@@ -2513,6 +2513,16 @@ class LandingPage(Component):
         white-space: nowrap;
       }
 
+      /* The advisory graphic is drawn for 720px; wider, its text would
+         outgrow the headings around it, so it stops there and centres. */
+      .landing-advisories svg {
+        display: block;
+        width: 100%;
+        max-width: 720px;
+        height: auto;
+        margin-inline: auto;
+      }
+
       .landing-content .landing-benchmark-card__note a:hover,
       .landing-content .landing-benchmark-card__note a:focus-visible {
         text-decoration: underline;

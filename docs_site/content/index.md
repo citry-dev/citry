@@ -141,6 +141,29 @@ Citry catches more errors than other Python frameworks and reports them earlier.
 </p>
 </div>
 </section>
+
+<!-- The README repeats this section. <c-advisory-watch> builds the sentence,
+the graphic, and the note from docs_site/data/advisory_watch.json through
+docs_site/scripts/advisory_watch.py, the module that writes the README block,
+so the numbers follow the data. The heading must match HEADING there; the
+readme_advisory_watch validator fails when they differ. -->
+<section class="landing-benchmark" markdown="1">
+## Monitoring vulnerabilities across the ecosystem
+
+<p class="landing-section__intro">
+<c-advisory-watch part="intro" />
+</p>
+
+<div class="landing-benchmark-card" markdown="1">
+
+<c-advisory-watch part="chart" />
+
+<p class="landing-benchmark-card__note">
+<c-advisory-watch part="note" />
+<a href="/security/#how-we-check">How we check</a>
+</p>
+</div>
+</section>
 </div>
 
 <!-- TODO: Overview video how it all works (incl VSCode, UI Lib, etc)

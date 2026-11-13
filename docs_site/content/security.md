@@ -1630,3 +1630,70 @@ same-origin page. The file's hash in the page must match the file:
   another gets a file that does not match. The page's scripts do not start
   until a reload reaches the same version. This ends when every process
   runs the new version.
+
+## How we check advisories { #how-we-check }
+
+Other web frameworks have shipped security bugs and published advisories
+about them. Citry turns Python values into HTML, CSS and JavaScript too,
+so it could repeat those bugs. This section explains how the maintainers
+check for them. You do not need to do anything for it.
+
+### Which projects we watch
+
+- Django
+- Next.js
+- Angular, with AngularJS and Angular Universal
+- Nuxt, with Nitro and h3, the server parts Nuxt runs on
+- Svelte, with SvelteKit
+- devalue, the library Svelte and Nuxt use to send data to the page
+- React, with React Server Components
+- Vue, with Vue I18n
+- Jinja, with MarkupSafe, the escaping library Jinja uses
+- django-components
+- htmx
+- Alpine.js
+
+The first review covered 456 advisories from 9 of these projects. 450
+came from GitHub. 6 appeared only in the US National Vulnerability
+Database (NVD), which the monthly job does not search, so a maintainer
+adds those by hand. htmx, Alpine.js and MarkupSafe had none.
+django-components had one, about its own CI setup, which Citry does not
+share, so it is not counted.
+
+### Review each advisory
+
+Once a month, a scheduled job asks GitHub for advisories from these
+projects that the maintainers have not reviewed yet, and lists them in an
+issue only the maintainers can see. For each one, a maintainer:
+
+1. Sorts it by the kind of bug it describes, for example text written
+   into HTML without escaping, or a file path that leaves its folder.
+2. Finds the part of Citry that would have the same bug.
+3. Tries the attack against Citry with a harmless test value, or reads
+   the code when a test cannot reach it.
+4. Fixes Citry if the bug is there.
+
+Some advisories do not apply. Citry has no image optimizer, for example,
+so an image optimizer bug has nothing to check.
+
+### Check each code change
+
+The maintainers keep the kinds of bug from these advisories as a
+checklist. Before a change to the code of Citry's published packages
+merges, a reviewer other than its author picks the kinds of bug the
+change could bring in and checks the change for each one. Short records
+of past security reviews are in
+[`docs/security/reviews/`](https://github.com/citry-dev/citry/tree/main/docs/security/reviews).
+
+### When we find a problem
+
+If a released version has the problem, we handle it in a private
+advisory, as
+[SECURITY.md](https://github.com/citry-dev/citry/blob/main/SECURITY.md)
+describes: we release the fix first and publish the advisory after. If
+no release has it yet, we fix it in a public pull request. To report a
+problem you found, follow SECURITY.md.
+
+Once a fix is released, we publish an advisory for the problem.
+[Citry's published advisories](https://github.com/citry-dev/citry/security/advisories)
+lists them.

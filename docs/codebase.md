@@ -1507,6 +1507,44 @@ It also fails when the landing page loses a section heading the README
 repeats (`HEADINGS` in `benchmark_readme.py`). It does not compare pixels, so
 after a style change to a chart, rerun the script yourself.
 
+#### README advisory graphic
+
+The README section "Monitoring vulnerabilities across the ecosystem" says
+how many security advisories from other frameworks and libraries the
+maintainers checked Citry against, with a graphic of each project and its
+count. The landing page shows the same section. Both are built from
+`docs_site/data/advisory_watch.json`: each project's name and count, the
+total (which must equal the sum of the counts), and the month the numbers
+are as of. The counts come from the maintainers' private advisory survey
+(see CLAUDE.md, Mechanism 8).
+
+After the data changes, run:
+
+```bash
+uv run --no-sync python -m docs_site.scripts.advisory_watch
+```
+
+The script draws the graphic as two SVG files (light and dark) in
+`docs/assets/advisories/` and rewrites the README block between its
+`advisory-watch` comments. It needs no browser, and the same data always
+gives the same files. Like the benchmark images, each file name holds a
+hash of the file, and the script never overwrites a file, because released
+PyPI pages keep loading the files they were published with. Commit the new
+files with the README change.
+
+Each project's circle sits at a spot picked by hand, in `POSITIONS` in
+`docs_site/scripts/advisory_watch.py`, so a new project needs a spot there;
+the script stops until it has one. The "How we check advisories" section of
+`docs_site/content/security.md` lists the watched projects and the first
+review's numbers in plain text, so update it by hand as well.
+
+The landing page prints the sentence, the graphic, and the note with
+`<c-advisory-watch part="..." />`. Its graphic is inline SVG coloured by
+the site's CSS color variables, so the theme toggle recolours it. The
+`readme_advisory_watch` validator redraws the README block and both files
+from the data and fails when they differ, when a file changed after it was
+written, or when the landing page loses the heading.
+
 #### Recording Marketplace demo GIFs
 
 The first VS Code release used this practical macOS workflow. It favors crisp,

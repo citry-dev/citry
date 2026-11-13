@@ -1,0 +1,15 @@
+{
+  "as_of": "2026-11",
+  "total": 456,
+  "projects": [
+    {"name": "Django", "count": 162},
+    {"name": "Next.js", "count": 77},
+    {"name": "Angular", "count": 65},
+    {"name": "Nuxt", "count": 55},
+    {"name": "Svelte", "count": 44},
+    {"name": "devalue", "count": 17},
+    {"name": "React", "count": 13},
+    {"name": "Vue", "count": 12},
+    {"name": "Jinja", "count": 11}
+  ]
+}

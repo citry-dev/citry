@@ -86,6 +86,33 @@ is faster.
 [How we measured](https://citry.dev/about/benchmarks/#how-the-numbers-were-taken)
 <!-- benchmark-chart:speed end -->
 
+<!-- advisory-watch start -->
+<!-- Written by `python -m docs_site.scripts.advisory_watch` from
+     docs_site/data/advisory_watch.json. Rerun it rather than
+     editing this block by hand. -->
+
+## Monitoring vulnerabilities across the ecosystem
+
+We read 456 security advisories from other frameworks and libraries and
+checked Citry for each kind of bug that could apply to it.
+
+<picture>
+  <source
+    media="(prefers-color-scheme: dark)"
+    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/advisories/advisories-2026-11-c8e03ef8d35e-dark.svg"
+  >
+  <img
+    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/advisories/advisories-2026-11-87c030fe5512-light.svg"
+    alt="Diagram: Citry&#x27;s logo in the middle, linked to each project whose advisories we read, with that project&#x27;s number of advisories: Django 162, Next.js 77, Angular 65, Nuxt 55, Svelte 44, devalue 17, React 13, Vue 12, Jinja 11."
+    width="720"
+  >
+</picture>
+
+Advisories published up to November 2026. A monthly job lists new GitHub
+advisories for review.
+[How we check](https://citry.dev/security/#how-we-check)
+<!-- advisory-watch end -->
+
 ## Watch the tutorial:
 
 <a href="https://www.youtube.com/watch?v=d3nPqvDdNB0">
