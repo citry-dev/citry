@@ -1209,10 +1209,13 @@ def test_vue_document_preserves_physical_shell_and_replaces_logical_body() -> No
     assert "</body></html>" in html
 
 
-def test_vue_document_shell_inside_a_nested_template_root_compiles_only_its_body() -> None:
+@pytest.mark.parametrize("wrapper", ["inline", "multiline", "component"])
+def test_vue_document_shell_inside_a_nested_template_root_compiles_only_its_body(wrapper: str) -> None:
     # A page template passed into another template's `{{ page }}` joins the
     # outer root's Vue template, so its doctype and head sit one render down.
     # Only the body may reach the Vue compiler, which rejects `<!doctype>`.
+    # The multi-line wrappers add whitespace around `{{ page }}`, which must
+    # not stop the walk down to the page.
     registry = Citry(autodiscover=False)
 
     class Button(Component):
@@ -1233,7 +1236,22 @@ def test_vue_document_shell_inside_a_nested_template_root_compiles_only_its_body
         content = Slot(lambda inner: CitryElement(Button, {}).render(provides=inner.provides))
         return registry.render_template(page_source, slots={"content": content}, provides=ctx.provides)
 
-    html = registry.render_template("{{ page }}", {"page": Slot(page)}).serialize()
+    class Wrapper(Component):
+        citry = registry
+
+        def template_data(self, kwargs, slots):
+            return {"page": Slot(page)}
+
+        template = """
+            {{ page }}
+        """
+
+    if wrapper == "component":
+        rendered = CitryElement(Wrapper, {}).render()
+    else:
+        source = "{{ page }}" if wrapper == "inline" else "\n    {{ page }}\n"
+        rendered = registry.render_template(source, {"page": Slot(page)})
+    html = rendered.serialize()
 
     assert html.lstrip().startswith("<!doctype html>")
     assert html.count("<!doctype html>") == 1

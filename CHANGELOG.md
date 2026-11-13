@@ -11,11 +11,10 @@
   thread where the platform has it, then the CPU time of the process,
   then the wall clock. Linux, macOS and Windows keep using the CPU time
   of the calling thread.
-- `citry preview` now shows components that use Events, and their
-  event handlers work in the preview. The preview page used to fail
-  with a Vue compile error at `<!doctype>`. The same fix applies when
-  you pass a whole-page template into another template, as in
-  `render_template("{{ page }}", {"page": page_slot})`.
+- `citry preview` no longer fails with a Vue compile error at
+  `<!doctype>` for components that use Events. The preview now renders
+  them, and their event handlers work. The same applies when a template
+  places a whole-page template through a variable, such as `{{ page }}`.
 
 ## v0.8.0
 
