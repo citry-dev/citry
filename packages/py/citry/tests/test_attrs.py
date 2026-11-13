@@ -12,6 +12,7 @@ with a comment saying what changed and why.
 import random
 import re
 import time
+import tracemalloc
 
 import pytest
 
@@ -361,6 +362,46 @@ class TestParseStringStyle:
     )
     def test_comment_like_text_in_quotes_and_escapes_is_kept(self, css_text, expected):
         assert parse_string_style(css_text) == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        ['"' + "a" * 1_000_000 + '"', '"' + "\\a" * 500_000 + '"', "'" + "a" * 1_000_000 + "'", '"' + "a" * 1_000_000],
+        ids=["double", "escapes", "single", "unclosed"],
+    )
+    def test_a_long_quoted_value_costs_about_a_few_copies_of_the_text(self, value):
+        css_text = "content: " + value + "; color: red"
+        tracemalloc.start()
+        try:
+            parsed = parse_string_style(css_text)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        assert parsed["color"] == "red"
+        assert peak < 8 * len(css_text)
+
+    @pytest.mark.parametrize(
+        ("value", "comments"),
+        [
+            ("\\a" * 500_000, ""),
+            ('"a"' * 330_000, ""),
+            ("'a'" * 330_000, ""),
+            ("a" * 1_000, "/**/" * 250_000),
+        ],
+        ids=["escapes", "short-strings", "short-single-quoted", "comments"],
+    )
+    def test_many_short_escapes_strings_or_comments_cost_about_one_copy_of_the_text(self, value, comments):
+        css_text = "content: " + value + comments + "; color: red"
+        expected = {"content": value, "color": "red"}
+        tracemalloc.start()
+        try:
+            parsed = parse_string_style(css_text)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        assert parsed == expected
+        # The text kept between comments is copied once; a small string per
+        # escape or quoted string would cost many bytes per character.
+        assert peak < 4 * len(css_text)
 
     def test_with_whitespace(self):
         assert parse_string_style("  color: red;  background-color: blue;  ") == {

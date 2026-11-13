@@ -12,10 +12,11 @@ import json
 import subprocess
 import sys
 import textwrap
+import tracemalloc
 import typing
 import weakref
 from collections.abc import Mapping
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, is_dataclass, make_dataclass
 from dataclasses import field as dataclass_field
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
@@ -29,6 +30,7 @@ from uuid import UUID
 import pytest
 import typing_extensions
 
+from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events import schemas as schemas_module
 from citry.ext.events.errors import FieldErrors, PydanticTotal
 from citry.ext.events.files import UploadedFile
@@ -883,17 +885,27 @@ class TestContainerCoercion:
         result = validate_args(DictOfLists, {"blob": {"a": [1, 2], "b": [3, "x"]}})
         assert result.fields == {"blob.b.1": "Expected int, got str."}
 
-    @pytest.mark.parametrize(("count", "unlisted"), [(20, 0), (21, 1)])
-    def test_bad_dict_values_stop_at_twenty(self, count, unlisted):
-        # The same per-field limit the Pydantic path has, for a plain class.
+    @pytest.mark.parametrize("count", [1, 2, 21])
+    def test_a_dict_stops_at_its_first_bad_value(self, count):
+        # The same early stop the Pydantic path has, for a plain class.
         values = {f"k{index:02d}": "x" for index in range(count)}
         result = validate_args(TypedDictAndInt, {"scores": values, "name": "x"})
         # A scalar field's message is always listed beside the dict's.
-        assert result.fields["name"] == "Expected int, got str."
-        assert [name for name in result.fields if name != "name"] == [
-            f"scores.k{index:02d}" for index in range(min(count, 20))
-        ]
-        assert result.unlisted_fields == unlisted
+        assert result.fields == {
+            "name": "Expected int, got str.",
+            "scores.k00": "Expected int, got str.",
+        }
+        assert result.unlisted_fields == 0
+
+    def test_a_dict_names_the_first_bad_value_in_the_order_sent(self):
+        result = validate_args(TypedDictAndInt, {"scores": {"a": 1, "b": "x", "c": "y"}, "name": 1})
+        # `c` is bad too, but the dict stopped at `b`.
+        assert result.fields == {"scores.b": "Expected int, got str."}
+
+    def test_a_bad_dict_key_stops_the_dict(self):
+        result = validate_args(IntKeyedDict, {"blob": {"x": "c", "y": "d", "3": "e"}})
+        assert result.fields == {"blob.x": "Invalid key: Not a valid int: 'x'."}
+        assert result.unlisted_fields == 0
 
     def test_mapping_field_rejects_non_object(self):
         result = validate_args(TypedMappingField, {"blob": 5})
@@ -1139,36 +1151,46 @@ class TestUnexpectedFieldLimit:
         assert list(result.fields) == _sorted_unknown(20, "address.")
         assert result.unlisted_fields == 2
 
-    def test_unknown_keys_inside_list_rows_count(self):
-        lines = [{"sku": "a", "qty": 1, f"x{index:02d}": 1} for index in range(25)]
-        result = validate_args(Order, {"lines": lines})
-        # List indexes sort in number order, so the first twenty rows are kept.
-        assert list(result.fields) == [f"lines.{index}.x{index:02d}" for index in range(20)]
+    def test_unknown_keys_inside_a_list_row_count(self):
+        row = {"sku": "a", "qty": 1, **_unknown_keys(25)}
+        result = validate_args(Order, {"lines": [row]})
+        assert list(result.fields) == _sorted_unknown(20, "lines.0.")
         assert result.unlisted_fields == 5
 
-    @pytest.mark.parametrize(("count", "unlisted"), [(20, 0), (21, 1), (30, 10)])
-    def test_bad_list_items_stop_at_twenty_per_field(self, count, unlisted):
-        result = validate_args(TagsList, {"tags": ["x"] * count})
-        # The earliest items are the ones kept, in number order.
-        assert list(result.fields) == [f"tags.{index}" for index in range(min(count, 20))]
-        assert set(result.fields.values()) == {"Expected int, got str."}
-        assert result.unlisted_fields == unlisted
+    def test_a_list_of_rows_stops_at_the_first_row_with_an_error(self):
+        lines = [{"sku": "a", "qty": 1, f"x{index:02d}": 1} for index in range(25)]
+        result = validate_args(Order, {"lines": lines})
+        # Row 0 has an unknown key, so the later rows are not checked.
+        assert result.fields == {"lines.0.x00": EXTRA_MESSAGE}
+        assert result.unlisted_fields == 0
 
-    def test_each_list_field_has_its_own_limit(self):
+    @pytest.mark.parametrize("count", [1, 20, 21, 30])
+    def test_a_list_stops_at_its_first_bad_item(self, count):
+        result = validate_args(TagsList, {"tags": ["x"] * count})
+        assert result.fields == {"tags.0": "Expected int, got str."}
+        assert result.unlisted_fields == 0
+
+    def test_a_list_names_the_first_bad_item_in_the_order_sent(self):
+        result = validate_args(TagsList, {"tags": [1, 2, "x", 4, "y"]})
+        # Item 4 is bad too, but the list stopped at item 2.
+        assert result.fields == {"tags.2": "Expected int, got str."}
+
+    def test_each_list_field_stops_at_its_own_first_bad_item(self):
         class TwoLists:
             first: list[int]
             second: list[int]
 
-        result = validate_args(TwoLists, {"first": ["x"] * 21, "second": ["x"] * 21})
-        assert len([name for name in result.fields if name.startswith("first.")]) == 20
-        assert len([name for name in result.fields if name.startswith("second.")]) == 20
-        assert result.unlisted_fields == 2
+        result = validate_args(TwoLists, {"first": ["x"] * 21, "second": [1, "x", "x"]})
+        assert result.fields == {"first.0": "Expected int, got str.", "second.1": "Expected int, got str."}
+        assert result.unlisted_fields == 0
 
-    def test_list_item_errors_and_unknown_keys_are_limited_separately(self):
+    def test_a_stopped_list_and_unknown_keys_are_limited_separately(self):
         result = validate_args(TagsList, {"tags": ["x"] * 30, **_unknown_keys(25)})
-        assert [name for name in result.fields if name.startswith("tags.")] == [f"tags.{i}" for i in range(20)]
+        # The list's early stop leaves the unknown-key limit untouched.
+        assert result.fields["tags.0"] == "Expected int, got str."
+        assert [name for name in result.fields if name.startswith("tags.")] == ["tags.0"]
         assert [name for name in result.fields if name.startswith("u")] == _sorted_unknown(20)
-        assert result.unlisted_fields == 15
+        assert result.unlisted_fields == 5
 
     def test_every_missing_required_field_is_listed(self):
         result = validate_args(Wide, {})
@@ -1581,19 +1603,37 @@ def test_declared_field_names_counts_pydantic_validation_aliases():
     assert "csrf" in declared_field_names(Nested)
 
 
+INTEGER_MESSAGE = "Input should be a valid integer, unable to parse string as an integer"
+
+
 @requires_pydantic
 class TestPydanticItemErrorLimit:
-    @pytest.mark.parametrize(("count", "unlisted"), [(20, 0), (21, 1)])
-    def test_bad_list_items_stop_at_twenty(self, count, unlisted):
+    """
+    A Pydantic list, set, tuple or dict stops at its first bad item, so a 422 lists one item per collection.
+
+    Citry's own validator for a plain dataclass stops at the first bad item
+    of each collection too (see ``TestContainerCoercion`` and
+    ``TestUnexpectedFieldLimit``).
+    """
+
+    @pytest.mark.parametrize("count", [1, 20, 21])
+    def test_a_pydantic_list_lists_only_its_first_bad_item(self, count):
         class Tags(pydantic.BaseModel):
             tags: list[int]
 
         result = validate_args(Tags, {"tags": ["x"] * count})
-        assert list(result.fields) == [f"tags.{index}" for index in range(min(count, 20))]
-        assert result.unlisted_fields == unlisted
+        assert result.fields == {"tags.0": INTEGER_MESSAGE}
+        assert result.unlisted_fields == 0
 
-    @pytest.mark.parametrize(("count", "unlisted"), [(20, 0), (21, 1)])
-    def test_bad_dict_values_stop_at_twenty(self, count, unlisted):
+    def test_a_pydantic_list_lists_the_first_bad_item_in_the_order_sent(self):
+        class Tags(pydantic.BaseModel):
+            tags: list[int]
+
+        result = validate_args(Tags, {"tags": [1, 2, "x", 4, "y"]})
+        assert result.fields == {"tags.2": INTEGER_MESSAGE}
+
+    @pytest.mark.parametrize("count", [1, 20, 21])
+    def test_a_pydantic_dict_lists_only_its_first_bad_value(self, count):
         class Scores(pydantic.BaseModel):
             scores: dict[str, int]
             name: int
@@ -1601,13 +1641,20 @@ class TestPydanticItemErrorLimit:
         values = {f"k{index:02d}": "x" for index in range(count)}
         result = validate_args(Scores, {"scores": values, "name": "x"})
         # A scalar field's message is always listed beside the dict's.
-        assert result.fields["name"].startswith("Input should be a valid integer")
-        assert [name for name in result.fields if name != "name"] == [
-            f"scores.k{index:02d}" for index in range(min(count, 20))
-        ]
-        assert result.unlisted_fields == unlisted
+        assert result.fields == {"name": INTEGER_MESSAGE, "scores.k00": INTEGER_MESSAGE}
+        assert result.unlisted_fields == 0
 
-    def test_a_list_inside_a_nested_model_is_limited(self):
+    @pytest.mark.parametrize("count", [1, 21])
+    def test_a_plain_dataclass_dict_lists_only_its_first_bad_value(self, count):
+        class Scores:
+            scores: dict[str, int]
+
+        values = {f"k{index:02d}": "x" for index in range(count)}
+        result = validate_args(Scores, {"scores": values})
+        assert result.fields == {"scores.k00": "Expected int, got str."}
+        assert result.unlisted_fields == 0
+
+    def test_a_list_inside_a_nested_model_lists_its_first_bad_item(self):
         class Inner(pydantic.BaseModel):
             values: list[int]
 
@@ -1615,21 +1662,25 @@ class TestPydanticItemErrorLimit:
             inner: Inner
 
         result = validate_args(HasInner, {"inner": {"values": ["x"] * 25}})
-        assert list(result.fields) == [f"inner.values.{index}" for index in range(20)]
-        assert result.unlisted_fields == 5
+        assert result.fields == {"inner.values.0": INTEGER_MESSAGE}
+        assert result.unlisted_fields == 0
 
-    def test_a_list_or_dict_inside_a_union_is_limited(self):
+    def test_a_list_or_dict_inside_a_union_lists_its_first_bad_item(self):
         class Shapes(pydantic.BaseModel):
             items: list[int] | str
             scores: dict[str, int] | int
 
         result = validate_args(Shapes, {"items": ["x"] * 25, "scores": {f"k{index:02d}": "x" for index in range(25)}})
         # Pydantic also reports the other union member once; that message stays.
-        assert len([name for name in result.fields if name.startswith("items.list")]) == 20
-        assert len([name for name in result.fields if name.startswith("scores.dict")]) == 20
-        assert result.unlisted_fields == 10
+        assert result.fields == {
+            "items.list[int].0": INTEGER_MESSAGE,
+            "items.str": "Input should be a valid string",
+            "scores.dict[str,int].k00": INTEGER_MESSAGE,
+            "scores.int": "Input should be a valid integer",
+        }
+        assert result.unlisted_fields == 0
 
-    def test_an_aliased_list_or_dict_is_limited(self):
+    def test_an_aliased_list_or_dict_lists_its_first_bad_item(self):
         class Aliased(pydantic.BaseModel):
             tags: list[int] = pydantic.Field(default=[], alias="tagList")
             scores: dict[str, int] = pydantic.Field(default={}, alias="scoreMap")
@@ -1637,9 +1688,8 @@ class TestPydanticItemErrorLimit:
         result = validate_args(
             Aliased, {"tagList": ["x"] * 21, "scoreMap": {f"k{index:02d}": "x" for index in range(21)}}
         )
-        assert len([name for name in result.fields if name.startswith("tagList.")]) == 20
-        assert len([name for name in result.fields if name.startswith("scoreMap.")]) == 20
-        assert result.unlisted_fields == 2
+        assert result.fields == {"scoreMap.k00": INTEGER_MESSAGE, "tagList.0": INTEGER_MESSAGE}
+        assert result.unlisted_fields == 0
 
     def test_a_very_long_digit_key_in_a_dict_is_an_ordinary_error(self):
         class Scores(pydantic.BaseModel):
@@ -1651,25 +1701,28 @@ class TestPydanticItemErrorLimit:
         assert list(result.fields) == ["scores." + "1" * 5000]
 
     def test_marking_the_lists_of_deep_errors_takes_time_in_step_with_their_depth(self):
-        class Node(pydantic.BaseModel):
-            c: "list[Node]" = []
-
+        # Every level holds a list of nodes, and the innermost node also has
+        # thirty bad scalar fields. Each scalar field has its own error, so
+        # thirty errors pass through `depth` lists, and the list of 3,000 bad
+        # items beside them adds only its first.
+        fields: dict[str, Any] = {f"v{index:02d}": (int, 0) for index in range(30)}
+        Node = pydantic.create_model("Node", c=("list[Node]", []), **fields)
         Node.model_rebuild(_types_namespace={"Node": Node})
 
         def best_time(depth: int) -> float:
-            # Every error passes through `depth` lists. The best of three
-            # runs keeps one slow run of a busy machine out of the ratio.
+            # The best of three runs keeps one slow run of a busy machine out
+            # of the ratio.
             best = float("inf")
             for _run in range(3):
-                value: dict[str, Any] = {"c": [1] * 3_000}
+                value: dict[str, Any] = {"c": [1] * 3_000, **{f"v{index:02d}": "x" for index in range(30)}}
                 for _level in range(depth - 1):
                     value = {"c": [value]}
                 started = perf_counter()
                 result = validate_args(Node, value)
                 best = min(best, perf_counter() - started)
-                # The innermost list still lists only twenty messages.
+                # The 31 errors are inside the outer lists, which keep twenty.
                 assert len(result.fields) == 20
-                assert result.unlisted_fields == 2_980
+                assert result.unlisted_fields == 11
             return best
 
         # Writing the text of each list for each error made the time grow
@@ -1679,7 +1732,7 @@ class TestPydanticItemErrorLimit:
         assert best_time(200) < 10 * best_time(40)
 
     @pytest.mark.parametrize("data_class", ["top", "nested"])
-    def test_a_list_field_with_an_empty_alias_is_limited(self, data_class):
+    def test_a_list_field_with_an_empty_alias_lists_its_first_bad_item(self, data_class):
         class Empty(pydantic.BaseModel):
             v: list[int] = pydantic.Field(alias="")
 
@@ -1689,10 +1742,11 @@ class TestPydanticItemErrorLimit:
 
         if data_class == "top":
             result = validate_args(Empty, {"": ["x"] * 500})
+            assert result.fields == {".0": INTEGER_MESSAGE}
         else:
             result = validate_args(Outer, {"o": {"": ["x"] * 500}})
-        assert len(result.fields) == 20
-        assert result.unlisted_fields == 480
+            assert result.fields == {"o..0": INTEGER_MESSAGE}
+        assert result.unlisted_fields == 0
 
 
 def test_a_very_long_digit_key_is_an_ordinary_unexpected_field():
@@ -1707,10 +1761,31 @@ def test_digit_segments_sort_in_number_order_with_leading_zeros_apart():
 
 @requires_pydantic
 class TestPydanticPathText:
-    """Pydantic writes each field's path into its errors, so Citry adds up the paths before calling it."""
+    """
+    Pydantic writes each field's path into its errors, so Citry can add up the paths before calling it.
+
+    ``pydantic_can_report`` is that sum. A Pydantic v2 class that Citry checks
+    with its copy of the validator does not need it, because the copy keeps one
+    error per collection. The sum still runs for a class whose copy had to be
+    built without its counting wrappers (``Checker.needs_path_limit``), which
+    the ``without_wrappers`` fixture forces, and for a Pydantic v1 model.
+    """
 
     class Model(pydantic.BaseModel if pydantic else object):  # type: ignore[misc]
         pass
+
+    @pytest.fixture
+    def without_wrappers(self, monkeypatch):
+        """Make Citry's copy of the validator fail to build with wrappers, so Citry falls back to the path limit."""
+        build = bounded._build
+
+        def refuse_wrappers(schema, *, wrapped):
+            if wrapped:
+                msg = "no wrappers"
+                raise RuntimeError(msg)
+            return build(schema, wrapped=wrapped)
+
+        monkeypatch.setattr(bounded, "_build", refuse_wrappers)
 
     def _passes(self, payload, model=None):
         return pydantic_can_report(payload, model or self.Model, FieldErrors())
@@ -1746,8 +1821,24 @@ class TestPydanticPathText:
         # Reading it twice adds paths, and does not make the payload larger.
         assert errors.pydantic_total.size == size
 
-    @pytest.mark.parametrize(("rows", "reaches_costly"), [(1, True), (10, True), (100, True), (1_000, False)])
-    def test_a_citry_union_of_pydantic_models_is_held_to_the_limit(self, rows, reaches_costly):
+    @pytest.mark.parametrize(
+        ("rows", "limited", "reaches_costly"),
+        [
+            # Citry's copy of the validator keeps one error per collection, so every
+            # member runs and answers cheaply.
+            (1, False, True),
+            (1_000, False, True),
+            (1, True, True),
+            (10, True, True),
+            (100, True, True),
+            (1_000, True, False),
+        ],
+        ids=["copy-1", "copy-1000", "limit-1", "limit-10", "limit-100", "limit-1000"],
+    )
+    def test_a_citry_union_of_pydantic_models_is_held_to_the_limit(self, rows, limited, reaches_costly, request):
+        if limited:
+            request.getfixturevalue("without_wrappers")
+
         class Cheap(pydantic.BaseModel):
             other: int
 
@@ -1777,6 +1868,9 @@ class TestPydanticPathText:
         result = validate_args(Data, {"value": payload})
         assert not result.ok
         assert bool(checked) is reaches_costly
+        # The limit refuses the member before it runs, so only the union's
+        # own message is left either way.
+        assert result.fields == {"value": "Expected Cheap or Costly, got dict."}
 
     def test_the_limit_follows_the_size_of_a_large_payload(self):
         # The same paths pass when the payload holds enough other text, so
@@ -1854,6 +1948,20 @@ class TestPydanticPathText:
         started = perf_counter()
         self._passes({"data": '"[\\"' * 40_000}, WithJson)
         assert perf_counter() - started < 1
+
+    def test_json_text_that_opens_a_bracket_at_every_character_is_read_in_little_memory(self):
+        class WithJson(pydantic.BaseModel):
+            data: pydantic.Json[list[Any]]
+
+        # The count keeps the path length at each open bracket, so a megabyte
+        # of brackets must not cost an object per bracket.
+        tracemalloc.start()
+        try:
+            self._passes({"data": "[" * 1_000_000}, WithJson)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        assert peak < 16_000_000
 
     @pytest.mark.parametrize(
         "quote",
@@ -2116,16 +2224,31 @@ class TestPydanticPathText:
         result = validate_args(Broken, {"size": 1})
         assert result.fields == {"_args": "The value could not be checked."}
 
-    def test_a_pydantic_dataclass_is_held_to_the_limit(self):
-        @pydantic.dataclasses.dataclass
+    @pytest.mark.parametrize("limited", [False, True], ids=["copy", "limit"])
+    def test_a_pydantic_dataclass_is_held_to_the_limit(self, limited, request):
+        if limited:
+            request.getfixturevalue("without_wrappers")
+
+        # A class that forbids extra keys has no fixed bound on its errors,
+        # so its copy is built with wrappers, which the fixture then refuses.
+        @pydantic.dataclasses.dataclass(config=pydantic.ConfigDict(extra="forbid"))
         class Scores:
             scores: dict[str, list[typing.Annotated[int, pydantic.Field(gt=0)]]]
 
         result = validate_args(Scores, {"scores": {"a" * 56_000: [-1] * 14_000}})
-        assert result.fields == {"_args": PATHS_TOO_LONG_MESSAGE}
+        if limited:
+            assert result.fields == {"_args": PATHS_TOO_LONG_MESSAGE}
+        else:
+            # The copy stops at the first bad item, and that one error is cheap.
+            assert result.fields == {"scores." + "a" * 56_000 + ".0": "Input should be greater than 0"}
 
-    def test_a_nested_model_over_the_limit_is_reported_on_its_own_path(self):
+    @pytest.mark.parametrize("limited", [False, True], ids=["copy", "limit"])
+    def test_a_nested_model_over_the_limit_is_reported_on_its_own_path(self, limited, request):
+        if limited:
+            request.getfixturevalue("without_wrappers")
+
         class Row(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(extra="forbid")
             tags: list[int]
 
         @dataclass
@@ -2133,19 +2256,34 @@ class TestPydanticPathText:
             rows: dict[str, Row]
 
         result = validate_args(Data, {"rows": {"a": {"tags": {"b" * 56_000: ["x"] * 14_000}}}})
-        assert result.fields == {"rows.a": PATHS_TOO_LONG_MESSAGE}
+        if limited:
+            assert result.fields == {"rows.a": PATHS_TOO_LONG_MESSAGE}
+        else:
+            assert result.fields == {"rows.a.tags": "Input should be a valid list"}
 
-    def test_many_nested_models_share_the_limit(self):
+    @pytest.mark.parametrize("limited", [False, True], ids=["copy", "limit"])
+    def test_many_nested_models_share_the_limit(self, limited, request):
+        if limited:
+            request.getfixturevalue("without_wrappers")
+
         class Row(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(extra="forbid")
             scores: dict[str, list[int]]
 
-        @dataclass
-        class Data:
-            rows: list[Row]
+        # A list of rows would stop at its first bad row, so the rows sit in
+        # separate fields, each of which is checked.
+        Data = make_dataclass("Data", [(f"row{index:03d}", Row) for index in range(100)])
 
-        rows = [{"scores": {"." * 1_000: ["x"] * 2_000}} for _ in range(100)]
+        payload = {f"row{index:03d}": {"scores": {"." * 1_000: ["x"] * 2_000}} for index in range(100)}
         started = perf_counter()
-        result = validate_args(Data, {"rows": rows})
+        result = validate_args(Data, payload)
         assert perf_counter() - started < 1
-        # Rows past the running total get one refusal each, not 2,000 messages.
-        assert len(result.fields) + result.unlisted_fields < 100 * 2_000
+        # Each row keeps one error, and the field messages are cut off at their own text limit.
+        assert len(result.fields) + result.unlisted_fields == 100
+        messages = [result.fields[name] for name in result.fields]
+        if limited:
+            # Rows past the running total get one refusal each, not 2,000 messages.
+            refused = [message == PATHS_TOO_LONG_MESSAGE for message in messages]
+            assert refused == [False] * 8 + [True] * 92
+        else:
+            assert all(message.startswith("Input should be a valid integer") for message in messages)

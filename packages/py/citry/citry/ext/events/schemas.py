@@ -5,11 +5,12 @@ A handler's ``data`` parameter is annotated with a schema class, and the
 whole wire ``args`` payload is validated against it before the handler runs.
 This module owns that machinery: the class-side conversion (a plain annotated
 class gets the same dataclass treatment as ``State``; a dataclass is used
-as-is; a Pydantic model is delegated to Pydantic, unless its error paths
-would be too costly: see ``pydantic_can_report``), and the payload
-validation with its deliberately small coercion table. Validation returns a
-structured :class:`ValidationResult` rather than raising, so the dispatcher
-can map failures onto the per-field 422 error object. Design:
+as-is; a Pydantic class is checked by a copy of its own validator that
+stops each list and dict at its first bad item, see ``_pydantic_bounded``),
+and the payload validation with its deliberately small coercion table.
+Validation returns a structured :class:`ValidationResult` rather than
+raising, so the dispatcher can map failures onto the per-field 422 error
+object. Design:
 ``docs/design/events.md`` section 3.3.
 
 The coercion table, exactly (anything else is a per-field error):
@@ -44,13 +45,15 @@ their own models).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import re
 import sys
 import threading
+from array import array
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import MISSING, dataclass, fields
+from dataclasses import MISSING, dataclass, fields, is_dataclass
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from enum import Enum
@@ -59,6 +62,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    ClassVar,
     Literal,
     NamedTuple,
     Union,
@@ -68,11 +72,12 @@ from typing import (
     get_type_hints,
 )
 from uuid import UUID
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, WeakSet
 
 import typing_extensions
 
 from citry._nested_declarations import _is_plain_field_family, convert_plain_declaration
+from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, FieldErrors, PydanticTotal, trimmed_path
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
@@ -125,10 +130,15 @@ class ValidationResult:
             (nested fields use dotted paths like ``"address.city"``, list
             elements ``"tags.1"``). Sorted by field path, with list indexes
             in number order, so the error object is deterministic. Empty
-            when validation succeeded. It lists at most 20 messages for
-            fields the payload sent and the schema does not declare, and at
-            most 20 for the items of each list or dict field; every other
-            message is listed.
+            when validation succeeded. Each list or dict field reports only
+            its first bad item. It lists at most 20 messages for fields the
+            payload sent and the schema does not declare, and stops listing
+            once the messages reach ``MAX_FIELD_ERRORS_TEXT``. A message
+            longer than ``MAX_FIELD_MESSAGE`` (1,000) characters is cut to
+            that length and ends with "…". Data with
+            too many errors, data too large or nested too deeply to
+            check, or a check that took too long gets one message under
+            ``_args``.
         unlisted_fields: How many messages those two limits left out of
             ``fields``. ``0`` when none were.
 
@@ -243,8 +253,9 @@ def generated_data_schema(comp_name: str, schema_cls: type, model_base: ModelBas
     if model_base.kind == "pydantic-v1":
         msg = (
             f"Component {comp_name}: the event data class {schema_cls.__qualname__} cannot be generated as a"
-            " Pydantic v1 model, because Events validation reads Pydantic v2 models only. Decorate it with"
-            " @dataclass to keep it a dataclass, or set model_base to a Pydantic v2 model."
+            " Pydantic v1 model, because Events validation reads dataclasses, annotated classes and Pydantic v2"
+            " models only. Decorate it with @dataclass to keep it a dataclass, or set model_base to a Pydantic v2"
+            " model."
         )
         raise ValueError(msg)
     generated = convert_plain_declaration(schema_cls, model_base=model_base, component_name=comp_name)
@@ -265,8 +276,9 @@ def validate_args(
     field and an unexpected key are each a per-field error), coerces the
     values per the module's coercion table, and constructs the schema
     instance. Nested annotated classes validate recursively from objects;
-    a Pydantic-model schema is validated by Pydantic (its own rules, its
-    own messages), unless ``pydantic_can_report`` refuses the payload first.
+    a Pydantic v2 model schema is validated by Pydantic's rules and messages,
+    through a copy of its validator that stops at the first bad item of
+    each list or dict and stops the whole validation past an error limit.
 
     Args:
         schema_cls: The schema class (converted or not;
@@ -287,8 +299,12 @@ def validate_args(
         A [`ValidationResult`][citry.ext.events.schemas.ValidationResult]:
         either the schema instance, or the per-field messages sorted by
         field path, with list indexes in number order. A schema
-        ``__post_init__`` (or Pydantic validator) that raises something
-        other than a validation error propagates to the caller.
+        ``__post_init__`` that raises propagates to the caller. A Pydantic
+        validator that raises ``ValueError`` or ``AssertionError`` gives a
+        field error with its message. One that raises another exception
+        gives a field error saying the value could not be checked. Data
+        nested deeper than Python can follow gives the "nested too deeply"
+        message under ``_args``.
 
     """
     if bind_strings is None:
@@ -296,7 +312,23 @@ def validate_args(
     if not isinstance(args, Mapping):
         return ValidationResult(value=None, fields={"": f"Expected an object, got {_value_type_name(args)}."})
     errors = FieldErrors()
-    instance = _validate_object(schema_cls, args, None, errors, bind_strings=bind_strings)
+    # One error total for the whole payload, so every Pydantic call inside it
+    # (a nested model in a plain dataclass, one per list item) shares it, and
+    # one work budget for the request, which a direct caller gets too.
+    with bounded.request_work(), bounded.validation_scope(args):
+        try:
+            instance = _validate_object(schema_cls, args, None, errors, bind_strings=bind_strings)
+        except bounded.ValidationTooCostly as stop:
+            # Stopping drops the errors Pydantic held, so the call gets one
+            # message for the whole payload.
+            bounded.warn_if_stopped(schema_cls, stop)
+            return ValidationResult(value=None, fields={"_args": stop.message})
+        except RecursionError:
+            # The data nests deeper than Python can follow inside one of the
+            # checks. Answer that it is nested too deeply. The log has no
+            # traceback, which would list every frame, and comes once per class.
+            bounded.warn_work_spent(schema_cls, "depth")
+            return ValidationResult(value=None, fields={"_args": bounded.TOO_DEEP_MESSAGE})
     if instance is _INVALID:
         # The payload alone decides how many undeclared keys and how many
         # list or dict items it sends, so only those messages are limited,
@@ -384,6 +416,126 @@ def payload_fields(schema_cls: type) -> tuple[_FieldSpec, ...] | None:
         return None
 
 
+def nested_pydantic_classes(schema_cls: type) -> tuple[type, ...]:
+    """
+    Return the Pydantic classes a plain ``data`` class reaches through its fields, at any depth.
+
+    Citry checks those with the copy of their validator too, so registration
+    refuses them on a Pydantic too old to build one. A class whose
+    annotations cannot be resolved is skipped; it fails at its first call.
+    """
+    found: list[type] = []
+    seen: set[int] = set()
+    # Visited hints stay alive, so a freed hint's id cannot name the next one.
+    visited: list[Any] = []
+    todo: list[Any] = [schema_cls]
+    while todo:
+        hint = todo.pop()
+        if id(hint) in seen:
+            continue
+        seen.add(id(hint))
+        visited.append(hint)
+        todo.extend(get_args(hint))
+        if not isinstance(hint, type):
+            continue
+        if bounded.is_pydantic_v2_class(hint) and hint is not schema_cls:
+            found.append(hint)
+        if _is_pydantic_model(hint) or not _is_schema_class(hint):
+            continue
+        specs = payload_fields(hint)
+        todo.extend(spec.annotation for spec in specs or ())
+    return tuple(found)
+
+
+def check_no_pydantic_v1(comp_name: str, schema_cls: type) -> None:
+    """
+    Refuse a ``data`` class that is, or holds, a ``pydantic.v1`` model or dataclass.
+
+    Events checks data with dataclasses, annotated classes and Pydantic v2
+    models. A v1 check cannot be stopped or counted the way those are, so
+    registration refuses it wherever it sits: as the class itself, in a
+    field, a list, a dict, an optional or a union, in a nested plain class,
+    or inside a Pydantic v2 class (see ``pydantic_v1_model_in``). A class
+    whose annotations cannot be resolved yet is skipped; a v1 class found
+    behind it at a call is refused there.
+
+    Raises:
+        ValueError: The class is or holds a ``pydantic.v1`` class, named in
+            the message with the fix.
+
+    """
+    # A v1 class can exist only once the app loaded `pydantic.v1`, so other
+    # apps skip resolving the annotations. Citry's own import fails under
+    # Pydantic 1 (`state.py` reads Pydantic 2 methods), so that install
+    # never reaches here.
+    if "pydantic.v1" not in sys.modules:
+        return
+    found = pydantic_v1_class_in(schema_cls)
+    if found is None:
+        return
+    where = "is" if found is schema_cls else f"holds {found.__qualname__}, which is"
+    msg = (
+        f"Component {comp_name}: the event data class {schema_cls.__qualname__} {where} a pydantic.v1 model or"
+        " dataclass. Events checks event data with dataclasses, annotated classes and Pydantic v2 models only."
+        f" Make {found.__qualname__} a Pydantic v2 model."
+    )
+    raise ValueError(msg)
+
+
+def pydantic_v1_class_in(schema_cls: type) -> type | None:
+    """Return the first ``pydantic.v1`` model or dataclass that a ``data`` class is or reaches, or ``None``."""
+    seen: set[int] = set()
+    # Each resolved annotation is a new object, such as `list[Tag]`, that
+    # Python may free and give the same id to the next one. Keeping every
+    # visited hint alive keeps an id from naming two different hints.
+    visited: list[Any] = []
+    todo: list[Any] = [schema_cls]
+    while todo:
+        hint = todo.pop()
+        if id(hint) in seen:
+            continue
+        seen.add(id(hint))
+        visited.append(hint)
+        # The arguments of a list, dict, optional or union hold the classes.
+        todo.extend(get_args(hint))
+        if not isinstance(hint, type):
+            continue
+        if bounded.is_pydantic_v1_class(hint) or bounded.is_pydantic_v1_dataclass(hint):
+            return hint
+        if bounded.is_pydantic_v2_class(hint):
+            # Pydantic reads its own fields, so Citry reads its core schema.
+            root = bounded.core_schema_of(hint)
+            found = None if root is None else bounded.pydantic_v1_model_in(root)
+            if found is not None:
+                return found
+            # Citry checks a Pydantic dataclass's fields itself before
+            # Pydantic builds it, so those fields are read below too.
+            if _is_pydantic_model(hint):
+                continue
+        if not _is_schema_class(hint):
+            continue
+        todo.extend(_annotations_without_converting(hint))
+    return None
+
+
+def _annotations_without_converting(cls: type) -> list[Any]:
+    """
+    Return the resolved annotations of a class's fields, or none when they do not resolve yet.
+
+    Registration reads these without building Citry's dataclass of the
+    class, because building it formats the defaults with ``repr()``, which
+    must not run before a call needs it.
+    """
+    try:
+        hints = get_type_hints(cls)
+    except Exception:  # noqa: BLE001 - an unresolvable annotation is reported when the handler runs
+        return []
+    # A dataclass field that `__init__` does not take never comes from the browser.
+    skipped = {item.name for item in fields(cls) if not item.init} if is_dataclass(cls) else set()
+    # A ClassVar is not a field, so the browser never sends a value for it.
+    return [hint for name, hint in hints.items() if name not in skipped and get_origin(hint) is not ClassVar]
+
+
 def declared_field_names(schema_cls: type) -> frozenset[str]:
     """
     Return the field names a ``data`` class takes from the wire, without resolving its annotations.
@@ -394,8 +546,7 @@ def declared_field_names(schema_cls: type) -> frozenset[str]:
     payload key by its alias.
     """
     if _is_pydantic_model(schema_cls):
-        # ``model_fields`` is Pydantic v2; ``__fields__`` the v1 spelling.
-        model_fields = getattr(schema_cls, "model_fields", None) or getattr(schema_cls, "__fields__", {})
+        model_fields = schema_cls.model_fields  # type: ignore[attr-defined]
         names = set(model_fields)
         for info in model_fields.values():
             names.update(_pydantic_input_names(info))
@@ -431,8 +582,15 @@ def json_value_error(annotation: Any, value: Any, *, bind_strings: bool = False)
     JSON. ``bind_strings`` applies those rules, as for a GET query string.
     """
     errors = FieldErrors()
-    if _coerce(value, annotation, (None, ""), errors, bind_strings=bind_strings) is not _INVALID:
-        return None
+    with bounded.request_work(), bounded.validation_scope(value):
+        try:
+            if _coerce(value, annotation, (None, ""), errors, bind_strings=bind_strings) is not _INVALID:
+                return None
+        except bounded.ValidationTooCostly as stop:
+            return stop.message
+        except RecursionError:
+            # Data nested deeper than Python can follow in the check, as in `validate_args`.
+            return bounded.TOO_DEEP_MESSAGE
     return errors.first_message()
 
 
@@ -451,6 +609,8 @@ def _validate_object(
     ``parent`` (``None`` for the top level) and returns the schema instance,
     or ``_INVALID`` when anything in this object's subtree failed.
     """
+    if bounded.is_pydantic_v1_class(schema_cls) or bounded.is_pydantic_v1_dataclass(schema_cls):
+        return _refuse_pydantic_v1(schema_cls, parent, errors)
     if _is_pydantic_model(schema_cls):
         return _validate_pydantic(schema_cls, mapping, parent, errors)
 
@@ -461,6 +621,9 @@ def _validate_object(
     for key in mapping:
         if key not in accepted:
             errors.add_unexpected((parent, str(key)), _EXTRA_MESSAGE)
+            # The payload decides how many keys it sends, so each one counts
+            # toward the validation's error limit.
+            bounded.count_errors()
             ok = False
 
     values: dict[str, Any] = {}
@@ -475,6 +638,7 @@ def _validate_object(
                 values[spec.name] = coerced
         elif spec.required:
             errors.add((parent, spec.name), _REQUIRED_MESSAGE)
+            bounded.count_errors()
             ok = False
 
     if not ok:
@@ -482,45 +646,109 @@ def _validate_object(
     if not _is_pydantic_dataclass(converted):
         return converted(**values)
     # A Pydantic dataclass checks its fields when it is built, so this call
-    # costs what a Pydantic model's does, and can fail the way one does.
-    if not pydantic_can_report(mapping, converted, errors):
-        errors.add(trimmed_path(parent, "_args"), PATHS_TOO_LONG_MESSAGE)
+    # costs what a Pydantic model's does, and can fail the way one does. The
+    # copy of its validator builds it as its `__init__` would, and stops early.
+    checker = _pydantic_checker(converted, mapping, parent, errors)
+    if checker is _INVALID:
         return _INVALID
     try:
-        return converted(**values)
+        if checker is None:
+            return converted(**values)
+        return bounded.validate_init(checker, converted, values)
     except pydantic.ValidationError as err:
         _record_pydantic_errors(err, converted, parent, errors)
         return _INVALID
+    except bounded.ValidationTooCostly:
+        raise
     except Exception:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
         logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
-        errors.add(trimmed_path(parent, "_args"), "The value could not be checked.")
+        errors.add(trimmed_path(parent, "_args"), bounded.NOT_CHECKABLE_MESSAGE)
         return _INVALID
 
 
 def _validate_pydantic(schema_cls: type, mapping: Mapping[str, Any], parent: Any, errors: FieldErrors) -> Any:
     """Delegate one payload object to Pydantic, mapping its errors onto field paths."""
-    if not pydantic_can_report(mapping, schema_cls, errors):
-        errors.add(trimmed_path(parent, "_args"), PATHS_TOO_LONG_MESSAGE)
+    checker = _pydantic_checker(schema_cls, mapping, parent, errors)
+    if checker is _INVALID:
         return _INVALID
-    # ``model_validate`` is Pydantic v2; ``parse_obj`` the v1 spelling.
-    validate = getattr(schema_cls, "model_validate", None) or schema_cls.parse_obj  # type: ignore[attr-defined]
     try:
-        return validate(dict(mapping))
+        if checker is None:
+            return schema_cls.model_validate(dict(mapping))  # type: ignore[attr-defined]
+        # A stop raised inside goes up to validate_args, which ends the whole validation.
+        return bounded.validate_python(checker, dict(mapping))
     except pydantic.ValidationError as err:
         _record_pydantic_errors(err, schema_cls, parent, errors)
         return _INVALID
+    except bounded.ValidationTooCostly:
+        raise
+    except RecursionError:
+        # The data nests deeper than Python can follow inside a check that
+        # Citry does not control, such as a validator of the author.
+        # `validate_args` answers that the data is nested too deeply and logs it once.
+        raise bounded.ValidationTooCostly("depth") from None
     except Exception:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
         # Pydantic turns only ValueError and AssertionError in a validator
         # into a ValidationError; another exception is the author's bug, and
         # answers this one call 422 rather than failing the whole envelope.
         logger.exception(f"A validator raised while checking event data for {schema_cls.__qualname__}.")
-        errors.add(trimmed_path(parent, "_args"), "The value could not be checked.")
+        errors.add(trimmed_path(parent, "_args"), bounded.NOT_CHECKABLE_MESSAGE)
         return _INVALID
+
+
+def _refuse_pydantic_v1(schema_cls: type, parent: Any, errors: FieldErrors) -> Any:
+    """
+    Refuse data for a ``pydantic.v1`` class that registration did not see, and log why once.
+
+    Registration refuses a ``data`` class that holds a v1 model, but it
+    cannot see one behind a forward reference resolved only later. The
+    call then gets the "could not be checked" 422, and the v1 model never
+    runs on the browser's data.
+    """
+    if schema_cls not in _LOGGED_V1:
+        _LOGGED_V1.add(schema_cls)
+        logger.error(
+            f"Citry refuses event data for {schema_cls.__qualname__}, a pydantic.v1 class, because Events checks"
+            " data with dataclasses, annotated classes and Pydantic v2 models only. Make"
+            f" {schema_cls.__qualname__} a Pydantic v2 model."
+        )
+    errors.add(trimmed_path(parent, "_args"), bounded.NOT_CHECKABLE_MESSAGE)
+    return _INVALID
+
+
+# The v1 classes already logged by `_refuse_pydantic_v1`, so each is logged once, not on every call.
+_LOGGED_V1: WeakSet[type] = WeakSet()
+
+
+def _pydantic_checker(schema_cls: type, mapping: Mapping[str, Any], parent: Any, errors: FieldErrors) -> Any:
+    """
+    Return Citry's copy of a Pydantic class's validator, ``None`` to use its own, or ``_INVALID``.
+
+    A class whose forward references are still unresolved has no core
+    schema to copy, so it keeps its own validator with the path limit. A
+    v2 class gets the copy, plus the path limit when the copy could only be
+    built without its counting wrappers.
+    ``_INVALID`` means the call was refused, with the message recorded.
+    """
+    checker = None
+    if bounded.is_pydantic_v2_class(schema_cls):
+        # Inside a union that Citry's own check may run again, the class's
+        # checks that parse text spend for it each time they run.
+        checker = bounded.checker_for(schema_cls, repeated=bounded.in_repeated_check())
+    if checker is not None and checker.validator is None:
+        bounded.log_refusal(schema_cls, checker)
+        errors.add(trimmed_path(parent, "_args"), bounded.NOT_CHECKABLE_MESSAGE)
+        return _INVALID
+    if (checker is None or checker.needs_path_limit) and not pydantic_can_report(mapping, schema_cls, errors):
+        errors.add(trimmed_path(parent, "_args"), PATHS_TOO_LONG_MESSAGE)
+        return _INVALID
+    return checker
 
 
 def _record_pydantic_errors(err: Any, schema_cls: type, parent: Any, errors: FieldErrors) -> None:
     """Record each error of a Pydantic ``ValidationError`` under ``parent``."""
-    entries = err.errors()
+    # Citry reads only each error's location, message and type, so the URL,
+    # context and input value are not built.
+    entries = err.errors(include_url=False, include_context=False, include_input=False)
     shared: dict[tuple[int, Any], Any] = {}
     for container in pydantic_container_paths(schema_cls, (entry["loc"] for entry in entries), parent, shared):
         errors.add_container(container)
@@ -553,15 +781,15 @@ def shared_location_path(parent: Any, location: Sequence[Any], shared: dict[tupl
     return path
 
 
-# Pydantic writes the whole path of a field into each error it reports, in
-# its own compiled code, before Citry sees any of them. So a long dict key
-# over many bad items costs time and memory growing with the square of the
-# request's size, and the only place to stop it is before Pydantic runs.
-# These bound the total text of the paths in one validation's payloads: the
-# larger of a fixed amount, which is about 335,000 paths of 50 characters, and
-# a multiple of the payloads' own size, so a large request with short keys
-# still reaches Pydantic. A union counts once per member, because each member
-# reports its own errors.
+# Pydantic writes the whole path of a field into each error it reports,
+# before Citry sees any of them. Where Citry cannot use its copy of the
+# validator with the wrappers that count errors (a Pydantic v1 model, a State
+# checked as JSON, or a copy built without those wrappers), Citry adds up the
+# paths before Pydantic runs. These limit the total text of the paths in one
+# validation's payloads: the larger of a fixed amount, which is about 335,000
+# paths of 50 characters, and a multiple of the payloads' own size, so a
+# large request with short keys still reaches Pydantic. A union counts once
+# per member, because each member reports its own errors.
 MAX_PYDANTIC_PATH_TEXT = 16 * 1024 * 1024
 MAX_PYDANTIC_PATH_TEXT_PER_CHARACTER = 32
 PATHS_TOO_LONG_MESSAGE = (
@@ -695,8 +923,9 @@ def _json_text_paths(text: str, length: int, costs: _ModelCosts) -> int:
     """
     total = 0
     # The path length at each open bracket, and the last string seen, which
-    # is the key when a bracket opens right after it.
-    lengths = [length]
+    # is the key when a bracket opens right after it. The lengths sit in a
+    # compact array of machine ints, one per open bracket.
+    lengths = array("q", [length])
     last_string = 0
     for token in _JSON_TOKEN.finditer(text):
         character = text[token.start()]
@@ -916,7 +1145,9 @@ def _container_depths(model_cls: type, shape: tuple[Any, ...]) -> tuple[int, ...
     for depth, part in enumerate(shape):
         annotation = _single_shape(annotation)
         origin = get_origin(annotation)
-        if isinstance(annotation, type) and (_is_pydantic_model(annotation) or _is_pydantic_v1_model(annotation)):
+        # A Pydantic v1 State reports its errors by the same paths as a v2 class.
+        is_model = _is_pydantic_model(annotation) or bounded.is_pydantic_v1_class(annotation)
+        if isinstance(annotation, type) and is_model:
             annotation = _pydantic_field_annotation(annotation, part)
         elif origin in (list, tuple, set, frozenset) or origin is Sequence:
             args = get_args(annotation)
@@ -965,18 +1196,8 @@ def _pydantic_field_annotation(model_cls: type, name: Any) -> Any:
     return None if field is None else field.outer_type_
 
 
-def _is_pydantic_v1_model(annotation: type) -> bool:
-    """Whether ``annotation`` is a Pydantic v1 model, which a v1 State or a v2 install's ``pydantic.v1`` provides."""
-    # A v1 model exists only once its module is loaded, so this never imports it.
-    for module_name in ("pydantic.v1", "pydantic"):
-        base = getattr(sys.modules.get(module_name), "BaseModel", None)
-        if isinstance(base, type) and issubclass(annotation, base) and hasattr(annotation, "__fields__"):
-            return True
-    return False
-
-
 def _is_pydantic_model(schema_cls: type) -> bool:
-    """Whether ``schema_cls`` is a Pydantic model (always ``False`` without Pydantic installed)."""
+    """Whether ``schema_cls`` is a Pydantic v2 model (always ``False`` without Pydantic installed)."""
     return pydantic is not None and isinstance(schema_cls, type) and issubclass(schema_cls, pydantic.BaseModel)
 
 
@@ -1227,13 +1448,62 @@ def _coerce_union(value: Any, annotation: Any, path: Any, errors: FieldErrors, *
     if len(non_none) == 1:
         # Optional[X]: the member's own message (and nested paths) apply directly.
         return _coerce(value, non_none[0], path, errors, bind_strings=bind_strings)
-    for member in non_none:
-        scratch = FieldErrors(shares_total_with=errors)
-        coerced = _coerce(value, member, path, scratch, bind_strings=bind_strings)
+    # A union inside another union's attempt is checked again for each member
+    # of the outer one. Each second or later attempt at a value there spends
+    # from the request's work budget for that value, twice: once for itself
+    # and once for the failed attempt before it, which spent nothing. A union
+    # outside any other, or a first attempt, adds work in step with the data
+    # only.
+    budget = bounded.current_work()
+    spends = budget is not None and budget.union_depth > 0
+    if budget is not None:
+        budget.union_depth += 1
+    # Every check inside such a union may run again, so the Pydantic classes
+    # checked there spend for the text they parse, as in a Pydantic tree.
+    repeated = bounded.repeated_checks() if spends else contextlib.nullcontext()
+    try:
+        with repeated:
+            coerced = _coerce_members(
+                value, non_none, path, errors, budget if spends else None, bind_strings=bind_strings
+            )
         if coerced is not _INVALID:
             return coerced
+    finally:
+        if budget is not None:
+            budget.union_depth -= 1
     names = " or ".join(_type_name(member) for member in non_none)
     return _fail(errors, path, f"Expected {names}, got {_value_type_name(value)}.")
+
+
+def _coerce_members(
+    value: Any,
+    members: list[Any],
+    path: Any,
+    errors: FieldErrors,
+    spending: bounded.WorkBudget | None,
+    *,
+    bind_strings: bool,
+) -> Any:
+    """Return what the first union member that fits gives, or ``_INVALID``; ``spending`` charges later attempts."""
+    for attempt, member in enumerate(members):
+        if spending is not None and attempt:
+            # Citry's own check runs in Python, so each value costs more,
+            # and a list or dict about as much as a number.
+            spending.spend_on(value, 2 * bounded.CITRY_CHECK_STEPS, container_values=1)
+        scratch = FieldErrors(shares_total_with=errors)
+        try:
+            # A failed member's messages are thrown away, so they leave the
+            # error total too, and a member with too many errors fails on
+            # its own while the next member still runs.
+            with bounded.discarded_errors():
+                coerced = _coerce(value, member, path, scratch, bind_strings=bind_strings)
+        except bounded.ValidationTooCostly as stop:
+            if stop.reason != "errors":
+                raise
+            coerced = _INVALID
+        if coerced is not _INVALID:
+            return coerced
+    return _INVALID
 
 
 def _coerce_literal(value: Any, annotation: Any, path: Any, errors: FieldErrors, *, bind_strings: bool) -> Any:
@@ -1297,15 +1567,13 @@ def _coerce_container(
 
     errors.add_container(path)
     items = []
-    ok = True
     for index, (item, element_annotation) in enumerate(zip(value, element_annotations, strict=True)):
         coerced = _coerce(item, element_annotation, (path, index), errors, bind_strings=bind_strings)
         if coerced is _INVALID:
-            ok = False
-        else:
-            items.append(coerced)
-    if not ok:
-        return _INVALID
+            # The payload decides how many items it sends, so the list stops
+            # at its first bad item, as a Pydantic list does in Citry's copy.
+            return _INVALID
+        items.append(coerced)
     if origin is tuple:
         return tuple(items)
     if origin is set:
@@ -1331,24 +1599,22 @@ def _coerce_mapping(
 
     errors.add_container(path)
     items: dict[Any, Any] = {}
-    ok = True
     for key, item in value.items():
         item_path = (path, key)
         # A JSON object key is always a string, as a form value is, so the
         # key binds by the string-transport rule: "3" fills a `dict[int, ...]`.
+        # The key's own message is replaced by the "Invalid key" message
+        # below, so it comes off the error total too.
         key_errors = FieldErrors()
-        coerced_key = _coerce(key, key_annotation, item_path, key_errors, bind_strings=True)
+        with bounded.discarded_errors():
+            coerced_key = _coerce(key, key_annotation, item_path, key_errors, bind_strings=True)
         if coerced_key is _INVALID:
-            ok = False
-            _fail(errors, item_path, f"Invalid key: {key_errors.first_message() or 'Invalid value.'}")
-            continue
+            # The dict stops at its first bad item, as a list does.
+            return _fail(errors, item_path, f"Invalid key: {key_errors.first_message() or 'Invalid value.'}")
         coerced = _coerce(item, value_annotation, item_path, errors, bind_strings=bind_strings)
         if coerced is _INVALID:
-            ok = False
-        else:
-            items[coerced_key] = coerced
-    if not ok:
-        return _INVALID
+            return _INVALID
+        items[coerced_key] = coerced
     return items
 
 
@@ -1358,8 +1624,9 @@ def _coerce_mapping(
 
 
 def _fail(errors: FieldErrors, path: Any, message: str) -> Any:
-    """Record the message for ``path`` and return the invalid marker."""
+    """Record the message for ``path``, count it toward the validation's error limit, and return the invalid marker."""
     errors.add(path, message)
+    bounded.count_errors()
     return _INVALID
 
 

@@ -12,6 +12,9 @@ kwargs. Design: ``docs/design/events.md`` sections 3.2 and 7.2.
 
 from __future__ import annotations
 
+import contextlib
+import copy
+import hashlib
 import inspect
 import json
 from dataclasses import MISSING, dataclass, fields
@@ -34,6 +37,8 @@ from citry._nested_declarations import (
     _warn_nested_schema_replaced,
     convert_plain_declaration,
 )
+from citry.ext.events import _pydantic_bounded as bounded
+from citry.util.logger import logger
 
 # A setting read with this default was not set.
 _UNSET = object()
@@ -93,10 +98,11 @@ class StateMeta:
             ``public``.
         storage: Where the round-trip State lives: ``"signed"`` (in the
             client token) or ``"server"``.
-        max_bytes: Cap on the serialized State, in bytes. Signed storage
-            checks it each time it makes a token. Server storage checks it
-            after the browser's writes and before the handler runs, and
-            ``None`` turns that check off.
+        max_bytes: Cap on the serialized State, in bytes. Both storages
+            check it after the browser's writes and before the handler
+            runs (signed storage only when the call gets a new token), and
+            signed storage also checks it each time it makes a token. With
+            server storage, ``None`` turns the check off.
         max_age: Optional token expiry. With ``None``, signed tokens never
             expire and server-stored entries expire after 24 hours.
 
@@ -120,7 +126,7 @@ def state_model_kind(state_cls: type) -> str | None:
     """Return ``"v2"`` or ``"v1"`` for a Pydantic model State, or ``None`` for a dataclass."""
     if isinstance(getattr(state_cls, "model_fields", None), dict) and hasattr(state_cls, "__pydantic_validator__"):
         return "v2"
-    if isinstance(getattr(state_cls, "__fields__", None), dict) and hasattr(state_cls, "__config__"):
+    if bounded.is_pydantic_v1_class(state_cls):
         return "v1"
     return None
 
@@ -189,10 +195,93 @@ def state_wire_values(state: Any) -> dict[str, Any]:
     if kind == "v1":
         # Pydantic v1 writes a nested model with the fields of its runtime
         # class, which may be a subclass State does not declare. Reading the
-        # JSON back through the State class keeps only declared fields.
-        declared = type(state).parse_raw(state.json())
+        # JSON back through the State class keeps only declared fields. The
+        # parse is only read here, never handed out, so a kept one is used
+        # as it is.
+        declared = _parse_v1(type(state), state.json(), hand_out=False)
         return cast("dict[str, Any]", json.loads(declared.json()))
     return state_values(state)
+
+
+# How many Pydantic v1 parses a request keeps, dropping the one read longest
+# ago first. One call reads its State's old values, the browser's writes and
+# the written State, so this covers a few calls in a row at the memory cost
+# of a few States.
+_V1_PARSES_KEPT = 8
+
+
+def _parse_v1(state_cls: type, text: str, *, hand_out: bool) -> Any:
+    """
+    Parse a Pydantic v1 State from JSON text, reusing a parse of the same text in the same request.
+
+    Citry has no copy of a v1 class's validator, so each read of a v1 State
+    as JSON runs the class's whole check. One call reads its State that way
+    many times: for the fingerprint that tells whether the handler changed
+    it, for the check that it reads back the same, for the new token and for
+    the public values. A State the browser wrote can be slow to check, so a
+    request keeps the last ``_V1_PARSES_KEPT`` parses by class and text, and
+    a read of the same text uses the kept parse instead of checking it again.
+
+    With ``hand_out``, the caller receives a State it may change, so it gets
+    a copy and the kept parse stays as it was read. A parse that fails is
+    not kept, so it fails again the same way, and a State that cannot be
+    copied is parsed each time. Outside a request nothing is kept.
+
+    The CPU time of every parse counts toward the request's limit, because
+    a token's values may be ones the browser chose in an earlier request,
+    each accepted there under the limit, and a request can carry many such
+    tokens. Inside a running check that time counts already, and the
+    ``pydantic.v1`` hooks can stop it there. Outside one, the time is
+    charged without stopping the parse, which leaves less time for the
+    request's later checks, and the dispatcher refuses a later call's v1
+    restore once the time is gone.
+    """
+    budget = bounded.current_work()
+    if budget is None:
+        return state_cls.parse_raw(text)  # type: ignore[attr-defined]
+    store = budget.v1_parses
+    # A class's own `json_dumps` may leave a lone surrogate unescaped, which
+    # plain UTF-8 cannot encode.
+    key = (state_cls, hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest())
+    kept = store.get(key)
+    if kept is not None:
+        # A thread that shares the request may have dropped the entry since
+        # the read above.
+        with contextlib.suppress(KeyError):
+            store.move_to_end(key)
+        if not hand_out:
+            return kept
+        try:
+            # Copying a State this request already checked does not count
+            # toward the CPU limit of a check this read runs inside.
+            with bounded.unbudgeted():
+                return copy.deepcopy(kept)
+        except Exception:  # noqa: BLE001 - a State that cannot be copied is parsed again instead
+            logger.debug(f"Citry could not copy a parsed State of {state_cls.__qualname__}.")
+    # Nested inside a running check, the clock is already counting, and
+    # this only adds one level to it.
+    budget.clock_on()
+    try:
+        parsed = state_cls.parse_raw(text)  # type: ignore[attr-defined]
+    finally:
+        budget.clock_off()
+    keep = parsed
+    if hand_out:
+        try:
+            # The caller may change the parse it receives, so the store keeps
+            # a copy of it.
+            with bounded.unbudgeted():
+                keep = copy.deepcopy(parsed)
+        except Exception:  # noqa: BLE001 - such a State is parsed each time instead
+            return parsed
+    store[key] = keep
+    # A thread that shares the request may change the store meanwhile; the
+    # store then keeps a few entries more or less, which is harmless.
+    with contextlib.suppress(KeyError):
+        store.move_to_end(key)
+        while len(store) > _V1_PARSES_KEPT:
+            store.popitem(last=False)
+    return parsed
 
 
 def state_setting(state_cls: type, name: str, default: Any = None) -> Any:
@@ -242,21 +331,138 @@ def restore_state(state_cls: type, values: dict[str, Any]) -> Any:
     type even under ``strict=True``. Keys are read as field names only, so
     an alias, which another field could share, never fills a field.
 
+    The token is signed (or kept on the server), so the browser cannot change
+    what it carries, and Citry checked every browser write before it reached
+    the State. A Pydantic v2 State is still built with Citry's copy of the
+    class's validator, which stops each list at its first bad item and counts
+    errors. No work budget applies to that copy (see
+    ``_pydantic_bounded.unbudgeted``), so a deep tree the app built itself
+    restores as it was saved. A Pydantic v1 State, or a v2 class Citry could
+    not copy, checks the values itself. That time counts toward the CPU
+    limit of a check this restore runs inside, and a v1 restore counts
+    toward the request's limit even outside one (see ``_parse_v1``). A
+    request reuses a v1 parse of the same JSON text.
+
+    The calls of one request often restore the same values, as when 16 calls
+    carry the same token. The second time a request restores the same values
+    for the same class, it keeps a copy of the result, and later restores of
+    those values return a copy of it without checking the values again. A
+    request remembers the eight value sets it restored or reused most recently,
+    and forgets them when it ends. So a validator with a side effect, or a
+    default that changes on each run, such as ``default_factory=uuid4`` for a
+    field the token does not carry, usually runs fewer times than there are
+    calls, and calls that receive a copy share the value of the run it came
+    from. A State that cannot be copied is restored each time, and values
+    that fail to restore are checked again by every call.
+
     Raises:
         TypeError: The values no longer fit a dataclass State.
-        ValueError: The values no longer validate for a model State
-            (Pydantic's ``ValidationError`` is a ``ValueError``).
+        ValueError: The values no longer validate for a model State or a
+            Pydantic dataclass State (Pydantic's ``ValidationError`` is a
+            ``ValueError``), or have too many errors or too much nesting
+            to check.
 
     """
+    budget = bounded.current_work()
+    key = None
+    if budget is not None:
+        try:
+            text = json.dumps(values, allow_nan=False)
+        except (TypeError, ValueError):
+            # Not JSON, so not from a token; it is restored without the store.
+            text = None
+        if text is not None:
+            key = (state_cls, hashlib.sha256(text.encode()).digest())
+    kept = None
+    if budget is not None and key is not None:
+        # A store that holds a copy hands out a copy of it. The copy is of a
+        # State this request already checked, so it does not count toward
+        # the CPU limit of a check this restore runs inside.
+        with bounded.unbudgeted():
+            kept = _read_restore(budget.restores, key)
+            if kept is not None and kept is not _SEEN_ONCE:
+                try:
+                    return copy.deepcopy(kept)
+                except Exception:  # noqa: BLE001 - a value that cannot be copied is restored again instead
+                    logger.debug(f"Citry could not copy a restored State of {state_cls.__qualname__}.")
+    # The restore itself runs on the caller's clock: the write check of a
+    # Pydantic v1 State restores the browser's raw writes here inside a
+    # running check, and that work must count toward the request's CPU
+    # limit. The paths that read through Citry's copy of the class stop
+    # the clock themselves (see `_restore_state_values`).
+    restored = _restore_state_values(state_cls, values)
+    if budget is not None and key is not None:
+        with bounded.unbudgeted():
+            _remember_restore(budget.restores, key, restored, seen_before=kept is not None)
+    return restored
+
+
+# What a request's restore store holds for values restored once: a second
+# restore of the same values keeps a copy of its result (see `restore_state`).
+_SEEN_ONCE = object()
+# How many restores a request remembers, dropping the one read longest ago
+# first. It is small, so the copies it keeps cost a few States' memory per
+# request.
+_RESTORES_KEPT = 8
+
+
+def _read_restore(store: Any, key: Any) -> Any:
+    """Return what the store holds for ``key``, or ``None``, and mark it as the entry read last."""
+    kept = store.get(key)
+    if kept is not None:
+        # The store drops the entry read longest ago, so values that every
+        # call of a request reads stay in it while the calls restore other
+        # values in between, unless eight or more others come between two
+        # reads. A thread that shares the request may have dropped the
+        # entry since the read above.
+        with contextlib.suppress(KeyError):
+            store.move_to_end(key)
+    return kept
+
+
+def _remember_restore(store: Any, key: Any, restored: Any, *, seen_before: bool) -> None:
+    """Remember that a request restored ``key``, and keep a copy of the result the second time."""
+    kept: Any = _SEEN_ONCE
+    if seen_before:
+        try:
+            # A copy, because the call that restored it may change its State.
+            kept = copy.deepcopy(restored)
+        except Exception:  # noqa: BLE001 - such a State is restored each time instead
+            kept = _SEEN_ONCE
+    store[key] = kept
+    # A thread that shares the request may change the store meanwhile; the
+    # store then keeps a few entries more or less, which is harmless.
+    with contextlib.suppress(KeyError):
+        store.move_to_end(key)
+        while len(store) > _RESTORES_KEPT:
+            store.popitem(last=False)
+
+
+def _restore_state_values(state_cls: type, values: dict[str, Any]) -> Any:
+    """Build State from a verified token's values, as ``restore_state`` describes, each time it is called."""
     kind = state_model_kind(state_cls)
-    if kind is None:
-        return state_cls(**values)
-    text = json.dumps(values, allow_nan=False)
-    if kind == "v2":
-        if _VALIDATES_BY_NAME:
-            return state_cls.model_validate_json(text, by_alias=False, by_name=True)  # type: ignore[attr-defined]
-        return state_cls.model_validate_json(text)  # type: ignore[attr-defined]
-    return state_cls.parse_raw(text)  # type: ignore[attr-defined]
+    try:
+        if kind is None:
+            checker = bounded.checker_for(state_cls, state=True) if bounded.is_pydantic_v2_class(state_cls) else None
+            if checker is None or checker.validator is None:
+                return state_cls(**values)
+            with bounded.unbudgeted():
+                return bounded.validate_init(checker, state_cls, values)
+        text = json.dumps(values, allow_nan=False)
+        if kind == "v2":
+            reader = bounded.json_checker_for(state_cls)
+            options = {"by_alias": False, "by_name": True} if _VALIDATES_BY_NAME else {}
+            if reader is None or reader.validator is None:
+                # The copy could not be built (Citry logged why), or the
+                # class is not finished; the class checks the values itself.
+                return state_cls.model_validate_json(text, **options)  # type: ignore[attr-defined]
+            with bounded.unbudgeted():
+                return bounded.validate_json(reader, text, values, **options)
+    except bounded.ValidationTooCostly as stop:
+        # Data with too many errors or too much nesting to check no longer
+        # fits, like data that fails.
+        raise ValueError(stop.message) from stop
+    return _parse_v1(state_cls, text, hand_out=True)
 
 
 def check_changed_state(state: Any) -> tuple[str | None, str] | None:
@@ -305,8 +511,9 @@ def _first_error(error: ValueError) -> tuple[str | None, str]:
     found: list[Any] = []
     if callable(errors):
         try:
-            found = list(errors(include_input=False))
+            found = list(errors(include_url=False, include_context=False, include_input=False))
         except TypeError:
+            # Pydantic v1 takes no options.
             found = list(errors())
     if not found:
         return None, type(error).__name__

@@ -15,6 +15,7 @@ import logging
 import random
 import time
 from types import SimpleNamespace
+from typing import Literal
 
 import pytest
 
@@ -23,6 +24,8 @@ from citry._vue.events import default_events_producer
 from citry.citry_render import CitryRender
 from citry.ext.events import actions
 from citry.ext.events.errors import (
+    MAX_FIELD_ERRORS_TEXT,
+    MAX_FIELD_MESSAGE,
     MAX_ITEM_ERRORS,
     MAX_UNEXPECTED_FIELDS,
     EventError,
@@ -43,6 +46,7 @@ from citry.ext.events.results import (
     warn_unreturned_actions,
 )
 from citry.ext.events.schemas import validate_args
+from citry.ext.events.tokens import StateUpdateError, apply_state_updates
 
 SIGNING_KEY = "test-secret-key"
 
@@ -1103,7 +1107,7 @@ class TestFieldErrors:
 
     @staticmethod
     def _released_limit(fields, containers, unexpected):
-        # The sort and the two limits as Citry 0.7.0 applied them: the
+        # A plain reference version of the sort and the two limits: the
         # expected answer for the random test below.
         def order(item):
             parts = []
@@ -1150,8 +1154,8 @@ class TestFieldErrors:
             assert list(got[0]) == list(expected[0])
 
     def test_a_path_with_many_dots_is_limited_quickly(self):
-        # A dict key from the request can hold any number of dots. Citry
-        # 0.7.0 took 2.6 s on this one key.
+        # A dict key from the request can hold any number of dots, and
+        # limiting the paths must take time in step with the key's length.
         fields = {f"scores.{'.' * 40_000}": "Bad."} | {f"scores.{index}": "Bad." for index in range(24)}
         started = time.perf_counter()
         kept, dropped = _limited(fields, {"scores"})
@@ -1160,7 +1164,8 @@ class TestFieldErrors:
 
     def test_a_long_key_under_many_messages_is_read_once(self):
         # Every message shares the pair of its dict key, so the key's text is
-        # written only for the kept messages.
+        # written only for the kept messages. This key is longer than the text
+        # cap, so only the first message is kept, and the rest are counted.
         errors = FieldErrors()
         key_path = ((None, "scores"), "a" * 100_000)
         errors.add_container((None, "scores"))
@@ -1170,4 +1175,76 @@ class TestFieldErrors:
         started = time.perf_counter()
         kept, dropped = errors.limited()
         assert time.perf_counter() - started < 1
+        assert list(kept) == ["scores." + "a" * 100_000 + ".0"]
+        assert dropped == 99_999
+
+    def test_a_shorter_key_under_many_messages_keeps_twenty_and_is_read_once(self):
+        errors = FieldErrors()
+        key_path = ((None, "scores"), "a" * 2_000)
+        errors.add_container((None, "scores"))
+        errors.add_container(key_path)
+        for index in range(100_000):
+            errors.add((key_path, index), "Bad.")
+        started = time.perf_counter()
+        kept, dropped = errors.limited()
+        assert time.perf_counter() - started < 1
         assert (len(kept), dropped) == (20, 99_980)
+
+    def test_the_first_message_is_kept_however_long_its_path(self):
+        long_name = "a" * (2 * MAX_FIELD_ERRORS_TEXT)
+        kept, dropped = _limited({long_name: "Bad.", "b": "Bad."})
+        assert list(kept) == [long_name]
+        assert dropped == 1
+
+    def test_a_long_message_is_cut_and_ends_with_an_ellipsis(self):
+        kept, dropped = _limited(
+            {
+                "a": "m" * MAX_FIELD_MESSAGE,
+                "b": "m" * (MAX_FIELD_MESSAGE + 1),
+                "_args": "m" * (2 * MAX_FIELD_ERRORS_TEXT),
+            }
+        )
+        assert dropped == 0
+        assert kept["a"] == "m" * MAX_FIELD_MESSAGE
+        assert kept["b"] == "m" * (MAX_FIELD_MESSAGE - 1) + "\u2026"
+        assert kept["_args"] == kept["b"]
+
+    def test_messages_stop_at_the_text_cap_and_the_rest_are_counted(self):
+        # Paths of about a thousand characters, so about 64 messages fit.
+        names = [f"f{index:03d}" + "x" * 1_000 for index in range(200)]
+        kept, dropped = _limited({name: "Bad." for name in names})
+        assert (len(kept), dropped) == (65, 135)
+        # The kept messages are the first in path order, and they fit the cap.
+        assert list(kept) == names[:65]
+        listed_text = sum(len(name) + len(message) for name, message in kept.items())
+        assert listed_text <= MAX_FIELD_ERRORS_TEXT
+        # One more would not have fit.
+        assert listed_text + len(names[65]) + len("Bad.") > MAX_FIELD_ERRORS_TEXT
+
+    def test_a_long_pydantic_message_is_cut_for_event_data_and_state_writes(self):
+        # Pydantic lists every allowed value of a Literal in its message.
+        pydantic = pytest.importorskip("pydantic")
+        choices = tuple(f"choice-{index:03d}-" + "x" * 40 for index in range(60))
+        pick = pydantic.create_model("Pick", choice=(Literal[choices], choices[0]))
+        result = validate_args(pick, {"choice": "nope"})
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(pick(), {"choice": "nope"}, model_fields={"choice"})
+
+        for message in (result.fields["choice"], caught.value.fields["choice"]):
+            assert len(message) == MAX_FIELD_MESSAGE
+            assert message.endswith("\u2026")
+
+    def test_the_text_of_the_messages_counts_beside_the_paths(self):
+        # Each message counts as listed, cut to 1,000 characters: with a
+        # four-character path, 65 of them fit in the text cap.
+        kept, dropped = _limited({f"f{index:03d}": "m" * 30_000 for index in range(100)})
+        assert (len(kept), dropped) == (65, 35)
+        assert {len(message) for message in kept.values()} == {MAX_FIELD_MESSAGE}
+
+    def test_a_short_message_after_the_cap_is_counted_not_listed(self):
+        # `b` does not fit after `a`, and `c` would fit alone. Once a message
+        # is turned away, none after it is listed, so the kept ones stay the
+        # first in path order.
+        kept, dropped = _limited({"a" + "x" * 63_000: "Bad.", "b" + "x" * 5_000: "Bad.", "c": "Bad."})
+        assert list(kept) == ["a" + "x" * 63_000]
+        assert dropped == 2

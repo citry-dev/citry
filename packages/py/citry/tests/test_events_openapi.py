@@ -35,9 +35,13 @@ _DATA_200_DESCRIPTION = (
 )
 _RESPONSE_422 = {
     "description": (
-        "The args did not validate; per-field messages ride in results[0].error.fieldErrors."
-        " fieldErrors lists at most 20 fields the schema does not declare and at most 20 items per list"
-        " or dict field; the message counts the rest."
+        "The args did not validate; results[0].error.fieldErrors holds a message for each bad field."
+        " It names the first bad item of each list or dict field (a list under a wrap validator lists"
+        " up to 20), lists at most 20 fields the schema does not declare, and"
+        " stops at 65,536 characters of text. It cuts a message longer than 1,000 characters."
+        " When it leaves messages out, the message field says how many."
+        " Data with too many errors, data too large or nested too deeply to check, or a check that took"
+        " too long gets one message under _args."
     ),
     "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EventErrorEnvelope"}}},
 }

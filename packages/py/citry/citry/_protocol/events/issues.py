@@ -332,9 +332,11 @@ def _copy_json_unchecked(value: Any) -> Any:
 
 # A JSON string, with its escapes. Brackets inside one are text, not nesting,
 # so they are removed before counting. A string with no closing quote runs to
-# the end of the text, so every match from a quote succeeds and each
-# character is read once.
-_JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"?', re.DOTALL)
+# the end of the text, so every match from a quote succeeds. The repeats are
+# possessive (`*+`, Python 3.11 and newer): a run of plain characters, or an
+# escape, is taken whole and never given back, so each character is read
+# once.
+_JSON_STRING = re.compile(r'"[^"\\]*+(?:\\.[^"\\]*+)*+"?', re.DOTALL)
 _JSON_BRACKET = re.compile(r"[\[\]{}]")
 
 

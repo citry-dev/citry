@@ -295,6 +295,10 @@ child component's `class Kwargs(Parent.Kwargs):` keeps its parent's.
 `Slots`, Citry's own components, and the components of a library you
 install with `register_library()` keep the classes their authors wrote.
 
+With a Pydantic v2 `model_base`, a component with Events `data` or State
+classes needs Pydantic 2.13.0 or newer. On an older Pydantic, defining
+it raises `RuntimeError`.
+
 `model_base` takes one of these values:
 
 | Value | What Citry generates |
@@ -341,8 +345,14 @@ the component:
   `Kwargs` cannot add fields to its parent's named tuple either.
 - `State` under a frozen dataclass base, a frozen model base, or
   `typing.NamedTuple`, because handlers change `State`.
-- An Events `data` class under `typing.NamedTuple` or a Pydantic v1 base,
-  because Events validation reads dataclasses and Pydantic v2 models.
+- An Events `data` class that a `typing.NamedTuple` or Pydantic v1
+  `model_base` would generate, because Events validation reads
+  dataclasses and Pydantic v2 models.
+- An Events `data` or State class with a part Citry refuses, such as a
+  State field the browser may write that holds a filter tree whose
+  union has no discriminator (`ValueError`, naming the field and the
+  fix; see
+  [Fix a refused schema](/security/#schemas-citry-refuses)).
 
 A name imported only under `if TYPE_CHECKING:`, which Citry's own check
 skips, cannot be read when the class is defined. Under a Pydantic v2 base

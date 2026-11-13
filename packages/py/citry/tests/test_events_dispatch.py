@@ -1027,6 +1027,74 @@ class TestServerStoredState:
         assert self._entries(c) == {}
 
 
+class TestSignedStateCap:
+    """A browser write may not make signed State larger than `_max_bytes`, which could not be signed."""
+
+    def _signed(self, c):
+        ran = []
+
+        class Notes(Component):
+            citry = c
+            template = "<div>n</div>"
+
+            class State:
+                note: str = ""
+                _max_bytes = 1000
+
+            class Events:
+                def read(self, state):
+                    ran.append(True)
+                    return {"size": len(state.note)}
+
+        Notes.ran = ran
+        return Notes
+
+    def _call(self, notes, note, caller="n1"):
+        token = mint_state_token(
+            notes.State(), class_id=notes.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=1000
+        )
+        call = {
+            "componentClassId": notes.class_id,
+            "handlerName": "read",
+            "stateToken": token,
+            "stateUpdates": {"note": note},
+        }
+        if caller is not None:
+            call["callerRenderId"] = caller
+        return call
+
+    def test_a_browser_write_over_the_cap_is_refused_before_the_handler(self):
+        # Signing the State after the handler would fail, which answered 500
+        # after the handler had already run.
+        c = _citry()
+        notes = self._signed(c)
+        [item] = _dispatch(c, self._call(notes, "x" * 2000))["results"]
+        assert item["error"]["status"] == 422
+        assert item["error"]["code"] == "invalid_args"
+        assert "over its _max_bytes cap of 1000" in item["error"]["message"]
+        assert notes.ran == []
+
+    def test_a_call_that_makes_no_new_token_is_not_capped(self):
+        # Without a caller instance, or with a client that does not accept
+        # the `state` action, Citry never signs the State again.
+        c = _citry()
+        notes = self._signed(c)
+        [item] = _dispatch(c, self._call(notes, "x" * 2000, caller=None))["results"]
+        assert item["ok"] is True
+        no_state = {"capabilities": {"actions": ["data"]}}
+        [item] = _dispatch(c, self._call(notes, "x" * 2000), envelope_extra=no_state)["results"]
+        assert item["ok"] is True
+        assert notes.ran == [True, True]
+
+    def test_a_browser_write_within_the_cap_runs_the_handler_and_signs_the_state(self):
+        c = _citry()
+        notes = self._signed(c)
+        [item] = _dispatch(c, self._call(notes, "x" * 500))["results"]
+        assert item["ok"] is True
+        assert notes.ran == [True]
+        assert item["actions"][0]["action"] == "state"
+
+
 class TestErrors:
     """Each wire code; messages are the protocol examples' locked texts."""
 
@@ -1597,6 +1665,113 @@ class TestErrors:
             [item] = _dispatch(c, call)["results"]
         assert item["error"]["code"] == "handler_error"
         assert "ValueError" in item["error"]["message"]
+
+
+@dataclass
+class _BrokenIn:
+    kind: str
+
+    def __post_init__(self):
+        if self.kind == "boom":
+            raise RuntimeError("the data class has a bug")
+        if self.kind == "refuse":
+            raise EventError("Not that kind.", status=403)
+
+
+class TestArgsCheckCrash:
+    """An exception from the data class's own code answers its call and leaves the others."""
+
+    @staticmethod
+    def _probe(c, runs):
+        class Probe(Component):
+            citry = c
+            template = "<div>probe</div>"
+
+            class Events:
+                def run(self, data: _BrokenIn):
+                    runs.append(data.kind)
+
+        return Probe
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True])
+    def test_a_data_class_that_raises_fails_only_its_call(self, use_async_dispatch, caplog):
+        c = _citry()
+        runs: list[str] = []
+        probe = self._probe(c, runs)
+        calls = [
+            {"componentClassId": probe.class_id, "handlerName": "run", "args": {"kind": kind}}
+            for kind in ("fine", "boom", "later")
+        ]
+        envelope = _envelope(*calls)
+        dispatcher = EventsDispatcher()
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            if use_async_dispatch:
+                result = asyncio.run(dispatcher.dispatch_async(envelope, _ctx(c)))
+            else:
+                result = dispatcher.dispatch(envelope, _ctx(c))
+
+        first, second, third = result["results"]
+        assert (first["ok"], third["ok"]) == (True, True)
+        assert second["ok"] is False
+        assert second["error"]["status"] == 500
+        assert second["error"]["code"] == "handler_error"
+        # The wire message never carries the exception text outside debug mode.
+        assert "the data class has a bug" not in json.dumps(second)
+        assert runs == ["fine", "later"]
+        # The handler never ran, and the log says the data check failed.
+        assert "Uncaught exception checking the data for event handler 'run'" in caplog.text
+
+    def test_the_debug_text_says_the_data_check_raised_not_the_handler(self, caplog):
+        c = _citry()
+        probe = self._probe(c, [])
+        call = {"componentClassId": probe.class_id, "handlerName": "run", "args": {"kind": "boom"}}
+        with caplog.at_level(logging.DEBUG, logger="citry"):
+            [item] = _dispatch(c, call)["results"]
+
+        message = item["error"]["message"]
+        assert message.startswith("Checking the event's data raised an unexpected error")
+        assert "the data class has a bug" in message
+
+    def test_the_on_event_error_hook_sees_a_data_class_that_raises(self):
+        seen = {}
+
+        class Observer(Extension):
+            name = "observer"
+
+            def on_event_error(self, ctx):
+                seen["error"] = str(ctx.error)
+                seen["handler"] = ctx.handler.name
+                seen["events"] = ctx.events
+
+        c = _citry(extensions=[Observer])
+        probe = self._probe(c, [])
+        call = {"componentClassId": probe.class_id, "handlerName": "run", "args": {"kind": "boom"}}
+        [item] = _dispatch(c, call)["results"]
+
+        assert item["error"]["code"] == "handler_error"
+        # The handler was resolved, but the call had not built its events instance.
+        assert seen == {"error": "the data class has a bug", "handler": "run", "events": None}
+
+    @pytest.mark.parametrize("use_async_dispatch", [False, True])
+    def test_an_event_error_from_a_data_class_answers_with_its_status(self, use_async_dispatch):
+        c = _citry()
+        runs: list[str] = []
+        probe = self._probe(c, runs)
+        envelope = _envelope(
+            {"componentClassId": probe.class_id, "handlerName": "run", "args": {"kind": "refuse"}},
+            {"componentClassId": probe.class_id, "handlerName": "run", "args": {"kind": "fine"}},
+        )
+        dispatcher = EventsDispatcher()
+        if use_async_dispatch:
+            result = asyncio.run(dispatcher.dispatch_async(envelope, _ctx(c)))
+        else:
+            result = dispatcher.dispatch(envelope, _ctx(c))
+
+        refused, accepted = result["results"]
+        assert refused["error"]["status"] == 403
+        assert refused["error"]["message"] == "Not that kind."
+        assert accepted["ok"] is True
+        assert runs == ["fine"]
 
 
 class TestUrlAuthoritative:

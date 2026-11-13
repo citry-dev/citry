@@ -60,6 +60,7 @@ from citry._protocol.events import (
     validate_action,
     validate_result,
 )
+from citry.ext.events._pydantic_bounded import TOO_SLOW_MESSAGE, current_work, request_work
 
 # The csrf_failed message is example-locked contract text; it lives next to
 # the floor that raises it (csrf.py) and is shared here for the fallback path
@@ -79,15 +80,21 @@ from citry.ext.events.results import (
     warn_unreturned_actions,
 )
 from citry.ext.events.schemas import StringArgs, declared_field_names, validate_args
-from citry.ext.events.state import check_changed_state, public_state_values, restore_state, state_wire_values
+from citry.ext.events.state import (
+    check_changed_state,
+    public_state_values,
+    restore_state,
+    state_model_kind,
+    state_wire_values,
+)
 from citry.ext.events.tokens import (
     InvalidStateError,
     StaleStateError,
     StateUpdateError,
     apply_state_updates,
     mint_state_token,
-    server_state_bytes,
-    server_state_growth_error,
+    state_bytes,
+    state_growth_error,
     verify_state_token,
 )
 from citry.extension import _as_list_of_items
@@ -505,19 +512,22 @@ class EventsDispatcher:
             return checked
         envelope_id, calls, capabilities = checked
         results: list[dict[str, Any]] = []
-        for call in calls:
-            outcome = self._run_call_sync(
-                call,
-                ctx,
-                capabilities=capabilities,
-                request=request,
-                url_component=url_component,
-                url_event=url_event,
-                csrf_check=csrf_check,
-            )
-            if isinstance(outcome, RouteResponse):
-                return outcome
-            results.append(outcome)
+        # The calls of one request share one work budget for data that can be
+        # checked more than once.
+        with request_work():
+            for call in calls:
+                outcome = self._run_call_sync(
+                    call,
+                    ctx,
+                    capabilities=capabilities,
+                    request=request,
+                    url_component=url_component,
+                    url_event=url_event,
+                    csrf_check=csrf_check,
+                )
+                if isinstance(outcome, RouteResponse):
+                    return outcome
+                results.append(outcome)
         return finalize_owned_result_envelope(envelope_id, results)
 
     async def dispatch_async(
@@ -560,19 +570,22 @@ class EventsDispatcher:
             return checked
         envelope_id, calls, capabilities = checked
         results: list[dict[str, Any]] = []
-        for call in calls:
-            outcome = await self._run_call_async(
-                call,
-                ctx,
-                capabilities=capabilities,
-                request=request,
-                url_component=url_component,
-                url_event=url_event,
-                csrf_check=csrf_check,
-            )
-            if isinstance(outcome, RouteResponse):
-                return outcome
-            results.append(outcome)
+        # The calls of one request share one work budget for data that can be
+        # checked more than once.
+        with request_work():
+            for call in calls:
+                outcome = await self._run_call_async(
+                    call,
+                    ctx,
+                    capabilities=capabilities,
+                    request=request,
+                    url_component=url_component,
+                    url_event=url_event,
+                    csrf_check=csrf_check,
+                )
+                if isinstance(outcome, RouteResponse):
+                    return outcome
+                results.append(outcome)
         return finalize_owned_result_envelope(envelope_id, results)
 
     # ----- Envelope-level validation -----
@@ -615,6 +628,7 @@ class EventsDispatcher:
         plan = self._prepare_call(
             call,
             ctx,
+            capabilities=capabilities,
             request=request,
             url_component=url_component,
             url_event=url_event,
@@ -673,6 +687,7 @@ class EventsDispatcher:
         plan = self._prepare_call(
             call,
             ctx,
+            capabilities=capabilities,
             request=request,
             url_component=url_component,
             url_event=url_event,
@@ -714,6 +729,7 @@ class EventsDispatcher:
         call: Any,
         ctx: TransportContext,
         *,
+        capabilities: dict[str, frozenset[str]],
         request: EventRequest | None,
         url_component: str | None,
         url_event: str | None,
@@ -819,6 +835,19 @@ class EventsDispatcher:
             except StaleStateError as err:
                 logger.debug(err.message)
                 return build_error_result(build_error(409, "stale_state", _MSG_STALE_STATE), send_sequence)
+            budget = current_work()
+            if state_model_kind(info.state_cls) == "v1" and budget is not None and budget.out_of_time():
+                # A Pydantic v1 restore counts toward the request's CPU limit
+                # but cannot be stopped partway outside a check (see
+                # `_parse_v1`), so once earlier work used the time up, this
+                # call is refused before it starts another one.
+                error = build_error(
+                    422,
+                    "invalid_args",
+                    f"The State of component {comp_cls.__name__!r} could not be checked in time.",
+                    {"_state": TOO_SLOW_MESSAGE},
+                )
+                return build_error_result(error, send_sequence)
             try:
                 state = restore_state(info.state_cls, verified.state_kwargs)
             except Exception as err:  # noqa: BLE001 - a validator's own bug must not escape the dispatcher
@@ -846,12 +875,29 @@ class EventsDispatcher:
             state_fingerprint = _state_fingerprint(state)
             if updates and info.state_meta is not None:
                 meta = info.state_meta
-                # Server storage keeps every changed State in the cache, so a
-                # browser write must not make it larger than the cap. The
+                # A browser write must not make State larger than the cap:
+                # signed storage could not sign it after the handler ran, and
+                # server storage keeps every changed State in the cache. The
                 # check runs here, before the handler, so a refused call has
                 # no side effects.
-                capped = meta.storage == "server" and meta.max_bytes is not None
-                size_before = server_state_bytes(state, comp_cls.class_id) if capped else None
+                capped = meta.max_bytes is not None
+                if meta.storage != "server":
+                    # Signed State is signed again only for a caller instance
+                    # that accepts the `state` action (see `_resign_state`).
+                    # A call that makes no token, such as an API call, keeps
+                    # working with a State it never sends back.
+                    accepted = (
+                        CAPABILITIES_BASELINE_V1["actions"]
+                        if ctx.response_mode == "compat"
+                        else capabilities["actions"]
+                    )
+                    capped = capped and call.get("callerRenderId") is not None and "state" in accepted
+                # Server storage may hold a State the server itself made
+                # larger than the cap, which the browser may still change
+                # as long as it does not grow it. A signed State over the cap
+                # cannot be signed at all, so it has no size to compare with.
+                compares = capped and meta.storage == "server"
+                size_before = state_bytes(state, comp_cls.class_id) if compares else None
                 try:
                     apply_state_updates(state, updates, model_fields=meta.model)
                 except StateUpdateError as err:
@@ -859,9 +905,9 @@ class EventsDispatcher:
                 # A browser update for a tuple field also arrives as a list.
                 _restore_json_tuples(state, info.state_cls)
                 if capped:
-                    too_large = server_state_growth_error(
+                    too_large = state_growth_error(
                         before=size_before,
-                        after=server_state_bytes(state, comp_cls.class_id),
+                        after=state_bytes(state, comp_cls.class_id),
                         max_bytes=meta.max_bytes,
                         component_name=comp_cls.__name__,
                     )
@@ -879,10 +925,23 @@ class EventsDispatcher:
         # a no-JS post both send as one more field; drop it first so the call
         # is not rejected for a field the data class never asked for. The
         # drop keeps the args' class, so the form conversion above survives.
-        args = _without_csrf_fields(args, handler.data_schema, csrf_field_names(ctx.citry))
+        validation = None
+        try:
+            args = _without_csrf_fields(args, handler.data_schema, csrf_field_names(ctx.citry))
+            if handler.data_schema is not None:
+                validation = validate_args(handler.data_schema, args)
+        except EventError as err:
+            return build_error_result(wire_error(err), send_sequence)
+        except Exception as err:  # noqa: BLE001 - a crash while checking args answers this call only
+            # The data class's own code (a `__post_init__`, a validator, a
+            # class Citry cannot read) may raise anything. Without this, the
+            # exception would leave the dispatcher and end the whole
+            # request, losing the results of the calls that already ran.
+            return self._unexpected_error(
+                ctx, err, comp_cls=comp_cls, handler=handler, send_sequence=send_sequence, checking_args=True
+            )
         data_value: Any = None
-        if handler.data_schema is not None:
-            validation = validate_args(handler.data_schema, args)
+        if validation is not None:
             if not validation.ok:
                 message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
                 # Validation listed only the first undeclared keys and the
@@ -1401,13 +1460,16 @@ class EventsDispatcher:
         handler: EventHandler | None = None,
         events: Any = None,
         send_sequence: int | None = None,
+        checking_args: bool = False,
     ) -> dict[str, Any]:
         """
         An uncaught exception: log it, fire ``on_event_error``, answer a 500.
 
         The wire message is the generic contract text; the exception text
         rides only in debug mode, and a traceback never rides at all
-        (design 3.7).
+        (design 3.7). ``checking_args`` says the exception came from checking
+        the call's data, so the handler never ran, and the log and the
+        debug text say so.
         """
         if plan is not None:
             comp_cls = plan.comp_cls
@@ -1416,9 +1478,11 @@ class EventsDispatcher:
             send_sequence = plan.send_sequence
         handler_label = handler.name if handler is not None else "<unresolved>"
         comp_label = comp_cls.__name__ if comp_cls is not None else "<unresolved>"
-        logger.exception(f"Uncaught exception from event handler {handler_label!r} on component {comp_label}.")
+        source = "checking the data for" if checking_args else "from"
+        logger.exception(f"Uncaught exception {source} event handler {handler_label!r} on component {comp_label}.")
         if _debug_enabled():
-            message = f"The event handler raised an unexpected error: {type(err).__name__}: {err}"
+            raised = "Checking the event's data raised" if checking_args else "The event handler raised"
+            message = f"{raised} an unexpected error: {type(err).__name__}: {err}"
         else:
             message = _MSG_HANDLER_ERROR
         result = build_error_result(build_error(500, "handler_error", message), send_sequence)

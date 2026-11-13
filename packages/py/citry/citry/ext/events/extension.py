@@ -25,6 +25,7 @@ from citry._nested_declarations import (
     _compose_nested_declaration_class,
     _nearest_data_shape_declaration,
 )
+from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events._introspection import capture_handler_introspection, inspect_events
 from citry.ext.events.bindings import compile_template_bindings, rewrite_resolved_attrs
 from citry.ext.events.cache import export_events_cache, stage_events_cache
@@ -48,7 +49,7 @@ from citry.ext.events.handlers import (
 )
 from citry.ext.events.openapi import OpenApiCommand
 from citry.ext.events.routes import events_routes
-from citry.ext.events.schemas import generated_data_schema
+from citry.ext.events.schemas import check_no_pydantic_v1, generated_data_schema, nested_pydantic_classes
 from citry.ext.events.state import (
     StateMeta,
     build_state_instance,
@@ -659,6 +660,12 @@ class EventsExtension(Extension):
         validate_state_class(comp_name, declaration)
         converted = convert_state_class(comp_name, declaration, _schema_model_base(cls, nearest.declaring_class))
         meta = resolve_state_meta(comp_name, declaration, converted)
+        # Browser writes reach a Pydantic State through Citry's copy of its
+        # validator, which needs a recent Pydantic, and Citry cannot check a
+        # few schemas; both fail here, or at the first write when the State
+        # is finished later.
+        bounded.check_supported(comp_name, converted, "State class")
+        bounded.check_state_class(comp_name, converted, frozenset(meta.model))
         check_replaced_state(cls, nearest, converted)
         type.__setattr__(cls, "State", converted)
         return converted, meta
@@ -724,6 +731,18 @@ class EventsExtension(Extension):
                 model_base = _schema_model_base(cls, cls)
                 if data_schema is not None and model_base is not None:
                     data_schema = generated_data_schema(comp_name, data_schema, model_base)
+                if data_schema is not None:
+                    # A pydantic.v1 check cannot be counted or stopped like
+                    # the others, so a data class that reaches one is refused.
+                    check_no_pydantic_v1(comp_name, data_schema)
+                    # Event data reaches a Pydantic class through Citry's
+                    # copy of its validator; see `_pydantic_bounded`.
+                    # Finding Pydantic classes nested in a plain dataclass
+                    # resolves its annotations, so it runs only when an old
+                    # Pydantic would refuse every call to them.
+                    nested = () if bounded.SUPPORTED else nested_pydantic_classes(data_schema)
+                    bounded.check_supported(comp_name, data_schema, "event data class", nested)
+                    bounded.check_data_class(comp_name, data_schema)
                 options = event_options(func)
                 wire_name = options.name if options is not None and options.name is not None else method_name
                 if wire_name in handlers:

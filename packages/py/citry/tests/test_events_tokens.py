@@ -12,9 +12,11 @@ fixed.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
+import logging
 import typing
 from dataclasses import dataclass, field, make_dataclass
 from datetime import timedelta
@@ -27,8 +29,10 @@ import pytest
 import typing_extensions
 
 from citry.cache import InMemoryCache
+from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events import tokens
 from citry.ext.events.schemas import PATHS_TOO_LONG_MESSAGE
+from citry.ext.events.state import check_changed_state, restore_state
 from citry.ext.events.tokens import (
     InvalidStateError,
     SigningSecretError,
@@ -881,6 +885,32 @@ class TestApplyUpdates:
         assert "Expected int" in exc_info.value.fields["count"]
         assert state.count == 0
 
+    def test_lone_surrogate_in_text_or_key_rejected_422(self):
+        # JSON lets the browser send half of a UTF-16 pair, which the UTF-8
+        # token cannot hold, so the whole batch is refused before any write.
+        @dataclass
+        class NoteState:
+            text: str = ""
+            tags: dict[str, int] = field(default_factory=dict)
+            count: int = 0
+
+        state = NoteState()
+        with pytest.raises(StateUpdateError) as exc_info:
+            apply_state_updates(
+                state,
+                {"text": "a\udc00", "tags": {"\ud800": 1}, "count": 2},
+                model_fields=("text", "tags", "count"),
+            )
+        assert exc_info.value.status == 422
+        assert exc_info.value.fields == {
+            "tags": tokens._LONE_SURROGATE_MESSAGE,
+            "text": tokens._LONE_SURROGATE_MESSAGE,
+        }
+        assert (state.text, state.tags, state.count) == ("", {}, 0)
+        # A pair of escapes in the request's JSON reads as one ordinary character.
+        paired = json.loads('{"text": "\\ud83d\\ude00"}')
+        assert apply_state_updates(state, paired, model_fields=("text",)) == ("text",)
+
     def test_parameterized_container_fields_accept_json_lists(self):
         # JSON has no tuple or set, and on Python 3.10 a parameterized generic
         # such as ``tuple[str, ...]`` counts as a type that isinstance() rejects.
@@ -1058,31 +1088,31 @@ class TestApplyUpdates:
             apply_state_updates(state, {"maybe_tags": 5}, model_fields=("maybe_tags",))
         assert exc_info.value.fields == {"maybe_tags": "Expected list[int], got int."}
 
-    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
-    def test_bad_list_items_stop_at_twenty(self, count, note):
-        # The same per-field limit a Pydantic State has, so a long list of
-        # bad items does not make the error response as long as the list.
+    @pytest.mark.parametrize("count", [1, 21])
+    def test_a_list_stops_at_its_first_bad_item(self, count):
+        # The same early stop a Pydantic State has, so a long list of bad
+        # items does not make the error response as long as the list.
         with pytest.raises(StateUpdateError) as exc_info:
             apply_state_updates(ShapedState(), {"tags": ["x"] * count}, model_fields=("tags",))
-        assert list(exc_info.value.fields) == [f"tags.{index}" for index in range(min(count, 20))]
-        assert exc_info.value.message == "Some state updates were rejected; see the field messages." + note
+        assert list(exc_info.value.fields) == ["tags.0"]
+        assert exc_info.value.message == "Some state updates were rejected; see the field messages."
 
-    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
-    def test_bad_dict_values_stop_at_twenty(self, count, note):
+    @pytest.mark.parametrize("count", [1, 21])
+    def test_a_dict_stops_at_its_first_bad_value(self, count):
         values = {f"k{index:02d}": "x" for index in range(count)}
         with pytest.raises(StateUpdateError) as exc_info:
             apply_state_updates(ShapedState(), {"scores": values}, model_fields=("scores",))
-        assert list(exc_info.value.fields) == [f"scores.k{index:02d}" for index in range(min(count, 20))]
-        assert exc_info.value.message == "Some state updates were rejected; see the field messages." + note
+        assert list(exc_info.value.fields) == ["scores.k00"]
+        assert exc_info.value.message == "Some state updates were rejected; see the field messages."
 
-    def test_a_scalar_message_is_listed_beside_a_limited_list(self):
-        # The limit applies to a list's items only, so the wrong-typed
-        # `choice` message is kept next to the 20 listed `tags` items.
+    def test_a_scalar_message_is_listed_beside_a_stopped_list(self):
+        # The early stop applies to a list's items only, so the wrong-typed
+        # `choice` message is kept next to the first bad `tags` item.
         with pytest.raises(StateUpdateError) as exc_info:
             apply_state_updates(ShapedState(), {"tags": ["x"] * 25, "choice": "z"}, model_fields=("tags", "choice"))
         fields = exc_info.value.fields
-        assert list(fields) == ["choice"] + [f"tags.{index}" for index in range(20)]
-        assert exc_info.value.message.endswith(" 5 more field errors are not shown.")
+        assert list(fields) == ["choice", "tags.0"]
+        assert "more field error" not in exc_info.value.message
 
     def test_a_typed_dict_field_or_item_accepts_an_object_and_rejects_the_rest(self):
         # isinstance() refuses a TypedDict, so it is checked as a JSON object.
@@ -1220,28 +1250,23 @@ class TestApplyUpdates:
         apply_state_updates(state, {"either": [1, 2]}, model_fields=("either",))
         assert state.either == [1, 2]
 
-    def test_rejected_messages_are_listed_in_path_order_whatever_the_key_order(self):
-        # Digit segments sort in number order and text after them, so a dict
-        # sent in reverse lists `9` before `10` before `a`.
+    def test_a_dict_names_its_first_bad_value_in_the_order_sent(self):
+        # The dict stops at the first bad value it reads, so which value is
+        # named follows the order the browser sent the keys in.
         values = {"a": "x", "10": "x", "9": "x", "2": "x"}
-        for ordered in (values, dict(reversed(values.items()))):
+        for ordered, first in ((values, "scores.a"), (dict(reversed(values.items())), "scores.2")):
             with pytest.raises(StateUpdateError) as exc_info:
                 apply_state_updates(TypedShapeState(), {"scores": ordered}, model_fields=("scores",))
-            assert list(exc_info.value.fields) == ["scores.2", "scores.9", "scores.10", "scores.a"]
+            assert list(exc_info.value.fields) == [first]
 
-    def test_the_twenty_kept_messages_do_not_depend_on_the_key_order(self):
-        # Without the sort, the 20 kept would be the last 20 sent.
-        values = {str(index): "x" for index in reversed(range(25))}
-        with pytest.raises(StateUpdateError) as exc_info:
-            apply_state_updates(TypedShapeState(), {"scores": values}, model_fields=("scores",))
-        assert list(exc_info.value.fields) == [f"scores.{index}" for index in range(20)]
-        assert exc_info.value.message.endswith(" 5 more field errors are not shown.")
-
-    def test_messages_of_different_fields_are_listed_in_path_order(self):
+    def test_messages_of_different_fields_are_listed_in_path_order_whatever_the_update_order(self):
         updates = {"scores": {"b": "x", "a": "x"}, "numbers": ["x", 1, "x"], "color": "green"}
-        with pytest.raises(StateUpdateError) as exc_info:
-            apply_state_updates(TypedShapeState(), updates, model_fields=tuple(updates))
-        assert list(exc_info.value.fields) == ["color", "numbers.0", "numbers.2", "scores.a", "scores.b"]
+        for ordered in (updates, dict(reversed(updates.items()))):
+            with pytest.raises(StateUpdateError) as exc_info:
+                apply_state_updates(TypedShapeState(), ordered, model_fields=tuple(ordered))
+            # Each collection names only its first bad item: `scores.b` is
+            # the first one sent, and `numbers.2` is never reached.
+            assert list(exc_info.value.fields) == ["color", "numbers.0", "scores.b"]
 
 
 class TestServerStorage:
@@ -1451,8 +1476,16 @@ class TestPydanticStateExtraKeys:
 
 
 class TestPydanticStateItemErrors:
-    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
-    def test_bad_list_items_in_a_write_stop_at_twenty(self, count, note):
+    """
+    A write to a Pydantic State lists the first bad item of each list or dict, where a dataclass State lists twenty.
+
+    The count of twenty for a dataclass State is in ``TestApplyUpdates``.
+    """
+
+    NO_NOTE = "Some state updates were rejected; see the field messages."
+
+    @pytest.mark.parametrize("count", [1, 20, 21])
+    def test_a_bad_list_in_a_write_lists_only_its_first_bad_item(self, count):
         pydantic = pytest.importorskip("pydantic")
 
         class Board(pydantic.BaseModel):
@@ -1460,11 +1493,11 @@ class TestPydanticStateItemErrors:
 
         with pytest.raises(StateUpdateError) as caught:
             apply_state_updates(Board(), {"tags": ["x"] * count}, model_fields={"tags"})
-        assert list(caught.value.fields) == [f"tags.{index}" for index in range(min(count, 20))]
-        assert caught.value.message == "Some state updates were rejected; see the field messages." + note
+        assert list(caught.value.fields) == ["tags.0"]
+        assert caught.value.message == self.NO_NOTE
 
-    @pytest.mark.parametrize(("count", "note"), [(20, ""), (21, " 1 more field error is not shown.")])
-    def test_bad_dict_values_in_a_write_stop_at_twenty(self, count, note):
+    @pytest.mark.parametrize("count", [1, 20, 21])
+    def test_a_bad_dict_in_a_write_lists_only_its_first_bad_value(self, count):
         pydantic = pytest.importorskip("pydantic")
 
         class Board(pydantic.BaseModel):
@@ -1473,11 +1506,11 @@ class TestPydanticStateItemErrors:
         values = {f"k{index:02d}": "x" for index in range(count)}
         with pytest.raises(StateUpdateError) as caught:
             apply_state_updates(Board(), {"scores": values}, model_fields={"scores"})
-        assert list(caught.value.fields) == [f"scores.k{index:02d}" for index in range(min(count, 20))]
-        assert caught.value.message == "Some state updates were rejected; see the field messages." + note
+        assert list(caught.value.fields) == ["scores.k00"]
+        assert caught.value.message == self.NO_NOTE
 
-    @pytest.mark.parametrize("reverse", [False, True])
-    def test_the_twenty_kept_dict_messages_do_not_depend_on_the_key_order(self, reverse):
+    @pytest.mark.parametrize(("reverse", "listed"), [(False, "scores.0"), (True, "scores.24")])
+    def test_the_dict_value_listed_in_a_write_is_the_first_one_sent(self, reverse, listed):
         pydantic = pytest.importorskip("pydantic")
 
         class Board(pydantic.BaseModel):
@@ -1487,8 +1520,10 @@ class TestPydanticStateItemErrors:
         values = {key: "x" for key in (reversed(keys) if reverse else keys)}
         with pytest.raises(StateUpdateError) as caught:
             apply_state_updates(Board(), {"scores": values}, model_fields={"scores"})
-        assert list(caught.value.fields) == [f"scores.{index}" for index in range(20)]
-        assert caught.value.message.endswith(" 5 more field errors are not shown.")
+        # Pydantic stops at the first bad value it reads, so the one listed
+        # follows the order the browser sent the keys in.
+        assert list(caught.value.fields) == [listed]
+        assert caught.value.message == self.NO_NOTE
 
     def test_a_wrong_literal_choice_in_a_write_is_rejected(self):
         # The dataclass State rejects a wrong choice too (see TestApplyUpdates),
@@ -1521,40 +1556,220 @@ class TestPydanticStateItemErrors:
         assert len([name for name in caught.value.fields if name.startswith("scores.")]) == 20
         assert caught.value.message.endswith(" 2 more field errors are not shown.")
 
+    def test_a_write_nested_too_deeply_for_a_pydantic_v1_state_is_refused_without_a_traceback(self, caplog):
+        v1 = pytest.importorskip("pydantic.v1")
+
+        class Node(v1.BaseModel):
+            # A string, because the class does not exist yet inside its own body.
+            child: "Node | None" = None  # noqa: UP037
+            value: int = 0
+
+        # The annotations are strings (this module defers them), and v1 reads
+        # a local class only when it is told where to find it.
+        Node.update_forward_refs(Node=Node)
+
+        class Board(v1.BaseModel):
+            tree: Node = Node()
+
+        Board.update_forward_refs(Node=Node)
+
+        # The protocol's JSON depth limit allows 200 levels, which is more than Python
+        # can follow inside a v1 model's own check.
+        deep: dict[str, typing.Any] = {"value": 1}
+        for _level in range(198):
+            deep = {"child": deep, "value": 1}
+        with caplog.at_level(logging.DEBUG, logger="citry"):
+            with pytest.raises(StateUpdateError) as caught:
+                apply_state_updates(Board(), {"tree": deep}, model_fields={"tree"})
+
+        assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+        # One warning for the class, and never a frame-by-frame traceback.
+        assert "Traceback" not in caplog.text
+        assert caplog.text.count("levels of Python calls") == 1
+
+    def test_a_pydantic_v1_write_that_makes_too_many_errors_ends_before_it_reaches_every_row(self):
+        v1 = pytest.importorskip("pydantic.v1")
+        seen: list[int] = []
+
+        class Row(v1.BaseModel):
+            a: int = 0
+            b: int
+            c: int
+
+            # `always` runs this for a missing field, so it counts the rows reached.
+            @v1.validator("a", pre=True, always=True, allow_reuse=True)
+            def note(cls, value):  # noqa: N805 - Pydantic v1 passes the class
+                seen.append(1)
+                return value
+
+        class Board(v1.BaseModel):
+            rows: list[Row] = []
+
+        # The annotations are strings (this module defers them), and v1 reads
+        # a local class only when it is told where to find it.
+        Board.update_forward_refs(Row=Row)
+
+        # Each row fails both required fields, so the error limit ends the
+        # check before the last row.
+        rows = json.loads("[" + ",".join(["[]"] * 100_000) + "]")
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), {"rows": rows}, model_fields={"rows"})
+
+        assert caught.value.fields == {"_state": bounded.TOO_MANY_ERRORS_MESSAGE}
+        assert len(seen) < 1_000
+
+    def test_a_valid_pydantic_v1_write_to_a_union_is_not_refused_for_the_errors_of_the_members_before_it(self):
+        v1 = pytest.importorskip("pydantic.v1")
+
+        class Board(v1.BaseModel):
+            xs: typing.List[typing.Union[int, str]] = []  # noqa: UP006, UP007
+
+        # Each text fails the `int` member first, and the `str` member accepts it.
+        applied = apply_state_updates(Board(), {"xs": ["a"] * 5_000}, model_fields={"xs"})
+
+        assert applied == ("xs",)
+
+    def test_a_pydantic_v1_write_that_the_cpu_time_stops_is_logged_as_refused(self, caplog):
+        v1 = pytest.importorskip("pydantic.v1")
+
+        class Even(v1.BaseModel):
+            child: "Tree | None" = None  # noqa: UP037
+            data: list[int] = []
+            kind: typing.Literal["even"]
+
+        class Odd(v1.BaseModel):
+            child: "Tree | None" = None  # noqa: UP037
+            data: list[int] = []
+            kind: typing.Literal["odd"]
+
+        Tree = Even | Odd
+        Even.update_forward_refs(Tree=Tree)
+        Odd.update_forward_refs(Tree=Tree)
+
+        class Board(v1.BaseModel):
+            root: Tree | None = None
+
+        Board.update_forward_refs(Tree=Tree)
+
+        # Each level checks the child more than once, so the clock is what
+        # ends the check.
+        node: dict[str, typing.Any] = {"data": list(range(3_000)), "kind": "odd"}
+        for _level in range(14):
+            node = {"child": node, "kind": "odd"}
+        with caplog.at_level(logging.WARNING, logger="citry"), bounded.request_work() as budget:
+            budget._seconds_left = 0.05
+            with pytest.raises(StateUpdateError) as caught:
+                apply_state_updates(Board(), {"root": node}, model_fields={"root"})
+
+        assert caught.value.fields == {"_state": bounded.TOO_SLOW_MESSAGE}
+        # Citry stopped the check, so the log says it refused the write, not
+        # that the check finished with the time gone.
+        assert caplog.text.count("Board was refused") == 1
+        assert "ended before Citry could stop it" not in caplog.text
+
+    def test_a_valid_pydantic_v1_write_checked_by_a_validator_that_catches_errors_is_not_refused(self):
+        v1 = pytest.importorskip("pydantic.v1")
+
+        class Tag(v1.BaseModel):
+            labels: list[int] = []
+
+        class Board(v1.BaseModel):
+            xs: list[int] = []
+
+            @v1.validator("xs", each_item=True)
+            def keep(cls, value):  # noqa: N805 - Pydantic v1 passes the class
+                # The author's own code builds a v1 error for each item and throws it away.
+                with contextlib.suppress(v1.ValidationError):
+                    Tag.parse_obj({"labels": ["a"]})
+                return value
+
+        applied = apply_state_updates(Board(), {"xs": list(range(1_500))}, model_fields={"xs"})
+
+        assert applied == ("xs",)
+
+    def test_a_pydantic_v1_write_with_a_few_errors_lists_them(self):
+        v1 = pytest.importorskip("pydantic.v1")
+
+        class Row(v1.BaseModel):
+            a: int
+            b: int
+
+        class Board(v1.BaseModel):
+            rows: list[Row] = []
+
+        Board.update_forward_refs(Row=Row)
+
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), {"rows": [{"a": 1}]}, model_fields={"rows"})
+
+        assert caught.value.fields == {"rows.0.b": "field required"}
+
     def test_marking_the_lists_of_deep_errors_in_a_write_takes_time_in_step_with_their_depth(self):
         pydantic = pytest.importorskip("pydantic")
 
-        class Node(pydantic.BaseModel):
-            c: list[Node] = []
-
+        # Every level holds a list of nodes, and the innermost node also has
+        # thirty bad scalar fields. Each scalar field has its own error, so
+        # thirty errors pass through `depth` lists, and the list of 10,000 bad
+        # items beside them adds only its first.
+        fields: dict[str, typing.Any] = {f"v{index:02d}": (int, 0) for index in range(30)}
+        Node = pydantic.create_model("Node", c=("list[Node]", []), **fields)
         Node.model_rebuild(_types_namespace={"Node": Node})
 
         class Board(pydantic.BaseModel):
             tree: Node = Node()
 
         def best_time(depth: int) -> float:
-            # Every error passes through `depth` lists. The best of three
-            # runs keeps one slow run of a busy machine out of the ratio.
+            # The best of three runs keeps one slow run of a busy machine out
+            # of the ratio.
             best = float("inf")
             for _run in range(3):
-                value: dict[str, typing.Any] = {"c": [1] * 10_000}
+                value: dict[str, typing.Any] = {"c": [1] * 10_000, **{f"v{index:02d}": "x" for index in range(30)}}
                 for _level in range(depth - 1):
                     value = {"c": [value]}
                 started = perf_counter()
                 with pytest.raises(StateUpdateError) as caught:
                     apply_state_updates(Board(), {"tree": value}, model_fields={"tree"})
                 best = min(best, perf_counter() - started)
+                # The 31 errors are inside the outer lists, which keep twenty.
                 assert len(caught.value.fields) == 20
-                assert caught.value.message.endswith(" 9,980 more field errors are not shown.")
+                assert caught.value.message.endswith(" 11 more field errors are not shown.")
             return best
 
-        # Writing the text of each list for each error made the time grow
-        # with the square of the depth: 8 times the depth took about 24
-        # times as long. Reading each error once takes about 5 times as long,
-        # and the bound leaves room for a slow machine. The deepest value
-        # here, 80 lists, is within the nesting Pydantic reads back from a
-        # State's JSON.
+        # Citry reads each error once, so 8 times the depth takes about 5
+        # times as long, and the bound leaves room for a slow machine. The
+        # deepest value here, 80 lists, is within the nesting Pydantic reads
+        # back from a State's JSON.
         assert best_time(80) < 14 * best_time(10)
+
+    def test_an_ordinary_large_write_to_a_strict_state_reaches_pydantic(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        # A strict model State is checked as JSON, where the path limit still
+        # runs. Thousands of short paths stay under it.
+        class Board(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(strict=True)
+            scores: dict[str, list[int]] = {}
+
+        assert bounded.state_write_mode(Board) == "json"
+        updates = {"scores": {f"key{index}": ["x"] for index in range(30_000)}}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), updates, model_fields={"scores"})
+        assert caught.value.fields == {"scores.key0.0": "Input should be a valid integer"}
+        assert caught.value.message == self.NO_NOTE
+
+    def test_a_write_with_long_paths_to_a_strict_state_is_refused_before_pydantic_runs(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        class Board(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(strict=True)
+            scores: dict[str, list[int]] = {}
+
+        assert bounded.state_write_mode(Board) == "json"
+        # Small enough that a regression fails on the message, not on memory.
+        updates = {"scores": {"a" * 8_000: ["x"] * 4_000}}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(Board(), updates, model_fields={"scores"})
+        assert caught.value.fields == {"_state": PATHS_TOO_LONG_MESSAGE}
 
 
 class TestPydanticDataclassState:
@@ -1588,10 +1803,470 @@ class TestPydanticDataclassState:
         assert state.title == ""
         assert state.scores == {}
 
-    def test_a_write_with_long_paths_is_refused_before_pydantic_runs(self):
+    def test_a_write_with_long_paths_lists_one_bad_item(self):
         state = self._state_class()()
         # Small enough that a regression fails on the message, not on memory.
         updates = {"scores": {"a" * 8_000: [-1] * 4_000}}
         with pytest.raises(StateUpdateError) as caught:
             apply_state_updates(state, updates, model_fields=("scores",))
+        # The copy of the validator stops at the first bad item, so the long
+        # key is written into one error and the path limit is not needed.
+        assert caught.value.fields == {"scores." + "a" * 8_000 + ".0": "Input should be greater than 0"}
+        assert state.scores == {}
+
+    def test_a_write_with_long_paths_is_refused_before_pydantic_runs_when_the_copy_has_no_wrappers(self, monkeypatch):
+        pydantic = pytest.importorskip("pydantic")
+        build = bounded._build
+
+        def refuse_wrappers(schema, *, wrapped):
+            if wrapped:
+                msg = "no wrappers"
+                raise RuntimeError(msg)
+            return build(schema, wrapped=wrapped)
+
+        # Citry then builds the copy without its counting wrappers, and
+        # applies the path limit as well. A class that forbids extra keys has
+        # no fixed bound on its errors, so its copy is built with wrappers.
+        monkeypatch.setattr(bounded, "_build", refuse_wrappers)
+
+        @pydantic.dataclasses.dataclass(config=pydantic.ConfigDict(validate_assignment=True, extra="forbid"))
+        class Board:
+            scores: dict[str, list[typing.Annotated[int, pydantic.Field(gt=0)]]] = pydantic.Field(default_factory=dict)
+
+        pydantic.dataclasses.rebuild_dataclass(Board, _types_namespace={"pydantic": pydantic, "typing": typing})
+        state = Board()
+        updates = {"scores": {"a" * 8_000: [-1] * 4_000}}
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, updates, model_fields=("scores",))
         assert caught.value.fields == {"_state": PATHS_TOO_LONG_MESSAGE}
+        assert state.scores == {}
+
+    def test_a_strict_state_takes_a_good_write_and_restores(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass(config=pydantic.ConfigDict(strict=True, validate_assignment=True))
+        class Board:
+            count: int = 0
+
+        state = Board()
+        assert apply_state_updates(state, {"count": 5}, model_fields=("count",)) == ("count",)
+        assert state.count == 5
+        assert restore_state(Board, {"count": 5}) == Board(count=5)
+
+    def test_a_write_without_validate_assignment_is_checked_and_kept_as_sent(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            scores: list[typing.Annotated[int, pydantic.Field(gt=0)]] = pydantic.Field(default_factory=list)
+            pair: tuple[int, ...] = ()
+
+        pydantic.dataclasses.rebuild_dataclass(Board, _types_namespace={"pydantic": pydantic, "typing": typing})
+        state = Board()
+        # A value the class refuses is refused when it arrives, so it never
+        # reaches the signed token.
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, {"scores": [1, -1]}, model_fields=("scores", "pair"))
+        assert list(caught.value.fields) == ["scores.1"]
+        assert state.scores == []
+        # A good value is kept as the browser sent it, as the class keeps an
+        # assignment without `validate_assignment`; the next restore converts it.
+        apply_state_updates(state, {"pair": [1, 2]}, model_fields=("scores", "pair"))
+        assert state.pair == [1, 2]
+
+    def test_a_deep_tree_the_server_built_restores(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass
+        class Cond:
+            type: Literal["cond"]
+
+        @pydantic.dataclasses.dataclass
+        class Or:
+            type: Literal["or"]
+            items: list[And | Or | Cond]
+
+        @pydantic.dataclasses.dataclass
+        class And:
+            type: Literal["and"]
+            items: list[And | Or | Cond]
+
+        namespace = {"And": And, "Or": Or, "Cond": Cond, "Literal": Literal}
+        pydantic.dataclasses.rebuild_dataclass(Or, _types_namespace=namespace)
+        pydantic.dataclasses.rebuild_dataclass(And, _types_namespace=namespace)
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            tree: And | Or | Cond | None = None
+
+        pydantic.dataclasses.rebuild_dataclass(Board, _types_namespace=namespace)
+        tree: dict[str, object] = {"type": "cond"}
+        for _ in range(16):
+            tree = {"type": "and", "items": [tree]}
+        # Citry's copy of the validator, which checks browser writes, stops
+        # at this depth.
+        with bounded.request_work(), pytest.raises(bounded.ValidationTooCostly):
+            bounded.validate_init(bounded.checker_for(Board, state=True), Board, {"tree": tree})
+        # The token is signed, and the browser's writes were checked when they
+        # arrived, so the same tree, built by the app, restores.
+        restored = restore_state(Board, {"tree": tree})
+        assert type(restored.tree).__name__ == "And"
+
+    def test_a_batch_without_validate_assignment_is_checked_as_the_restore_will_build_it(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            low: int = 0
+            high: int = 0
+
+            @pydantic.model_validator(mode="after")
+            def ordered(self):
+                if self.low > self.high:
+                    msg = "low must not exceed high"
+                    raise ValueError(msg)
+                return self
+
+            def __post_init__(self):
+                if self.high > 100:
+                    msg = "high must be at most 100"
+                    raise ValueError(msg)
+
+        # The validator sees the whole batch, not one write on the old State.
+        state = Board()
+        apply_state_updates(state, {"low": 5, "high": 9}, model_fields=("low", "high"))
+        assert (state.low, state.high) == (5, 9)
+        # `__post_init__` runs at the restore, so it runs on the write too.
+        with pytest.raises(StateUpdateError):
+            apply_state_updates(state, {"high": 101}, model_fields=("low", "high"))
+        assert state.high == 9
+
+    @pytest.mark.parametrize("slots", [False, True])
+    def test_a_field_validator_that_reads_another_field_checks_a_write_without_validate_assignment(self, slots):
+        pydantic = pytest.importorskip("pydantic")
+
+        # Pydantic's password-confirm pattern: the second field's validator
+        # reads the first through `info.data`. A class with slots has no
+        # `__dict__` to read the other fields from.
+        @pydantic.dataclasses.dataclass(slots=slots)
+        class Board:
+            password: str = "pw"  # noqa: S105 - a test value
+            confirm: str = "pw"
+
+            @pydantic.field_validator("confirm")
+            @classmethod
+            def matches(cls, value, info):
+                if value != info.data["password"]:
+                    msg = "passwords differ"
+                    raise ValueError(msg)
+                return value
+
+        writable = ("password", "confirm")
+        state = Board()
+        apply_state_updates(state, {"confirm": "pw"}, model_fields=writable)
+        # The validator of the later field sees the earlier field's write
+        # from the same batch, because Citry assigns in declaration order,
+        # whatever order the names sort in.
+        apply_state_updates(state, {"confirm": "x", "password": "x"}, model_fields=writable)
+        assert (state.password, state.confirm) == ("x", "x")
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, {"confirm": "zz"}, model_fields=writable)
+        assert caught.value.fields == {"confirm": "Value error, passwords differ"}
+        assert state.confirm == "x"
+
+    def test_a_field_validator_that_reads_its_field_name_checks_a_write_without_validate_assignment(self):
+        pydantic = pytest.importorskip("pydantic")
+        longest = {"first": 5, "last": 8}
+
+        # One validator shared by several fields looks up its own field.
+        @pydantic.dataclasses.dataclass
+        class Board:
+            first: str = ""
+            last: str = ""
+
+            @pydantic.field_validator("first", "last")
+            @classmethod
+            def short(cls, value, info):
+                if len(value) > longest[info.field_name]:
+                    msg = f"{info.field_name} is too long"
+                    raise ValueError(msg)
+                return value
+
+        writable = ("first", "last")
+        state = Board()
+        apply_state_updates(state, {"first": "Ada", "last": "Lovelace"}, model_fields=writable)
+        assert (state.first, state.last) == ("Ada", "Lovelace")
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, {"last": "Lovelace!"}, model_fields=writable)
+        assert caught.value.fields == {"last": "Value error, last is too long"}
+
+    def test_a_field_validator_sees_only_the_fields_declared_before_its_own(self):
+        pydantic = pytest.importorskip("pydantic")
+        seen: dict[str, list[str]] = {}
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            first: str = ""
+            second: str = "block"
+            third: str = ""
+
+            @pydantic.field_validator("first", "second", "third")
+            @classmethod
+            def check(cls, value, info):
+                seen[info.field_name] = sorted(info.data)
+                # The class never shows `first` a later field, so this
+                # never fires when the class is built.
+                if info.field_name == "first" and info.data.get("second") == "block":
+                    msg = "second blocks first"
+                    raise ValueError(msg)
+                return value
+
+        writable = ("first", "second", "third")
+        state = Board()
+        # The class takes these, so the write check takes them too.
+        apply_state_updates(state, {"first": "y"}, model_fields=writable)
+        apply_state_updates(state, {"first": "z", "second": "ok", "third": "t"}, model_fields=writable)
+        assert (state.first, state.second, state.third) == ("z", "ok", "t")
+        assert seen == {"first": [], "second": ["first"], "third": ["first", "second"]}
+
+    def test_a_write_to_a_frozen_field_is_kept_as_the_class_keeps_it(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            title: str = pydantic.Field(default="", frozen=True)
+
+        state = Board()
+        # Without `validate_assignment` the class takes the assignment, so
+        # a field listed in `_model` takes the browser's write.
+        Board().title = "direct"
+        assert apply_state_updates(state, {"title": "new"}, model_fields=("title",)) == ("title",)
+        assert state.title == "new"
+
+    @pytest.mark.parametrize("note", ["ok", "bad"])
+    def test_a_validator_that_changes_info_data_leaves_the_state_as_it_was(self, note):
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            items: list[int] = field(default_factory=lambda: [1])
+            note: str = ""
+
+            @pydantic.field_validator("note")
+            @classmethod
+            def check(cls, value, info):
+                info.data["items"].append(0)
+                if value == "bad":
+                    msg = "bad note"
+                    raise ValueError(msg)
+                return value
+
+        state = Board()
+        writable = ("items", "note")
+        if note == "bad":
+            with pytest.raises(StateUpdateError):
+                apply_state_updates(state, {"note": note}, model_fields=writable)
+        else:
+            apply_state_updates(state, {"note": note}, model_fields=writable)
+        # The validator changed its copy of the fields, not the State.
+        assert state.items == [1]
+
+    @pytest.mark.parametrize("validated", [False, True])
+    def test_the_whole_state_is_built_again_only_when_the_class_checks_across_fields(self, validated, monkeypatch):
+        pydantic = pytest.importorskip("pydantic")
+        namespace: dict[str, typing.Any] = {"__annotations__": {"low": "int", "high": "int"}, "low": 0, "high": 0}
+        if validated:
+            namespace["ordered"] = pydantic.model_validator(mode="after")(lambda self: self)
+        board = pydantic.dataclasses.dataclass(type("Board", (), namespace))
+        builds = []
+        real = tokens.restore_state
+
+        def counted(state_cls, values):
+            builds.append(values)
+            return real(state_cls, values)
+
+        monkeypatch.setattr(tokens, "restore_state", counted)
+        apply_state_updates(board(), {"low": 1}, model_fields=("low", "high"))
+        # Each field is checked on its own when the class is built, so the
+        # field check already ran the check the next restore runs.
+        assert len(builds) == (1 if validated else 0)
+
+    @pytest.mark.parametrize("kind", ["model", "dataclass"])
+    def test_the_calls_of_one_request_share_the_restore_of_the_same_values(self, kind):
+        pydantic = pytest.importorskip("pydantic")
+        runs: list[object] = []
+
+        def counted(value):
+            runs.append(value)
+            return value
+
+        annotations = {"items": typing.Annotated[list[int], pydantic.AfterValidator(counted)]}
+        if kind == "model":
+            board = type("Board", (pydantic.BaseModel,), {"__annotations__": annotations, "items": []})
+        else:
+            board = pydantic.dataclasses.dataclass(
+                type("Board", (), {"__annotations__": annotations, "items": field(default_factory=list)})
+            )
+        values = {"items": [1, 2]}
+
+        with bounded.request_work():
+            restored = [restore_state(board, values) for _ in range(4)]
+            restored[0].items.append(3)
+        # The second restore keeps a copy of its result, and the later ones
+        # hand out copies of it, so a call that changes its State changes
+        # only its own.
+        assert len(runs) == 2
+        assert [state.items for state in restored] == [[1, 2, 3], [1, 2], [1, 2], [1, 2]]
+        assert len({id(state.items) for state in restored}) == 4
+        # Outside a request every restore checks the values again.
+        restore_state(board, values)
+        restore_state(board, values)
+        assert len(runs) == 4
+
+    def test_values_that_every_call_restores_stay_shared_among_other_restores(self):
+        pydantic = pytest.importorskip("pydantic")
+        runs: list[int] = []
+
+        def counted(value):
+            runs.append(value)
+            return value
+
+        annotations = {"count": typing.Annotated[int, pydantic.AfterValidator(counted)]}
+        board = type("Board", (pydantic.BaseModel,), {"__annotations__": annotations, "count": 0})
+
+        with bounded.request_work():
+            for call in range(1, 17):
+                # Each call carries the same token.
+                state = restore_state(board, {"count": 0})
+                # Its handler changes State to new values, which Citry
+                # restores twice to check that they can be signed.
+                state.count = call
+                assert check_changed_state(state) is None
+                # Other components of the request restore States of their own.
+                for other in range(3):
+                    restore_state(board, {"count": 1000 * (other + 1) + call})
+        # The token's values are read on every call, so the store keeps them
+        # while it drops the values each call restored only for itself.
+        assert runs.count(0) == 2
+        assert runs.count(16) == 2
+
+    def test_a_default_factory_that_reads_other_fields_runs_on_the_write(self):
+        pydantic = pytest.importorskip("pydantic")
+        namespace: dict[str, typing.Any] = {
+            "__annotations__": {"a": "int", "b": "int"},
+            "a": 1,
+            "b": pydantic.Field(default_factory=lambda data: 10 // data["a"], init=False),
+        }
+        board = pydantic.dataclasses.dataclass(type("Board", (), namespace))
+        state = board()
+
+        # The factory reads the written field, so the whole State is built
+        # with the write in it, and the write fails at once, not on the next
+        # call's restore.
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, {"a": 0}, model_fields=("a",))
+        assert caught.value.fields == {"_state": "The State could not be checked."}
+        assert state.a == 1
+        apply_state_updates(state, {"a": 5}, model_fields=("a",))
+        assert state.a == 5
+
+    @pytest.mark.parametrize("checks_assignment", [False, True])
+    @pytest.mark.parametrize("where", ["model_validator", "post_init"])
+    def test_a_validator_that_raises_another_exception_refuses_the_write(self, where, checks_assignment, caplog):
+        pydantic = pytest.importorskip("pydantic")
+        if where == "post_init" and checks_assignment:
+            pytest.skip("Pydantic does not run __post_init__ on an assignment")
+
+        def fail(value):
+            if value == "boom":
+                msg = "author bug"
+                raise TypeError(msg)
+
+        namespace: dict[str, typing.Any] = {"__annotations__": {"note": "str"}, "note": "ok"}
+        if where == "model_validator":
+            namespace["check"] = pydantic.model_validator(mode="after")(lambda self: fail(self.note) or self)
+        else:
+            namespace["__post_init__"] = lambda self: fail(self.note)
+        config = pydantic.ConfigDict(validate_assignment=checks_assignment)
+        board = pydantic.dataclasses.dataclass(config=config)(type("Board", (), namespace))
+        state = board()
+
+        # The author's bug answers like a refused write, not a server error.
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, {"note": "boom"}, model_fields=("note",))
+        assert caught.value.fields == {"_state": "The State could not be checked."}
+        assert state.note == "ok"
+        assert "A State validator raised while checking browser writes to Board." in caplog.text
+
+    @pytest.mark.parametrize("kind", ["model", "dataclass"])
+    def test_a_restore_stops_each_list_at_its_first_bad_item(self, kind):
+        pydantic = pytest.importorskip("pydantic")
+        zones = typing.Literal[tuple(f"zone-{i:03}" for i in range(600))]  # type: ignore[misc]
+        annotations = {"tags": list[zones] | list[str]}
+        if kind == "model":
+            board = type("Board", (pydantic.BaseModel,), {"__annotations__": annotations, "tags": []})
+        else:
+            board = pydantic.dataclasses.dataclass(
+                type("Board", (), {"__annotations__": annotations, "tags": field(default_factory=list)})
+            )
+
+        # A valid value restores as the class gives it.
+        assert restore_state(board, {"tags": ["a"] * 5_000}).tags == ["a"] * 5_000
+        # Citry's copy stops each member at its first bad item.
+        with pytest.raises(pydantic.ValidationError) as raised:
+            restore_state(board, {"tags": [1] * 5_000})
+        assert raised.value.error_count() == 2
+
+    def test_a_batch_check_reads_the_values_the_restore_reads(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            pair: tuple[int, ...] = ()
+            note: str = ""
+
+            @pydantic.field_validator("pair", mode="before")
+            @classmethod
+            def copied(cls, value):
+                # Takes the JSON form only (a list), as the restore hands it over.
+                return value.copy()
+
+        pydantic.dataclasses.rebuild_dataclass(Board, _types_namespace={"pydantic": pydantic})
+        state = restore_state(Board, {"pair": [1, 2], "note": ""})
+        assert state.pair == (1, 2)
+        apply_state_updates(state, {"note": "hi"}, model_fields=("note",))
+        assert state.note == "hi"
+
+    def test_a_write_to_a_field_without_init_is_checked(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            count: typing.Annotated[int, pydantic.Field(gt=0)] = field(default=1, init=False)
+
+        pydantic.dataclasses.rebuild_dataclass(Board, _types_namespace={"pydantic": pydantic, "typing": typing})
+        state = Board()
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, {"count": -5}, model_fields=("count",))
+        assert list(caught.value.fields) == ["count"]
+        assert state.count == 1
+
+    def test_a_large_value_the_app_built_does_not_spend_the_writes_budget(self):
+        pydantic = pytest.importorskip("pydantic")
+        nested = typing_extensions.TypeAliasType("nested", "list[nested] | tuple[nested, ...] | int")
+
+        @pydantic.dataclasses.dataclass
+        class Board:
+            tree: nested = 0  # type: ignore[valid-type]
+            note: str = ""
+
+        pydantic.dataclasses.rebuild_dataclass(Board, _types_namespace={"nested": nested})
+        tree: typing.Any = 1
+        for _ in range(30):
+            tree = [tree, [1, 2]]
+        state = restore_state(Board, {"tree": tree, "note": ""})
+        with bounded.request_work() as budget:
+            # Only the browser's own value spends from the request's budget.
+            budget.left = 1_000
+            apply_state_updates(state, {"note": "hi"}, model_fields=("note",))
+        assert state.note == "hi"

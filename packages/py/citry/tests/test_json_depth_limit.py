@@ -10,10 +10,12 @@ failed test instead of stopping the test run.
 
 import dataclasses
 import json
+import random
 import subprocess
 import sys
 import textwrap
 import time
+import tracemalloc
 
 import pytest
 
@@ -26,6 +28,29 @@ _CRASH_DEPTH = 100_000
 
 def _nested(depth):
     return "[" * depth + "]" * depth
+
+
+def _deepest_outside_strings(text):
+    """Return the deepest bracket nesting outside JSON strings, reading one character at a time."""
+    depth = deepest = 0
+    in_string = escaped = False
+    for character in text:
+        if in_string:
+            # A backslash takes the next character with it, whatever it is.
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+        elif character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            deepest = max(deepest, depth)
+        elif character in "]}":
+            depth -= 1
+    return deepest
 
 
 class TestCheckJsonDepth:
@@ -82,6 +107,41 @@ class TestCheckJsonDepth:
         with pytest.raises(JsonNestingError):
             check_json_depth("[" * 201 + '"' + '\\"' * 500_000)
         assert time.perf_counter() - started < 2
+
+    @pytest.mark.parametrize(
+        "body",
+        ["a" * 1_000_000, "\\a" * 500_000, "[]" * 500_000, '\\"' * 500_000],
+        ids=["plain", "escapes", "brackets", "escaped-quotes"],
+    )
+    @pytest.mark.parametrize("closed", [True, False], ids=["closed", "unclosed"])
+    def test_a_long_string_costs_about_one_copy_of_the_text(self, body, closed):
+        # Enough brackets outside the string make the full scan run. The
+        # string is removed before counting, which copies the text once.
+        text = "[" * 150 + "]" * 150 + "[" * 60 + '"' + body + ('"' + "]" * 60 if closed else "")
+        tracemalloc.start()
+        try:
+            check_json_depth(text)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        assert peak < 3 * len(text)
+
+    def test_the_scan_agrees_with_a_character_by_character_reading(self):
+        # Random text built from the characters the scan cares about, with a
+        # small limit so that both answers come up often.
+        rng = random.Random(8)  # noqa: S311 - test data, not secrets
+        alphabet = '[]{}"\\a,\n'
+        for _ in range(20_000):
+            text = "".join(rng.choice(alphabet) for _ in range(rng.randrange(40)))
+            limit = rng.randrange(4)
+            expected = _deepest_outside_strings(text) > limit
+            try:
+                check_json_depth(text, limit)
+            except JsonNestingError:
+                refused = True
+            else:
+                refused = False
+            assert refused == expected, (text, limit)
 
     def test_strict_parsing_refuses_deep_text(self):
         assert loads_strict_json(_nested(5)) == [[[[[]]]]]

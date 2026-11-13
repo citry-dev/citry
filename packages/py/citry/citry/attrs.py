@@ -452,8 +452,12 @@ _whitespace_re = re.compile(r"\s+")
 # quoted value stays. A comment with no `*/` runs to the end of the text and
 # is kept: otherwise the regex would search to the end again from every later
 # `/*`, which takes time growing with the square of the length. Only a match
-# that captured its closing `*/` (group 1) is a comment to remove.
-_style_comment_re = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|\\.|/\*.*?(?:(\*/)|\Z)", re.DOTALL)
+# that captured its closing `*/` (group 1) is a comment to remove. The string
+# repeats are possessive (`*+`): a run of plain characters, or an escape, is
+# taken whole and never given back, so each character is read once.
+_style_comment_re = re.compile(
+    r"\"[^\"\\]*+(?:\\.[^\"\\]*+)*+\"|'[^'\\]*+(?:\\.[^'\\]*+)*+'|\\.|/\*.*?(?:(\*/)|\Z)", re.DOTALL
+)
 # Splits one CSS declaration into name and value on the first `:`.
 _style_property_re = re.compile(r":(.+)", re.DOTALL)
 
@@ -628,6 +632,30 @@ def _split_style_declarations(css_text: str) -> list[str]:
     return pieces
 
 
+def _strip_style_comments(css_text: str) -> str:
+    """
+    Return ``css_text`` without its closed ``/* ... */`` comments.
+
+    Quoted strings and backslash escapes are matched too, so a ``/*`` inside
+    them stays text, but only the text between comments is copied: a value
+    made of many short strings or escapes then costs one copy of the text,
+    not one small string per match.
+    """
+    pieces: list[str] = []
+    start = 0
+    for match in _style_comment_re.finditer(css_text):
+        # Only a comment with its closing `*/` is removed; an unclosed one stays.
+        if match.group(1):
+            # Back-to-back comments leave nothing between them to keep.
+            if match.start() > start:
+                pieces.append(css_text[start : match.start()])
+            start = match.end()
+    if start == 0:
+        return css_text
+    pieces.append(css_text[start:])
+    return "".join(pieces)
+
+
 def parse_string_style(css_text: str) -> dict[str, Any]:
     """
     Parse an inline CSS string into a property dict.
@@ -646,7 +674,7 @@ def parse_string_style(css_text: str) -> dict[str, Any]:
     # regex passes below get a real str; the slices they produce are then
     # plain str too.
     css_text = _underlying(css_text)
-    css_text = _style_comment_re.sub(lambda match: "" if match.group(1) else match.group(), css_text)
+    css_text = _strip_style_comments(css_text)
 
     res: dict[str, Any] = {}
     for declaration in _split_style_declarations(css_text):

@@ -442,8 +442,8 @@ def test_state_and_event_data_follow_the_setting(base: type) -> None:
 
 
 def test_event_data_refuses_a_pydantic_v1_base() -> None:
-    # Events validation reads Pydantic v2 models only, so this fails at
-    # class setup rather than when the handler is called.
+    # Events cannot generate event data classes as Pydantic v1 models, so
+    # this fails at class setup rather than when the handler is called.
     with pytest.raises(ValueError, match="cannot be generated as a Pydantic v1 model"):
         _counter(pydantic_v1.BaseModel)
 

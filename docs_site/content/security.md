@@ -99,8 +99,9 @@ that changes State, and keeps each one until it expires: after
 server processes, use a shared backend and set its memory limit and
 eviction policy. A browser write that would make the stored
 State larger than `State._max_bytes` (64 KiB by default) gets a 422
-before the handler runs. The limit covers only browser writes, so when a
-handler copies request data into State, limit its size yourself. The
+before the handler runs. With the default signed storage, Citry makes
+the same check when the call gets a new token. The limit covers only
+browser writes, so when a handler copies request data into State, limit its size yourself. The
 default `InMemoryCache` counts such State against a 64 MiB budget and
 drops the entry used longest ago when it is full; see
 [Server-stored State](/performance/cache-backends/#server-stored-state).
@@ -406,37 +407,6 @@ State token gets the 403 for a malformed token, and an i18n request gets
 a 400. Citry also refuses to make a State token from State nested that
 deep. You cannot change this limit.
 
-Pydantic writes a field's whole path, such as `scores.alice.3`, into
-each error it reports, so one very long dict key over many items could
-use gigabytes of memory. Before Citry passes a call's data or State
-updates to a Pydantic model or a Pydantic dataclass, it adds up the
-length of every field path in them, including those inside a `Json`
-field. When the total is over 16 MiB, or about 32 times the size of the
-data if that is larger, the call fails with a 422 error and Pydantic
-does not run. You cannot change this limit.
-
-This can refuse a valid call, because Citry cannot tell before Pydantic
-runs. Requests with short keys usually stay below the limit, even large
-ones. These can reach it:
-
-- A dict key of a few kilobytes over thousands of items.
-- A large call to a model with a union. The whole call counts once per
-  member type of that union, even fields outside it. Give the union a
-  discriminator, so that Pydantic tries one member and the call counts
-  once.
-- A large call to a model with many required fields. Citry counts every
-  object in the data as if it lacked all the required fields of the
-  model with the most of them. For example, a call to a model with 30
-  required fields and a list of `{x, y}` points is refused from about
-  37,600 points (about 680 KB written as `{"x":1.5,"y":2.5}`), and with
-  100 required fields, from about 12,400 points (about 220 KB).
-- A long text with thousands of `[` that never close, in a model with
-  any `Json` field. Citry counts every string as if it held JSON, even
-  one in an unrelated field.
-
-The count leaves out a string that your own validator parses, so check
-that string's length first.
-
 Citry stops reading a body once it passes `_max_body_bytes`, even when the
 request's `Content-Length` is wrong or missing. A request over either
 limit fails with the error code `payload_too_large`: an event call made
@@ -480,6 +450,350 @@ Citry does not accept file uploads by default. If you add your own code
 that turns the request into
 [`UploadedFile`][citry.ext.events.UploadedFile] values, the files come
 from the same body, so `_max_body_bytes` limits them too.
+
+## Check event data { #check-event-data }
+
+Citry checks a call's data against the `data` class (the class of the
+handler's `data` parameter) before the handler runs, and checks the
+browser's writes against the State class. When the data fails a check,
+the call gets a 422 error and the handler does not run. The 422 can list
+fewer problems than the data has, because Citry stops checking early:
+
+- Each list, set, tuple, or dict reports only its first bad item. The
+  exceptions are listed below.
+- Data with more than about 1,000 errors gets one message in place of the
+  field messages. The message sits under `fieldErrors._args`, the key for
+  a message about the whole call's data (`fieldErrors._state` for a State
+  write). The number can be lower for data with long keys or long
+  messages.
+- A Pydantic v2 class that forbids extra keys gets one message when the
+  data holds more than 100 keys it does not declare. A TypedDict or
+  dataclass inside that class has the same limit, unless it sets its own
+  extra-keys setting.
+- A 422 lists field messages until their text would pass 65,536
+  characters. Its message ends with how many field messages it left out.
+- A 422 cuts a field message longer than 1,000 characters to that
+  length, ending it with "…".
+
+These parts report more than their first bad item:
+
+- A browser write to a Pydantic v1 State reports every bad item. The
+  422 lists up to 20 for each list or dict field.
+- A list or dict inside a wrap validator reports every bad item, because
+  your function may need every error. A wrap validator is a validator
+  that receives the value and the next validator (`WrapValidator`, or a
+  validator with `mode="wrap"`). This includes a list or dict in the
+  text of a `Json[...]` field that has the wrap validator around it
+  (`Json[...]` is a Pydantic type that makes a field read its value from
+  JSON text). The 422 lists up to 20 for each list or dict field.
+- A fixed-length tuple in a Pydantic class, such as `tuple[int, int]`,
+  reports each position.
+- Extra keys that a model allows and checks against a type report each
+  bad key. A model declares them with `extra="allow"` and
+  `__pydantic_extra__: dict[str, X]`, and a TypedDict with
+  `extra_items`.
+
+A wrap validator that drops bad items cannot rescue data with more than
+about 1,000 errors: the call still gets the single message.
+
+A form that shows only the message next to each field shows nothing when
+Citry sends `fieldErrors._args` or `fieldErrors._state`, so show those
+messages too ([how](/events/forms/#eventerror-field-errors)).
+
+Citry stops checking a request's data once its checks have used about 1
+second of CPU time. The call then fails with a 422 that says the data
+took too long to check, and Citry logs a warning naming the class. A slow
+check also delays the other requests that the same worker handles, so run
+more than one worker process.
+
+Restoring State at the start of a call, checking a State your handler
+changed, and building a Pydantic dataclass State again after a browser
+write do not count toward that second, except for a Pydantic v1 State
+(below).
+
+Every check of a Pydantic v1 State counts toward that second: restoring
+it at the start of a call, checking a browser write to it, and checking
+it again after your handler changes it. A restore counts because the
+token may hold values the browser wrote in an earlier request. Citry
+cannot stop a restore partway, so it can run past the second, and the
+request's later checks have less time left. Once the time is gone, a
+later call whose State is a Pydantic v1 model gets the "took too long"
+422 before Citry restores its State.
+
+Citry stops a v1 check when the time is gone, as it does a v2 check. It
+reads the clock once for every 256 values the model checks, so the write
+ends with a 422 that says the data took too long, and it can run past
+the second by the time it takes to check up to 256 more values.
+
+A slow validator function of your own is not interrupted, because Citry
+reads no clock inside it. When such a check ends with the time gone,
+the model's own checks accept or refuse the write, and Citry logs a
+warning that names the model. A later check in the same request that
+reads the clock, such as another v1 State write or a large v2 check, is then
+refused with the "took too long" 422.
+
+Use a Pydantic v2 model when the browser sends large or nested data.
+
+Citry cannot limit the work your own validators do. If a validator
+parses a string, check the string's length first. If it calls another
+model's `model_validate`, declare that model as a field type instead,
+so the limits apply to it.
+
+### Allow deep filter trees { #trees-in-event-data }
+
+Event data can hold a tree, such as a filter whose `And` and `Or` nodes
+hold more nodes. Citry limits how deeply such data may nest when the
+union of node classes has no discriminator (a field, or a function, that
+tells Pydantic which class in a union a value is) and two or more of the
+classes can hold more nodes. Deeper data fails with a 422 error under
+`fieldErrors._args` that says the data is too large or nested too deeply
+to check, and Citry logs a warning naming the class.
+
+How deep depends on your classes. When `And` and `Or` hold their
+children in fields of the same name, a Pydantic model fits about 15
+levels with one child per node, and about 8 with two children per node.
+More children, or more data in each node, lower those numbers. With
+different field names, such as `items` and `any`, data can nest much
+deeper.
+
+To check deeper trees, declare the discriminator where you define the
+recursive type (a type that contains itself, here `Node`), and give each
+class a `Literal` tag field:
+
+```python
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, Field
+
+
+class Cond(BaseModel):
+    type: Literal["cond"] = "cond"
+    field: str
+
+
+class And(BaseModel):
+    type: Literal["and"] = "and"
+    items: list["Node"]
+
+
+class Or(BaseModel):
+    type: Literal["or"] = "or"
+    any: list["Node"]
+
+
+Node = Annotated[And | Or | Cond, Field(discriminator="type")]
+```
+
+A discriminator on the field that holds the tree does not reach the
+unions inside it. With a tag field, each node the browser sends must
+carry its `type`, so update browser code that builds nodes. A callable
+`Discriminator` with a `Tag` on each class works too, and reads fields
+the nodes already have, when each class has a field the others lack
+(here `items`, `any` and `field`); the code is in
+[Fix a tree in State](/events/state/#trees-in-state). Citry checks a
+plain class or dataclass itself, and that check does not read
+discriminators, so make the recursive type a Pydantic model, or keep the
+nesting shallow.
+
+### Fix a refused schema { #schemas-citry-refuses }
+
+Defining the component raises `ValueError` when its `data` or State
+class holds one of the parts below. The error names the field (or the
+class, when the part sits outside any field) and a change that fixes
+it, so you rarely need this list. The usual fixes are the discriminator
+above, another type for the extra keys or items, or `_model` set to the
+fields the browser may change, without that field. For a `data` class,
+declaring the field as the type itself instead of `Json[...]` works
+too.
+
+- **A tree without a discriminator.** A union of node classes where two
+  or more can hold more nodes, as in the filter tree above.
+    - Refused: a `Json[...]` field (in State, one the browser may write)
+      that holds such a tree.
+    - Refused: a field of a Pydantic model State that the browser may
+      write, with or without `Json[...]`. This includes a plain
+      `class State:` that `Citry(model_base=BaseModel)` turns into a
+      model. When you do not set `_model`, the browser may write every
+      public field. [Fix a tree in State](/events/state/#trees-in-state)
+      shows the fixes and what each changes for browser code.
+- **Extra keys with a type that can fail with many errors.** A class
+  allows extra keys and checks each one against a type, such as
+  `__pydantic_extra__: dict[str, X]`.
+    - Refused: `X` can fail with more than one error, or with a message
+      that lists many values. That is a model, a list or dict, a union
+      of several types, or a `Literal` or `Enum` with many or long
+      values.
+    - Fine: `X` fails with one short message, such as `int`, `str`, or
+      `int | None`.
+    - Where it applies: in a `Json[...]` field, and in a field of a
+      Pydantic model State that the browser may write, when Citry can
+      check the State only as JSON text (see below) or when the keys sit
+      inside a type in a union or an `OnErrorOmit` item.
+- **A `Json[...]` field with a wrap validator around it.**
+    - Refused: a list or dict whose items can fail with several errors
+      or with a message that lists many values, such as a list of models
+      or of a union of several types like `date | time`.
+    - Refused: a list or dict inside a dict in its text, unless its items
+      are plain JSON values such as `int`, `str`, `bool` or `None`, as
+      in `Json[dict[str, list[date]]]`.
+    - Fine: items such as `int`, `str`, a date or a URL, alone or in a
+      union with `None` (as in `date | None`), nested lists of those,
+      and a union of plain JSON types such as `int | str | None`.
+    - Fine: a wrap validator inside the `Json[...]`, as in
+      `Json[Annotated[list[Item], WrapValidator(...)]]`. Your validator
+      then does not run when the text is not valid JSON.
+- **A `pydantic.v1` model or dataclass in a `data` class or in a
+  Pydantic v2 State.** Citry checks event data, and the fields of a
+  Pydantic v2 State, with dataclasses, annotated classes and Pydantic v2
+  models, not with `pydantic.v1` classes.
+    - Refused: a `data` class that is a `pydantic.v1` model or dataclass,
+      or that holds one in a field, a list, dict, optional or union, a
+      nested class, or a Pydantic v2 class. Inside a Pydantic v2 class
+      this covers a field typed as the v1 class, and a validator that is
+      a method of it, as in `PlainValidator(Model.parse_obj)`. The error
+      names the `data` class and the v1 class.
+    - Refused: a Pydantic v2 State with a field, writable or not, typed
+      as a `pydantic.v1` class or checked with a method of one. The
+      error names the State and the v1 class.
+    - Fine: a State that is itself a `pydantic.v1` model, which Citry
+      checks as described in
+      [Use Pydantic in events](#pydantic-classes-in-events).
+    - Fine: `InstanceOf[Model]` in a Pydantic v2 model, which only tests
+      that the value is an instance, so a JSON object gets a 422 that
+      says "Input should be an instance of Model".
+    - Not seen: a v1 class that your own validator function calls from
+      inside its code, as in a lambda. Citry counts that check's errors
+      and stops it as it does for a v1 State write (see
+      [Use Pydantic in events](#pydantic-classes-in-events)), but the
+      class is not refused, so keep v1 classes out of your validators.
+      In a Pydantic v2 State, Citry counts and stops such a check when
+      the browser writes the field, but not when it restores the State
+      at the start of a call.
+    - Fix a refused class: make the v1 class a Pydantic v2 model.
+
+Citry looks for these parts when the component class is defined. It
+cannot look inside a class it meets only when a call arrives: a Pydantic
+model inside a plain `data` class, or a `data` or State class whose
+forward references were not resolved by then. A call that reaches such a
+class (for State, a call that writes it) fails with a 422 that says "The
+value could not be checked.", and Citry logs the field and the fix once.
+A `pydantic.v1` class that Citry meets only at a call gets the same 422
+and does not run.
+
+The extra keys rule and the [path limit](#the-path-limit) depend on how
+Citry checks a browser write to a model State. It checks the write as
+Python values when that gives the same answer as checking JSON text. It
+can check the write only as JSON text when the State has one of these:
+
+- a strict setting: `strict=True`, or a strict field of a type that JSON
+  has no form for, such as a date, a tuple, or a model;
+- the `val_json_bytes` setting;
+- a custom type that checks JSON input differently from Python input;
+- a model that forbids extra keys and gives a field an alias.
+
+Without any of these, Citry checks the write as Python values first.
+When that check accepts the write, Citry then reads it as JSON text.
+
+### Use Pydantic in events { #pydantic-classes-in-events }
+
+Events needs Pydantic 2.13.0 or newer for a Pydantic v2 `data` or State
+class, including one used inside a plain `data` class. On an older
+Pydantic, defining the component raises `RuntimeError`.
+
+Citry checks a Pydantic v2 class with the same rules as the class,
+apart from the limits on this page. A few things differ:
+
+- Citry does not call your class's `model_validate`, or an override of
+  it, for event data. Put such logic in a `model_validator`.
+- Pydantic plugins, such as Logfire, do not record the checks of event
+  data and State writes, because Citry runs them with its own copy of
+  the class's validator.
+- Citry can check a browser write to a Pydantic model State both as
+  Python values and as JSON. A validator that reads `info.mode` and
+  answers differently can then refuse a valid write, so keep such
+  validators out of a model State.
+- Citry checks each browser write to a Pydantic dataclass State when it
+  arrives; see
+  [Pydantic dataclass State](/events/state/#pydantic-dataclass-state).
+- A validator that raises an exception other than `ValueError` or
+  `AssertionError`, such as `RuntimeError`, refuses a State write with
+  "The State could not be checked." under `fieldErrors._state`.
+
+A field typed `ImportString` (or `pydantic.v1.PyObject`) lets the data
+choose a Python module for the server to import, so never use one in a
+`data` class or in a State field that the browser may write.
+
+An Events `data` class can't be a `pydantic.v1` model, and neither a
+`data` class nor a Pydantic v2 State can hold one
+([details](#schemas-citry-refuses)). Use a Pydantic v2 model.
+
+A `pydantic.v1` State checks a browser write itself, and a bad value gets
+a 422 with field messages. Citry cannot give a v1 model the copy of its
+validator that it gives a v2 class, so it guards the check of a write in
+three ways:
+
+- Before the model runs, Citry refuses writes whose
+  [field paths are too long](#the-path-limit).
+- Citry counts the errors the model builds as it builds them. When a
+  check reaches about 1,000 errors, Citry stops it and the write gets
+  the single "too many errors" message described under
+  [Check event data](#check-event-data).
+- Citry reads the clock while the model checks, and stops the check when
+  the request's CPU time is gone.
+
+Citry adds these checks to `pydantic.v1` only while one of its own
+checks of event data or State writes runs, and only once your app has
+loaded `pydantic.v1`. Other code that uses `pydantic.v1` in another
+thread at that moment runs a little slower, and Citry does not count its
+errors.
+
+A union without a discriminator that holds a tree can make a v1 model
+check the same data again at each level, and the clock is what stops
+that. To avoid the repeats, give the union a discriminator, as in
+`Field(..., discriminator="type")` with a `Literal` field called `type`
+on each member.
+
+A v1 union tries its members in turn, and the errors of a member that
+fails do not count when a later member accepts the value. A member that
+builds more than about 1,000 errors by itself (fewer when the data has
+long keys) still ends the check with the "too many errors" message, even
+when a later member would accept the data.
+
+Keep secrets out of the messages your v1 validators raise. Pydantic v1
+turns a `TypeError` raised in a validator into a field error, and Citry
+sends its message to the browser, as it does for a `ValueError`.
+
+### Shorten long field paths { #the-path-limit }
+
+A valid call can fail with a 422 that says "The field paths in this data
+are too long in total to check. Send shorter keys or fewer items." Citry
+adds up the length of every field path in the data, such as
+`scores.alice.3`, before Pydantic runs. When the total is over
+16,777,216 characters, or over 32 times the size of the data (counted in
+characters of text) if that is larger, the call fails with this 422 and
+Pydantic does not run. You cannot change this limit. It can refuse a
+valid call, because it runs before Pydantic decides whether the data is
+valid.
+
+Citry applies this limit to three kinds of data: a browser write to a
+Pydantic v1 State, the browser's writes to a model State that Citry can
+check only as JSON text
+(see [Fix a refused schema](#schemas-citry-refuses)), and, rarely, a
+Pydantic v2 class whose checks Citry could not set up (Citry logs an
+error when that happens).
+
+Some data adds more path text than its own size:
+
+- A union without a discriminator adds the data's paths once for each
+  type in the union, because each type reports its own errors. Give the
+  union a discriminator to add them once.
+- A model with many required fields adds a path for each of them to every
+  object, because an empty object reports them all as missing. A long
+  list of objects next to many required fields can reach the limit.
+- When the class has any `Json[...]` field, each string in the data adds
+  as much path text as if it held JSON text.
+- A dict key of a few kilobytes over thousands of items can reach the
+  limit in any of the three kinds.
 
 ## Sandbox template code { #sandbox-python-template-expressions }
 

@@ -42,10 +42,18 @@ _FALLBACK_CODE = "error"
 # does not declare (or State fields the browser may not write), and how
 # many items one list or dict field holds. Listing a message for each
 # could make the response many times the size of the request, so an error
-# lists at most this many of each kind. Messages about other fields, and
-# fields an author passes to EventError, are always listed.
+# lists at most this many of each kind. Fields an author passes to
+# EventError are always listed in full.
 MAX_UNEXPECTED_FIELDS = 20
 MAX_ITEM_ERRORS = 20
+# The most text (field paths and messages) one error lists. Past this the
+# remaining messages are only counted. The first message is always listed.
+MAX_FIELD_ERRORS_TEXT = 64 * 1024
+# The most characters one listed message keeps. A message can repeat a
+# value from the request or a long list of allowed values, so a longer one
+# is cut and ends with "…". This leaves room for more messages under
+# MAX_FIELD_ERRORS_TEXT.
+MAX_FIELD_MESSAGE = 1000
 
 # Pydantic's error types for a key a model does not declare: v2, then v1.
 PYDANTIC_EXTRA_TYPES = frozenset({"extra_forbidden", "value_error.extra"})
@@ -219,8 +227,10 @@ class FieldErrors:
 
         The messages are sorted by path, with list indexes in number order.
         At most ``MAX_UNEXPECTED_FIELDS`` messages for unexpected fields are
-        kept, and at most ``MAX_ITEM_ERRORS`` inside each list or dict
-        field. A message is inside a container when its path text starts
+        kept, at most ``MAX_ITEM_ERRORS`` inside each list or dict field,
+        and messages stop being kept once their paths and text add up to
+        ``MAX_FIELD_ERRORS_TEXT`` characters. Each kept message is cut to
+        ``MAX_FIELD_MESSAGE`` characters first. A message is inside a container when its path text starts
         with the container's path text and a dot (``tags.3`` is inside
         ``tags``), and in a nested container it counts toward every
         container it is inside. "First" follows the sorted order.
@@ -423,6 +433,8 @@ def _walk_path_tree(root: _PathNode, *, limit_unexpected: bool) -> tuple[dict[st
     kept: dict[str, str] = {}
     dropped = 0
     unexpected_listed = 0
+    kept_text = 0
+    text_full = False
     # The text of the current path, one segment each. Written out only for a
     # kept message, and the limits keep few of those.
     segments: list[str] = []
@@ -454,10 +466,20 @@ def _walk_path_tree(root: _PathNode, *, limit_unexpected: bool) -> tuple[dict[st
                 dropped += 1
             else:
                 unexpected_listed += node.unexpected
-                if full_containers:
+                text = None if full_containers or text_full else ".".join(segments)
+                # The total counts each message as it will be listed, cut
+                # to MAX_FIELD_MESSAGE characters.
+                message = shortened_message(message)
+                if text is not None and kept and kept_text + len(text) + len(message) > MAX_FIELD_ERRORS_TEXT:
+                    # Once the text is full, every later message is only
+                    # counted, so the kept ones are still the first in order.
+                    text_full = True
+                    text = None
+                if text is None:
                     dropped += 1
                 else:
-                    kept[".".join(segments)] = message
+                    kept[text] = message
+                    kept_text += len(text) + len(message)
                     for container in open_containers:
                         container.listed += 1
                         if container.listed == MAX_ITEM_ERRORS:
@@ -468,6 +490,13 @@ def _walk_path_tree(root: _PathNode, *, limit_unexpected: bool) -> tuple[dict[st
         stack.append((node, True))
         stack.extend((child, False) for child in reversed(node.ordered_children()))
     return kept, dropped
+
+
+def shortened_message(message: str) -> str:
+    """Return ``message`` cut to ``MAX_FIELD_MESSAGE`` characters, ending with "…" when it was longer."""
+    if len(message) <= MAX_FIELD_MESSAGE:
+        return message
+    return message[: MAX_FIELD_MESSAGE - 1] + "\u2026"
 
 
 def unlisted_fields_note(count: int) -> str:

@@ -33,7 +33,7 @@ from citry.ext.events.codecs import (
 )
 from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
-from citry.ext.events.errors import EventError
+from citry.ext.events.errors import MAX_FIELD_ERRORS_TEXT, EventError
 from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
 from citry.ext.events.routes import _encode_location, _join_like_a_browser, get_event_url
 from citry.ext.events.schemas import PATHS_TOO_LONG_MESSAGE, StringArgs
@@ -1047,6 +1047,20 @@ class TestPerEventRoute:
         assert error["fieldErrors"] == {f"scores.{key}": "Expected int, got str."}
         assert elapsed < 1
 
+    # What a call can reach, as (schema, field): a plain dataclass pair, a
+    # Pydantic pair, and a Pydantic data class with a strict Pydantic State,
+    # whose writes Citry checks as JSON with the path limit as well.
+    BOARD_CASES = pytest.mark.parametrize(
+        ("schema", "field"),
+        [
+            ("dataclass", "args"),
+            ("dataclass", "state_updates"),
+            ("pydantic", "args"),
+            ("pydantic", "state_updates"),
+            ("strict", "state_updates"),
+        ],
+    )
+
     @staticmethod
     def _board(c, *, schema):
         """A component with a `dict[str, list[int]]` field in its `data` class and its State."""
@@ -1065,6 +1079,9 @@ class TestPerEventRoute:
                 scores: dict[str, list[int]]
 
             class BoardState(pydantic.BaseModel):
+                # A strict model reads JSON differently from the same values
+                # decoded, so Citry checks a write to it as JSON.
+                model_config = pydantic.ConfigDict(strict=schema == "strict")
                 scores: dict[str, list[int]] = {}
 
         class Board(Component):
@@ -1088,8 +1105,7 @@ class TestPerEventRoute:
         return {"args": {"scores": {}}, "stateToken": _token(board), "stateUpdates": {"scores": value}}
 
     @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
-    @pytest.mark.parametrize("field", ["args", "state_updates"])
-    @pytest.mark.parametrize("schema", ["dataclass", "pydantic"])
+    @BOARD_CASES
     def test_a_long_key_over_many_bad_items_costs_little(self, adapter, field, schema):
         # Citry 0.7.0 wrote the key into the path of every item, so the time
         # and memory grew with the square of the body. The memory check is
@@ -1108,12 +1124,17 @@ class TestPerEventRoute:
 
         error = response.json()["results"][0]["error"]
         assert error["status"] == 422
-        if schema == "pydantic":
-            name = "_args" if field == "args" else "_state"
-            assert error["fieldErrors"] == {name: PATHS_TOO_LONG_MESSAGE}
+        long_path = "scores." + "a" * 56_000 + ".0"
+        if schema == "strict":
+            # Checked as JSON: the path limit refuses the write before Pydantic runs.
+            assert error["fieldErrors"] == {"_state": PATHS_TOO_LONG_MESSAGE}
         else:
-            assert len(error["fieldErrors"]) == 20
-            assert error["message"].endswith(" 13,980 more field errors are not shown.")
+            # Pydantic and Citry's own validator both stop at the first bad
+            # item, so one error holds the key and nothing is left unlisted.
+            assert list(error["fieldErrors"]) == [long_path]
+            assert "more field error" not in error["message"]
+            listed_text = sum(len(name) + len(message) for name, message in error["fieldErrors"].items())
+            assert listed_text <= MAX_FIELD_ERRORS_TEXT + len(long_path) + 100
 
         call = self._long_key_call(board, field, {"a" * 28_000: ["x"] * 7_000})
         tracemalloc.start()
@@ -1124,20 +1145,22 @@ class TestPerEventRoute:
             tracemalloc.stop()
         assert peak < 32_000_000
 
-    @pytest.mark.parametrize("field", ["args", "state_updates"])
-    def test_a_dotted_key_under_the_pydantic_limit_is_split_once(self, field):
-        # Under the limit, so Pydantic runs and its messages are listed. Each
-        # of its errors has its own copy of the key, and this body would need
-        # 6 million tree steps if each copy were split at its dots.
+    @BOARD_CASES
+    def test_a_dotted_key_over_many_bad_items_is_answered_quickly(self, field, schema):
+        # A validator that kept every bad item would give each one its own
+        # copy of the key, and building the path tree would take long if
+        # each copy were split at its dots.
+        # The strict State is under the path limit here, so Pydantic runs.
+        # Every schema lists its one error for the first bad item.
         c = _citry()
-        board = self._board(c, schema="pydantic")
+        board = self._board(c, schema=schema)
         call = self._long_key_call(board, field, {"." * 3_000: ["x"] * 2_000})
         started = time.perf_counter()
         response = _post_call(_landing_client(c, "wsgi"), board, "save", call)
         assert time.perf_counter() - started < 0.3
         error = response.json()["results"][0]["error"]
-        assert len(error["fieldErrors"]) == 20
-        assert error["message"].endswith(" 1,980 more field errors are not shown.")
+        assert list(error["fieldErrors"]) == ["scores." + "." * 3_000 + ".0"]
+        assert "more field error" not in error["message"]
 
     @pytest.mark.parametrize("field", ["args", "state_updates"])
     def test_a_long_key_over_many_good_items_is_accepted_quickly(self, field):
@@ -1150,16 +1173,17 @@ class TestPerEventRoute:
         assert time.perf_counter() - started < 0.5
         assert "error" not in response.json()["results"][0]
 
-    @pytest.mark.parametrize("field", ["args", "state_updates"])
-    def test_pydantic_checks_an_ordinary_large_request(self, field):
+    @BOARD_CASES
+    def test_an_ordinary_large_request_is_checked_and_answered_with_one_error_per_collection(self, field, schema):
         # Thousands of short paths stay well below the limit on path text, so
-        # Pydantic's own messages reach the browser.
+        # a strict State's JSON check reaches Pydantic too. A dataclass and
+        # Pydantic each list only the first bad item of the collection.
         c = _citry()
-        board = self._board(c, schema="pydantic")
+        board = self._board(c, schema=schema)
         call = self._long_key_call(board, field, {f"key{index}": ["x"] for index in range(30_000)})
         error = _post_call(_landing_client(c, "wsgi"), board, "save", call).json()["results"][0]["error"]
-        assert list(error["fieldErrors"])[:2] == ["scores.key0.0", "scores.key1.0"]
-        assert error["message"].endswith(" 29,980 more field errors are not shown.")
+        assert list(error["fieldErrors"]) == ["scores.key0.0"]
+        assert "more field error" not in error["message"]
 
 
 class TestGetHandlers:

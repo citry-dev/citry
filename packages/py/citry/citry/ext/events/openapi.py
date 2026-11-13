@@ -37,20 +37,13 @@ from uuid import UUID
 from citry._class_introspection import _static_class_namespace_copy
 from citry._protocol.events import PROTOCOL, openapi_error_envelope_schema, openapi_error_schema
 from citry.command import CommandArg, style_success
+from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events.csrf import X_CITRY_EVENTS_HEADER
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.routes import EVENT_PATH
-from citry.ext.events.schemas import convert_schema_class
+from citry.ext.events.schemas import _is_pydantic_model, convert_schema_class
 from citry.extension import ExtensionCommand
-
-# Pydantic is optional here exactly as in the schema layer: a Pydantic-model
-# schema delegates its JSON Schema to Pydantic; without Pydantic installed no
-# such schema can exist.
-try:
-    import pydantic
-except ImportError:  # pragma: no cover - exercised via the tests' None patch
-    pydantic = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -127,7 +120,7 @@ class _SchemaRegistry:
         """One class's JSON Schema: enums by value, Pydantic wholesale, else the field walk."""
         if issubclass(cls, Enum):
             return _enum_schema(cls)
-        if _is_pydantic_model(cls):
+        if _is_any_pydantic_model(cls):
             return self._pydantic_schema(cls)
         return _object_schema(cls, self)
 
@@ -236,9 +229,10 @@ def _values_schema(values: list[Any]) -> dict[str, Any]:
     return schema
 
 
-def _is_pydantic_model(cls: type) -> bool:
-    """Whether ``cls`` is a Pydantic model (always ``False`` without Pydantic installed)."""
-    return pydantic is not None and isinstance(cls, type) and issubclass(cls, pydantic.BaseModel)
+def _is_any_pydantic_model(cls: Any) -> bool:
+    """Whether ``cls`` is a Pydantic v2 or ``pydantic.v1`` model, which describes itself in JSON Schema."""
+    # A handler may still return a v1 model, though a `data` class cannot be one.
+    return _is_pydantic_model(cls) or bounded.is_pydantic_v1_class(cls)
 
 
 ################################################
@@ -307,7 +301,7 @@ def _annotation_to_schema(annotation: Any, registry: _SchemaRegistry) -> dict[st
         return {"type": "string", "format": "decimal"}
     if issubclass(annotation, UploadedFile):
         return {"type": "string", "format": "binary"}
-    if _is_pydantic_model(annotation) or _is_schema_class(annotation):
+    if _is_any_pydantic_model(annotation) or _is_schema_class(annotation):
         return registry.ref(annotation)
     return {}
 
@@ -389,7 +383,7 @@ def _is_data_annotation(annotation: Any) -> bool:
     # as a type, and issubclass() rejects it, so it is told apart by its origin.
     if not isinstance(annotation, type) or origin is not None or issubclass(annotation, Enum):
         return False
-    return _is_pydantic_model(annotation) or _is_schema_class(annotation)
+    return _is_any_pydantic_model(annotation) or _is_schema_class(annotation)
 
 
 def _data_response_schema(annotation: Any, registry: _SchemaRegistry) -> dict[str, Any]:
@@ -505,9 +499,13 @@ def _build_operation(
         responses["200"] = {"description": "The citry-events/1 result envelope."}
     responses["422"] = {
         "description": (
-            "The args did not validate; per-field messages ride in results[0].error.fieldErrors."
-            " fieldErrors lists at most 20 fields the schema does not declare and at most 20 items per list"
-            " or dict field; the message counts the rest."
+            "The args did not validate; results[0].error.fieldErrors holds a message for each bad field."
+            " It names the first bad item of each list or dict field (a list under a wrap validator lists"
+            " up to 20), lists at most 20 fields the schema does not declare, and"
+            " stops at 65,536 characters of text. It cuts a message longer than 1,000 characters."
+            " When it leaves messages out, the message field says how many."
+            " Data with too many errors, data too large or nested too deeply to check, or a check that took"
+            " too long gets one message under _args."
         ),
         "content": {"application/json": {"schema": {"$ref": _REF_PREFIX + "EventErrorEnvelope"}}},
     }

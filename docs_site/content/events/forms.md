@@ -118,7 +118,7 @@ The form's fields are sent only when the binding names the handler alone,
 as in `submit` or `submit()`. Arguments you write, as in
 `submit({draft: true})`, are sent instead of the fields.
 
-## `EventError` field errors
+## `EventError` field errors { #eventerror-field-errors }
 
 Raise [`EventError`][citry.ext.events.EventError] with a message and an error
 per field. When a call fails, nothing re-renders, so the form keeps what the
@@ -131,10 +131,35 @@ or `null`. Its `fieldErrors` uses the field names you passed to `EventError`:
 <span v-text="$error('submit')?.fieldErrors?.email"></span>
 ```
 
-`fieldErrors` lists at most 20 errors for fields the `data` class does
-not declare, and at most 20 errors for the items of each list or dict
-field. When it leaves some out, `message` ends with how many. Every other
-error is listed in full.
+Fields you pass to `EventError` are always listed in full. When the
+`data` class rejects a call, Citry shortens the list:
+
+- It names only the first bad item of each list or dict field, and
+  does not check the items after it. With a list or dict inside a wrap
+  validator (a validator that receives the value and the next
+  validator), it lists up to 20.
+- It lists at most 20 fields the `data` class does not declare.
+- It stops at 65,536 characters of text.
+- It cuts a message longer than 1,000 characters to that length,
+  ending it with "…".
+
+When it leaves messages out, `message` ends with how many.
+
+Sometimes Citry cannot list field messages at all. It then sends one
+message about the whole call's data under `fieldErrors._args`, and no
+message under the field names (a browser write to State gets
+`fieldErrors._state` the same way). This happens when the data has more
+than about 1,000 errors, is too large or nested too deeply to check, or
+took too long to check ([details](/security/#check-event-data)). A form
+that shows only the message next to each field then shows nothing, so
+show this one too. Add the `_state` line when the call also carries
+State writes:
+
+```citry-html
+<span v-text="$error('submit')?.fieldErrors?.email"></span>
+<span v-text="$error('submit')?.fieldErrors?._args"></span>
+<span v-text="$error('submit')?.fieldErrors?._state"></span>
+```
 
 A later successful `submit` call clears the error. Errors from other
 handlers in the same component are separate, so two forms in one component

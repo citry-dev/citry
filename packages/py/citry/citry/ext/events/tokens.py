@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import copy
 import hashlib
 import hmac
 import json
@@ -56,6 +57,7 @@ import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
 from datetime import timedelta
 from enum import Enum
 from functools import lru_cache
@@ -80,6 +82,7 @@ from citry._class_introspection import _static_class_namespace_copy
 from citry._protocol.events import MAX_JSON_DEPTH, JsonNestingError, check_json_depth
 from citry._vue.json_data import _secret_key_path
 from citry.cache import STATE_KEY_PREFIX, InMemoryCache
+from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events.errors import PYDANTIC_EXTRA_TYPES, FieldErrors, unlisted_fields_note
 from citry.ext.events.schemas import (
     PATHS_TOO_LONG_MESSAGE,
@@ -310,9 +313,11 @@ def mint_state_token(
             gives the entry a 24-hour lifetime.
         max_bytes: The mint-time size canary for signed storage: State whose
             serialized form exceeds it raises, with guidance to keep an id and
-            reload the rest. Not applied here in server storage, whose whole
-            purpose is State too large to round-trip; the dispatcher checks it
-            against browser writes instead (see ``server_state_growth_error``).
+            reload the rest. The dispatcher also checks it against browser
+            writes before the handler runs, in signed storage only when the
+            call gets a new token (see ``state_growth_error``). Not
+            applied here in server storage, whose whole purpose is State too
+            large to round-trip; there only the dispatcher's check applies.
         storage: ``"signed"`` (default) or ``"server"``.
         cache: The cache backend for server storage; required when
             ``storage="server"``.
@@ -551,9 +556,9 @@ def _state_dict_bytes(state_dict: dict[str, Any]) -> int:
     return len(_canonical_json(state_dict).encode("utf-8"))
 
 
-def server_state_bytes(state: Any, class_id: str) -> int | None:
+def state_bytes(state: Any, class_id: str) -> int | None:
     """
-    Measure State the way server storage will store it, or ``None`` when it cannot be stored.
+    Measure State the way a token stores it, or ``None`` when it cannot be stored.
 
     A State that cannot be written as JSON fails later, when Citry stores it,
     with the error that names the field, so the size check skips it.
@@ -564,16 +569,18 @@ def server_state_bytes(state: Any, class_id: str) -> int | None:
         return None
 
 
-def server_state_growth_error(
+def state_growth_error(
     *, before: int | None, after: int | None, max_bytes: int | None, component_name: str
 ) -> str | None:
     """
-    Return why the browser's writes made server-stored State too large, or ``None`` when they did not.
+    Return why the browser's writes made State too large, or ``None`` when they did not.
 
-    Every State change stores a new cache entry, so the cap bounds what one
-    call's browser writes can add to the cache. Only growth past the cap is refused: State
-    the server itself made large keeps working when the browser changes it
-    without making it larger.
+    Signed storage cannot sign a State over the cap, so a call that gets a
+    new token is refused before its handler runs. For server storage,
+    every State change stores a new cache entry, so the cap bounds what one
+    call's browser writes can add to the cache. With a ``before`` size, only
+    growth past the cap is refused: State the server itself made large keeps
+    working when the browser changes it without making it larger.
     """
     if max_bytes is None or after is None or after <= max_bytes:
         return None
@@ -869,6 +876,16 @@ def apply_state_updates(
     if not updates:
         return ()
     writable = frozenset(model_fields)
+    # JSON lets the browser send half of a UTF-16 pair on its own, which a
+    # State check may accept as text. The token is UTF-8, which cannot hold
+    # it, so such a write would fail only at signing, after the handler ran.
+    # It is refused here for every kind of State, before any check runs.
+    surrogates = FieldErrors()
+    for name in sorted(updates):
+        if name in writable and _holds_lone_surrogate(updates[name]):
+            surrogates.add((None, name), _LONE_SURROGATE_MESSAGE)
+    if surrogates:
+        raise _rejected_updates(surrogates)
     if state_model_kind(type(state)) is not None:
         return _apply_model_state_updates(state, updates, writable)
     hints = _resolve_hints(type(state))
@@ -898,21 +915,55 @@ def _set_on_pydantic_dataclass(state: Any, to_apply: list[tuple[str, Any]], erro
     """
     Write browser values to a Pydantic dataclass State, which may check them as it is assigned.
 
-    With ``validate_assignment`` each ``setattr`` runs Pydantic, and a value
-    it refuses rejects the whole batch. Without it, the next call runs
-    Pydantic when it restores the State. Either way the writes are held to
-    the same limit as a Pydantic model.
+    Citry's copy of the class's validator, which stops each list and dict
+    at its first bad item, checks the writes, and a value it refuses
+    rejects the whole batch. With ``validate_assignment`` the copy assigns
+    each value, as the class would. Without it the State keeps the values
+    the browser sent, as the class would, after the checks in
+    ``_check_dataclass_batch``. So no browser value reaches the token
+    unchecked.
     """
-    if not pydantic_can_report(dict(to_apply), type(state), errors):
+    state_cls = type(state)
+    if bounded.state_refusal(state_cls) is not None:
+        errors.add((None, "_state"), bounded.NOT_CHECKABLE_MESSAGE)
+        raise _rejected_updates(errors)
+    checker = bounded.checker_for(state_cls, state=True) if bounded.is_pydantic_v2_class(state_cls) else None
+    if checker is not None and checker.validator is None:
+        bounded.log_refusal(state_cls, checker)
+        errors.add((None, "_state"), bounded.NOT_CHECKABLE_MESSAGE)
+        raise _rejected_updates(errors)
+    if (checker is None or checker.needs_path_limit) and not pydantic_can_report(dict(to_apply), state_cls, errors):
         errors.add((None, "_state"), PATHS_TOO_LONG_MESSAGE)
         raise _rejected_updates(errors)
+    checks_assignment = bool(getattr(state_cls, "__pydantic_config__", {}).get("validate_assignment"))
     # A field with `init=False` can still be unset, and has nothing to restore.
     before = {name: getattr(state, name) for name, _ in to_apply if hasattr(state, name)}
-    for name, value in to_apply:
+    # The writes of one batch share one error total.
+    with bounded.validation_scope(dict(to_apply)):
         try:
-            setattr(state, name, value)
-        except ValueError as error:
-            _record_model_errors(error, errors, type(state))
+            if checker is not None and checks_assignment:
+                for name, value in to_apply:
+                    try:
+                        bounded.validate_assignment(checker, state, name, value)
+                    except ValueError as error:
+                        _record_model_errors(error, errors, state_cls)
+            elif checker is not None:
+                _check_dataclass_batch(state, to_apply, errors)
+            if not errors and not checks_assignment:
+                for name, value in to_apply:
+                    # The class keeps an assignment as it is without
+                    # `validate_assignment`; an unfinished class is refused
+                    # by Pydantic at the restore.
+                    setattr(state, name, value)
+        except bounded.ValidationTooCostly as stop:
+            bounded.warn_if_stopped(state_cls, stop)
+            errors.add((None, "_state"), stop.message)
+        except Exception:  # noqa: BLE001 - the author's validator must not fail the whole request
+            # A validator that fails with an error Pydantic does not report
+            # as a field error (it reports ValueError and AssertionError) is
+            # the author's bug. The batch is refused as for a model State.
+            logger.exception(f"A State validator raised while checking browser writes to {state_cls.__qualname__}.")
+            errors.add((None, "_state"), _NOT_CHECKED_MESSAGE)
     if errors:
         # A failed batch leaves the State as it was, as for every other State.
         for name, value in before.items():
@@ -920,7 +971,104 @@ def _set_on_pydantic_dataclass(state: Any, to_apply: list[tuple[str, Any]], erro
         raise _rejected_updates(errors)
 
 
+def _check_dataclass_batch(state: Any, to_apply: list[tuple[str, Any]], errors: FieldErrors) -> None:
+    """
+    Check a batch of browser writes to a Pydantic dataclass State without ``validate_assignment``.
+
+    The batch is the ``stateUpdates`` of one call: the browser's new values
+    for the State's writable fields, accepted or refused together.
+
+    Each written value is first checked against its field, within the
+    request's limits, since the browser chose it. As when the class is
+    built, the writes are checked in the order the class declares its
+    fields, and a field validator sees its own name (``info.field_name``)
+    and the fields declared before its own (``info.data``), with the
+    batch's earlier writes in them. ``info.data`` is a deep copy of the
+    State's fields when they can be copied, so a validator that changes it
+    leaves the State as it was. Model validators and ``__post_init__`` do
+    not run there, since a batch may write two fields that agree only once
+    both are written.
+
+    Then, when the class checks more than each field on its own (a model
+    validator, ``__post_init__``, a validator that takes ``info``, or a
+    ``default_factory`` that takes the other fields), the whole State is
+    built once from the values the next call's restore will read: the
+    token's JSON form with the writes in it. So model validators
+    that compare fields, ``__post_init__``, and the validators of fields
+    the batch did not write see the whole batch. That build runs without a
+    work budget or CPU limit, as the restore does (see ``restore_state``):
+    the browser's values in it already passed their field check within the
+    request's limits, and the rest are the server's own. A class whose
+    fields are each checked on their own needs no build: each written value
+    passed the check the restore will run on it, and the other fields were
+    restored at the start of the call.
+    """
+    state_cls = type(state)
+    check = bounded.fields_checker_for(state_cls)
+    if check is None:
+        errors.add((None, "_state"), bounded.NOT_CHECKABLE_MESSAGE)
+        return
+    names = [item.name for item in dataclass_fields(state)]
+    current: dict[str, Any] = {}
+    if check.reads_other_fields:
+        # The fields a validator reads as `info.data`, as Pydantic's own
+        # assignment check reads them from the instance. Read by field,
+        # since a class with `slots=True` has no `__dict__`, and a field
+        # with `init=False` may still be unset. A copy, so a validator that
+        # changes a value in place does not change the State, which the
+        # batch may yet refuse. The values are the server's, so copying
+        # them does not count toward the request's CPU limit.
+        current = {name: getattr(state, name) for name in names if hasattr(state, name)}
+        with bounded.unbudgeted():
+            try:
+                current = copy.deepcopy(current)
+            except Exception:  # noqa: BLE001 - a value that cannot be copied must not refuse a valid write
+                # The validators then read the State's own values, as
+                # Pydantic's assignment check does.
+                logger.debug(f"Citry could not copy the State of {state_cls.__qualname__} for its field validators.")
+    order = {name: index for index, name in enumerate(names)}
+    for name, value in sorted(to_apply, key=lambda write: order.get(write[0], len(order))):
+        # Only the fields declared before this one, as when the class is built.
+        earlier = {key: current[key] for key in names[: order.get(name, len(names))] if key in current}
+        try:
+            checked = bounded.validate_field(check.validator, earlier, name, value)
+        except ValueError as error:
+            _record_model_errors(error, errors, state_cls)
+            continue
+        if check.reads_other_fields:
+            current[name] = checked
+    if errors or not check.checks_across_fields:
+        return
+    try:
+        merged = json.loads(_canonical_json(state_wire_values(state)))
+    except (TypeError, ValueError):
+        # The State does not hold JSON; signing it fails later with its own message.
+        return
+    merged.update(to_apply)
+    init_names = {item.name for item in dataclass_fields(state) if item.init}
+    try:
+        restore_state(state_cls, {key: item for key, item in merged.items() if key in init_names})
+    except ValueError as error:
+        _record_model_errors(error, errors, state_cls)
+
+
+# The field message when an author's validator fails with an error Pydantic
+# does not report as a field error while checking browser writes.
+_NOT_CHECKED_MESSAGE = "The State could not be checked."
 _UNWRITABLE_MESSAGE = "This field cannot be written from the client (it is not in the State _model set)."
+_LONE_SURROGATE_MESSAGE = "This text holds an unpaired surrogate character, which cannot be stored in the State."
+
+
+def _holds_lone_surrogate(value: Any) -> bool:
+    """Whether ``value`` holds text, as a string or a key, with a lone surrogate, which UTF-8 cannot encode."""
+    try:
+        json.dumps(value, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    except (TypeError, ValueError, RecursionError):
+        # Not JSON, or nested too deep to write; the field's own check reports it.
+        return False
+    return False
 
 
 def _rejected_updates(errors: FieldErrors) -> StateUpdateError:
@@ -930,9 +1078,11 @@ def _rejected_updates(errors: FieldErrors) -> StateUpdateError:
     The browser decides how many names outside ``_model`` it sends, and how
     many items a list or dict field holds, so only the first few of those
     messages are listed and the message counts the rest. Other messages
-    about writable fields are all kept. The messages are in path order, so
-    the ones kept do not depend on the order the browser sent a dict's keys
-    in, for a dataclass and a Pydantic State alike.
+    about writable fields are kept until their text reaches
+    ``MAX_FIELD_ERRORS_TEXT``, each cut to ``MAX_FIELD_MESSAGE``
+    characters. The messages are in path order. A
+    Pydantic State stops each list or dict at its first bad item in the
+    order the browser sent, so which item it names follows that order.
     """
     fields, unlisted = errors.limited()
     message = "Some state updates were rejected; see the field messages." + unlisted_fields_note(unlisted)
@@ -959,24 +1109,38 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
             errors.add_unexpected((None, name), _UNWRITABLE_MESSAGE)
     if errors:
         raise _rejected_updates(errors)
-    if not pydantic_can_report(updates, type(state), errors):
-        errors.add((None, "_state"), PATHS_TOO_LONG_MESSAGE)
-        raise _rejected_updates(errors)
+    state_cls = type(state)
     # The writes are JSON, as the token is, so they are merged into the
     # token's form and read back the same way a restore reads them.
     merged = {**state_wire_values(state), **updates}
+    check = _model_state_check(state_cls, updates, merged, errors)
     try:
-        checked = restore_state(type(state), merged)
+        checked = check()
     except ValueError as error:
-        _record_model_errors(error, errors, type(state))
+        _record_model_errors(error, errors, state_cls)
         raise _rejected_updates(errors) from error
+    except bounded.ValidationTooCostly as stop:
+        # Name the class in the log, so the app author can tell a valid but
+        # deep tree from an attack.
+        bounded.warn_if_stopped(state_cls, stop)
+        errors.add((None, "_state"), stop.message)
+        raise _rejected_updates(errors) from stop
     except Exception as error:
         # A validator that fails with another exception is the author's bug,
-        # but it must not take down the whole envelope.
-        logger.exception(f"A State validator raised while checking browser writes to {type(state).__qualname__}.")
+        # but it must not fail the whole request.
+        if _is_pydantic_v1_config_error(error):
+            # Pydantic v1 refuses to check a model it could not finish, such
+            # as one whose forward reference was never resolved. The log
+            # gives Pydantic's own message, which names the model and the fix.
+            logger.error(
+                f"Citry could not check browser writes to the State {state_cls.__qualname__}, because"
+                f" Pydantic v1 cannot check a model in it: {error}"
+            )
+        else:
+            logger.exception(f"A State validator raised while checking browser writes to {state_cls.__qualname__}.")
         raise StateUpdateError(
             "Some state updates were rejected; see the field messages.",
-            fields={"_state": "The State could not be checked."},
+            fields={"_state": _NOT_CHECKED_MESSAGE},
         ) from error
     # Every field takes the checked model's value, so a value a validator
     # derives from a written field is current too. The values are copied
@@ -985,10 +1149,143 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
     return tuple(sorted(updates))
 
 
+def _is_pydantic_v1_config_error(error: BaseException) -> bool:
+    """Whether ``error`` is Pydantic v1's ``ConfigError``, raised for a model it could not finish."""
+    error_type = type(error)
+    return error_type.__name__ == "ConfigError" and error_type.__module__.startswith("pydantic.v1")
+
+
+def _model_state_check(
+    state_cls: type, updates: Mapping[str, Any], merged: dict[str, Any], errors: FieldErrors
+) -> Any:
+    """
+    Return the function that checks browser writes merged into a model State's values.
+
+    The State's values always come from reading the writes as JSON, the way
+    a restore reads the token, with a copy of the validator that stops each
+    list and dict at its first bad item, and counts errors at and below a
+    wrap validator. What runs before that read differs:
+
+    - A Pydantic v2 State that pydantic-core reads alike from JSON and from
+      Python (see ``_Schema.json_mode_differs``) is first checked in Python
+      mode by Citry's copy, which counts errors and work and reads keys by
+      field name only. A write it refuses gets its errors and is not read
+      as JSON: tests that compared the two modes over such classes found
+      no write that Python mode refuses and JSON mode accepts. The JSON
+      read then sees only writes that the Python check accepted.
+      Registration refused the writable fields with a part Citry cannot
+      check in this read (see ``check_state_class``).
+    - Any other v2 State has no Python check that matches JSON, so it gets
+      the path limit before the read, and Citry refused it at registration
+      if a writable field leads to a part the JSON copy cannot check.
+    - A Pydantic v1 State keeps its own validator. Citry refuses the write
+      before it runs if the path limit or the CPU limit says so. While it
+      runs, Citry counts the errors the validator builds and reads the
+      clock, and ends the check at the error limit or when the time is gone
+      (see ``guarding_pydantic_v1``). The same check also reads the written
+      State back as JSON, which the request then reuses (see ``_parse_v1``).
+
+    Raises:
+        StateUpdateError: The writes were refused before Pydantic ran.
+
+    """
+    is_v2 = bounded.is_pydantic_v2_class(state_cls)
+    if is_v2 and bounded.state_refusal(state_cls) is not None:
+        # The State was unfinished at registration, and the check run now
+        # refuses a writable field; the reason is logged once.
+        errors.add((None, "_state"), bounded.NOT_CHECKABLE_MESSAGE)
+        raise _rejected_updates(errors)
+    python_check = None
+    reader = None
+    if is_v2:
+        reader = bounded.json_checker_for(state_cls)
+        if bounded.state_write_mode(state_cls) == "python":
+            python_check = bounded.checker_for(state_cls, state=True, by_name=True)
+    for checker in (python_check, reader):
+        if checker is not None and checker.validator is None:
+            bounded.log_refusal(state_cls, checker)
+            errors.add((None, "_state"), bounded.NOT_CHECKABLE_MESSAGE)
+            raise _rejected_updates(errors)
+    # The Python check keeps the read within the limits, unless it had to be
+    # built without its counting wrappers; without it, the path limit does.
+    bounded_by_python = python_check is not None and not python_check.needs_path_limit
+    if not bounded_by_python and not pydantic_can_report(updates, state_cls, errors):
+        errors.add((None, "_state"), PATHS_TOO_LONG_MESSAGE)
+        raise _rejected_updates(errors)
+    if reader is None:
+        # A Pydantic v1 State (in practice the only class that reaches this
+        # branch) checks the browser's writes itself. The check counts
+        # toward the request's CPU limit like any check of browser data, so
+        # a slow write leaves less time for the request's later checks.
+        def check_itself() -> Any:
+            budget = bounded.current_work()
+            # An earlier check may have used the time already, and it has
+            # its own warning. Only a write that uses up the time is named here.
+            was_out = budget is not None and budget.out_of_time()
+            stopped = False
+            try:
+                # The scope puts the `pydantic.v1` hooks in, which count the
+                # model's errors and read the clock while it checks.
+                with bounded.validation_scope(merged):
+                    if budget is not None:
+                        # Spend for the values before the check starts, which
+                        # also ends the request's checks when the time is gone.
+                        budget.spend_on(merged)
+                    checked = restore_state(state_cls, merged)
+                    # Citry reads the written State back as JSON for the
+                    # fingerprint, the new token and the public values. That
+                    # read checks the browser's values once more, so it runs
+                    # here, within this check's error count and CPU limit,
+                    # before the handler. The request keeps the parse, so the
+                    # reads after the handler reuse it while the handler
+                    # leaves State as it is (see `_parse_v1`).
+                    # A written State that fails to read back could never be
+                    # signed, so the write is refused here with Pydantic's
+                    # field messages instead of failing after the handler.
+                    state_wire_values(checked)
+                    return checked
+            except bounded.ValidationTooCostly:
+                stopped = True
+                raise
+            except RecursionError:
+                # The data nests deeper than Python can follow inside the
+                # model's own check. Answer that the data is nested too
+                # deeply, and log it once per class without a traceback.
+                stopped = True
+                raise bounded.ValidationTooCostly("depth") from None
+            finally:
+                # The check ends with the time gone, without being stopped,
+                # when the time ran out inside one validator function, where
+                # Citry reads no clock. Without this warning, the log would
+                # blame the next class whose check finds the time gone and is
+                # refused, and the author would tune the wrong class. A check
+                # that Citry stopped has its own warning, from the caller.
+                if budget is not None and not was_out and not stopped and budget.out_of_time():
+                    bounded.warn_work_spent(state_cls, "time", refused=False)
+
+        return check_itself
+
+    def check() -> Any:
+        # Keys are read as field names only, as a restore reads them.
+        if python_check is not None:
+            bounded.validate_python(python_check, merged, by_alias=False, by_name=True)
+        text = json.dumps(merged, allow_nan=False)
+        return bounded.validate_json(reader, text, merged, by_alias=False, by_name=True)  # type: ignore[arg-type]
+
+    return check
+
+
 def _record_model_errors(error: ValueError, errors: FieldErrors, state_cls: type) -> None:
     """Record each field Pydantic names in ``error``, or the whole error when it names none."""
     found = getattr(error, "errors", None)
-    items = found() if callable(found) else ()
+    items: Any = ()
+    if callable(found):
+        try:
+            # Citry reads only each error's location, message and type.
+            items = found(include_url=False, include_context=False, include_input=False)
+        except TypeError:
+            # Pydantic v1 takes no options.
+            items = found()
     shared: dict[tuple[int, Any], Any] = {}
     for item in items:
         location = item.get("loc", ()) if isinstance(item, dict) else ()
@@ -1095,10 +1392,11 @@ def _check_value(value: Any, hint: Any, path: Any, errors: FieldErrors) -> bool:
     """
     Check a JSON value against a field's declared type, without converting it.
 
-    Records a message at the path of each part that does not fit (``tags.2``
+    Records a message at the path of a part that does not fit (``tags.2``
     for the third item of a list field), keeping the first message for a
     path, and returns whether the whole value fits. A list, tuple, or dict
-    type is checked item by item, and a ``Literal`` against its listed values.
+    type is checked item by item up to its first bad item, and a ``Literal``
+    against its listed values.
     """
     # No usable hint: cannot type-check reliably, so accept and rely on the
     # handler to authorize what it does with the value (7.2).
@@ -1163,10 +1461,9 @@ def _check_value(value: Any, hint: Any, path: Any, errors: FieldErrors) -> bool:
         if value_hint is Any or value_hint is object:
             return True
         errors.add_container(path)
-        ok = True
-        for key, item in value.items():
-            ok = _check_value(item, value_hint, (path, key), errors) and ok
-        return ok
+        # The browser decides how many values it sends, so the check stops at
+        # the first bad one, as the check of a `data` class does.
+        return all(_check_value(item, value_hint, (path, key), errors) for key, item in value.items())
     # A TypedDict is a plain dict at runtime and isinstance() refuses it, so
     # the value is checked only as an object. typing_extensions also
     # recognizes its own TypedDict, which Pydantic asks for on Python 3.11.
@@ -1197,14 +1494,16 @@ def _value_matches(value: Any, hint: Any) -> bool:
 
 
 def _check_items(items: Sequence[Any], hints: list[Any], path: Any, errors: FieldErrors) -> bool:
-    """Check each item of a list value against its type, recording a message per item."""
+    """Check the items of a list value against their types, stopping at the first bad one, which gets a message."""
     if all(hint is Any or hint is object for hint in hints):
         return True
     errors.add_container(path)
-    ok = True
-    for index, (item, hint) in enumerate(zip(items, hints, strict=True)):
-        ok = _check_value(item, hint, (path, index), errors) and ok
-    return ok
+    # The browser decides how many items it sends, so the check stops at the
+    # first bad one, as the check of a `data` class does.
+    return all(
+        _check_value(item, hint, (path, index), errors)
+        for index, (item, hint) in enumerate(zip(items, hints, strict=True))
+    )
 
 
 def _check_literal(value: Any, hint: Any, path: Any, errors: FieldErrors) -> bool:
