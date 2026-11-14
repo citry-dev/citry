@@ -190,7 +190,13 @@ does. The upgrade notes below list what can change.
   to a cached component.
 - The development warning for a repeated `id` now reads a numeric
   character reference in an `id` as the browser does, so `id="a&#1;b"`
-  and `id="ab"` are no longer reported as the same id.
+  and `id="ab"` are no longer reported as the same id. When one element
+  has two `id` attributes, the warning now counts only the first, which
+  is the one the browser uses.
+- Citry now adds its preload links to a page's `<head>` when the page
+  holds a numeric character reference with thousands of digits. It used
+  to skip them when such a reference fell where Citry splits the page to
+  read it.
 
 ## v0.8.0
 

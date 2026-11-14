@@ -235,6 +235,20 @@ def test_a_parser_that_never_reads_values_keeps_no_text() -> None:
 
 
 @pytest.mark.parametrize(
+    ("written", "count", "valid"),
+    [('<div id="app" ID="x"></div>', 1, True), ('<div id="x" id="app"></div>', 0, True)],
+    ids=["host-first", "host-second"],
+)
+def test_the_vue_host_check_reads_a_repeated_id_as_the_browser_does(written: str, count: int, valid: bool) -> None:
+    # The browser gives the element the first id only, so the first tag is
+    # the host with no other attribute, and the second is not the host.
+    validator = _HostValidator("app")
+    validator.feed(written)
+    validator.close()
+    assert (validator.count, validator.valid_attrs) == (count, valid)
+
+
+@pytest.mark.parametrize(
     ("written", "hosts"),
     [("app&#1;", 0), ("a&#x70;p", 1), ("app", 1)],
     ids=["kept-code-point", "reference-to-a-letter", "plain"],
@@ -329,6 +343,26 @@ def test_the_id_check_tells_apart_ids_that_differ_by_a_kept_code_point() -> None
     scanner.feed('<p id="a&#1;b"></p><p id="ab"></p><p id="a&#xfdd0;b"></p>')
     scanner.close()
     assert scanner.ids == ["a\x01b", "ab", "a\ufdd0b"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    ['<p title="a" TITLE="b" hidden title="c">', '<p title="a" TITLE="b&#1;" hidden title="c">'],
+    ids=["no-reference", "with-a-reference"],
+)
+def test_a_repeated_attribute_reads_as_its_first_value(source: str) -> None:
+    # A browser keeps the first of two attributes with the same name,
+    # whatever its letter case; a tag with "&" takes a different path
+    # through the parser.
+    assert _attributes(source) == [[("title", "a"), ("hidden", None)]]
+
+
+def test_the_id_check_counts_only_the_first_id_of_an_element() -> None:
+    # The browser registers id="a" only, so "b" cannot repeat the later one.
+    scanner = _IdScanner()
+    scanner.feed('<p id="a" id="b"></p><p id="b"></p>')
+    scanner.close()
+    assert scanner.ids == ["a", "b"]
 
 
 def _link_page(*, interactive: bool) -> str:

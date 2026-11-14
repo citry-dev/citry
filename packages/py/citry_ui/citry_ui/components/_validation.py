@@ -68,3 +68,37 @@ def validate_html_id(component_name: str, value: str | None) -> None:
     if not value or any(character in "\t\n\f\r " for character in value):
         msg = f"{component_name} id must be non-empty and cannot contain ASCII whitespace."
         raise ValueError(msg)
+
+
+def first_attribute_occurrences(attrs: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
+    """
+    Return the attributes a browser keeps from one start tag that ``HTMLParser`` read.
+
+    A browser keeps the first of two attributes with the same name and
+    ignores the rest, so ``<div popover="auto" popover="manual">`` has
+    ``popover="auto"``, while ``dict(attrs)`` would keep the last value. The
+    checks of rendered output read this list, so they decide on the
+    attributes the page really has. ``HTMLParser`` already lowercases names.
+    """
+    # Citry 0.9.0 and later already hand the start tag handlers this list,
+    # but Citry UI also runs on older releases, whose parser keeps every
+    # occurrence.
+    seen: set[str] = set()
+    kept: list[tuple[str, str | None]] = []
+    for name, value in attrs:
+        if name not in seen:
+            seen.add(name)
+            kept.append((name, value))
+    return kept
+
+
+def visible_markup_text(text: str) -> str:
+    r"""
+    Return ``text`` with every unprintable character written as a visible escape such as ``\x1b``.
+
+    Error messages quote tag names from the rendered HTML, and a tag name can
+    hold a control character. Written as it is, ESC would reach the
+    developer's terminal, where it can start an escape sequence, such as
+    one that changes the window title.
+    """
+    return "".join(char if char.isprintable() else char.encode("unicode_escape").decode("ascii") for char in text)

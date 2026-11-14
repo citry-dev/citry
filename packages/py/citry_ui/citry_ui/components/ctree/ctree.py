@@ -10,7 +10,12 @@ from typing import Any, Literal, TypedDict, cast
 from citry import LibraryComponent, SlotInput, const_value
 from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
-from citry_ui.components._validation import reject_owned_attrs, validate_boolean
+from citry_ui.components._validation import (
+    first_attribute_occurrences,
+    reject_owned_attrs,
+    validate_boolean,
+    visible_markup_text,
+)
 
 CTreeSelectionMode = Literal["none", "single", "multiple"]
 CTreeVariant = Literal["plain", "soft", "outline"]
@@ -185,7 +190,8 @@ class _TreeOutputParser(LongReferenceSafeParser):
         self.seen_tree = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        values = dict(attrs)
+        # Read each repeated attribute at its first occurrence, as the browser does.
+        values = dict(first_attribute_occurrences(attrs))
         part = values.get("data-citry-ui-part")
         parent = self.stack[-1] if self.stack else None
         in_tree = self.seen_tree and bool(self.stack)
@@ -201,7 +207,7 @@ class _TreeOutputParser(LongReferenceSafeParser):
                 "label": set(),
             }
             if parent in allowed and part not in allowed[parent]:
-                self.problem = f"{parent} contains unsupported element {tag}"
+                self.problem = f"{parent} contains unsupported element {visible_markup_text(tag)}"
         self.stack.append(part)
 
     def handle_endtag(self, tag: str) -> None:  # noqa: ARG002
