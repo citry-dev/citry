@@ -2638,14 +2638,14 @@ class _Job:
     def run(self) -> None:
         """Run the call and keep its outcome; the check thread then wakes the caller (see `_CheckThreads._serve`)."""
         call, context = self.call, self.context
+        if call is None or context is None:
+            # Already run: keep the outcome the caller may not have read.
+            return
         # A check thread keeps its last job until the next one arrives, and
         # an idle thread can wait a long time, so the job lets go of the
         # request's data and context here rather than keep them alive.
         self.call = self.context = None
         try:
-            if call is None or context is None:
-                msg = "Citry ran a check twice."
-                raise RuntimeError(msg)
             self.outcome = (True, context.run(call))
         except BaseException as error:  # noqa: BLE001 - handed to the waiting caller, which raises it
             self.outcome = (False, error)
@@ -2730,10 +2730,7 @@ class _CheckThreads:
                 # A platform without a settable stack size.
                 return False
             try:
-                # The thread keeps its start arguments while it lives, so it
-                # gets the job through a list it empties, which then holds
-                # no request data.
-                self.start_thread(self._serve, ([job],))
+                self.start_thread(self._serve, (job,))
             except Exception:  # noqa: BLE001 - the job is left to the caller
                 # A platform without threads (Pyodide sets the stack size but
                 # starts no thread), or a process at its thread limit.
@@ -2751,9 +2748,8 @@ class _CheckThreads:
                     )
         return True
 
-    def _serve(self, first: list[_Job]) -> None:
-        """Run jobs on this check thread, starting with the one in ``first``, until it has waited idle too long."""
-        job = first.pop()
+    def _serve(self, job: _Job) -> None:
+        """Run jobs on this check thread, starting with ``job``, until it has waited idle too long."""
         ident = self.get_ident()
         idle: _Idle | None = None
         # The job whose caller still waits for it, if any.
@@ -2769,12 +2765,14 @@ class _CheckThreads:
                 job.run()
                 with self.lock:
                     next_job = self.queue.popleft() if self.queue else None
+                    # Set with the pop, so a failure from here on still
+                    # answers the job taken off the queue.
+                    waiting = next_job
                     if next_job is None:
                         self.idle.append(idle)
                 # Wake the caller only once this thread is settled, so the
                 # caller does not wait for the interpreter lock while this
                 # thread does its bookkeeping.
-                waiting = next_job
                 job.done.release()
                 while next_job is None:
                     if idle.wake.acquire(timeout=_CHECK_THREAD_IDLE_SECONDS):
@@ -2790,7 +2788,7 @@ class _CheckThreads:
                             ended = True
                             return
                 job = next_job
-        except Exception:  # noqa: BLE001 - logged; the callers still waiting get an error below
+        except Exception:  # noqa: BLE001 - logged; a caller whose check did not run gets an error below
             # A job's own errors go to its caller, so this is a fault in
             # the loop; log it here rather than leave it to the thread's
             # default error printer.
@@ -2807,12 +2805,14 @@ class _CheckThreads:
                         self.idle.remove(idle)
                     self.count -= 1
                     handed = idle.job if idle is not None else None
-                for left in (waiting, handed):
-                    if left is not None:
-                        if not left.ran:
-                            left.outcome = (False, RuntimeError("Citry's check thread stopped unexpectedly."))
-                        with suppress(RuntimeError):
-                            left.done.release()
+                # The current job too: its caller may not have been woken
+                # yet. A job that ran keeps its outcome, and releasing the
+                # lock of a caller that is already awake does no harm.
+                for left in {id(each): each for each in (job, waiting, handed) if each is not None}.values():
+                    if not left.ran:
+                        left.outcome = (False, RuntimeError("Citry's check thread stopped unexpectedly."))
+                    with suppress(RuntimeError):
+                        left.done.release()
 
 
 _CHECK_THREADS = _CheckThreads()
@@ -2879,7 +2879,13 @@ def run_on_check_thread(function: Callable[..., Any], /, *args: Any, **kwargs: A
         return call()
     succeeded, value = outcome
     if not succeeded:
-        raise value
+        try:
+            raise value
+        finally:
+            # The traceback holds this frame, so without this the error and
+            # the request data it reaches stay alive until the cycle
+            # collector runs.
+            del value, outcome
     return value
 
 

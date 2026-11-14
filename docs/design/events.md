@@ -2041,6 +2041,13 @@ Error modes:
           waits in a queue for the next free thread. Citry keeps two
           idle threads; any other thread ends after 60 seconds without
           work. A forked child starts with none.
+        - A job lets go of its call, context and result once its caller
+          has them, so an idle thread keeps no request data. A failure
+          in a check thread's own loop (not in a check) is logged; a
+          caller whose check had not run gets `RuntimeError("Citry's
+          check thread stopped unexpectedly.")`, and the thread gives
+          its place back. A failure to set the stack size back after
+          starting a thread is logged.
         - When no check thread can start (no threads, as in Pyodide, a
           stack size that cannot be set, or the process at its thread
           limit with no check thread alive), the call runs on the
@@ -2072,8 +2079,7 @@ Error modes:
       which gets the checked data on the server's own thread: a handler
       that calls `model_dump()` on a chain of models fits about 100
       levels in 512 KiB and about 22 in 128 KiB (macOS, Python 3.14), so
-      data at the limit leaves a margin of about 1.6x on a 512 KiB
-      thread.
+      data at the limit fits with room to spare on a 512 KiB thread.
     - A State write read as JSON text whose text nests deeper than
       Pydantic's JSON reader accepts gets the "nested too deeply"
       answer, as data past the nesting limit does.

@@ -559,9 +559,10 @@ can read the request's context variables (`contextvars`), but a value
 your code stores with `threading.local` is unset there, and a context
 variable that a validator sets does not reach your handler. A validator
 that uses Django's database gets the check thread's own connection,
-which stays open while the thread lives and does not see rows the request wrote inside an unfinished
-transaction, and a write from it waits for that transaction. A
-validator must not wait for a lock that the request's thread holds.
+which stays open while the thread lives and does not see rows the
+request wrote inside an unfinished transaction, and a write from it
+waits for that transaction. A validator must not wait for a lock that
+the request's thread holds.
 Under gevent or eventlet the check runs on a real thread, so other
 greenlets do not run while a validator waits, and a validator must not
 wait for anything another greenlet holds.

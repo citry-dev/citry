@@ -817,6 +817,32 @@ def test_a_check_thread_lets_go_of_the_request_data_once_the_check_returns() -> 
     assert pool.count == 1
 
 
+def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_collector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Payload:
+        pass
+
+    class Refused(Exception):
+        pass
+
+    def check(data: Payload) -> None:
+        raise Refused
+
+    monkeypatch.setattr(bounded, "_CHECK_THREADS", bounded._CheckThreads())
+    payload = Payload()
+    gone = ref(payload)
+    gc.disable()
+    try:
+        with pytest.raises(Refused):
+            bounded.run_on_check_thread(check, payload)
+        del payload
+        # Without the cycle collector, only plain reference counting frees it.
+        assert gone() is None
+    finally:
+        gc.enable()
+
+
 def test_a_check_keeps_its_outcome_when_the_thread_loop_fails_after_it(monkeypatch: pytest.MonkeyPatch) -> None:
     class Broken:
         def __bool__(self) -> bool:
