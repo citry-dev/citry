@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+Citry now states the order in which a page's scripts and `onServerRender`
+callbacks run, and what happens when one of them fails; see
+[When scripts run](https://citry.dev/advanced/js-and-css-dependencies/#when-scripts-run).
+A component script that throws now keeps the page's Vue app from
+starting, and a third-party script that an ad blocker refuses no longer
+does. The upgrade notes below list what can change.
+
 ### Upgrading from 0.8.x
 
 - **Put text between two route parameters:** a `URLRoute` path such as
@@ -21,6 +28,34 @@
 - Routes with text between their parameters, such as
   `"files/{name}.{ext}"`, match the same paths with the same values as
   before.
+- **A component script that throws now keeps the Vue app from
+  starting:** if a component's `js` throws while it runs, or has a
+  syntax error, the page's Vue app does not start, and the console names
+  the component. Before, the page usually started while the error showed
+  in the console. Fix the script, or catch the error inside it when it
+  is expected, for example when an optional browser feature is missing.
+  The page's `error` event still receives the original error.
+- **A third-party script that fails to load no longer stops the page:**
+  on a page served through a web framework integration, a dependency
+  file or extension script from another origin that fails to load (an ad
+  blocker, a content security policy, a failed integrity check, or a
+  network error) is skipped with a console warning, and the app starts.
+  Citry cannot tell your own CDN from a third party, so this holds for
+  every file from another origin. Serve a file the page must not run
+  without, such as a consent manager, from your own origin.
+- **`onServerRender` callbacks after a server render now run children
+  before their parent, and siblings in the order they first mounted,**
+  as on the first mount. Before, they ran in the order the server's
+  response listed the components, which often put the parent first. If
+  your code relied on that, check it against the new order.
+- **A callback that throws on the first mount now stops the callbacks
+  after it,** as it already did after a server render. Catch an error
+  you expect inside the callback.
+- **Extension scripts that register a browser plugin now run before
+  component scripts on every page.** Before, a page written without a
+  web framework integration ran them after. If you write an extension
+  whose plugin script reads a value a component script sets, read it
+  later, for example inside a callback.
 
 ### Changed
 

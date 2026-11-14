@@ -1452,7 +1452,7 @@
     const initialLive = new Map([...occurrences].map(([id,item]) => [id, {...item, serverData: V.reactive(clone(item.serverData))}]));
     const definitionTypes = new Map();
     for (const item of occurrences.values()) { const prior = definitionTypes.get(item.definitionId); if (prior && prior !== item.typeKey) throw new Error("definition used by multiple stable types"); definitionTypes.set(item.definitionId, item.typeKey); }
-    const app = {id: bootstrap.appId, startAttempt, rootId: bootstrap.rootId, revision: bootstrap.revision, occurrences, markers, snapshot: V.shallowRef(initialLive), definitions: new Map(), definitionTypes, callRunTags: new Map(), typeTags: new Map(), types: new Map(), replacedTypeIds: new Set(), untaggedTypes: new Set(), browserPlugins: [], templateContextNames: [], initialPluginStages: [], vueApp: null, hostElement: null, mounted: new Map(), mountEpoch: 0, nextMountGeneration: 0, preparedHost: null, eventDispatch: null, eventDispatchComponent: null, initialTasks: new Set(), initialError: null, transaction: null, busy: false, terminal: false};
+    const app = {id: bootstrap.appId, startAttempt, rootId: bootstrap.rootId, revision: bootstrap.revision, occurrences, markers, snapshot: V.shallowRef(initialLive), definitions: new Map(), definitionTypes, callRunTags: new Map(), typeTags: new Map(), types: new Map(), replacedTypeIds: new Set(), untaggedTypes: new Set(), browserPlugins: [], templateContextNames: [], initialPluginStages: [], vueApp: null, hostElement: null, mounted: new Map(), mountEpoch: 0, nextMountGeneration: 0, preparedHost: null, eventDispatch: null, eventDispatchComponent: null, initialTasks: new Set(), initialError: null, started: false, nextMountIndex: 0, pendingMountCallbacks: [], mountCallbackFlush: Promise.resolve(), transaction: null, busy: false, terminal: false};
     apps.set(app.id, app);
     return app;
   }
@@ -2408,7 +2408,7 @@
       if (!occurrence || occurrence.typeKey !== typeKey || app.mounted.has(occurrence.id)) throw new Error("invalid mounted occurrence");
       const generation = ++app.nextMountGeneration;
       const initialLive = app.snapshot.value.get(occurrence.id);
-      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, callbackSubscriptions: undefined, callbackRunning: false, rootElements: [], applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
+      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, callbackSubscriptions: undefined, callbackRunning: false, mountIndex: undefined, rootElements: [], applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
       record.events = createEventActivity(record, occurrence.eventContext?.descriptor || null);
       record.state = createStateFacade(record, occurrence.eventContext);
       instanceRecords.set(this, record);
@@ -2576,25 +2576,25 @@
     };
     options.mounted = function () {
       const record = instanceRecords.get(this);
+      // Vue runs `mounted` children first and siblings in order, so numbering the instances here
+      // records that order without reading Vue's internal tree. `onServerRender` callbacks run in
+      // this order (see callbackOrder). The counter belongs to the app and never repeats a value.
+      record.mountIndex = record.app.nextMountIndex++;
       if (userMounted) userMounted.call(this);
       const transaction = record.app.transaction;
-      if (transaction) {
+      // A component that an `onServerRender` callback shows while a server render runs its callbacks
+      // mounts after that render's checks, so it is handled like a mount outside a render.
+      if (transaction && !transaction.runningCallbacks) {
         const generations = transaction.newMounts.get(record.occurrenceId) || [];
         generations.push(record.generation);
         transaction.newMounts.set(record.occurrenceId, generations);
       } else {
         const occurrence = record.app.occurrences.get(record.occurrenceId);
         const mounted = {stableId: record.occurrenceId, generation: record.generation, occurrence};
-        const task = Promise.resolve(record.app.preparedHost?.onOccurrenceMounted(mounted))
-          .then(() => runCallback(this, record, callback, record.app.revision))
-          .catch(error => {
-            record.app.terminal = true;
-            record.app.initialError = error;
-          })
-          .finally(() => {
-            record.app.initialTasks.delete(task);
-          });
-        record.app.initialTasks.add(task);
+        // The host learns about the mount now, so every `mounted` hook of this pass, and every host
+        // notice, comes before the first callback.
+        const hostReady = record.app.preparedHost?.onOccurrenceMounted(mounted);
+        queueMountCallback(record.app, {component: this, record, callback, revision: record.app.revision, hostReady});
       }
     };
     options.beforeUnmount = function () {
@@ -2664,6 +2664,37 @@
       return;
     }
     registeredTypeOptions.set(typeKey, Object.freeze({options, sourceHash}));
+  }
+
+  // What each component script reported when it ran, keyed by the `finishKey` its manifest entry
+  // carries. The server wraps every component `js` it publishes in a `try` that calls
+  // `finishScript` once: with no error after the script ran to its end, or with the error it threw.
+  // A script that fails to parse never calls it, so a missing entry means the script did not run.
+  // A component script runs once per page and a fragment reuses it, so the record belongs to the
+  // page rather than to one app. It is a Map, so a key can never reach Object.prototype.
+  const componentScriptResults = new Map();
+  function finishScript(key, ...failure) {
+    if (typeof key !== "string" || !/^[0-9a-f]{64}$/.test(key)) throw new TypeError("invalid component script key");
+    componentScriptResults.set(key, failure.length ? {failed: true, error: failure[0]} : {failed: false});
+    // The wrapper caught the error, so the browser never reported it. Report it again so the
+    // page's `error` event, and the error-monitoring tools that listen to it, still see it.
+    if (failure.length) {
+      if (typeof global.reportError === "function") global.reportError(failure[0]);
+      else queueMicrotask(() => { throw failure[0]; });
+    }
+  }
+  // The error that stops startup, or the server render, when a component script did not run to its
+  // end. It names the component and carries the script's own error as its cause, when there is one.
+  function componentScriptError(asset) {
+    const result = componentScriptResults.get(asset.finishKey);
+    if (result && !result.failed) return null;
+    const name = asset.owner.typeKey;
+    return result
+      ? new Error("Citry Vue component script threw while it ran: " + name +
+        ". Fix the script, or catch the error inside it. The script's error is attached as the cause.",
+        {cause: result.error})
+      : new Error("Citry Vue component script did not run to its end: " + name +
+        ". It may have failed to load or to parse; look for an earlier error in the console.");
   }
 
   const loadedDefinitionUrls = new Map();
@@ -2820,7 +2851,11 @@
   }
   function normalizeScriptAsset(asset) {
     plain(asset, "prepared script asset");
-    if (Object.keys(asset).sort().join(",") !== "lazyAllowed,owner,registersOptions,source" ||
+    // `finishKey` is present only on a component's own `js`, which the server wraps so the script
+    // reports when it finishes (see `finishScript`).
+    const hasFinishKey = own(asset, "finishKey");
+    if (Object.keys(asset).sort().join(",") !==
+        (hasFinishKey ? "finishKey,lazyAllowed,owner,registersOptions,source" : "lazyAllowed,owner,registersOptions,source") ||
         typeof asset.lazyAllowed !== "boolean" || typeof asset.registersOptions !== "boolean")
       throw new Error("invalid prepared script asset");
     plain(asset.owner, "prepared script owner");
@@ -2831,6 +2866,11 @@
         typeof asset.owner.extensionName !== "string" || asset.registersOptions)
       throw new Error("invalid prepared script asset");
     normalizeAssetSource(asset.source, "script");
+    // Only a script the server published itself carries the wrapper that reports the finish. This
+    // runs after the source checks, so a bad source still gets its own, more specific error.
+    if (hasFinishKey && (typeof asset.finishKey !== "string" || !/^[0-9a-f]{64}$/.test(asset.finishKey) ||
+        asset.owner.kind !== "component" || asset.source.kind !== "owned"))
+      throw new Error("invalid prepared script asset");
     return asset;
   }
   // Scripts load only over http(s) or from a blob: URL. A data: URL would let a forged manifest
@@ -3089,6 +3129,20 @@
       pageDocument.head.append(probe);
     });
   }
+  // A third-party script is one the server lists by URL, that is not declared to register
+  // component options, and that comes from another origin than the page. The URL is resolved
+  // against the page's own address rather than the document's base URL, so an injected <base>
+  // element cannot make one of the app's own files look third-party. A page whose origin is
+  // `null` (one opened from disk) and a URL that does not resolve count as the app's own.
+  function isThirdPartyScript(asset) {
+    if (asset.source.kind !== "external" || asset.registersOptions || asset.finishKey) return false;
+    let pageOrigin, scriptOrigin;
+    try {
+      pageOrigin = new URL(pageDocument.URL).origin;
+      scriptOrigin = new URL(asset.source.url, pageDocument.URL).origin;
+    } catch { return false; }
+    return pageOrigin !== "null" && scriptOrigin !== "null" && scriptOrigin !== pageOrigin;
+  }
   function loadTypeScript(appId, asset, nonce, knownInitial = false) {
     normalizeScriptAsset(asset);
     const key = scriptRecordKey(appId, asset), prior = loadedScriptUrls.get(key);
@@ -3100,6 +3154,9 @@
     if (!knownInitial && !asset.lazyAllowed)
       throw new Error("lazy type script loading is unsupported after custom dependency hooks");
     const record = {appId: asset.owner.kind === "extension" ? appId : null, identity, promise: null};
+    // A script that failed earlier is added again here (its record was dropped), so forget what its
+    // last run reported; otherwise a run that now fails to parse would show the old result.
+    if (asset.finishKey) componentScriptResults.delete(asset.finishKey);
     record.promise = new Promise((resolve, reject) => {
       const script = pageDocument.createElement("script");
       script.src = asset.source.url;
@@ -3110,15 +3167,32 @@
         script.remove();
         callback();
       };
+      // Dropping the record lets the next server render, fragment, or app restart try the script again.
+      const forget = () => { if (loadedScriptUrls.get(key) === record) loadedScriptUrls.delete(key); };
       script.onload = () => finish(() => {
-        if (asset.registersOptions && (asset.owner.kind !== "component" || !registeredTypeOptions.has(asset.owner.typeKey))) {
-          if (loadedScriptUrls.get(key) === record) loadedScriptUrls.delete(key);
+        // The browser fires `load` even when the script threw, so the wrapper's report decides.
+        // It is checked first because a script that threw before `$component()` also registered
+        // nothing, and the thrown error says more than the missing registration.
+        const failure = asset.finishKey ? componentScriptError(asset) : null;
+        if (failure) {
+          forget();
+          reject(failure);
+        } else if (asset.registersOptions && (asset.owner.kind !== "component" || !registeredTypeOptions.has(asset.owner.typeKey))) {
+          forget();
           reject(new Error("Citry Vue type script did not register its declared Options"));
         } else resolve();
       });
       script.onerror = () => finish(() => {
-        if (loadedScriptUrls.get(key) === record) loadedScriptUrls.delete(key);
-        reject(new Error("Citry Vue type script failed to load: " + asset.source.url));
+        forget();
+        // A third-party file that the browser refused (an ad blocker, a content security policy, a
+        // failed integrity check, or the network) is skipped, so a blocked analytics script cannot
+        // stop the app. The browser reports all of these as the same `error` event.
+        if (isThirdPartyScript(asset)) {
+          console.warn("[Citry] skipped a script from another origin that failed to load: " + asset.source.url +
+            ". The page started without it; serve it from the page's own origin if the page needs it.");
+          // `false` tells the first load not to record the script as loaded (see primeInitialAssets).
+          resolve(false);
+        } else reject(new Error("Citry Vue type script failed to load: " + asset.source.url));
       });
       pageDocument.head.append(script);
     });
@@ -3186,6 +3260,7 @@
     const initialTypes = new Map(manifest.occurrences.map(item => [item.id, item.typeKey]));
     const {scripts: normalizedScripts, styles: normalizedStyles} = validateCandidateAssets(
       manifest.appId, manifest.scripts, manifest.styles, initialTypes, extensionNames, configuration, false);
+    const skippedScripts = new Set();
     const initialStyleStage = configuration.loadInitialAssets === true ? {
       token: Symbol("initial-style-stage"),
       refs: new Map(),
@@ -3193,6 +3268,13 @@
     } : null;
     try {
     if (configuration.loadInitialAssets !== true) {
+      // On a standalone page the browser has already run every script tag. A component script that
+      // threw or failed to parse stops startup here, with an error that names the component. This
+      // comes before the registration check, whose message would hide the script's own error.
+      for (const asset of normalizedScripts) {
+        const failure = asset.finishKey ? componentScriptError(asset) : null;
+        if (failure) throw failure;
+      }
       for (const asset of normalizedScripts) if (asset.registersOptions &&
           (asset.owner.kind !== "component" || !registeredTypeOptions.has(asset.owner.typeKey)))
         throw new Error("initial Citry Vue type Options were not emitted before bootstrap");
@@ -3212,7 +3294,12 @@
       );
       lifecycle?.guard();
       for (const asset of normalizedScripts) {
-        await waitForStartup(loadTypeScript(manifest.appId, asset, configuration.nonce, true), lifecycle);
+        // The manifest lists a shared file once per component type that owns it. One that was
+        // skipped already is not requested again in the same startup.
+        if (skippedScripts.has(scriptRecordKey(manifest.appId, asset)) && isThirdPartyScript(asset)) continue;
+        const loaded = await waitForStartup(loadTypeScript(manifest.appId, asset, configuration.nonce, true), lifecycle);
+        // A skipped third-party script keeps no record, so a later server render or fragment tries it again.
+        if (loaded === false) skippedScripts.add(scriptRecordKey(manifest.appId, asset));
         lifecycle?.guard();
       }
     }
@@ -3224,7 +3311,7 @@
         const key = scriptRecordKey(manifest.appId, asset);
         const prior = loaded.get(key), identity = assetIdentity(asset);
         if (prior && prior.identity !== identity) throw new Error("prepared script URL identity collision");
-        if (!prior) loaded.set(key, {
+        if (!prior && !skippedScripts.has(key)) loaded.set(key, {
           appId: asset.owner.kind === "extension" ? manifest.appId : null,
           identity,
           promise: Promise.resolve(),
@@ -3996,8 +4083,13 @@
           // from preflight may be out of date; applyEnvelope repeats this check at commit.
           if (validated) assertDeclaredDefinitionsCurrent(definitionRegistry(appId), declaredDefinitions);
           if (mountsMoved()) validateCombinedActions(definitionRegistry(appId), envelope);
-          for (const asset of normalizedAssets.scripts)
-            await wait(loadTypeScript(appId, asset, configuration.nonce));
+          // As at startup, a file skipped once is not requested again in the same server render.
+          const skippedScripts = new Set();
+          for (const asset of normalizedAssets.scripts) {
+            const key = scriptRecordKey(appId, asset);
+            if (skippedScripts.has(key) && isThirdPartyScript(asset)) continue;
+            if (await wait(loadTypeScript(appId, asset, configuration.nonce)) === false) skippedScripts.add(key);
+          }
           await wait(Promise.all(normalizedAssets.styles.map(asset =>
             loadStyle(appId, asset, configuration.nonce, attempt.styleStage))));
         } finally {
@@ -4897,6 +4989,79 @@
     }
   }
 
+  // Mounts outside a server render (the first mount, or a browser-only `v-if`) queue their callbacks
+  // here. Every `mounted` hook of one pass runs in the same task, so one flush, queued after them,
+  // sees the whole pass and runs its callbacks in one ordered loop. Flushes are chained, so a pass
+  // that mounts while an earlier flush is still running waits for it.
+  function queueMountCallback(app, entry) {
+    app.pendingMountCallbacks.push(entry);
+    if (app.pendingMountCallbacks.length > 1) return;
+    const task = app.mountCallbackFlush.then(async () => {
+      const entries = app.pendingMountCallbacks;
+      app.pendingMountCallbacks = [];
+      for (const item of callbackOrder(entries)) {
+        // One failure rule for every pass: a callback that throws stops the app, and no later
+        // callback of the pass runs. A pass that a previous failure stopped runs nothing.
+        if (app.terminal) return;
+        await item.hostReady;
+        // An earlier callback of this pass may have changed state so that Vue unmounted this
+        // component in between. Its cleanup would never run, so its callback does not run either.
+        if (instanceRecords.get(item.component) !== item.record) continue;
+        await runCallback(item.component, item.record, item.callback, item.revision);
+      }
+    }).catch(error => {
+      app.terminal = true;
+      if (!app.initialError) app.initialError = error;
+      // During startup, `whenReady` reports the error and startup disposes the app. A pass after
+      // startup (a browser-only `v-if`) has no such caller, so it reports and stops the app here,
+      // as a failed server render does.
+      if (app.started) {
+        console.error("[Citry] an onServerRender callback failed and the app has stopped:", error);
+        try { app.vueApp?.unmount(); } catch (unmountError) { console.error("[Citry] terminal Vue disposal failed:", unmountError); }
+      }
+    }).finally(() => {
+      app.initialTasks.delete(task);
+    });
+    app.mountCallbackFlush = task;
+    app.initialTasks.add(task);
+  }
+
+  // Order the components whose `onServerRender` runs in one pass (one mount or one server render):
+  // each component after all of its descendants, and the children of each component in the order
+  // they mounted. This is the order Vue runs `mounted` in; a component that mounted in an earlier
+  // pass keeps its place. Page order and response order both differ from it when a keyed list
+  // moves elements, so the order follows the `$parent` links instead. A component whose parent
+  // runs no callback in this pass is placed under its nearest ancestor that does, and one with no
+  // such ancestor is a root, ordered by mount.
+  // Each entry is {component, record, ...}; the same entries come back in the new order.
+  function callbackOrder(entries) {
+    // Keyed by record, the way validateMountedParents matches `$parent` to Citry's instances.
+    const byRecord = new Map(entries.map(entry => [entry.record, entry]));
+    const children = new Map(entries.map(entry => [entry, []])), roots = [];
+    for (const entry of entries) {
+      // An instance whose `mounted` hook never ran has no place in the order, so it stops the app
+      // rather than run in a guessed position.
+      if (!Number.isSafeInteger(entry.record.mountIndex))
+        throw new Error("Citry cannot order the onServerRender callback of a component that never mounted: " +
+          entry.record.app.occurrences.get(entry.record.occurrenceId)?.typeKey + " (" + entry.record.occurrenceId +
+          "). Its `mounted` hook did not run.");
+      let parent = entry.component.$parent;
+      while (parent && !byRecord.has(instanceRecords.get(parent))) parent = parent.$parent;
+      (parent ? children.get(byRecord.get(instanceRecords.get(parent))) : roots).push(entry);
+    }
+    const ordered = [], byMount = (a, b) => a.record.mountIndex - b.record.mountIndex;
+    // An explicit stack rather than recursion, so a deep component tree cannot overflow the call stack.
+    const stack = roots.sort(byMount).reverse().map(entry => [entry, false]);
+    while (stack.length) {
+      const [entry, childrenDone] = stack.pop();
+      if (childrenDone) { ordered.push(entry); continue; }
+      stack.push([entry, true]);
+      const own = children.get(entry).sort(byMount);
+      for (let index = own.length - 1; index >= 0; index--) stack.push([own[index], false]);
+    }
+    return ordered;
+  }
+
   async function whenReady(appId) {
     const app = definitionRegistry(appId);
     await V.nextTick();
@@ -4906,6 +5071,9 @@
     }
     if (app.terminal) throw app.initialError || new Error("Citry Vue app failed during initialization");
     validateMountedParents(app);
+    // Set in the same step as the check above, so a callback flush that fails from here on reports
+    // the failure and stops the app itself (see queueMountCallback): startup no longer looks.
+    app.started = true;
     return app;
   }
 
@@ -5502,9 +5670,22 @@
         });
         await app.preparedHost.beforeServerCallbacks({revision: app.revision, mounted});
       }
-      for (const id of callbackIds) {
-        const mounted = app.mounted.get(id);
-        await runCallback(mounted.component, mounted.record, mounted.component.$options.__citryCallback, app.revision);
+      // A component that one of these callbacks shows mounts during the loop. Its callback is
+      // queued as a mount outside a render, and the queue waits until this loop has finished.
+      app.transaction.runningCallbacks = true;
+      let callbacksDone;
+      const loopFinished = new Promise(resolve => { callbacksDone = resolve; });
+      app.mountCallbackFlush = app.mountCallbackFlush.then(() => loopFinished);
+      try {
+        // Callbacks after a server render run in the order of the first mount: children before their
+        // parent, siblings in the order they mounted. A callback that throws ends the loop and stops the app.
+        for (const {component, record} of callbackOrder([...callbackIds].map(id => app.mounted.get(id)))) {
+          // Skip a component that an earlier callback of this render caused Vue to unmount.
+          if (instanceRecords.get(component) !== record) continue;
+          await runCallback(component, record, component.$options.__citryCallback, app.revision);
+        }
+      } finally {
+        callbacksDone();
       }
       await V.nextTick();
       if (app.terminal) throw new Error("render failed during onServerRender flush");
@@ -5578,7 +5759,7 @@
   }
 
   Object.defineProperty(global, Symbol.for("citry:built-in-members"), {value: builtInMembers});
-  global.__citryRuntime = {configure, registerDefinition, registerTypeOptions, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, startDocument, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps, _dispatchLifecycleEvent: dispatchLifecycleEvent};
+  global.__citryRuntime = {configure, registerDefinition, registerTypeOptions, finishScript, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, startDocument, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps, _dispatchLifecycleEvent: dispatchLifecycleEvent};
   const fragmentSupport = ownGlobal("CitryVueFragments");
   if (!fragmentSupport?.installFragmentManager)
     throw new Error("Citry Vue fragment support is unavailable");

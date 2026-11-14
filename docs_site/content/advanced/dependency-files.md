@@ -34,8 +34,18 @@ class PriceChart(Component):
 ```
 
 A JavaScript URL becomes a `<script src="...">` tag, and a CSS URL becomes
-a `<link rel="stylesheet">` tag. Files load in the order you list them.
-When several components on a page list the same URL, Citry adds it once.
+a `<link rel="stylesheet">` tag. Files load in the order you list them,
+except that a file another component already listed runs at that earlier
+place. When several components on a page list the same URL, Citry adds
+it once.
+
+On a page served through a
+[web framework integration](/advanced/web-frameworks/), a script from
+another origin that fails to load, for example because an ad blocker
+refuses it, is skipped with a console warning, and the page still
+starts. A file from your own origin that fails to load keeps the page's
+Vue app from starting. See
+[When a script fails](/advanced/js-and-css-dependencies/#when-a-script-fails).
 
 On an interactive page (see [Use plain scripts](#use-plain-scripts)),
 Citry's browser code adds the script tags itself, and it refuses a `data:`
@@ -207,7 +217,9 @@ raises `TypeError` on an interactive page.
 
 Entries from a base component come first, then the child's own entries.
 [Subclass components](/advanced/subclassing/) shows how to extend or
-replace inherited entries.
+replace inherited entries. Dependency files run before every component's
+`js`; [When scripts run](/advanced/js-and-css-dependencies/#when-scripts-run)
+gives the whole order.
 
 Citry treats two scripts or two stylesheets as the same file when they have
 the same URL or the same inline content, and adds that file once:

@@ -179,6 +179,19 @@ Citry calls `onServerRender` once the component first appears on the
 page, and again after each server render that updates it. A change made
 only in the browser does not call it.
 
+When several components get a callback at the same time, children run
+before their parent, and siblings run in the order they first mounted.
+This holds on the first mount and after a server render, so a parent's
+callback can rely on its children's callbacks having run. A sibling that
+appears in a later server render runs after the siblings that were
+already there.
+
+If a callback throws, Citry runs none of the callbacks still waiting
+from the same mount or server render, and stops the page's Vue app.
+Catch an error you expect inside the callback. An `async` callback that
+rejects only logs the error; see
+[Browser APIs](/reference/browser-apis/#on-server-render).
+
 Return a cleanup function to undo the work. Citry calls it before the next
 `onServerRender` call and when the component is removed. Returning
 anything other than a function or nothing throws a `TypeError`, which the

@@ -276,7 +276,7 @@ class Analytics(Extension):
 
     def on_dependencies(self, ctx):
         ctx.early_scripts.append(
-            Script(url="https://cdn.example.com/consent.js"),
+            Script(url="/static/consent.js"),
         )
         ctx.scripts.append(
             Script(url="https://cdn.example.com/analytics.js"),
@@ -294,6 +294,15 @@ Vue app, in the order you added them, followed by `ctx.scripts`. Scripts
 there must be classic JavaScript: a `type="module"` or
 `type="application/json"` script, or one with `async`, `defer`, or
 `nomodule`, makes serialization raise `ValueError`.
+
+On a page served through a
+[web framework integration](/advanced/web-frameworks/), a script from
+another origin that fails to load is skipped with a console warning, so
+a blocked analytics file does not stop the page. The page then runs
+without that script. Serve a script the page must not run without, such
+as the consent manager above, from your own origin. A file from your own
+origin that fails to load keeps the Vue app from starting instead. See
+[When a script fails](/advanced/js-and-css-dependencies/#when-a-script-fails).
 
 To install a Vue plugin on the page's Vue apps, add an early script that
 calls `Citry.vue.use(plugin)`. It runs before Citry creates the app.

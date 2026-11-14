@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
+from html.parser import HTMLParser
 from typing import Any
 
 import pytest
@@ -74,16 +74,16 @@ def _page(*, clobber_current_script: bool = False) -> str:
 
 def _forge(fragment_html: str, source: dict[str, Any]) -> str:
     """Return a genuine fragment, without its nonce, with every script asset replaced by `source`."""
-    pattern = r'(<script type="application/json" data-citry-vue-fragment>)(.*?)(</script>)'
-    match = re.search(pattern, fragment_html, re.DOTALL)
-    assert match is not None, fragment_html
-    manifest = json.loads(match.group(2))
+    text = _manifest_text(fragment_html)
+    manifest = json.loads(text)
     scripts = manifest["vue"]["prepared"]["manifest"]["scripts"]
     assert scripts, "the widget must load a component script for the forged one to replace"
     for script in scripts:
         script["source"] = source
     forged = json.dumps(manifest).replace("<", "\\u003c")
-    return fragment_html[: match.start(2)] + forged + fragment_html[match.end(2) :]
+    # The parser hands back the script text exactly as written, so it marks where the forged text goes.
+    start = fragment_html.index(text)
+    return fragment_html[:start] + forged + fragment_html[start + len(text) :]
 
 
 def _open(page: Any, serve_live: Any, app: Citry, page_html: str, fragment_html: str, policy: str = POLICY) -> str:
@@ -170,10 +170,39 @@ def _load_from_page_code(page: Any, fragment: str, manifest: dict[str, Any]) -> 
     )
 
 
+class _FragmentManifestReader(HTMLParser):
+    """Reads the text of the fragment's manifest script, the one marked `data-citry-vue-fragment`."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.chunks: list[str] | None = None
+        self._reading = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        # Tag and attribute names arrive lowercased, so the match does not depend on their case.
+        if tag == "script" and any(name == "data-citry-vue-fragment" for name, _value in attrs):
+            self.chunks = []
+            self._reading = True
+
+    def handle_data(self, data: str) -> None:
+        if self._reading and self.chunks is not None:
+            self.chunks.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self._reading = False
+
+
+def _manifest_text(fragment: str) -> str:
+    reader = _FragmentManifestReader()
+    reader.feed(fragment)
+    reader.close()
+    assert reader.chunks is not None, fragment
+    return "".join(reader.chunks)
+
+
 def _manifest(fragment: str) -> dict[str, Any]:
-    match = re.search(r"data-citry-vue-fragment>(.*?)</script>", fragment, re.DOTALL)
-    assert match is not None
-    return json.loads(match.group(1))
+    return json.loads(_manifest_text(fragment))
 
 
 @pytest.mark.parametrize("kind", ["owned", "external", "definition"])
@@ -220,6 +249,9 @@ def test_fragment_script_may_use_a_blob_url_page_code_made(page: Any, serve_live
     url = page.evaluate("() => URL.createObjectURL(new Blob(['window.__blobRan = 1;'], {type: 'text/javascript'}))")
     for asset in manifest["vue"]["prepared"]["manifest"]["scripts"]:
         asset["source"] = {"kind": "external", "url": url, "attrs": {}}
+        # Only a script Citry published itself carries the finish report, so an
+        # external source cannot keep the component script's `finishKey`.
+        asset.pop("finishKey", None)
 
     error = _load_from_page_code(page, fragment, manifest)
     # The script does not register the component's options, which is the only

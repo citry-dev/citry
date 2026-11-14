@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -398,6 +399,85 @@ $component({});
     assert '"owner":{"extensionName":"browser_probe","kind":"extension"}' in html
     assert 'data-citry-css-url="/assets/' in html
     assert 'data-citry-vue-style-app="' in html
+
+
+class _ScriptCollector(HTMLParser):
+    """Collects each script element as (opening tag, body), in page order."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.scripts: list[tuple[str, list[str]]] = []
+        self._open: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        # The parser lowercases tag names and reads script content as raw text up to the closing
+        # tag, the way a browser does, so upper-case tags and `</script >` are found too.
+        if tag == "script":
+            self._open = []
+            self.scripts.append((self.get_starttag_text() or "", self._open))
+
+    def handle_data(self, data: str) -> None:
+        # Script text can arrive in several chunks, so the body is joined at the end.
+        if self._open is not None:
+            self._open.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self._open = None
+
+
+def _script_tags(html: str) -> list[tuple[str, str]]:
+    """Each script tag of a page as (opening tag, body), in page order."""
+    collector = _ScriptCollector()
+    collector.feed(html)
+    collector.close()
+    return [(tag, "".join(body)) for tag, body in collector.scripts]
+
+
+def _plugin_page(*, mounted: bool) -> str:
+    class BrowserProbeExtension(Extension):
+        name = "browser_probe"
+
+        def browser_plugin(self) -> BrowserPluginDescriptor:
+            return BrowserPluginDescriptor(1, Script(content="window.pluginMark = true"))
+
+    app = Citry(extensions=[BrowserProbeExtension], autodiscover=False, secret="script-order-test-secret")  # noqa: S106
+    if mounted:
+        app.set_mounted_prefix("/citry")
+
+    class Page(Component):
+        citry = app
+        template = "<html><body><div>ready</div></body></html>"
+        js = "window.componentMark = true; $component({});"
+
+    return Page().render().serialize()
+
+
+def test_standalone_page_writes_plugin_script_between_the_bundles_and_component_scripts() -> None:
+    scripts = _script_tags(_plugin_page(mounted=False))
+    bodies = [body for _tag, body in scripts]
+
+    def position(marker: str) -> int:
+        [found] = [index for index, body in enumerate(bodies) if marker in body]
+        return found
+
+    runtime = position("Citry interactive runtime")
+    definitions = position("__citryRuntimeDefinitions[")
+    plugin = position("window.pluginMark")
+    component = position("window.componentMark")
+    data_block = next(index for index, (tag, _body) in enumerate(scripts) if "data-citry-vue-document" in tag)
+    # A browser plugin registers itself with the runtime, so it follows the runtime and the definition
+    # bundles, and it must register before the component scripts that may rely on what it adds.
+    assert runtime < definitions < plugin < component < data_block
+
+
+def test_mounted_page_writes_plugin_script_right_after_the_runtime_tag() -> None:
+    scripts = _script_tags(_plugin_page(mounted=True))
+    # The runtime is a URL tag, and Citry's browser code adds each component script only once the app
+    # starts, so the plugin script that follows the runtime already runs before every one of them.
+    assert 'src="/citry/citry.js"' in scripts[0][0]
+    assert "window.pluginMark" in scripts[1][1]
+    assert all("window.componentMark" not in body for _tag, body in scripts)
 
 
 @pytest.mark.parametrize("mutation", ["component", "descriptor", "registry"])

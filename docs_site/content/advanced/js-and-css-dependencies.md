@@ -12,7 +12,9 @@ adds it to every page that renders the component, once per page however many
 times the component appears.
 
 This page covers code that belongs to one component. To add a library or a
-shared file, see [Dependency files](/advanced/dependency-files/). To choose
+shared file, see [Dependency files](/advanced/dependency-files/). For the
+order scripts run in and what happens when one fails, see
+[When scripts run](#when-scripts-run). To choose
 where the tags go in the page, see
 [Place JavaScript and CSS](/advanced/asset-placement/). For the Vue
 attributes you write in templates, such as `@click` and `v-show`, see
@@ -311,6 +313,110 @@ class Sparkline(Component):
 A plain annotated class checks names, not the type of each value. See
 [Inputs and validation](/concepts/inputs-and-validation/) for schema styles
 that also check types.
+
+## When scripts run
+
+If one component's script reads a value that another script sets, such
+as a value on `window`, the order the scripts run in matters. On one
+page, Citry runs them in this order:
+
+1. Citry's own browser code, then scripts that extensions add before
+   everything else, such as
+   [`ctx.early_scripts`](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page).
+2. [Dependency files](/advanced/dependency-files/).
+3. Each component's `js`.
+
+Within each group, components run in the order Citry first renders them,
+so a parent runs before the components in its template. Each
+component's script runs once per page.
+
+**Before components start.** Every component script on the page's first
+load runs before Citry starts the page's Vue app. When an event handler
+returns a component and the browser applies the new HTML (a server
+render), every new component script runs before any `onServerRender`
+callback of that render.
+
+**`onServerRender` order.** On the first mount and after each server
+render, callbacks run children before their parent, and siblings in the
+order they first mounted. See
+[`onServerRender` callback](/vue/component-options/#react-after-a-server-render).
+
+**Fragments.** Each [HTML fragment](/advanced/html-fragments/) starts
+its own Vue app, so two fragments, or a fragment and the page around it,
+run in no fixed order. Inside one fragment, the rules above apply.
+
+These cases can surprise you:
+
+- Group order wins over the position on the page. A dependency file of a
+  component lower on the page runs before the `js` of a component higher
+  up.
+- Two components that list the same file share one copy, which runs at
+  the first component's position. So a later component's files may not
+  run in the order that component listed them.
+- An extension's [`on_dependencies()`](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page)
+  hook can reorder the list or add to it.
+- A script an extension supplies through `prepare_browser_render()` runs
+  after every component script, once for the page and once for each
+  fragment.
+
+Citry promises no other order, such as the order the components appear
+in the page's HTML. The clearest place for setup that several
+components share is a dependency file.
+
+Pages without Citry's browser runtime, and the `"simple"` strategy, write
+plain `<script>` tags, and the browser runs them by its own rules. The
+rules on this page apply to
+[interactive pages](/advanced/dependency-files/#use-plain-scripts).
+
+## When a script fails
+
+What happens depends on which script fails:
+
+- **A component's `js` throws while it runs, or has a syntax error.**
+  The page's Vue app does not start. The browser console shows an error
+  that names the component; when the script threw, that error carries
+  the original one as its cause. The page's `error` event also receives
+  the original error, so error-monitoring tools see it. When the script
+  is new in a server render, that render fails. If an error is expected,
+  for example when an optional browser feature is missing, catch it
+  inside the script.
+- **A dependency file or an extension's script throws.** The browser
+  reports the error, and the next script runs.
+
+When a script fails to load, what happens depends on how the page is
+served. On a page served through a
+[web framework integration](/advanced/web-frameworks/), Citry adds each
+script itself and decides:
+
+- **A script from another origin fails to load.** Citry skips a
+  dependency file or extension script that you list by URL and that
+  comes from another origin. It logs a console warning with the URL and
+  starts the app. An ad blocker that refuses an analytics file then
+  cannot stop the page. A blocked file, a file that fails its integrity
+  check, and a network error all count, because the browser reports all
+  three the same way. A later server render or fragment tries the file
+  again.
+- **A component's `js` or a file from the page's own origin fails to
+  load.** The Vue app does not start, or that server render fails, with
+  `Citry Vue type script failed to load: <url>`. These files come from
+  your app, so a failure usually means a broken deploy.
+
+Citry cannot tell your own CDN from a third party, so it skips a file
+from another origin either way. Nothing runs in place of a skipped file.
+A component script that uses it while it runs throws, and the app does
+not start; code that uses it later, inside a callback, fails when the
+callback runs. If the skipped file was a consent manager or a
+sanitizer, the page runs without it, so serve such a file from your own
+origin.
+
+On a page written without a web framework integration, every script is
+a tag in the page, and the browser runs each tag on its own. A
+dependency file or extension script that fails to load is skipped, and
+Citry adds no warning. A component's `js` that fails to load keeps the
+Vue app from starting, as a script that throws does.
+
+A script that never finishes loading leaves the app waiting; Citry sets
+no time limit.
 
 ## How CSS loads
 

@@ -1295,6 +1295,9 @@ def prepare_vue_serialization(
         runtime = Script(kind="core", url=ctx.citry.build_url(RUNTIME_PATH))
         runtime._owned_resource = _runtime_resource(ctx.citry)
         scripts.append(runtime)
+        # The runtime adds the manifest's scripts only once the app starts, so plugin scripts
+        # written here run before every component script.
+        scripts.extend(cast("Any", plugin).script for plugin in browser_plugins.values())
     else:
         scripts.append(Script(kind="core", content=EVENTS_RUNTIME_SRC.read_text()))
         for digest in dict.fromkeys(item["sha256"] for item in manifest["definitions"]):
@@ -1302,6 +1305,9 @@ def prepare_vue_serialization(
             if bundle is None:
                 raise RuntimeError("A prepared Vue definition bundle was not published.")
             scripts.append(Script(kind="core", content=bundle.decode()))
+        # Browser plugin scripts run after Citry's runtime and the definition bundles and before
+        # the manifest's scripts, which is where they fall on a mounted page too.
+        scripts.extend(cast("Any", plugin).script for plugin in browser_plugins.values())
         from citry._vue.events import style_asset  # noqa: PLC0415
 
         # Standalone HTML has no asset routes. Materialize every prepared
@@ -1322,7 +1328,6 @@ def prepare_vue_serialization(
                 scripts.append(Script(kind="core", content=body.decode(), attrs=attrs))
             else:
                 scripts.append(Script(kind="core", url=source["url"], attrs=attrs))
-    scripts.extend(cast("Any", plugin).script for plugin in browser_plugins.values())
     if development and configuration.get("emptyShells") is True:
         # The runtime compares each shell's served contents with Vue's first
         # render only when this script is on the page. It is a classic

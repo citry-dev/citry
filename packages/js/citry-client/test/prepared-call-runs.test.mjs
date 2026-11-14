@@ -437,6 +437,9 @@ test("nested changed replacement sites remount their shared mounted descendant o
   const childInstance = { $parent: rootInstance, $options: {}, citryId: "child" };
   Child.beforeCreate.call(childInstance);
   Child.created.call(childInstance);
+  // Vue runs `mounted` children first, which gives each instance its place in the callback order.
+  Child.mounted.call(childInstance);
+  Root.mounted.call(rootInstance);
   // Only the child is mounted, so a remount expected for the sibling would fail the commit.
   const priorGeneration = app.mounted.get("child").record.generation;
   // Vue replaces the child a single time, however many changed sites name it.
@@ -683,7 +686,10 @@ function componentChangingFixture({ mountForm = true } = {}) {
   if (mountForm) {
     Form.beforeCreate.call(formInstance);
     Form.created.call(formInstance);
+    Form.mounted.call(formInstance);
   }
+  // Vue runs `mounted` children first, which gives each instance its place in the callback order.
+  Parent.mounted.call(rootInstance);
   return {
     fixture,
     citryRuntime,
