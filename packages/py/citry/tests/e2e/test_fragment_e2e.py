@@ -20,16 +20,18 @@ import pytest
 pytest.importorskip("pytest_playwright")
 
 from citry import Citry, Component
-from citry.ext.dependencies.routes import script_url
+from citry.ext.dependencies.routes import SHARED_RUNTIME, script_url
 
 pytestmark = pytest.mark.e2e
 
 # The initial page: load the runtime, then fetch the fragment and drop it in.
 # innerHTML-inserted Vue fragment manifests are picked up by the runtime's
 # MutationObserver, which then fetches the component's assets and mounts it.
+# The page links the runtime by its content hash, as a page that builds its
+# link with `citry.runtime_url()` does.
 _PAGE = """
 <html>
-  <head><script src="/citry/citry.js"></script></head>
+  <head><script src="RUNTIME_URL"></script></head>
   <body>
     <div id="target"></div>
     <script>
@@ -39,7 +41,7 @@ _PAGE = """
     </script>
   </body>
 </html>
-"""
+""".replace("RUNTIME_URL", f"/citry/{SHARED_RUNTIME.hashed_path}")
 
 
 def test_fragment_scripts_load_on_demand(page: Any, serve_live: Any) -> None:

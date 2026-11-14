@@ -625,12 +625,20 @@
       throw new Error("Citry browser plugin registration collision: " + name);
     browserPluginFactories.set(name, Object.freeze({schemaVersion, factory, templateContextNames: normalizedNames}));
   }
+  // The property on a "missing browser plugin" error that holds the URL of the plugin's script.
+  const MISSING_PLUGIN_SCRIPT = "citryMissingPluginScript";
   function extensionEntries(value) {
     plain(value, "prepared extensions");
     return Object.keys(value).sort().map(name => {
       if (!/^[a-z][a-z0-9_]*$/.test(name)) throw new Error("invalid prepared extension name");
       const item = plain(value[name], "prepared extension");
-      if (Object.keys(item).sort().join(",") !== "payload,schemaVersion,templateContextNames" ||
+      // `scriptUrl` names the script that registers this extension's browser plugin. It is
+      // optional, because a page rendered without it (one rendered by an older Citry) must still start, and it is
+      // only used to check whether a missing plugin script is gone from the server.
+      const keys = Object.keys(item).sort().join(",");
+      if ((keys !== "payload,schemaVersion,templateContextNames" &&
+           keys !== "payload,schemaVersion,scriptUrl,templateContextNames") ||
+          (keys.includes("scriptUrl") && (typeof item.scriptUrl !== "string" || !item.scriptUrl)) ||
           !Number.isInteger(item.schemaVersion) || item.schemaVersion <= 0)
         throw new Error("invalid prepared extension wrapper");
       plain(item.payload, "prepared extension payload");
@@ -3436,8 +3444,16 @@
       for (const [name, item] of pluginEntries) {
         const registration = browserPluginFactories.get(name);
         if (!registration || registration.schemaVersion !== item.schemaVersion ||
-            JSON.stringify(registration.templateContextNames) !== JSON.stringify(item.templateContextNames))
-          throw new Error("missing or incompatible Citry browser plugin: " + name);
+            JSON.stringify(registration.templateContextNames) !== JSON.stringify(item.templateContextNames)) {
+          const error = new Error("missing or incompatible Citry browser plugin: " + name);
+          // A plugin that never registered usually means its script failed to load, for example
+          // because a deploy removed the hashed file this cached page names. Mark the error with
+          // the script's URL so `startDocument` can check for that and reload the page once. A
+          // registered plugin that does not match is a version mix-up a reload cannot fix.
+          if (!registration && item.scriptUrl)
+            Object.defineProperty(error, MISSING_PLUGIN_SCRIPT, {value: item.scriptUrl});
+          throw error;
+        }
         const plugin = registration.factory(pluginHost);
         if (!plugin || typeof plugin.install !== "function" || typeof plugin.prepareRevision !== "function" ||
             typeof plugin.activateRevision !== "function" || typeof plugin.commitRevision !== "function" ||
@@ -5755,7 +5771,49 @@
       throw new Error(`[Citry] the configuration block for app ${appId} describes a different app`);
     // Report a failed start as an uncaught error on the page (window.onerror and the
     // console see it), without leaving an unhandled promise rejection.
-    startPrepared(configuration).catch(error => queueMicrotask(() => { throw error; }));
+    startPrepared(configuration).catch(error => {
+      // Only a document start may reload: the server sets `canReload` when reloading repeats the
+      // request safely (a GET), and a fragment start never reaches this function.
+      const scriptUrl = error?.[MISSING_PLUGIN_SCRIPT];
+      if (typeof scriptUrl === "string" && configuration.canReload === true) reloadForMissingScript(scriptUrl);
+      queueMicrotask(() => { throw error; });
+    });
+  }
+
+  // The key and flag below are shared with the start script the server writes for the runtime
+  // itself, so a page reloads at most once whichever script went missing.
+  const RELOAD_STORAGE_KEY = "citry:runtime-reload";
+  const RELOAD_FLAG = "__citryRuntimeMissing";
+
+  // A page served from a cache can name a plugin script that a later deploy removed. Reload the
+  // page once to fetch fresh HTML, but only when the server confirms the file is gone (404), so a
+  // network failure or a script that broke for another reason does not cause a reload loop.
+  function reloadForMissingScript(scriptUrl) {
+    const giveUp = () => console.error("Citry could not load a browser plugin script: " + scriptUrl);
+    // Several apps on one page can fail the same way; the first one decides for all of them.
+    if (Object.prototype.hasOwnProperty.call(global, RELOAD_FLAG)) return;
+    global[RELOAD_FLAG] = true;
+    // A load that is already a reload has had its one chance. Without a way to tell, assume it
+    // is one, because a missed reload only leaves the error showing while a loop never ends.
+    const navigation = global.performance?.getEntriesByType?.("navigation")?.[0];
+    const isReload = navigation ? navigation.type === "reload"
+      : global.performance?.navigation ? global.performance.navigation.type === 1 : true;
+    if (isReload) return giveUp();
+    // The URL is stored before reloading, so a page that comes back naming the same missing
+    // script stops here even when the browser does not report the load as a reload.
+    let stored = null;
+    try { stored = global.sessionStorage.getItem(RELOAD_STORAGE_KEY); } catch { stored = null; }
+    if (stored === scriptUrl) return giveUp();
+    // Bypass the HTTP cache so the answer comes from the server as it is now.
+    Promise.resolve()
+      .then(() => global.fetch(scriptUrl, {method: "HEAD", cache: "no-store"}))
+      .then(response => {
+        if (response?.status !== 404) return giveUp();
+        // Storage can be unavailable (a private window); the reload type check above still
+        // stops a second reload in that case.
+        try { global.sessionStorage.setItem(RELOAD_STORAGE_KEY, scriptUrl); } catch { /* reload anyway */ }
+        global.location.reload();
+      }, giveUp);
   }
 
   Object.defineProperty(global, Symbol.for("citry:built-in-members"), {value: builtInMembers});

@@ -9,8 +9,14 @@ import pytest
 from citry import Citry, Component, Extension, Markup
 from citry._vue import events as vue_events
 from citry.ext.dependencies import Script
-from citry.ext.dependencies.routes import script_url
+from citry.ext.dependencies.routes import SHARED_RUNTIME, script_url
 from citry.util.routing import match_route
+
+
+def _assert_no_runtime(html):
+    """Assert the page links neither the hashed runtime URL nor the stable one."""
+    assert SHARED_RUNTIME.hashed_path not in html
+    assert "citry.js" not in html
 
 
 def _vue_manifest(html):
@@ -51,7 +57,7 @@ class TestFragmentStrategy:
         assert 'rel="stylesheet"' in html
         assert "data-citry-vue-fragment" not in html
         assert 'type="application/json" data-citry' not in html
-        assert "citry.js" not in html
+        _assert_no_runtime(html)
 
     def test_static_css_document_emits_stylesheet_without_runtime_manifest(self):
         c = Citry()
@@ -66,7 +72,7 @@ class TestFragmentStrategy:
 
         assert script_url(Summary, "css") in html
         assert "<style data-citry-css-class=" in html
-        assert "citry.js" not in html
+        _assert_no_runtime(html)
         assert 'type="application/json" data-citry' not in html
 
     def test_static_fragment_emits_dependency_scripts_in_declared_order(self):
@@ -85,7 +91,7 @@ class TestFragmentStrategy:
         assert html.index("window.first = true") < html.index("/static/second.js")
         assert "data-citry-vue-fragment" not in html
         assert 'type="application/json" data-citry' not in html
-        assert "citry.js" not in html
+        _assert_no_runtime(html)
 
     def test_fragment_carries_urls_not_content(self):
         c = Citry()
@@ -244,10 +250,44 @@ class TestFragmentStrategy:
         _widget(c)
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
         html = str(page().render().serialize(deps_strategy="fragment"))
-        assert 's.src = "/citry/citry.js"' in html
+        assert f's.src = "/citry/{SHARED_RUNTIME.hashed_path}"' in html
         # The loader removes its own tag, read through Document.prototype so a named element
         # in the page cannot stand in for it.
         assert 'var current = member("currentScript");\nif (current) current.remove();' in html
+
+    def test_vue_fragment_loader_reports_a_runtime_that_fails_to_load(self):
+        c = Citry()
+        c.set_mounted_prefix("/citry")
+        _widget(c)
+        page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
+        html = str(page().render().serialize(deps_strategy="fragment"))
+
+        url = json.dumps(f"/citry/{SHARED_RUNTIME.hashed_path}")
+        loader = re.search(r"<script>(\(function\(\) \{.*?\}\)\(\);)</script>", html, re.DOTALL)
+        assert loader is not None
+        loader_text = loader.group(1)
+        # The error handler names the URL the loader requested, as the same JSON string.
+        assert f"s.src = {url};" in loader_text
+        assert (
+            f's.onerror = function () {{ console.error("Citry could not load its runtime: " + {url}); }};'
+            in loader_text
+        )
+        # The handler is set before the tag is added, or a fast failure would be missed.
+        assert loader_text.index("s.onerror") < loader_text.index("appendChild(s)")
+        # A fragment is a small part of a page, so a failed runtime is only reported, never a reason to reload it.
+        assert "reload" not in loader_text
+        assert "location" not in loader_text
+
+    def test_vue_fragment_loader_writes_the_url_as_json_even_for_a_quoted_prefix(self):
+        c = Citry()
+        c.set_mounted_prefix('/ci"try')
+        _widget(c)
+        page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
+        html = str(page().render().serialize(deps_strategy="fragment"))
+
+        url = json.dumps(f'/ci"try/{SHARED_RUNTIME.hashed_path}')
+        assert f"s.src = {url};" in html
+        assert f'console.error("Citry could not load its runtime: " + {url});' in html
 
     def test_fragment_inlines_local_file_entries_as_descriptors(self, tmp_path):
         (tmp_path / "helper.js").write_text("var H = 1;")
@@ -305,7 +345,7 @@ class TestFragmentStrategy:
 
         html = Bare().render().serialize(deps_strategy="fragment")
         assert '<script src="/hook.js"></script>' in html
-        assert "citry.js" not in html
+        _assert_no_runtime(html)
 
     def test_fragment_escapes_a_quoted_runtime_url(self):
         c = Citry()
@@ -323,7 +363,7 @@ class TestFragmentStrategy:
         html = Card().render().serialize(deps_strategy="fragment")
 
         assert '<script src="/static/card.js"></script>' in html
-        assert "citry.js" not in html
+        _assert_no_runtime(html)
 
     def test_whitespace_css_creates_no_variables_or_fragment_css(self):
         c = Citry()
@@ -462,7 +502,7 @@ class TestMountedDocumentFlow:
         _widget(c)
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
         html = str(page())
-        assert 'src="/citry/citry.js" integrity="sha384-' in html
+        assert f'src="/citry/{SHARED_RUNTIME.hashed_path}" integrity="sha384-' in html
         assert "client-side dependency manager" not in html  # not inlined
 
     def test_interactive_document_starts_native_vue_after_runtime_and_options(self):
@@ -474,7 +514,7 @@ class TestMountedDocumentFlow:
         rendered = page().render()
         html = rendered.serialize()
         data_block = '<script type="application/json" data-citry-vue-document='
-        assert html.index("/citry/citry.js") < html.index(data_block)
+        assert html.index(f"/citry/{SHARED_RUNTIME.hashed_path}") < html.index(data_block)
         assert '"loadInitialAssets":true' in html
         # The start configuration is the only JSON data block Citry writes.
         assert html.count('type="application/json" data-citry') == html.count(data_block) == 1
@@ -490,7 +530,7 @@ class TestMountedDocumentFlow:
 
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-card /></main>"})
         html = str(page())
-        assert '<script src="/citry/citry.js"></script>' not in html
+        _assert_no_runtime(html)
         assert "<style data-citry-css-class=" in html
         assert 'type="application/json" data-citry' not in html
 
@@ -507,5 +547,5 @@ class TestMountedDocumentFlow:
 
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-bare /></main>"})
         html = str(page())
-        assert "citry.js" not in html
+        _assert_no_runtime(html)
         assert "data-citry" not in html

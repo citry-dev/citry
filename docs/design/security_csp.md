@@ -704,23 +704,46 @@ An interactive document keeps its per-request data out of executable scripts.
 The server sends the app's configuration (the prepared manifest with the
 page's data) as a JSON data block,
 `<script type="application/json" data-citry-vue-document="APP_ID">`, and
-starts the app with a one-line module script,
-`__citryRuntime.startDocument("APP_ID")` ([`dependencies.md`](dependencies.md)
+starts the app with a module script ([`dependencies.md`](dependencies.md)
 8.2). The browser never runs a data block, so CSP does not apply to it: a
 nonce policy does not need the block's nonce, and a hash policy does not need
-its hash. `csp_script_hashes` therefore lists the start script, whose text
-holds only the random app id, and not the configuration. The per-script
-records in `serialized.security.scripts` still describe the data block with
-its digest, as they do for every inert structured script. Citry still stamps
-the request nonce on the data block, and the runtime refuses a block whose
-nonce differs from the nonce of the runtime's own script tag. The runtime
-therefore trusts a configuration only when it comes from the same document,
-carries the id named by an authorized start script, is the only block with
-that id, and, under a nonce policy, carries the page nonce. With a hash-only
-policy and a predictable id (an application `id_generator`), injected markup
-before the real block can hide it (an unclosed comment or attribute value)
-and supply its own block, so such pages should keep the default random ids
-or use a nonce policy.
+its hash. `csp_script_hashes` therefore lists the start script, and not the
+configuration.
+
+The start script's text never holds page data. A page rendered without a mount
+prefix inlines the runtime and gets the one-line
+`__citryRuntime.startDocument("APP_ID")`, which holds only the random app id.
+A mounted `document` render links the runtime at `<prefix>/citry.<sha256>.js`,
+so its start script also holds that URL and a `canReload` value of `true` or
+`false`. When the runtime failed to load, the script uses them to reload the
+page at most once, after a `HEAD` request for that URL answers `404`
+([`runtime_hashed_urls.md`](runtime_hashed_urls.md) section 3.5). The URL and
+the app id are written with `script_json`. Two things follow for an app that
+sends script hashes in its policy:
+
+- The start script's hash changes whenever a Citry release changes the runtime
+  file, because the runtime URL carries a hash of the runtime's bytes.
+- The text has two forms, one for each `canReload` value. The server writes
+  `true` only when the app passes `serialize(request_method=...)` with `GET`
+  or `HEAD`, and `false` otherwise.
+
+Serialization reports the hash for each render in `csp_script_hashes`, so an
+app that copies the hashes from there picks up the new values. A policy that
+blocks the `HEAD` request through `connect-src` (or through `default-src` when
+it has no `connect-src`) only stops the reload: the page keeps its server HTML
+and the console shows the error.
+
+The per-script records in `serialized.security.scripts` still describe the
+data block with its digest, as they do for every inert structured script.
+Citry still stamps the request nonce on the data block, and the runtime
+refuses a block whose nonce differs from the nonce of the runtime's own script
+tag. The runtime therefore trusts a configuration only when it comes from the
+same document, carries the id named by an authorized start script, is the only
+block with that id, and, under a nonce policy, carries the page nonce. With a
+hash-only policy and a predictable id (an application `id_generator`),
+injected markup before the real block can hide it (an unclosed comment or
+attribute value) and supply its own block, so such pages should keep the
+default random ids or use a nonce policy.
 
 A fragment is different. Its serialization result can describe its scripts
 and carry SRI metadata, but the fragment response cannot add hash sources to

@@ -50,11 +50,22 @@ files.
 ## Load HTMX and Citry
 
 Load HTMX and Citry's browser runtime once, on the full page. Host a
-fixed version of HTMX yourself, so an update cannot change it under you:
+fixed version of HTMX yourself, so an update cannot change it under you.
+Get Citry's runtime URL from
+[`citry.runtime_url()`][citry.Citry.runtime_url] in the route that
+renders the page, and pass it to the page's template. This example uses
+a Jinja or Django template:
 
-```html
+```python
+from citry import citry
+
+# Pass this to your page template.
+context = {"citry_runtime_url": citry.runtime_url()}
+```
+
+```htmldjango
 <script src="/static/htmx.min.js"></script>
-<script src="/citry/citry.js"></script>
+<script src="{{ citry_runtime_url }}"></script>
 
 <main>
   <label for="contact-search">Search contacts</label>
@@ -75,6 +86,16 @@ fixed version of HTMX yourself, so an update cannot change it under you:
 When HTMX inserts a Citry response, Citry's runtime notices it, loads its
 CSS and JavaScript, and starts its components. HTMX needs no extension or
 helper script for this.
+
+The runtime URL includes a hash of the file, such as
+`/citry/citry.<hash>.js`, so the browser keeps the file between page
+loads. In a Citry template, return the URL from `template_data()` and
+set the attribute with `c-src` (see
+[`c-*` Python attrs](/syntax/attributes/#c-dynamic-attributes)).
+
+A static HTML file that you write once links the stable
+`/citry/citry.js` instead. The browser downloads that file on every page
+load.
 
 The browser does not check the content of a `<script>` tag you write
 yourself. If your page has a Content Security Policy, add `base-uri 'self'`

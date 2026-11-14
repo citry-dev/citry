@@ -22,14 +22,13 @@ import json
 import re
 from copy import copy
 from dataclasses import dataclass, replace
-from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, OWNED_ASSET_CROSSORIGIN, _OwnedResource
 from citry.assets import HasHtml
 from citry.citry_render import CitryRender, selected_render_ids
-from citry.ext.dependencies.routes import RUNTIME_PATH, asset_content_type, runtime_url, script_url
+from citry.ext.dependencies.routes import SHARED_RUNTIME, asset_content_type, script_url
 from citry.ext.dependencies.scripts import (
     cache_asset,
     cache_component_css,
@@ -731,15 +730,14 @@ def _resolve_records(
 # ----- The client runtime and the Vue fragment descriptor -----
 
 
-@cache
 def _runtime_js() -> str:
-    """The generated Vue interactive runtime shipped to browsers."""
-    return (Path(__file__).parents[2] / "_vue" / "runtime.js").read_text(encoding="utf8")
+    """The generated Vue interactive runtime shipped to browsers, read once per process."""
+    return SHARED_RUNTIME.content
 
 
 def _runtime_resource(citry: Citry) -> _OwnedResource:
-    url = runtime_url(citry) if citry.mounted_prefix is not None else RUNTIME_PATH
-    return _OwnedResource(url=url, content=_runtime_js(), content_type=JAVASCRIPT_CONTENT_TYPE)
+    """The runtime as pages link it: its hashed URL when mounted, its relative stable path otherwise."""
+    return SHARED_RUNTIME.resource(citry)
 
 
 def _owned_script(
@@ -868,6 +866,9 @@ def _preloader_script(
         f"{integrity_line}"
         f"{crossorigin_line}"
         f"{nonce_line}"
+        # A fragment never reloads the page, which would lose the user's
+        # work, so a runtime that fails to load is only reported.
+        f'  s.onerror = function () {{ console.error("Citry could not load its runtime: " + {url_literal}); }};\n'
         '  member("head").appendChild(s);\n'
         "}\n"
         'var current = member("currentScript");\n'

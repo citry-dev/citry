@@ -21,6 +21,8 @@ import pytest
 from citry import Citry, Component, Extension
 from citry._owned_resource import _OwnedResource
 from citry.ext.dependencies import Script, Style
+from citry.ext.dependencies.routes import SHARED_RUNTIME
+from citry.ext.i18n.emission import I18N_RUNTIME
 from citry.util.routing import match_route
 
 if TYPE_CHECKING:
@@ -95,10 +97,11 @@ class TestDocuments:
             """
 
         html = Page().render().serialize()
-        _assert_all_pinned(app, html, "citry.js")
+        runtime = f"/citry/{SHARED_RUNTIME.hashed_path}"
+        _assert_all_pinned(app, html, SHARED_RUNTIME.hashed_path)
         # A hint with other values is not reused, so the browser would fetch the file twice.
-        preload = next(tag for tag in TAG.findall(html) if 'rel="preload"' in tag and "citry.js" in tag)
-        assert _tags(html)["/citry/citry.js"]["integrity"] in preload
+        preload = next(tag for tag in TAG.findall(html) if 'rel="preload"' in tag and runtime in tag)
+        assert _tags(html)[runtime]["integrity"] in preload
         assert 'crossorigin="anonymous"' in preload
 
     def test_i18n_runtime_is_pinned(self):
@@ -113,7 +116,7 @@ class TestDocuments:
             """
             messages = "client-title = Client title"
 
-        _assert_all_pinned(app, Page().render().serialize(), "citry.js", "ext/i18n/runtime.js")
+        _assert_all_pinned(app, Page().render().serialize(), SHARED_RUNTIME.hashed_path, I18N_RUNTIME.hashed_path)
 
     @pytest.mark.parametrize("mode", ["allow", "omit"])
     def test_served_files_on_a_static_document_are_pinned(self, tmp_path: Path, mode: str):
@@ -201,7 +204,9 @@ class TestDocuments:
         replayed = Page().render().serialize()
         # One render means the second page came from the cache.
         assert len(renders) == 1
-        _assert_all_pinned(app, replayed, "citry.js")
+        _assert_all_pinned(app, replayed, SHARED_RUNTIME.hashed_path)
+        # The cache stores the page with the runtime URL it was rendered with, and that is the hashed one.
+        assert "/citry/citry.js" not in replayed
 
 
 class TestFragments:
@@ -213,7 +218,9 @@ class TestFragments:
             template = '<button @click="open = true">open</button>'
 
         html = Widget().render().serialize(deps_strategy="fragment")
-        assert f's.integrity = "{_sri(_served(app, "/citry/citry.js"))}"' in html
+        runtime = f"/citry/{SHARED_RUNTIME.hashed_path}"
+        assert f's.src = "{runtime}"' in html
+        assert f's.integrity = "{_sri(_served(app, runtime))}"' in html
         assert 's.crossOrigin = "anonymous"' in html
 
     def test_static_fragment_pins_component_variables_and_served_files(self, tmp_path: Path):

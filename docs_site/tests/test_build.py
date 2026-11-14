@@ -13,6 +13,7 @@ import pytest
 import yaml
 from lxml import html as lxml_html
 
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 from docs_site._internal import build as build_module
 from docs_site._internal.build import BuildOutcome, _is_unsafe_output, _replace_output_directory, build_site
 from docs_site._internal.config import DocsConfig
@@ -879,11 +880,13 @@ def test_build_writes_404_and_runtime(tmp_path: Path) -> None:
     # And a link to report a page that has moved.
     assert "https://github.com/citry-dev/citry/issues" in text
 
-    # The client runtime is written where pages reference it (/citry/citry.js).
+    # The client runtime is written where pages reference it
+    # (/citry/citry.<sha256>.js) and at its stable URL (/citry/citry.js).
     runtime = out / "citry" / "citry.js"
     assert outcome.runtime == runtime
     assert runtime.is_file()
     assert runtime.stat().st_size > 0
+    assert (out / "citry" / SHARED_RUNTIME.hashed_path).read_bytes() == runtime.read_bytes()
     events_runtime = out / "citry" / "ext" / "events" / "runtime.js"
     assert events_runtime.is_file()
     assert events_runtime.stat().st_size > 0

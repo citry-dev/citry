@@ -28,6 +28,7 @@ import inspect
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs
 
+from citry._hashed_runtime import NO_STORE_HEADERS
 from citry.util.routing import (
     BODYLESS_METHODS,
     RouteHeaders,
@@ -157,7 +158,9 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
         # ASGI adapter, so a host rule sees the path Citry routes.
         matched = match_path_below_mount(citry_instance.urls, environ.get("PATH_INFO", ""))
         if matched is None:
-            return respond(RouteResponse(content="Not Found", status=404))
+            # A path that matches nothing now may match after a deploy (a new
+            # runtime hash), so neither the browser nor a CDN may keep the miss.
+            return respond(RouteResponse(content="Not Found", status=404, headers=NO_STORE_HEADERS))
         method = environ.get("REQUEST_METHOD", "GET")
         # The shared rule keeps HEAD off POST-only routes, the same on every adapter.
         if not route_allows_method(matched.route, method):

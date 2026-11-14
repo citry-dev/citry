@@ -1,5 +1,6 @@
 import pytest
 from django.test import Client
+from project_explorer.citry_app import citry_app
 from project_explorer.data import Project
 
 
@@ -14,7 +15,8 @@ def test_page_runtime_and_csrf_cookie_are_served() -> None:
     assert page["Content-Type"].startswith("text/html")
     assert "Project Explorer" in page.content.decode()
     assert "Atlas" in page.content.decode()
-    assert "/citry/citry.js" in page.content.decode()
+    # The page links the runtime by its hash; the stable URL fetched above stays for hand-written pages.
+    assert citry_app.runtime_url() in page.content.decode()
     assert "csrftoken" in page.cookies
     assert runtime.status_code == 200
     assert runtime["Content-Type"].startswith("text/javascript")

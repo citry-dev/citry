@@ -108,12 +108,16 @@ template.
 
 The page looks right, but buttons, menus, and other browser behavior do
 not work. Open the browser console and find the first message that starts
-with `[Citry]`. Later errors are often caused by the first one, so fix
-that one first.
+with `[Citry]`, `Citry could not`, or
+`Error: missing or incompatible Citry browser plugin`. Later errors are
+often caused by the first one, so fix that one first.
 
 | What the console shows | Cause | Fix |
 |---|---|---|
-| 404 responses for `citry.js`, component code, or stylesheets | Citry is not mounted on your web app, or another worker process answered without the stored files | [Mount Citry](/advanced/web-frameworks/), and [share the cache between worker processes](/advanced/web-frameworks/#share-the-cache-between-worker-processes) |
+| 404 responses for component code or stylesheets | Citry is not mounted on your web app, or another worker process answered without the stored files | [Mount Citry](/advanced/web-frameworks/), and [share the cache between worker processes](/advanced/web-frameworks/#share-the-cache-between-worker-processes) |
+| `Citry could not load its runtime: ...` | The page names a runtime file the browser could not get. After a deploy, neither the browser nor the server still has the old file. The message also appears when the request was blocked or failed | Clear caches that store whole pages, and see [Deploy a Citry upgrade](/advanced/web-frameworks/#deploy-a-new-version) |
+| `Error: missing or incompatible Citry browser plugin: i18n` | A browser plugin script, such as the i18n runtime, did not load or does not match the runtime. After a deploy this usually means the page names an old copy of it. A page whose view passed `request_method` with `GET` or `HEAD` reloads once first | As for the runtime above |
+| `Citry could not load a browser plugin script: ...` | The page tried to reload for a missing plugin script and could not, for example because this load was already a reload | As for the runtime above |
 | `[Citry] discarded Vue fragment` | An inserted fragment arrived incomplete, or its files did not load | Insert the whole response, and fix the first network error |
 | `[Citry] expected one configuration block for app ...` | A tool such as an HTML minifier, sanitizer, or your own script removed part of the HTML Citry wrote | [Preserve page HTML](/vue/server-rendering/#preserve-interactive-html) |
 

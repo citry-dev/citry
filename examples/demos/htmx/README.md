@@ -88,9 +88,11 @@ contents, so the form opens in the row where you chose Edit. The wrapper
 remains outside the row's Vue app, so replacing its contents unmounts one
 complete app without changing unrelated rows.
 
-Load HTMX and `/citry/citry.js` once on the full page. Put a
-plain `<div>` around the area HTMX will update, and replace the contents of
-that `<div>` with `hx-swap="innerHTML"`. Keep the wrapper outside the HTML
+Load HTMX and Citry's browser runtime once on the full page. The page
+links the runtime at the URL that `citry_app.runtime_url()` returns.
+
+Put a plain `<div>` around the area HTMX will update, and replace the contents
+of that `<div>` with `hx-swap="innerHTML"`. Keep the wrapper outside the HTML
 returned by the route. `innerHTML` then replaces its contents while leaving
 the wrapper on the page.
 

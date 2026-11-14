@@ -9,7 +9,7 @@ import pytest
 from citry import Citry, Component, Extension, InMemoryCache
 from citry.ext.dependencies import emission
 from citry.ext.dependencies.emission import _runtime_js
-from citry.ext.dependencies.routes import script_url
+from citry.ext.dependencies.routes import SHARED_RUNTIME, script_url
 from citry.util.routing import RouteResponse, URLRoute, match_route
 
 
@@ -58,6 +58,8 @@ class TestCitryUrls:
         assert "cache/{class_id}.{vars_hash}.{script_type}" in paths
         assert "cache/{class_id}.{script_type}" in paths
         assert "citry.js" in paths
+        # The runtime also has a route named by its hash, which pages link.
+        assert "citry.{digest}.js" in paths
 
     def test_user_extension_routes_namespaced_under_ext(self):
         class Probe(Extension):
@@ -254,6 +256,15 @@ class TestScriptEndpointLogic:
 
         assert _runtime_js() == runtime.read_text(encoding="utf8")
         assert "Citry interactive runtime." in _runtime_js()
+        # The route, the inline copy, and the hash all come from one read of the file.
+        assert SHARED_RUNTIME.content == _runtime_js()
+
+    def test_serves_the_runtime_by_its_hash(self):
+        c = Citry()
+        response = self._serve(c, SHARED_RUNTIME.hashed_path)
+        assert response.status == 200
+        assert response.content == self._serve(c, "citry.js").content
+        assert response.content_type == "text/javascript; charset=utf-8"
 
 
 class TestWsgiApp:

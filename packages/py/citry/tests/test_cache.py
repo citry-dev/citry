@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 
 from citry import Citry, CitryCache, InMemoryCache
+from citry.cache import _store_if_missing
 
 
 class TestInMemoryCache:
@@ -296,3 +297,78 @@ class TestCitryCacheWiring:
         c.cache.set("k", "v")
         c.clear()
         assert c.cache.get("k") is None
+
+
+class _Owner:
+    """What a store call remembers its confirmed keys under (the engine, in a real render)."""
+
+
+class _TwoArgumentCache:
+    """A backend whose ``set`` has no ``ttl`` parameter, as one written before the parameter existed."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    def get(self, key: str) -> str | None:
+        return self.values.get(key)
+
+    def set(self, key: str, value: str) -> None:
+        self.values[key] = value
+
+    def delete(self, key: str) -> None:
+        self.values.pop(key, None)
+
+    def has(self, key: str) -> bool:
+        return key in self.values
+
+
+class _TtlRecordingCache(_TwoArgumentCache):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ttls: list[float | None] = []
+
+    def set(self, key: str, value: str, ttl: float | None = None) -> None:  # type: ignore[override]
+        self.ttls.append(ttl)
+        super().set(key, value)
+
+
+class _KeywordTtlCache(_TwoArgumentCache):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ttls: list[float | None] = []
+
+    def set(self, key: str, value: str, *, ttl: float | None = None) -> None:  # type: ignore[override]
+        self.ttls.append(ttl)
+        super().set(key, value)
+
+
+class TestStoreIfMissing:
+    def test_a_ttl_reaches_a_backend_that_takes_it_only_by_keyword(self):
+        """The ttl is passed by keyword, as every other Citry caller passes it."""
+        cache = _KeywordTtlCache()
+        _store_if_missing(_Owner(), cache, "expiring", lambda: "v", ttl=60)
+        assert cache.ttls == [60]
+
+    def test_a_write_without_a_ttl_calls_set_with_two_arguments(self):
+        owner = _Owner()
+        cache = _TwoArgumentCache()
+        # A backend that leaves out the optional `ttl` keeps working for the entries that never expire.
+        _store_if_missing(owner, cache, "k", lambda: "v")
+        assert cache.values == {"k": "v"}
+
+    def test_a_ttl_reaches_the_backend(self):
+        owner = _Owner()
+        cache = _TtlRecordingCache()
+        _store_if_missing(owner, cache, "kept", lambda: "v")
+        _store_if_missing(owner, cache, "expiring", lambda: "v", ttl=60)
+        assert cache.ttls == [None, 60]
+
+    def test_an_entry_the_backend_holds_is_not_written_again(self):
+        owner = _Owner()
+        cache = _TtlRecordingCache()
+        cache.values["k"] = "already there"
+        calls: list[int] = []
+        _store_if_missing(owner, cache, "k", lambda: calls.append(1) or "v", ttl=60)
+        # The value is built only when the entry must be written.
+        assert calls == []
+        assert cache.ttls == []

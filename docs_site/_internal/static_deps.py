@@ -3,10 +3,12 @@ Write Citry's client runtimes and prepared assets to the static build.
 
 A page that uses a component with JavaScript loads Citry's small client runtime
 (the part that wires up component scripts in the browser). Interactive examples
-also load the Events runtime. When the live dev server runs, both are served
-from the ``/citry`` mount. A built site is just flat files with no server, so
-the build writes both runtimes under ``<output>/citry/`` at the URLs emitted by
-the pages.
+also use Events, which loads the same runtime. When the live dev server runs,
+it is served from the ``/citry`` mount. A built site is just flat files with no server, so
+the build writes the runtime under ``<output>/citry/`` at every URL that names
+it: the hashed ``citry.<sha256>.js`` the pages link, and the stable
+``citry.js`` and ``ext/events/runtime.js`` that hand-written pages and older
+snapshots load.
 
 The runtime is written for every build. Prepared document serialization retains
 owned JS and CSS as content-addressed browser assets, so the build exports the
@@ -28,12 +30,8 @@ from typing import TYPE_CHECKING
 from lxml import html as lxml_html
 
 from citry.ext.dependencies.routes import RUNTIME_PATH as DEPENDENCIES_RUNTIME_PATH
-from citry.ext.events.routes import (
-    EVENTS_RUNTIME_SRC,
-)
-from citry.ext.events.routes import (
-    RUNTIME_PATH as EVENTS_RUNTIME_PATH,
-)
+from citry.ext.dependencies.routes import SHARED_RUNTIME
+from citry.ext.events.routes import RUNTIME_PATH as EVENTS_RUNTIME_PATH
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -43,7 +41,7 @@ if TYPE_CHECKING:
 
 # Where the build serves Citry's routes from (the dev server uses the same
 # value). The runtime is written under this prefix so the URL the pages emit,
-# "<prefix>/citry.js", resolves to the file on disk.
+# "<prefix>/citry.<sha256>.js", resolves to the file on disk.
 CITRY_MOUNT_PREFIX = "/citry"
 
 
@@ -63,27 +61,41 @@ class StaticSiteRequestHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 
+def export_hashed_runtime(output_dir: Path, citry_instance: Citry) -> Path:
+    """
+    Write the client runtime at the hashed URL rendered pages link, and return its path.
+
+    A prefix of ``/citry`` writes ``<output_dir>/citry/citry.<sha256>.js``. A
+    version snapshot writes only this file: ``assemble`` copies it to the
+    site root, where the snapshot's pages look for it.
+    """
+    prefix = (citry_instance.mounted_prefix or CITRY_MOUNT_PREFIX).strip("/")
+    dest = output_dir / prefix / SHARED_RUNTIME.hashed_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    # Bytes, not text, so no newline translation can change the file the hash names.
+    dest.write_bytes(SHARED_RUNTIME.content.encode())
+    return dest
+
+
 def export_runtime(output_dir: Path, citry_instance: Citry) -> Path:
     """
-    Write the client runtimes and return the base runtime path.
+    Write the client runtime at each of its URLs and return the stable runtime path.
 
-    The destination mirrors the URL the pages reference: a prefix of ``/citry``
-    writes ``<output_dir>/citry/citry.js`` and
-    ``<output_dir>/citry/ext/events/runtime.js``.
+    The destination mirrors the URLs the routes serve: a prefix of ``/citry``
+    writes ``<output_dir>/citry/citry.<sha256>.js``,
+    ``<output_dir>/citry/citry.js`` and
+    ``<output_dir>/citry/ext/events/runtime.js``, all with the same bytes.
     """
-    # _runtime_js() returns the runtime source (shipped with citry as package
-    # data); it is exactly what the "/citry/citry.js" route serves at runtime.
-    from citry.ext.dependencies.emission import _runtime_js  # noqa: PLC0415
-
+    export_hashed_runtime(output_dir, citry_instance)
     prefix = (citry_instance.mounted_prefix or CITRY_MOUNT_PREFIX).strip("/")
-    dest = output_dir / prefix / DEPENDENCIES_RUNTIME_PATH
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(_runtime_js(), encoding="utf-8")
-
-    events_dest = output_dir / prefix / EVENTS_RUNTIME_PATH
-    events_dest.parent.mkdir(parents=True, exist_ok=True)
-    events_dest.write_bytes(EVENTS_RUNTIME_SRC.read_bytes())
-    return dest
+    # The two stable paths stay for hand-written pages and for snapshots
+    # built before pages linked the hash. The server answers them with the
+    # same runtime as the hashed URL, so the static copy does too.
+    for path in (DEPENDENCIES_RUNTIME_PATH, EVENTS_RUNTIME_PATH):
+        dest = output_dir / prefix / path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(SHARED_RUNTIME.content.encode())
+    return output_dir / prefix / DEPENDENCIES_RUNTIME_PATH
 
 
 def _prepared_owned_assets(html: str, citry_instance: Citry) -> set[tuple[str, str]]:

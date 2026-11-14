@@ -53,6 +53,7 @@ from citry._vue.serialization import (
 )
 from citry.citry_context import CitryContext
 from citry.citry_render import CitryRender
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 from citry.ext.dependencies.types import DependencyRecord, Script, Style
 
 
@@ -244,6 +245,8 @@ def test_vue_serialization_plan_validates_hook_output_and_can_defer_assets() -> 
 
 
 def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> None:
+    # Pages link the runtime by its hashed URL, so the plan's runtime script and the hooked document use it too.
+    runtime_url = f"/citry/{SHARED_RUNTIME.hashed_path}"
     external_integrity = "sha384-" + base64.b64encode(hashlib.sha384(b"external").digest()).decode("ascii")
     manifest = {
         "definitions": [
@@ -293,7 +296,7 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
         "https://cdn.example.test/lib.js?one=1&two=2",
     ]
 
-    runtime = Script(url="/citry/citry.js")
+    runtime = Script(url=runtime_url)
     runtime._owned_resource = _OwnedResource(
         url=runtime.url or "",
         content="runtime bytes",
@@ -320,8 +323,8 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
     output = security.finalize(plan.finalize(document))
     head = output[output.index("<head>") : output.index("</head>")]
     assert head.index('<meta charset="utf-8">') < head.index("Content-Security-Policy")
-    assert head.index('href="/site.css"') < head.index('href="/citry/citry.js"')
-    assert head.index('href="/citry/citry.js"') < head.index('href="/citry/ext/events/definitions/root.js"')
+    assert head.index('href="/site.css"') < head.index(f'href="{runtime_url}"')
+    assert head.index(f'href="{runtime_url}"') < head.index('href="/citry/ext/events/definitions/root.js"')
     assert head.count('rel="preload" as="script"') == 4
     assert 'href="https://cdn.example.test/lib.js?one=1&amp;two=2"' in head
     assert f'integrity="{external_integrity}" crossorigin' in head
@@ -329,12 +332,12 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
     assert 'fetchpriority="high" nonce="response-nonce"' in head
     assert "data-custom" not in head
     assert "javascript:alert" not in head
-    assert 'href="/citry/citry.js"' not in output[output.index("<body>") :]
+    assert f'href="{runtime_url}"' not in output[output.index("<body>") :]
     assert output.index("</head>") < output.index('<script nonce="response-nonce"')
     runtime_digest = base64.b64encode(hashlib.sha384(b"runtime bytes").digest()).decode("ascii")
     # The runtime hint repeats the tag's crossorigin, or the browser would not reuse it.
     assert (
-        f'href="/citry/citry.js" integrity="sha384-{runtime_digest}" crossorigin="anonymous" nonce="response-nonce"'
+        f'href="{runtime_url}" integrity="sha384-{runtime_digest}" crossorigin="anonymous" nonce="response-nonce"'
         in head
     )
     # Owned definitions ask for CORS so integrity also works in an opaque-origin frame.
@@ -342,7 +345,7 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
     definition_hint = re.search(r'<link[^>]*definitions/root\.js"[^>]*>', head)
     assert definition_hint is not None
     assert 'crossorigin="anonymous"' in definition_hint.group()
-    runtime_tag = re.search(r'<script[^>]*src="/citry/citry\.js"[^>]*>', output)
+    runtime_tag = re.search(rf'<script[^>]*src="{re.escape(runtime_url)}"[^>]*>', output)
     assert runtime_tag is not None
     assert f'integrity="sha384-{runtime_digest}"' in runtime_tag.group()
     assert 'crossorigin="anonymous"' in runtime_tag.group()
@@ -378,7 +381,7 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
 
     app = Citry(autodiscover=False)
     app.set_mounted_prefix("/citry")
-    managed_runtime = Script(url="/citry/citry.js")
+    managed_runtime = Script(url=runtime_url)
     managed_runtime._owned_resource = _OwnedResource(
         url=managed_runtime.url or "",
         content="runtime bytes",
@@ -407,10 +410,10 @@ def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> N
         initial_script_preloads=preloads,
     )
     managed_output = managed_plan.finalize(
-        '<html><head><script src="/citry/citry.js"></script></head><body><div id="mount"></div></body></html>'
+        f'<html><head><script src="{runtime_url}"></script></head><body><div id="mount"></div></body></html>'
     )
     managed_head = managed_output[managed_output.index("<head>") : managed_output.index("</head>")]
-    assert 'href="/citry/citry.js"' in managed_head
+    assert f'href="{runtime_url}"' in managed_head
     assert 'href="/citry/ext/events/runtime.js"' not in managed_head
     assert 'href="/citry/ext/events/definitions/root.js"' in managed_head
     assert 'href="/citry/ext/events/assets/owned.js"' in managed_head

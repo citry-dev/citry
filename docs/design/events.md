@@ -1483,11 +1483,19 @@ colliding with component addressing:
 ```
 POST      ext/events/call               batch endpoint
                                         (envelope w/ calls[])
-GET       ext/events/runtime.js                         events JS code
+GET       ext/events/runtime.js                         stable alias of the runtime
 GET       ext/events/definitions/{digest}.js            prepared component definition
 GET       ext/events/assets/{digest}.css                 prepared component stylesheet
 declared  ext/events/e/{class_id}/{event}                per-event handler methods
 ```
+
+Events pages load the browser runtime from the Dependencies route
+`<prefix>/citry.<sha256>.js`, the same URL other Citry pages link, so the
+browser keeps one copy. That URL carries the SHA-256 of the runtime file
+and answers `immutable`. `ext/events/runtime.js` serves the same bytes with
+`Cache-Control: no-store`, for pages rendered by older versions and for
+apps that link the runtime by hand. See
+[`runtime_hashed_urls.md`](runtime_hashed_urls.md).
 
 The per-event route (`ext/events/e/{class_id}/{event}`) is one fixed
 parametrized pattern resolved through the registry per request (never one

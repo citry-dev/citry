@@ -1189,6 +1189,10 @@ class DirectVueEventsProducer:
                 "schemaVersion": item.schema_version,
                 "payload": item.payload,
                 "templateContextNames": list(item.plugin.template_context_names),
+                # A full page whose plugin script failed to load probes this
+                # URL to decide whether to reload once. An inlined plugin has
+                # no URL and never reloads.
+                **({"scriptUrl": item.plugin.script.url} if item.plugin.script.url is not None else {}),
             }
             for item in browser_extensions
         }

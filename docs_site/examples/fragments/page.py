@@ -1,6 +1,8 @@
 """Standalone page that loads FragmentWidget as an HTML fragment."""
 
-from citry import Component
+from typing import Any
+
+from citry import Component, citry
 
 
 class FragmentsPage(Component):
@@ -12,6 +14,15 @@ class FragmentsPage(Component):
     class Slots:
         pass
 
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
+        # The runtime's URL carries a hash of the file and changes
+        # with each Citry release, so ask Citry for it.
+        return {"runtime_url": citry.runtime_url()}
+
     template = """
       <!DOCTYPE html>
       <html lang="en">
@@ -22,7 +33,7 @@ class FragmentsPage(Component):
                MutationObserver notices the fragment's manifest when
                it is inserted below, then fetches and runs the
                fragment's CSS/JS on demand. -->
-          <script src="/citry/citry.js"></script>
+          <script c-src="runtime_url"></script>
           <style>
             body {
               margin: 0;

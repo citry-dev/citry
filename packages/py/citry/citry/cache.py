@@ -304,14 +304,25 @@ _STORED_KEYS: WeakKeyDictionary[object, OrderedDict[str, tuple[float, str | None
 _STORED_KEYS_LOCK = Lock()
 
 
-def _store_if_missing(owner: object, cache: CitryCache, key: str, value: Callable[[], str]) -> None:
+def _store_if_missing(
+    owner: object,
+    cache: CitryCache,
+    key: str,
+    value: Callable[[], str],
+    *,
+    ttl: float | None = None,
+) -> None:
     """
     Make sure ``cache`` holds ``key``, asking the backend at most once per recheck interval.
 
     ``value`` is called only when the entry must be written, so a large body
-    is encoded and sent only then. The entry is written without a TTL: an
-    open page can ask for it at any later time. Backend errors propagate, so
-    a render never links an entry that failed to store.
+    is encoded and sent only then. ``ttl`` is the seconds until the entry
+    expires. Most callers pass none, because an open page can ask for the
+    entry at any later time; the browser runtimes pass a fixed 30 days, so
+    the cache does not keep every version ever deployed. An entry that
+    expired is written again by the next call after the recheck interval.
+    Backend errors propagate, so a render never links an entry that failed
+    to store.
 
     A render on another thread that checked the backend just before a
     delete (a bad entry removed, or ``Citry.clear()``) can record the key as
@@ -325,7 +336,12 @@ def _store_if_missing(owner: object, cache: CitryCache, key: str, value: Callabl
     # ``has`` before ``set`` sends the body only when the backend lacks it,
     # including after the backend dropped it.
     if not cache.has(key):
-        cache.set(key, value())
+        # Callers without an expiry keep the two-argument call they always
+        # made, so a backend that leaves out the optional ``ttl`` still works.
+        if ttl is None:
+            cache.set(key, value())
+        else:
+            cache.set(key, value(), ttl=ttl)
     _remember_confirmed(owner, key, None, now)
 
 

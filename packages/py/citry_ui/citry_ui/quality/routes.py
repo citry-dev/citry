@@ -14,11 +14,11 @@ import citry_ui
 from citry import Citry, Component, DepsStrategy
 from citry._vue.events import definition_bundle, style_asset
 from citry.ext.dependencies.emission import _runtime_js
-from citry.ext.dependencies.routes import RUNTIME_PATH
+from citry.ext.dependencies.routes import RUNTIME_PATH, SHARED_RUNTIME
 from citry.ext.dependencies.types import Script, Style
 from citry.ext.events.routes import RUNTIME_PATH as EVENTS_RUNTIME_PATH
+from citry.ext.i18n.emission import I18N_RUNTIME, client_runtime_js
 from citry.ext.i18n.emission import RUNTIME_PATH as I18N_RUNTIME_PATH
-from citry.ext.i18n.emission import client_runtime_js
 from citry.util.html import script_json
 from citry_ui.components.caccordion.quality.scenario import accordion_states_component
 from citry_ui.components.calert.quality.scenario import alert_states_component
@@ -270,11 +270,22 @@ _HREF_RE = re.compile(r'\bhref="(?P<href>[^"]*)"')
 
 def _host_runtime_sources(app: Citry) -> dict[str, str]:
     """Map each runtime URL a mounted page may load to the text served there."""
-    # Both runtime routes serve the same generated Vue runtime file, and the
-    # i18n route serves its own plugin bundle.
+    # Pages link the hashed URLs. The stable URLs serve the same files, and a
+    # scenario that writes a script tag by hand may still name one of them.
+    # The shared routes all serve the generated Vue runtime, and the i18n
+    # routes serve their own plugin bundle.
     return {
+        app.build_url(SHARED_RUNTIME.hashed_path): _runtime_js(),
         app.build_url(RUNTIME_PATH): _runtime_js(),
         app.build_url(EVENTS_RUNTIME_PATH): _runtime_js(),
+        **_host_i18n_runtime_sources(app),
+    }
+
+
+def _host_i18n_runtime_sources(app: Citry) -> dict[str, str]:
+    """Map the i18n runtime's hashed and stable URLs to its plugin bundle."""
+    return {
+        app.build_url(I18N_RUNTIME.hashed_path): client_runtime_js(),
         app.build_url(I18N_RUNTIME_PATH): client_runtime_js(),
     }
 
@@ -354,7 +365,7 @@ def _inline_prepared_assets(html: str, app: Citry) -> str:
 
     prefix = app.build_url("")
     runtime_sources = _host_runtime_sources(app)
-    i18n_runtime_url = app.build_url(I18N_RUNTIME_PATH)
+    i18n_runtime_urls = _host_i18n_runtime_sources(app).keys()
     definitions_written = False
 
     def inline_runtime(tag: re.Match[str]) -> str:
@@ -370,7 +381,7 @@ def _inline_prepared_assets(html: str, app: Citry) -> str:
         inline = str(Script(kind="core", content=content, wrap=False).render())
         # The definitions register with the runtime, so they go right after
         # the first runtime script, before any plugin or start script.
-        if not definitions_written and src != i18n_runtime_url:
+        if not definitions_written and src not in i18n_runtime_urls:
             definitions_written = True
             return inline + "".join(scripts)
         return inline

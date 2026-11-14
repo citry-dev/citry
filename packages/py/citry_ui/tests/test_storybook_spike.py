@@ -14,6 +14,7 @@ import pytest
 
 from citry import Component, RouteHeaders, RouteRequest
 from citry import citry as default_citry
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 
 _STORYBOOK_DIR = Path(__file__).resolve().parents[1] / "storybook"
 
@@ -260,7 +261,7 @@ def test_interactive_scenario_uses_fragment_assets_and_control_input(spike_modul
     )
     assert default_fragment["protocol"] == "citry-vue-fragment/1"
     assert default_manifest["protocol"] == "citry-vue-prepared/1"
-    assert "/citry/citry.js" in content
+    assert f"/citry/{SHARED_RUNTIME.hashed_path}" in content
     assert all(asset["source"]["url"].startswith("/citry/ext/events/assets/") for asset in default_manifest["styles"])
     assert all(
         asset["source"]["url"].startswith("/citry/ext/events/definitions/") for asset in default_manifest["scripts"]
@@ -276,7 +277,7 @@ def test_tabs_scenario_uses_fragment_assets_and_each_control(spike_modules):
 
     assert scenario.client_interactive is True
     assert scenario.ready_selector == "[data-citry-tabs-root][data-citry-tabs-initialized]"
-    assert "/citry/citry.js" in default_content
+    assert f"/citry/{SHARED_RUNTIME.hashed_path}" in default_content
     default_manifest = _vue_fragment_manifest(default_content)["prepared"]["manifest"]
     default_tabs = next(
         occurrence for occurrence in default_manifest["occurrences"] if occurrence["typeKey"].startswith("CTabs_")

@@ -20,13 +20,17 @@ derive it from their own URL and are left alone).
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from citry.ext.dependencies.routes import SHARED_RUNTIME
+from citry.ext.i18n.emission import I18N_RUNTIME
 from docs_site._internal._vendor.mike_versions import Versions
 from docs_site._internal.base_path import apply_base_path
 from docs_site._internal.build import _is_unsafe_output, _replace_output_directory, build_site
@@ -38,6 +42,7 @@ from docs_site._internal.html_rewrite import (
     rewrite_start_tags,
 )
 from docs_site._internal.project import DocsProject, current_docs_project, docs_project_scope
+from docs_site._internal.static_deps import CITRY_MOUNT_PREFIX
 from docs_site._internal.versioning import (
     load_manifest,
     select_indexed_versions,
@@ -47,6 +52,12 @@ from docs_site._internal.versioning import (
 
 if TYPE_CHECKING:
     from docs_site._internal.config import DocsConfig
+
+# A runtime file named by its hash, as a path under a build's `citry/` folder:
+# `citry.<sha256>.js` or `ext/i18n/runtime.<sha256>.js`. Taken from the
+# library's own names so a new hashed runtime path is picked up here too.
+_HASHED_RUNTIME_STEMS = "|".join(re.escape(runtime.hashed_stem) for runtime in (SHARED_RUNTIME, I18N_RUNTIME))
+_HASHED_RUNTIME_PATH = re.compile(rf"(?:{_HASHED_RUNTIME_STEMS})\.(?P<digest>[0-9a-f]{{64}})\.js")
 
 
 @dataclass
@@ -70,6 +81,8 @@ class AssembleOutcome:
     breadcrumb_pages: int = 0
     # Old-version HTML pages rewritten to noindex + a canonical to the current release.
     noindexed_pages: int = 0
+    # Snapshot runtime files (named by their hash) copied to the root `/citry/`.
+    shared_runtime_files: int = 0
 
 
 @docs_project_scope
@@ -105,6 +118,7 @@ def assemble_site(
 
     dest_v = site_dir / "v"
     outcome.published = _publish_versions(config.versions_dir, dest_v, project.versions.publish_window)
+    outcome.shared_runtime_files = _share_snapshot_runtimes(dest_v, site_dir / CITRY_MOUNT_PREFIX.strip("/"))
 
     if (dest_v / "versions.json").is_file():
         # Hide the old mounted versions from search (noindex + canonical to the
@@ -148,6 +162,47 @@ def _publish_versions(versions_root: Path, dest_v: Path, window: int) -> list[st
             write_manifest(staged_v, trimmed)
         _replace_output_directory(staged_v, dest_v)
     return published
+
+
+def _share_snapshot_runtimes(dest_v: Path, root_citry: Path) -> int:
+    """
+    Copy each mounted snapshot's hashed runtime files into the root ``citry/`` folder.
+
+    A snapshot page links root paths such as ``/citry/citry.<sha256>.js``, but
+    the root build writes only the current runtime. Copying each snapshot's
+    own runtime next to it keeps old pages on the runtime they were built
+    for. Returns the number of files copied.
+    """
+    copied = 0
+    prefix = CITRY_MOUNT_PREFIX.strip("/")
+    sources = (
+        (source, source.relative_to(version_dir / prefix).as_posix())
+        for version_dir in sorted(dest_v.iterdir())
+        if (version_dir / prefix).is_dir()
+        for source in sorted((version_dir / prefix).rglob("*.js"))
+    )
+    for source, relative in sources:
+        match = _HASHED_RUNTIME_PATH.fullmatch(relative)
+        if match is None:
+            continue
+        content = source.read_bytes()
+        digest = match.group("digest")
+        # The name promises these exact bytes to every page that links it,
+        # so a file that does not match its name must not reach the root.
+        if hashlib.sha256(content).hexdigest() != digest:
+            raise RuntimeError(f"A snapshot runtime does not match the hash in its name: {source}")
+        dest = root_citry / relative
+        if dest.is_file():
+            # Two versions that shipped the same runtime share one file. The
+            # hash check above makes different bytes under one name impossible
+            # unless the root copy is damaged, which must stop the deploy.
+            if dest.read_bytes() != content:
+                raise RuntimeError(f"A runtime file in the site root does not match the snapshot's copy: {dest}")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(content)
+        copied += 1
+    return copied
 
 
 def _enable_root_version_picker(site_dir: Path, base: str) -> int:

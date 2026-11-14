@@ -1,4 +1,5 @@
 import pytest
+from app.citry_app import citry_app
 from app.components.event_inputs import AddTaskIn
 from app.components.project_board import ProjectBoard
 from app.main import web_app
@@ -24,7 +25,8 @@ def test_page_and_citry_runtime_are_served() -> None:
     assert '<div id="citry-vue-' in page.text
     assert '"host":"#citry-vue-' in page.text
     assert "data-citry-vue-document" in page.text
-    assert "/citry/citry.js" in page.text
+    # The page links the runtime by its hash; the stable URL fetched above stays for hand-written pages.
+    assert citry_app.runtime_url() in page.text
     assert "ext/events" in page.text
     assert runtime.status_code == 200
     assert runtime.headers["content-type"].startswith("text/javascript")

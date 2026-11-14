@@ -631,19 +631,25 @@ sit next to each other, in this order:
 
 ```html
 <script type="application/json" data-citry-vue-document="APP_ID">{...}</script>
-<script type="module">__citryRuntime.startDocument("APP_ID");</script>
+<script type="module">
+  /* calls __citryRuntime.startDocument("APP_ID"), or, when the
+     runtime is missing, may reload the page once (below) */
+</script>
 ```
 
-The first tag is a JSON data block that holds the whole app configuration
-(the prepared manifest, component tags, host selector, and flags). The browser
-never runs it. The second is a one-line module script that asks the already
-loaded runtime to start the app with that id. `startDocument` finds the data
-block whose `data-citry-vue-document` value equals the id, requires exactly
-one such block, reads it with `JSON.parse`, checks that the manifest's
-`appId` matches, and calls `startPrepared` with the result. A failed start is
-reported as an uncaught error on the page. Each app on a page has its own id
-(random unless the application sets `id_generator`), so several apps on one
-page each read only their own block.
+The first tag is a JSON data block that holds the whole app configuration (the
+prepared manifest, component tags, host selector, and flags). The browser
+never runs it. The second is a module script that asks the already loaded
+runtime to start the app with that id. The form above is what a `document`
+render with a mount prefix gets, because it links the runtime by URL. A page
+rendered without a mount prefix inlines the runtime, so its start script is
+the one line `__citryRuntime.startDocument("APP_ID");`. `startDocument`
+finds the data block whose `data-citry-vue-document` value equals the id,
+requires exactly one such block, reads it with `JSON.parse`, checks that the
+manifest's `appId` matches, and calls `startPrepared` with the result. A
+failed start is reported as an uncaught error on the page. Each app on a page
+has its own id (random unless the application sets `id_generator`), so several
+apps on one page each read only their own block.
 
 The configuration is data rather than a JavaScript object literal because the
 browser reads JSON much faster than it compiles the same text as a script. On
@@ -671,13 +677,37 @@ Both tags carry the request's CSP nonce like Citry's other scripts. The
 browser does not apply CSP to a data block, so the nonce on it is not needed
 for the page to load; the runtime uses it as a check instead. When the
 runtime's own script tag had a nonce, `startDocument` refuses a data block
-whose nonce differs, so markup injected into the page without the nonce
-cannot supply a configuration. In script-integrity mode only the start
-script's hash is listed in `csp_script_hashes`; the data block is not
-executable, so it needs no CSP hash (the per-script records in
-`serialized.security.scripts` still describe it). The start script's text
-holds only the app id, so its hash is cheap to compute and never contains
-page data.
+whose nonce differs, so markup injected into the page without the nonce cannot
+supply a configuration. In script-integrity mode only the start script's hash
+is listed in `csp_script_hashes`; the data block is not executable, so it
+needs no CSP hash (the per-script records in `serialized.security.scripts`
+still describe it). The start script's text holds the app id and, on a mounted
+document, the runtime URL and the `canReload` value described below. It never
+contains page data.
+
+On a mounted document the runtime is linked as `<prefix>/citry.<sha256>.js`
+(section 9.1), and a page rendered before a deploy can name a hash that no
+worker holds any more. The start script there carries the runtime URL and a
+`canReload` value, both written with `script_json`:
+
+- When `window.__citryRuntime` is an own property, it starts the app.
+- Otherwise it reloads the page at most once, and only when `canReload` is
+  `true`, this load is not already a reload, this tab has not already reloaded
+  for the same URL, and a `HEAD` request for the runtime URL answers `404`. In
+  every other case it writes a `console.error` and leaves the server HTML.
+- The server writes `canReload` as `true` only when the app passes
+  `request_method="GET"` or `"HEAD"` (in any letter case) to `serialize()`.
+  Any other method, and a missing one, writes `false`, because reloading a
+  page that answered a form `POST` sends the form again, and Chrome does that
+  without asking.
+- The configuration JSON of a mounted `document` render carries the same
+  `canReload` field, which the runtime reads when a browser plugin script is
+  missing.
+- The script's CSP hash changes when the runtime file changes, and the text
+  has two forms, one for each `canReload` value.
+
+The full rule is [`runtime_hashed_urls.md`](runtime_hashed_urls.md) section
+3.5.
 
 The trust model is that the runtime trusts a data block from the same
 document when its id matches and, under a nonce policy, its nonce matches.
@@ -726,7 +756,8 @@ extension's routes, and `Citry.urls` exposes the combined table:
 <prefix>/cache/<class_id>.<js|css>                # compatibility/current class script
 <prefix>/cache/<class_id>.<content_hash>.<js|css> # immutable class version
 <prefix>/cache/<class_id>.<vars_hash>.<js|css>    # variables script
-<prefix>/citry.js                                 # generated client runtime delivery
+<prefix>/citry.<sha256>.js                        # client runtime, the URL pages link
+<prefix>/citry.js                                 # stable alias of the client runtime
 <prefix>/ext/<extension_name>/...                 # extension-provided routes
 ```
 
@@ -743,12 +774,24 @@ names the current tag (`_OwnedResource.revalidated_response` in
 variables script: its hash covers the `css_data()` values, while the stylesheet
 text around them comes from Citry's code. An `If-None-Match` that names no
 current tag, or a handler run without a request, gets the full file.
-`citry.js` answers with `Cache-Control: no-store`, like the Events runtime it
-shares its bytes with: a copy reused on back/forward navigation could pair a
-page with another runtime and fail its integrity check (content-hashed runtime
-URLs are tracked in #578). A missing class, unknown type, or missing hashed
-entry answers `404` with `Cache-Control: no-store`, because another worker may
-store the entry a moment later.
+Pages link the client runtime as `citry.<sha256>.js`, where `<sha256>` is
+the SHA-256 of the runtime file as 64 lowercase hex characters. That URL
+names the exact bytes, so it answers `immutable` like the other hashed URLs.
+A worker that does not hold the hash reads it from the shared cache when
+`settings.cache` is set. A process that links a hashed runtime URL writes the
+bytes there when the entry is missing, and the entry expires 30 days after
+that write. The stable `citry.js` serves the same bytes with
+`Cache-Control: no-store`, like the Events runtime alias
+`ext/events/runtime.js`: its address stays the same across upgrades, and a
+copy reused on back/forward navigation could pair a page with another runtime
+and fail its integrity check. The design is
+[`runtime_hashed_urls.md`](runtime_hashed_urls.md). A missing class, unknown
+type, missing hashed entry, or unknown runtime hash answers `404` with
+`Cache-Control: no-store`, because another worker may store the entry a
+moment later. The unknown runtime hash, and a missing Events definition or
+stylesheet, also send `Access-Control-Allow-Origin: *`, so a page in a
+sandboxed iframe (every request counts as cross-origin there) can read the
+status of its `HEAD` request.
 
 Handlers stay framework-neutral by keeping the logic out of them: the
 endpoint body is a plain function on the extension,
@@ -861,8 +904,9 @@ So Citry does two things together:
   hint carries the same value as the tag it prepares; with a different value
   the browser ignores the hint and downloads the file again.
 - **The public asset routes answer with `Access-Control-Allow-Origin: *`:**
-  `citry.js`, `cache/...`, `asset/...`, `ext/events/runtime.js`,
-  `ext/events/definitions/...`, `ext/events/assets/...`, and
+  `citry.<sha256>.js`, `citry.js`, `cache/...`, `asset/...`,
+  `ext/events/runtime.js`, `ext/events/definitions/...`,
+  `ext/events/assets/...`, `ext/i18n/runtime.<sha256>.js`, and
   `ext/i18n/runtime.js`. Routes that answer with a Citry-owned file (the
   `_OwnedResource` helper, which holds one URL and its exact bytes) get the
   header automatically; the Events definition and style routes add the same
@@ -904,14 +948,18 @@ Error modes:
   Integrity error and the Vue app does not mount.
 - **Citry's mount sits on another origin that sends no header.** Same as
   above: integrity needs CORS from that host.
-- **A proxy changes the bytes, or a cache serves `citry.js` from an earlier
-  version.** The browser reports a Subresource Integrity error, even on a
-  same-origin page, and the file does not run or apply. A rolling deploy shows
-  the same error when a page from a new process loads `citry.js` from an old
-  one, until the visitor reloads.
-- **A cached page outlives a Citry upgrade.** The page names the old
-  `citry.js` hash at a URL that now serves the new file, so the browser refuses
-  it. The host must clear full-page caches on upgrade.
+- **A proxy changes the bytes, or a cache serves the stable `citry.js` from an
+  earlier version.** The browser reports a Subresource Integrity error, even on
+  a same-origin page, and the file does not run or apply. Pages Citry renders
+  link the hashed runtime URL, which names one version's bytes, so this
+  affects only a page that links the stable URL.
+- **A cached page outlives a Citry upgrade.** The page names the old runtime
+  hash. The browser runs the copy it kept, or a worker serves the old bytes
+  from the shared cache. When neither has it, the server answers `404`, and a
+  page whose app passed `request_method="GET"` reloads once to get fresh HTML.
+  A page cached whole by a CDN or page cache returns the same HTML, stays as
+  server HTML, and does not reload again. The app owner should clear full-page
+  caches on upgrade.
 - **A hook points an owned tag at another URL.** Citry leaves both attributes
   off, because it does not know the bytes at the new URL. With
   `security_script_integrity="citry"`, the same edit to a script raises.

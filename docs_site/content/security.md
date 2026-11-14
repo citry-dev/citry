@@ -1176,7 +1176,8 @@ to these:
   [Third-party scripts](#third-party-scripts) shows for a file from another
   site.
 - A `<script>` or `<link>` tag you write in a layout or template, including
-  a tag you write by hand for `/citry/citry.js`.
+  a tag you write by hand for Citry's runtime, whether it links the URL
+  from `citry.runtime_url()` or `/citry/citry.js`.
 - A tag that an `on_dependencies` hook points at another URL or builds as a
   new `Script` or `Style`, because Citry keeps the file's hash on the
   original object.
@@ -1607,7 +1608,7 @@ they keep.
 
 Subresource Integrity (SRI) makes the browser use a file only when its
 bytes match a hash. Citry adds an `integrity` attribute to the script and
-stylesheet tags it writes for files it serves, such as `/citry/citry.js`.
+stylesheet tags it writes for files it serves, such as its browser runtime.
 You do not need a setting for this. Citry adds no hash to a file you list
 by URL, because it never downloads that file. You can add one yourself, as
 [Third-party scripts](#third-party-scripts) shows.
@@ -1643,9 +1644,19 @@ than `"off"` or `"citry"` raises `ValueError`, both in `Citry(...)` and in
 
 ### Hash each response
 
-The short script that starts an interactive page names an app id that is
-random for each response. Compute the hashes for each response, as for any
-page with inline scripts.
+The script that starts an interactive page names an app id that is
+random for each response. Compute the hashes for each response, as for
+any page with inline scripts.
+
+On a page that links the runtime by URL, the script also names that URL,
+so its hash changes when the runtime file changes. The script then has
+two forms: one for a page whose view passed `request_method` with `GET`
+or `HEAD`, and one for every other page. Take the hash from
+`csp_script_hashes` each time. That script may also send a `HEAD`
+request for the runtime URL when the runtime is missing, so a
+`connect-src` (or `default-src`) that blocks this URL stops the page
+from reloading itself; see
+[Deploy a Citry upgrade](/advanced/web-frameworks/#deploy-a-new-version).
 
 The page's data, such as the rows of a table, is JSON that the browser
 never runs. `csp_script_hashes` leaves it out, because your policy does not
@@ -1668,9 +1679,16 @@ shows a CORS or Subresource Integrity error.
 
 Citry adds `integrity` to the scripts and stylesheets it serves. It writes
 those tags with `crossorigin="anonymous"`, and its file routes answer with
-`Access-Control-Allow-Origin: *`. These routes are `/citry/citry.js`, the
-component JS and CSS, the files a component serves with
-`local_files = "serve"`, and the compiled component code.
+`Access-Control-Allow-Origin: *`. These routes are:
+
+- the browser runtimes at the URLs that pages link, which hold a hash of
+  the file (`/citry/citry.<hash>.js` and
+  `/citry/ext/i18n/runtime.<hash>.js`);
+- the same runtimes at their stable URLs (`/citry/citry.js`,
+  `/citry/ext/events/runtime.js` and `/citry/ext/i18n/runtime.js`);
+- the component JS and CSS;
+- the files a component serves with `local_files = "serve"`;
+- the compiled component code.
 
 A same-origin page needs no CORS header. Two setups make these requests
 cross-origin:
@@ -1690,22 +1708,37 @@ routes do not send it.
 
 ### Keep files unchanged
 
-The browser also refuses a file that changed after Citry sent it, even on a
-same-origin page. The file's hash in the page must match the file:
+The browser refuses a file that changed after Citry sent it, even on a
+same-origin page, because the file's hash in the page must match the
+file. Stop any proxy from minifying these files or adding code to them,
+for every URL under your Citry prefix.
 
-- **A proxy that rewrites files.** Stop the proxy from minifying these files
-  or adding code to them, for every URL under your Citry prefix.
-- **A cache in front of Citry's files.** `/citry/citry.js` keeps its URL
-  across Citry upgrades, and Citry marks it `no-store`. A cache that ignores
-  this keeps serving the old file, so the browser refuses it until you clear
-  the cache.
-- **A cache of whole pages.** A page cached before an upgrade names the old
-  file's hash, so the browser refuses the new `citry.js`. Clear these caches
-  when you upgrade Citry.
-- **A rolling deploy.** A page from one version that loads `citry.js` from
-  another gets a file that does not match. The page's scripts do not start
-  until a reload reaches the same version. This ends when every process
-  runs the new version.
+### Runtimes after upgrades
+
+A page can also end up with an old runtime, or none, after you upgrade
+Citry:
+
+- **A cache in front of Citry's files.** The stable `/citry/citry.js`
+  keeps its URL across Citry upgrades, and Citry marks it `no-store`. A
+  cache that ignores this keeps serving the old file, so a page that
+  links this URL runs the old runtime until you clear the cache. Pages
+  that Citry renders link a URL that changes when the file changes, so
+  they are not affected.
+- **A cache of whole pages.** A page cached before an upgrade names the
+  old runtime's URL. If neither the browser nor the server still has
+  that runtime, the page's interactive components do not start, and a
+  reload returns the same cached page. Clear these caches when you
+  upgrade Citry. See
+  [Deploy a Citry upgrade](/advanced/web-frameworks/#deploy-a-new-version).
+- **A rolling deploy.** While you deploy, some of your app's server
+  processes run the new Citry version and some the old one. A page from
+  one version can ask a process on the other version for its runtime. That
+  process answers from a shared cache if you set one. Without a shared
+  cache it answers `404`, and a page whose view passed `request_method`
+  reloads once. If the reload reaches a process without the file again,
+  the page stays without its interactive components until the visitor's
+  next visit. This ends when every process runs the new version. See
+  [Handle rolling deploys](/advanced/web-frameworks/#rolling-deploys).
 
 ## How we check advisories { #how-we-check }
 

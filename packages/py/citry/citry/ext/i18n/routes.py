@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 from citry._protocol.events import MAX_JSON_DEPTH, JsonNestingError, loads_strict_json
 from citry.util.routing import RouteResponse, URLRoute
 
-from .emission import MESSAGES_PATH, RUNTIME_PATH, client_runtime_resource
+from .emission import I18N_RUNTIME, MESSAGES_PATH, RUNTIME_PATH
 
 if TYPE_CHECKING:
     from citry.util.routing import RouteRequest
@@ -25,7 +25,11 @@ def i18n_routes(extension: I18nExtension) -> list[URLRoute]:
     """Return the browser-runtime and message-partition routes."""
 
     def serve_runtime(_request: RouteRequest) -> RouteResponse:
-        return client_runtime_resource(extension.citry).response()
+        # The stable URL, for pages rendered by older versions.
+        return I18N_RUNTIME.serve_stable()
+
+    def serve_hashed_runtime(_request: RouteRequest, *, digest: str) -> RouteResponse:
+        return I18N_RUNTIME.serve_hashed(extension.citry, digest)
 
     def serve_messages(request: RouteRequest) -> RouteResponse:
         try:
@@ -51,6 +55,15 @@ def i18n_routes(extension: I18nExtension) -> list[URLRoute]:
 
     return [
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_i18n_runtime", methods=("GET",)),
+        # The runtime named by its hash. A digest never holds a dot, so this
+        # pattern never matches `runtime.js`.
+        URLRoute(
+            I18N_RUNTIME.route_path,
+            handler=serve_hashed_runtime,
+            name="citry_i18n_runtime_hashed",
+            methods=("GET",),
+            dotless_params=frozenset({"digest"}),
+        ),
         URLRoute(
             MESSAGES_PATH,
             handler=serve_messages,

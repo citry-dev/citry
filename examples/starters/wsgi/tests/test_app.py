@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pytest
+from app.citry_app import citry_app
 from app.data import Project
 from app.main import application
 
@@ -41,7 +42,8 @@ def test_page_and_citry_runtime_are_served() -> None:
     assert headers["Content-Type"].startswith("text/html")
     assert b"Project Explorer" in page
     assert b"Atlas" in page
-    assert b"/citry/citry.js" in page
+    # The page links the runtime by its hash; the stable URL fetched above stays for hand-written pages.
+    assert citry_app.runtime_url().encode() in page
     assert runtime_status == "200 OK"
     assert runtime_headers["Content-Type"].startswith("text/javascript")
     assert events_status == "200 OK"

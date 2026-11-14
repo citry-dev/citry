@@ -7,7 +7,9 @@ from html.parser import HTMLParser
 
 import pytest
 
-from citry_ui.quality.routes import build_scenario, render_scenario, renderable_scenario_ids
+from citry.ext.dependencies.routes import SHARED_RUNTIME
+from citry.ext.i18n.emission import I18N_RUNTIME
+from citry_ui.quality.routes import _host_runtime_sources, build_scenario, render_scenario, renderable_scenario_ids
 from citry_ui.quality.scenarios import SCENARIOS
 
 _PREPARED_RE = re.compile(
@@ -428,7 +430,20 @@ def test_build_scenario_uses_the_default_mount_for_host_routes() -> None:
     rendered = build_scenario("button.states")
 
     assert rendered.app.mounted_prefix == "/citry"
-    assert 'src="/citry/citry.js"' in rendered.html
+    assert f'src="/citry/{SHARED_RUNTIME.hashed_path}"' in rendered.html
+
+
+def test_host_runtime_sources_cover_hashed_and_stable_runtime_urls() -> None:
+    """Pages link the hashed runtime URLs; the stable ones stay for hand-written tags."""
+    rendered = build_scenario("button.states")
+
+    assert _host_runtime_sources(rendered.app) == {
+        f"/citry/{SHARED_RUNTIME.hashed_path}": SHARED_RUNTIME.content,
+        "/citry/citry.js": SHARED_RUNTIME.content,
+        "/citry/ext/events/runtime.js": SHARED_RUNTIME.content,
+        f"/citry/{I18N_RUNTIME.hashed_path}": I18N_RUNTIME.content,
+        "/citry/ext/i18n/runtime.js": I18N_RUNTIME.content,
+    }
 
 
 def test_build_scenario_self_contained_mode_inlines_assets() -> None:

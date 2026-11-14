@@ -11,6 +11,7 @@ come from packages/protocol/events/v1/tests/.
 
 import asyncio
 import json
+import re
 import time
 import tracemalloc
 from decimal import Decimal
@@ -22,6 +23,7 @@ from citry import Citry, Component
 from citry._vue import events as vue_events
 from citry.contrib.asgi import asgi_app
 from citry.contrib.wsgi import wsgi_app
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 from citry.ext.events import actions, event
 from citry.ext.events import errors as errors_module
 from citry.ext.events import routes as events_routes
@@ -839,6 +841,25 @@ class TestPerEventRoute:
         assert "Hello" in action["html"]
         assert "eventContext" in action["html"]
         assert "citry-vue-" in action["html"]
+
+    def test_a_render_result_loader_links_the_hashed_runtime(self):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        response = _post_call(
+            client,
+            greeter,
+            "save",
+            {"callerRenderId": "i1", "args": {"text": "Hello"}, "stateToken": _token(greeter), "sendSequence": 2},
+        )
+        [action] = response.json()["results"][0]["actions"]
+        url = json.dumps(f"/citry/{SHARED_RUNTIME.hashed_path}")
+        # The page that receives this HTML may not have the runtime yet, so the result carries the loader for it.
+        assert f"s.src = {url};" in action["html"]
+        assert f'console.error("Citry could not load its runtime: " + {url});' in action["html"]
+        assert "/citry/citry.js" not in action["html"]
+        # A fragment never reloads the page it joins, and carries no reload answer.
+        assert "canReload" not in action["html"]
 
     def test_error_statuses_mirror_onto_http(self):
         c = _citry()
@@ -1693,6 +1714,27 @@ class TestRuntimeRoute:
         # The bundle's generated-file banner is its identifying marker
         # (observed from the built file; the versions behind it may move).
         assert "Citry interactive runtime. GENERATED FILE" in response.text
+
+    def test_the_events_url_is_an_alias_of_the_hashed_runtime(self):
+        c = _citry()
+        client = _mounted(c)
+        alias = client.get("/citry/ext/events/runtime.js")
+        hashed = client.get(f"/citry/{SHARED_RUNTIME.hashed_path}")
+        assert alias.status_code == hashed.status_code == 200
+        # One copy of the runtime serves both URLs, so they can never differ.
+        assert alias.content == hashed.content
+        assert alias.headers.get_list("cache-control") == ["no-store"]
+        assert hashed.headers.get_list("cache-control") == ["public, max-age=31536000, immutable"]
+        assert hashed.headers["access-control-allow-origin"] == "*"
+
+    def test_an_events_page_links_the_hashed_runtime_it_can_fetch(self):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+        html = greeter().render().serialize()
+        [url] = re.findall(r'src="(/citry/citry\.[^"]*)"', html)
+        assert url == f"/citry/{SHARED_RUNTIME.hashed_path}"
+        assert client.get(url).status_code == 200
 
 
 class TestImmutableAssetRoutes:

@@ -1125,9 +1125,34 @@ The protocol is transport-neutral. The built-in HTTP transport mounts:
 
 ```text
 POST      <prefix>/ext/events/call
+GET       <prefix>/citry.<sha256>.js
 GET       <prefix>/ext/events/runtime.js
 GET|POST  <prefix>/ext/events/e/{componentClassId}/{handlerName}
 ```
+
+An Events page loads the browser runtime from `<prefix>/citry.<sha256>.js`,
+where `<sha256>` is the SHA-256 of the runtime file as 64 lowercase hex
+characters. The address changes whenever the file does, so the server answers
+it with `Cache-Control: public, max-age=31536000, immutable` and
+`Access-Control-Allow-Origin: *`, which the browser needs to check the tag's
+`integrity`. The Dependencies extension serves this route, and every Citry
+page that loads the runtime by URL links the same address, so the browser
+keeps one copy of the file.
+
+A digest that is not 64 lowercase hex characters, or one the server does not
+hold, gets `404` with an empty body. The answer carries
+`Cache-Control: no-store`, so neither the browser nor a CDN keeps the miss.
+It also carries `Access-Control-Allow-Origin: *`, so a page in a sandboxed
+iframe (every request counts as cross-origin there) can read the status. A
+path with an extra dot matches no route. The ASGI and WSGI apps, and FastAPI
+and Flask through them, answer it with `Not Found` and
+`Cache-Control: no-store`; Django answers with the project's own `404`.
+
+`<prefix>/ext/events/runtime.js` is a stable address for the same bytes. It
+answers `Cache-Control: no-store`, because its address stays the same across
+upgrades. Pages that Citry renders link the hashed address instead. The
+stable address stays for pages rendered by older versions and for apps that
+link the runtime by hand.
 
 The batch route accepts the standard protocol envelope and always uses POST. The
 per-handler route uses the handler's allowed method and mirrors a single error

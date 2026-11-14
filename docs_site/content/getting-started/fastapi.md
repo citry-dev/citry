@@ -142,6 +142,12 @@ def home() -> HTMLResponse:
 document. If you returned the plain string, FastAPI would send it as JSON.
 Your existing routes can return Citry pages the same way.
 
+In a deployed app, use
+`page.render().serialize(request_method=request.method)` instead of
+`str(page)`: after a Citry upgrade, a page recovers by itself only when
+its view passes the request method. See
+[Pass the request method](/advanced/web-frameworks/#pass-the-request-method).
+
 ### Add Citry's routes
 
 The last line adds Citry's own routes to the FastAPI app:
@@ -177,7 +183,8 @@ Visit `http://127.0.0.1:8000/`. You see the choice picker on the
 as it did without a server.
 
 To confirm that Citry's routes work, visit
-`http://127.0.0.1:8000/citry/citry.js`. You should see JavaScript.
+`http://127.0.0.1:8000/citry/citry.js`. You should see JavaScript,
+Citry's browser code.
 
 ## Next steps
 

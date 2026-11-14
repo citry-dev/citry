@@ -15,8 +15,11 @@ CSS and starts it.
 
 The lines to notice:
 
-- The page loads `/citry/citry.js` up front. That script notices the
-  inserted fragment and fetches its JavaScript and CSS.
+- The page loads Citry's runtime up front. The runtime is the
+  JavaScript that starts components in the browser. Its URL comes from
+  [`citry.runtime_url()`][citry.Citry.runtime_url].
+- The runtime notices the inserted fragment and fetches its JavaScript
+  and CSS.
 - The button's script fetches the fragment and sets it as the
   `innerHTML` of an empty element. No other setup is needed.
 - "(JS ran)" appears in the widget once its own script has started.
