@@ -211,6 +211,8 @@ def check() -> list[str]:
                     f"playground {name}={runtime_pyodide.get(name)!r}"
                 )
 
+    errors.extend(pyodide_smoke_pin_errors(REPO_ROOT))
+
     publish = _PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     if publish.count('SOURCE_DATE_EPOCH: "315532800"') != 1:
         errors.append("citry-core qualification must normalize release archive timestamps")
@@ -583,4 +585,37 @@ def _action_pin_errors(where: str, step: dict[str, object], env: dict[str, objec
     # saved cache small and pruned, as it was before that release.
     if str(settings.get("prune-cache")).lower() != "true":
         errors.append(f"{where} must set prune-cache: true on {_UV_ACTION}")
+    return errors
+
+
+def pyodide_smoke_pin_errors(root: Path) -> list[str]:
+    """
+    Report a Pyodide smoke check that would run a different Pyodide than the playground serves.
+
+    The check in `tools/pyodide-smoke` runs the `pyodide` npm package that its
+    `package.json` pins, while the playground serves the Pyodide that
+    `docs_site/static/playground/runtime.json` pins. A pull request that
+    changes only runtime.json does not start the smoke job, because the job's
+    path filter does not list that file, so this check, which runs on every
+    pull request, catches the difference.
+    """
+    errors: list[str] = []
+    runtime_path = root / "docs_site" / "static" / "playground" / "runtime.json"
+    package_path = root / "tools" / "pyodide-smoke" / "package.json"
+    label = package_path.relative_to(root).as_posix()
+    try:
+        runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+        package = json.loads(package_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return [f"could not read the Pyodide pins in {runtime_path.name} and {label}: {error}"]
+    runtime_pyodide = runtime.get("pyodide") if isinstance(runtime, dict) else None
+    runtime_version = runtime_pyodide.get("version") if isinstance(runtime_pyodide, dict) else None
+    dev_dependencies = package.get("devDependencies") if isinstance(package, dict) else None
+    smoke_version = dev_dependencies.get("pyodide") if isinstance(dev_dependencies, dict) else None
+    # Two missing pins would compare equal, so a missing one fails on its own.
+    if runtime_version is None or smoke_version != runtime_version:
+        errors.append(
+            f"{label} pins pyodide {smoke_version!r}, but {runtime_path.name} pins Pyodide {runtime_version!r}; "
+            "change both together, then refresh the lockfile with `pnpm --dir tools/pyodide-smoke install`"
+        )
     return errors

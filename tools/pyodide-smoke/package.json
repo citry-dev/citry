@@ -1,0 +1,11 @@
+{
+  "name": "citry-pyodide-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Imports this checkout's Citry and Citry UI in Pyodide and renders two components. Not published.",
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "devDependencies": {
+    "pyodide": "314.0.3"
+  }
+}

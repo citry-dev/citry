@@ -1,0 +1,48 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      pyodide:
+        specifier: 314.0.3
+        version: 314.0.3
+
+packages:
+
+  '@types/emscripten@1.41.6':
+    resolution: {integrity: sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==}
+
+  pyodide@314.0.3:
+    resolution: {integrity: sha512-sK40My6m8tmBUYtYH9au9rXUeh9x0wfahtHdOlGmJxZDsKBGKtP6KznyFB2+u/klbQTdDionR0uaVd176zVQzQ==}
+    engines: {node: '>=18.0.0'}
+
+  ws@8.23.0:
+    resolution: {integrity: sha512-wCkmX8QMOrKjgO8HW2WyDbTSGeqkocxgDzS9iR79rEAexty6/2qzilx3Ag8Tqf9ykop3irLKle0MtVn5qjVnoQ==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+snapshots:
+
+  '@types/emscripten@1.41.6': {}
+
+  pyodide@314.0.3:
+    dependencies:
+      '@types/emscripten': 1.41.6
+      ws: 8.23.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  ws@8.23.0: {}

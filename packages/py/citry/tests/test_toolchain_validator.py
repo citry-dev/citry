@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 import yaml
 from scripts.validators import toolchain
-from scripts.validators.toolchain import nightly_pin_errors, pinned_action_errors, selected_toolchain_errors
+from scripts.validators.toolchain import (
+    nightly_pin_errors,
+    pinned_action_errors,
+    pyodide_smoke_pin_errors,
+    selected_toolchain_errors,
+)
 
 _REPO = Path(__file__).resolve().parents[4]
 _UV_PIN = json.loads((_REPO / "packages/py/citry_core/pyodide-build.json").read_text())["uv"]
@@ -253,3 +258,66 @@ def test_an_unguarded_skip_existing_fails(tmp_path, monkeypatch):
     monkeypatch.setattr(toolchain, "_PUBLISH_WORKFLOW", workflow)
 
     assert any(_SKIP_MESSAGE in error for error in toolchain.check())
+
+
+_RUNTIME = "docs_site/static/playground/runtime.json"
+_SMOKE_PACKAGE = "tools/pyodide-smoke/package.json"
+
+
+@pytest.fixture
+def pin_root(tmp_path):
+    """A copy of the two files that pin Pyodide, for a test to change one of them."""
+    for relative_path in (_RUNTIME, _SMOKE_PACKAGE):
+        target = tmp_path / relative_path
+        target.parent.mkdir(parents=True)
+        shutil.copy(_REPO / relative_path, target)
+    return tmp_path
+
+
+def _edit_json(path: Path, edit) -> None:
+    data = json.loads(path.read_text())
+    edit(data)
+    path.write_text(json.dumps(data))
+
+
+def test_the_pyodide_smoke_check_runs_the_pyodide_the_playground_serves(pin_root):
+    assert pyodide_smoke_pin_errors(pin_root) == []
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "edit"),
+    [
+        # Either file can move on its own: the playground to a new Pyodide,
+        # or the smoke check's package.
+        (_RUNTIME, lambda data: data["pyodide"].update(version="999.0.0")),
+        (_SMOKE_PACKAGE, lambda data: data["devDependencies"].update(pyodide="999.0.0")),
+        # A range or a missing pin is no pin, so it differs from runtime.json too.
+        (_SMOKE_PACKAGE, lambda data: data["devDependencies"].update(pyodide="^314.0.3")),
+        (_SMOKE_PACKAGE, lambda data: data["devDependencies"].pop("pyodide")),
+        (_SMOKE_PACKAGE, lambda data: data.pop("devDependencies")),
+    ],
+)
+def test_a_pyodide_smoke_check_on_another_pyodide_fails(pin_root, relative_path, edit):
+    _edit_json(pin_root / relative_path, edit)
+    errors = pyodide_smoke_pin_errors(pin_root)
+    assert len(errors) == 1
+    assert "pnpm --dir tools/pyodide-smoke install" in errors[0]
+
+
+def test_two_missing_pyodide_pins_fail(pin_root):
+    # `None` equals `None`, so a check that only compares the two values passes this.
+    _edit_json(pin_root / _RUNTIME, lambda data: data["pyodide"].pop("version"))
+    _edit_json(pin_root / _SMOKE_PACKAGE, lambda data: data.pop("devDependencies"))
+    assert len(pyodide_smoke_pin_errors(pin_root)) == 1
+
+
+def test_the_full_check_reports_a_pyodide_pin_error(monkeypatch):
+    # `check()` must run the pin check; the tests above call it directly.
+    monkeypatch.setattr(toolchain, "pyodide_smoke_pin_errors", lambda _root: ["pins differ"])
+    assert "pins differ" in toolchain.check()
+
+
+def test_unreadable_pyodide_pins_fail(tmp_path):
+    errors = pyodide_smoke_pin_errors(tmp_path)
+    assert len(errors) == 1
+    assert "could not read the Pyodide pins" in errors[0]
