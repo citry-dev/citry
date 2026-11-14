@@ -14,7 +14,9 @@ This document records three decisions:
 3. Treat owner-dispatched foreign compilation, compiled-body rendering, fill
    collection, and provider analysis scopes as part of the supported integration
    surface. A serious adapter cannot safely rebuild those operations from
-   private Citry internals.
+   private Citry internals. For 1.0.0 this surface is marked experimental
+   (the public API audit, `public_api_1_0_0_audit.md`, row 2): it stays
+   public, but may change in a minor release.
 
 Citry core remains unaware of Django, ERB, or any other foreign syntax. A Django
 adapter remains a separate package. The migration outcome matters: a project

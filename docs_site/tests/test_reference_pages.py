@@ -37,9 +37,9 @@ def test_every_reference_page_stays_pending_human_review() -> None:
     assert all("🚧" not in item.title for item in items)
 
 
-def test_public_entrypoints_are_the_three_shapes() -> None:
-    # The public API is exactly three entrypoint shapes: the root package,
-    # each citry.contrib module, and each citry.ext extension package.
+def test_public_entrypoints_are_the_known_modules() -> None:
+    # The public API is the root package, each citry.contrib module, each
+    # citry.ext extension package, and citry.reload.
     assert public_entrypoints() == [
         "citry",
         "citry.contrib.asgi",
@@ -54,6 +54,7 @@ def test_public_entrypoints_are_the_three_shapes() -> None:
         "citry.ext.events",
         "citry.ext.i18n",
         "citry.ext.preview",
+        "citry.reload",
     ]
 
 

@@ -52,6 +52,7 @@ __all__ = [
     "FormatRegistry",
     "I18n",
     "I18nError",
+    "I18nExtension",
     "I18nFormatter",
     "I18nNotConfiguredError",
     "I18nParser",

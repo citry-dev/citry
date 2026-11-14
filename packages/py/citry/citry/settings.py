@@ -199,7 +199,7 @@ _TEMPLATE_RULE_FIELDS = (
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class LintSettings:
     """
     Configure Citry's template and browser lint rules, analysis-only variables, and the render-time input type check.
@@ -633,7 +633,7 @@ class LintSettings:
             raise TypeError(msg)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CitrySettings:
     """
     Immutable settings for a ``Citry`` instance.
@@ -641,6 +641,11 @@ class CitrySettings:
     Every security mode is enforced during serialization. The defaults
     preserve established output; restrictive JavaScript modes inventory,
     omit, or reject client behavior without changing render-cache data.
+
+    Experimental:
+        The `event_result_resolvers` and `event_payload_codecs` settings are
+        experimental. What a resolver or a codec receives and returns may
+        change in a minor release without a deprecation period.
 
     Attributes:
         extensions: The extensions to install on the instance. Each entry is
@@ -827,7 +832,8 @@ class CitrySettings:
             secret is set. Django projects can reuse ``SECRET_KEY``
             and any ``SECRET_KEY_FALLBACKS`` by passing
             ``citry.contrib.django.secret()``.
-        event_result_resolvers: Result resolvers for the Events extension.
+        event_result_resolvers: Experimental. Result resolvers for the Events
+            extension.
             When an event handler returns a value, citry converts it into the
             actions sent back to the browser (the instructions the client
             runtime applies: re-render this component, redirect, and so on).
@@ -836,8 +842,8 @@ class CitrySettings:
             or declines, letting the next resolver try. Resolvers run in
             order, after the built-in conversions; the first one to convert
             the value wins.
-        event_payload_codecs: Payload codecs for the Events extension's HTTP
-            endpoints. A codec reads one request format (identified by its
+        event_payload_codecs: Experimental. Payload codecs for the Events
+            extension's HTTP endpoints. A codec reads one request format (identified by its
             content type) into the event call the extension expects, so
             clients are not limited to the built-in JSON, form, and query
             formats. Codecs given here are tried before the built-in ones, in

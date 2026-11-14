@@ -11,6 +11,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+import citry.reload
 from citry import Citry, Component
 from citry.command import run
 from citry.commands import build_cli
@@ -663,3 +664,18 @@ class TestNativeBackends:
     def test_watchdog_backend_reloads(self, tmp_path):
         pytest.importorskip("watchdog")
         _assert_backend_reloads(tmp_path, WatchdogWatcher())
+
+
+def test_public_names_are_importable():
+    # The hot reload guide teaches these names; each must import from the
+    # module it names.
+    assert sorted(citry.reload.__all__) == [
+        "FileWatcher",
+        "PollingWatcher",
+        "WatchHandle",
+        "WatchdogWatcher",
+        "WatchfilesWatcher",
+        "watch",
+    ]
+    for name in citry.reload.__all__:
+        assert hasattr(citry.reload, name)

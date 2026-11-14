@@ -949,11 +949,12 @@ do. Two things decide how much you can trust a template with:
 
 A statement fails with `SyntaxError` when Citry compiles the template. A
 blocked access fails with [`SecurityError`][citry.SecurityError] only when
-the expression runs:
+the expression runs. To try the sandbox on one expression, call
+[`safe_eval`][citry.safe_eval]. It turns the expression into a function,
+and calling that function with a dict of names runs it:
 
 ```python
-from citry import SecurityError
-from citry_core.safe_eval import safe_eval
+from citry import SecurityError, safe_eval
 
 compiled = safe_eval("f('1+1')")
 try:
@@ -1024,7 +1025,7 @@ To stop templates from calling one of your functions, decorate it with
 blocked the same way:
 
 ```python
-from citry_core.safe_eval import unsafe
+from citry import unsafe
 
 @unsafe
 def delete_account(user):
@@ -1032,7 +1033,8 @@ def delete_account(user):
 ```
 
 A template that calls `delete_account(...)` then fails with
-`SecurityError`.
+`SecurityError`. The mark works only while the sandbox is on: with
+`sandbox_expressions=False`, templates can call the function.
 
 ### Turn the sandbox off { #turning-the-sandbox-off }
 

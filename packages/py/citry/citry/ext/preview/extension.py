@@ -96,6 +96,11 @@ class PreviewExtension(Extension):
     Install with ``Citry(extensions=[PreviewExtension])``. Components configure
     examples through a nested ``Preview`` class. Ordinary application adapters
     receive no routes from this extension.
+
+    Experimental:
+        The preview extension, everything `citry.ext.preview` exports, and
+        the `citry ext run preview` commands are experimental. They may
+        change in a minor release without a deprecation period.
     """
 
     name = "preview"

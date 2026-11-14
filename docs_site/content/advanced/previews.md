@@ -13,6 +13,13 @@ review visual changes. The idea is similar to
 [Storybook](https://storybook.js.org/){: target="_blank" rel="noopener"},
 but simpler.
 
+!!! warning "Experimental"
+
+    Previews are experimental. The extension, the nested `Preview`
+    class, and the commands may change in a minor release without a
+    deprecation period. If your project depends on them, pin one exact
+    Citry version, such as `citry==0.9.0`.
+
 The preview extension adds two commands:
 
 - `serve` runs a local web server with a gallery of your previews.

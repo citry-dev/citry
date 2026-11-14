@@ -20,7 +20,14 @@ _COMPILED_BODY_TOKEN = object()
 
 @dataclass(frozen=True, slots=True, init=False)
 class CompiledBody:
-    """Opaque handle to one already-compiled independent Citry body list."""
+    """
+    Opaque handle to one already-compiled independent Citry body list.
+
+    Experimental:
+        Part of the experimental API for embedding Citry tags in another
+        template engine. It may change in a minor release without a
+        deprecation period.
+    """
 
     _items: tuple[BodyItem, ...]
     _engine_id: str
@@ -75,7 +82,14 @@ def render_compiled_body(
     *,
     variables_overlay: Mapping[str, Any] | None = None,
 ) -> CitryRender:
-    """Render a protected compiled body with a live host-variable overlay."""
+    """
+    Render a protected compiled body with a live host-variable overlay.
+
+    Experimental:
+        Part of the experimental API for embedding Citry tags in another
+        template engine. It may change in a minor release without a
+        deprecation period.
+    """
     from citry.component_render import _render_body, _settle_render  # noqa: PLC0415
 
     if not isinstance(body, CompiledBody):
@@ -101,7 +115,14 @@ def collect_compiled_body_fills(
     *,
     variables_overlay: Mapping[str, Any] | None = None,
 ) -> None:
-    """Collect fills from a host-selected compiled body against a live overlay."""
+    """
+    Collect fills from a host-selected compiled body against a live overlay.
+
+    Experimental:
+        Part of the experimental API for embedding Citry tags in another
+        template engine. It may change in a minor release without a
+        deprecation period.
+    """
     from citry.nodes import collect_fills_from_body  # noqa: PLC0415
 
     if not isinstance(body, CompiledBody):

@@ -48,6 +48,36 @@ CITRY_PACKAGE_DIRS = tuple(
 )
 
 
+class CitryDeprecationWarning(DeprecationWarning):
+    """
+    Warn that your code uses a Citry feature that will be removed.
+
+    Citry uses this class for every deprecation warning: when you call a
+    deprecated function, pass a deprecated argument, or set a deprecated
+    setting. The warning names the line in your code that used the
+    feature and says what to use instead. From 1.0.0 on, a deprecated
+    feature keeps working, and keeps warning, for at least two minor
+    releases and at least three months, and is removed only in a major
+    release.
+
+    It is a subclass of `DeprecationWarning`, so Python shows it by
+    default only in code run as `__main__` and under test runners such
+    as pytest. A web server started some other way does not show it.
+    Turn it into an error in your tests to find every use before you
+    upgrade.
+
+    Example:
+        ```toml
+        # pyproject.toml
+        [tool.pytest.ini_options]
+        filterwarnings = [
+            "error::citry.CitryDeprecationWarning",
+        ]
+        ```
+
+    """
+
+
 def warn_at_caller(message: str, category: type[Warning]) -> None:
     """
     Issue a warning attributed to the first frame outside the citry package.

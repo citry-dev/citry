@@ -354,3 +354,17 @@ def test_an_extension_route_with_several_parameters_in_one_segment_matches_quick
 def test_dotless_params_must_be_a_frozenset_of_names(dotless: object) -> None:
     with pytest.raises(TypeError, match=r"dotless_params=\.\.\.\) must be a frozenset of parameter names"):
         URLRoute("files/{name}.{ext}", handler=_handler, dotless_params=dotless)  # type: ignore[arg-type]
+
+
+def test_route_fields_after_handler_are_keyword_only() -> None:
+    # The path and the handler may be positional; the rest are named, so a
+    # field added later cannot shift what a positional call passes.
+    assert URLRoute("status", _handler).handler is _handler
+    with pytest.raises(TypeError, match="positional"):
+        URLRoute("status", _handler, None)  # type: ignore[misc]
+
+
+def test_route_has_no_extra_field() -> None:
+    # URLRoute takes no `extra=` argument, so passing one raises TypeError.
+    with pytest.raises(TypeError, match="extra"):
+        URLRoute("status", _handler, extra={})  # type: ignore[call-arg]

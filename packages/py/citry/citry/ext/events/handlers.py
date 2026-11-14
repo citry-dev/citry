@@ -20,7 +20,6 @@ import sys
 import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
-from string import Formatter
 from types import FunctionType
 from typing import Any, TypeVar, get_type_hints, overload
 
@@ -52,7 +51,6 @@ CONFIG_NAMES = (
     "_methods",
     "_debounce",
     "_throttle",
-    "_topics",
     "_max_body_bytes",
     "_max_form_fields",
     "_csrf_field_names",
@@ -231,41 +229,6 @@ def validate_callable_value(source: str, value: Any) -> Callable[..., Any] | Non
         return value
     msg = f"{source} must be a callable or None; got {value!r}."
     raise ValueError(msg)
-
-
-def validate_topics_value(source: str, value: Any, state_fields: tuple[str, ...] | None) -> tuple[str, ...]:
-    """
-    Check a ``_topics`` value: topic-name templates formatted from State fields.
-
-    Stored and validated here, consumed by server push later; every
-    ``{placeholder}`` must name a State field of the component.
-    """
-    if isinstance(value, str) or not isinstance(value, (tuple, list)) or not all(isinstance(t, str) for t in value):
-        msg = f'{source} must be a tuple of topic-name templates, e.g. ("project:{{project_id}}",); got {value!r}.'
-        raise ValueError(msg)
-    for template in value:
-        for _, placeholder, _, _ in Formatter().parse(template):
-            if placeholder is None:
-                continue
-            if placeholder == "" or placeholder.isdigit():
-                msg = (
-                    f"{source} template {template!r} uses a positional placeholder;"
-                    f' name a State field instead, e.g. "{{project_id}}".'
-                )
-                raise ValueError(msg)
-            if state_fields is None:
-                msg = (
-                    f"{source} template {template!r} names {placeholder!r}, but the component"
-                    f" declares no State class (topic templates format State fields)."
-                )
-                raise ValueError(msg)
-            if placeholder not in state_fields:
-                msg = (
-                    f"{source} template {template!r} names {placeholder!r}, which is not a State"
-                    f" field. Declared fields: {', '.join(state_fields) or '(none)'}."
-                )
-                raise ValueError(msg)
-    return tuple(value)
 
 
 ################################################

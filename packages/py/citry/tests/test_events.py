@@ -991,7 +991,7 @@ class TestHandlerEnumeration:
             "Component Comp: invalid config field on its nested 'Events' class (the"
             " 'events' extension). '_guardd' is not a recognized Events config attribute;"
             " the recognized names are:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names, _csp_nonce."
             " Did you mean '_guard'?" in str(err.value)
         )
@@ -1570,7 +1570,6 @@ class TestConfigResolution:
         assert info.methods == ("POST",)
         assert info.debounce is None
         assert info.throttle is None
-        assert info.topics == ()
 
     def test_extensions_defaults_level(self):
         def engine_guard(events):
@@ -1687,24 +1686,9 @@ class TestConfigResolution:
 
         assert _events_ext(app).resolve(Comp).methods == ("GET", "PATCH")
 
-    def test_topics_stored_and_validated(self):
-        app = _Citry()
-
-        class Comp(Component):
-            citry = app
-
-            class State:
-                project_id: int
-
-            class Events:
-                _topics = ("project:{project_id}", "global")
-
-                def go(self, state):
-                    return None
-
-        assert _events_ext(app).resolve(Comp).topics == ("project:{project_id}", "global")
-
-    def test_topics_placeholder_must_name_state_field(self):
+    def test_topics_is_not_a_config_attribute(self):
+        # Server push does not exist yet, so a `_topics` declaration would do
+        # nothing; it fails at class definition rather than being ignored.
         app = _Citry()
 
         with pytest.raises(ValueError, match="_topics") as err:
@@ -1714,59 +1698,14 @@ class TestConfigResolution:
 
                 class State:
                     project_id: int
-
-                class Events:
-                    _topics = ("project:{proj_id}",)
-
-                    def go(self, state):
-                        return None
-
-        assert (
-            "Component Comp: Events._topics template 'project:{proj_id}' names 'proj_id',"
-            " which is not a State field. Declared fields: project_id." in str(err.value)
-        )
-
-    def test_topics_placeholder_without_state_rejected(self):
-        app = _Citry()
-
-        with pytest.raises(ValueError, match="_topics") as err:
-
-            class Comp(Component):
-                citry = app
 
                 class Events:
                     _topics = ("project:{project_id}",)
 
-                    def go(self):
-                        return None
-
-        assert (
-            "Component Comp: Events._topics template 'project:{project_id}' names"
-            " 'project_id', but the component declares no State class (topic templates"
-            " format State fields)." in str(err.value)
-        )
-
-    def test_topics_positional_placeholder_rejected(self):
-        app = _Citry()
-
-        with pytest.raises(ValueError, match="positional") as err:
-
-            class Comp(Component):
-                citry = app
-
-                class State:
-                    project_id: int
-
-                class Events:
-                    _topics = ("project:{}",)
-
                     def go(self, state):
                         return None
 
-        assert (
-            "Component Comp: Events._topics template 'project:{}' uses a positional"
-            ' placeholder; name a State field instead, e.g. "{project_id}".' in str(err.value)
-        )
+        assert "'_topics' is not a recognized Events config attribute" in str(err.value)
 
 
 class TestConfigFieldValidation:
@@ -1780,7 +1719,7 @@ class TestConfigFieldValidation:
             "Extension 'events': invalid config field in the 'extensions_defaults'"
             " setting. '_guardd' is not a recognized Events config attribute; the"
             " recognized names are:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names, _csp_nonce."
             " Did you mean '_guard'?" in str(err.value)
         )
@@ -1813,7 +1752,7 @@ class TestConfigFieldValidation:
             " setting. 'refresh' cannot be a global default: unprefixed names on Events"
             " are event handlers, and event handlers are defined on each component's"
             " nested Events class. Only the underscore config can be defaulted globally:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names, _csp_nonce." in str(err.value)
         )
 
@@ -1844,7 +1783,7 @@ class TestConfigFieldValidation:
             " 'events' extension). 'greeting' must be an event handler (unprefixed names"
             " on Events are handlers, and a handler is a plain method defined with"
             " 'def'); got 'hi'. Configuration uses the underscore names:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names, _csp_nonce." in str(err.value)
         )
 
@@ -1889,7 +1828,7 @@ class TestConfigFieldValidation:
             " on Events are handlers, and a handler is a plain method defined with"
             " 'def'); got functools.partial(<built-in function print>, 'hi')."
             " Configuration uses the underscore names:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_body_bytes, _max_form_fields,"
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _max_body_bytes, _max_form_fields,"
             " _csrf_field_names, _csp_nonce." in str(err.value)
         )
 
@@ -2372,7 +2311,6 @@ class TestEventsIntrospection:
 
     def test_publication_excludes_private_events_state_and_queue_configuration(self):
         private_value = "PRIVATE_STATE_VALUE_MUST_NOT_BE_PUBLISHED"
-        private_topic = "private-topic:{token}"
 
         def private_guard(events):
             return None
@@ -2395,7 +2333,6 @@ class TestEventsIntrospection:
                 _guard = private_guard
                 _context = private_context
                 _csrf = private_csrf
-                _topics = (private_topic,)
 
                 @event(guard=private_guard, csrf=private_csrf, latest_wins=True, bundle=False)
                 def publish(self):
@@ -2421,7 +2358,6 @@ class TestEventsIntrospection:
         serialized = json.dumps(publication, sort_keys=True)
         for excluded in (
             private_value,
-            private_topic,
             "private_guard",
             "private_context",
             "private_csrf",
