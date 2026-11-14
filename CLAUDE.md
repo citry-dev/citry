@@ -277,10 +277,65 @@ Citry turns Python values into HTML, CSS, JavaScript, and browser actions, so
 a feature can let data run in the visitor's browser without anyone noticing.
 When a change adds or alters how a value reaches the page (template syntax,
 attribute or tag handling, a keyword argument, an extension hook, a cached
-render, or an Events action), check its security before delivery. First open
-[`docs/security/where-values-reach-the-browser.md`](docs/security/where-values-reach-the-browser.md)
-and note which of the places listed there the change touches; steps 1 to 3
-and the step 4 brief use that list. Then follow these steps:
+render, or an Events action), check its security before delivery. Start by
+noting which of these places the change touches; steps 1 to 3 and the step 4
+brief use that list:
+
+- **Text and markup.** `{{ }}` output, `Markup`, `<c-raw>`, slot content,
+  `v-html` and Vue bindings that set a DOM property, and the HTML a Vue
+  fragment or an Events `Render` action inserts after the page has
+  loaded. HTML that Citry parses and writes again must mean the same
+  after the rewrite.
+- **Attribute names, not only values.** A `c-bind` spread or a Citry UI
+  `attrs=` argument (and the other `*_attrs=` arguments) lets data choose
+  the name. A data-chosen name can add an `on*` handler, set a DOM
+  property such as `innerHTML`, or contain a form feed or other control
+  character, which the browser reads as the end of the name.
+- **URL attributes.** `href`, `src`, `action`, `formaction`, `srcset`,
+  `xlink:href`, the URL in `<meta http-equiv="refresh">`, and the `to`,
+  `from`, `by` or `values` of an SVG `<set>` or `<animate>` that changes a
+  link. A `javascript:` URL runs code, and a `data:` URL can open a
+  document that runs code.
+- **Embedded documents.** An `iframe srcdoc` value, or a `data:` document
+  opened in a frame, by a link or by a form, is a whole page with its own
+  scripts and its own embedded documents.
+- **Tag names.** `<c-element>` and the Citry UI components that take a
+  tag. A data-chosen `script`, `style`, `plaintext` or `iframe` changes
+  how the browser reads the element's content, and `base`, `meta` or
+  `link` changes how the page loads.
+- **CSS.** `css_data()` values, in the stylesheet Citry generates from
+  them and in inline `<style>`, and `:style` bindings. Citry must write
+  them so they read the same under any encoding the page declares.
+- **JavaScript and JSON.** `js_data()`, the JSON Citry writes into
+  `<script>` blocks (Events, i18n and Vue data), Events responses, and any
+  value that ends up in a Vue or `$c-tr` expression the browser compiles.
+- **Translated messages.** A translated message and the values put into
+  it, through `tr()`, `<c-trans>` and the browser i18n runtime.
+- **Markers for Citry's browser code.** Render ids, root markers and
+  hydration markers. Data must not be able to write one.
+- **Addresses and keys the browser code takes from the server.** Fragment
+  and definition scripts, Events request URLs, and State and locale
+  names, which the browser code must look up so that a name such as
+  `__proto__` reaches only its own entry.
+- **Navigation.** `Redirect`, `PushUrl` and `ReplaceUrl`, including the
+  `Location` header on the no-JavaScript form path, which must not hold a
+  control character.
+- **Element `id` and `name`.** Citry's browser code must read `window`,
+  `document` and form members so that a data-chosen `id` or `name` cannot
+  change what it gets.
+- **The CSP nonce.** Every path that gives the page's nonce to a script,
+  including fragments inserted after the page has loaded.
+- **The opt-in output checks** (the `security_csp` and
+  `security_javascript` settings).
+  They must read attribute values and URLs as the browser reads them. A
+  check that reads a value differently lets code through or refuses
+  harmless text.
+- **Responses Citry serves.** `Content-Type` and its charset,
+  `X-Content-Type-Options`, `Cache-Control`, `Content-Disposition` on a
+  `Download`, the text of error bodies, and error output shown in the
+  page, such as the error fallback.
+
+Then follow these steps:
 
 1. **Name who first supplies each new input.** For every value the change
    accepts, say where it first comes from: the template author, the app's
@@ -333,8 +388,8 @@ and the step 4 brief use that list. Then follow these steps:
    after its fix is released and disclosed.
 
 When a review finds a new place where a value reaches the browser, add it to
-that list in the same change, or, for a hole in a released version, when its
-advisory is published.
+the list at the top of this mechanism in the same change, or, for a hole in a
+released version, when its advisory is published.
 
 ## Mechanism 8 - check library code against other frameworks' advisories
 
@@ -494,8 +549,8 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 - **New or changed behavior comes with tests.** Tests are the primary
   evidence the change works and the guard against regressions. Prove each
   rule once, at the boundary that owns it, with representative cases rather
-  than every combination; the full rule is "Design verification" in
-  [`docs/agent/delivery-loop.md`](docs/agent/delivery-loop.md).
+  than every combination (see
+  [Adding a verification step](#adding-a-verification-step)).
 - **Avoid verification and benchmarking rabbit holes.** Match the evidence
   budget to the risk and reversibility of the decision. For UI, content,
   prototypes, and other work that can be inspected and adjusted quickly,
@@ -654,14 +709,129 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 
 ## CI, releases, and new verification steps
 
-Three kinds of work follow the rules in
-[`docs/agent/delivery-loop.md`](docs/agent/delivery-loop.md). Read that
-file before you start any of them:
+### Waiting on CI or release runs
 
-- adding or widening a test suite, validator, generated file, CI job, or
-  release gate;
-- waiting on CI or release runs, or fixing a CI failure;
-- promoting a change to `main` or publishing a release.
+Wake up on the first failure, not when every run has finished. A background
+command that polls `gh run` until every run finishes hides an early failure
+behind the slowest run. So every background command that waits on CI or a
+release must:
+
+- exit as soon as any run or job finishes with a failure, a cancellation, or
+  a timeout; and
+- exit after at most 20 minutes even when nothing has changed, so you wake
+  and check a slow or stuck run (a hung job never fails on its own).
+
+When you wake, read the failed jobs right away, even inside runs that are
+still going (`gh run view <run-id> --job <job-id> --log-failed`). Then start
+a new background command on the runs that are still going, and repeat until
+every run that can still reveal a related failure has finished, or a failure
+already makes waiting for the rest pointless. Use the wait to group the failures and
+reproduce them locally, but still fix them in one pass, as the next section
+describes.
+
+### When CI fails
+
+Do not use CI as a debugger that shows one failure at a time. When CI fails:
+
+1. Inspect every failed job and read each job's complete failure output.
+2. Group failures by root cause before editing.
+3. Reproduce locally where practical.
+4. Fix the complete known failure set in one coherent pass.
+5. Run focused checks for the affected surfaces.
+6. Send the settled candidate through the required full gate.
+
+Do not push a commit for each new symptom while the remaining results can
+still reveal related failures. Wait for those results, then push one
+corrective commit for the whole known set.
+
+### Adding a verification step
+
+Treat the time and maintenance cost of every test, validator, generated file,
+CI job, qualification step, and release gate as part of its design. More
+verification is not automatically better. Before adding or widening one,
+state:
+
+- the concrete user-facing contract or failure it protects;
+- the least expensive boundary that can prove that contract;
+- when it runs and how often;
+- its expected effect on the local feedback loop, ordinary CI, and the
+  release critical path;
+- which existing build output or evidence it can reuse; and
+- which independent work can run concurrently.
+
+Prove an invariant once, at the boundary that owns it. Repeat the proof at
+the unit, integration, distribution, and release layers only when each layer
+can fail in a distinct way. Prefer representative boundary cases over an
+exhaustive cross-product when a parser, type checker, schema, or lower-level
+test already proves the general rule. Remove or combine scaffolding whose
+maintenance and runtime cost outweigh the failure it can catch.
+
+Before implementing a mandatory step expected to add more than one minute to
+the longest routine CI or release path, or any step that creates a publish,
+source-update, and requalification cycle, call out the cost in the plan and
+get the user's explicit agreement. A safety improvement is incomplete when it
+makes routine changes or releases disproportionately slow. Reuse work, narrow
+the proof, move it earlier, or run independent work concurrently until the
+workflow stays practical.
+
+### Promoting and releasing
+
+Before promoting or releasing a large change, map the whole operation: the
+commits to promote, the packages and versions to publish, their dependency
+order, the required local gates, the required CI checks, and the final public
+verification. State any step expected to take significant time.
+
+Prefer one clean release candidate over a chain of incremental release
+commits, and keep these stages separate:
+
+1. Stabilize the complete source change.
+2. Pass the local integration gate.
+3. Promote the settled candidate.
+4. Pass the required exact-SHA CI checks.
+5. Publish packages in dependency order.
+6. Verify each published artifact once from a clean consumer environment.
+7. Run exceptional post-release source updates in one non-blocking batch,
+   only when their values could not be prepared in the qualified candidate.
+
+Repository-wide checks follow the shared-worktree testing practice above.
+Run the required exact-SHA CI gate on the final release candidate. A small
+follow-up reruns the checks its risk requires and any mandatory final gate,
+not unrelated qualification work that already passed.
+
+Prepare every knowable release value and generated surface in the release
+candidate before qualification, including versions, filenames, hashes,
+runtime tuples, and metadata. Change the source after publication only for a
+value the registry assigns that cannot be known beforehand, and keep that
+work off the path to the final tag. Post-release checks confirm that
+registries and deployments serve the qualified bytes; they are not the first
+place package correctness is proved.
+
+Release evidence counts only for the exact set of package versions it
+tested (the package and every dependency it installs), not for a commit that
+once passed locally:
+
+- **Prove the exact dependency closure before the first tag.** The candidate
+  must pass distribution qualification in a clean environment that installs
+  built artifacts, never workspace or editable installs. Resolve an
+  unselected dependency from its public registry. When the dependency is
+  selected in the same release, qualify against wheels built from that exact
+  release commit so independent builds can run concurrently. During
+  promotion, publish and verify the exact files built for the dependency's
+  release candidate before starting the packages that depend on it.
+- **Invalidate stale evidence after a late release correction.** If a
+  package version, dependency constraint, release lock, browser runtime
+  tuple, distribution verifier, or release-coupled test changes after a green
+  gate, stop before tagging. Recalculate the affected package and its
+  dependents, and rerun their focused checks plus every mandatory exact-SHA
+  gate from the corrected state. The earlier full gate is not evidence for
+  files or dependency bytes it did not test.
+- **Keep release-coupled values single-sourced.** Tests must derive versions, ABI
+  tags, and artifact filenames from the owning manifest, runtime manifest, or
+  build metadata, then validate their relationships and immutable public
+  artifacts. A test never repeats the current version or wheel URL as a
+  second literal. When public-registry evidence is required, fetch it in the
+  release workflow and pass it into a deterministic validator; unit tests use
+  synthetic registry payloads instead of network access.
 
 ## House style
 
@@ -780,12 +950,43 @@ abstract framing of the failure mode.)
 
 ## Changelog entries
 
-Each published package owns its `CHANGELOG.md`, which users read to decide
-whether to upgrade. Before you finish any change to code under `crates/` or
-`packages/`, read
-[`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md#write-changelog-entries)
-to decide whether the change needs an entry, which changelog owns it, and how
-to phrase it.
+Each published package owns its `CHANGELOG.md`. The root one belongs only to
+the Python `citry` package; every other package keeps one in its own
+directory, such as `packages/py/citry_core/CHANGELOG.md` or
+`packages/editors/vscode/CHANGELOG.md`. Record each change exactly once, in
+the changelog of the package it affects.
+
+Before you finish any change to code under `crates/` or `packages/`, decide
+whether it needs an entry. Users read the changelog to decide whether to
+upgrade, so the test is: does a user of the package need to know this, or do
+anything differently? If not, leave it out; the commit history records it.
+
+- **Add an entry** when the change is observable from outside the package: a
+  fix to documented or relied-on behavior, a new or changed public API, a
+  behavior or default change, a deprecation, or a performance change a user
+  would notice.
+- **Skip the entry** for internal refactors, test-only changes,
+  CI/tooling/dependency bumps, and docstring/comment edits.
+- **When unsure**, phrase the entry as "you can now ..." or "X no longer
+  happens when you ..." where *you* is an ordinary user of the package. If
+  the only honest *you* is "you, a maintainer", it is not a changelog entry.
+  A batch of internal fixes can still earn one high-level line, such as
+  "various caching leaks fixed".
+
+Write the entry for that user, not by copying the shape of the entries
+around it:
+
+- Lead with the outcome: what users can now do, what behaves differently, or
+  what they must change when upgrading.
+- Keep one user-visible change to one sentence when practical, grouping the
+  related implementation work under it rather than listing every internal
+  type, dependency, or edge case.
+- Name only the APIs and keywords a reader needs to recognize the feature.
+  Exhaustive detail belongs in the commit, issue, or design document.
+- Use a small before/after example when it is faster to read than prose, and
+  show only the lines that change.
+- Give a breaking change enough room for its migration; keep ordinary
+  additions and fixes short enough to scan.
 
 ## Pointers
 
@@ -793,8 +994,6 @@ to phrase it.
 - Cross-crate architecture -> [`docs/agent/INDEX.md`](docs/agent/INDEX.md)
 - Why the rules exist -> [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md)
 - Monorepo dev / build / release -> [`docs/codebase.md`](docs/codebase.md)
-- CI, releases, and new verification steps ->
-  [`docs/agent/delivery-loop.md`](docs/agent/delivery-loop.md)
 - Writing user-facing text ->
   [`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md)
 - Brand assets (the C3 logo, favicons, icons) ->

@@ -102,10 +102,26 @@ During the 0.6.0 release, the agent started one background command that polled
 every CI and release run and exited only once all of them had finished. The
 `Check` workflow and the browser tests on main had already failed, but release
 qualification kept running for another hour, so nobody looked at the failures
-until it ended. The rule in [`delivery-loop.md`](delivery-loop.md) ("Keep
-integration and release loops bounded") followed: a watcher exits on the first
+until it ended. The rule in [`CLAUDE.md`](../../CLAUDE.md#waiting-on-ci-or-release-runs)
+("Waiting on CI or release runs") followed: a watcher exits on the first
 failure and on a timer of at most 20 minutes, and the agent reads failed jobs
 inside runs that are still going.
+
+### Rules behind a pointer went unread
+
+To save tokens, the CI rules, the list of places where a value reaches the
+browser, and the changelog rules once lived in separate files, and
+`CLAUDE.md` told agents to read each file before the task it covers. In the
+13 hours after that change, the first 7 CI waits (all before the problem was
+reported) missed the rule. One background loop waited on every run with no
+time limit and missed hung Windows jobs for about four hours. A CI-fix agent
+whose brief named the CI rules file never opened it. Agents did open such a
+file when a brief named it (6 of 8 for the browser list); none did when no
+brief named it (0 of 5). While the CI rule was in `CLAUDE.md`, 118 of 187 CI
+waits (about 63%) by agents that had it loaded followed it. So a rule that
+has to fire in the middle of a task (while waiting, before finishing, while
+writing a given kind of text) stays in `CLAUDE.md`, and only reference
+material that an agent looks up on purpose lives elsewhere.
 
 ## Token cost of long-running agents
 

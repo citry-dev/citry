@@ -224,47 +224,10 @@ the "Inline comments explain intent" bullet of
 
 ## Write changelog entries
 
-### What belongs in a changelog
-
-Each published package owns its release notes. The root `CHANGELOG.md` belongs
-only to the Python `citry` package. Other packages keep a
-`CHANGELOG.md` in their own package directory, for example
-`packages/py/citry_core/CHANGELOG.md`,
-`packages/py/pygments_citry/CHANGELOG.md`, and
-`packages/editors/vscode/CHANGELOG.md`. Record a release entry exactly once,
-in the changelog owned by that package.
-
-The owning changelog is read by **end users deciding whether to upgrade**, not
-by contributors auditing the diff. The test: *"does a user of the package
-need to know this, or do anything differently?"* If not, leave it out; the
-commit history already records it.
-
-- **Add an entry** when the change is observable from outside the package: a
-  fix to documented or relied-on behavior, a new or changed public API, a
-  behavior or default change, a deprecation, or a performance change a user
-  would notice.
-- **Skip the entry** for internal refactors, test-only changes,
-  CI/tooling/dependency bumps, and docstring/comment edits.
-- **When unsure**, try to phrase the entry as "you can now ..." or "X no
-  longer happens when you ..." where *you* is an ordinary user of the
-  package. If the only honest *you* is "you, a maintainer", it is not a
-  changelog entry. (A batch of internal fixes can still earn one high-level
-  line, such as "various caching leaks fixed", without detail.)
-
-### How to write a changelog entry
-
-- Lead with the outcome: what users can now do, what behaves differently, or
-  what they must change when upgrading.
-- Keep one user-visible change to one sentence when practical. Group related
-  implementation work under that sentence instead of listing every internal
-  capability, type, dependency, or edge case.
-- Use only the API names and keywords a reader needs to recognize the affected
-  feature. Put exhaustive technical detail in the commit, issue, or design
-  document.
-- Use a small before/after example when it communicates the difference faster
-  than prose. Show only the lines that change.
-- Give breaking changes enough space for the required migration. Ordinary
-  additions and fixes should remain easy to scan in the full release list.
+What goes in a changelog, which package's changelog owns an entry, and how
+to phrase it are operating rules for every code change, so they live in
+[`CLAUDE.md`](../../CLAUDE.md#changelog-entries). Word the entry by the rest
+of this guide, as you would any other user-facing text.
 
 ## Before and after
 

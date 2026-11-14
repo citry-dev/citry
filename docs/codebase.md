@@ -1872,16 +1872,9 @@ the release history for the package they are deciding whether to upgrade, and
 one change is not duplicated across unrelated release streams. Internal crates
 and monorepo infrastructure do not need user-facing release notes.
 
-Use clear user-facing language, include migration instructions for breaking
-changes, and link relevant issues when helpful. Record each release exactly
-once in its owning changelog. The content test and exclusions are defined in
-[`docs/best-practices/writing-docs.md`](best-practices/writing-docs.md#what-belongs-in-a-changelog).
-
-Write each item as one outcome-first sentence when practical. Group related
-implementation work, keep only the API names and keywords users need, and use
-a small before/after example when it is faster to understand than prose.
-Breaking migrations may be longer. The complete writing rules live in
-[`docs/best-practices/writing-docs.md`](best-practices/writing-docs.md#how-to-write-a-changelog-entry).
+What goes in an entry and how to write it are in
+[`CLAUDE.md`](../CLAUDE.md#changelog-entries); link relevant issues when
+helpful.
 
 ## Versioning, tags and releases
 
