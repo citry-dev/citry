@@ -19,6 +19,8 @@ import dataclasses
 import datetime
 import decimal
 import enum
+import functools
+import gc
 import ipaddress  # noqa: TC003 - Pydantic reads the test classes' annotations at run time
 import json
 import logging
@@ -32,7 +34,7 @@ import tracemalloc
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, cast, get_args
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, ref
 
 import pydantic
 import pydantic.dataclasses
@@ -78,8 +80,8 @@ class _HandClock:
 @pytest.fixture
 def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     # A test of the work budget needs data deep enough for the budget to run
-    # out before the nesting limit stops it. These tests were sized for a
-    # limit of 100, which the stack of a check thread holds many times over.
+    # out before the nesting limit stops it, so these tests raise the limit
+    # to 100, which the stack of a check thread holds many times over.
     monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 100)
 
 
@@ -787,6 +789,125 @@ def test_check_threads_are_os_threads_when_threading_is_replaced_after_import(
     monkeypatch.setattr(bounded, "_CHECK_THREADS", bounded._CheckThreads())
 
     assert bounded.run_on_check_thread(bounded.on_check_thread) is True
+
+
+def test_a_check_thread_lets_go_of_the_request_data_once_the_check_returns() -> None:
+    # A kept check thread can sit idle for a long time, so it must not keep
+    # the last request's data, context or result alive.
+    class Payload:
+        pass
+
+    held: contextvars.ContextVar[Payload | None] = contextvars.ContextVar("held", default=None)
+    pool = bounded._CheckThreads()
+    payload, in_context = Payload(), Payload()
+    gone = [ref(payload), ref(in_context)]
+
+    def check(data: Payload) -> Payload:
+        return data
+
+    def first_check(data: Payload, kept: Payload) -> None:
+        held.set(kept)
+        assert pool.run(functools.partial(check, data)) == (True, data)
+
+    contextvars.copy_context().run(first_check, payload, in_context)
+    del payload, in_context
+    gc.collect()
+
+    assert [alive() for alive in gone] == [None, None]
+    assert pool.count == 1
+
+
+def test_a_check_keeps_its_outcome_when_the_thread_loop_fails_after_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Broken:
+        def __bool__(self) -> bool:
+            msg = "broken queue"
+            raise RuntimeError(msg)
+
+    pool = bounded._CheckThreads()
+    # The thread reads the queue after the check, so its loop fails there.
+    pool.queue = cast("Any", Broken())
+    logged: list[object] = []
+    monkeypatch.setattr(bounded.logger, "exception", lambda *args, **_: logged.append(args[0]))
+
+    assert pool.run(lambda: "checked") == (True, "checked")
+    # The failed thread gives its place back for the next check.
+    assert pool.count == 0
+    assert not pool.idle
+    assert logged == ["Citry's check thread stopped unexpectedly."]
+
+
+def test_a_failure_to_set_the_stack_size_back_is_logged(monkeypatch: pytest.MonkeyPatch) -> None:
+    sizes = iter([0])
+    logged: list[object] = []
+
+    def stack_size(size: int = 0) -> int:
+        # The first call sets the size; the call that sets it back fails.
+        for previous in sizes:
+            return previous
+        msg = "stack size"
+        raise ValueError(msg)
+
+    pool = bounded._CheckThreads()
+    pool.stack_size = stack_size
+    monkeypatch.setattr(bounded.logger, "exception", lambda *args, **_: logged.append(args[0]))
+
+    # The thread started, so the check runs there and is not run again.
+    succeeded, ran_on = cast("tuple[bool, int]", pool.run(threading.get_ident))
+    assert succeeded
+    assert ran_on != threading.get_ident()
+    assert len(logged) == 1
+    assert "stack size back" in str(logged[0])
+
+
+_HANDLER_DUMPS_DATA_AT_THE_LIMIT_ON_A_HALF_MEGABYTE_THREAD = r"""
+from __future__ import annotations
+
+import threading
+from typing import Optional
+
+import pydantic
+
+from citry.ext.events import _pydantic_bounded as bounded
+
+
+class Node(pydantic.BaseModel):
+    c: Optional[Node] = None
+
+
+done = []
+
+
+def handler():
+    node = None
+    for _ in range(bounded.MAX_CHECK_DEPTH):
+        node = Node(c=node)
+    node.model_dump()
+    node.model_dump_json()
+    done.append(True)
+
+
+threading.stack_size(512 * 1024)
+thread = threading.Thread(target=handler)
+thread.start()
+thread.join()
+assert done == [True]
+"""
+
+
+def test_a_handler_can_write_out_data_at_the_limit_on_a_half_megabyte_thread() -> None:
+    # The handler gets the checked data on the server's own thread, so the
+    # nesting limit must leave room there; the docs tell servers to give
+    # request threads at least 512 KiB. A process of its own, since too
+    # little room ends the process.
+    done = subprocess.run(
+        [sys.executable, "-c", _HANDLER_DUMPS_DATA_AT_THE_LIMIT_ON_A_HALF_MEGABYTE_THREAD],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
 
 
 def test_only_a_refusal_of_the_whole_json_text_counts_as_too_deep() -> None:
@@ -3915,7 +4036,8 @@ class Tree(Component):
             state.tree = Node(c=state.tree)
 
         def render(self, state):
-            return actions.Render(Tree(tree=state.tree))
+            # Plain data, so Citry builds and checks the nodes for the render.
+            return actions.Render(Tree(tree=value))
 
     template = '''
       <div>x</div>

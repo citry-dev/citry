@@ -574,7 +574,7 @@ class EventsExtension(Extension):
 
     def _build_state_value(self, component: Component, state_cls: type) -> Callable[[], Any]:
         """
-        Return a function that returns State: from ``state_data()``, a dict of its fields, or same-named kwargs.
+        Return a function that builds State from what ``state_data()`` returns, or from same-named kwargs.
 
         ``state_data()`` is the app's own code and runs here, on the render's
         thread. Building the State class from values runs when the function

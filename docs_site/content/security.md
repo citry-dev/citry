@@ -527,8 +527,8 @@ Your handler gets the checked data on your server's own thread. Code of
 yours that walks it level by level, such as `model_dump()` on a model
 that holds a model on each level, needs room on that thread's stack: on
 macOS with Python 3.14, about 100 levels fit in 512 KiB, so data at the
-limit leaves a margin of about 1.6x there, while 128 KiB (musl's
-default for threads) fits only about 22. If your server's request
+limit fits with room to spare, while 128 KiB (the default on musl Linux
+such as Alpine) fits only about 22. If your server's request
 threads have less than 512 KiB, call `threading.stack_size()` before
 the server starts them. It applies only to threads Python starts after
 the call:
@@ -541,13 +541,16 @@ threading.stack_size(512 * 1024)
 
 Citry checks the data on a thread of its own with a 16 MiB stack, so the
 limit is the same whatever stack size your server gives its threads.
-Citry also builds State, writes it out for its token, and compares it
-there. Your request thread waits each time Citry hands work to such a
-thread, which takes about 10 microseconds (measured on macOS); a call
-that writes State does this about a dozen times. Citry starts these
-threads when checks need them, keeps up to two idle, and runs at most
-32 per server process; a check that finds all 32 busy waits for one to
-finish its current check. On Windows, each thread's 16 MiB counts
+Citry also builds State for a render, writes State out for its token,
+and checks State a handler changed, all on those threads. Your request
+thread waits each time Citry hands work to such a thread, which takes
+about 10 to 40 microseconds (measured on macOS); a call that writes
+State does this about a dozen times. Citry starts these threads when
+checks need them, keeps up to two idle, and runs at most 32 per server
+process; a check that finds all 32 busy waits for one to finish its
+current check. A validator that waits for the network or a database
+keeps its thread busy while it waits, so slow validators can make other
+checks and renders wait. On Windows, each thread's 16 MiB counts
 toward the system's memory commit limit while the thread lives.
 
 Your validators, serializers and `__post_init__` methods run on that
@@ -556,7 +559,7 @@ can read the request's context variables (`contextvars`), but a value
 your code stores with `threading.local` is unset there, and a context
 variable that a validator sets does not reach your handler. A validator
 that uses Django's database gets the check thread's own connection,
-which does not see rows the request wrote inside an unfinished
+which stays open while the thread lives and does not see rows the request wrote inside an unfinished
 transaction, and a write from it waits for that transaction. A
 validator must not wait for a lock that the request's thread holds.
 Under gevent or eventlet the check runs on a real thread, so other

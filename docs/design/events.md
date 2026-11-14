@@ -2035,7 +2035,7 @@ Error modes:
           variable changes and `threading.local` values stay on the check
           thread. The caller waits on a lock, so a check from an event
           loop blocks the loop for the length of the check, plus the
-          hand-over (about 6 to 10 microseconds on macOS) and any wait
+          hand-over (about 10 to 40 microseconds on macOS) and any wait
           in the queue (next point).
         - At most `MAX_CHECK_THREADS` (32) exist; a call past that
           waits in a queue for the next free thread. Citry keeps two
@@ -2079,7 +2079,7 @@ Error modes:
       answer, as data past the nesting limit does.
     - Depths that fit, counted by the nesting limit alone: a model
       with one nested model per level and a discriminated tree about
-      62 levels, the model-and-field wrap shape about 21, and a union
+      60 levels, the model-and-field wrap shape about 21, and a union
       without a discriminator about 15, where the work budget stops it.
     - What cannot absorb the refusal: a part of the schema that drops an
       item on any error, such as `OnErrorOmit`. The tally records the

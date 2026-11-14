@@ -174,17 +174,15 @@ cpu_clock = _choose_cpu_clock()
 # passes through counts one, and so does each union whose members can read
 # it. Data that nests deeper is refused with TOO_DEEP_MESSAGE. Each level
 # takes room on the thread's stack, so the limit keeps a check within a
-# fixed amount of it. Checks run on check threads with a stack of
-# CHECK_STACK_BYTES (see `run_on_check_thread`), and the limit is sized so
-# data at the limit, in the shapes that measured heaviest per level, is
-# checked in half of that. The test with an 8 MiB check thread checks
-# those shapes. The heaviest, a wrap validator on a model and another on
-# its field, measured about 14 KB per level on macOS with Python 3.11, so
-# data at the limit needs about 0.9 MiB. The check thread could hold far
-# more; the limit is lower because the handler gets the checked data on
-# the server's own thread, where a handler that calls `model_dump()` on a
-# chain of models fits about 100 levels in 512 KiB (macOS, Python 3.14).
-# 64 leaves a margin of about 1.6x there.
+# fixed amount of it. Two stacks bound the limit. Checks run on check
+# threads with a stack of CHECK_STACK_BYTES (see `run_on_check_thread`),
+# which hold far more than 64 levels: the heaviest shape measured, a wrap
+# validator on a model and another on its field, takes about 14 KB per
+# level on macOS with Python 3.11, so data at the limit needs about
+# 0.9 MiB. The tighter bound is the handler, which gets the checked data on
+# the server's own thread: a handler that calls `model_dump()` on a chain
+# of models fits about 100 levels in 512 KiB (macOS, Python 3.14), so 64
+# leaves room to spare there.
 MAX_CHECK_DEPTH = 64
 # The nesting limit for a check that runs on a thread whose stack Citry did
 # not choose, which happens only where no check thread can start (see
@@ -2621,25 +2619,37 @@ def _os_thread_functions() -> tuple[Callable[..., Any], Callable[[], Any], Calla
 class _Job:
     """One call to run on a check thread, and what it returned or raised."""
 
-    __slots__ = ("call", "context", "done", "outcome")
+    __slots__ = ("call", "context", "done", "outcome", "ran")
 
     def __init__(self, call: Callable[[], Any], allocate_lock: Callable[[], Any]) -> None:
-        self.call = call
+        self.call: Callable[[], Any] | None = call
         # The caller's context variables (the request's work budget, the
         # running validation's tally, and the app's own), copied so the call
         # sees what it would see on the caller's thread.
-        self.context = contextvars.copy_context()
+        self.context: contextvars.Context | None = contextvars.copy_context()
         # Held until the call ends; the caller waits by acquiring it.
         self.done = allocate_lock()
         self.done.acquire()
-        self.outcome: tuple[bool, Any] = (False, None)
+        self.outcome: tuple[bool, Any] | None = (False, None)
+        # Whether the call ran, so a failure in the thread's own loop
+        # afterwards does not replace the call's outcome.
+        self.ran = False
 
     def run(self) -> None:
         """Run the call and keep its outcome; the check thread then wakes the caller (see `_CheckThreads._serve`)."""
+        call, context = self.call, self.context
+        # A check thread keeps its last job until the next one arrives, and
+        # an idle thread can wait a long time, so the job lets go of the
+        # request's data and context here rather than keep them alive.
+        self.call = self.context = None
         try:
-            self.outcome = (True, self.context.run(self.call))
+            if call is None or context is None:
+                msg = "Citry ran a check twice."
+                raise RuntimeError(msg)
+            self.outcome = (True, context.run(call))
         except BaseException as error:  # noqa: BLE001 - handed to the waiting caller, which raises it
             self.outcome = (False, error)
+        self.ran = True
 
 
 class _Idle:
@@ -2693,7 +2703,10 @@ class _CheckThreads:
                         return None
                     self.queue.append(job)
         job.done.acquire()
-        return job.outcome
+        # The check thread holds on to the job until its next one, so the
+        # job lets go of the result once the caller has it.
+        outcome, job.outcome = job.outcome, None
+        return outcome
 
     def _hand(self, job: _Job) -> bool:
         """Hand ``job`` to an idle thread, with ``self.lock`` held, and say whether there was one."""
@@ -2717,7 +2730,10 @@ class _CheckThreads:
                 # A platform without a settable stack size.
                 return False
             try:
-                self.start_thread(self._serve, (job,))
+                # The thread keeps its start arguments while it lives, so it
+                # gets the job through a list it empties, which then holds
+                # no request data.
+                self.start_thread(self._serve, ([job],))
             except Exception:  # noqa: BLE001 - the job is left to the caller
                 # A platform without threads (Pyodide sets the stack size but
                 # starts no thread), or a process at its thread limit.
@@ -2725,12 +2741,19 @@ class _CheckThreads:
             finally:
                 # The thread may have started, so a failure to put the size
                 # back must not hand the job to the caller as well.
-                with suppress(Exception):
+                try:
                     self.stack_size(previous)
+                except Exception:  # noqa: BLE001 - logged, since the started thread already has the job
+                    logger.exception(
+                        "Citry could not set the thread stack size back after starting a check thread, so "
+                        "threads the process starts from now on get a stack of %d bytes.",
+                        CHECK_STACK_BYTES,
+                    )
         return True
 
-    def _serve(self, job: _Job) -> None:
-        """Run jobs on this check thread until it has waited idle too long."""
+    def _serve(self, first: list[_Job]) -> None:
+        """Run jobs on this check thread, starting with the one in ``first``, until it has waited idle too long."""
+        job = first.pop()
         ident = self.get_ident()
         idle: _Idle | None = None
         # The job whose caller still waits for it, if any.
@@ -2767,6 +2790,11 @@ class _CheckThreads:
                             ended = True
                             return
                 job = next_job
+        except Exception:  # noqa: BLE001 - logged; the callers still waiting get an error below
+            # A job's own errors go to its caller, so this is a fault in
+            # the loop; log it here rather than leave it to the thread's
+            # default error printer.
+            logger.exception("Citry's check thread stopped unexpectedly.")
         finally:
             self.idents.discard(ident)
             if not ended:
@@ -2781,7 +2809,8 @@ class _CheckThreads:
                     handed = idle.job if idle is not None else None
                 for left in (waiting, handed):
                     if left is not None:
-                        left.outcome = (False, RuntimeError("Citry's check thread ended before the check ran."))
+                        if not left.ran:
+                            left.outcome = (False, RuntimeError("Citry's check thread stopped unexpectedly."))
                         with suppress(RuntimeError):
                             left.done.release()
 
@@ -2815,9 +2844,8 @@ def run_on_check_thread(function: Callable[..., Any], /, *args: Any, **kwargs: A
     validators. Each nested call takes room on the thread's stack, and the
     server's own threads can have little of it: Windows gives a thread
     1 MB, and a thread Python did not start keeps the size its creator
-    chose. Running every check on a thread with a
-    fixed large stack lets the nesting limit be high and the same
-    everywhere.
+    chose. Running every check on a thread with a fixed large stack lets
+    the nesting limit be the same everywhere.
 
     The call sees the caller's context variables, and what it raises
     reaches the caller with its traceback. The call does not see values
@@ -2842,6 +2870,9 @@ def run_on_check_thread(function: Callable[..., Any], /, *args: Any, **kwargs: A
     if tally is not None and tally.budget is not None:
         # The validation's clock runs on the caller's thread, which only
         # waits, so the check thread counts the CPU time it spends itself.
+        # Where `cpu_clock` is the process or wall clock (see
+        # `_choose_cpu_clock`), the caller's clock counts that time as
+        # well, which can only stop the request sooner.
         call = functools.partial(_clocked, tally.budget, call)
     outcome = _CHECK_THREADS.run(call)
     if outcome is None:
