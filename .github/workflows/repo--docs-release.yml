@@ -16,8 +16,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Snapshot builds compile citry-core with the workspace MSRV, the compiler
-  # the published wheels use; the toolchain validator checks this pin.
+  # The tagged snapshot build compiles citry-core with the minimum supported
+  # Rust version, the compiler the published wheels use; the toolchain
+  # validator checks this pin. The shared wheel build ignores this variable
+  # and uses the compiler in rust-toolchain.toml.
   RUSTUP_TOOLCHAIN: "1.97.0"
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"
@@ -67,8 +69,11 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Rust is needed because `uv sync` builds the citry_core extension through
-      # the maturin backend, and the docs import `citry`, which depends on it.
+      # `build-tag` below syncs the tagged checkout in its own worktree and
+      # environment, which compiles that tag's citry_core extension, so this
+      # job installs Rust 1.97.0 and sccache for that build. The Rust cache
+      # step saves only this checkout's target folder, which holds the
+      # shared wheel build when the wheel cache missed.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
@@ -84,13 +89,33 @@ jobs:
           add-job-id-key: false
           cache-on-failure: true
 
+      # The checkout of main installs the shared citry-core wheel, built from
+      # these exact Rust sources by an earlier run when one exists. The Rust
+      # cache step above already saves the target folder. The empty
+      # RUSTUP_TOOLCHAIN lets the wheel build install and log the compiler
+      # in rust-toolchain.toml instead of the 1.97.0 pin above.
+      - name: Restore or build the citry-core wheel
+        id: core
+        uses: ./.github/actions/citry-core-wheel
+        env:
+          RUSTUP_TOOLCHAIN: ""
+        with:
+          cache-rust: "false"
+
       # `social-cards` adds Playwright so the per-page OG images render during the
       # snapshot preparation. The site imports Citry and Citry UI, but not
       # the LSP workspace package.
+
       - name: Install the workspace with docs + social-card extras
+        env:
+          CORE_WHEEL_DIR: ${{ steps.core.outputs.wheel-dir }}
+          CORE_WHEEL_CACHE_KEY: ${{ steps.core.outputs.cache-key }}
         run: >-
-          uv sync --locked --package citry-monorepo --package citry
-          --package citry-ui --extra docs --extra social-cards --group e2e
+          python scripts/citry_core_wheel.py install
+          --wheel-dir "$CORE_WHEEL_DIR"
+          --cache-key "$CORE_WHEEL_CACHE_KEY"
+          -- --package citry-monorepo --package citry --package citry-ui
+          --extra docs --extra social-cards --group e2e
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
