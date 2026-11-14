@@ -519,6 +519,19 @@ def test_manifest_rejects_duplicate_aliases_reserved_names_and_identities():
     with pytest.raises(ValueError, match="reserved name 'cache'"):
         ComponentLibrary("reserved", (Cache,))
 
+    class Transition(LibraryComponent):
+        template = "planned"
+
+    with pytest.raises(ValueError, match="reserved name 'transition'"):
+        ComponentLibrary("planned", (Transition,))
+
+    class Planned(LibraryComponent):
+        name = "lazy"
+        template = "planned"
+
+    with pytest.raises(ValueError, match="reserved name 'lazy'"):
+        ComponentLibrary("planned", (Planned,))
+
     DuplicateFooBar = type(
         "FooBar",
         (LibraryComponent,),

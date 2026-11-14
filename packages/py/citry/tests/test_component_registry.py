@@ -1272,6 +1272,51 @@ class TestDuplicateDetection:
                 citry = c
                 name = reserved_name
 
+    @pytest.mark.parametrize("future_name", ["lazy", "teleport", "transition", "suspense"])
+    def test_future_tag_name_raises_for_explicit_name(self, future_name):
+        c = Citry()
+
+        with pytest.raises(AlreadyRegistered, match=rf"future built-in <c-{future_name}> tag"):
+
+            class Planned(Component):
+                citry = c
+                name = future_name
+
+        assert not c.has(future_name)
+
+    def test_future_tag_name_raises_for_class_name(self):
+        c = Citry()
+
+        # The class name is lowercased into the registry name, so `Teleport`
+        # claims `teleport` without an explicit `name`.
+        with pytest.raises(AlreadyRegistered, match=r"future built-in <c-teleport> tag"):
+
+            class Teleport(Component):
+                citry = c
+
+        assert not c.has("teleport")
+
+    def test_future_tag_name_raises_for_alias(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+        # Aliases are normalized to lowercase before the check.
+        with pytest.raises(AlreadyRegistered, match=r"future built-in <c-suspense> tag"):
+            c.register(Card, "Suspense")
+
+        assert c.get("card") is Card
+        assert not c.has("suspense")
+
+    def test_names_containing_a_future_tag_name_are_allowed(self):
+        c = Citry()
+
+        class LazyCard(Component):
+            citry = c
+
+        assert c.get("lazy-card") is LazyCard
+
 
 class TestNameValidation:
     def test_valid_names(self):

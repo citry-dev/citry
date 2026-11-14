@@ -433,10 +433,12 @@ tags**. `docs_site/reference.yml` is the authoritative list. Scope is
   the generated page pass skips this path so the authored HTML, companion,
   metadata, sitemap record, and LLM projection remain consistent. The dev
   server makes the same distinction. The `builtin_tags` guard compares the
-  page with `BUILTIN_COMPONENT_NAMES | STRUCTURAL_TAG_NAMES`, checks all 15
-  anchors, and verifies that every runtime-backed entry resolves. The same
-  category list supplies cross-references and `objects.inv` entries for all 15
-  tags.
+  page with `BUILTIN_COMPONENT_NAMES | STRUCTURAL_TAG_NAMES`, checks one
+  anchor for each of those built-in tags, and verifies that every
+  runtime-backed entry resolves. The same category list supplies
+  cross-references and `objects.inv` entries for every built-in tag. The
+  current list of built-in tag names is in
+  [`template_grammar.md`](template_grammar.md#built-in-tag-names).
 - *Slice 3c (done):* `crossrefs.py` - `[text][symbol]` resolution wired into
   both the content pipeline and docstring rendering (`reference._md`), with
   absolute reference URLs, the `[text][]` shorthand, and member anchors. On

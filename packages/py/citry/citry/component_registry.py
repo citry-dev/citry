@@ -38,6 +38,18 @@ STRUCTURAL_TAG_NAMES: Final = frozenset(name.removeprefix("c-") for name in RESE
 """Names the template parser interprets directly instead of resolving through
 the component registry. Single-sourced from the Rust parser."""
 
+FUTURE_TAG_NAMES: Final = frozenset({"lazy", "teleport", "transition", "suspense"})
+"""Names kept free for built-in tags that Citry plans to add.
+
+Registering a component under one of them fails now, so adding the tag in a
+1.x release cannot clash with an existing user component. The full list of
+reserved names is in ``docs/design/template_grammar.md`` ("Reserved names and the 1.x freeze").
+"""
+
+RESERVED_COMPONENT_NAMES: Final = STRUCTURAL_TAG_NAMES | BUILTIN_COMPONENT_NAMES | FUTURE_TAG_NAMES
+"""Every name a user component cannot take: the structural tags, the
+built-in components, and the planned built-in tags."""
+
 
 class AlreadyRegistered(Exception):
     """Raised when registering a component under a name that is already taken."""
@@ -157,6 +169,14 @@ class _ComponentRegistry:
                 raise AlreadyRegistered(
                     f"Cannot register {comp_cls.__name__!r} as {n!r}: "
                     f"the name is reserved for the built-in <c-{n}> component."
+                )
+
+            # A planned tag gets the same refusal as a built-in one, so a user
+            # who picked the name learns now rather than when the tag ships.
+            if n in FUTURE_TAG_NAMES:
+                raise AlreadyRegistered(
+                    f"Cannot register {comp_cls.__name__!r} as {n!r}: "
+                    f"the name is reserved for a future built-in <c-{n}> tag."
                 )
 
             if is_builtin and n not in BUILTIN_COMPONENT_NAMES:

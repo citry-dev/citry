@@ -90,6 +90,16 @@ does. The upgrade notes below list what can change.
   per process. A cache backend error therefore fails the render. Citry
   calls the backend's `set` with `ttl=` as a keyword argument, so a custom
   backend's `set` must accept it under that name.
+- **Rename a component called `lazy`, `teleport`, `transition` or
+  `suspense`:** Citry keeps these names for built-in tags it plans to
+  add, so a component class named `Teleport`, or one given one of these
+  names through `name` or `register()`, now raises `AlreadyRegistered`
+  when it is defined or registered.
+  A component library that contains one raises `ValueError`. Rename it,
+  for example to `TeleportTarget`, and update the tags in your
+  templates. Longer names that contain one of these words, such as
+  `LazyCard`, still work
+  ([reserved names](https://citry.dev/reference/builtins/#reserved-names)).
 - **Event data checked as a plain class or dataclass now has the 64-level
   nesting limit:** when an event's `data` class is a plain class, a
   dataclass or a Pydantic dataclass, data that nests more than 64 of its
