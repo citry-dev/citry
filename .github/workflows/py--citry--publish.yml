@@ -53,7 +53,7 @@ env:
 
 jobs:
   verify-version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.package-version.outputs.version }}
     steps:
@@ -77,7 +77,7 @@ jobs:
   build:
     if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -122,7 +122,7 @@ jobs:
   smoke-python:
     if: ${{ inputs.operation == 'qualify' }}
     needs: [verify-version, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -172,7 +172,7 @@ jobs:
   verify-distributions:
     if: ${{ inputs.operation == 'qualify' }}
     needs: [verify-version, build, smoke-python]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       attestations: write
       contents: read
@@ -247,7 +247,7 @@ jobs:
     name: Verify the selected candidate artifact
     if: ${{ inputs.operation == 'promote' }}
     needs: verify-version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
@@ -281,7 +281,7 @@ jobs:
     name: Promote qualified bytes and release
     if: ${{ inputs.operation == 'promote' }}
     needs: [verify-version, select-qualification]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: pypi
     env:
       CITRY_VERSION: ${{ needs.verify-version.outputs.version }}
@@ -398,7 +398,7 @@ jobs:
     permissions:
       contents: read
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: release-maintenance
     env:
       PACKAGE: citry
@@ -435,7 +435,7 @@ jobs:
   closeout:
     name: Create the GitHub Release and notify
     needs: [verify-version, release, tag]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: read
