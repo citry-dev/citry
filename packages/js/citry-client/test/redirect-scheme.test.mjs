@@ -224,6 +224,9 @@ test("a redirect is followed or refused exactly as the released scheme rule deci
     }
   }
   assert.ok(followed >= 100 && refused >= 100, `followed ${followed}, refused ${refused}`);
+  // The fixed seed yields about ten URLs the page address cannot resolve. The count depends on the
+  // URL parser, so the test requires only one, which keeps that branch from going untested.
+  assert.ok(unresolvable >= 1, `unresolvable ${unresolvable}`);
 });
 
 test("a redirect URL with a long run of spaces inside is checked quickly", async () => {

@@ -17,6 +17,7 @@ from citry.browser_render import (
     collect_browser_plugin_descriptors,
     prepare_browser_extensions,
 )
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 from citry.ext.dependencies.types import Script, Style
 from citry.extension import Extension
 
@@ -475,7 +476,8 @@ def test_mounted_page_writes_plugin_script_right_after_the_runtime_tag() -> None
     scripts = _script_tags(_plugin_page(mounted=True))
     # The runtime is a URL tag, and Citry's browser code adds each component script only once the app
     # starts, so the plugin script that follows the runtime already runs before every one of them.
-    assert 'src="/citry/citry.js"' in scripts[0][0]
+    # The page links the runtime by the hashed name the runtime route serves.
+    assert f'src="/citry/{SHARED_RUNTIME.hashed_path}"' in scripts[0][0]
     assert "window.pluginMark" in scripts[1][1]
     assert all("window.componentMark" not in body for _tag, body in scripts)
 
