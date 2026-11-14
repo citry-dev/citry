@@ -7,10 +7,10 @@ from citry import citry as default_citry
 
 
 def test_fragments_example_page_renders() -> None:
-    # The page links the runtime by its URL, which exists only once Citry's
-    # routes are mounted. The docs build and server mount them at this
-    # prefix; the autouse fixture in docs_site/conftest.py unmounts the
-    # instance again after the test.
+    # The page asks Citry for the runtime's URL, which Citry can build only
+    # once its routes are mounted. The docs build and server mount them at
+    # this prefix; the autouse fixture in docs_site/conftest.py restores the
+    # earlier value after the test.
     default_citry.set_mounted_prefix(CITRY_MOUNT_PREFIX)
     html = str(get_example_registry()["fragments"].page_cls())
     # The page loads the runtime up front, so the fragment it inserts later can run.
