@@ -568,6 +568,9 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     assert runner_image_argument in identity["run"]
 
     build = steps["Build Citry Core wheel"]
+    # The command spans two lines joined by a backslash, which only bash reads
+    # as one command, and the step also runs on Windows.
+    assert build["shell"] == "bash"
     assert build["env"] == {
         "CARGO_INCREMENTAL": "0",
         "RUSTC_WRAPPER": "sccache",

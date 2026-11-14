@@ -142,6 +142,9 @@ jobs:
           CARGO_INCREMENTAL: "0"
           RUSTC_WRAPPER: sccache
           SCCACHE_GHA_ENABLED: "true"
+        # The backslash continues the command only in bash; the default shell
+        # on Windows is PowerShell, which reads the next line as a new command.
+        shell: bash
         run: |
           uv lock --check
           uv build --package citry-core --wheel \
