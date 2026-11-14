@@ -241,6 +241,10 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
     runs-on: ${{ matrix.os }}
+    # The slowest cell takes about 30 minutes. A worker process that crashes
+    # can leave pytest-xdist waiting for good on Windows, so the job stops
+    # well before GitHub's six-hour limit.
+    timeout-minutes: 75
     strategy:
       # A failure on one interpreter must not hide portability results from
       # the other supported Windows and Linux versions.
