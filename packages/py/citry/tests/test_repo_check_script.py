@@ -93,7 +93,10 @@ def test_reload_tests_run_once_in_the_check_workflow_and_nowhere_else() -> None:
 
     # The Python test matrix leaves the real-server reload tests out, because
     # check.py runs them once, serially, in the Check workflow on every PR.
-    matrix_steps = {step.get("name"): step for step in tests_jobs["test"]["steps"]}
+    # One test job per OS, sharing its steps through a YAML anchor.
+    test_jobs = [tests_jobs[name] for name in ("test-linux", "test-windows", "test-macos")]
+    assert all(job["steps"] == test_jobs[0]["steps"] for job in test_jobs)
+    matrix_steps = {step.get("name"): step for step in test_jobs[0]["steps"]}
     assert f"--ignore {_RELOAD_TEST_PATH}" in matrix_steps["Run Python tests"]["run"]
     reload_invocations = [
         step["run"]

@@ -1366,18 +1366,17 @@ and similar variables, because the key does not cover them.
 
 `py--tests.yml` builds the wheel once per run in three jobs,
 `citry-core-wheel-linux`, `citry-core-wheel-windows` and
-`citry-core-wheel-macos`, which upload it as a run artifact. The test, e2e, Vue conformance, i18n qualification and
-`citry-ui-wheel-build` jobs download that artifact rather than reading the
-cache, so a cache eviction during a run cannot fail them. They run whenever
-their wheel job ran, even after it failed, so a broken build fails the
-required `citry-ui-wheel-build` check rather than letting it pass as
-skipped. The test matrix is split into one job per OS (`test-linux`,
-`test-windows`, `test-macos`, all shown as `test`), so each cell waits only
-for its own OS's build, and the Linux-only jobs wait only for the Linux
-build. The Check, docs
-check, docs deploy, Lighthouse, external-link and cross-browser workflows
-call the action directly, so they build the wheel themselves only when no
-earlier run cached it.
+`citry-core-wheel-macos`, which upload it as a run artifact. The test, e2e, Vue
+conformance, i18n qualification and `citry-ui-wheel-build` jobs download that
+artifact rather than reading the cache, so a cache eviction during a run cannot
+fail them. They run whenever their wheel job ran, even after it failed, so a
+broken build fails the required `citry-ui-wheel-build` check rather than
+letting it pass as skipped. The test matrix is split into one job per OS
+(`test-linux`, `test-windows`, `test-macos`, all shown as `test`), so each cell
+waits only for its own OS's build, and the Linux-only jobs wait only for the
+Linux build. The Check, docs check, docs deploy, Lighthouse, external-link and
+cross-browser workflows call the action directly, so they build the wheel
+themselves only when no earlier run cached it.
 
 GitHub scopes the cache by branch: a wheel saved on `main` serves every pull
 request, and a wheel first saved on a pull request serves only that pull

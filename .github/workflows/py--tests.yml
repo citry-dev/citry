@@ -323,8 +323,8 @@ jobs:
       # failure that shows only on Windows 3.12 to 3.14 or on macOS 3.11 is
       # caught right after merge. Linux 3.14 is left out of both: the Check
       # workflow (repo--check.yml) runs this same suite there on every pull
-      # request (test_ci_workflows.py keeps the two in step and pins both
-      # sets).
+      # request (test_ci_workflows.py keeps this suite and the Check workflow
+      # in step and pins both sets).
       matrix:
         include: >-
           ${{ fromJSON(github.event_name == 'pull_request'
