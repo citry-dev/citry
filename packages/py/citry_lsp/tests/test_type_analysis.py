@@ -674,7 +674,7 @@ async def test_ty_adapter_returns_filtered_completion_hover_and_diagnostics(tmp_
     assert by_label["lower"].detail == "bound method str.lower() -> str"
     assert hint is not None
     assert "str" in hint.contents.value
-    assert any(item.code == "unresolved-attribute" and "missing" in item.message for item in diagnostics)
+    assert any(item.code == "missing-attribute" and "missing" in item.message for item in diagnostics)
     assert "format" in {item.label for item in custom}
     assert "mro" in {item.label for item in safe_mro}
     assert "mro" not in {item.label for item in unsafe_mro}

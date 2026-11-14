@@ -209,10 +209,7 @@ function componentScript(overrides = {}) {
 test("a manifest script entry accepts a finishKey on a component script the server owns", async () => {
   // The script never reported, so the start fails on the finish check. Reaching that check at all
   // shows the entry's shape was accepted.
-  await assert.rejects(
-    startWith([componentScript()]),
-    /Citry Vue component script did not run to its end: Root/,
-  );
+  await assert.rejects(startWith([componentScript()]), /Citry Vue component script did not run to its end: Root/);
 });
 
 test("a manifest script entry rejects a finishKey that is not 64 lowercase hex characters", async () => {

@@ -83,7 +83,7 @@ class _CountingDiagnosticsAnalyzer:
                     ),
                     f"Unknown attribute in {marker}",
                     types.DiagnosticSeverity.Error,
-                    "unresolved-attribute",
+                    "missing-attribute",
                     "ty",
                     None,
                 )
@@ -765,7 +765,7 @@ async def test_optional_completion_narrowing_does_not_hide_diagnostics(tmp_path:
     finally:
         await analyzer.close()
 
-    assert any(finding.code == "citry.python.unresolved-attribute" for finding in findings)
+    assert any(finding.code == "citry.python.missing-union-attribute" for finding in findings)
 
 
 def test_repaired_loop_completion_still_withholds_after_a_real_walrus(tmp_path: Path) -> None:
@@ -1169,7 +1169,7 @@ async def test_semantic_diagnostics_map_members_and_defer_unknown_roots(tmp_path
         await analyzer.close()
 
     assert len(findings) == 1
-    assert findings[0].code == "citry.python.unresolved-attribute"
+    assert findings[0].code == "citry.python.missing-attribute"
     assert findings[0].range == types.Range(types.Position(0, 3), types.Position(0, 16))
     assert "missing" in findings[0].message
 
@@ -1213,7 +1213,7 @@ async def test_semantic_diagnostics_batch_queries_per_consumer(
 
     assert analyzer.calls == 1
     assert [finding.range.start.line for finding in findings] == [0, 1]
-    assert all(finding.code == "citry.python.unresolved-attribute" for finding in findings)
+    assert all(finding.code == "citry.python.missing-attribute" for finding in findings)
 
 
 @pytest.mark.asyncio
@@ -1997,7 +1997,7 @@ async def test_loop_clause_diagnostics_use_comprehension_semantics(tmp_path: Pat
         await analyzer.close()
 
     assert len(findings) == 1
-    assert findings[0].code == "citry.python.unresolved-attribute"
+    assert findings[0].code == "citry.python.missing-attribute"
     assert findings[0].range == types.Range(types.Position(0, 21), types.Position(0, 34))
 
 
@@ -2609,13 +2609,13 @@ async def test_fill_data_name_is_typed_from_the_slots_declared_data(tmp_path: Pa
     # A slot with an open data class, a fill whose slot name is computed,
     # and an unpacked field stay untyped, so they report nothing.
     assert findings == [
-        ("citry.python.unresolved-attribute", "card.titel", "Object of type `FooterData` has no attribute `titel`"),
+        ("citry.python.missing-attribute", "card.titel", "Object of type `FooterData` has no attribute `titel`"),
         (
             "citry.python.unsupported-operator",
             'card.count + " tasks"',
             'Operator `+` is not supported between objects of type `int` and `Literal[" tasks"]`',
         ),
-        ("citry.python.unresolved-attribute", "card.owner.nmae", "Object of type `Owner` has no attribute `nmae`"),
+        ("citry.python.missing-attribute", "card.owner.nmae", "Object of type `Owner` has no attribute `nmae`"),
     ]
 
 
@@ -2651,7 +2651,7 @@ async def test_fill_data_class_in_the_same_module_keeps_its_own_methods(tmp_path
     findings = await _python_findings_in(tmp_path, template_source, module_source)
 
     assert findings == [
-        ("citry.python.unresolved-attribute", "node.titel", "Object of type `NodeSlotData` has no attribute `titel`"),
+        ("citry.python.missing-attribute", "node.titel", "Object of type `NodeSlotData` has no attribute `titel`"),
     ]
 
 

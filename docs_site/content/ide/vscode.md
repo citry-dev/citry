@@ -343,7 +343,7 @@ wrong use of one is an error:
 {# FooterData declares `title: str` and `count: int` #}
 <c-Card>
   <c-fill name="footer" data="card">
-    {# Error: citry.python.unresolved-attribute #}
+    {# Error: citry.python.missing-attribute #}
     {{ card.titel }}
     {# Error: citry.python.unsupported-operator #}
     {{ card.count + " tasks" }}

@@ -213,12 +213,12 @@ jobs:
         if: inputs.workspace_dependencies == ''
         run: >-
           uv pip install --system --only-binary :all:
-          dist/citry_ui-*.whl playwright==1.64.1
+          dist/citry_ui-*.whl playwright==1.65.0
       - name: Install the exact wheel and selected dependency closure
         if: inputs.workspace_dependencies != ''
         run: >-
           uv pip install --system --only-binary :all:
-          candidate-dependencies/*.whl dist/citry_ui-*.whl playwright==1.64.1
+          candidate-dependencies/*.whl dist/citry_ui-*.whl playwright==1.65.0
 
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium

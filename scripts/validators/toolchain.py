@@ -48,8 +48,8 @@ _RUST_ACTION = "dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8"
 _PYPI_ACTION = "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086"
 _UV_ACTION = "astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2"
 _SCCACHE_ACTION = "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
-_RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
-_PNPM_ACTION = "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86"
+_RUST_CACHE_ACTION = "Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0"
+_PNPM_ACTION = "pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413"
 
 
 def check() -> list[str]:

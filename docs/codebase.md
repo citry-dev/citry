@@ -2874,7 +2874,7 @@ The workflow also builds one
 pinned by the playground. That browser wheel is another build of
 `citry-core`, not a package dependency.
 
-The qualification uses Rust 1.97.0, Maturin 1.15.0, and Cargo's
+The qualification uses Rust 1.97.0, Maturin 1.16.0, and Cargo's
 performance-qualified `release-wheel` profile: fat LTO, one codegen unit, and
 no debug information in the stripped distribution build. The four-way
 profile/ABI comparison and keep/drop decision are recorded in
