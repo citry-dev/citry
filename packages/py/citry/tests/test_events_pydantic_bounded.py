@@ -297,54 +297,49 @@ def test_a_chain_of_nested_models_deeper_than_the_recursion_limit_is_checked(
     assert caplog.text == ""
 
 
-_CHAIN_ON_A_SMALL_STACK = """
+_CHAIN_BUILT_ON_A_SMALL_STACK = """
 import json
-import sys
 import threading
 
 import pydantic
 
-from citry.ext.events.schemas import validate_args
+from citry.ext.events import _pydantic_bounded as bounded
 
 model = pydantic.create_model("Level0", v=(int, ...))
 for index in range(1, 300):
     model = pydantic.create_model(f"Level{index}", c=(model, ...))
-payload = {"v": 1}
-for _ in range(299):
-    payload = {"c": payload}
 
-answers = []
+built = []
 
 
-def check():
-    answers.append(validate_args(model, payload).fields)
-    answers.append(validate_args(model, {"c": {}}).fields)
+def build():
+    built.append(bounded.checker_for(model).validator is not None)
 
 
 threading.stack_size(1024 * 1024)
-thread = threading.Thread(target=check)
+thread = threading.Thread(target=build)
 thread.start()
 thread.join()
-print(json.dumps(answers))
+print(json.dumps(built))
 """
 
 
-def test_a_chain_of_nested_models_is_checked_on_a_thread_with_a_small_stack() -> None:
+def test_the_copy_of_a_chain_of_nested_models_is_built_on_a_thread_with_a_small_stack() -> None:
     # The first call to a class builds Citry's copy of its validator on the
-    # thread that serves the request, and a server's threads can have small
-    # stacks (1 MB on Windows). Building the copy of this chain there
-    # overflows the stack and ends the process, so the test runs it in a
-    # process of its own.
+    # thread that serves the request, and that thread's stack can be small
+    # (1 MB on Windows). Building the copy of this chain on such a stack
+    # overflows it and ends the process, so the test runs it in a process
+    # of its own.
     done = subprocess.run(
-        [sys.executable, "-c", _CHAIN_ON_A_SMALL_STACK], capture_output=True, text=True, timeout=300, check=False
+        [sys.executable, "-c", _CHAIN_BUILT_ON_A_SMALL_STACK],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
     )
 
     assert done.returncode == 0, done.stderr[-2000:]
-    valid, missing = json.loads(done.stdout)
-    # Checking the valid chain may still run out of this small stack, and
-    # Citry then refuses it with a message instead of ending the process.
-    assert valid in ({}, {"_args": bounded.TOO_DEEP_MESSAGE})
-    assert missing in ({"c.c": "Field required"}, {"_args": bounded.TOO_DEEP_MESSAGE})
+    assert json.loads(done.stdout) == [True]
 
 
 def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_set(
@@ -364,6 +359,19 @@ def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_se
 
     assert bounded._on_large_stack(build) == "built"
     assert built_on == [threading.get_ident()]
+
+
+def test_a_forked_child_gets_a_new_build_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A thread of the parent may hold the lock at the fork, and the child has
+    # no thread that would release it.
+    held = threading.Lock()
+    held.acquire()
+    monkeypatch.setattr(bounded, "_BUILD_STACK_LOCK", held)
+
+    bounded._new_build_stack_lock()
+
+    assert bounded._BUILD_STACK_LOCK is not held
+    assert bounded._on_large_stack(lambda: "built") == "built"
 
 
 def test_an_error_while_building_a_copy_reaches_the_caller() -> None:

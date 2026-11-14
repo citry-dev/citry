@@ -76,6 +76,7 @@ import contextlib
 import contextvars
 import functools
 import inspect
+import os
 import re
 import sys
 import threading
@@ -2336,10 +2337,23 @@ def core_schema_of(cls: type) -> dict[str, Any] | None:
     return root if type(root) is dict else None
 
 
-# The stack of the thread that builds a copy of a validator, in bytes. The
-# system reserves this much address space and uses only what the build needs.
-_BUILD_STACK_BYTES = 64 * 1024 * 1024
+# The stack of the thread that builds a copy of a validator, in bytes: 16
+# times the 1 MB of a Windows thread, on which a chain of about 250 nested
+# models overflowed. On Windows the system sets this memory aside for the
+# thread, which ends with the build.
+_BUILD_STACK_BYTES = 16 * 1024 * 1024
+# Keeps Citry's own builds from setting the process-wide stack size at once.
 _BUILD_STACK_LOCK = threading.Lock()
+
+
+def _new_build_stack_lock() -> None:
+    """Give a forked child a new lock, since a thread of the parent may have held the old one at the fork."""
+    global _BUILD_STACK_LOCK  # noqa: PLW0603 - the module's one lock is replaced, not shared
+    _BUILD_STACK_LOCK = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_new_build_stack_lock)
 
 
 def _on_large_stack(build: Callable[[], Any]) -> Any:
@@ -2349,14 +2363,14 @@ def _on_large_stack(build: Callable[[], Any]) -> Any:
     pydantic-core builds a validator by walking the schema through nested
     calls on the C stack, and the copy nests deeper than the class's own
     schema because of its wrappers. A chain of a few hundred nested models
-    overflows the stack and ends the process, with no Python exception to
-    catch. The first call to a class builds its copy, so the build runs on
-    whatever thread serves that request, and a server's threads can have
-    small stacks: 1 MB on Windows, 512 KB by default on macOS. Running the
-    build on a thread with a fixed large stack makes the depth it handles
-    the same everywhere. Checking a value with the copy takes far less
-    stack than building it (a chain of 300 models checks within the 1 MB of
-    a Windows thread), so only the build moves.
+    overflows a small stack and ends the process, with no Python exception
+    to catch. The first call to a class builds its copy, so the build runs
+    on whatever thread serves that request, and that thread's stack can be
+    small: Windows gives a thread 1 MB, and a thread that Python did not
+    start keeps the size its creator chose. Running the build on a thread
+    with a fixed large stack makes the depth of class it handles the same
+    everywhere. The build runs once per class, so the extra thread costs
+    little; checking a value with the copy runs on the caller's thread.
     """
     outcome: list[Any] = []
 
@@ -2369,8 +2383,9 @@ def _on_large_stack(build: Callable[[], Any]) -> Any:
     # The same context as the caller, so the build sees what it would see there.
     context = contextvars.copy_context()
     try:
-        # The stack size applies to every thread started while it is set,
-        # so it is set and put back around this one start only.
+        # The stack size applies to every thread the process starts while it
+        # is set, so it is put back right after this start. Another thread
+        # started in this short window also gets the large stack.
         with _BUILD_STACK_LOCK:
             previous = threading.stack_size(_BUILD_STACK_BYTES)
             try:

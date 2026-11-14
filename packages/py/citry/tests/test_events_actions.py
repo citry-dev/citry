@@ -1199,7 +1199,7 @@ class TestFieldErrors:
         monkeypatch.setattr(errors_module._PathNode, "child", counting_child)
         return placed
 
-    def test_a_long_key_under_many_messages_is_read_once(self, monkeypatch):
+    def test_a_long_key_under_many_messages_is_placed_once(self, monkeypatch):
         # Every message shares the pair of its dict key, so the key is placed
         # in the path tree once, not once per message. This key is longer
         # than the text cap, so only the first message is kept, and the rest
@@ -1211,7 +1211,7 @@ class TestFieldErrors:
         assert list(kept) == ["scores." + key + ".0"]
         assert dropped == 9_999
 
-    def test_a_shorter_key_under_many_messages_keeps_twenty_and_is_read_once(self, monkeypatch):
+    def test_a_shorter_key_under_many_messages_keeps_twenty_and_is_placed_once(self, monkeypatch):
         key = "a" * 2_000
         placed = self._times_the_key_is_placed(monkeypatch, key)
         kept, dropped = self._many_messages_under_one_key(key, 10_000).limited()
