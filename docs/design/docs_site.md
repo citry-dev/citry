@@ -422,12 +422,12 @@ tags**. `docs_site/reference.yml` is the authoritative list. Scope is
   the categories cover all of `citry.__all__`.
 - *Slice 3d (done): unified built-in tag reference.*
   `/reference/builtins/` is now the authored **Built-in tags** page. It covers
-  all 15 public tags, groups them by task, and gives each one a stable
-  `#c-<name>` anchor. The seven component-backed entries still use
-  `<c-builtin>` and their runtime class docstrings. The eight syntax-backed
-  entries use reader-oriented Markdown because they do not have one-to-one
-  public Python classes: `IfNode` and `ForNode` each implement several tags,
-  and `<c-raw>` does not become a runtime node.
+  every public built-in tag, groups them by task, and gives each one a stable
+  `#c-<name>` anchor. The component-backed entries still use `<c-builtin>` and
+  their runtime class docstrings. The syntax-backed entries use
+  reader-oriented Markdown because they do not have one-to-one public Python
+  classes: `IfNode` and `ForNode` each implement several tags, and `<c-raw>`
+  does not become a runtime node.
 
   The generated Reference index and sidebar still own the category entry, but
   the generated page pass skips this path so the authored HTML, companion,
