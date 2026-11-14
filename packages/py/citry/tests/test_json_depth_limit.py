@@ -14,12 +14,13 @@ import random
 import subprocess
 import sys
 import textwrap
-import time
 import tracemalloc
 
 import pytest
 
 from citry._protocol.events import MAX_JSON_DEPTH, JsonNestingError, check_json_depth, loads_strict_json
+
+from ._growth import assert_grows_in_step
 
 # Deep enough to crash CPython 3.12 and 3.13 in a 512 KiB thread (4,000
 # levels already does), and still small enough to build quickly.
@@ -94,19 +95,30 @@ class TestCheckJsonDepth:
         check_json_depth(12345)  # type: ignore[arg-type]
 
     def test_the_scan_takes_linear_time(self):
-        # A megabyte of brackets that never nest deeply, and a megabyte of an
-        # unterminated string full of escapes, both stay fast. A string with
-        # no closing quote runs to the end, so its brackets are text.
-        started = time.perf_counter()
-        check_json_depth("[]" * 500_000)
-        check_json_depth('"' + "\\[" * 500_000)
-        # An unterminated string full of escaped quotes, after enough
-        # brackets to need the scan: no escaped quote may start a new scan
-        # to the end of the text.
-        check_json_depth("[" * 200 + '"' + '\\"' * 500_000)
-        with pytest.raises(JsonNestingError):
-            check_json_depth("[" * 201 + '"' + '\\"' * 500_000)
-        assert time.perf_counter() - started < 2
+        def texts(units):
+            return (
+                # Brackets that never nest deeply.
+                "[]" * units,
+                # An unterminated string full of escapes. A string with no
+                # closing quote runs to the end, so its brackets are text.
+                '"' + "\\[" * units,
+                # An unterminated string full of escaped quotes, after enough
+                # brackets to need the scan: no escaped quote may start a new
+                # scan to the end of the text.
+                "[" * 200 + '"' + '\\"' * units,
+                "[" * 201 + '"' + '\\"' * units,
+            )
+
+        def scan(texts):
+            *shallow, too_deep = texts
+            for text in shallow:
+                check_json_depth(text)
+            with pytest.raises(JsonNestingError):
+                check_json_depth(too_deep)
+
+        # Eight times as much text, up to a megabyte, may take about eight
+        # times as long.
+        assert_grows_in_step(scan, texts(62_500), texts(500_000), factor=8)
 
     @pytest.mark.parametrize(
         "body",

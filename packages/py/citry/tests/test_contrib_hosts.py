@@ -1,11 +1,11 @@
 """Tests for the Flask mount, the Django adapter, and the cache adapters (``citry/contrib/``)."""
 
-import time
-
 import pytest
 
 from citry import Citry, Component, Extension
 from citry.util.routing import RouteResponse, URLRoute, compile_route_pattern
+
+from ._growth import assert_grows_in_step
 
 
 class _FakeWsgiHost:
@@ -180,9 +180,12 @@ class TestDjangoAdapter:
         assert match.kwargs == {"name": "my-lib", "version": "1.2", "build": "3"}
         assert pattern.pattern.regex.pattern == compile_route_pattern("ext/probe/pkg/{name}-{version}-{build}").pattern
 
-        started = time.perf_counter()
-        assert pattern.resolve("ext/probe/pkg/" + "-" * 1_500 + "/") is None
-        assert time.perf_counter() - started < 0.5
+        def reject(dashes):
+            assert pattern.resolve("ext/probe/pkg/" + "-" * dashes + "/") is None
+
+        # Django's own matching took seconds at 1,500 characters. Eight
+        # times as many may take about eight times as long.
+        assert_grows_in_step(reject, 1_500 // 8, 1_500, factor=8)
 
         urlconf = type("Urlconf", (), {"urlpatterns": list(by_name.values())})
         assert (
