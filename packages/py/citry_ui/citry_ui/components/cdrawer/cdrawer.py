@@ -542,19 +542,22 @@ class CDrawer(LibraryComponent):
           const eligibilityObserver = new MutationObserver(reconcileEligibility);
           const startEligibilityWatch = () => {
             eligibilityObserver.disconnect();
-            const observed = new Set();
+            // Each node on the path gets one `observe` call with every option it
+            // needs, because a second call for the same node replaces the first
+            // one's options. Every element on the path is watched for the
+            // attributes that hide it, so an enclosing dialog that closes after
+            // this run took the drawer over still closes the drawer. Every parent
+            // is also watched for its children, so removing the path is noticed.
+            const attributeOptions = {
+              attributes: true,
+              attributeFilter: ["class", "hidden", "inert", "open", "style"],
+            };
             for (let node = host; node; node = composedParent(node)) {
-              if (node instanceof Element && !observed.has(node)) {
-                observed.add(node);
-                eligibilityObserver.observe(node, {
-                  attributes: true,
-                  attributeFilter: ["class", "hidden", "inert", "open", "style"],
-                });
-              }
-              if (node && parentNodeOf(node) && !observed.has(parentNodeOf(node))) {
-                observed.add(parentNodeOf(node));
-                eligibilityObserver.observe(parentNodeOf(node), { childList: true });
-              }
+              // Every node after the host is the composed parent (assigned slot,
+              // parent node or shadow host) of the one before it.
+              const options = node === host ? {} : { childList: true };
+              if (node instanceof Element) Object.assign(options, attributeOptions);
+              if (Object.keys(options).length) eligibilityObserver.observe(node, options);
             }
             eligibilityObserver.observe(drawer, {
               attributes: true,
@@ -591,11 +594,48 @@ class CDrawer(LibraryComponent):
             if (immediate) restore();
             else queueMicrotask(restore);
           };
-          const applyOpen = (nextOpen, source = null, returnValue = "") => {
+          // How many tasks this drawer should still wait before it opens, or 0.
+          // It waits while the nearest enclosing <dialog> shows only because the
+          // server rendered its `open` attribute, and that dialog's own run has
+          // not made it modal yet. Each enclosing level opens at most one task
+          // after the level around it, so the wait is capped at the number of
+          // enclosing dialogs; an enclosing dialog an author left open without
+          // making it modal never changes, and the drawer opens once the cap is hit.
+          const enclosingDialogWait = (attempts) => {
+            let pending = null;
+            let depth = 0;
+            for (let node = composedParent(host); node; node = composedParent(node)) {
+              if (!(node instanceof HTMLDialogElement)) continue;
+              depth += 1;
+              if (pending === null) {
+                try { pending = node.open && !node.matches(":modal"); } catch { pending = false; }
+              }
+            }
+            return pending ? Math.max(0, depth - attempts) : 0;
+          };
+          // Counts open requests, so a deferred open (see applyOpen) runs only
+          // when no later request came after it, even one that changed nothing.
+          let openRequest = 0;
+          const applyOpen = (nextOpen, source = null, returnValue = "", attempts = 0) => {
+            const request = ++openRequest;
             if (!nextOpen) closeDescendants();
             if (nextOpen === appliedOpen && drawer.open === nextOpen) return;
             generation += 1;
             if (nextOpen) {
+              // An enclosing dialog that the same server render opens runs its
+              // callback after this one, and its `mayOpen` check refuses while a
+              // modal it does not contain is open. Wait a task, after every
+              // callback of the render has run, and try again (see
+              // enclosingDialogWait). A later `applyOpen` changes `openRequest`,
+              // and the cleanup sets `disposed`, so either cancels the retry.
+              if (enclosingDialogWait(attempts) > 0) {
+                setTimeout(() => {
+                  if (!disposed && request === openRequest) {
+                    applyOpen(true, source, returnValue, attempts + 1);
+                  }
+                }, 0);
+                return;
+              }
               if (!mayOpen()) {
                 if (controlled) suppressedControlledOpen = props.open === true;
                 else internalOpen = false;
@@ -785,12 +825,13 @@ class CDrawer(LibraryComponent):
           // The effect below then keeps it open, or closes it when the server's
           // `open` input changed to false.
           //
-          // A server re-render runs an enclosing dialog's callback first, and that
-          // run may close it. An enclosing drawer leaves this handed-over drawer
-          // to this run, and an enclosing CDialog cannot reach it. Taking it over
-          // open would leave a modal drawer inside a closed dialog: invisible, yet
-          // blocking the page. Close it instead and report the close as
-          // "ancestor" once the callback is known.
+          // An enclosing dialog may already be closed when this drawer is handed
+          // over, and that dialog's callback runs after this one. An enclosing
+          // drawer leaves this handed-over drawer to this run, and an enclosing
+          // CDialog cannot reach it. Taking it over open would leave a modal
+          // drawer inside a closed dialog: invisible, yet blocking the page.
+          // Close it instead and report the close as "ancestor" once the
+          // callback is known.
           let ancestorClose = null;
           if (handoff?.open && drawer.open) {
             for (let node = composedParent(host); node; node = composedParent(node)) {

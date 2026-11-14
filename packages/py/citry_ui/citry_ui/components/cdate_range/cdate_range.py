@@ -597,7 +597,7 @@ class CDateRange(LibraryComponent):
             c-placement="placement"
             c-match_width="match_width"
             class_="cui-date-range__popover"
-            :open="dateRangeOpen"
+            :open="dateRangeOpen && !(dateRangeAwaitingRun && serverDefaults.disabled)"
             :dismissible="dateRangeDismissible"
             :placement="dateRangePlacement"
             :matchWidth="dateRangeMatchWidth"
@@ -672,7 +672,7 @@ class CDateRange(LibraryComponent):
         provide() { return {[Symbol.for('citry-ui:form')]: null}; },
         data() {
           return {
-            dateRangeOpen: false, dateRangeCalendarValue: null, dateRangeCalendarDisabled: false,
+            dateRangeOpen: false, dateRangeAwaitingRun: false, dateRangeCalendarValue: null, dateRangeCalendarDisabled: false,
             dateRangeCalendarReadonly: false, dateRangeRangeStart: null, dateRangeRangeEnd: null,
             dateRangeRangePreview: false, dateRangeStartLabel: null, dateRangeEndLabel: null,
             dateRangeAccessibleLabel: null, dateRangeDismissible: true,
@@ -716,6 +716,8 @@ class CDateRange(LibraryComponent):
           // re-render stays open. The picker has no server `open` input, so there
           // is no server value for it to follow.
           let internalOpen = scope.dateRangeOpen === true;
+          // This run now decides the popup's state (see the cleanup below).
+          scope.dateRangeAwaitingRun = false;
           let controlledValue = false;
           let controlledOpen = false;
           let nativeInvalid = false;
@@ -929,10 +931,25 @@ class CDateRange(LibraryComponent):
           owned(() => { startInput.tabIndex = -1; endInput.tabIndex = -1; root.toggleAttribute('data-enhanced', true); root.setAttribute('data-citry-date-range-initialized', ''); });
           render();
 
-          return () => {
+          // After a server render, Citry runs this cleanup before any callback,
+          // and then runs the popup's callback before this component's, since
+          // the popup is a child. On that handoff the control stays enhanced,
+          // because a popup that reopens while its trigger is hidden closes as
+          // if an ancestor hid it; the next run enhances the control again
+          // either way. Until this component runs again, the template keeps a
+          // popup that the server just disabled closed, so the popup does not
+          // flash open before this run closes it.
+          const cleanup = (options = {}) => {
             ready = false; invalidGeneration += 1; unavailableBinding?.dispose(); unsubscribe?.(); listeners.stop(); mutations.stop(); stopFieldset(); reset();
+            if (options.handoff === true) {
+              scope.dateRangeAwaitingRun = true;
+              return;
+            }
             owned(() => { startInput.removeAttribute('tabindex'); endInput.removeAttribute('tabindex'); root.removeAttribute('data-enhanced'); root.removeAttribute('data-citry-date-range-initialized'); });
           };
+          // Citry passes `{handoff: true}` only to a cleanup that sets this flag.
+          cleanup.supportsHandoff = true;
+          return cleanup;
         },
       });
     """

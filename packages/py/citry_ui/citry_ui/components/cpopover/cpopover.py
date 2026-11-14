@@ -391,9 +391,28 @@ class CPopover(LibraryComponent):
           const scheduledTasks = new Set();
           const initialHandoff = surface[handoffKey];
           delete surface[handoffKey];
+          if (initialHandoff?.watch) {
+            clearTimeout(initialHandoff.watch);
+          }
+          // A server render hands over a popover that was showing with its layer
+          // still registered (see the cleanup), because Citry runs the callback
+          // of a layer nested inside this popover before this one, and that
+          // layer must still find this popover open. This run takes over the
+          // surface on its first update instead of hiding and showing it again.
+          const handedLayer = initialHandoff?.layer ?? null;
+          let takeover = Boolean(handedLayer) && surface.matches(":popover-open");
+          // A surface that stopped showing in between (a keyed move takes it out
+          // of the page) cannot be taken over, so its handed-over layer goes now
+          // instead of staying registered beside this run's layer.
+          if (handedLayer && !takeover) {
+            layerCoordinator.unregister(handedLayer);
+          }
           let active = true;
+          // Set by a cleanup that hands this run's layer to the next run, so the
+          // layer still counts as open for nested layers until that run takes over.
+          let handedOver = false;
           let controlled = false;
-          let logicalOpen = false;
+          let logicalOpen = takeover;
           // Set once this run's first update is done, so a blocked open on the
           // first render can be told apart from one the owner asked for later.
           let settled = false;
@@ -621,18 +640,67 @@ class CPopover(LibraryComponent):
             }
             trigger.focus({ preventScroll: true });
           };
-          const layer = {
+          // Reassigned once, when this run takes over the previous run's layer.
+          let layer = {
             surface,
             trigger,
-            isOpen: () => active && logicalOpen,
+            isOpen: () => (active || handedOver) && logicalOpen,
             requestDismiss: (reason, source) => {
-              if (configuration.dismissible) {
+              // A handed-over layer leaves user requests to the run that takes it over.
+              if (active && configuration.dismissible) {
                 requestOpen(false, reason, source);
               }
             },
-            forceClose: (reason, source) => forceCloseLayer(reason, source),
+            // Vue's update can make a handed-over layer ineligible before the
+            // next run starts (for example, the server closed an enclosing
+            // dialog). That run decides and reports the close, so this one
+            // leaves the surface as it is.
+            forceClose: (reason, source) => {
+              if (active) {
+                forceCloseLayer(reason, source);
+              }
+            },
+          };
+          // The first update of a run that took over a showing surface. The
+          // surface is already in the top layer, so keeping it open keeps the
+          // previous run's layer without the entry animation or a focus move.
+          // Otherwise the surface hides at once and applyOpen continues from a
+          // closed popover, so a popover that may not open reports why.
+          // Returns whether the takeover kept the popover open.
+          const takeOver = (nextOpen) => {
+            takeover = false;
+            if (nextOpen && handedLayer.__citryAnchoredRegistration) {
+              // Keep the previous run's layer object, so the nested layers that
+              // registered under it keep it as their parent, and point it at
+              // this run's state. The render may have replaced the trigger, so
+              // the layer takes this run's one. Registering it again checks that
+              // it may stay open, and only a layer that may stay open becomes
+              // this run's layer.
+              handedLayer.trigger = trigger;
+              handedLayer.isOpen = layer.isOpen;
+              handedLayer.requestDismiss = layer.requestDismiss;
+              handedLayer.forceClose = layer.forceClose;
+              if (layerCoordinator.register(handedLayer)) {
+                layer = handedLayer;
+                updateTrigger();
+                return true;
+              }
+            }
+            // Nested layers close with this popover, as they do on any close.
+            layerCoordinator.unregister(handedLayer);
+            logicalOpen = false;
+            if (surface.matches(":popover-open")) {
+              surface.hidePopover();
+            }
+            surface.inert = true;
+            surface.removeAttribute("data-open");
+            updateTrigger();
+            return false;
           };
           const applyOpen = (nextOpen, context = null) => {
+            if (takeover && takeOver(nextOpen)) {
+              return;
+            }
             if (nextOpen === logicalOpen) {
               if (
                 nextOpen
@@ -895,9 +963,24 @@ class CPopover(LibraryComponent):
           });
           host.setAttribute("data-citry-popover-initialized", "");
 
-          return () => {
+          const cleanup = (options = {}) => {
+            // Citry passes `{handoff: true}` when a server render runs this
+            // component's callback again. A showing popover then stays showing
+            // and registered, so a layer nested inside it, whose callback runs
+            // first, still finds it open; the next run takes it over.
+            const handoff = options.handoff === true
+              && logicalOpen
+              && surface.matches(":popover-open")
+              && Boolean(layer.__citryAnchoredRegistration);
             active = false;
-            surface[handoffKey] = { open: logicalOpen, serverOpen: defaults.open };
+            handedOver = handoff;
+            const record = {
+              open: logicalOpen,
+              serverOpen: defaults.open,
+              layer: handoff ? layer : null,
+              watch: null,
+            };
+            surface[handoffKey] = record;
             shownWatch?.disconnect();
             host.removeEventListener("click", onHostClick, true);
             surface.removeEventListener("toggle", onToggle);
@@ -906,6 +989,27 @@ class CPopover(LibraryComponent):
             }
             scheduledTasks.clear();
             cancelAnimation();
+            host.removeAttribute("data-citry-popover-initialized");
+            if (handoff) {
+              // The next run normally starts within the same server render. If
+              // Vue removes this popover first, no run takes the layer over,
+              // and a registered layer would keep answering Escape and outside
+              // clicks for the page; release it once the popover is gone.
+              const release = () => {
+                if (surface[handoffKey] !== record) {
+                  return;
+                }
+                if (host.isConnected && surface.isConnected) {
+                  record.watch = setTimeout(release, 50);
+                  return;
+                }
+                delete surface[handoffKey];
+                handedOver = false;
+                layerCoordinator.unregister(layer);
+              };
+              record.watch = setTimeout(release, 0);
+              return;
+            }
             layerCoordinator.unregister(layer);
             if (surface.matches(":popover-open")) {
               surface.hidePopover();
@@ -914,8 +1018,10 @@ class CPopover(LibraryComponent):
             surface.removeAttribute("data-open");
             surface.removeAttribute("data-citry-popover-exiting");
             trigger.setAttribute("aria-expanded", "false");
-            host.removeAttribute("data-citry-popover-initialized");
           };
+          // Citry passes `{handoff: true}` only to a cleanup that sets this flag.
+          cleanup.supportsHandoff = true;
+          return cleanup;
         },
       });
     """

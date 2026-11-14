@@ -514,7 +514,7 @@ class CDatePicker(LibraryComponent):
             c-placement="placement"
             c-match_width="match_width"
             class_="cui-date-picker__popover"
-            :open="datePickerOpen"
+            :open="datePickerOpen && !(datePickerAwaitingRun && serverDisabled)"
             :dismissible="datePickerDismissible"
             :placement="datePickerPlacement"
             :matchWidth="datePickerMatchWidth"
@@ -601,6 +601,7 @@ class CDatePicker(LibraryComponent):
         data() {
           return {
             datePickerOpen: false,
+            datePickerAwaitingRun: false,
             datePickerCalendarValue: null,
             datePickerVisibleDate: undefined,
             datePickerMin: null,
@@ -647,6 +648,8 @@ class CDatePicker(LibraryComponent):
           // re-render stays open. The picker has no server `open` input, so there
           // is no server value for it to follow.
           let internalOpen = scope.datePickerOpen === true;
+          // This run now decides the popup's state (see the cleanup below).
+          scope.datePickerAwaitingRun = false;
           let controlledValue = false;
           let controlledOpen = false;
           let visibleDate = current || undefined;
@@ -892,7 +895,15 @@ class CDatePicker(LibraryComponent):
           });
           render();
 
-          return () => {
+          // After a server render, Citry runs this cleanup before any callback,
+          // and then runs the popup's callback before this component's, since
+          // the popup is a child. On that handoff the control stays enhanced,
+          // because a popup that reopens while its trigger is hidden closes as
+          // if an ancestor hid it; the next run enhances the control again
+          // either way. Until this component runs again, the template keeps a
+          // popup that the server just disabled closed, so the popup does not
+          // flash open before this run closes it.
+          const cleanup = (options = {}) => {
             ready = false;
             invalidGeneration += 1;
             unavailableBinding?.dispose();
@@ -902,12 +913,19 @@ class CDatePicker(LibraryComponent):
             stopFieldset();
             reset();
             if (nativeInvalid) field?.setNativeInvalid(false);
+            if (options.handoff === true) {
+              scope.datePickerAwaitingRun = true;
+              return;
+            }
             owned(() => {
               runtime.enhanceNative(input, trigger, { publicId: data.publicId, nativeId: data.nativeId, visibleId: data.visibleId, className: 'cui-form-control__native--enhanced' }, false);
               root.removeAttribute('data-enhanced');
               root.removeAttribute('data-citry-date-picker-initialized');
             });
           };
+          // Citry passes `{handoff: true}` only to a cleanup that sets this flag.
+          cleanup.supportsHandoff = true;
+          return cleanup;
         },
       });
     """

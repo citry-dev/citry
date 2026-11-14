@@ -136,6 +136,27 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       }
       return null;
     };
+    // How many tasks a dialog should still wait before it opens, or 0. It
+    // waits while the nearest enclosing <dialog> shows only because the server
+    // rendered its `open` attribute, and that dialog's own run has not made it
+    // modal yet. Citry runs a child's callback before its parent's, so a
+    // dialog that opened now would enter the top layer below the enclosing one
+    // and stay hidden behind it. Each enclosing level opens at most one task
+    // after the level around it, so the wait is capped at the number of
+    // enclosing dialogs; an enclosing dialog an author left open without
+    // making it modal never changes, and the dialog opens once the cap is hit.
+    const enclosingDialogWait = (dialog, attempts) => {
+      let pending = null;
+      let depth = 0;
+      for (let node = parentNodeOf(dialog); node; ) {
+        if (node instanceof HTMLDialogElement) {
+          depth += 1;
+          pending ??= node.open && !isModal(node);
+        }
+        node = parentNodeOf(node) ?? (node instanceof ShadowRoot ? node.host : null);
+      }
+      return pending ? Math.max(0, depth - attempts) : 0;
+    };
     const register = (record) => {
       if (!modalRecords.includes(record)) modalRecords.push(record);
     };
@@ -242,10 +263,11 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         previousFocus = previous.previousFocus;
         delete dialog[handoffKey];
       }
-      // A re-render runs an enclosing dialog's callback first, and a close there
-      // cannot reach this handed-over dialog. Keeping it open would
-      // leave an invisible modal blocking the page, so close it; the component
-      // reports reason "ancestor" once its callback is ready.
+      // An enclosing dialog may already be closed when this dialog is handed
+      // over, and that dialog's own callback, which runs after this one,
+      // cannot reach this handed-over dialog. Keeping it open
+      // would leave an invisible modal blocking the page, so close it; the
+      // component reports reason "ancestor" once its callback is ready.
       let closedByAncestor = null;
       if (appliedOpen) {
         const ancestor = closedAncestorDialog(dialog);
@@ -595,6 +617,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       generation: 1,
       create,
       abortHandoff,
+      enclosingDialogWait,
       deepActive,
       isFocusable,
       restoreModalOpen,

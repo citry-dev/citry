@@ -22,7 +22,7 @@ def test_complete_component_catalog_stays_inside_compressed_asset_budgets() -> N
     # an edit to this test too, so the new ceiling shows up in review instead of
     # passing quietly. Keep it in step with `_CATALOG_ASSET_LIMITS`.
     assert catalog["limits"] == {
-        "javascript": {"raw": 1152 * 1024, "gzip": 232 * 1024, "brotli": 168 * 1024},
+        "javascript": {"raw": 1152 * 1024, "gzip": 240 * 1024, "brotli": 172 * 1024},
         "css": {"raw": 400 * 1024, "gzip": 52 * 1024, "brotli": 44 * 1024},
     }
     for kind in ("javascript", "css"):
