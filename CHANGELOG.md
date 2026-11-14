@@ -203,8 +203,8 @@ does. The upgrade notes below list what can change.
 - When an event handler leaves State nested deeper than Pydantic can
   write as JSON, the error now says the State nests too deeply instead
   of naming only `ValueError`. Rendering such a State raises the same
-  message. Pydantic's limit is 99 levels on Windows and PyPy, and 255 on
-  CPython for Linux and macOS.
+  message. Pydantic's limit is lower on Windows, PyPy and Pyodide than
+  on Linux and macOS.
 - A `c-bind` key that is a `str` subclass with its own `startswith` or
   `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
   and component tags.

@@ -58,8 +58,8 @@ def _pydantic_supports(method: str, parameter: str) -> bool:
 _VALIDATES_BY_NAME = _pydantic_supports("model_validate_json", "by_name")
 _DUMP_EXCLUDES_COMPUTED = _pydantic_supports("model_dump", "exclude_computed_fields")
 # The messages of the ValueError Pydantic raises when it stops writing a value
-# nested past its depth limit, which differ by release (pydantic-core 2.50.4
-# raises the first, 2.50.1 the second). Pydantic gives this stop no class of
+# nested past its depth limit, which differ by release (pydantic-core 2.50.3
+# and later raise the first, earlier releases the second). Pydantic gives this stop no class of
 # its own, so the message is the only way to tell it from other errors, such
 # as the "(id repeated)" error for a value that contains itself. A custom
 # serializer function that meets the stop passes it on with the message at
@@ -222,8 +222,9 @@ def _state_wire_values(state: Any) -> dict[str, Any]:
             if not str(error).endswith(_DUMP_TOO_DEEP):
                 raise
             # Pydantic stops writing a value nested past its own limit, and
-            # sets that limit by platform (99 levels on Windows and PyPy, 255
-            # on CPython for Linux and macOS). The cause is
+            # sets that limit by platform: 49 levels on Pyodide and on Windows
+            # PyPy, 99 on other Windows and PyPy builds, and 255 elsewhere.
+            # The cause is
             # `ValidationTooCostly("depth")`, as a restore of data nested too
             # deeply sets it, so `check_changed_state` reports the same
             # reason at whichever depth the platform stops.

@@ -4201,7 +4201,7 @@ def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() ->
         # Pydantic's JSON reader refuses more than 200 levels, so on CPython
         # for Linux and macOS the State is written out but cannot be read
         # back from its token. On Windows and PyPy, Pydantic stops writing
-        # at 99 levels.
+        # at 99 levels or fewer.
         pytest.param(250, id="past-the-reader"),
         # 300 levels is past Pydantic's writing limit on every platform.
         pytest.param(300, id="past-the-writer"),
@@ -4504,8 +4504,9 @@ def deepest(board, name):
     # limit on request JSON bounds them: the envelope, its calls, the call
     # and its State updates take four levels, which leaves 196. Pydantic
     # also stops checking and writing a JsonValue past its own limit, which
-    # it sets lower on Windows and PyPy (99 levels) than on CPython for Linux
-    # and macOS (255), so the value nests as deeply as both allow here.
+    # it sets lower on Windows and PyPy (99 levels or fewer) than on CPython
+    # for Linux and macOS (255), so the value nests as deeply as both allow
+    # here.
     adapter = pydantic.TypeAdapter(board)
     depth = 196
     while depth > 0 and not pydantic_takes(adapter, nest(name, depth)):
