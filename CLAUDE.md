@@ -334,6 +334,18 @@ brief use that list:
   `X-Content-Type-Options`, `Cache-Control`, `Content-Disposition` on a
   `Download`, the text of error bodies, and error output shown in the
   page, such as the error fallback.
+- **Requests Citry's browser code sends on its own.** The `HEAD` request
+  the start script and the runtime send to a runtime or plugin URL that
+  failed to load. The URL must come from the server's own URL builder,
+  never from page data, and the browser code reads only the status.
+- **Page reloads.** The `location.reload()` that the start script and the
+  runtime call when a runtime or plugin is missing. It fires at most once
+  per URL per tab, and only when the server wrote `canReload: true` for a
+  request it knows was a `GET` or `HEAD`, so a reload never sends a form
+  again.
+- **CORS headers.** The `Access-Control-Allow-Origin: *` on the runtime
+  routes and on their `404` answers lets any site read whether a URL
+  exists, so only public files may carry it.
 
 Then follow these steps:
 
