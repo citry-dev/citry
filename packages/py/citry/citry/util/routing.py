@@ -591,16 +591,6 @@ def route_param_names(path: str) -> tuple[str, ...]:
     return tuple(match.group(1) for match in _PARAM_RE.finditer(path))
 
 
-def fill_route_path(path: str, values: Mapping[str, str]) -> str:
-    """
-    Put each value in place of its ``{name}`` parameter in a route path.
-
-    Each parameter is replaced once, where it stands, so a value that holds
-    text such as ``{other}`` stays as written.
-    """
-    return _PARAM_RE.sub(lambda match: values[match.group(1)], path)
-
-
 def route_reverse_regex(path: str) -> str:
     """
     Build the regex Django keeps for a route, for ``reverse()`` and its URL checks.
@@ -612,11 +602,15 @@ def route_reverse_regex(path: str) -> str:
     first place where the text after it can start, inside an atomic group
     that never gives characters back, so the search takes time in step with
     the URL's length whatever the values hold. Every path that the route
-    matches also matches this regex, because a parameter that is not
-    dotless accepts any run of characters other than ``/``. The regex
-    leaves out ``dotless_params``; the Django integration checks each URL
-    that ``reverse()`` builds with :func:`match_route_pattern`, which
-    applies them.
+    matches also matches this regex: each group accepts any run of
+    characters other than ``/``, and the first place where each following
+    text can start leaves the most room for the rest. The regex
+    leaves out ``dotless_params``: leaving ``.`` out of a dotless parameter
+    there could make the regex refuse a URL the route matches, such as
+    ``pkg/my-lib.v2-3`` for ``pkg/{name}-{build}`` with ``build`` dotless.
+    The Django
+    integration checks each value that ``reverse()`` puts in the URL
+    instead, including that a dotless value holds no ``.``.
 
     Raises:
         ValueError: As :func:`check_route_table` does.

@@ -1,16 +1,15 @@
 """
-Django's ``reverse()`` gives the same URLs for Citry's routes as before, quickly.
-
-"The same" holds for routes mounted without a parent pattern whose
-parameter accepts ``/``; under such a parent, ``reverse()`` can now refuse
-a URL whose Citry part the route would split differently.
+Django's ``reverse()`` builds URLs for Citry's routes as before, quickly.
 
 The Django integration keeps a regex for each Citry route with
 parameters, which ``reverse()`` reads to build a URL and then searches the
-URL with. These tests compare ``reverse()`` through that pattern with
-``reverse()`` through the regex Citry used before (``_route_oracle``), on
-generated routes and values, and check that the time ``reverse()`` takes
-grows in step with the length of the values. The timing tests compare
+URL with, and a converter per parameter that refuses a value the route
+could never give back. These tests compare ``reverse()`` through that
+pattern with ``reverse()`` through the regex Citry used before
+(``_route_oracle``), on generated routes and values: the URL is the same
+whenever every value passes its converter, and refused otherwise. They
+also check that the time ``reverse()`` takes grows in step with the length
+of the values. The timing tests compare
 values with ones eight times as long, so the result does not depend on how
 fast the machine is.
 """
@@ -21,6 +20,7 @@ import random
 import re
 import types
 from typing import Any
+from urllib.parse import unquote
 
 import pytest
 
@@ -86,6 +86,10 @@ def _reverse(urlconf: Any, name: str, **call: Any) -> str | None:
         return None
 
 
+def _value_fits(value: str, *, dotless: bool) -> bool:
+    return bool(value) and "/" not in value and not (dotless and "." in value)
+
+
 def test_reverse_gives_the_earlier_urls_on_generated_routes_and_values() -> None:
     rng = random.Random(602)  # noqa: S311 - test data, not secrets
     names = ["a", "b", "c", "d"]
@@ -103,35 +107,46 @@ def test_reverse_gives_the_earlier_urls_on_generated_routes_and_values() -> None
         dotless = frozenset(name for name in names[:count] if rng.random() < 0.4)
         routes.append(URLRoute(path, handler=_handler, name=f"r{index}", dotless_params=dotless))
     urlconf, _full_paths = _urlconf(routes)
+    by_name = {pattern.name: pattern for pattern in urlconf.urlpatterns}
 
-    accepted = refused = 0
+    accepted = refused = newly_refused = 0
     for index, route in enumerate(routes):
         params = [name for name in names if "{" + name + "}" in route.path]
         for _ in range(30):
             values = {name: "".join(rng.choice(value_characters) for _ in range(rng.randint(0, 4))) for name in params}
-            expected = _reverse(urlconf, f"old{index}", kwargs=values)
-            assert _reverse(urlconf, f"r{index}", kwargs=values) == expected, (
-                route.path,
-                route.dotless_params,
-                values,
-            )
+            fits = all(_value_fits(values[name], dotless=name in route.dotless_params) for name in params)
+            earlier = _reverse(urlconf, f"old{index}", kwargs=values)
+            got = _reverse(urlconf, f"r{index}", kwargs=values)
+            # Values that fit give the earlier URL; any other value is refused,
+            # where the earlier regex could build a URL the route splits
+            # into different values.
+            assert got == (earlier if fits else None), (route.path, route.dotless_params, values)
             # Positional values go through the same check.
             positional = [values[name] for name in params]
-            assert _reverse(urlconf, f"r{index}", args=positional) == _reverse(urlconf, f"old{index}", args=positional)
-            accepted += expected is not None
-            refused += expected is None
-    # Both answers came up often enough to mean something.
-    assert accepted > 500
-    assert refused > 500
+            assert _reverse(urlconf, f"r{index}", args=positional) == got
+            if got is not None:
+                # The route matches the URL reverse() returns (an earlier
+                # route in the table may match it too). reverse() quotes the
+                # URL; a server hands Django the decoded path.
+                assert by_name[f"r{index}"].resolve(unquote(got).removeprefix("/")) is not None
+            accepted += got is not None
+            refused += got is None
+            newly_refused += got is None and earlier is not None
+    # Each answer came up often enough to mean something.
+    assert accepted > 300
+    assert refused > 300
+    assert newly_refused > 20
 
 
-def test_reverse_refuses_values_the_route_would_not_match() -> None:
+def test_reverse_refuses_values_the_route_could_not_give_back() -> None:
     urlconf, _full_paths = _urlconf(
         [URLRoute("files/{name}.{ext}", handler=_handler, name="r0", dotless_params=frozenset({"name"}))]
     )
     assert _reverse(urlconf, "r0", kwargs={"name": "report", "ext": "txt"}) == "/ext/probe/files/report.txt"
-    # The route splits `a.b.txt` as name="a", so it matches and reverse() accepts it, as before.
-    assert _reverse(urlconf, "r0", kwargs={"name": "a.b", "ext": "txt"}) == "/ext/probe/files/a.b.txt"
+    # The route would split `a.b.txt` as name="a", not the name passed.
+    assert _reverse(urlconf, "r0", kwargs={"name": "a.b", "ext": "txt"}) is None
+    # A dotted value is fine where the parameter is not dotless.
+    assert _reverse(urlconf, "r0", kwargs={"name": "a", "ext": "tar.gz"}) == "/ext/probe/files/a.tar.gz"
     assert _reverse(urlconf, "r0", kwargs={"name": "a/b", "ext": "txt"}) is None
     assert _reverse(urlconf, "r0", kwargs={"name": "", "ext": "txt"}) is None
 
@@ -220,11 +235,11 @@ def test_a_reverse_call_that_stops_part_way_does_not_change_the_next_one() -> No
     assert _reverse(urlconf, "r0", kwargs={"b": "y", "a": "u", "p": "ok"}) == "/ok/ext/probe/f/u.y"
 
 
-def test_without_the_other_values_a_dotless_value_with_a_dot_is_refused() -> None:
-    # Django always hands the converter all values; a direct call has none.
-    from citry.contrib.django import _citry_route_pattern_class
-
-    pattern = _citry_route_pattern_class()("f/{a}.{b}", frozenset({"a"}), name=None)
-    assert pattern.converters["b"].to_url("x.y") == "x.y"
-    with pytest.raises(ValueError, match="dotless"):
-        pattern.converters["a"].to_url("x.y")
+def test_a_dotless_value_after_a_dotted_one_reverses() -> None:
+    # The regex lets any parameter take a `.`, so it accepts this URL even
+    # though its own split puts `lib.v2-3` in `build`. Leaving `.` out of
+    # `build` there would refuse it.
+    urlconf, _full_paths = _urlconf(
+        [URLRoute("pkg/{name}-{build}", handler=_handler, name="r0", dotless_params=frozenset({"build"}))]
+    )
+    assert _reverse(urlconf, "r0", kwargs={"name": "my-lib.v2", "build": "3"}) == "/ext/probe/pkg/my-lib.v2-3"

@@ -34,6 +34,11 @@
   built unless it is a `frozenset` of parameter names. Before, a set or a
   list failed when Django's `urlpatterns()` ran, or on the first request
   under ASGI, WSGI, Flask and FastAPI.
+- Django's `reverse()` for a Citry route now raises `NoReverseMatch` for
+  a value that is empty, holds a `/`, or holds a `.` for a parameter in
+  `dotless_params`. Before, it could return a URL that the route splits
+  into different values, such as `cache/a.b.js` for `class_id="a.b"`,
+  which Citry reads as `class_id="a"`.
 
 ### Fixes
 
