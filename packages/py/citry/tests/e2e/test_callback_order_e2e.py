@@ -526,3 +526,137 @@ def test_throwing_callback_of_a_component_shown_after_startup_stops_the_app_and_
     # Firefox prints an Error argument of `console.error` as just "Error", so the check names the
     # message that comes first. The order above shows which callback threw.
     assert any("an onServerRender callback failed and the app has stopped" in error for error in errors), errors
+
+
+# The six `Beta` siblings of the reveal page, in the order their callbacks run.
+_BETAS = ["Beta"] * 6
+
+
+def _build_reveal_page() -> tuple[Citry, type[Component]]:
+    """
+    Build a page whose `Alpha` callback shows `Revealed`, a component behind a browser-only `v-if`.
+
+    The page keeps the `v-if` flag as Vue data and exposes the component as `window.__page`.
+    Every callback pushes its name onto `window.__order`. `Alpha` sets the flag when the revision
+    it runs in equals `window.__revealAtRevision`, so it shows `Revealed` while the callbacks
+    of that server render are still running. Six `Beta` siblings come after `Alpha`, so many
+    callbacks are still queued when `Revealed` mounts. `Revealed` has a callback of its own.
+    """
+    engine = Citry(secret="callback-reveal-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class Alpha(Component):
+        citry = engine
+        template = """
+            <b>alpha</b>
+        """
+        js = """
+            $component({
+                onServerRender({revision}) {
+                    (window.__order ||= []).push('Alpha');
+                    if (window.__revealAtRevision === revision) window.__page.revealed = true;
+                },
+            });
+        """
+
+    class Beta(Component):
+        citry = engine
+        template = """
+            <i>beta</i>
+        """
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Beta');
+                },
+            });
+        """
+
+    class Revealed(Component):
+        citry = engine
+        template = """
+            <u>revealed</u>
+        """
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Revealed');
+                },
+            });
+        """
+
+    class Page(Component):
+        citry = engine
+
+        class Events:
+            def refresh(self) -> Any:
+                return actions.Render(Page())
+
+        template = """
+            <main>
+                <button
+                    id="refresh"
+                    @c-click="refresh"
+                >refresh</button>
+                <c-Alpha />
+                <c-Beta />
+                <c-Beta />
+                <c-Beta />
+                <c-Beta />
+                <c-Beta />
+                <c-Beta />
+                <template v-if="revealed"><c-Revealed /></template>
+            </main>
+        """
+        js = """
+            $component({
+                data() { return {revealed: false}; },
+                mounted() { window.__page = this; },
+                onServerRender() {
+                    (window.__order ||= []).push('Page');
+                },
+            });
+        """
+
+    dispatcher_for(engine)
+    return engine, Page
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "client-rendered"])
+def test_component_shown_by_a_server_render_callback_runs_its_own_callback_once_after_the_rest(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any, send_event: Any, hydrate: bool
+) -> None:
+    engine, page_class = _build_reveal_page()
+    errors = _page_errors(page)
+    # Revision 0 is the first mount, which leaves `Revealed` hidden. The server render is revision 1.
+    page.add_init_script("window.__revealAtRevision = 1;")
+    page.goto(serve_live(engine, _serialize(page_class, hydrate=hydrate), "") + "/")
+    wait_for_citry_ready()
+    assert page.evaluate("window.__order") == ["Alpha", *_BETAS, "Page"]
+    assert page.locator("u").count() == 0
+    page.evaluate("window.__order = []")
+
+    send_event(lambda: page.locator("#refresh").click())
+
+    # `Alpha` shows `Revealed` while the callbacks of the six `Beta` siblings and `Page` are still
+    # queued. The callback of `Revealed` must come after every one of them, not between them.
+    page.wait_for_function("window.__order.includes('Revealed')", timeout=5000)
+    # `citry:events:after` fires before the queued callback runs, hence the wait above. A second run
+    # of the callback would be queued right behind the first, so a short pause is enough to show it.
+    page.wait_for_timeout(150)
+    assert page.locator("u").count() == 1
+    assert page.evaluate("window.__order") == ["Alpha", *_BETAS, "Page", "Revealed"]
+    assert errors == []
+
+    # The app is alive: a later server render still runs the callbacks, `Revealed` among them.
+    page.evaluate("window.__order = []")
+    send_event(lambda: page.locator("#refresh").click())
+    page.wait_for_function("window.__order.includes('Revealed')", timeout=5000)
+    page.wait_for_timeout(150)
+    # The page already shows `Revealed`, so this time the server render updates it with the other
+    # components: it is a child of the page, so it runs before the page, as in any other pass.
+    assert page.evaluate("window.__order") == ["Alpha", *_BETAS, "Revealed", "Page"]
+    # A failed app removes itself from the runtime (see the tests above), so one app left means it runs.
+    assert page.evaluate("window.__citryRuntime._apps.size") == 1
+    assert errors == []

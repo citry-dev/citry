@@ -10,6 +10,7 @@ is proved on the page kinds it applies to.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -19,6 +20,8 @@ pytest.importorskip("pytest_playwright")
 from citry import Citry, Component
 from citry.browser_render import BrowserPluginDescriptor
 from citry.ext.dependencies import Script
+from citry.ext.events import actions
+from citry.ext.events.renderers import dispatcher_for
 from citry.extension import Extension
 
 pytestmark = pytest.mark.e2e
@@ -449,4 +452,126 @@ def test_failed_other_origin_file_listed_by_two_components_is_requested_once(
     # The app started without the file, and the browser asked for it once and the page warned once.
     assert len(skips) == 1
     assert len(requests) == 1
+    assert _error_messages(page) == []
+
+
+def test_failed_other_origin_file_listed_twice_in_a_server_render_is_requested_once(
+    page: Any, open_page: Any, wait_for_citry_ready: Any, wait_for_count: Any, send_event: Any
+) -> None:
+    engine = _engine(mounted=True)
+    url = "http://third-party.test/analytics.js"
+    skips: list[str] = []
+    page.on(
+        "console",
+        lambda message: skips.append(message.text) if message.text.startswith("[Citry] skipped") else None,
+    )
+    requests: list[str] = []
+
+    def refuse(route: Any) -> None:
+        requests.append(route.request.url)
+        route.abort("blockedbyclient")
+
+    page.route(url, refuse)
+
+    class Alpha(Component):
+        citry = engine
+
+        class Dependencies:
+            js = [Script(url=url)]
+
+        template = """
+            <b>alpha</b>
+        """
+        # The two scripts differ, so the last assertion shows that each component's own script ran.
+        js = """
+            window.__alphaRan = true;
+        """
+
+    class Beta(Component):
+        citry = engine
+
+        class Dependencies:
+            js = [Script(url=url)]
+
+        template = """
+            <i>beta</i>
+        """
+        js = """
+            window.__betaRan = true;
+        """
+
+    class Page(Component):
+        citry = engine
+
+        class Kwargs:
+            show: bool = False
+
+        class Events:
+            # The page starts without the two components, so the file reaches the browser only
+            # in the server render that this handler causes.
+            def show(self) -> Any:
+                return actions.Render(Page(show=True))
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"show": kwargs.show}
+
+        template = """
+            <main>
+                <button
+                    id="show"
+                    @c-click="show"
+                >show</button>
+                <c-Alpha c-if="show" />
+                <c-Beta c-if="show" />
+            </main>
+        """
+        # The page needs a script of its own, so that a browser app starts and can receive the server render.
+        js = """
+            window.__pageRan = true;
+        """
+
+    dispatcher_for(engine)
+    html = Page().render().serialize()
+    # The page itself does not mention the file.
+    assert url not in html, html
+    open_page(engine, html, mounted=True)
+    wait_for_citry_ready()
+    assert skips == []
+    assert requests == []
+    listed: list[int] = []
+
+    def allow_lazy_types(route: Any) -> None:
+        # The server marks a component type that lists a file (`Dependencies`) as not allowed to join
+        # a page late, so the browser would reject this render. This test is about how the browser
+        # loads such a file, so the response marks every file and type in it as allowed. A real
+        # response never allows it, so this guards the browser's behavior, not a path an app can take.
+        response = route.fetch()
+        body = response.json()
+        for result in body["results"]:
+            for action in result["actions"]:
+                prepared = action.get("prepared")
+                if not prepared:
+                    continue
+                # The server lists the file once for each of the two component types that own it.
+                listed.append([item["source"].get("url") for item in prepared["scripts"]].count(url))
+                for item in [*prepared["scripts"], *prepared["typePolicies"]]:
+                    item["lazyAllowed"] = True
+        route.fulfill(response=response, body=json.dumps(body))
+
+    page.route("**/ext/events/call", allow_lazy_types)
+    send_event(lambda: page.locator("#show").click())
+    assert listed == [2]
+
+    # The server render went on without the file: both components are on the page. The browser
+    # asked for the file once and the page warned once.
+    assert page.locator("b").count() == 1
+    assert page.locator("i").count() == 1
+    wait_for_count(skips, 1)
+    # The event has finished, so the server render's file loop is done; the pause is a last check
+    # that no late second request or warning follows.
+    page.wait_for_timeout(200)
+    assert len(skips) == 1
+    assert len(requests) == 1
+    # The two component scripts ran, so the page works without the file.
+    assert page.evaluate("() => [window.__pageRan, window.__alphaRan, window.__betaRan]") == [True, True, True]
     assert _error_messages(page) == []
