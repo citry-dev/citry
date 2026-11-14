@@ -330,6 +330,25 @@ brief use that list:
   They must read attribute values and URLs as the browser reads them. A
   check that reads a value differently lets code through or refuses
   harmless text.
+- **Parser rules browsers differ on.** The HTML parser behind Citry's
+  output checks does not always build the same page as a browser, and the
+  browsers differ from each other. Known cases are the contents of a
+  `<select>`, SVG and MathML elements that hold HTML and misplaced end
+  tags inside them, the mode a doctype picks for an `iframe srcdoc`
+  document (quirks or standards mode), and HTML that a script inserts into
+  another page or into a `<template>`. The output checks must read a page
+  every way a supported browser can build it, or report a page they cannot
+  read.
+- **The page's declared encoding.** A browser reads the page in the
+  encoding that a response header or a `<meta charset>` names, and in some
+  encodings the same bytes mean something else. In ISO-2022-JP an escape
+  byte can hide a closing quote, in Shift_JIS, Big5, GBK and GB18030
+  non-ASCII text can hide the `]]>` that ends a CDATA section (a block of
+  raw text in SVG or MathML), and in UTF-16 text with a NUL byte after
+  each character reads as tags. Citry must write escaped values so they
+  read the same under any encoding the page declares, its own responses
+  must name `charset=utf-8`, and the output checks must report text whose
+  meaning depends on the encoding.
 - **Responses Citry serves.** `Content-Type` and its charset,
   `X-Content-Type-Options`, `Cache-Control`, `Content-Disposition` on a
   `Download`, the text of error bodies, and error output shown in the

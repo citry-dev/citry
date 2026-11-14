@@ -36,6 +36,16 @@ detail that would help someone attack an older release.
 Name each file `YYYY-MM-DD-<short-topic>-<PR number>.md`, using the date the
 pull request merged.
 
+A record for a published advisory has no pull request. In its header, the
+template's "Pull request" line becomes three lines: "Advisory" (the link,
+the publication date and the severity), "Affected and fixed versions", and
+"Fix" (the commit on `main` and what it changes). Name the file
+`YYYY-MM-DD-<short-topic>-ghsa-<first four characters of the id>.md`, using
+the day the advisory was published. "Fixed during the review" then lists the
+problems the review found in the fix before the fix merged. The problem the
+advisory describes belongs in "Who controls the input" and in the advisory
+itself.
+
 ## Template
 
 ```markdown
