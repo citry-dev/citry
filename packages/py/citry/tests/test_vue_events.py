@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import re
 import threading
-from typing import TYPE_CHECKING
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -1715,6 +1716,86 @@ def test_prepared_type_script_identity_hashes_exact_wrapped_served_bytes() -> No
     # The key names the component's script as the page would run it without the wrapper.
     unwrapped = content.removeprefix(b"try {\n").partition(b"\n__citryRuntime.finishScript")[0]
     assert key == hashlib.sha256(unwrapped).hexdigest()
+
+
+def test_finish_key_is_on_the_components_own_wrapped_js_and_nowhere_else() -> None:
+    class Assets(Extension):
+        name = "assets"
+
+        def browser_plugin(self):
+            return BrowserPluginDescriptor(1, Script(content="window.plugin=true"))
+
+        def prepare_browser_render(self, ctx):
+            return BrowserRenderContribution(1, {}, scripts=(Script(content="window.extensionScript = true;"),))
+
+    registry = Citry(secret="vue-finish-key-test-secret", autodiscover=False, extensions=[Assets])  # noqa: S106
+    registry.set_mounted_prefix("/citry")
+
+    class Root(Component):
+        citry = registry
+        template = '<main :data-ready="true">root</main>'
+        js = "window.ownScript = true; $component({});"
+
+        class Dependencies:
+            js = [Script(content="window.dependenciesScript = true;")]
+
+    payload = default_events_producer(registry).prepare_from_render(
+        render_prepared_direct(Root()), citry=registry, app_id="app", revision=0
+    )
+
+    def entry_for(marker: bytes) -> dict[str, Any]:
+        [found] = [
+            item
+            for item in payload["scripts"]
+            if item["source"]["kind"] == "owned"
+            and marker in (definition_bundle(registry, item["source"]["sha256"]) or b"")
+        ]
+        return found
+
+    own = entry_for(b"window.ownScript")
+    # Only the server's wrapper around the component's own `js` calls `finishScript`, and the manifest
+    # names the key it will report under, so the browser can tell a script that never ran.
+    assert own["owner"] == {"kind": "component", "typeKey": Root.class_id}
+    served = definition_bundle(registry, own["source"]["sha256"])
+    assert served is not None
+    assert own["finishKey"].encode() in served
+    assert re.fullmatch(r"[0-9a-f]{64}", own["finishKey"])
+    # A `Dependencies` script has the kind "extra": the user wrote it, and it may throw without stopping the app.
+    extra = entry_for(b"window.dependenciesScript")
+    assert extra["owner"]["kind"] == "component"
+    assert "finishKey" not in extra
+    assert b"finishScript" not in (definition_bundle(registry, extra["source"]["sha256"]) or b"")
+    # An extension's script is its own code, which Citry does not wrap.
+    ext = entry_for(b"window.extensionScript")
+    assert ext["owner"] == {"kind": "extension", "extensionName": "assets"}
+    assert "finishKey" not in ext
+    assert b"finishScript" not in (definition_bundle(registry, ext["source"]["sha256"]) or b"")
+
+
+def test_component_script_that_opts_out_of_wrapping_has_no_finish_key() -> None:
+    registry = Citry(secret="vue-finish-key-test-secret", autodiscover=False)  # noqa: S106
+    registry.set_mounted_prefix("/citry")
+
+    class Root(Component):
+        citry = registry
+        template = '<main :data-ready="true">root</main>'
+        js = "window.unwrapped = true; $component({});"
+
+        @classmethod
+        def on_dependencies(cls, scripts, styles):
+            # Turning wrapping off means the script is not inside the `try` that reports the finish,
+            # so a key in the manifest could never be reported and would stop every start.
+            return [replace(item, wrap=False) if item.kind == "component" else item for item in scripts], styles
+
+    payload = default_events_producer(registry).prepare_from_render(
+        render_prepared_direct(Root()), citry=registry, app_id="app", revision=0
+    )
+    [script] = payload["scripts"]
+    served = definition_bundle(registry, script["source"]["sha256"])
+    assert served is not None
+    assert b"window.unwrapped = true;" in served
+    assert b"finishScript" not in served
+    assert "finishKey" not in script
 
 
 def test_custom_dependency_hook_disables_later_lazy_type_assets() -> None:

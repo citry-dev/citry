@@ -312,6 +312,91 @@ A plain annotated class checks names, not the type of each value. See
 [Inputs and validation](/concepts/inputs-and-validation/) for schema styles
 that also check types.
 
+## When scripts run { #when-scripts-run }
+
+One component's script can rely on another one having run, for example
+to read a value it set on `window`. On one page, Citry runs scripts in
+this order:
+
+1. Citry's own browser code, then the script each extension returns from
+   `browser_plugin()`, then the scripts an extension adds to
+   [`ctx.early_scripts`](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page).
+2. [Dependency files](/advanced/dependency-files/).
+3. Each component's `js`.
+
+Within each group, components run in the order Citry first renders them,
+so a parent runs before the components in its template. Each
+component's script runs once per page.
+
+Some details follow from how Citry builds that list:
+
+- The groups decide the order before the page does. A dependency file of
+  a component lower on the page runs before the `js` of a component
+  higher up.
+- An extension's [`on_dependencies()`](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page)
+  hook can reorder the list or add to it.
+- A file that several components list runs once, at the place of the
+  first component that lists it.
+- A script an extension supplies through `prepare_browser_render()` runs
+  once for each Vue app, so a page with an
+  [HTML fragment](/advanced/html-fragments/) runs it twice.
+
+Citry does not promise HTML order beyond these rules. The clearest place
+for setup that several components share is a dependency file.
+
+**Before components start.** Every component script of the first render
+runs before Citry creates the Vue app, and every new component script of
+a server render runs before any `onServerRender` callback of that render.
+
+**`onServerRender` order.** On the first mount and after each server
+render, callbacks run children before their parent, and siblings in the
+order they first mounted. See
+[`onServerRender` callback](/vue/component-options/#react-after-a-server-render).
+
+**Fragments.** Each [HTML fragment](/advanced/html-fragments/) starts on
+its own, so two fragments, or a fragment and the page around it, run in
+no fixed order. Inside one fragment, the rules above apply.
+
+### When a script fails { #when-a-script-fails }
+
+What happens depends on which script fails:
+
+- **A component's `js` throws while it runs, or has a syntax error.**
+  The page's Vue app does not start, and the browser console shows an
+  error that names the component and carries the original error. The
+  page's `error` event still receives the original error, so
+  error-monitoring tools see it. The same happens when the script is
+  new in a server render: that render stops. If an error is expected,
+  for example when an optional browser feature is missing, catch it
+  inside the script.
+- **A dependency file or an extension's script throws.** The browser
+  reports the error, and the next script runs.
+- **A script fails to load from another origin.** On an interactive
+  page, Citry skips a dependency file or extension script that is given
+  by URL and comes from another origin, logs a console warning with its
+  URL, and goes on. An ad blocker that refuses an analytics file then
+  cannot stop the page. Citry treats a blocked file, a file that fails
+  its integrity check, and a network error the same way, because the
+  browser reports all three as the same error. A later server render or
+  fragment tries the file again.
+- **Any other script fails to load.** A component's `js`, and any file
+  from the page's own origin, stops startup, or the server render that
+  loads it, with `Citry Vue type script failed to load: <url>`. These
+  files come from your app, so a failure there usually means a broken
+  deploy. On a page opened from disk, every file counts as the page's
+  own.
+
+Citry cannot tell your own CDN from a third party, so a file from another
+origin is skipped either way. Nothing runs in place of a skipped file: a
+component script that needs it while it runs throws, and the app stops
+with an error that names that component. Skipping a file also
+removes whatever protection it set up, so serve a script that a
+safeguard depends on, such as a consent manager or a sanitizer, from
+your own origin.
+
+Pages without Citry's browser runtime, and the `"simple"` strategy, write
+plain `<script>` tags, and the browser runs them by its own rules.
+
 ## How CSS loads
 
 - **Once per page.** A component's CSS appears once, however many copies

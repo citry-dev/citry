@@ -1827,6 +1827,40 @@ def test_prepared_asset_security_metadata_accepts_valid_shapes_and_rejects_tampe
             _validate_script_assets(values)
 
 
+_FINISH_KEY_SCRIPT = {
+    "owner": {"kind": "component", "typeKey": "Root"},
+    "source": {"kind": "owned", "url": "/assets/script.js", "sha256": "0" * 64},
+    "lazyAllowed": True,
+    "registersOptions": True,
+    "finishKey": "a" * 64,
+}
+
+
+def test_prepared_script_finish_key_is_accepted_on_a_component_script_the_server_owns() -> None:
+    _validate_script_assets([deepcopy(_FINISH_KEY_SCRIPT)])
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"finishKey": "a" * 63},
+        {"finishKey": "A" * 64},
+        {"finishKey": "g" * 64},
+        {"finishKey": 7},
+        # Only the server's wrapper on a component's own `js` reports a finish, so an extension
+        # script or an external file cannot claim a key.
+        {"owner": {"kind": "extension", "extensionName": "preview"}, "registersOptions": False},
+        {"source": {"kind": "external", "url": "https://cdn.example/a.js", "attrs": {}}},
+    ],
+    ids=["short", "upper-case", "not-hex", "not-a-string", "extension-owner", "external-source"],
+)
+def test_prepared_script_finish_key_is_rejected_when_malformed_or_misplaced(changes: dict[str, object]) -> None:
+    value = deepcopy(_FINISH_KEY_SCRIPT)
+    value.update(changes)
+    with pytest.raises(ValueError, match="metadata is invalid"):
+        _validate_script_assets([value])
+
+
 def test_direct_relationship_helpers_cover_session_and_slot_execution_boundaries() -> None:
     app = Citry(autodiscover=False)
 

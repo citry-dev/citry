@@ -119,6 +119,12 @@ The callback receives one object with these members:
 **When it runs.** On mount, and after each server render the page applies
 to this component. A Vue update made only in the browser does not call it.
 
+**Order.** Callbacks that run in the same pass run children before their
+parent, and siblings in the order they first mounted, on the first mount
+and after a server render alike. Every `mounted` hook of a pass runs
+before its first callback. A callback that throws stops the pass: no
+later callback of it runs, and the page's Vue app stops.
+
 **Cleanup.** The callback returns a cleanup function or `undefined`; any
 other value is an error. Citry calls the cleanup before the next run and
 when the component unmounts. Vue effects created synchronously inside the
