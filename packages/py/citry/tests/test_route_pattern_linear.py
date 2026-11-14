@@ -1,14 +1,12 @@
 """
 A route matches a request path in time that grows in step with the path's length.
 
-Two of the dependency routes place parameters next to each other with only
-a ``.`` between them. They list those parameters in ``dotless_params``, so
-each one stops at the next dot and a long path that never matches is
-rejected after one scan of the regex. Any other route with several
-parameters in one path segment is matched by ``match_route_pattern``
-without the regex, which would try every way to split the segment between
-the parameters. These tests lock the matched values, the one-pass
-behaviour, and that ``match_route_pattern`` gives the regex's answer. The
+Every adapter matches a request with ``match_route_pattern``, which splits
+the path at each ``/`` and then splits each segment between its parameters
+without trying every possible split. These tests lock three things: the
+matcher gives the same values as the regex Citry used to match routes with
+(``tests/_route_oracle.py``), it refuses a route with two parameters side
+by side, and the time it takes grows in step with the path's length. The
 timing tests compare a path with one eight times as long, so the result
 does not depend on how fast the machine is.
 """
@@ -16,23 +14,38 @@ does not depend on how fast the machine is.
 from __future__ import annotations
 
 import random
+import re
 
 import pytest
 
 from citry import Citry, Extension
-from citry.util.routing import RouteResponse, URLRoute, compile_route_pattern, match_route, match_route_pattern
+from citry.util.routing import (
+    RouteResponse,
+    URLRoute,
+    check_route_table,
+    match_route,
+    match_route_pattern,
+)
 
 from ._growth import assert_grows_in_step
+from ._route_oracle import reference_match
 
 # Each timing test compares a path with one this many times as long.
 _GROWTH_FACTOR = 8
 
 
+def _handler(_request: object, **params: str) -> RouteResponse:
+    return RouteResponse(content=repr(params))
+
+
 def _builtin_cache_routes() -> list:
-    from citry import Citry
     from citry.ext.dependencies.routes import dependency_routes
 
     return [route for route in dependency_routes(Citry(autodiscover=False)) if route.path.startswith("cache/")]
+
+
+def _regex_match(route: str, dotless: frozenset[str], path: str) -> dict[str, str] | None:
+    return reference_match(route, dotless, path)
 
 
 def test_builtin_cache_routes_match_valid_paths() -> None:
@@ -47,25 +60,25 @@ def test_builtin_cache_routes_match_valid_paths() -> None:
     ]
     for route_path, path, expected in cases:
         route = by_path[route_path]
-        match = compile_route_pattern(route.path, route.dotless_params).match(path)
-        assert match is not None
-        assert match.groupdict() == expected
+        assert match_route_pattern(route.path, route.dotless_params, path) == expected
 
 
-def test_builtin_cache_routes_reject_a_long_path_in_one_pass() -> None:
-    # A long run of `.`-separated parts with a final `/` never matches. With
-    # the parameters stopping at each `.`, this is one scan rather than a
-    # search over every way to split the dots.
+def test_builtin_cache_routes_reject_a_long_path_quickly() -> None:
+    # A long run of `.`-separated parts: with a final `/` it has one segment
+    # too many, and without it the last parameter takes everything after the
+    # dotless ones.
     def path(parts: int) -> str:
-        return "cache/" + "a." * parts + "/"
+        return "cache/" + "a." * parts + "x"
 
     for route in _builtin_cache_routes():
-        pattern = compile_route_pattern(route.path, route.dotless_params)
 
-        def reject(request_path: str, pattern=pattern) -> None:
-            assert pattern.match(request_path) is None
+        def match_and_reject(request_path: str, route=route) -> None:
+            assert match_route_pattern(route.path, route.dotless_params, request_path + "/") is None
+            matched = match_route_pattern(route.path, route.dotless_params, request_path)
+            assert matched is not None
+            assert matched["script_type"].endswith(".x")
 
-        assert_grows_in_step(reject, path(2_500), path(20_000), factor=_GROWTH_FACTOR)
+        assert_grows_in_step(match_and_reject, path(2_500), path(20_000), factor=_GROWTH_FACTOR)
 
 
 @pytest.mark.parametrize(
@@ -77,14 +90,8 @@ def test_builtin_cache_routes_reject_a_long_path_in_one_pass() -> None:
     ],
 )
 def test_a_route_without_dotless_params_matches_as_before(route: str, path: str, expected: dict[str, str]) -> None:
-    match = compile_route_pattern(route).match(path)
-    assert match is not None
-    assert match.groupdict() == expected
-
-
-def _regex_match(route: str, dotless: frozenset[str], path: str) -> dict[str, str] | None:
-    match = compile_route_pattern(route, dotless).fullmatch(path)
-    return None if match is None else match.groupdict()
+    assert match_route_pattern(route, frozenset(), path) == expected
+    assert _regex_match(route, frozenset(), path) == expected
 
 
 def test_match_route_pattern_gives_the_regex_answer_on_generated_routes() -> None:
@@ -92,10 +99,20 @@ def test_match_route_pattern_gives_the_regex_answer_on_generated_routes() -> Non
     names = ["a", "b", "c", "d"]
     texts = ["", ".", "-", "x", "/", ".x", "x.", "--", "{1}", "\n", "é"]
     path_characters = [".", "-", "x", "/", "y", "\n", "é"]
-    for _ in range(400):
+    compared = refused = 0
+    for _ in range(600):
         count = rng.randint(1, 4)
-        route = rng.choice(texts) + "".join("{" + name + "}" + rng.choice(texts) for name in names[:count])
+        between = [rng.choice(texts) for _ in range(count)]
+        route = rng.choice(texts) + "".join(
+            "{" + name + "}" + text for name, text in zip(names, between, strict=False)
+        )
         dotless = frozenset(name for name in names[:count] if rng.random() < 0.4)
+        # A parameter followed directly by the next one has no single split.
+        if "" in between[:-1]:
+            with pytest.raises(ValueError, match="next to each other"):
+                match_route_pattern(route, dotless, "x")
+            refused += 1
+            continue
         for _ in range(40):
             # Filling the route's own parameters gives many paths that match.
             path = route
@@ -109,6 +126,10 @@ def test_match_route_pattern_gives_the_regex_answer_on_generated_routes() -> Non
             assert got == expected, (route, sorted(dotless), path)
             # The handler gets the parameters as keyword arguments in route order.
             assert list(got or {}) == list(expected or {})
+            compared += 1
+    # Both kinds of route came up often enough to mean something.
+    assert compared > 10_000
+    assert refused > 50
 
 
 @pytest.mark.parametrize(
@@ -116,12 +137,14 @@ def test_match_route_pattern_gives_the_regex_answer_on_generated_routes() -> Non
     [
         # Each earlier parameter takes as much as it can.
         ("{a}-{b}", "x-y-z", {"a": "x-y", "b": "z"}),
-        ("{a}{b}{c}", "wxyz", {"a": "wx", "b": "y", "c": "z"}),
+        ("{a}.{b}.{c}", "w.x.y.z", {"a": "w.x", "b": "y", "c": "z"}),
         ("v{a}.{b}/{c}-{d}.js", "vx.y.z/p-q-r.js", {"a": "x.y", "b": "z", "c": "p-q", "d": "r"}),
         ("{a}.{b}", "x.y.z", {"a": "x.y", "b": "z"}),
         ("{a}-{b}", "x-", None),
         ("{a}-{b}", "x-y/", None),
+        # A parameter holds any character but `/`, a newline included.
         ("{a}-{b}", "x-y\n", {"a": "x", "b": "y\n"}),
+        ("call", "call\n", None),
     ],
 )
 def test_several_parameters_in_one_segment(route: str, path: str, expected: dict[str, str] | None) -> None:
@@ -129,24 +152,121 @@ def test_several_parameters_in_one_segment(route: str, path: str, expected: dict
     assert _regex_match(route, frozenset(), path) == expected
 
 
+def test_dotless_params_split_at_the_first_dot() -> None:
+    route = "files/{name}.{ext}"
+    assert match_route_pattern(route, frozenset(), "files/report.v2.txt") == {"name": "report.v2", "ext": "txt"}
+    assert match_route_pattern(route, frozenset({"name"}), "files/report.v2.txt") == {
+        "name": "report",
+        "ext": "v2.txt",
+    }
+
+
+def test_only_the_matched_routes_dotless_params_apply() -> None:
+    # The parent's dotless_params names `name`, but only the child, which
+    # has the handler, decides how its full path is matched.
+    routes = [
+        URLRoute(
+            "files/{name}",
+            dotless_params=frozenset({"name"}),
+            children=[URLRoute(".{ext}", handler=_handler)],
+        )
+    ]
+    matched = match_route(routes, "files/report.v2.txt")
+    assert matched is not None
+    assert matched.params == {"name": "report.v2", "ext": "txt"}
+
+
+@pytest.mark.parametrize(
+    ("routes", "message"),
+    [
+        pytest.param(
+            [URLRoute("{year}{month}", handler=_handler)],
+            "'{year}{month}' puts the parameters {year} and {month} next to each other",
+            id="one-path",
+        ),
+        pytest.param(
+            [URLRoute("ext/", children=[URLRoute("files/{name}{ext}", handler=_handler, name="file")])],
+            "'files/{name}{ext}' (name 'file', full path 'ext/files/{name}{ext}') puts the parameters",
+            id="one-path-below-a-parent",
+        ),
+        pytest.param(
+            [URLRoute("files/{name}", name="files", children=[URLRoute("{ext}", handler=_handler)])],
+            "'{ext}' is joined to the path before it, 'files/{name}' (name 'files'), as plain text,"
+            " which makes 'files/{name}{ext}'",
+            id="parent-and-child",
+        ),
+        pytest.param(
+            [URLRoute("files/{a}{b}/", name="group", children=[URLRoute("x", handler=_handler)])],
+            "'files/{a}{b}/' (name 'group'), a parent of 'x' (full path 'files/{a}{b}/x'), puts the parameters",
+            id="inside-a-parent",
+        ),
+        pytest.param(
+            [URLRoute("pkg/{name}/{name}", handler=_handler)],
+            "'pkg/{name}/{name}' uses the parameter {name} twice",
+            id="repeated-name",
+        ),
+        pytest.param(
+            [URLRoute("pkg/{name}/", children=[URLRoute("{name}", handler=_handler)])],
+            "One comes from the earlier path 'pkg/{name}/' and one from '{name}'",
+            id="repeated-name-across-parent-and-child",
+        ),
+    ],
+)
+def test_check_route_table_refuses_an_ambiguous_route(routes: list[URLRoute], message: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(message)):
+        check_route_table(routes)
+
+
+def test_check_route_table_accepts_parameters_with_text_between_them() -> None:
+    check_route_table(
+        [
+            URLRoute("files/{name}.{ext}", handler=_handler),
+            URLRoute(
+                "files/{name}", children=[URLRoute("/{ext}", handler=_handler), URLRoute("-{v}", handler=_handler)]
+            ),
+            # A parent without a handler is checked only as part of its children's paths.
+            URLRoute("{a}", children=[URLRoute("-{b}", handler=_handler)]),
+            *_builtin_cache_routes(),
+        ]
+    )
+
+
+def test_a_route_that_skipped_the_check_is_refused_on_every_request() -> None:
+    # match_route checks each full path too, so a table that was never
+    # mounted cannot quietly pick one of the splits.
+    routes = [URLRoute("files/{name}", children=[URLRoute("{ext}", handler=_handler)])]
+    with pytest.raises(ValueError, match="next to each other"):
+        match_route(routes, "files/abc")
+
+
 @pytest.mark.parametrize(
     ("route", "dotless", "build", "length"),
     [
-        # Each path almost matches and then fails at its end, so the regex
-        # tries every split of the long segment: about 5 s, 2 s and 1.5 s at
-        # the longest length listed. A final `/` or a missing suffix is
-        # caught before the segment is split.
+        # Each path makes the route's regex try every split of the long
+        # segment. The matcher rejects the first four before it splits the
+        # segment (one segment too many, or a missing suffix).
         ("{a}-{b}", frozenset(), lambda n: "-" * n + "/", 50_000),
-        ("{a}-{b}-{c}", frozenset(), lambda n: "-" * n + "/", 1_500),
-        ("{a}{b}{c}{d}", frozenset(), lambda n: "x" * n + "/", 300),
-        ("{a}-{b}-{c}x", frozenset(), lambda n: "-" * n, 1_500),
-        # These pass the quick checks, so the segment is split between the
-        # parameters before the last one fails at the `.`: about 4 s and 2.5 s
-        # on the regex.
-        ("{a}-{b}-{c}", frozenset({"c"}), lambda n: "-" * n + ".", 1_500),
-        ("{a}{b}{c}{d}", frozenset({"d"}), lambda n: "x" * n + ".", 300),
+        ("{a}-{b}-{c}", frozenset(), lambda n: "-" * n + "/", 50_000),
+        ("{a}-{b}-{c}x", frozenset(), lambda n: "-" * n, 50_000),
+        ("{a}.{b}.{c}", frozenset(), lambda n: "." * n + "/", 50_000),
+        # These reach the split and fail only after searching the whole
+        # segment: the search from the right, the split at each `.`, and
+        # the general walk for a dotless parameter followed by other text.
+        ("{a}-{b}-{c}", frozenset(), lambda n: "x" * n + "-y", 50_000),
+        ("{a}.{b}.{c}", frozenset({"a", "b"}), lambda n: "x" * n + ".y", 50_000),
+        ("{a}-{b}.{c}", frozenset({"b"}), lambda n: "-" * n + "x", 8_000),
+        ("{a}.{b}-{c}", frozenset({"a", "c"}), lambda n: "x." + "-" * n + ".", 8_000),
     ],
-    ids=["two", "three", "four-adjacent", "three-with-suffix", "three-split", "four-split"],
+    ids=[
+        "two",
+        "three",
+        "three-with-suffix",
+        "three-dots",
+        "from-the-right",
+        "at-dots",
+        "general-walk",
+        "general-walk-dot-first",
+    ],
 )
 def test_several_parameters_in_one_segment_reject_a_long_path_quickly(
     route: str, dotless: frozenset[str], build, length: int
@@ -154,15 +274,13 @@ def test_several_parameters_in_one_segment_reject_a_long_path_quickly(
     def reject(path: str) -> None:
         assert match_route_pattern(route, dotless, path) is None
 
-    # The length listed is the longest the regex finishes in a few seconds.
-    # The path is compared with one an eighth as long.
     short = length // _GROWTH_FACTOR
     assert_grows_in_step(reject, build(short), build(length), factor=_GROWTH_FACTOR)
 
 
 def test_several_parameters_in_one_segment_split_a_long_path_quickly() -> None:
-    # A route without dotless parameters: the regex takes time growing with
-    # the square of the run of `-` when the `.` is missing.
+    # A route without dotless parameters, so the split depends on the
+    # whole run of `-`.
     route = "pkg/{name}-{version}.{build}"
     length = 80_000
 
@@ -174,21 +292,65 @@ def test_several_parameters_in_one_segment_split_a_long_path_quickly() -> None:
     assert_grows_in_step(match_both, length // _GROWTH_FACTOR, length, factor=_GROWTH_FACTOR)
 
 
-def test_an_extension_route_with_several_parameters_in_one_segment_matches_quickly() -> None:
-    def handler(_request: object, name: str, version: str, build: str) -> RouteResponse:
-        return RouteResponse(content=f"{name} {version} {build}")
-
+def _probe_app(routes: list[URLRoute]) -> Citry:
     class Probe(Extension):
         name = "probe"
-        urls = [URLRoute("pkg/{name}-{version}-{build}", handler=handler)]
+        urls = routes
 
-    app = Citry(extensions=[Probe])
+    return Citry(extensions=[Probe])
+
+
+@pytest.mark.parametrize(
+    "routes",
+    [
+        pytest.param([URLRoute("files/{name}.{ext}", handler=_handler)], id="one-path"),
+        pytest.param(
+            [URLRoute("files/{name}", children=[URLRoute(".{ext}", handler=_handler)])], id="parent-and-child"
+        ),
+    ],
+)
+def test_an_extension_route_with_parameters_around_a_dot_matches_quickly(routes: list[URLRoute]) -> None:
+    app = _probe_app(routes)
+    check_route_table(app.urls)
+    matched = match_route(app.urls, "ext/probe/files/report.v2.txt")
+    assert matched is not None
+    assert matched.params == {"name": "report.v2", "ext": "txt"}
+
+    def reject(dots: int) -> None:
+        # The `.` run fills the segment, and the final `/` adds a segment
+        # the route does not have.
+        assert match_route(app.urls, "ext/probe/files/" + "." * dots + "/") is None
+        # One segment with no `.` that can end `name`.
+        assert match_route(app.urls, "ext/probe/files/" + "x" * dots) is None
+
+    def split(dots: int) -> None:
+        matched = match_route(app.urls, "ext/probe/files/" + "a." * dots + "x")
+        assert matched is not None
+        assert matched.params["ext"] == "x"
+
+    for run in (reject, split):
+        assert_grows_in_step(run, 20_000 // _GROWTH_FACTOR, 20_000, factor=_GROWTH_FACTOR)
+
+
+def test_an_extension_route_with_several_parameters_in_one_segment_matches_quickly() -> None:
+    app = _probe_app([URLRoute("pkg/{name}-{version}-{build}", handler=_handler)])
     matched = match_route(app.urls, "ext/probe/pkg/my-lib-1.2-3")
     assert matched is not None
     assert matched.params == {"name": "my-lib", "version": "1.2", "build": "3"}
 
-    def reject(dashes: int) -> None:
-        assert match_route(app.urls, "ext/probe/pkg/" + "-" * dashes + "/") is None
+    def match_and_reject(dashes: int) -> None:
+        assert match_route(app.urls, "ext/probe/pkg/" + "-" * dashes) is not None
+        # Only one `-` for the two the route needs, after a long `name`.
+        assert match_route(app.urls, "ext/probe/pkg/" + "x" * dashes + "-y") is None
 
-    # The regex takes seconds at 1,500 characters.
-    assert_grows_in_step(reject, 1_500 // _GROWTH_FACTOR, 1_500, factor=_GROWTH_FACTOR)
+    assert_grows_in_step(match_and_reject, 8_000 // _GROWTH_FACTOR, 8_000, factor=_GROWTH_FACTOR)
+
+
+@pytest.mark.parametrize(
+    "dotless",
+    [{"name"}, ["name"], "name", frozenset({1})],
+    ids=["set", "list", "str", "not-a-name"],
+)
+def test_dotless_params_must_be_a_frozenset_of_names(dotless: object) -> None:
+    with pytest.raises(TypeError, match=r"dotless_params=\.\.\.\) must be a frozenset of parameter names"):
+        URLRoute("files/{name}.{ext}", handler=_handler, dotless_params=dotless)  # type: ignore[arg-type]

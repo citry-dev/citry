@@ -5,8 +5,9 @@ The two `cache/...` routes place parameters next to each other with a `.`
 between them. On each adapter, a valid path resolves to the script handler
 with the right parts, and a long path that never matches is rejected
 quickly rather than by searching every way to split the dots. Every mount,
-Django's `re_path` routes included, uses `compile_route_pattern`. Inputs are ordinary: a real class-id-shaped
-string, and a long run of `.`-separated parts for the no-match case.
+Django's patterns included, matches with `match_route_pattern`. Inputs are
+ordinary: a real class-id-shaped string, and a long run of `.`-separated
+parts for the no-match case.
 """
 
 from __future__ import annotations

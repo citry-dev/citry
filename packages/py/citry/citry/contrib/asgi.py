@@ -56,6 +56,7 @@ from citry.util.routing import (
     RouteResponse,
     body_read_limit,
     call_maybe_sync,
+    check_route_table,
     match_path_below_mount,
     route_allows_method,
     sent_content_type,
@@ -144,7 +145,16 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
     awaits an async handler or runs a sync one in a worker thread, and
     sends the returned [`RouteResponse`][citry.RouteResponse] as ASGI
     messages.
+
+    Raises:
+        ValueError: If a route's full path (its parents' paths followed by
+            its own) has two parameters side by side (such as ``{a}{b}``)
+            or uses one parameter name twice. See [`URLRoute`][citry.URLRoute].
+
     """
+    # Checked here, when the routes are mounted, so a bad route fails at
+    # startup instead of on the first request.
+    check_route_table(citry_instance.urls)
 
     async def app(scope: Scope, receive: Receive, send: Send) -> None:
         # Lifespan support, so the app also works served standalone (uvicorn
