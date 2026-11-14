@@ -119,11 +119,16 @@ The callback receives one object with these members:
 **When it runs.** On mount, and after each server render the page applies
 to this component. A Vue update made only in the browser does not call it.
 
-**Order.** Callbacks that run in the same pass run children before their
-parent, and siblings in the order they first mounted, on the first mount
-and after a server render alike. Every `mounted` hook of a pass runs
-before its first callback. A callback that throws stops the pass: no
-later callback of it runs, and the page's Vue app stops.
+**Order.** Children's callbacks run before their parent's, and siblings
+run in the order they first mounted. This holds on the first mount and
+after a server render. By the time the first callback runs, every
+component mounted by that mount or render has run its `mounted` hook. If
+a callback throws, no later callback of that mount or render runs, and
+the page's Vue app stops. A rejected `async` callback only logs.
+
+Each callback sees the page as the earlier callbacks left it, after Vue
+applied any change they made. A component that such a change removed
+before its turn gets no callback.
 
 **Cleanup.** The callback returns a cleanup function or `undefined`; any
 other value is an error. Citry calls the cleanup before the next run and

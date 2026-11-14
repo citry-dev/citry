@@ -1798,6 +1798,48 @@ def test_component_script_that_opts_out_of_wrapping_has_no_finish_key() -> None:
     assert "finishKey" not in script
 
 
+@pytest.mark.parametrize(
+    ("script_type", "wrapped"),
+    [
+        ("text/javascript", True),
+        # The browser still runs this as a classic script, but Citry does not recognise the
+        # parameter and leaves the script's text alone, so nothing reports a finish.
+        ("text/javascript; charset=utf-8", False),
+    ],
+    ids=["recognised-type", "type-with-parameter"],
+)
+def test_component_script_has_a_finish_key_only_when_citry_wrapped_it(script_type: str, wrapped: bool) -> None:
+    registry = Citry(secret="vue-finish-key-test-secret", autodiscover=False)  # noqa: S106
+    registry.set_mounted_prefix("/citry")
+
+    class Root(Component):
+        citry = registry
+        template = '<main :data-ready="true">root</main>'
+        js = "window.typed = true; $component({});"
+
+        @classmethod
+        def on_dependencies(cls, scripts, styles):
+            # `wrap` stays on. A `type` that is not a plain classic script keeps the script out of
+            # its own function, so the `try` that reports the finish is skipped as well.
+            typed = [
+                replace(item, attrs={**item.attrs, "type": script_type}) if item.kind == "component" else item
+                for item in scripts
+            ]
+            return typed, styles
+
+    payload = default_events_producer(registry).prepare_from_render(
+        render_prepared_direct(Root()), citry=registry, app_id="app", revision=0
+    )
+    [script] = payload["scripts"]
+    served = definition_bundle(registry, script["source"]["sha256"])
+    assert served is not None
+    assert b"window.typed = true;" in served
+    # The manifest key and the bytes agree: both have the wrapper, or neither does.
+    assert (b"finishScript" in served) is wrapped
+    assert ("finishKey" in script) is wrapped
+    assert (b"(function() {" in served) is wrapped
+
+
 def test_custom_dependency_hook_disables_later_lazy_type_assets() -> None:
     class DependencyPolicy(Extension):
         name = "dependency_policy"

@@ -122,7 +122,7 @@ const METADATA = {
 // Starts a prepared app on a standalone page (the browser already ran every script tag) whose
 // manifest lists `scripts`. Startup stops at the first check that fails, so the tests read which
 // check that was from the error. A start that gets past the script checks stops at the Vue mount.
-async function startWith(scripts, setup = () => {}) {
+async function startWith(scripts, setup = () => {}, configure = () => {}) {
   class Element {}
   const app = {
     component() {},
@@ -137,6 +137,8 @@ async function startWith(scripts, setup = () => {}) {
   const fixture = load({
     // A failed script is reported again; the stand-in keeps that from ending this test process.
     reportError() {},
+    // The client keeps the `Vue` it finds when it loads, so the stand-in app factories go in here.
+    Vue: { ...vueStub(), ...RealVue, createApp: () => app, createSSRApp: () => app },
     Element,
     Node: class {},
     location: { assign() {} },
@@ -158,7 +160,6 @@ async function startWith(scripts, setup = () => {}) {
       },
     },
   });
-  fixture.context.Vue = { ...vueStub(), ...RealVue, createApp: () => app, createSSRApp: () => app };
   setup(fixture);
   const asset = { id: "definition", url: "/definitions/abc.js", sha256: "0".repeat(64), ...METADATA };
   const loaded = fixture.realm(METADATA);
@@ -190,6 +191,7 @@ async function startWith(scripts, setup = () => {}) {
     tags: { Root: "c-root" },
   });
   configuration.host = new Element();
+  configure(configuration);
   return fixture.citryRuntime.startPrepared(configuration);
 }
 
@@ -269,6 +271,131 @@ test("the finish check runs before the registration check, so a script error is 
     }),
     /initial Citry Vue type Options were not emitted before bootstrap/,
   );
+});
+
+// ---------------------------------------------------------------------------
+// A script from another origin that fails to load is skipped
+// ---------------------------------------------------------------------------
+
+// A file the server lists by URL, with no claim that it registers component options.
+function fileScript(url, typeKey = "Root") {
+  return {
+    owner: { kind: "component", typeKey },
+    source: { kind: "external", url, attrs: {} },
+    lazyAllowed: false,
+    registersOptions: false,
+  };
+}
+
+// Starts a page at `pageUrl` (with `baseUrl` as its base URL) that loads `scripts` itself, as a
+// mounted page does, and refuses every script request the way an ad blocker would. `requested`
+// lists the URL of each script element the runtime added, and `warnings` holds the console
+// warnings. The start either rejects with the failed script's error or runs on to the Vue mount,
+// which stops with "STOP AT MOUNT".
+async function startWhereScriptsFail(scripts, { pageUrl, baseUrl = pageUrl }) {
+  const requested = [];
+  const warnings = [];
+  const outcome = await startWith(
+    scripts,
+    (fixture) => {
+      const { document } = fixture.context;
+      document.URL = pageUrl;
+      document.baseURI = baseUrl;
+      fixture.context.console = { error() {}, warn: (text) => warnings.push(text) };
+      document.createElement = (tag) => ({ tag, setAttribute() {}, remove() {} });
+      document.head = {
+        append(element) {
+          // Only a script element is a request. The runtime also adds preload hints, which have no handlers.
+          if (element.tag !== "script") return;
+          requested.push(element.src);
+          // The browser reports every refused request as one `error` event, after the call returns.
+          queueMicrotask(() => element.onerror());
+        },
+      };
+    },
+    (configuration) => {
+      configuration.loadInitialAssets = true;
+    },
+  ).then(
+    () => "started",
+    (error) => error.message,
+  );
+  return { outcome, requested, warnings };
+}
+
+test("a refused script from another origin is skipped and the page starts without it", async () => {
+  const { outcome, requested, warnings } = await startWhereScriptsFail([fileScript("https://cdn.test/a.js")], {
+    pageUrl: "https://example.test/page",
+  });
+  // The start got past the script and reached the Vue mount.
+  assert.equal(outcome, "STOP AT MOUNT");
+  assert.deepEqual(requested, ["https://cdn.test/a.js"]);
+  assert.equal(warnings.length, 1);
+  assert.ok(
+    warnings[0].startsWith("[Citry] skipped a script from another origin that failed to load: https://cdn.test/a.js. "),
+    warnings[0],
+  );
+});
+
+test("a refused script from the page's own origin stops the start", async () => {
+  for (const url of ["https://example.test/a.js", "/a.js", "a.js"]) {
+    const { outcome, warnings } = await startWhereScriptsFail([fileScript(url)], {
+      pageUrl: "https://example.test/page",
+    });
+    assert.equal(outcome, "Citry Vue type script failed to load: " + url, url);
+    assert.deepEqual(warnings, [], url);
+  }
+});
+
+test("a script URL without a scheme is judged against the page's address, not the base element's", async () => {
+  // The page is at example.test but `<base href>` points at cdn.test. The browser fetches "/a.js"
+  // from cdn.test, yet the app's own files are written relative to the page, so a base element
+  // injected by an attacker must not turn one of them into a skippable "other origin" file.
+  const own = await startWhereScriptsFail([fileScript("/a.js")], {
+    pageUrl: "https://example.test/page",
+    baseUrl: "https://cdn.test/",
+  });
+  assert.equal(own.outcome, "Citry Vue type script failed to load: /a.js");
+  assert.deepEqual(own.warnings, []);
+  // A full URL to another origin is still another origin, whatever the base is.
+  const other = await startWhereScriptsFail([fileScript("https://cdn.test/a.js")], {
+    pageUrl: "https://example.test/page",
+    baseUrl: "https://cdn.test/",
+  });
+  assert.equal(other.outcome, "STOP AT MOUNT");
+  assert.equal(other.warnings.length, 1);
+});
+
+test("a protocol-relative URL to another host is skipped, and one to the page's own host stops the start", async () => {
+  const other = await startWhereScriptsFail([fileScript("//cdn.test/a.js")], { pageUrl: "https://example.test/page" });
+  assert.equal(other.outcome, "STOP AT MOUNT");
+  assert.equal(other.warnings.length, 1);
+  const own = await startWhereScriptsFail([fileScript("//example.test/a.js")], {
+    pageUrl: "https://example.test/page",
+  });
+  assert.equal(own.outcome, "Citry Vue type script failed to load: //example.test/a.js");
+  assert.deepEqual(own.warnings, []);
+});
+
+test("a page whose origin is null skips nothing, so a refused script stops the start", async () => {
+  // A page opened from disk or an empty page has no origin to compare against, so every refused
+  // script is the app's own as far as the runtime can tell.
+  for (const pageUrl of ["file:///tmp/page.html", "about:blank"]) {
+    const { outcome, warnings } = await startWhereScriptsFail([fileScript("https://cdn.test/a.js")], { pageUrl });
+    assert.equal(outcome, "Citry Vue type script failed to load: https://cdn.test/a.js", pageUrl);
+    assert.deepEqual(warnings, [], pageUrl);
+  }
+});
+
+test("a file that two component types list is requested once when it is skipped", async () => {
+  // The manifest lists a shared file once for each component type that owns it.
+  const { outcome, requested, warnings } = await startWhereScriptsFail(
+    [fileScript("https://cdn.test/a.js", "Root"), fileScript("https://cdn.test/a.js", "Other")],
+    { pageUrl: "https://example.test/page" },
+  );
+  assert.equal(outcome, "STOP AT MOUNT");
+  assert.deepEqual(requested, ["https://cdn.test/a.js"]);
+  assert.equal(warnings.length, 1);
 });
 
 // ---------------------------------------------------------------------------
@@ -445,7 +572,7 @@ test("the parent links decide, not raw mount order, which of two related compone
 
 test("a component under a plain Vue wrapper is ordered under its nearest Citry ancestor", async () => {
   // leaf's Vue parent is a component Citry did not create, so it has no callback in the pass. leaf
-  // hangs from root, whose children are [sib, leaf] by mount. If leaf were treated as the start of
+  // is placed under root, whose children are [sib, leaf] by mount. If leaf were treated as the start of
   // its own walk instead, it would run before sib.
   const setup = page({ root: null, sib: "root", leaf: "root" }, ["sib", "leaf", "root"], { viaPlain: ["leaf"] });
   await setup.settleFirstMount();

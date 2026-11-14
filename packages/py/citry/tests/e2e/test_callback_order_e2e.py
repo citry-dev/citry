@@ -35,33 +35,14 @@ pytest.importorskip("playwright.sync_api")
 # the siblings Alpha, Group, Card and the Rows in the order they sit in the template.
 _FIRST_MOUNT_ORDER = ["Alpha", "Leaf", "Group", "Filled", "Card", "Row:a", "Row:b", "Row:c", "Page"]
 
-# The callback that records its component's name. A repeated component reads its name from the
-# element it rendered, since every instance shares one callback.
-_RECORD_ROW = """
-    $component({
-        onServerRender({els}) {
-            (window.__order ||= []).push('Row:' + els[0].textContent.trim());
-        },
-    });
-"""
+
+def _fail_in(page: Any, name: str) -> None:
+    """Make the callback of the component called `name` throw, by setting a global before any script runs."""
+    page.add_init_script(f"window.__failing = {name!r};")
 
 
-def _record(name: str, *, throws: bool = False) -> str:
-    """Return the `js` of a component whose callback pushes `name`, then throws when `throws` is set."""
-    # The push comes first so a throwing callback still shows that it ran.
-    throw = f"throw new Error('{name} failed on purpose');" if throws else ""
-    return f"""
-        $component({{
-            onServerRender() {{
-                (window.__order ||= []).push('{name}');
-                {throw}
-            }},
-        }});
-    """
-
-
-def _build_page(*, failing: str | None = None) -> tuple[Citry, type[Component]]:
-    """Build the test page; the callback of the component named `failing` throws."""
+def _build_page() -> tuple[Citry, type[Component]]:
+    """Build the test page. Each callback throws when `window.__failing` names its component (see `_fail_in`)."""
     engine = Citry(secret="callback-order-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -70,42 +51,90 @@ def _build_page(*, failing: str | None = None) -> tuple[Citry, type[Component]]:
         template = """
             <i>leaf</i>
         """
-        js = _record("Leaf", throws=failing == "Leaf")
+        # The push comes first so a throwing callback still shows that it ran.
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Leaf');
+                    if (window.__failing === 'Leaf') throw new Error('Leaf failed on purpose');
+                },
+            });
+        """
 
     class Late(Component):
         citry = engine
         template = """
             <s>late</s>
         """
-        js = _record("Late", throws=failing == "Late")
+        # The push comes first so a throwing callback still shows that it ran.
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Late');
+                    if (window.__failing === 'Late') throw new Error('Late failed on purpose');
+                },
+            });
+        """
 
     class Group(Component):
         citry = engine
         template = """
             <section><c-Leaf /></section>
         """
-        js = _record("Group", throws=failing == "Group")
+        # The push comes first so a throwing callback still shows that it ran.
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Group');
+                    if (window.__failing === 'Group') throw new Error('Group failed on purpose');
+                },
+            });
+        """
 
     class Alpha(Component):
         citry = engine
         template = """
             <b>alpha</b>
         """
-        js = _record("Alpha", throws=failing == "Alpha")
+        # The push comes first so a throwing callback still shows that it ran.
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Alpha');
+                    if (window.__failing === 'Alpha') throw new Error('Alpha failed on purpose');
+                },
+            });
+        """
 
     class Card(Component):
         citry = engine
         template = """
             <article><c-slot name="default" /></article>
         """
-        js = _record("Card", throws=failing == "Card")
+        # The push comes first so a throwing callback still shows that it ran.
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Card');
+                    if (window.__failing === 'Card') throw new Error('Card failed on purpose');
+                },
+            });
+        """
 
     class Filled(Component):
         citry = engine
         template = """
             <u>filled</u>
         """
-        js = _record("Filled", throws=failing == "Filled")
+        # The push comes first so a throwing callback still shows that it ran.
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Filled');
+                    if (window.__failing === 'Filled') throw new Error('Filled failed on purpose');
+                },
+            });
+        """
 
     class Row(Component):
         citry = engine
@@ -119,7 +148,14 @@ def _build_page(*, failing: str | None = None) -> tuple[Citry, type[Component]]:
         template = """
             <li>{{ name }}</li>
         """
-        js = _RECORD_ROW
+        # Every instance shares one callback, so it reads its name from the element it rendered.
+        js = """
+            $component({
+                onServerRender({els}) {
+                    (window.__order ||= []).push('Row:' + els[0].textContent.trim());
+                },
+            });
+        """
 
     class Page(Component):
         citry = engine
@@ -163,7 +199,15 @@ def _build_page(*, failing: str | None = None) -> tuple[Citry, type[Component]]:
                 </ul>
             </main>
         """
-        js = _record("Page", throws=failing == "Page")
+        # The push comes first so a throwing callback still shows that it ran.
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Page');
+                    if (window.__failing === 'Page') throw new Error('Page failed on purpose');
+                },
+            });
+        """
 
     dispatcher_for(engine)
     return engine, Page
@@ -189,7 +233,7 @@ def _page_errors(page: Any) -> list[str]:
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "mounted"])
+@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "client-rendered"])
 def test_first_mount_runs_children_before_parents_and_siblings_in_order(
     page: Any, serve_live: Any, wait_for_citry_ready: Any, hydrate: bool
 ) -> None:
@@ -205,7 +249,7 @@ def test_first_mount_runs_children_before_parents_and_siblings_in_order(
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "mounted"])
+@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "client-rendered"])
 def test_server_render_keeps_the_first_mount_order(
     page: Any, serve_live: Any, wait_for_citry_ready: Any, send_event: Any, hydrate: bool
 ) -> None:
@@ -243,7 +287,7 @@ def test_server_render_keeps_the_first_mount_order(
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "mounted"])
+@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "client-rendered"])
 def test_new_sibling_and_reordered_rows_follow_mount_order_not_page_order(
     page: Any, serve_live: Any, wait_for_citry_ready: Any, send_event: Any, hydrate: bool
 ) -> None:
@@ -273,11 +317,12 @@ def test_new_sibling_and_reordered_rows_follow_mount_order_not_page_order(
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "mounted"])
+@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "client-rendered"])
 def test_throwing_callback_on_first_mount_stops_later_callbacks_and_the_app(
     page: Any, serve_live: Any, hydrate: bool
 ) -> None:
-    engine, page_class = _build_page(failing="Group")
+    engine, page_class = _build_page()
+    _fail_in(page, "Group")
     errors = _page_errors(page)
     page.add_init_script(
         """
@@ -303,7 +348,8 @@ def test_throwing_callback_after_a_server_render_stops_later_callbacks_and_the_a
     page: Any, serve_live: Any, wait_for_citry_ready: Any
 ) -> None:
     # `Late` mounts only after the server render, so the first mount runs without a failure.
-    engine, page_class = _build_page(failing="Late")
+    engine, page_class = _build_page()
+    _fail_in(page, "Late")
     errors = _page_errors(page)
     page.goto(serve_live(engine, _serialize(page_class, hydrate=False), "") + "/")
     wait_for_citry_ready()
@@ -320,3 +366,162 @@ def test_throwing_callback_after_a_server_render_stops_later_callbacks_and_the_a
     # Firefox prints an Error argument of `console.error` as just "Error", so the check names
     # the runtime's own message. The order above shows which callback threw.
     assert any("a server render failed and the app has stopped" in error for error in errors), errors
+
+
+def _build_toggle_page() -> tuple[Citry, type[Component]]:
+    """
+    Build a page whose browser-only `v-if` shows a `Spinner` or a `Bad` component.
+
+    The page keeps its `v-if` flags as Vue data and exposes the component as `window.__page`, so a
+    test or another component's callback can flip them. `Alpha` sits before the toggled
+    component in the template, so its callback runs first and can remove the component that
+    is still waiting for its own callback. `Alpha` does that when the revision it runs in equals
+    `window.__removeAtRevision`.
+    """
+    engine = Citry(secret="callback-toggle-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class Alpha(Component):
+        citry = engine
+        template = """
+            <b>alpha</b>
+        """
+        js = """
+            $component({
+                onServerRender({revision}) {
+                    if (window.__removeAtRevision === revision) window.__page.shown = false;
+                },
+            });
+        """
+
+    class Spinner(Component):
+        citry = engine
+        template = """
+            <s>spinner</s>
+        """
+        # A callback that starts a timer must hand back the function that stops it, and Citry calls
+        # that function when the component goes away.
+        js = """
+            $component({
+                onServerRender() {
+                    const stats = (window.__spinner ||= {started: 0, cleaned: 0, ticks: 0});
+                    stats.started++;
+                    const timer = setInterval(() => { stats.ticks++; }, 10);
+                    return () => {
+                        stats.cleaned++;
+                        clearInterval(timer);
+                    };
+                },
+            });
+        """
+
+    class Bad(Component):
+        citry = engine
+        template = """
+            <u>bad</u>
+        """
+        js = """
+            $component({
+                onServerRender() {
+                    (window.__order ||= []).push('Bad');
+                    throw new Error('Bad failed on purpose');
+                },
+            });
+        """
+
+    class Page(Component):
+        citry = engine
+
+        class Events:
+            def refresh(self) -> Any:
+                return actions.Render(Page())
+
+        template = """
+            <main>
+                <button
+                    id="refresh"
+                    @c-click="refresh"
+                >refresh</button>
+                <c-Alpha />
+                <template v-if="shown"><c-Spinner /></template>
+                <template v-if="badShown"><c-Bad /></template>
+            </main>
+        """
+        js = """
+            $component({
+                data() { return {shown: true, badShown: false}; },
+                mounted() { window.__page = this; },
+            });
+        """
+
+    dispatcher_for(engine)
+    return engine, Page
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "client-rendered"])
+def test_first_mount_skips_a_component_that_an_earlier_callback_removed(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any, hydrate: bool
+) -> None:
+    engine, page_class = _build_toggle_page()
+    errors = _page_errors(page)
+    # Alpha runs before Spinner and takes it off the page, so Vue unmounts Spinner before its turn.
+    page.add_init_script("window.__removeAtRevision = 0;")
+
+    page.goto(serve_live(engine, _serialize(page_class, hydrate=hydrate), "") + "/")
+    wait_for_citry_ready()
+    # A timer that a skipped callback had started would keep counting; give it time to show.
+    page.wait_for_timeout(150)
+
+    assert page.locator("s").count() == 0
+    # Spinner's callback never ran, so it started no timer and has nothing left to stop.
+    assert page.evaluate("window.__spinner ?? null") is None
+    assert errors == []
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("hydrate", [True, False], ids=["hydrated", "client-rendered"])
+def test_server_render_skips_a_component_that_an_earlier_callback_removed(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any, send_event: Any, hydrate: bool
+) -> None:
+    engine, page_class = _build_toggle_page()
+    errors = _page_errors(page)
+    # Revision 0 is the first mount, which leaves Spinner in place. The server render is revision 1.
+    page.add_init_script("window.__removeAtRevision = 1;")
+    page.goto(serve_live(engine, _serialize(page_class, hydrate=hydrate), "") + "/")
+    wait_for_citry_ready()
+    assert page.evaluate("window.__spinner.started") == 1
+    assert page.locator("s").count() == 1
+
+    send_event(lambda: page.locator("#refresh").click())
+
+    # The server render updated Spinner too, but Alpha's callback ran first and removed it. Vue
+    # called the cleanup of the timer at the removal, and Spinner's callback did not start another.
+    assert page.locator("s").count() == 0
+    stats = page.evaluate("window.__spinner")
+    assert (stats["started"], stats["cleaned"]) == (1, 1)
+    ticks = stats["ticks"]
+    page.wait_for_timeout(150)
+    # The only timer was stopped, so the count has not moved.
+    assert page.evaluate("window.__spinner.ticks") == ticks
+    assert errors == []
+
+
+@pytest.mark.e2e
+def test_throwing_callback_of_a_component_shown_after_startup_stops_the_app_and_says_so(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
+    engine, page_class = _build_toggle_page()
+    errors = _page_errors(page)
+    page.goto(serve_live(engine, _serialize(page_class, hydrate=False), "") + "/")
+    wait_for_citry_ready()
+    assert errors == []
+
+    # `Bad` mounts only now, after startup, so no start-up code waits on its callback.
+    page.evaluate("window.__page.badShown = true")
+    page.wait_for_function("window.__citryRuntime._apps.size === 0")
+
+    assert page.evaluate("window.__order") == ["Bad"]
+    # Firefox prints an Error argument of `console.error` as just "Error", so the check names the
+    # message that comes first. The order above shows which callback threw.
+    assert any("an onServerRender callback failed and the app has stopped" in error for error in errors), errors

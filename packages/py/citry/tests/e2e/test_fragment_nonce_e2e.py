@@ -220,6 +220,9 @@ def test_fragment_script_may_use_a_blob_url_page_code_made(page: Any, serve_live
     url = page.evaluate("() => URL.createObjectURL(new Blob(['window.__blobRan = 1;'], {type: 'text/javascript'}))")
     for asset in manifest["vue"]["prepared"]["manifest"]["scripts"]:
         asset["source"] = {"kind": "external", "url": url, "attrs": {}}
+        # Only a script Citry published itself carries the finish report, so an
+        # external source cannot keep the component script's `finishKey`.
+        asset.pop("finishKey", None)
 
     error = _load_from_page_code(page, fragment, manifest)
     # The script does not register the component's options, which is the only

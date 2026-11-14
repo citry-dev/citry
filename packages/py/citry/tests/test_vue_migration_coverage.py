@@ -1857,7 +1857,7 @@ def test_prepared_script_finish_key_is_accepted_on_a_component_script_the_server
 def test_prepared_script_finish_key_is_rejected_when_malformed_or_misplaced(changes: dict[str, object]) -> None:
     value = deepcopy(_FINISH_KEY_SCRIPT)
     value.update(changes)
-    with pytest.raises(ValueError, match="metadata is invalid"):
+    with pytest.raises(ValueError, match="has an invalid finishKey"):
         _validate_script_assets([value])
 
 

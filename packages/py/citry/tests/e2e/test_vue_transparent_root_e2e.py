@@ -443,6 +443,8 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
       const script = structuredClone(manifest.vue.prepared.manifest.scripts[0]);
       script.registersOptions = false;
       script.source = {kind: 'external', url: '/must-not-run-after-cancel.js', attrs: {}};
+      // Only a script Citry published itself reports its finish, so an external one has no key.
+      delete script.finishKey;
       manifest.vue.prepared.manifest.scripts = [script];
       globalThis.__cancelledManifest = manifest;
       globalThis.__cancelledHost = host;
@@ -571,6 +573,8 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
       const script = structuredClone(manifest.vue.prepared.manifest.scripts[0]);
       script.registersOptions = false;
       script.source = {kind: 'external', url: '/must-not-run-after-css.js', attrs: {}};
+      // Only a script Citry published itself reports its finish, so an external one has no key.
+      delete script.finishKey;
       manifest.vue.prepared.manifest.scripts = [script];
       globalThis.__relocatedAppId = appId;
       globalThis.__relocatedHost = host;

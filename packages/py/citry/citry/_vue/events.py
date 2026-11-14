@@ -27,6 +27,7 @@ from citry.citry_element import CitryElement
 from citry.component import Component, ComponentMeta
 from citry.component_registry import NotRegistered
 from citry.ext.dependencies.scripts import uses_component
+from citry.ext.dependencies.types import _script_type_should_wrap
 from citry.ext.events.emission import EXTRA_KEY, EventInstanceEntry, build_events_manifest
 from citry_core.template_parser import HtmlAttrKind, ParseOptions, TemplateElement, parse_template
 
@@ -1098,7 +1099,14 @@ class DirectVueEventsProducer:
                     # script that throws or fails to parse stops startup with an error that names
                     # the component. The wrapper is part of the published bytes, so the digest,
                     # the integrity hash and any CSP hash below already cover it.
-                    if not is_style and dependency.kind == "component" and cast("Script", prepared_dependency).wrap:
+                    # Only a script that `Script._render` put inside its own function is wrapped
+                    # again, so the `try` never changes how the script's top level behaves.
+                    if (
+                        not is_style
+                        and dependency.kind == "component"
+                        and cast("Script", prepared_dependency).wrap
+                        and _script_type_should_wrap(prepared_dependency.attrs)
+                    ):
                         finish_key = hashlib.sha256(text.encode()).hexdigest()
                         text = _report_component_script_finish(text, finish_key)
                     content = text.encode()
@@ -1693,7 +1701,7 @@ def _validate_script_assets(scripts: list[dict[str, object]]) -> None:
             or type(source) is not dict
             or source.get("kind") != "owned"
         ):
-            raise ValueError("prepared script asset metadata is invalid")
+            raise ValueError("prepared script asset has an invalid finishKey")
         if type(owner) is not dict or type(source) is not dict or type(script["lazyAllowed"]) is not bool:
             raise ValueError("prepared script asset metadata is invalid")
         component = owner.get("kind") == "component"

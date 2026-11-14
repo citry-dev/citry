@@ -102,7 +102,9 @@ def test_browser_plugin_script_runs_before_component_scripts(
 
     class Widget(Component):
         citry = engine
-        template = "<p>widget</p>"
+        template = """
+            <p>widget</p>
+        """
         js = """
         (window.__order = window.__order || []).push('component');
         $component({
@@ -120,19 +122,79 @@ def test_browser_plugin_script_runs_before_component_scripts(
     assert _error_messages(page) == []
 
 
+# Each builder defines one `Widget` whose `js` fails in a different way. The `js` is a literal in
+# each class so the test reads the way a component author would write it.
+def _widget_that_throws_before_registering(engine: Citry) -> type[Component]:
+    class Widget(Component):
+        citry = engine
+        template = """
+            <p>widget</p>
+        """
+        js = """
+            throw new Error('script boom');
+        """
+
+    return Widget
+
+
+def _widget_that_throws_after_registering(engine: Citry) -> type[Component]:
+    class Widget(Component):
+        citry = engine
+        template = """
+            <p>widget</p>
+        """
+        # `$component` has already registered the type's options when the script throws, so a
+        # check that only asked whether the options registered would let this start go on.
+        js = """
+            $component({
+              onServerRender() {
+                window.__callbackRan = true;
+              },
+            });
+            throw new Error('script boom');
+        """
+
+    return Widget
+
+
+def _widget_with_a_syntax_error(engine: Citry) -> type[Component]:
+    class Widget(Component):
+        citry = engine
+        template = """
+            <p>widget</p>
+        """
+        js = """
+            const = ;
+            $component({
+              onServerRender() {
+                window.__callbackRan = true;
+              },
+            });
+        """
+
+    return Widget
+
+
 @pytest.mark.parametrize("mounted", [False, True], ids=["standalone", "mounted"])
 @pytest.mark.parametrize(
-    ("body", "original_name", "original_message", "startup_error", "cause"),
+    ("build_widget", "original_name", "original_message", "startup_error", "cause"),
     [
         (
-            "throw new Error('script boom');",
+            _widget_that_throws_before_registering,
             "Error",
             "script boom",
             "Citry Vue component script threw while it ran: Widget_",
             "script boom",
         ),
         (
-            "const = ;",
+            _widget_that_throws_after_registering,
+            "Error",
+            "script boom",
+            "Citry Vue component script threw while it ran: Widget_",
+            "script boom",
+        ),
+        (
+            _widget_with_a_syntax_error,
             # Each browser words a syntax error its own way, so only its type is checked.
             "SyntaxError",
             None,
@@ -140,35 +202,22 @@ def test_browser_plugin_script_runs_before_component_scripts(
             None,
         ),
     ],
-    ids=["throws", "syntax-error"],
+    ids=["throws-before-registering", "throws-after-registering", "syntax-error"],
 )
 def test_failing_component_script_stops_startup(
     page: Any,
     open_page: Any,
     mounted: bool,
-    body: str,
+    build_widget: Any,
     original_name: str,
     original_message: str | None,
     startup_error: str,
     cause: str | None,
 ) -> None:
     engine = _engine(mounted=mounted)
+    widget = build_widget(engine)
 
-    class Widget(Component):
-        citry = engine
-        template = "<p>widget</p>"
-        js = (
-            body
-            + """
-        $component({
-          onServerRender() {
-            window.__callbackRan = true;
-          },
-        });
-        """
-        )
-
-    open_page(engine, Widget().render().serialize(), mounted=mounted)
+    open_page(engine, widget().render().serialize(), mounted=mounted)
     # The page's own `error` event sees the script's error first, then the error that stops the start.
     page.wait_for_function("() => window.__errors.length >= 2")
     # A third error would be a second start attempt or a leaked callback error; give it a moment to show.
@@ -183,6 +232,7 @@ def test_failing_component_script_stops_startup(
     assert errors[1]["message"].startswith(startup_error)
     assert errors[1]["cause"] == cause
     assert page.evaluate("() => window.__citryReadyApps.length") == 0
+    # A callback that a failed script registered never runs, because the app never starts.
     assert page.evaluate("() => window.__callbackRan") is None
 
 
@@ -205,7 +255,9 @@ def test_throwing_dependencies_file_does_not_stop_startup(
                 ),
             ]
 
-        template = "<p>widget</p>"
+        template = """
+            <p>widget</p>
+        """
         js = """
         window.__order = ['component'];
         $component({
@@ -250,7 +302,9 @@ def test_failed_script_url_is_skipped_only_for_another_origin(
         class Dependencies:
             js = [Script(url=script_url)]
 
-        template = "<p>widget</p>"
+        template = """
+            <p>widget</p>
+        """
         js = """
         window.__componentRan = true;
         """
@@ -265,9 +319,10 @@ def test_failed_script_url_is_skipped_only_for_another_origin(
         page.wait_for_function("() => window.__citryReadyApps.length === 1")
         assert _error_messages(page) == []
         assert page.evaluate("() => window.__componentRan") is True
-        assert [text for text in warnings if script_url in text] == [
-            f"[Citry] skipped a third-party script that failed to load: {script_url}"
-        ]
+        [warning] = [text for text in warnings if script_url in text]
+        # The warning names the file and says what the page lacks and what to do about it.
+        assert warning.startswith(f"[Citry] skipped a script from another origin that failed to load: {script_url}. ")
+        assert "The page started without it" in warning
 
 
 def test_skipped_third_party_script_is_tried_again_by_a_later_fragment(
@@ -295,7 +350,9 @@ def test_skipped_third_party_script_is_tried_again_by_a_later_fragment(
         class Dependencies:
             js = [Script(url="http://third-party.test/analytics.js")]
 
-        template = "<p>widget</p>"
+        template = """
+            <p>widget</p>
+        """
         js = """
         window.__componentRan = true;
         """
@@ -321,3 +378,75 @@ def test_skipped_third_party_script_is_tried_again_by_a_later_fragment(
     # so the route sees every attempt only in the other browsers.
     if browser_name != "webkit":
         assert len(requests) == 2
+
+
+def test_failed_other_origin_file_listed_by_two_components_is_requested_once(
+    page: Any, open_page: Any, wait_for_citry_ready: Any, wait_for_count: Any
+) -> None:
+    engine = _engine(mounted=True)
+    url = "http://third-party.test/analytics.js"
+    skips: list[str] = []
+    page.on(
+        "console",
+        lambda message: skips.append(message.text) if message.text.startswith("[Citry] skipped") else None,
+    )
+    requests: list[str] = []
+
+    def refuse(route: Any) -> None:
+        requests.append(route.request.url)
+        route.abort()
+
+    page.route(url, refuse)
+
+    class Alpha(Component):
+        citry = engine
+
+        class Dependencies:
+            js = [Script(url=url)]
+
+        template = """
+            <b>alpha</b>
+        """
+        # Only a component with its own `js` starts a browser app that reads the file list.
+        js = """
+            window.__ran = (window.__ran || 0) + 1;
+        """
+
+    class Beta(Component):
+        citry = engine
+
+        class Dependencies:
+            js = [Script(url=url)]
+
+        template = """
+            <i>beta</i>
+        """
+        # Only a component with its own `js` starts a browser app that reads the file list.
+        js = """
+            window.__ran = (window.__ran || 0) + 1;
+        """
+
+    class Page(Component):
+        citry = engine
+        template = """
+            <main>
+                <c-Alpha />
+                <c-Beta />
+            </main>
+        """
+
+    html = Page().render().serialize()
+    # The server lists the shared file once for each component type that owns it. Without two
+    # entries the page below would prove nothing, because a single entry is always requested once.
+    assert html.count(f'"url":"{url}"') == 2, html
+
+    open_page(engine, html, mounted=True)
+    wait_for_citry_ready()
+    wait_for_count(skips, 1)
+    # A second request or warning would come right after the first, so give it a moment to show.
+    page.wait_for_timeout(200)
+
+    # The app started without the file, and the browser asked for it once and the page warned once.
+    assert len(skips) == 1
+    assert len(requests) == 1
+    assert _error_messages(page) == []

@@ -186,9 +186,10 @@ callback can rely on its children's callbacks having run. A sibling that
 appears in a later server render runs after the siblings that were
 already there.
 
-If a callback throws, Citry runs no further callbacks of that pass and
-stops the page's Vue app. An `async` callback that rejects only logs the
-error; see
+If a callback throws, Citry runs none of the callbacks still waiting
+from the same mount or server render, and stops the page's Vue app.
+Catch an error you expect inside the callback. An `async` callback that
+rejects only logs the error; see
 [Browser APIs](/reference/browser-apis/#on-server-render).
 
 Return a cleanup function to undo the work. Citry calls it before the next
