@@ -1917,7 +1917,9 @@ same class, built by the same schema. The copy differs in these ways:
    such an attempt spends as it would inside a Pydantic tree. A request
    also stops once its checks have used a fixed amount of CPU time,
    counted only while Citry checks, so another request on the same
-   thread does not count.
+   thread does not count. The time is read from the thread's CPU clock
+   (`time.thread_time`), which on Windows moves in steps of about
+   15.6 ms, so there the limit can stop a request up to one step late.
 
 A schema whose worst case is fixed and small (no recursion, no extra
 keys, no wrap validator, and a small fixed number of errors) gets only

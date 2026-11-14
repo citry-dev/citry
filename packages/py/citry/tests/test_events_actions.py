@@ -15,7 +15,7 @@ import logging
 import random
 import time
 from types import SimpleNamespace
-from typing import Literal
+from typing import Any, Literal
 
 import pytest
 
@@ -1153,42 +1153,72 @@ class TestFieldErrors:
             assert got == expected, (containers, fields)
             assert list(got[0]) == list(expected[0])
 
-    def test_a_path_with_many_dots_is_limited_quickly(self):
+    def test_a_path_with_many_dots_is_limited_in_time_in_step_with_its_length(self):
         # A dict key from the request can hold any number of dots, and
         # limiting the paths must take time in step with the key's length.
-        fields = {f"scores.{'.' * 40_000}": "Bad."} | {f"scores.{index}": "Bad." for index in range(24)}
-        started = time.perf_counter()
-        kept, dropped = _limited(fields, {"scores"})
-        assert time.perf_counter() - started < 0.5
-        assert (len(kept), dropped) == (20, 5)
+        def best_time(dots: int) -> float:
+            # The best of three runs keeps one slow run of a busy machine out
+            # of the ratio.
+            best = float("inf")
+            for _run in range(3):
+                fields = {f"scores.{'.' * dots}": "Bad."} | {f"scores.{index}": "Bad." for index in range(24)}
+                started = time.perf_counter()
+                kept, dropped = _limited(fields, {"scores"})
+                best = min(best, time.perf_counter() - started)
+                assert (len(kept), dropped) == (20, 5)
+            return best
+
+        # Ten times the dots takes about ten times as long. Time growing with
+        # the square of the length would take about a hundred times as long.
+        assert best_time(40_000) < 30 * best_time(4_000)
+
+    class _CountedKey(str):
+        """A key that counts how often its text is read, so a test can check that a shared key is read once."""
+
+        __slots__ = ()
+        reads = 0
+
+        def __format__(self, spec: str) -> str:
+            type(self).reads += 1
+            # The plain text, so the read is not counted again in __str__.
+            return format(str.__str__(self), spec)
+
+        def __str__(self) -> str:
+            type(self).reads += 1
+            return super().__str__()
+
+        def split(self, *args: Any, **kwargs: Any) -> list[str]:
+            type(self).reads += 1
+            return super().split(*args, **kwargs)
+
+    def _many_messages_under_one_key(self, key_length: int) -> tuple[dict[str, str], int, int]:
+        """Limit 10,000 messages under one dict key, and return the result and how often the key was read."""
+
+        class Key(self._CountedKey):
+            __slots__ = ()
+
+        errors = FieldErrors()
+        key_path = ((None, "scores"), Key("a" * key_length))
+        errors.add_container((None, "scores"))
+        errors.add_container(key_path)
+        for index in range(10_000):
+            errors.add((key_path, index), "Bad.")
+        kept, dropped = errors.limited()
+        return kept, dropped, Key.reads
 
     def test_a_long_key_under_many_messages_is_read_once(self):
         # Every message shares the pair of its dict key, so the key's text is
-        # written only for the kept messages. This key is longer than the text
+        # read once, not once per message. This key is longer than the text
         # cap, so only the first message is kept, and the rest are counted.
-        errors = FieldErrors()
-        key_path = ((None, "scores"), "a" * 100_000)
-        errors.add_container((None, "scores"))
-        errors.add_container(key_path)
-        for index in range(100_000):
-            errors.add((key_path, index), "Bad.")
-        started = time.perf_counter()
-        kept, dropped = errors.limited()
-        assert time.perf_counter() - started < 1
+        kept, dropped, reads = self._many_messages_under_one_key(100_000)
+        assert reads == 1
         assert list(kept) == ["scores." + "a" * 100_000 + ".0"]
-        assert dropped == 99_999
+        assert dropped == 9_999
 
     def test_a_shorter_key_under_many_messages_keeps_twenty_and_is_read_once(self):
-        errors = FieldErrors()
-        key_path = ((None, "scores"), "a" * 2_000)
-        errors.add_container((None, "scores"))
-        errors.add_container(key_path)
-        for index in range(100_000):
-            errors.add((key_path, index), "Bad.")
-        started = time.perf_counter()
-        kept, dropped = errors.limited()
-        assert time.perf_counter() - started < 1
-        assert (len(kept), dropped) == (20, 99_980)
+        kept, dropped, reads = self._many_messages_under_one_key(2_000)
+        assert reads == 1
+        assert (len(kept), dropped) == (20, 9_980)
 
     def test_the_first_message_is_kept_however_long_its_path(self):
         long_name = "a" * (2 * MAX_FIELD_ERRORS_TEXT)

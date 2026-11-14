@@ -315,8 +315,12 @@ def test_a_discriminated_recursive_union_has_no_depth_limit() -> None:
     class TQuery(pydantic.BaseModel):
         q: TAnd
 
+    # Eighty levels, four times the depth at which the work budget stops a
+    # union without a discriminator (see the filter chain tests above). It
+    # stays under pydantic-core's own recursion limit, which is lowest on
+    # Windows, where a value nested past 99 levels is refused.
     value: dict[str, Any] = {"type": "leaf", "v": 1}
-    for _ in range(100):
+    for _ in range(80):
         value = {"type": "and", "items": [value]}
 
     assert validate_args(TQuery, {"q": value}).ok
@@ -2505,11 +2509,27 @@ def test_a_check_that_parses_text_spends_for_it_only_inside_a_check_that_may_run
     assert bounded.WORK_BUDGET - budget.left == bounded.PYTHON_CALL_STEPS + 64_000 * bounded.TEXT_STEPS["url"] // 64
 
 
-def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check() -> None:
-    budget = bounded.WorkBudget(seconds=0.0)
-    # Outside a check the clock does not run, so nothing stops.
+class _HandClock:
+    """A CPU clock that moves only when a test moves it, so a test of the CPU limit does not depend on the machine."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = _HandClock()
+    monkeypatch.setattr(bounded, "cpu_clock", clock)
+    budget = bounded.WorkBudget(seconds=0.5)
+    # Outside a check the clock does not count, so nothing stops.
+    clock.now += 1.0
     budget.spend_time(1)
     budget.clock_on()
+    clock.now += 0.4
+    budget.spend_time(1)
+    clock.now += 0.2
     with pytest.raises(bounded.ValidationTooCostly) as stopped:
         budget.spend_time(1)
     budget.clock_off()
@@ -2519,16 +2539,22 @@ def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check() -> N
     assert stopped.value.message == bounded.TOO_SLOW_MESSAGE
 
 
-def test_cpu_time_between_the_checks_of_a_request_does_not_count() -> None:
-    budget = bounded.WorkBudget(seconds=0.05)
+def test_cpu_time_between_the_checks_of_a_request_does_not_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = _HandClock()
+    monkeypatch.setattr(bounded, "cpu_clock", clock)
+    budget = bounded.WorkBudget(seconds=0.5)
     budget.clock_on()
+    clock.now += 0.3
     budget.clock_off()
     # Another request on the same thread (an async server) runs here.
-    started = time.thread_time()
-    while time.thread_time() - started < 0.1:
-        pass
+    clock.now += 10.0
     budget.clock_on()
+    clock.now += 0.1
     budget.spend_time(1)
+    # The two checks together used 0.4 s of the 0.5 s, and 0.2 s more is over.
+    clock.now += 0.2
+    with pytest.raises(bounded.ValidationTooCostly):
+        budget.spend_time(1)
     budget.clock_off()
 
 
@@ -2538,6 +2564,16 @@ def test_a_deep_union_that_runs_out_of_cpu_time_is_refused_with_its_own_message(
     payload = {"q": _chain(5, 1)}
     assert validate_args(Query, payload).ok
 
+    # Every read of the clock finds a millisecond more used. A real CPU clock
+    # can read the same time across a short check (on Windows it moves in
+    # steps of about 15.6 ms), and then a limit of zero never fires.
+    clock = _HandClock()
+
+    def ticking() -> float:
+        clock.now += 0.001
+        return clock.now
+
+    monkeypatch.setattr(bounded, "cpu_clock", ticking)
     monkeypatch.setattr(bounded, "WORK_SECONDS", 0.0)
 
     assert validate_args(Query, payload).fields == {"_args": bounded.TOO_SLOW_MESSAGE}

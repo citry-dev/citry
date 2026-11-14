@@ -122,6 +122,12 @@ WORK_BUDGET = 60_000_000
 # limit; this one stops a request once its checks that may run again have
 # used a fixed amount of CPU time, whatever the steps say.
 WORK_SECONDS = 1.0
+# The clock behind WORK_SECONDS: the CPU time of the calling thread. On
+# Windows it moves in steps of about 15.6 ms, so a check that runs for less
+# than one step can read no time at all, and the limit can stop a request up
+# to one step late. A module name, so a test can give the budget a clock it
+# moves by hand.
+cpu_clock = time.thread_time
 # What one more check of a list or object costs besides the values inside it,
 # in steps: the Python wrappers around it run on every check.
 ENTRY_STEPS = 32
@@ -283,7 +289,7 @@ class WorkBudget:
         # Read the clock only here, before each check that may run again,
         # not at every wrapper call: reading it costs about a tenth of a call.
         clock = self._clocks.get(threading.get_ident())
-        if clock is not None and time.thread_time() - clock[0] > self._seconds_left:
+        if clock is not None and cpu_clock() - clock[0] > self._seconds_left:
             raise ValidationTooCostly("time")
 
     def spend_on(self, value: Any, times: int = 1, container_values: int = CONTAINER_STEPS) -> None:
@@ -430,7 +436,7 @@ class WorkBudget:
         thread = threading.get_ident()
         clock = self._clocks.get(thread)
         if clock is None:
-            self._clocks[thread] = [time.thread_time(), 1]
+            self._clocks[thread] = [cpu_clock(), 1]
         else:
             clock[1] += 1
 
@@ -442,13 +448,13 @@ class WorkBudget:
             return
         clock[1] -= 1
         if clock[1] == 0:
-            self._seconds_left -= time.thread_time() - clock[0]
+            self._seconds_left -= cpu_clock() - clock[0]
             del self._clocks[thread]
 
     def out_of_time(self) -> bool:
         """Return whether the request's CPU time is used up, counting what the check on this thread has used so far."""
         clock = self._clocks.get(threading.get_ident())
-        used = time.thread_time() - clock[0] if clock is not None else 0.0
+        used = cpu_clock() - clock[0] if clock is not None else 0.0
         return used > self._seconds_left
 
     def skip_time(self, seconds: float) -> None:
@@ -548,7 +554,7 @@ def unbudgeted() -> Iterator[None]:
     the request keep the CPU time that the browser's data had left.
     """
     outer = current_work()
-    started = time.thread_time()
+    started = cpu_clock()
     work = _REQUEST_WORK.set(None)
     tally = _TALLY.set(None)
     try:
@@ -557,7 +563,7 @@ def unbudgeted() -> Iterator[None]:
         _TALLY.reset(tally)
         _REQUEST_WORK.reset(work)
         if outer is not None:
-            outer.skip_time(time.thread_time() - started)
+            outer.skip_time(cpu_clock() - started)
 
 
 def current_work() -> WorkBudget | None:

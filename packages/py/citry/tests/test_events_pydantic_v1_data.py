@@ -1056,7 +1056,10 @@ def test_a_v1_state_is_not_refused() -> None:
     _state_component(_app(), _Story, _keep)
 
 
-def test_a_v2_state_whose_validator_runs_a_v1_check_is_guarded() -> None:
+def test_a_v2_state_whose_validator_runs_a_v1_check_is_guarded(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The error limit is under test, so the CPU limit is out of reach: on a
+    # slow machine it could stop the check first, with its own message.
+    monkeypatch.setattr(bounded, "WORK_SECONDS", 60.0)
     state = V2StateWithHiddenV1Check()
 
     with pytest.raises(StateUpdateError) as caught:
@@ -1079,7 +1082,10 @@ with warnings.catch_warnings():
         board: Annotated[Any, pydantic.PlainValidator(lambda value: Board.parse_obj(value))]
 
 
-def test_a_v1_check_that_a_validator_calls_is_counted_and_stopped() -> None:
+def test_a_v1_check_that_a_validator_calls_is_counted_and_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The error limit is under test, so the CPU limit is out of reach: on a
+    # slow machine it could stop the check first, with its own message.
+    monkeypatch.setattr(bounded, "WORK_SECONDS", 60.0)
     _component(_app(), HiddenV1)
 
     result = validate_args(HiddenV1, {"board": {"rows": [[]] * 100_000}})
