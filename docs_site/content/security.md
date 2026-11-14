@@ -523,13 +523,15 @@ The limit applies to event data and to browser writes to State, not to
 restoring State the server saved. You cannot change it.
 
 When Citry can check a State only as JSON text
-([which ones](#schemas-citry-refuses)), it counts only wrap validators
-and `Iterable` fields, because counting each class would change how the
-class reads JSON. So defining the component raises `ValueError` when a
-field the browser may write holds a recursive model, dataclass, or
-TypedDict (one that can hold itself) with no wrap validator on the way
-back to itself. Fix it by removing what makes Citry check the State only
-as JSON, or by leaving the field out of `_model`.
+([which ones](#schemas-citry-refuses)), it counts only wrap validators,
+because counting each class would change how the class reads JSON. So
+defining the component raises `ValueError` when a field the browser may
+write holds a recursive model, dataclass, or TypedDict (one that can
+hold itself) with no wrap validator on the way back to itself. A loop
+that passes through an `Iterable` field is still such a loop. Fix it by
+removing what makes Citry check the State only as JSON, by leaving the
+field out of `_model`, or by adding a wrap validator to the recursive
+class.
 
 Each level takes room on the stack of the thread that checks the data.
 Citry sets the limit so a check of data at the limit fits in a 1 MiB

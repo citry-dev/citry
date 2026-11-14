@@ -1383,9 +1383,10 @@ class _Schema:
         Return the definitions on a loop through a class that no wrapper of the copy for JSON text counts.
 
         Where no wrapper may go (inside ``Json[...]``, in the copy for JSON
-        text), only an author's wrap validator, or the read of an
-        ``Iterable`` field, counts a level, so a class that can reach itself
-        without passing a wrap validator nests as deep as the data does.
+        text), only an author's wrap validator counts a level, so a class
+        that can reach itself without passing a wrap validator nests as deep
+        as the data does. A loop that passes through an ``Iterable`` field
+        is still such a loop, because only a wrap validator ends it.
         Computed on first use, since only a State read only as JSON needs it.
         """
         bare = {ref: _refs_used_without_wrap(node) for ref, node in self.definitions.items()}
