@@ -355,9 +355,9 @@ These cases can surprise you:
   run in the order that component listed them.
 - An extension's [`on_dependencies()`](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page)
   hook can reorder the list or add to it.
-- A script an extension supplies through `prepare_browser_render()` runs
-  after every component script, once for the page and once for each
-  fragment.
+- A script an extension supplies through `prepare_browser_render()`
+  (an experimental method) runs after every component script, once for
+  the page and once for each fragment.
 
 Citry promises no other order, such as the order the components appear
 in the page's HTML. The clearest place for setup that several

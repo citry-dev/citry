@@ -198,12 +198,13 @@ print(json.dumps([item.filename for item in caught if item.category is RuntimeWa
     assert json.loads(result.stdout.strip().splitlines()[-1]) == [str(script)]
 
 
+# The same filter string the CitryDeprecationWarning docstring and the
+# changelog tell users to put in pytest's `filterwarnings`.
+@pytest.mark.filterwarnings("error::citry.CitryDeprecationWarning")
 def test_deprecation_warning_is_public_and_filterable():
     # Users turn Citry's deprecations into errors with the standard filters,
     # so the class must be a DeprecationWarning that the root package exports.
     assert issubclass(citry.CitryDeprecationWarning, DeprecationWarning)
     assert "CitryDeprecationWarning" in citry.__all__
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", citry.CitryDeprecationWarning)
-        with pytest.raises(citry.CitryDeprecationWarning, match="old feature"):
-            warn_at_caller("old feature", citry.CitryDeprecationWarning)
+    with pytest.raises(citry.CitryDeprecationWarning, match="old feature"):
+        warn_at_caller("old feature", citry.CitryDeprecationWarning)

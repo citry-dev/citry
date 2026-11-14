@@ -60,8 +60,9 @@ as it is would also be acceptable.
 ### 1.1 Proposed changes
 
 The maintainer decided every row; the Decision column records it. The
-0.9.0 pull request that lands these decisions also updated the code, so
-the "Uses" counts describe the code before it.
+0.9.0 pull request that landed these decisions also changed the code, so
+the "Uses" counts, and the `file:line` citations in this audit, describe
+the code at the audit commit, before that pull request.
 
 | # | What | Proposed change | Uses | Risk | Must or fine | Decision |
 |---|---|---|---|---|---|---|
@@ -89,12 +90,13 @@ and it was not approved.
 carries an `Experimental:` section in its docstring, the one
 `ComponentGraph` uses (#629). The API reference renders it as a box
 titled "Experimental", in the same style as the "Example" box. The
-reference intro of a category that holds only experimental names says
-so in one sentence, and a guide page that teaches an experimental
+reference intro of a category that holds experimental names says so in
+one sentence, and a guide page that teaches or names an experimental
 feature has a `!!! warning "Experimental"` box
 (`advanced/component-discovery.md`, `advanced/previews.md`) or one
 sentence where the feature is a paragraph of a larger page
-(`advanced/extensions.md`). There is no separate badge.
+(`advanced/extensions.md`, `advanced/js-and-css-dependencies.md`).
+There is no separate badge.
 
 Already done:
 
@@ -110,7 +112,11 @@ Already done:
 ### 1.2 Additions that #624 already asks for, or that close a gap
 
 These only add names, so none needs an upgrade note. All four were
-approved and are done in 0.9.0. `CitryDeprecationWarning` is a
+approved and are done in 0.9.0, except naming `citry.reload` on the
+Versioning page, which waits for that page (#624). Running the test
+suite with `CitryDeprecationWarning` turned into an error is also left
+to its own #624 task; one test checks the filter string the docstring
+teaches. `CitryDeprecationWarning` is a
 `DeprecationWarning` subclass. `citry.reload.__all__` is `watch`,
 `WatchHandle`, `FileWatcher`, `WatchfilesWatcher`, `WatchdogWatcher` and
 `PollingWatcher`; `default_watcher` stays internal. The docs site counts
@@ -341,7 +347,7 @@ out. citry-lsp imports two `citry.ext.events` internals (1.4 question 1).
 | `on_extension_created`, `on_component_class_created`, `on_component_registered`, `on_component_unregistered`, `on_citry_cleared` | keep |
 | `on_component_input`, `on_component_data`, `on_component_rendered`, `on_slot_rendered`, `on_attrs_resolved`, `on_render_context_merge`, `on_serialize` | keep |
 | `on_template_loaded`, `on_template_compiled`, `on_template_reset`, `on_js_loaded`, `on_css_loaded`, `on_messages_loaded` | keep |
-| `on_files_reset` | keep. It is not declared on `Extension`, and only the `ExtensionManager.on_files_reset` docstring describes it; move that text to the `Extension` docstring |
+| `on_files_reset` | keep. It is not declared on `Extension`, and only the `ExtensionManager.on_files_reset` docstring describes it; move that text to the `Extension` docstring. 0.9.0 keeps the text there and adds that the extension's `on_files_reset` is public while the manager method is internal; the move is still open |
 | `on_dependencies` (fired by the dependencies extension) | keep |
 | `on_component_cache_hit` (fired by the cache extension) | keep. Its context is exported, but no guide teaches it |
 | `render_cache_mode` `"deny"` and `"stateless"`, `render_cache_version`, `render_cache_bypass_reason` | keep |

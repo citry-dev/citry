@@ -949,7 +949,9 @@ do. Two things decide how much you can trust a template with:
 
 A statement fails with `SyntaxError` when Citry compiles the template. A
 blocked access fails with [`SecurityError`][citry.SecurityError] only when
-the expression runs:
+the expression runs. To try the sandbox on one expression, call
+[`safe_eval`][citry.safe_eval]. It turns the expression into a function,
+and calling that function with a dict of names runs it:
 
 ```python
 from citry import SecurityError, safe_eval

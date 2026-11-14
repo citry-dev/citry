@@ -15,9 +15,10 @@ but simpler.
 
 !!! warning "Experimental"
 
-    The preview extension, its `Preview` options, and its commands are
-    experimental. They may change in a minor release without a
-    deprecation period.
+    Previews are experimental. The extension, the nested `Preview`
+    class, and the commands may change in a minor release without a
+    deprecation period. If your project depends on them, pin one exact
+    Citry version, such as `citry==0.9.0`.
 
 The preview extension adds two commands:
 

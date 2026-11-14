@@ -418,9 +418,10 @@ class CitryRender:
     The result of rendering a ``CitryElement`` (the render-phase output).
 
     Experimental:
-        `RenderFrame`, the `CitryRender.frame` attribute and the `frame=`
-        argument of `CitryRender` are experimental. They may change in a
-        minor release without a deprecation period.
+        The `frame` attribute, the `frame=` argument and the
+        [`RenderFrame`][citry.RenderFrame] class they use are
+        experimental. They may change in a minor release without a
+        deprecation period. The rest of `CitryRender` is stable.
 
     Attributes:
         parts: Ordered list of ``str`` or nested ``CitryRender`` fragments.

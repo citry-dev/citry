@@ -392,7 +392,7 @@ already built, and this design adds no core hooks:
   extension own its own lifecycle hooks (`extension.py:719-773`); the rule
   that extension lifecycle points are `emit()` hooks, not core hooks, is
   settled ([`extensions.md`](extensions.md) section 9.2).
-- **Routing.** `URLRoute(path, handler, methods, name)` with `{param}`
+- **Routing.** `URLRoute(path, handler, methods=..., name=...)` with `{param}`
   segments and first-match-in-definition-order resolution
   ([`routing.py:36-141`](../../packages/py/citry/citry/util/routing.py));
   user-extension routes are namespaced under `ext/<name>/`
@@ -1242,8 +1242,9 @@ implementation never share a file. The docs build points griffe at
 exactly these entrypoints, making the API reference the enforcement of
 the rule (docs as contract). The complete list of public entrypoints is
 therefore `citry`, `citry.contrib.<name>`, `citry.ext.<name>`, and the
-`citry.reload` module that the hot reload guide teaches (a single module,
-so its `__all__` sits beside its code). (The extensions directory itself is renamed
+`citry.reload` module that the hot reload guide teaches. `citry.reload`
+is the one exception to the rule above: it is a single small module, so
+its `__all__` sits beside its code. (The extensions directory itself is renamed
 `citry/extensions/` to `citry/ext/`, the SQLAlchemy precedent; a
 mechanical pre-1.0 task alongside the v0 substrate work.)
 
@@ -5909,7 +5910,8 @@ design-panel decisions argued the other way:
     re-export surfaces with `__all__` and no logic; griffe is pointed
     at exactly these entrypoints, and the complete public surface is
     three entrypoint shapes: `citry`, `citry.contrib.<name>`, and
-    `citry.ext.<name>` (an earlier draft of this round added a
+    `citry.ext.<name>` (0.9.0 later added the `citry.reload` module,
+    section 3.4; an earlier draft of this round added a
     `citry.events` alias for built-ins; dropped, one path per thing);
     the extensions directory renames to `citry/ext/`.
 

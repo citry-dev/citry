@@ -425,7 +425,10 @@ class ForeignCompileContext(Protocol):
 @dataclass(frozen=True, slots=True)
 class OnTemplateForeignSpansContext:
     """
-    Context for [`Extension.on_template_foreign_spans()`][citry.Extension.on_template_foreign_spans].
+    Give [`Extension.on_template_foreign_spans()`][citry.Extension.on_template_foreign_spans] the template source.
+
+    A provider extension reads ``content`` and marks the parts that
+    another template engine owns.
 
     Experimental:
         Part of the experimental API for embedding Citry tags in another
@@ -1111,8 +1114,9 @@ class Extension:
         Describe the fixed Vue plugin installed before an interactive app mounts.
 
         Experimental:
-            This method and the types it takes and returns may change in a
-            minor release without a deprecation period.
+            This method is experimental. It and the types it takes and
+            returns may change in a minor release without a deprecation
+            period.
         """
         return None
 
@@ -1124,8 +1128,9 @@ class Extension:
         Project this extension's selected render records into prepared browser data.
 
         Experimental:
-            This method and the types it takes and returns may change in a
-            minor release without a deprecation period.
+            This method is experimental. It and the types it takes and
+            returns may change in a minor release without a deprecation
+            period.
         """
         return None
 
@@ -2242,8 +2247,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_extension_created()`][citry.Extension.on_extension_created] instead.
+        To react to this hook, implement
+        [`Extension.on_extension_created()`][citry.Extension.on_extension_created] on your extension instead.
         """
         # Each extension receives a context naming itself, so this cannot go
         # through the shared-ctx ``emit``.
@@ -2256,8 +2261,9 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_component_class_created()`][citry.Extension.on_component_class_created] instead.
+        To react to this hook, implement
+        [`Extension.on_component_class_created()`][citry.Extension.on_component_class_created]
+        on your extension instead.
         """
         # Validate newly declared config fields before the hook reaches any
         # extension, so extensions (and the config weaving that follows) only
@@ -2274,8 +2280,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_component_registered()`][citry.Extension.on_component_registered] instead.
+        To react to this hook, implement
+        [`Extension.on_component_registered()`][citry.Extension.on_component_registered] on your extension instead.
         """
         self.emit(
             "on_component_registered",
@@ -2288,8 +2294,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_component_unregistered()`][citry.Extension.on_component_unregistered] instead.
+        To react to this hook, implement
+        [`Extension.on_component_unregistered()`][citry.Extension.on_component_unregistered] on your extension instead.
         """
         self.emit(
             "on_component_unregistered",
@@ -2302,8 +2308,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_citry_cleared()`][citry.Extension.on_citry_cleared] instead.
+        To react to this hook, implement
+        [`Extension.on_citry_cleared()`][citry.Extension.on_citry_cleared] on your extension instead.
         """
         self.emit("on_citry_cleared", OnCitryClearedContext(citry=self.citry))
 
@@ -2315,8 +2321,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_component_input()`][citry.Extension.on_component_input] instead.
+        To react to this hook, implement
+        [`Extension.on_component_input()`][citry.Extension.on_component_input] on your extension instead.
         """
         # Skip building the context dataclass when no extension subscribes, the
         # same short-circuit the per-element/per-slot hooks use. This runs per
@@ -2359,8 +2365,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_component_data()`][citry.Extension.on_component_data] instead.
+        To react to this hook, implement
+        [`Extension.on_component_data()`][citry.Extension.on_component_data] on your extension instead.
         """
         if not self.has_hook("on_component_data"):
             return
@@ -2391,8 +2397,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_render_context_merge()`][citry.Extension.on_render_context_merge] instead.
+        To react to this hook, implement
+        [`Extension.on_render_context_merge()`][citry.Extension.on_render_context_merge] on your extension instead.
         """
         self.emit(
             "on_render_context_merge",
@@ -2418,8 +2424,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_serialize()`][citry.Extension.on_serialize] instead.
+        To react to this hook, implement
+        [`Extension.on_serialize()`][citry.Extension.on_serialize] on your extension instead.
         """
         ctx = OnSerializeContext(
             citry=self.citry,
@@ -2466,8 +2472,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_component_rendered()`][citry.Extension.on_component_rendered] instead.
+        To react to this hook, implement
+        [`Extension.on_component_rendered()`][citry.Extension.on_component_rendered] on your extension instead.
         """
         had_error = error is not None
         extensions = self._extensions_with_hook("on_component_rendered")
@@ -2534,8 +2540,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_slot_rendered()`][citry.Extension.on_slot_rendered] instead.
+        To react to this hook, implement
+        [`Extension.on_slot_rendered()`][citry.Extension.on_slot_rendered] on your extension instead.
         """
         # Skip building the context when nothing subscribes: this fires for
         # every slot of every component, so the dataclass would otherwise be
@@ -2610,8 +2616,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_attrs_resolved()`][citry.Extension.on_attrs_resolved] instead.
+        To react to this hook, implement
+        [`Extension.on_attrs_resolved()`][citry.Extension.on_attrs_resolved] on your extension instead.
         """
         extensions = self._attrs_resolved_extensions(runtime_candidate=runtime_candidate)
         if not extensions:
@@ -2664,8 +2670,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_template_loaded()`][citry.Extension.on_template_loaded] instead.
+        To react to this hook, implement
+        [`Extension.on_template_loaded()`][citry.Extension.on_template_loaded] on your extension instead.
         """
         return self._thread_checked(
             "on_template_loaded",
@@ -2698,8 +2704,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_template_foreign_spans()`][citry.Extension.on_template_foreign_spans] instead.
+        To react to this hook, implement
+        [`Extension.on_template_foreign_spans()`][citry.Extension.on_template_foreign_spans] on your extension instead.
         """
         from citry_core.template_parser import ForeignSpan as CoreForeignSpan  # noqa: PLC0415
 
@@ -2759,8 +2765,9 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_template_foreign_compiled()`][citry.Extension.on_template_foreign_compiled] instead.
+        To react to this hook, implement
+        [`Extension.on_template_foreign_compiled()`][citry.Extension.on_template_foreign_compiled]
+        on your extension instead.
         """
         return self._resolve_foreign_body(
             component_class,
@@ -2912,8 +2919,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_messages_loaded()`][citry.Extension.on_messages_loaded] instead.
+        To react to this hook, implement
+        [`Extension.on_messages_loaded()`][citry.Extension.on_messages_loaded] on your extension instead.
         """
         ctx = OnMessagesLoadedContext(
             citry=self.citry,
@@ -2957,8 +2964,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_template_compiled()`][citry.Extension.on_template_compiled] instead.
+        To react to this hook, implement
+        [`Extension.on_template_compiled()`][citry.Extension.on_template_compiled] on your extension instead.
         """
         return self._thread_checked(
             "on_template_compiled",
@@ -2982,8 +2989,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_template_reset()`][citry.Extension.on_template_reset] instead.
+        To react to this hook, implement
+        [`Extension.on_template_reset()`][citry.Extension.on_template_reset] on your extension instead.
         """
         self.emit(
             "on_template_reset",
@@ -2998,8 +3005,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_js_loaded()`][citry.Extension.on_js_loaded] instead.
+        To react to this hook, implement
+        [`Extension.on_js_loaded()`][citry.Extension.on_js_loaded] on your extension instead.
         """
         return self._thread_checked(
             "on_js_loaded",
@@ -3016,8 +3023,8 @@ class ExtensionManager:
 
         Internal: Citry calls this method itself. It is not covered by Citry's
         API stability promise and may change in any release.
-        An extension implements
-        [`Extension.on_css_loaded()`][citry.Extension.on_css_loaded] instead.
+        To react to this hook, implement
+        [`Extension.on_css_loaded()`][citry.Extension.on_css_loaded] on your extension instead.
         """
         return self._thread_checked(
             "on_css_loaded",
@@ -3041,8 +3048,9 @@ class ExtensionManager:
         wait for another thread that renders: that thread waits for the
         reset to finish, so both can hang.
 
-        Internal: Citry calls this method itself. It is not covered by Citry's
-        API stability promise and may change in any release.
+        Internal: Citry calls this manager method itself, and it may change
+        in any release. The ``on_files_reset`` method an extension defines
+        is public.
         """
         self.emit(
             "on_files_reset",

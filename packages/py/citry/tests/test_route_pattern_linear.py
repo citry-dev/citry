@@ -362,3 +362,9 @@ def test_route_fields_after_handler_are_keyword_only() -> None:
     assert URLRoute("status", _handler).handler is _handler
     with pytest.raises(TypeError, match="positional"):
         URLRoute("status", _handler, None)  # type: ignore[misc]
+
+
+def test_route_has_no_extra_field() -> None:
+    # `extra=` was never read, so it is refused rather than silently stored.
+    with pytest.raises(TypeError, match="extra"):
+        URLRoute("status", _handler, extra={})  # type: ignore[call-arg]

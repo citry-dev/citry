@@ -8,11 +8,12 @@
 #
 # API stability: the public API is the names in `citry.__all__`, plus the
 # names in the `__all__` of each `citry.ext.<name>` package, each
-# `citry.contrib.<name>` module, and the `citry.reload` module. Features marked experimental in their docs
-# and docstrings, such as `ComponentGraph`, may still change in a minor
-# release. Deeper modules (citry.ext.events.handlers, ...), other submodules
-# (citry.slots, citry.nodes, ...), and any name that starts with `_` are
-# internal and free to change between releases.
+# `citry.contrib.<name>` module, and the `citry.reload` module. Features
+# marked experimental in their docs and docstrings, such as
+# `ComponentGraph`, may still change in a minor release. Deeper modules
+# (citry.ext.events.handlers, ...), other submodules (citry.slots,
+# citry.nodes, ...), and any name that starts with `_` are internal and
+# free to change between releases.
 
 from markupsafe import Markup
 

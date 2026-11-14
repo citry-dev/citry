@@ -832,7 +832,8 @@ class CitrySettings:
             secret is set. Django projects can reuse ``SECRET_KEY``
             and any ``SECRET_KEY_FALLBACKS`` by passing
             ``citry.contrib.django.secret()``.
-        event_result_resolvers: Result resolvers for the Events extension.
+        event_result_resolvers: Experimental. Result resolvers for the Events
+            extension.
             When an event handler returns a value, citry converts it into the
             actions sent back to the browser (the instructions the client
             runtime applies: re-render this component, redirect, and so on).
@@ -841,8 +842,8 @@ class CitrySettings:
             or declines, letting the next resolver try. Resolvers run in
             order, after the built-in conversions; the first one to convert
             the value wins.
-        event_payload_codecs: Payload codecs for the Events extension's HTTP
-            endpoints. A codec reads one request format (identified by its
+        event_payload_codecs: Experimental. Payload codecs for the Events
+            extension's HTTP endpoints. A codec reads one request format (identified by its
             content type) into the event call the extension expects, so
             clients are not limited to the built-in JSON, form, and query
             formats. Codecs given here are tried before the built-in ones, in

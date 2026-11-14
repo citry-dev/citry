@@ -328,13 +328,14 @@ class StaticWrapper(Extension):
     render_cache_version = 1
 ```
 
-Use `"payload"` when reusing the output must also restore data your
-extension keeps. Return that data as plain JSON values from
-`export_render_cache()`. In `stage_render_cache()`, check the data and
-describe the changes to make, without changing anything yet. Citry applies
-them only after every extension accepts the cached entry. The `"payload"`
-mode and its two methods are experimental, so they may change in a minor
-release.
+`"payload"` is experimental, so it and its two methods,
+`export_render_cache()` and `stage_render_cache()`, may change in a minor
+release. `"deny"` and `"stateless"` are stable. Use `"payload"` when
+reusing the output must also restore data your extension keeps. Return
+that data as plain JSON values from `export_render_cache()`. In
+`stage_render_cache()`, check the data and describe the changes to make,
+without changing anything yet. Citry applies them only after every
+extension accepts the cached entry.
 
 `"stateless"` and `"payload"` require a positive `render_cache_version`;
 without one, creating the `Citry` instance raises `ValueError`. Increase
@@ -585,9 +586,11 @@ messages once per component class, the first time a render needs them:
 `on_messages_loaded`. The hooks that see a template as Citry compiles it,
 `on_template_foreign_spans`, `on_template_compiled`, and
 `on_template_foreign_compiled`, also run once per class, or once per set
-of `Const` values for the two compiled hooks. The two foreign hooks let
-another template engine embed Citry tags; they are experimental, so they
-may change in a minor release.
+of `Const` values for the two compiled hooks.
+
+`on_template_foreign_spans` and `on_template_foreign_compiled` let another
+template engine embed Citry tags in its templates. They are experimental
+and may change in a minor release.
 
 On a server with several threads, these hooks can run again for the same
 class. They run once per thread when several requests render the class for

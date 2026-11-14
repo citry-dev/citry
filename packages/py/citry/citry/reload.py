@@ -18,8 +18,8 @@ straight into ``Citry.invalidate_file``.
 Typical use is through the ``citry watch`` command; the design and the host
 entry points are in ``docs/design/hot_reload.md``.
 
-The public names are the ones in ``__all__``, which the hot reload guide
-teaches. ``default_watcher`` is internal.
+The public names are the ones in ``__all__``. ``default_watcher`` is
+internal.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ class FileWatcher(Protocol):
 
 class WatchfilesWatcher:
     """
-    Watch files with the `watchfiles` package, the fastest backend.
+    Watch files with the `watchfiles` package, the recommended backend.
 
     `watchfiles` listens to your operating system's file-change events. It
     needs the `watcher-watchfiles` extra
@@ -303,7 +303,9 @@ def watch(
     For each changed file, the watcher calls
     [`Citry.invalidate_file()`][citry.Citry.invalidate_file], so the next
     render reads the new template, JavaScript or CSS. The watcher runs on
-    a background thread, so `watch()` returns at once.
+    a background daemon thread, so `watch()` returns at once, and the
+    watcher stops when your program exits. Call `wait()` on the returned
+    handle to keep a script running.
 
     A change to a file no component has loaded yet does nothing, because
     nothing is cached for it. A new component file or a change to Python
