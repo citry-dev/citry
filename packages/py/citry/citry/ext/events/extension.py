@@ -10,6 +10,7 @@ everything else reads. Design: ``docs/design/events.md`` section 3.
 
 from __future__ import annotations
 
+import functools
 import inspect
 from dataclasses import dataclass
 from difflib import get_close_matches
@@ -562,15 +563,23 @@ class EventsExtension(Extension):
         info = self.resolve(comp_cls)
         if info.state_cls is None:
             return None
-        state = self._build_state_value(component, info.state_cls)
+        build = self._build_state_value(component, info.state_cls)
         # Only State built here, from this render's values, is checked. State
         # rebuilt from an event call's signed token was checked when the token
         # was made, and JSON turns a tuple field into a list on the way back.
-        _check_input_types(state, info.state_cls, comp_cls, "State")
-        return state
+        # Building and checking run on one check thread: a handler that
+        # renders the component again passes State the browser wrote, which
+        # can nest as deeply as the nesting limit allows.
+        return bounded.run_on_check_thread(_built_and_checked_state, build, info.state_cls, comp_cls)
 
-    def _build_state_value(self, component: Component, state_cls: type) -> Any:
-        """Build State from ``state_data()`` or from same-named kwargs, without checking types."""
+    def _build_state_value(self, component: Component, state_cls: type) -> Callable[[], Any]:
+        """
+        Return a function that returns State: from ``state_data()``, a dict of its fields, or same-named kwargs.
+
+        ``state_data()`` is the app's own code and runs here, on the render's
+        thread. Building the State class from values runs when the function
+        is called, on a check thread (see ``_built_and_checked_state``).
+        """
         comp_name = type(component).__name__
         state_data = getattr(component, "state_data", None)
         if callable(state_data):
@@ -582,15 +591,15 @@ class EventsExtension(Extension):
                 )
                 raise ValueError(msg)
             if isinstance(result, dict):
-                return state_cls(**result)
+                return functools.partial(state_cls, **result)
             if isinstance(result, state_cls):
-                return result
+                return lambda: result
             msg = (
                 f"Component {comp_name}: state_data() must return the State instance"
                 f" ({comp_name}.State(...)) or a dict of its fields; got {type(result).__name__}."
             )
             raise ValueError(msg)
-        return build_state_instance(comp_name, state_cls, component.raw_kwargs)
+        return functools.partial(build_state_instance, comp_name, state_cls, component.raw_kwargs)
 
     # ----- Capture and validation (class definition time) -----
 
@@ -800,3 +809,10 @@ class EventsExtension(Extension):
         if name in defaults:
             return defaults[name]
         return _FACTORY_DEFAULTS[name]
+
+
+def _built_and_checked_state(build: Callable[[], Any], state_cls: type, comp_cls: type) -> Any:
+    """Build State with ``build`` and check its field types, on the running thread."""
+    state = build()
+    _check_input_types(state, state_cls, comp_cls, "State")
+    return state

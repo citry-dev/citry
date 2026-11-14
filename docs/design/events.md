@@ -1973,8 +1973,8 @@ Error modes:
   a Pydantic class whose union members hold their children in fields of
   the same name, a tree whose nodes each hold two children fits about 8
   levels; more children or more data in each node fit fewer levels. A
-  chain with one child per level reaches the nesting limit below first,
-  at about 14 levels. Citry's own check of a plain class or dataclass
+  chain with one child per level fits about 15 levels. Citry's own
+  check of a plain class or dataclass
   reaches the budget at different depths.
 - Over the nesting limit: a 422 that says the data is nested too deeply
   to check, and a warning naming the class, once per class, for `data`
@@ -1984,7 +1984,9 @@ Error modes:
       checking inside each other. The wrapper around each object, each
       wrap validator, and each union whose members can read a value adds
       one level while it runs, and the data is refused past
-      `MAX_CHECK_DEPTH` (32). Lists and dicts do not count.
+      `MAX_CHECK_DEPTH` (64) on a check thread (below), or past
+      `SMALL_STACK_CHECK_DEPTH` (32) where no check thread can start.
+      Lists and dicts do not count.
     - `Iterable[...]` and `Generator[...]` fields: Pydantic checks their
       items only when the handler reads them, after the check has
       returned. The copy puts a function after each such node that reads
@@ -2003,20 +2005,82 @@ Error modes:
       refuses a writable field that reaches a class able to hold itself
       without an author's wrap validator on the way
       (`_RECURSIVE_CLASS_REASON`).
+    - Where checks run: every validation runs on a check thread, one of
+      a small set of threads with a 16 MiB stack (`CHECK_STACK_BYTES`)
+      that Citry starts as needed (`run_on_check_thread`). The entry
+      points move the whole validation there: `validate_args`,
+      `json_value_error`, the State write checks in `tokens.py`, and
+      `restore_state`. The functions that call Pydantic
+      (`validate_python`, `validate_json`, `validate_init`,
+      `validate_assignment`, `validate_field`) do too, so a caller that
+      skips those entry points still gets the large stack (with the
+      lower limit, when it opened the validation on its own thread). So
+      Citry's own check of a plain class, the app's validators, the
+      reads of `Iterable` items, and restores all run on the large
+      stack, and the
+      CPU time counted toward the request is the time the check thread
+      spends. A call made on a check thread runs at once, so a nested
+      check never waits for another thread. Code on a check thread that
+      hands a check to another thread and waits for it can stall the
+      pool once all its threads wait that way.
+        - Citry's other work on State runs on a check thread too, since
+          State the check accepted nests as deeply as the limit allows:
+          writing it out (`state_wire_values`, for the fingerprint, the
+          token and the public values), the round trip and comparison
+          in `check_changed_state`, and building and type-checking State
+          for a render (`_built_and_checked_state`). The app's own
+          `state_data()` and handlers run on the request's thread.
+        - The call sees a copy of the caller's context variables, and an
+          exception reaches the caller with its traceback. Context
+          variable changes and `threading.local` values stay on the check
+          thread. The caller waits on a lock, so a check from an event
+          loop blocks the loop for the length of the check, plus the
+          hand-over (about 6 to 10 microseconds on macOS) and any wait
+          in the queue (next point).
+        - At most `MAX_CHECK_THREADS` (32) exist; a call past that
+          waits in a queue for the next free thread. Citry keeps two
+          idle threads; any other thread ends after 60 seconds without
+          work. A forked child starts with none.
+        - When no check thread can start (no threads, as in Pyodide, a
+          stack size that cannot be set, or the process at its thread
+          limit with no check thread alive), the call runs on the
+          calling thread, and a validation that starts there uses
+          `SMALL_STACK_CHECK_DEPTH` (32), sized so data at that limit
+          is checked in 512 KiB, half of the 1 MiB stack of a Windows
+          program that embeds Python and of the official Python images
+          for Alpine Linux.
+        - Under gevent or eventlet monkey-patching, the check threads
+          are started with the original `_thread` functions, so they are
+          OS threads with their own stack, also when the patching
+          happens after Citry is imported (gunicorn `--preload`); the
+          greenlet that asks waits without yielding to other greenlets,
+          even while a validator waits for I/O.
+        - Free-threaded Python runs the check threads in parallel; the
+          several threads can spend from the request's work budget at
+          once.
     - How the limit is sized: each level takes room on the C stack of
-      the thread that checks, so data at the limit must be checked in
-      512 KiB, half of the 1 MiB stack a thread gets in a Windows
-      program that embeds Python with the linker's default and in the
-      official Python images for Alpine Linux. A test checks data at the
-      limit on a 512 KiB thread in its own process, in shapes that take
-      a lot of stack per level. The heaviest measured, a wrap validator
-      on the model and another on its field, sets the limit: it needs
-      about 400 KiB on macOS with Python 3.11, a margin of about 2.5x on
-      a 1 MiB thread. The other shapes measured on CI leave about 2.9x
-      on Linux and macOS and several times that on Windows.
-    - Depths that fit: a model with one nested model per level and a
-      discriminated tree fit about 30 levels, a union without a
-      discriminator about 14, and the model-and-field wrap shape about 9.
+      the check thread, so data at the limit must be checked in half of
+      its stack. A test, run in a process of its own, checks data at
+      the limit on check threads started with 8 MiB, in shapes that take
+      a lot of stack per level. The same test runs on Linux, Windows and
+      macOS on CI, from a calling thread with musl's 128 KiB default
+      stack. The heaviest measured, a wrap validator on the model and
+      another on its field, takes about 14 KB per level on macOS with
+      Python 3.11 (12 KB on 3.14), so data at the limit needs about
+      0.9 MiB, far inside half the check thread's stack. The stack would
+      fit about 590 levels; the limit is set lower for the handler,
+      which gets the checked data on the server's own thread: a handler
+      that calls `model_dump()` on a chain of models fits about 100
+      levels in 512 KiB and about 22 in 128 KiB (macOS, Python 3.14), so
+      data at the limit leaves a margin of about 1.6x on a 512 KiB
+      thread.
+    - A State write read as JSON text whose text nests deeper than
+      Pydantic's JSON reader accepts gets the "nested too deeply"
+      answer, as data past the nesting limit does.
+    - Depths that fit, counted by the nesting limit alone: a model
+      with one nested model per level and a discriminated tree about
+      62 levels, the model-and-field wrap shape about 21, and a union
+      without a discriminator about 15, where the work budget stops it.
     - What cannot absorb the refusal: a part of the schema that drops an
       item on any error, such as `OnErrorOmit`. The tally records the
       first stop for work, time, or nesting, and the check raises it

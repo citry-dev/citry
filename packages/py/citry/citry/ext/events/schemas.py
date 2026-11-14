@@ -306,11 +306,23 @@ def validate_args(
         nested deeper than Python can follow gives the "nested too deeply"
         message under ``_args``.
 
+    The check runs on a thread of Citry's own with a large stack, and the
+    calling thread waits for it. Validators and ``__post_init__`` see the
+    caller's context variables there, but not ``threading.local`` values,
+    and a context variable they set does not reach the caller.
+
     """
     if bind_strings is None:
         bind_strings = isinstance(args, StringArgs)
     if not isinstance(args, Mapping):
         return ValidationResult(value=None, fields={"": f"Expected an object, got {_value_type_name(args)}."})
+    # The whole check runs on a check thread, whose large stack fits data at
+    # the nesting limit, whatever stack the server gives the calling thread.
+    return bounded.run_on_check_thread(_validate_payload, schema_cls, args, bind_strings=bind_strings)
+
+
+def _validate_payload(schema_cls: type, args: Mapping[str, Any], *, bind_strings: bool) -> ValidationResult:
+    """Check ``args`` against ``schema_cls`` as ``validate_args`` describes, on the running thread."""
     errors = FieldErrors()
     # One error total for the whole payload, so every Pydantic call inside it
     # (a nested model in a plain dataclass, one per list item) shares it, and
@@ -581,6 +593,12 @@ def json_value_error(annotation: Any, value: Any, *, bind_strings: bool = False)
     rules of a form post, because the browser sends ``@c-*`` arguments as
     JSON. ``bind_strings`` applies those rules, as for a GET query string.
     """
+    # On a check thread, for its large stack, as in `validate_args`.
+    return bounded.run_on_check_thread(_value_error, annotation, value, bind_strings=bind_strings)
+
+
+def _value_error(annotation: Any, value: Any, *, bind_strings: bool) -> str | None:
+    """Return the message for ``value`` as ``json_value_error`` describes, checking on the running thread."""
     errors = FieldErrors()
     with bounded.request_work(), bounded.validation_scope(value):
         try:

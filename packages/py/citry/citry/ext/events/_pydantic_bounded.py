@@ -70,6 +70,12 @@ class is defined if it can, and otherwise at the first call.
 Pydantic's ``PydanticOmit`` and ``PydanticUseDefault`` signals reach the node
 that handles them through every wrapper unchanged (see ``_signal``).
 
+Every check and every build of a copy runs on a check thread, a thread with
+a 16 MiB stack that this module starts as needed (see
+``run_on_check_thread``), so the limit on how deeply data may nest
+(``MAX_CHECK_DEPTH``) does not depend on the stack of the thread that serves
+the request.
+
 The copy needs ``SchemaValidator(..., _use_prebuilt=False)``, from Pydantic
 2.13.0, so that nested models are rebuilt inside the copy instead of reusing
 their own validators.
@@ -77,6 +83,7 @@ their own validators.
 
 from __future__ import annotations
 
+import _thread
 import contextlib
 import contextvars
 import functools
@@ -86,7 +93,7 @@ import re
 import sys
 import threading
 import time
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
@@ -167,12 +174,25 @@ cpu_clock = _choose_cpu_clock()
 # passes through counts one, and so does each union whose members can read
 # it. Data that nests deeper is refused with TOO_DEEP_MESSAGE. Each level
 # takes room on the thread's stack, so the limit keeps a check within a
-# fixed amount of it. It is sized so data at the limit, in the shapes that
-# measured heaviest per level, is checked in 512 KiB, half the 1 MiB thread
-# stack of a Windows program that embeds Python with the linker's default
-# and of the official Python images for Alpine Linux. The test with a
-# 512 KiB thread checks those shapes.
-MAX_CHECK_DEPTH = 32
+# fixed amount of it. Checks run on check threads with a stack of
+# CHECK_STACK_BYTES (see `run_on_check_thread`), and the limit is sized so
+# data at the limit, in the shapes that measured heaviest per level, is
+# checked in half of that. The test with an 8 MiB check thread checks
+# those shapes. The heaviest, a wrap validator on a model and another on
+# its field, measured about 14 KB per level on macOS with Python 3.11, so
+# data at the limit needs about 0.9 MiB. The check thread could hold far
+# more; the limit is lower because the handler gets the checked data on
+# the server's own thread, where a handler that calls `model_dump()` on a
+# chain of models fits about 100 levels in 512 KiB (macOS, Python 3.14).
+# 64 leaves a margin of about 1.6x there.
+MAX_CHECK_DEPTH = 64
+# The nesting limit for a check that runs on a thread whose stack Citry did
+# not choose, which happens only where no check thread can start (see
+# `run_on_check_thread`). It is sized so data at the limit, in the shapes
+# that measured heaviest per level, is checked in 512 KiB, half the 1 MiB
+# thread stack of a Windows program that embeds Python with the linker's
+# default and of the official Python images for Alpine Linux.
+SMALL_STACK_CHECK_DEPTH = 32
 # What one more check of a list or object costs besides the values inside it,
 # in steps: the Python wrappers around it run on every check.
 ENTRY_STEPS = 32
@@ -248,14 +268,20 @@ class ValidationTooCostly(Exception):
         reason: ``"errors"`` when the validation kept too many errors,
             ``"work"`` when the request spent its work budget, ``"time"``
             when the request's checks used up their CPU time, ``"nesting"``
-            when the data nests deeper than ``MAX_CHECK_DEPTH``, ``"depth"``
-            when the data nests deeper than Python can follow.
+            when the data nests deeper than the nesting limit (see
+            ``nesting_limit``), ``"depth"`` when the data nests deeper than
+            Python can follow.
+        limit: For ``"nesting"``, the nesting limit the data went past,
+            which the warning in the log names. ``None`` for the other
+            reasons, and for ``"nesting"`` when Pydantic's JSON reader
+            refused the text.
 
     """
 
-    def __init__(self, reason: str) -> None:
+    def __init__(self, reason: str, limit: int | None = None) -> None:
         super().__init__(reason)
         self.reason = reason
+        self.limit = limit
 
     @property
     def message(self) -> str:
@@ -620,6 +646,11 @@ def unbudgeted() -> Iterator[None]:
             outer.skip_time(cpu_clock() - started)
 
 
+def nesting_limit() -> int:
+    """Return the nesting limit here: ``MAX_CHECK_DEPTH`` on a check thread, ``SMALL_STACK_CHECK_DEPTH`` elsewhere."""
+    return MAX_CHECK_DEPTH if on_check_thread() else SMALL_STACK_CHECK_DEPTH
+
+
 def current_work() -> WorkBudget | None:
     """Return the running request's work budget, or ``None`` outside one or after its request ended."""
     budget = _REQUEST_WORK.get()
@@ -639,8 +670,8 @@ class _Tally:
         "active",
         "budget",
         "depth",
+        "depth_limit",
         "errors",
-        "limits_nesting",
         "longest_message",
         "member_floor",
         "payload",
@@ -653,9 +684,10 @@ class _Tally:
     def __init__(self, payload: Any) -> None:
         self.errors = 0
         # How many `_counted` checks are running inside each other now, and
-        # whether MAX_CHECK_DEPTH applies to them (see `unbudgeted`).
+        # how many may: the nesting limit for the stack of the thread the
+        # validation runs on, or no limit for a restore (see `unbudgeted`).
         self.depth = 0
-        self.limits_nesting = _LIMIT_NESTING.get()
+        self.depth_limit = nesting_limit() if _LIMIT_NESTING.get() else sys.maxsize
         # The first stop for work, time or nesting. A part of the schema that
         # drops an item on any error, such as `OnErrorOmit`, would otherwise
         # swallow the stop and accept the data without that item, so
@@ -708,9 +740,9 @@ class _Tally:
 _TALLY: contextvars.ContextVar[_Tally | None] = contextvars.ContextVar("citry_events_tally", default=None)
 
 
-def _stopped(reason: str) -> ValidationTooCostly:
+def _stopped(reason: str, limit: int | None = None) -> ValidationTooCostly:
     """Return the stop for ``reason``, kept on the running validation's tally so it cannot be swallowed."""
-    stop = ValidationTooCostly(reason)
+    stop = ValidationTooCostly(reason, limit)
     tally = _current_tally()
     if tally is not None and tally.stop is None:
         tally.stop = stop
@@ -913,8 +945,8 @@ def _counted(value: Any, handler: Any) -> Any:
             raise _signal(err) from None
     # Every object and every union that can reach a value runs this, so
     # counting here bounds how deep the check goes on the thread's stack.
-    if tally.limits_nesting and tally.depth >= MAX_CHECK_DEPTH:
-        raise _stopped("nesting")
+    if tally.depth >= tally.depth_limit:
+        raise _stopped("nesting", tally.depth_limit)
     if tally.repeating and tally.budget is not None:
         tally.budget.spend(PYTHON_CALL_STEPS)
     before = tally.errors
@@ -1101,8 +1133,8 @@ def _read_items_now(items: Any) -> Any:
     # Each item is checked by a new call into pydantic-core on top of this
     # frame, which the counting wrappers do not see when the items are not
     # objects, so this counts as one level of nesting, as an object does.
-    if tally.limits_nesting and tally.depth >= MAX_CHECK_DEPTH:
-        raise _stopped("nesting")
+    if tally.depth >= tally.depth_limit:
+        raise _stopped("nesting", tally.depth_limit)
     tally.depth += 1
     try:
         return iter(list(items))
@@ -2526,71 +2558,321 @@ def core_schema_of(cls: type) -> dict[str, Any] | None:
     return root if type(root) is dict else None
 
 
-# The stack of the thread that builds a copy of a validator, in bytes: 16
-# times the 1 MB of a Windows thread, on which a chain of about 250 nested
-# models overflowed. On Windows the system sets this memory aside for the
-# thread, which ends with the build.
-_BUILD_STACK_BYTES = 16 * 1024 * 1024
-# Keeps Citry's own builds from setting the process-wide stack size at once.
-_BUILD_STACK_LOCK = threading.Lock()
+################################################
+# THE CHECK THREADS
+################################################
+
+# The stack of each check thread, in bytes: 16 times the 1 MB of a Windows
+# thread. Every check of event data or State, and every build of a copy,
+# runs on such a thread (see `run_on_check_thread`), so how deeply nested
+# data and classes Citry can check does not depend on the stack the server
+# gives its own threads. Linux and macOS reserve the address range and use
+# memory only for the pages a check touches; Windows counts all of it
+# against the system's memory limit (its commit limit) while the thread
+# lives.
+CHECK_STACK_BYTES = 16 * 1024 * 1024
+# How many check threads may exist at once. A thread that asks for a check
+# waits for it, so this is how many requests can check data at the same
+# time; the next ones wait for a free check thread, in order.
+MAX_CHECK_THREADS = 32
+# How many idle check threads stay running, so a request after a quiet
+# spell does not pay to start one.
+_KEPT_CHECK_THREADS = 2
+# How long, in seconds, an idle check thread past those waits for work
+# before it ends.
+_CHECK_THREAD_IDLE_SECONDS = 60.0
+# Keeps Citry's own thread starts from setting the process-wide stack size
+# at the same time.
+_STACK_SIZE_LOCK = threading.Lock()
 
 
-def _new_build_stack_lock() -> None:
-    """Give a forked child a new lock, since a thread of the parent may have held the old one at the fork."""
-    global _BUILD_STACK_LOCK  # noqa: PLW0603 - the module's one lock is replaced, not shared
-    _BUILD_STACK_LOCK = threading.Lock()
+# The `_thread` functions as they were when this module was imported. A
+# server that loads the app before gevent or eventlet patches the
+# standard library (such as gunicorn with `--preload`) imports Citry first,
+# so these are the originals there, while a later lookup would find the
+# replacements.
+_IMPORTED_THREAD_FUNCTIONS = (_thread.start_new_thread, _thread.allocate_lock, _thread.get_ident, _thread.stack_size)
 
 
-if hasattr(os, "register_at_fork"):
-    os.register_at_fork(after_in_child=_new_build_stack_lock)
-
-
-def _on_large_stack(build: Callable[[], Any]) -> Any:
+def _os_thread_functions() -> tuple[Callable[..., Any], Callable[[], Any], Callable[[], int], Callable[[int], int]]:
     """
-    Run ``build`` on a new thread with a large stack, and return its result or raise its exception.
+    Return the functions that start an OS thread, make a lock, read the running thread's id, and set the stack size.
 
-    pydantic-core builds a validator by walking the schema through nested
-    calls on the C stack, and the copy nests deeper than the class's own
-    schema because of its wrappers. A chain of a few hundred nested models
-    overflows a small stack and ends the process, with no Python exception
-    to catch. The first call to a class builds its copy, so the build runs
-    on whatever thread serves that request, and that thread's stack can be
-    small: Windows gives a thread 1 MB, and a thread that Python did not
-    start keeps the size its creator chose. Running the build on a thread
-    with a fixed large stack makes the depth of class it handles the same
-    everywhere. The build runs once per class, so the extra thread costs
-    little; checking a value with the copy runs on the caller's thread.
+    gevent and eventlet can replace the ``threading`` and ``_thread``
+    functions with ones that start a greenlet on the calling thread's
+    stack, which would give a check no stack of its own. So Citry uses the
+    original functions, whether the replacement happened before or after
+    Citry was imported: a check runs on an OS thread with its own large
+    stack, and the greenlet that asked for it waits without letting other
+    greenlets run, even while a validator waits for I/O.
     """
-    outcome: list[Any] = []
+    gevent_monkey = sys.modules.get("gevent.monkey")
+    if gevent_monkey is not None and gevent_monkey.is_module_patched("threading"):
+        names = ["start_new_thread", "allocate_lock", "get_ident", "stack_size"]
+        start, allocate, ident, stack_size = gevent_monkey.get_original("_thread", names)
+        return start, allocate, ident, stack_size
+    patcher = sys.modules.get("eventlet.patcher")
+    if patcher is not None and patcher.is_monkey_patched("thread"):
+        original = patcher.original("_thread")
+        return original.start_new_thread, original.allocate_lock, original.get_ident, original.stack_size
+    return _IMPORTED_THREAD_FUNCTIONS
 
-    def run() -> None:
+
+class _Job:
+    """One call to run on a check thread, and what it returned or raised."""
+
+    __slots__ = ("call", "context", "done", "outcome")
+
+    def __init__(self, call: Callable[[], Any], allocate_lock: Callable[[], Any]) -> None:
+        self.call = call
+        # The caller's context variables (the request's work budget, the
+        # running validation's tally, and the app's own), copied so the call
+        # sees what it would see on the caller's thread.
+        self.context = contextvars.copy_context()
+        # Held until the call ends; the caller waits by acquiring it.
+        self.done = allocate_lock()
+        self.done.acquire()
+        self.outcome: tuple[bool, Any] = (False, None)
+
+    def run(self) -> None:
+        """Run the call and keep its outcome; the check thread then wakes the caller (see `_CheckThreads._serve`)."""
         try:
-            outcome.append((True, build()))
-        except BaseException as error:  # noqa: BLE001 - handed to the calling thread, which raises it
-            outcome.append((False, error))
+            self.outcome = (True, self.context.run(self.call))
+        except BaseException as error:  # noqa: BLE001 - handed to the waiting caller, which raises it
+            self.outcome = (False, error)
 
-    # The same context as the caller, so the build sees what it would see there.
-    context = contextvars.copy_context()
-    try:
+
+class _Idle:
+    """An idle check thread: the lock it waits on, and the job a caller hands it."""
+
+    __slots__ = ("job", "wake")
+
+    def __init__(self, allocate_lock: Callable[[], Any]) -> None:
+        self.wake = allocate_lock()
+        self.wake.acquire()
+        self.job: _Job | None = None
+
+
+class _CheckThreads:
+    """
+    The threads with a large stack that run Citry's checks, started as they are needed.
+
+    A job goes to an idle thread, or to a new thread while fewer than
+    ``MAX_CHECK_THREADS`` exist, or else waits in a queue, which a busy
+    thread empties before it goes idle. So a job waits behind other jobs
+    only while that many checks already run at once.
+    """
+
+    def __init__(self) -> None:
+        self.start_thread, self.allocate_lock, self.get_ident, self.stack_size = _os_thread_functions()
+        self.lock = self.allocate_lock()
+        self.idle: list[_Idle] = []
+        self.queue: deque[_Job] = deque()
+        self.count = 0
+        # The ids of the running check threads (see `on_check_thread`).
+        self.idents: set[int] = set()
+
+    def run(self, call: Callable[[], Any]) -> tuple[bool, Any] | None:
+        """Run ``call`` on a check thread and return what it returned or raised, or ``None`` when none can run it."""
+        job = _Job(call, self.allocate_lock)
+        start = False
+        with self.lock:
+            handed = self._hand(job)
+            if not handed and self.count < MAX_CHECK_THREADS:
+                self.count += 1
+                start = True
+            elif not handed:
+                self.queue.append(job)
+        if start and not self._start(job):
+            with self.lock:
+                self.count -= 1
+                # A live check thread takes the queued job once it is done,
+                # since a thread goes idle only when the queue is empty.
+                if not self._hand(job):
+                    if self.count == 0:
+                        return None
+                    self.queue.append(job)
+        job.done.acquire()
+        return job.outcome
+
+    def _hand(self, job: _Job) -> bool:
+        """Hand ``job`` to an idle thread, with ``self.lock`` held, and say whether there was one."""
+        if not self.idle:
+            return False
+        idle = self.idle.pop()
+        idle.job = job
+        # Releasing a lock does not block, so it is safe under `self.lock`.
+        idle.wake.release()
+        return True
+
+    def _start(self, job: _Job) -> bool:
+        """Start a check thread that runs ``job`` first, and say whether it started."""
         # The stack size applies to every thread the process starts while it
         # is set, so it is put back right after this start. Another thread
         # started in this short window also gets the large stack.
-        with _BUILD_STACK_LOCK:
-            previous = threading.stack_size(_BUILD_STACK_BYTES)
+        with _STACK_SIZE_LOCK:
             try:
-                worker = threading.Thread(target=context.run, args=(run,), name="citry-validator-build", daemon=True)
-                worker.start()
+                previous = self.stack_size(CHECK_STACK_BYTES)
+            except Exception:  # noqa: BLE001 - the job is left to the caller
+                # A platform without a settable stack size.
+                return False
+            try:
+                self.start_thread(self._serve, (job,))
+            except Exception:  # noqa: BLE001 - the job is left to the caller
+                # A platform without threads (Pyodide sets the stack size but
+                # starts no thread), or a process at its thread limit.
+                return False
             finally:
-                threading.stack_size(previous)
-    except (RuntimeError, ValueError):
-        # A platform that cannot start threads (such as Pyodide) or cannot
-        # set the stack size builds on the calling thread, as Pydantic does.
-        return build()
-    worker.join()
-    succeeded, value = outcome[0]
+                # The thread may have started, so a failure to put the size
+                # back must not hand the job to the caller as well.
+                with suppress(Exception):
+                    self.stack_size(previous)
+        return True
+
+    def _serve(self, job: _Job) -> None:
+        """Run jobs on this check thread until it has waited idle too long."""
+        ident = self.get_ident()
+        idle: _Idle | None = None
+        # The job whose caller still waits for it, if any.
+        waiting: _Job | None = job
+        ended = False
+        try:
+            self.idents.add(ident)
+            # A thread dump and the app's log lines then say what this thread is.
+            with suppress(Exception):
+                threading.current_thread().name = "citry-check"
+            idle = _Idle(self.allocate_lock)
+            while True:
+                job.run()
+                with self.lock:
+                    next_job = self.queue.popleft() if self.queue else None
+                    if next_job is None:
+                        self.idle.append(idle)
+                # Wake the caller only once this thread is settled, so the
+                # caller does not wait for the interpreter lock while this
+                # thread does its bookkeeping.
+                waiting = next_job
+                job.done.release()
+                while next_job is None:
+                    if idle.wake.acquire(timeout=_CHECK_THREAD_IDLE_SECONDS):
+                        next_job, idle.job = idle.job, None
+                        waiting = next_job
+                        continue
+                    with self.lock:
+                        # Still idle and not needed: end. A thread that a
+                        # caller picked meanwhile has its wake-up coming.
+                        if idle in self.idle and self.count > _KEPT_CHECK_THREADS:
+                            self.idle.remove(idle)
+                            self.count -= 1
+                            ended = True
+                            return
+                job = next_job
+        finally:
+            self.idents.discard(ident)
+            if not ended:
+                # Only an error in this loop itself gets here (a job's own
+                # errors go to its caller). Give the thread's place back, so
+                # later checks can start a new thread, and answer every
+                # caller still waiting on this thread, so none waits forever.
+                with self.lock:
+                    if idle is not None and idle in self.idle:
+                        self.idle.remove(idle)
+                    self.count -= 1
+                    handed = idle.job if idle is not None else None
+                for left in (waiting, handed):
+                    if left is not None:
+                        left.outcome = (False, RuntimeError("Citry's check thread ended before the check ran."))
+                        with suppress(RuntimeError):
+                            left.done.release()
+
+
+_CHECK_THREADS = _CheckThreads()
+
+
+def _new_check_threads() -> None:
+    """Give a forked child its own check threads, since the parent's threads do not exist in it."""
+    global _CHECK_THREADS, _STACK_SIZE_LOCK  # noqa: PLW0603 - the module's one pool and lock are replaced, not shared
+    _CHECK_THREADS = _CheckThreads()
+    # A thread of the parent may have held the lock at the fork.
+    _STACK_SIZE_LOCK = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_new_check_threads)
+
+
+def on_check_thread() -> bool:
+    """Return whether the running code is on one of Citry's check threads, which have a large stack."""
+    return _CHECK_THREADS.get_ident() in _CHECK_THREADS.idents
+
+
+def run_on_check_thread(function: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    """
+    Call ``function`` on a check thread, a thread with a stack of ``CHECK_STACK_BYTES``, and return its result.
+
+    pydantic-core checks a value and builds a validator through nested
+    calls on the C stack, and so do Citry's own checks and the app's
+    validators. Each nested call takes room on the thread's stack, and the
+    server's own threads can have little of it: Windows gives a thread
+    1 MB, and a thread Python did not start keeps the size its creator
+    chose. Running every check on a thread with a
+    fixed large stack lets the nesting limit be high and the same
+    everywhere.
+
+    The call sees the caller's context variables, and what it raises
+    reaches the caller with its traceback. The call does not see values
+    the caller keeps with ``threading.local``, and context variables it
+    sets stay on the check thread. The caller waits until the call
+    returns. Called on a check thread, the function runs at once on that
+    thread. Code on a check thread must not hand a check to another thread
+    and wait for it: when every check thread waits that way, the queued
+    check never runs. Inside a running validation, the check thread's own CPU time
+    counts toward the request's time limit.
+
+    When no check thread can start (a platform without threads, such as
+    Pyodide, or without a settable stack size, or a process at its thread
+    limit with no check thread running), the function runs on the calling
+    thread, and a validation that starts there applies the lower nesting
+    limit ``SMALL_STACK_CHECK_DEPTH``.
+    """
+    call = functools.partial(function, *args, **kwargs) if args or kwargs else function
+    if on_check_thread():
+        return call()
+    tally = _current_tally()
+    if tally is not None and tally.budget is not None:
+        # The validation's clock runs on the caller's thread, which only
+        # waits, so the check thread counts the CPU time it spends itself.
+        call = functools.partial(_clocked, tally.budget, call)
+    outcome = _CHECK_THREADS.run(call)
+    if outcome is None:
+        return call()
+    succeeded, value = outcome
     if not succeeded:
         raise value
     return value
+
+
+def _clocked(budget: WorkBudget, call: Callable[[], Any]) -> Any:
+    """Run ``call`` with this thread's CPU time counting toward ``budget``."""
+    budget.clock_on()
+    try:
+        return call()
+    finally:
+        budget.clock_off()
+
+
+def _on_a_check_thread(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Make each call of ``function`` run on a check thread (see ``run_on_check_thread``)."""
+
+    # The entry points in `schemas.py`, `tokens.py` and `state.py` move the
+    # whole validation to a check thread already, where this calls the
+    # function at once. A caller that checks without them still gets the
+    # large stack for the part pydantic-core runs.
+    @functools.wraps(function)
+    def moved(*args: Any, **kwargs: Any) -> Any:
+        return run_on_check_thread(function, *args, **kwargs)
+
+    return moved
 
 
 def _build(schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False) -> Any:
@@ -2599,8 +2881,12 @@ def _build(schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappe
         copied = rewriter.rewrite(schema.root)
         return pydantic_core.SchemaValidator(copied, _top_config(schema.root), _use_prebuilt=False)
 
-    # The rewrite builds validators too, for the labels of union members.
-    return _on_large_stack(build)
+    # pydantic-core builds a validator by walking the schema through nested
+    # calls on the C stack, and the copy nests deeper than the class's own
+    # schema because of its wrappers, so a chain of a few hundred nested
+    # models needs a large stack. The rewrite builds validators too, for the
+    # labels of union members.
+    return run_on_check_thread(build)
 
 
 def checker_for(cls: type, *, state: bool = False, by_name: bool = False, repeated: bool = False) -> Checker | None:
@@ -2735,8 +3021,8 @@ def fields_checker_for(cls: type) -> FieldsCheck | None:
             return pydantic_core.SchemaValidator(copied, config, _use_prebuilt=False)
 
         try:
-            # A large stack, as for the copy of a whole class (see `_on_large_stack`).
-            validator = _on_large_stack(build)
+            # A large stack, as for the copy of a whole class (see `_build`).
+            validator = run_on_check_thread(build)
         except Exception:  # noqa: BLE001 - the caller then refuses the write, as for a class it cannot copy
             logger.exception(f"Citry could not build its copy of the field checks of {cls.__qualname__}.")
         else:
@@ -2806,6 +3092,7 @@ def _reads_other_fields(root: dict[str, Any]) -> bool:
     return False
 
 
+@_on_a_check_thread
 def validate_field(validator: Any, earlier: dict[str, Any], name: str, value: Any) -> Any:
     """
     Check one write to a Pydantic dataclass field with a copy from ``fields_checker_for``, and return its value.
@@ -2968,10 +3255,10 @@ def warn_if_stopped(cls: type, stop: ValidationTooCostly) -> None:
     each applies the same rule.
     """
     if stop.reason != "errors":
-        warn_work_spent(cls, stop.reason)
+        warn_work_spent(cls, stop.reason, limit=stop.limit)
 
 
-def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True) -> None:
+def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True, limit: int | None = None) -> None:
     """
     Warn once per class and kind that a check stopped for work, time, nesting or depth (``reason``), naming the fix.
 
@@ -2983,7 +3270,8 @@ def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True) ->
     request's later checks may be refused.
 
     With ``refused=True``, a v1 model gets its own advice, because Citry
-    checks it with Pydantic's own validator.
+    checks it with Pydantic's own validator. ``limit`` is the nesting limit
+    the data went past, for ``"nesting"``.
     """
     # A refused check and one that finished past the time give different
     # advice, so each gets its own once-per-class key.
@@ -2993,9 +3281,16 @@ def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True) ->
         if key in warned:
             return
         _WARNED_WORK[cls] = warned | {key}
+    if reason == "nesting" and limit is None:
+        # Pydantic's JSON reader refused the text before any class saw it.
+        logger.warning(
+            f"Data for {cls.__qualname__} was refused because its JSON text nests lists and objects deeper than"
+            " Pydantic's JSON reader accepts. If valid data nests this deeply, send it with fewer levels of nesting."
+        )
+        return
     if reason == "nesting":
         logger.warning(
-            f"Data for {cls.__qualname__} was refused because it nests more than {MAX_CHECK_DEPTH} objects,"
+            f"Data for {cls.__qualname__} was refused because it nests more than {limit} objects,"
             " unions, wrap validators and Iterable values inside each other, which is as deep as Citry checks"
             " event data and State. If valid data nests this deeply, give the recursive union a discriminator,"
             " or use fewer nested classes, wrap validators and Iterable fields."
@@ -3100,12 +3395,14 @@ def _counting(checker: Checker, payload: Any) -> Iterator[_Tally]:
             raise ValidationTooCostly("depth") from None
 
 
+@_on_a_check_thread
 def validate_python(checker: Checker, payload: Any, **options: Any) -> Any:
     """Check ``payload`` (JSON-decoded values) with the copy, in Python mode."""
     with _counting(checker, payload):
         return checker.validator.validate_python(payload, **options)
 
 
+@_on_a_check_thread
 def validate_init(checker: Checker, cls: type, values: dict[str, Any]) -> Any:
     """Build a Pydantic dataclass from keyword values with the copy, as its ``__init__`` would."""
     # The class's own `__init__` fills an instance Python already made. A
@@ -3118,12 +3415,14 @@ def validate_init(checker: Checker, cls: type, values: dict[str, Any]) -> Any:
     return instance
 
 
+@_on_a_check_thread
 def validate_assignment(checker: Checker, instance: Any, name: str, value: Any) -> None:
     """Check and set one field of a Pydantic dataclass with the copy, as its ``validate_assignment`` would."""
     with _counting(checker, value):
         checker.validator.validate_assignment(instance, name, value)
 
 
+@_on_a_check_thread
 def validate_json(checker: Checker, text: str, payload: Any, **options: Any) -> Any:
     """
     Check JSON text with the copy for JSON text, in JSON mode.
@@ -3132,7 +3431,28 @@ def validate_json(checker: Checker, text: str, payload: Any, **options: Any) -> 
     wrapper below a wrap validator counts a failure.
     """
     with _counting(checker, payload):
-        return checker.validator.validate_json(text, **options)
+        try:
+            return checker.validator.validate_json(text, **options)
+        except pydantic_core.ValidationError as err:
+            # Pydantic's JSON reader refuses text nested past its own depth
+            # and calls it invalid. Citry answers that the data is nested
+            # too deeply.
+            if _json_too_deep(err):
+                raise _stopped("nesting") from None
+            raise
+
+
+def _json_too_deep(err: Any) -> bool:
+    """Return whether ``err`` is only Pydantic's JSON reader refusing text that nests deeper than it accepts."""
+    if err.error_count() != 1:
+        return False
+    error = err.errors(include_url=False)[0]
+    message = str(error.get("ctx", {}).get("error", ""))
+    # Only the whole text: a `Json[...]` field's own text that nests too
+    # deeply is that field's error, with the field in its location.
+    return (
+        error.get("type") == "json_invalid" and not error.get("loc") and message.startswith("recursion limit exceeded")
+    )
 
 
 ################################################

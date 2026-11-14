@@ -184,6 +184,14 @@ def state_wire_values(state: Any) -> dict[str, Any]:
     dataclass State's values are used as they are, and the token checks they
     are plain JSON.
     """
+    # On a check thread: State that passed the nesting limit can nest as
+    # deeply as the limit allows, and writing it out nests as deeply, so it
+    # needs the same large stack as the check.
+    return bounded.run_on_check_thread(_state_wire_values, state)
+
+
+def _state_wire_values(state: Any) -> dict[str, Any]:
+    """Return the State field values as ``state_wire_values`` describes, on the running thread."""
     kind = state_model_kind(type(state))
     if kind == "v2":
         options: dict[str, Any] = {"mode": "json", "by_alias": False, "round_trip": True, "warnings": False}
@@ -363,6 +371,15 @@ def restore_state(state_cls: type, values: dict[str, Any]) -> Any:
             to check.
 
     """
+    # On a check thread, whose large stack fits a deep tree the app saved,
+    # whatever stack the server gives the calling thread. The copy a
+    # request keeps of a restored State is made there too, since copying a
+    # tree also nests.
+    return bounded.run_on_check_thread(_restore_state, state_cls, values)
+
+
+def _restore_state(state_cls: type, values: dict[str, Any]) -> Any:
+    """Build State from a verified token's values as ``restore_state`` describes, on the running thread."""
     budget = bounded.current_work()
     key = None
     if budget is not None:
@@ -478,6 +495,14 @@ def check_changed_state(state: Any) -> tuple[str | None, str] | None:
     Returns ``(field, message)`` for the first problem, or ``None`` when the
     State can be signed or is a dataclass.
     """
+    # On one check thread: the State may nest as deeply as the nesting limit
+    # allows, and writing it out, reading it back and comparing the two all
+    # nest as deeply.
+    return bounded.run_on_check_thread(_check_changed_state, state)
+
+
+def _check_changed_state(state: Any) -> tuple[str | None, str] | None:
+    """Check a changed State as ``check_changed_state`` describes, on the running thread."""
     state_cls = type(state)
     if state_model_kind(state_cls) is None:
         return None

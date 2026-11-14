@@ -57,6 +57,18 @@ does. The upgrade notes below list what can change.
   whose plugin script reads a value a component script sets, read it
   later, for example inside a callback.
 
+- **Validators of event data and State run on Citry's own threads:**
+  so do State serializers and `__post_init__`, and your request thread
+  waits for them. They can read the request's context variables, but a
+  value stored with `threading.local` is unset there, and a context
+  variable a validator sets does not reach your handler. A validator
+  that uses Django's database gets a separate connection, which does not
+  see rows the request wrote in an unfinished transaction, and a write
+  from it waits for that transaction. A validator must not wait for a
+  lock that the request's thread holds, or, under gevent or eventlet,
+  for anything another greenlet holds
+  ([details](https://citry.dev/security/#check-event-data)).
+
 ### Changed
 
 - **Breaking:** a `c-bind` key such as `":row"` or `"v-slot"` on
@@ -96,6 +108,19 @@ does. The upgrade notes below list what can change.
   `dotless_params`. Before, it could return a URL that the route splits
   into different values, such as `cache/a.b.js` for `class_id="a.b"`,
   which Citry reads as `class_id="a"`.
+- **Event data may nest 64 levels, and the check no longer depends on
+  your threads' stack size:** Citry now checks event data, browser
+  writes to State, and State read back from its token on threads of its
+  own, each with a 16 MiB stack. The nesting limit rises from 32 to 64
+  levels, so a tree whose node classes have a discriminator can nest
+  about 60 levels. Your handler still gets the checked data on your
+  server's own thread: on macOS with Python 3.14, a handler that calls
+  `model_dump()` on a chain of models fits about 100 levels in a 512 KiB
+  thread stack, a margin of about 1.6x over the limit, but only about 22
+  in 128 KiB (musl's default), so give request threads at least 512 KiB
+  with `threading.stack_size()`. Where Python cannot start threads, as
+  in Pyodide (Python in the browser), the limit stays at 32
+  ([details](https://citry.dev/security/#check-event-data)).
 
 ### Fixes
 
@@ -105,10 +130,10 @@ does. The upgrade notes below list what can change.
 - **Citry imports on Pyodide again:** Citry 0.8.0 failed to import on
   Pyodide with `AttributeError: module 'time' has no attribute
   'thread_time'`, because the Events limit on CPU time read a clock that
-  Pyodide does not have. Citry now uses the CPU time of the calling
-  thread where the platform has it, then the CPU time of the process,
-  then the wall clock. Linux, macOS and Windows keep using the CPU time
-  of the calling thread.
+  Pyodide does not have. Citry now uses the CPU time of the thread that
+  runs the check where the platform has it, then the CPU time of the
+  process, then the wall clock. Linux, macOS and Windows keep using the
+  thread's CPU time.
 - A `c-bind` key that is a `str` subclass with its own `startswith` or
   `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
   and component tags.
