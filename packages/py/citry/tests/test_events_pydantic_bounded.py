@@ -4116,16 +4116,49 @@ def test_a_lone_surrogate_deep_inside_a_state_write_is_refused() -> None:
     assert caught.value.fields == {"items": _LONE_SURROGATE_MESSAGE}
 
 
+class _Text(str):
+    __slots__ = ()
+
+
+class _Items(list[Any]):
+    pass
+
+
+class _Fields(dict[Any, Any]):
+    pass
+
+
+class _Pair(typing_extensions.NamedTuple):
+    first: str
+    second: str
+
+
+def test_the_lone_surrogate_scan_reads_subclasses_as_json_dumps_does() -> None:
+    # Decoded JSON holds only exact types, but a direct caller may pass a
+    # subclass of str, list or dict, which `json.dumps` writes like its base.
+    assert _holds_lone_surrogate(_Items([_Text("\ud800")])) is True
+    assert _holds_lone_surrogate(_Fields({_Text("\udc00"): 1})) is True
+    assert _holds_lone_surrogate(_Fields({"a": _Items([("\ud800",)])})) is True
+    assert _holds_lone_surrogate([_Pair("ok", "\ud800")]) is True
+    assert _holds_lone_surrogate(_Items([_Text("é"), _Fields({"k": _Text("ok")})])) is False
+
+
 def test_the_lone_surrogate_scan_ends_on_a_value_that_holds_itself() -> None:
-    # Only a direct caller can pass such a value; the scan must still end,
-    # and still find a surrogate behind the loop, in a dict key or a tuple.
+    # Only a direct caller can pass such a value. The quick scan gives up
+    # after more items than a default-sized body holds, and the scan that
+    # reads each container once then finds a surrogate behind the loop, in
+    # a dict key or a tuple.
     looped: list[Any] = ["text"]
     looped.append(looped)
     shared = ["text"]
 
     assert _holds_lone_surrogate([looped, shared, shared]) is False
-    assert _holds_lone_surrogate([looped, ("\ud800",)]) is True
-    assert _holds_lone_surrogate([looped, {"\udc00": 1}]) is True
+    # The scan reads the last item first, so it meets the loop first.
+    assert _holds_lone_surrogate([("\ud800",), looped]) is True
+    assert _holds_lone_surrogate([{"\udc00": 1}, looped]) is True
+    holder: dict[str, Any] = {"a": "text"}
+    holder["self"] = holder
+    assert _holds_lone_surrogate(["\ud800", holder]) is True
 
 
 def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() -> None:
