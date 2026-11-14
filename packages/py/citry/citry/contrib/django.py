@@ -56,6 +56,8 @@ from __future__ import annotations
 import inspect
 import io
 import posixpath
+import sys
+from collections.abc import Mapping
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -71,11 +73,13 @@ from citry.util.routing import (
     RouteRequest,
     body_read_limit,
     check_route_table,
-    compile_route_pattern,
+    fill_route_path,
     flatten_routes,
     match_route_pattern,
     normalize_mount_prefix,
     route_allows_method,
+    route_param_names,
+    route_reverse_regex,
     sent_content_type,
     sent_headers,
 )
@@ -276,27 +280,90 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
     return patterns
 
 
+class _ReverseConverter:
+    """
+    A Django URL converter that checks the URL ``reverse()`` builds for one Citry route.
+
+    ``reverse()`` builds a URL by putting the given values into the route's
+    URL template, then accepts it only if the route's regex matches it. The
+    regex the route keeps (:func:`citry.util.routing.route_reverse_regex`)
+    leaves out ``dotless_params``, so it accepts some URLs that the route
+    itself would not match, such as one whose only parameter in its
+    segment is dotless and whose value holds a ``.``. So the route gives ``reverse()`` one of
+    these converters per parameter, and the converter refuses the URL
+    unless Citry's own matcher matches the route's part of it.
+    """
+
+    regex = "[^/]+"
+
+    def __init__(self, route_path: str, dotless_params: frozenset[str], names: tuple[str, ...], name: str) -> None:
+        self._route_path = route_path
+        self._dotless_params = dotless_params
+        self._names = names
+        self._name = name
+
+    def to_python(self, value: str) -> str:
+        return value
+
+    def to_url(self, value: object) -> str:
+        # The same text reverse() puts in the URL for a value with no converter.
+        text = str(value)
+        # A converter sees one value, but the check needs them all. Django's
+        # reverse() holds every value of this call in `candidate_subs`
+        # (Django 4.2 to 6.0), so read them from there; nothing is kept
+        # between calls.
+        frame = sys._getframe(1)
+        try:
+            values = frame.f_locals.get("candidate_subs")
+        finally:
+            del frame
+        if not isinstance(values, Mapping) or not all(param in values for param in self._names):
+            # Without the other values, refuse a dotless value that holds a
+            # `.`, which the regex would let through. This can refuse a URL
+            # the route matches, but never accepts one it refuses this way.
+            if self._name in self._dotless_params and "." in text:
+                msg = f"{self._name!r} is dotless in the route {self._route_path!r} but holds a '.'"
+                raise ValueError(msg)
+            return text
+        # Check once per URL, at the first of the route's values reverse() converts.
+        first = next(param for param in values if param in self._names)
+        if first == self._name:
+            # This value's own text is the one reverse() puts in the URL.
+            texts = {param: text if param == self._name else str(values[param]) for param in self._names}
+            filled = fill_route_path(self._route_path, texts)
+            if match_route_pattern(self._route_path, self._dotless_params, filled) is None:
+                # reverse() treats ValueError from a converter as "this URL does not fit".
+                msg = f"the values do not make a path that the route {self._route_path!r} matches"
+                raise ValueError(msg)
+        return text
+
+
 @cache
 def _citry_route_pattern_class() -> type[Any]:
     """
     Return a Django URL pattern class that matches a request the way Citry's own adapters do.
 
-    The class holds the regex from
-    :func:`citry.util.routing.compile_route_pattern`, which describes the
-    route's shape, so ``reverse()`` and Django's URL checks work as for
-    ``re_path()``. It matches each request with
-    :func:`citry.util.routing.match_route_pattern` instead of that regex,
-    because a regex with several parameters in one path segment can take
-    time that grows much faster than the path's length. So Django splits a
-    path between parameters exactly as the other adapters do. The class is
-    built on first use because this module must import without Django.
+    The class matches each request with
+    :func:`citry.util.routing.match_route_pattern`, so Django splits a path
+    between parameters exactly as the other adapters do, in time that grows
+    in step with the path's length. For ``reverse()`` and Django's URL
+    checks it holds the regex from
+    :func:`citry.util.routing.route_reverse_regex`, which takes time in
+    step with the URL's length whatever the values hold, and a converter
+    per parameter that checks the URL ``reverse()`` builds with Citry's
+    matcher, so ``reverse()`` accepts only URLs whose Citry part the route
+    matches. The class is built on first use because this module must
+    import without Django.
     """
     from django.urls.resolvers import RegexPattern  # noqa: PLC0415
 
     class CitryRoutePattern(RegexPattern):  # type: ignore[misc]
         def __init__(self, route_path: str, dotless_params: frozenset[str], *, name: str | None) -> None:
-            super().__init__(compile_route_pattern(route_path, dotless_params).pattern, name=name, is_endpoint=True)
+            super().__init__(route_reverse_regex(route_path), name=name, is_endpoint=True)
             self._citry_route = (route_path, dotless_params)
+            names = route_param_names(route_path)
+            # reverse() calls a converter's to_url() for each value it puts in the URL.
+            self.converters = {param: _ReverseConverter(route_path, dotless_params, names, param) for param in names}
 
         def match(self, path: str) -> tuple[str, tuple[()], dict[str, str]] | None:
             params = match_route_pattern(*self._citry_route, path)

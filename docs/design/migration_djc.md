@@ -768,7 +768,7 @@ stays in django-components; the verdicts below are about each *field*.
 | Feature | Status | Notes |
 |---|---|---|
 | `load_as_django_command` (`ComponentCommand` -> Django management command) | ⏭️ Skip (Django) | citry deliberately adds no Django management-command bridge; Django projects call the installed `citry` binary directly ([`extensions_commands.md`](extensions_commands.md) section 14) |
-| `routes_to_django` (`URLRoute` -> Django urlpatterns) | ✅ Done | `citry.contrib.django.urlpatterns()`; a route with parameters gets a Django pattern that keeps the route's regex for `reverse()` and matches requests with Citry's own matcher ([`dependencies.md`](dependencies.md) section 9.2) |
+| `routes_to_django` (`URLRoute` -> Django urlpatterns) | ✅ Done | `citry.contrib.django.urlpatterns()`; a route with parameters gets a Django pattern that keeps a regex of the route for `reverse()` and matches requests with Citry's own matcher ([`dependencies.md`](dependencies.md) section 9.2) |
 
 </details>
 
@@ -2917,7 +2917,7 @@ the user-facing docs remain, deliberately).
   works for any framework exposing that attribute.
 - **`citry.contrib.django`**: `urlpatterns(citry_instance, prefix=...)`
   converts `Citry.urls` to Django patterns. A route with parameters gets a
-  pattern class that keeps the route's regex for `reverse()` and Django's
+  pattern class that keeps a regex of the route for `reverse()` and Django's
   URL checks, and matches each request with Citry's own matcher. Views check
   `route.methods` and translate `RouteResponse`. `DjangoCache` adapts any
   configured Django cache to the `CitryCache` protocol, so a Django project

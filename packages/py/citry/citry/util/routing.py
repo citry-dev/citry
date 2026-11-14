@@ -219,6 +219,9 @@ class URLRoute:
     admits more methods than its handler serves, the handler answers 405
     for the rest.
 
+    ``dotless_params`` must be a ``frozenset`` of parameter names; any
+    other value raises ``TypeError`` when the route is built.
+
     ``max_body_bytes`` is an optional function that returns the largest
     request body the route accepts. Citry calls it for each request, so the
     limit can follow a setting. The ASGI, WSGI, and Django integrations then
@@ -264,6 +267,17 @@ class URLRoute:
             )
             raise ValueError(msg)
         _validate_route_methods(self.methods)
+        # The matcher caches each route by its dotless_params, so they must
+        # be hashable, and a set or list would otherwise fail later, on the
+        # first request or in Django's urlpatterns().
+        if not isinstance(self.dotless_params, frozenset) or not all(
+            isinstance(name, str) for name in self.dotless_params
+        ):
+            msg = (
+                "URLRoute(dotless_params=...) must be a frozenset of parameter names, such as"
+                f' frozenset({{"name"}}); got {self.dotless_params!r}.'
+            )
+            raise TypeError(msg)
         if self.max_body_bytes is not None and not callable(self.max_body_bytes):
             msg = (
                 "URLRoute(max_body_bytes=...) must be a function that returns the limit in bytes,"
@@ -402,31 +416,6 @@ def normalize_mount_prefix(prefix: str) -> str:
 # A path parameter: `{name}` where name is a Python identifier. Any other
 # text, including a `{` that does not start a parameter, is fixed text.
 _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
-
-
-@cache
-def compile_route_pattern(path: str, dotless_params: frozenset[str] = frozenset()) -> re.Pattern[str]:
-    """
-    Build a regex that describes a route path, for Django's ``reverse()`` and URL checks.
-
-    Each ``{name}`` becomes a named group of one or more characters other
-    than ``/`` (and other than ``.`` for a parameter in ``dotless_params``),
-    and the text around the parameters must appear as written. The Django
-    integration registers this regex so that ``reverse()`` and Django's URL
-    checks know the route's parameters. No adapter matches a request path
-    against it: with several parameters in one path segment, Python's regex
-    engine can take time that grows much faster than the path's length, so
-    every adapter matches requests with :func:`match_route_pattern`.
-    """
-    pattern = ""
-    last_end = 0
-    for match in _PARAM_RE.finditer(path):
-        pattern += re.escape(path[last_end : match.start()])
-        characters = "[^/.]" if match.group(1) in dotless_params else "[^/]"
-        pattern += f"(?P<{match.group(1)}>{characters}+)"
-        last_end = match.end()
-    pattern += re.escape(path[last_end:])
-    return re.compile(f"^{pattern}$")
 
 
 def check_route_table(routes: Iterable[URLRoute]) -> None:
@@ -595,6 +584,60 @@ def _parse_route_path(path: str, dotless_params: frozenset[str]) -> tuple[_Route
     add_text(path[last_end:])
     segments.append(_RouteSegment(tuple(literals), tuple(params)))
     return tuple(segments)
+
+
+def route_param_names(path: str) -> tuple[str, ...]:
+    """Return the names of the ``{name}`` parameters in a route path, in order."""
+    return tuple(match.group(1) for match in _PARAM_RE.finditer(path))
+
+
+def fill_route_path(path: str, values: Mapping[str, str]) -> str:
+    """
+    Put each value in place of its ``{name}`` parameter in a route path.
+
+    Each parameter is replaced once, where it stands, so a value that holds
+    text such as ``{other}`` stays as written.
+    """
+    return _PARAM_RE.sub(lambda match: values[match.group(1)], path)
+
+
+def route_reverse_regex(path: str) -> str:
+    """
+    Build the regex Django keeps for a route, for ``reverse()`` and its URL checks.
+
+    Django turns this regex into the URL template that ``reverse()`` fills
+    in, so the text around the parameters is written as plain text and each
+    ``{name}`` is a named group. ``reverse()`` then searches the URL it
+    built with the regex. Each group takes its parameter only up to the
+    first place where the text after it can start, inside an atomic group
+    that never gives characters back, so the search takes time in step with
+    the URL's length whatever the values hold. Every path that the route
+    matches also matches this regex, because a parameter that is not
+    dotless accepts any run of characters other than ``/``. The regex
+    leaves out ``dotless_params``; the Django integration checks each URL
+    that ``reverse()`` builds with :func:`match_route_pattern`, which
+    applies them.
+
+    Raises:
+        ValueError: As :func:`check_route_table` does.
+
+    """
+    segments = _parse_route_path(path, frozenset())
+    parts: list[str] = []
+    for segment in segments:
+        part = re.escape(segment.literals[0])
+        for index, (name, _dotless) in enumerate(segment.params):
+            after = segment.literals[index + 1]
+            if index < len(segment.params) - 1:
+                # Up to the first place the next text starts, after at least one character.
+                group = f"(?>[^/]+?(?={re.escape(after)}))"
+            else:
+                # The last parameter of a segment runs to where the segment's
+                # closing text ends the segment.
+                group = rf"(?>[^/]+(?={re.escape(after)}(?:/|\Z)))"
+            part += f"(?P<{name}>{group}){re.escape(after)}"
+        parts.append(part)
+    return "^" + "/".join(parts) + "$"
 
 
 def _match_segments(segments: tuple[_RouteSegment, ...], pieces: list[str]) -> dict[str, str] | None:

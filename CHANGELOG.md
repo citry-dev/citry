@@ -30,6 +30,16 @@
   when `urlpatterns()` ran, and under ASGI and WSGI on every request that
   reached the route.
   ([details](https://citry.dev/advanced/extensions/#separate-two-parameters))
+- `URLRoute(dotless_params=...)` now raises `TypeError` when the route is
+  built unless it is a `frozenset` of parameter names. Before, a set or a
+  list failed when Django's `urlpatterns()` ran, or on the first request
+  under ASGI, WSGI, Flask and FastAPI.
+
+### Fixes
+
+- Django's `reverse()` for a Citry route with several parameters in one
+  path segment, such as `{name}-{version}`, now takes time in step with
+  the length of the values you pass.
 
 ### Fixes
 

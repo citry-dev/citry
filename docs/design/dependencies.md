@@ -1169,7 +1169,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 5. **Breadth - built** (except as noted). `citry.contrib.flask.mount`
    (wraps the app's `wsgi_app`, needs no Flask import);
    `citry.contrib.django` (`urlpatterns()` over `Citry.urls`; a route
-   with parameters gets a Django pattern that keeps the route's regex for
+   with parameters gets a Django pattern that keeps a regex of the route for
    `reverse()` but matches requests with Citry's own matcher, plus the
    `DjangoCache` wrapper); the cache adapters as
    `citry.contrib.caches.RedisCache` / `DiskCache` (one module, wrapping

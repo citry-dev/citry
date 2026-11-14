@@ -4,12 +4,11 @@ A route matches a request path in time that grows in step with the path's length
 Every adapter matches a request with ``match_route_pattern``, which splits
 the path at each ``/`` and then splits each segment between its parameters
 without trying every possible split. These tests lock three things: the
-matcher gives the same values as the route's regex
-(``compile_route_pattern``, which Django keeps for ``reverse()``), it
-refuses a route with two parameters side by side, and the time it takes
-grows in step with the path's length. The timing tests compare a path with
-one eight times as long, so the result does not depend on how fast the
-machine is.
+matcher gives the same values as the regex Citry used to match routes with
+(``tests/_route_oracle.py``), it refuses a route with two parameters side
+by side, and the time it takes grows in step with the path's length. The
+timing tests compare a path with one eight times as long, so the result
+does not depend on how fast the machine is.
 """
 
 from __future__ import annotations
@@ -24,12 +23,12 @@ from citry.util.routing import (
     RouteResponse,
     URLRoute,
     check_route_table,
-    compile_route_pattern,
     match_route,
     match_route_pattern,
 )
 
 from ._growth import assert_grows_in_step
+from ._route_oracle import reference_match
 
 # Each timing test compares a path with one this many times as long.
 _GROWTH_FACTOR = 8
@@ -46,8 +45,7 @@ def _builtin_cache_routes() -> list:
 
 
 def _regex_match(route: str, dotless: frozenset[str], path: str) -> dict[str, str] | None:
-    match = compile_route_pattern(route, dotless).fullmatch(path)
-    return None if match is None else match.groupdict()
+    return reference_match(route, dotless, path)
 
 
 def test_builtin_cache_routes_match_valid_paths() -> None:
@@ -346,3 +344,13 @@ def test_an_extension_route_with_several_parameters_in_one_segment_matches_quick
         assert match_route(app.urls, "ext/probe/pkg/" + "x" * dashes + "-y") is None
 
     assert_grows_in_step(match_and_reject, 8_000 // _GROWTH_FACTOR, 8_000, factor=_GROWTH_FACTOR)
+
+
+@pytest.mark.parametrize(
+    "dotless",
+    [{"name"}, ["name"], "name", frozenset({1})],
+    ids=["set", "list", "str", "not-a-name"],
+)
+def test_dotless_params_must_be_a_frozenset_of_names(dotless: object) -> None:
+    with pytest.raises(TypeError, match=r"dotless_params=\.\.\.\) must be a frozenset of parameter names"):
+        URLRoute("files/{name}.{ext}", handler=_handler, dotless_params=dotless)  # type: ignore[arg-type]
