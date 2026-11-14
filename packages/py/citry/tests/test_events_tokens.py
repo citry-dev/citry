@@ -1799,13 +1799,13 @@ class TestPydanticStateItemErrors:
         # Citry reads each error once, so 9 times the depth takes about 2
         # times as long, and the bound leaves room for a slow machine.
         # Writing the text of each list for each error took about 14 times
-        # as long. The deeper value stays within the nesting Citry checks
-        # (MAX_CHECK_DEPTH).
+        # as long (measured at 36 levels against 4). The deeper value stays
+        # within the nesting Citry checks (MAX_CHECK_DEPTH).
         # The shallow run takes 1 to 2 ms on a laptop, and a run that short
         # is mostly noise, so its time is floored at 1 ms. The floor is close
         # to the shallow run's own time, so a regression that makes the deep
         # run 15 times slower still fails the bound.
-        assert best_time(36) < 7 * max(best_time(4), 0.001)
+        assert best_time(27) < 7 * max(best_time(3), 0.001)
 
     def test_an_ordinary_large_write_to_a_strict_state_reaches_pydantic(self):
         pydantic = pytest.importorskip("pydantic")

@@ -77,9 +77,10 @@ class _HandClock:
 @pytest.fixture
 def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     # A test of the work budget needs data deep enough for the budget to run
-    # out, which is past the nesting limit. The limit is sized for a 512 KiB
-    # thread, and pytest runs tests on the main thread, which has at least
-    # 2 MB of stack on every OS, so a limit of 100 still fits.
+    # out, which is past the nesting limit. pytest runs tests on the main
+    # thread, which has 8 MiB of stack on Linux and macOS. On Windows a
+    # check uses far less stack per level: CI measured more than 150 levels
+    # of these shapes in 512 KiB. So a limit of 100 still fits.
     monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 100)
 
 
@@ -380,6 +381,18 @@ class WNode(pydantic.BaseModel):
     v: int = 0
 
 
+# A wrap validator on the model and another on its field: the heaviest
+# shape per level measured, so it sets MAX_CHECK_DEPTH.
+class MWNode(pydantic.BaseModel):
+    c: Annotated[Optional[MWNode], pydantic.WrapValidator(lambda v, h: h(v))] = None
+    v: int = 0
+
+    @pydantic.model_validator(mode="wrap")
+    @classmethod
+    def around(cls, value, handler):
+        return handler(value)
+
+
 class UAnd(pydantic.BaseModel):
     type: Literal["and"]
     items: list[Union[UAnd, UOr, ULeaf]]
@@ -433,7 +446,7 @@ class TLeaf(pydantic.BaseModel):
     v: int
 
 
-for model in (WNode, UAnd, UOr, LTree, TAnd):
+for model in (WNode, MWNode, UAnd, UOr, LTree, TAnd):
     model.model_rebuild()
 for data_class in (DAnd, DOr):
     pydantic.dataclasses.rebuild_dataclass(
@@ -469,6 +482,10 @@ def chained(depth, leaf, wrap):
 
 SHAPES = {
     "wrap validator": (holder(WNode), lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": c})),
+    "model and field wrap validators": (
+        holder(MWNode),
+        lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": c}),
+    ),
     "union of models": (holder(Union[UAnd, UOr, ULeaf]), lambda n, leaf: tagged(n, leaf, ("and", "or"))),
     "union of Pydantic dataclasses": (
         holder(Union[DAnd, DOr, DLeaf]),
@@ -507,8 +524,8 @@ results = []
 
 def check_all():
     for name, depth, cls, payload, expected in cases:
-        # A full stack ends the process on Python before 3.14, so name the
-        # case first: the test prints the last name it saw.
+        # Name the case first, so a run that does not finish shows the last
+        # case it reached.
         print(f"checking {name} at {depth} levels", file=sys.stderr, flush=True)
         results.append([name, depth, answer(cls, payload) == expected])
 
@@ -522,12 +539,13 @@ print(json.dumps(results))
 
 
 def test_data_at_the_nesting_limit_gets_the_same_answer_on_a_thread_with_half_a_windows_stack() -> None:
-    # A server thread has 1 MiB of stack on Windows and on musl Linux. The
-    # nesting limit must leave half of that free, so data at the limit, in
-    # the shapes that take the most stack per level, must get the same
-    # answer on a 512 KiB thread as on the main thread. Valid data, data
-    # with a bad leaf, and data one level too deep are each checked. A full
-    # stack can end the process, so the check runs in a process of its own.
+    # A server thread has 1 MiB of stack on Windows and in the official
+    # Python images for Alpine Linux. The nesting limit must leave half of
+    # that free, so data at the limit, in shapes that take a lot of stack
+    # per level, must get the same answer on a 512 KiB thread as on the
+    # main thread. Valid data, data with a bad leaf, and data one level too
+    # deep are each checked. The check runs in a process of its own, so a
+    # thread that runs out of stack cannot affect the other tests.
     done = subprocess.run(
         [sys.executable, "-c", _CHECKED_AT_THE_LIMIT_ON_A_SMALL_STACK],
         capture_output=True,
@@ -538,7 +556,7 @@ def test_data_at_the_nesting_limit_gets_the_same_answer_on_a_thread_with_half_a_
 
     assert done.returncode == 0, done.stderr[-2000:]
     results = json.loads(done.stdout)
-    assert len(results) == 18
+    assert len(results) == 21
     assert [result for result in results if not result[2]] == []
 
 
@@ -557,6 +575,47 @@ def test_data_past_the_nesting_limit_is_refused_and_logged_once(caplog: pytest.L
     assert first.fields == second.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
     # Any client can send deep data again, so the warning comes once per class.
     assert caplog.text.count(f"nests more than {bounded.MAX_CHECK_DEPTH} objects") == 1
+
+
+def test_a_part_that_drops_bad_items_does_not_swallow_the_nesting_limit() -> None:
+    # `OnErrorOmit` drops an item on any error, Citry's stops included.
+    # Without the stop kept on the tally, the data would be accepted with
+    # its deep part cut off.
+    class ONode(pydantic.BaseModel):
+        c: list[pydantic.OnErrorOmit[ONode]] = []
+
+    payload: dict[str, Any] = {}
+    for _ in range(bounded.MAX_CHECK_DEPTH + 10):
+        payload = {"c": [payload]}
+
+    assert validate_args(ONode, payload).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+@pydantic.dataclasses.dataclass
+class DeepNode:
+    c: DeepNode | None = None
+
+
+@pydantic.dataclasses.dataclass
+class DeepTreeState:
+    tree: DeepNode | None = None
+
+
+def test_a_dataclass_state_the_app_built_deeper_than_the_nesting_limit_restores() -> None:
+    # A restore reads values the server wrote, or Citry checked when the
+    # browser wrote them, so the nesting limit does not apply to it.
+    value: dict[str, Any] = {}
+    for _ in range(bounded.MAX_CHECK_DEPTH + 10):
+        value = {"c": value}
+
+    state = restore_state(DeepTreeState, {"tree": value})
+
+    depth = 0
+    node = state.tree
+    while node is not None:
+        depth += 1
+        node = node.c
+    assert depth == bounded.MAX_CHECK_DEPTH + 11
 
 
 def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_set(
@@ -603,11 +662,11 @@ def test_an_error_while_building_a_copy_reaches_the_caller() -> None:
 # --- recursive unions and the work budget -------------------------------------------
 
 
-def test_a_valid_filter_chain_fifteen_levels_deep_is_accepted() -> None:
-    result = validate_args(Query, {"q": _chain(15, 1)})
+def test_a_valid_filter_chain_fourteen_levels_deep_is_accepted() -> None:
+    result = validate_args(Query, {"q": _chain(14, 1)})
 
     assert result.ok
-    assert result.value == Query.model_validate({"q": _chain(15, 1)})
+    assert result.value == Query.model_validate({"q": _chain(14, 1)})
 
 
 @pytest.mark.usefixtures("deep_checks")
@@ -659,10 +718,10 @@ def test_a_discriminated_recursive_union_is_limited_only_by_the_nesting_limit() 
         return {"q": value}
 
     # Each level of a discriminated union counts once toward the nesting
-    # limit, so 35 levels pass, more than twice the depth at which the work
-    # budget stops a union without a discriminator (see the filter chain
-    # tests above). A chain past the limit gets the 422 for deep data.
-    assert validate_args(TQuery, chain(35)).ok
+    # limit, so 28 levels pass, twice the depth at which a union without a
+    # discriminator stops (see the filter chain tests above). A chain past
+    # the limit gets the 422 for deep data.
+    assert validate_args(TQuery, chain(28)).ok
     assert validate_args(TQuery, chain(bounded.MAX_CHECK_DEPTH)).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
 
 

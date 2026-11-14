@@ -129,15 +129,16 @@ WORK_SECONDS = 1.0
 # can be off by up to one step. It is a module-level name so that a test can
 # replace it with a clock it moves by hand.
 cpu_clock = time.thread_time
-# How many objects and unions Citry's copy of a validator may be checking
-# inside each other: each Pydantic model, dataclass or TypedDict a value
+# How many of Citry's counting wrappers may be checking inside each other:
+# each Pydantic model, dataclass, TypedDict and wrap validator a value
 # passes through counts one, and so does each union whose members can read
 # it. Data that nests deeper is refused with TOO_DEEP_MESSAGE. Each level
-# takes room on the thread's stack, and on Python before 3.14 a full stack
-# ends the process instead of raising an error. At this limit a check fits
-# in 512 KiB, half the 1 MiB stack of a thread on Windows or musl Linux, on
-# every supported system (the test with a 512 KiB thread checks this).
-MAX_CHECK_DEPTH = 40
+# takes room on the thread's stack, so the limit keeps a check within a
+# fixed amount of it. It is sized so data at the limit, in the shapes that
+# measured heaviest per level, is checked in 512 KiB, half the 1 MiB thread
+# stack of Windows and of the official Python images for Alpine Linux. The
+# test with a 512 KiB thread checks those shapes.
+MAX_CHECK_DEPTH = 32
 # What one more check of a list or object costs besides the values inside it,
 # in steps: the Python wrappers around it run on every check.
 ENTRY_STEPS = 32
@@ -292,7 +293,7 @@ class WorkBudget:
         """Spend ``steps`` steps, and stop the validation once they are gone."""
         self.left -= steps
         if self.left < 0:
-            raise ValidationTooCostly("work")
+            raise _stopped("work")
 
     def spend_time(self, steps: int) -> None:
         """Spend ``steps`` steps before a check that may run long, and stop once the steps or CPU time are gone."""
@@ -301,7 +302,7 @@ class WorkBudget:
         # not at every wrapper call: reading it costs about a tenth of a call.
         clock = self._clocks.get(threading.get_ident())
         if clock is not None and cpu_clock() - clock[0] > self._seconds_left:
-            raise ValidationTooCostly("time")
+            raise _stopped("time")
 
     def spend_on(self, value: Any, times: int = 1, container_values: int = CONTAINER_STEPS) -> None:
         """
@@ -520,6 +521,9 @@ def _frame(value: Any) -> list[Any]:
 
 
 _REQUEST_WORK: contextvars.ContextVar[WorkBudget | None] = contextvars.ContextVar("citry_events_work", default=None)
+# Whether a validation that starts now applies MAX_CHECK_DEPTH. Only a
+# restore of server-written values turns it off (see `unbudgeted`).
+_LIMIT_NESTING: contextvars.ContextVar[bool] = contextvars.ContextVar("citry_events_limit_nesting", default=True)
 
 
 @contextmanager
@@ -556,7 +560,7 @@ def unbudgeted() -> Iterator[None]:
     which the app built or Citry checked when the browser wrote them, so a
     deep tree the app built must restore. The copy still stops each list at
     its first bad item and counts errors, which bounds what a failing
-    restore keeps, but no work budget or CPU limit applies.
+    restore keeps, but no work budget, CPU limit or nesting limit applies.
 
     A check of the request's data may already be running when this
     starts, as when a write to a dataclass State with a model validator
@@ -568,9 +572,14 @@ def unbudgeted() -> Iterator[None]:
     started = cpu_clock()
     work = _REQUEST_WORK.set(None)
     tally = _TALLY.set(None)
+    # The values were written by the server or checked when the browser
+    # wrote them, so a tree the app built deeper than the nesting limit
+    # still restores.
+    nesting = _LIMIT_NESTING.set(False)
     try:
         yield
     finally:
+        _LIMIT_NESTING.reset(nesting)
         _TALLY.reset(tally)
         _REQUEST_WORK.reset(work)
         if outer is not None:
@@ -597,18 +606,27 @@ class _Tally:
         "budget",
         "depth",
         "errors",
+        "limits_nesting",
         "longest_message",
         "member_floor",
         "payload",
         "repeating",
+        "stop",
         "strings_hold_keys",
         "values_read",
     )
 
     def __init__(self, payload: Any) -> None:
         self.errors = 0
-        # How many `_counted` checks are running inside each other now.
+        # How many `_counted` checks are running inside each other now, and
+        # whether MAX_CHECK_DEPTH applies to them (see `unbudgeted`).
         self.depth = 0
+        self.limits_nesting = _LIMIT_NESTING.get()
+        # The first stop for work, time or nesting. A part of the schema that
+        # drops an item on any error, such as `OnErrorOmit`, would otherwise
+        # swallow the stop and accept the data without that item, so
+        # `_counting` raises it again when the validation returns.
+        self.stop: ValidationTooCostly | None = None
         # How many values a Pydantic v1 check has read, so it reads the
         # clock once for every few hundred (see `guarding_pydantic_v1`).
         self.values_read = 0
@@ -654,6 +672,15 @@ class _Tally:
 
 
 _TALLY: contextvars.ContextVar[_Tally | None] = contextvars.ContextVar("citry_events_tally", default=None)
+
+
+def _stopped(reason: str) -> ValidationTooCostly:
+    """Return the stop for ``reason``, kept on the running validation's tally so it cannot be swallowed."""
+    stop = ValidationTooCostly(reason)
+    tally = _current_tally()
+    if tally is not None and tally.stop is None:
+        tally.stop = stop
+    return stop
 
 
 @contextmanager
@@ -852,8 +879,8 @@ def _counted(value: Any, handler: Any) -> Any:
             raise _signal(err) from None
     # Every object and every union that can reach a value runs this, so
     # counting here bounds how deep the check goes on the thread's stack.
-    if tally.depth >= MAX_CHECK_DEPTH:
-        raise ValidationTooCostly("nesting")
+    if tally.limits_nesting and tally.depth >= MAX_CHECK_DEPTH:
+        raise _stopped("nesting")
     if tally.repeating and tally.budget is not None:
         tally.budget.spend(PYTHON_CALL_STEPS)
     before = tally.errors
@@ -2822,9 +2849,10 @@ def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True) ->
         _WARNED_WORK[cls] = warned | {key}
     if reason == "nesting":
         logger.warning(
-            f"Data for {cls.__qualname__} was refused because it nests more than {MAX_CHECK_DEPTH} objects and"
-            " unions inside each other, which is as deep as Citry checks event data and State. Send data with"
-            " fewer levels of nesting."
+            f"Data for {cls.__qualname__} was refused because it nests more than {MAX_CHECK_DEPTH} objects,"
+            " unions and wrap validators inside each other, which is as deep as Citry checks event data and"
+            " State. If valid data nests this deeply, give the recursive union a discriminator, or use fewer"
+            " nested classes and wrap validators."
         )
         return
     if reason == "depth":
@@ -2905,6 +2933,10 @@ def _counting(checker: Checker, payload: Any) -> Iterator[_Tally]:
         before = tally.errors
         try:
             yield tally
+            # The validation returned, but a part of the schema may have
+            # swallowed a stop on the way (see `_Tally.stop`).
+            if tally.stop is not None:
+                raise tally.stop
         except pydantic_core.ValidationError as err:
             # A copy without wrappers counts here, after the call. A wrapped
             # copy's outer object already set the same total.
