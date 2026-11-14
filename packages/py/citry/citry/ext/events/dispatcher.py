@@ -60,7 +60,7 @@ from citry._protocol.events import (
     validate_action,
     validate_result,
 )
-from citry.ext.events._pydantic_bounded import TOO_SLOW_MESSAGE, current_work, request_work
+from citry.ext.events._pydantic_bounded import TOO_SLOW_MESSAGE, ValidationTooCostly, current_work, request_work
 
 # The csrf_failed message is example-locked contract text; it lives next to
 # the floor that raises it (csrf.py) and is shared here for the fallback path
@@ -408,6 +408,19 @@ def _state_fingerprint(state: Any) -> str | None:
         # A State nested past Python's recursion limit has no fingerprint, so
         # it counts as changed, and `check_changed_state` reports the depth.
         return None
+
+
+def _too_deep_to_write(state: Any) -> bool:
+    """Whether Pydantic stops writing ``state`` out as JSON because it nests too deeply."""
+    try:
+        state_wire_values(state)
+    except ValueError as error:
+        # `state_wire_values` marks that stop with this cause (see its docstring).
+        cause = error.__cause__
+        return isinstance(cause, ValidationTooCostly) and cause.reason == "depth"
+    except Exception:  # noqa: BLE001 - other failures are reported where the State is signed
+        return False
+    return False
 
 
 def _is_detached(handler: EventHandler) -> bool:
@@ -885,6 +898,17 @@ class EventsDispatcher:
             # component it renders from this State see the declared type.
             _restore_json_tuples(state, info.state_cls)
             state_fingerprint = _state_fingerprint(state)
+            if state_fingerprint is None and _too_deep_to_write(state):
+                # Pydantic's limit on writing nested values depends on the
+                # platform, so a token signed by a server with a higher limit
+                # can hold a State this server cannot write out again. It is
+                # stale here, as a State too deep to restore is, and the call
+                # ends before the handler runs.
+                logger.warning(
+                    f"Component {comp_cls.__name__}: a verified State token holds a State nested too deeply for"
+                    " Pydantic to write as JSON on this server, so the call answers stale_state."
+                )
+                return build_error_result(build_error(409, "stale_state", _MSG_STALE_STATE), send_sequence)
             if updates and info.state_meta is not None:
                 meta = info.state_meta
                 # A browser write must not make State larger than the cap:

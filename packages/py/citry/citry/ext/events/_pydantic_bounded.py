@@ -271,7 +271,9 @@ class ValidationTooCostly(Exception):
             when the request's checks used up their CPU time, ``"nesting"``
             when the data nests deeper than the nesting limit (see
             ``nesting_limit``), ``"depth"`` when the data nests deeper than
-            Python can follow.
+            Python can follow, ``"writing"`` when a State write passed its
+            check but nests deeper than Pydantic writes as JSON on this
+            platform.
         limit: For ``"nesting"``, the nesting limit the data went past,
             which the warning in the log names. ``None`` for the other
             reasons, and for ``"nesting"`` when Pydantic's JSON reader
@@ -3316,7 +3318,7 @@ _WARNED_WORK: WeakKeyDictionary[type, frozenset[str]] = WeakKeyDictionary()
 
 def warn_if_stopped(cls: type, stop: ValidationTooCostly) -> None:
     """
-    Warn once per class when a check stopped for work, CPU time, nesting or call depth.
+    Warn once per class when a check stopped for work, CPU time, nesting, call depth or writing.
 
     Stay quiet when it stopped for too many errors, because the client sent
     bad data. Every place that catches a stop calls this one function, so
@@ -3328,7 +3330,7 @@ def warn_if_stopped(cls: type, stop: ValidationTooCostly) -> None:
 
 def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True, limit: int | None = None) -> None:
     """
-    Warn once per class and kind that a check stopped for work, time, nesting or depth (``reason``), naming the fix.
+    Warn once per class and kind that a check stopped, naming the fix; ``reason`` is a ``ValidationTooCostly`` reason.
 
     Pass ``refused=False`` for a browser write to a Pydantic v1 State whose
     check finished before Citry could stop it. Citry reads the clock once
@@ -3362,6 +3364,16 @@ def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True, li
             " unions, wrap validators and Iterable values inside each other, which is as deep as Citry checks"
             " event data and State. If valid data nests this deeply, give the recursive union a discriminator,"
             " or use fewer nested classes, wrap validators and Iterable fields."
+        )
+        return
+    if reason == "writing":
+        # Pydantic's limit on writing nested values is lower on some
+        # platforms than the nesting Citry checks, so the message says the
+        # limit depends on the platform.
+        logger.warning(
+            f"A browser write to the State {cls.__qualname__} was refused because the State would nest deeper"
+            " than Pydantic can write as JSON on this platform. If valid data nests this deeply, use fewer"
+            " levels of nesting."
         )
         return
     if reason == "depth":

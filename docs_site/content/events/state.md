@@ -234,13 +234,15 @@ each one:
   the model, for example because you changed a field's type and deployed,
   the call fails with `stale_state` (409) and Citry asks the user to reload
   the page ([details](/reference/browser-apis/#events-fired-around-each-call)).
+  The same happens when the State nests deeper than Pydantic can write as
+  JSON on this server (Pydantic's limit depends on the platform).
 - **When the browser writes a field.** The call fails with `invalid_args`
   (422) before the handler runs, with Pydantic's message for each bad
   field (for a list or dict, only its first bad item). A write with too
-  many errors, too large or nested too deeply to check, or with field
-  paths too long in total gets one message instead, under
-  `fieldErrors._state`, the key for a message about the whole write
-  rather than one field ([details](/security/#check-event-data)).
+  many errors, too large or nested too deeply to check or for Pydantic to
+  write as JSON, or with field paths too long in total gets one message
+  instead, under `fieldErrors._state`, the key for a message about the
+  whole write rather than one field ([details](/security/#check-event-data)).
 - **After a handler changes State.** If a new value does not fit, such as
   `state.page = "two"` or a wrong-typed item appended to a list, the call
   fails with `handler_error` (500), the page keeps its old State, and the

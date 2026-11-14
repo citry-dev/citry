@@ -4227,6 +4227,159 @@ def test_a_pydantic_v1_state_that_a_handler_nests_too_deeply_is_reported_as_too_
     assert check_changed_state(board(tree=_v1_chain(node, 300))) == (None, TOO_DEEP_TO_SIGN)
 
 
+# The serializer limit simulated below: Pydantic stops writing a value
+# nested deeper than this on some platforms (99 levels), and deeper than
+# 255 elsewhere, so the write tests below behave the same on every
+# platform. The token test builds its deep State without Pydantic.
+_LOW_WRITE_LIMIT = 99
+
+
+def _nesting(value: Any) -> int:
+    """Return how many lists and dicts ``value`` nests, read without recursion."""
+    deepest = 0
+    pending = [(value, 1)]
+    while pending:
+        item, level = pending.pop()
+        if isinstance(item, (list, dict)):
+            deepest = max(deepest, level)
+            pending.extend((child, level + 1) for child in (item.values() if isinstance(item, dict) else item))
+    return deepest
+
+
+def _limit_pydantic_writes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make Pydantic stop writing a model as it does where its limit is 99 levels."""
+    model_dump = pydantic.BaseModel.model_dump
+
+    def limited(self: pydantic.BaseModel, **options: Any) -> dict[str, Any]:
+        if any(_nesting(value) > _LOW_WRITE_LIMIT for value in self.__dict__.values()):
+            # Pydantic's own message for this stop.
+            raise pydantic_core.PydanticSerializationError("Maximum serialization depth exceeded")
+        return model_dump(self, **options)
+
+    monkeypatch.setattr(pydantic.BaseModel, "model_dump", limited)
+
+
+@pytest.fixture
+def low_write_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    _limit_pydantic_writes(monkeypatch)
+
+
+def _lists(depth: int) -> Any:
+    value: Any = 0
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+class _AnyBoard(pydantic.BaseModel):
+    data: Any = None
+    rows: list[Any] = []
+    _model = ("data", "rows")
+
+
+@dataclasses.dataclass
+class _PlainAnyBoard:
+    # The same fields as `_AnyBoard`. Citry signs a dataclass State without
+    # Pydantic, so its token can hold values Pydantic would not write.
+    data: Any = None
+    rows: list[Any] = dataclasses.field(default_factory=list)
+
+
+@pytest.mark.parametrize("field", ["data", "rows"])
+@pytest.mark.usefixtures("low_write_limit")
+def test_a_state_write_too_deep_for_pydantic_to_write_out_is_refused_as_nested_too_deeply(
+    field: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    # The write passes Pydantic's check of an `Any` field, but Pydantic
+    # cannot write the State out for its token, so the write is refused
+    # before the handler, with the answer for data nested too deeply.
+    state = _AnyBoard()
+
+    with caplog.at_level(logging.WARNING, logger="citry"), bounded.request_work():
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(state, {field: _lists(150)}, model_fields=("data", "rows"))
+        applied = apply_state_updates(state, {field: _lists(50)}, model_fields=("data", "rows"))
+
+    assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+    assert f"State {_AnyBoard.__qualname__} was refused because the State would nest deeper" in caplog.text
+    assert applied == (field,)
+    assert _nesting(getattr(state, field)) == 50
+
+
+def _any_board_component(calls: list[Any]) -> type[Component]:
+    app = _citry()
+
+    class AnyPanel(Component):
+        citry = app
+        State = _AnyBoard
+        template = """
+          <p></p>
+        """
+
+        class Events:
+            def read(self, state: Any) -> None:
+                calls.append(state)
+
+    return AnyPanel
+
+
+@pytest.mark.usefixtures("low_write_limit")
+def test_a_deep_state_write_pydantic_cannot_write_out_does_not_run_the_handler() -> None:
+    calls: list[Any] = []
+    panel = _any_board_component(calls)
+    token = mint_state_token(_AnyBoard(), class_id=panel.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6)
+
+    item = _dispatch(panel, stateToken=token, stateUpdates={"data": _lists(150)}, sendSequence=1, callerRenderId="r0")
+
+    assert (item["error"]["status"], item["error"]["code"]) == (422, "invalid_args")
+    assert item["error"]["fieldErrors"] == {"_state": bounded.TOO_DEEP_MESSAGE}
+    assert calls == []
+
+
+@pytest.mark.usefixtures("low_write_limit")
+def test_a_signed_state_this_server_cannot_write_out_answers_stale_state(caplog: pytest.LogCaptureFixture) -> None:
+    # A server whose Pydantic writes deeper values signed this State, and
+    # this server cannot write it out again, so the token is stale here
+    # and the handler does not run.
+    calls: list[Any] = []
+    panel = _any_board_component(calls)
+    token = mint_state_token(
+        _PlainAnyBoard(data=_lists(150)), class_id=panel.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6
+    )
+
+    with caplog.at_level(logging.WARNING, logger="citry"):
+        item = _dispatch(panel, stateToken=token, sendSequence=1, callerRenderId="r0")
+
+    assert (item["error"]["status"], item["error"]["code"]) == (409, "stale_state")
+    assert calls == []
+    assert "nested too deeply for Pydantic to write as JSON on this server" in caplog.text
+
+
+class _OddBoard(pydantic.BaseModel):
+    note: Any = None
+    _model = ("note",)
+
+    @pydantic.field_validator("note")
+    @classmethod
+    def odd(cls, value: Any) -> Any:
+        # A validator bug: a value Pydantic cannot write as JSON.
+        return object() if value == "odd" else value
+
+
+def test_a_state_write_pydantic_cannot_write_out_for_another_reason_is_refused_with_the_fixed_message(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Pydantic's own text, which may name the app's classes, stays in the log.
+    state = _OddBoard()
+
+    with caplog.at_level(logging.ERROR, logger="citry"), pytest.raises(StateUpdateError) as caught:
+        apply_state_updates(state, {"note": "odd"}, model_fields=("note",))
+
+    assert caught.value.fields == {"_state": "The State could not be checked."}
+    assert "_OddBoard" in caplog.text
+    assert state.note is None
+
+
 _DEEP_STATE_WRITE_DISPATCHED_FROM_A_SMALL_THREAD = r"""
 from __future__ import annotations
 

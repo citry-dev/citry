@@ -263,6 +263,11 @@ does. The upgrade notes below list what can change.
   of naming only `ValueError`. Rendering such a State raises the same
   message. Pydantic's limit is lower on Windows, PyPy and Pyodide than
   on Linux and macOS.
+- A browser write to a Pydantic model State that nests deeper than
+  Pydantic can write as JSON now gets a 422 "nested too deeply" field
+  error before the event handler runs. A call whose State token holds
+  a State nested deeper than this server's Pydantic can write now
+  answers `stale_state`, and the browser offers a reload.
 - A `c-bind` key that is a `str` subclass with its own `startswith` or
   `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
   and component tags.

@@ -2118,6 +2118,13 @@ Error modes:
     - A State write read as JSON text whose text nests deeper than
       Pydantic's JSON reader accepts gets the "nested too deeply"
       answer, as data past the nesting limit does.
+    - A Pydantic v2 State write ends its check by writing the checked
+      State out as JSON, as the token will. Pydantic stops writing a
+      value nested past its own limit (255 levels on Linux and macOS,
+      99 or fewer elsewhere), which an `Any` field does not reach while
+      it is checked, so such a write also gets the "nested too deeply"
+      answer before the handler runs. A verified token whose State this
+      server cannot write out again answers `stale_state`.
     - Depths that fit, counted by the nesting limit alone: a model
       with one nested model per level and a discriminated tree about
       60 levels, the model-and-field wrap shape about 21, and a union

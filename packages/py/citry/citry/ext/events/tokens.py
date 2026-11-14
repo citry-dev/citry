@@ -1337,6 +1337,10 @@ def _model_state_check(
       (see ``guarding_pydantic_v1``). The same check also reads the written
       State back as JSON, which the request then reuses (see ``_parse_v1``).
 
+    A v2 check ends by writing the checked State out as JSON, as the token
+    will, so a State that nests deeper than Pydantic writes as JSON is
+    refused before the handler runs.
+
     Raises:
         StateUpdateError: The writes were refused before Pydantic ran.
 
@@ -1431,7 +1435,25 @@ def _model_state_check(
         if python_check is not None:
             bounded.validate_python(python_check, merged, by_alias=False, by_name=True)
         text = json.dumps(merged, allow_nan=False)
-        return bounded.validate_json(reader, text, merged, by_alias=False, by_name=True)  # type: ignore[arg-type]
+        checked = bounded.validate_json(reader, text, merged, by_alias=False, by_name=True)  # type: ignore[arg-type]
+        # The token holds the checked State written out as JSON, and Pydantic
+        # stops writing a value nested past its own limit, which is lower on
+        # some platforms than the nesting the check accepts. So the State is
+        # written out here, before the handler runs, and a State that could
+        # never be signed is refused while nothing has happened yet.
+        try:
+            state_wire_values(checked)
+        except ValueError as error:
+            cause = error.__cause__
+            if isinstance(cause, bounded.ValidationTooCostly) and cause.reason == "depth":
+                # The same answer as data too deep to check.
+                raise bounded.ValidationTooCostly("writing") from None
+            # Usually a validator of the app returned a value Pydantic cannot
+            # write. The caller logs it and answers with its fixed message,
+            # so Pydantic's text, which may name the app's classes, stays in
+            # the log.
+            raise RuntimeError("Pydantic could not write the checked State as JSON.") from error
+        return checked
 
     return check
 
