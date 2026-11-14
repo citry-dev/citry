@@ -29,7 +29,7 @@ import threading
 import time
 import tracemalloc
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, cast, get_args
 from weakref import WeakKeyDictionary
 
@@ -363,6 +363,7 @@ import dataclasses
 import json
 import sys
 import threading
+from collections.abc import Iterable
 from typing import Annotated, Literal, Optional, Union
 
 import pydantic
@@ -446,7 +447,24 @@ class TLeaf(pydantic.BaseModel):
     v: int
 
 
-for model in (WNode, MWNode, UAnd, UOr, LTree, TAnd):
+# Pydantic checks the items of an Iterable field with a new call into
+# pydantic-core for each item, which Citry makes while it checks.
+class ITree(pydantic.BaseModel):
+    c: Iterable[ITree] = ()
+    v: int = 0
+
+
+class IAnd(pydantic.BaseModel):
+    type: Literal["and"]
+    items: Iterable[Union[IAnd, IOr, ULeaf]]
+
+
+class IOr(pydantic.BaseModel):
+    type: Literal["or"]
+    any: Iterable[Union[IAnd, IOr, ULeaf]]
+
+
+for model in (WNode, MWNode, UAnd, UOr, LTree, TAnd, ITree, IAnd, IOr):
     model.model_rebuild()
 for data_class in (DAnd, DOr):
     pydantic.dataclasses.rebuild_dataclass(
@@ -494,6 +512,8 @@ SHAPES = {
     "plain dataclass union": (holder(PNode), lambda n, leaf: chained(n, {"c": leaf}, lambda c: {"c": c})),
     "list of models": (holder(LTree), lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": [c]})),
     "discriminated union": (holder(TAnd), lambda n, leaf: tagged(n, leaf, ("and",))),
+    "Iterable of models": (holder(ITree), lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": [c]})),
+    "union in an Iterable": (holder(Union[IAnd, IOr, ULeaf]), lambda n, leaf: tagged(n, leaf, ("and", "or"))),
 }
 
 
@@ -557,7 +577,7 @@ def test_data_at_the_nesting_limit_gets_the_same_answer_on_a_thread_with_half_a_
 
     assert done.returncode == 0, done.stderr[-2000:]
     results = json.loads(done.stdout)
-    assert len(results) == 21
+    assert len(results) == 27
     assert [result for result in results if not result[2]] == []
 
 
@@ -3181,3 +3201,361 @@ def test_a_finished_time_warning_does_not_hide_a_refused_one(caplog: pytest.LogC
     assert len(messages) == 2
     assert "ended before Citry could stop it" in messages[0]
     assert "was refused" in messages[1]
+
+
+# --- Iterable fields --------------------------------------------------------------------------------------
+
+
+class INode(pydantic.BaseModel):
+    """A tree that holds its children in an `Iterable` field, whose items Pydantic checks only when read."""
+
+    c: Iterable[INode] = ()
+    v: int = 0
+
+
+class IAnd(pydantic.BaseModel):
+    type: Literal["and"]
+    items: Iterable[IAnd | IOr | ILeaf]
+
+
+class IOr(pydantic.BaseModel):
+    type: Literal["or"]
+    items: Iterable[IAnd | IOr | ILeaf]
+
+
+class ILeaf(pydantic.BaseModel):
+    type: Literal["leaf"]
+    v: int
+
+
+class IFilter(pydantic.BaseModel):
+    q: IAnd | IOr | ILeaf
+
+
+class Batch(pydantic.BaseModel):
+    rows: Iterable[Row]
+
+
+def _iterable_chain(depth: int, leaf: Any = 0) -> dict[str, Any]:
+    value: dict[str, Any] = {"v": leaf}
+    for _ in range(depth):
+        value = {"c": [value]}
+    return value
+
+
+def _union_chain(depth: int, leaf: Any) -> dict[str, Any]:
+    # Both node classes hold their children under the same name, so each
+    # level tries every member of the union again.
+    value: dict[str, Any] = {"type": "leaf", "v": leaf}
+    for level in range(depth):
+        value = {"type": ("and", "or")[level % 2], "items": [value]}
+    return value
+
+
+def test_the_items_of_an_iterable_field_count_toward_the_nesting_limit() -> None:
+    # Pydantic checks these items only when the handler reads them, so
+    # Citry reads them during its own check, where the limit applies.
+    assert validate_args(INode, _iterable_chain(bounded.MAX_CHECK_DEPTH + 10)).fields == {
+        "_args": bounded.TOO_DEEP_MESSAGE
+    }
+
+
+def test_a_bad_item_of_an_iterable_field_fails_the_check_with_its_path() -> None:
+    result = validate_args(Batch, {"rows": [{"a": 1, "b": 2}, {"a": "x", "b": 2}]})
+
+    assert result.fields == {"rows.1.a": "Input should be a valid integer, unable to parse string as an integer"}
+
+
+def test_the_handler_gets_an_iterator_over_the_checked_items_of_an_iterable_field() -> None:
+    result = validate_args(Batch, {"rows": [{"a": 1, "b": 2}, {"a": "3", "b": 4}]})
+
+    assert result.ok
+    rows = result.value.rows
+    # An iterator, as the class's own validator hands out, over checked items.
+    assert iter(rows) is rows
+    assert list(rows) == [Row(a=1, b=2), Row(a=3, b=4)]
+
+
+@pytest.mark.usefixtures("deep_checks")
+def test_the_items_of_an_iterable_field_spend_from_the_work_budget() -> None:
+    # Without a discriminator each level tries both node classes, so the
+    # check of a bad leaf grows with the depth until the budget stops it.
+    with bounded.request_work() as budget:
+        budget.left = 200_000
+        result = validate_args(IFilter, {"q": _union_chain(25, "bad")})
+
+    assert result.fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
+
+
+def test_a_state_write_to_an_iterable_field_counts_toward_the_nesting_limit() -> None:
+    class Forest(pydantic.BaseModel):
+        tree: INode = INode()
+        _model = ("tree",)
+
+    with bounded.request_work(), pytest.raises(StateUpdateError) as caught:
+        apply_state_updates(Forest(), {"tree": _iterable_chain(bounded.MAX_CHECK_DEPTH + 10)}, model_fields=("tree",))
+
+    assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+
+
+def test_a_union_tries_its_next_member_when_an_item_of_an_iterable_member_fails() -> None:
+    # The class's own validator would pick the Iterable member and fail
+    # only when the handler reads it; Citry reads the items while it checks.
+    data = pydantic.create_model("Data", v=(Iterable[int] | list[str], ...))
+
+    result = validate_args(data, {"v": ["a"]})
+
+    assert result.ok
+    assert result.value.v == ["a"]
+
+
+def test_a_bad_item_of_an_iterable_inside_a_json_field_fails_the_check() -> None:
+    data = pydantic.create_model("Data", f=(pydantic.Json[Iterable[int]], ...))
+
+    result = validate_args(data, {"f": '[1, 2, "x"]'})
+
+    assert result.fields == {"f.2": "Input should be a valid integer, unable to parse string as an integer"}
+
+
+_ITERABLE_DISPATCHED_ON_A_SMALL_STACK = r"""
+from __future__ import annotations
+
+import json
+import threading
+from collections.abc import Iterable
+
+import pydantic
+
+from citry import Citry, Component
+from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
+
+
+class Node(pydantic.BaseModel):
+    c: Iterable[Node] = ()
+    v: int = 0
+
+
+class Tree(pydantic.BaseModel):
+    root: Node
+
+
+app = Citry(secret="test-secret-key", autodiscover=False)
+app.set_mounted_prefix("/citry")
+
+
+class Viewer(Component):
+    citry = app
+    template = '''
+      <p></p>
+    '''
+
+    class Events:
+        def show(self, data: Tree) -> int:
+            # Reading every item is what a handler of an Iterable field does.
+            depth = 0
+            nodes = list(data.root.c)
+            while nodes:
+                depth += 1
+                nodes = list(nodes[0].c)
+            return depth
+
+
+# Deep enough to end a 1 MiB thread when the items are checked one call
+# into Pydantic at a time, and within the 200 levels a request may nest.
+value = {"v": 0}
+for _ in range(180):
+    value = {"c": [value]}
+envelope = {
+    "protocol": "citry-events/1",
+    "requestId": "r1",
+    "calls": [{"componentClassId": Viewer.class_id, "handlerName": "show", "args": {"root": value}}],
+}
+results = []
+
+
+def dispatch():
+    results.append(EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=app)))
+
+
+threading.stack_size(1024 * 1024)
+thread = threading.Thread(target=dispatch)
+thread.start()
+thread.join()
+print(json.dumps(results[0]["results"][0]))
+"""
+
+
+def test_deep_data_in_an_iterable_field_is_refused_on_a_thread_with_a_windows_stack() -> None:
+    # A server thread can have 1 MiB of stack. If the items were checked
+    # only when the handler reads them, each level would start a new check
+    # with nothing to count the levels, and the thread would run out of
+    # stack. The call runs in a process of its own, so that cannot affect
+    # the other tests.
+    done = subprocess.run(
+        [sys.executable, "-c", _ITERABLE_DISPATCHED_ON_A_SMALL_STACK],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    item = json.loads(done.stdout)
+    assert item["error"]["status"] == 422
+    assert item["error"]["fieldErrors"] == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+# --- recursive classes in a State read only as JSON ---------------------------------------------------------
+
+
+class SNode(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(strict=True)
+    c: SNode | None = None
+
+
+class WSNode(pydantic.BaseModel):
+    """A strict recursive model with a wrap validator of the author, which Citry counts at each level."""
+
+    model_config = pydantic.ConfigDict(strict=True)
+    c: WSNode | None = None
+
+    @pydantic.model_validator(mode="wrap")
+    @classmethod
+    def around(cls, value: Any, handler: Any) -> Any:
+        return handler(value)
+
+
+def _strict_tree_state(node: type, model: tuple[str, ...]) -> type:
+    class StrictTree(pydantic.BaseModel):
+        model_config = pydantic.ConfigDict(strict=True)
+        boss: node | None = None  # type: ignore[valid-type]
+        _model = model
+
+    StrictTree.model_rebuild(_types_namespace={"node": node})
+    return StrictTree
+
+
+def _node_chain(depth: int) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for _ in range(depth):
+        value = {"c": value}
+    return value
+
+
+def test_a_strict_state_whose_writable_field_holds_a_recursive_model_is_refused() -> None:
+    # Citry reads writes to a strict State only as JSON, where no counting
+    # wrapper may go, so nothing would limit how deeply the write nests.
+    state = _strict_tree_state(SNode, ("boss",))
+    app = _citry()
+
+    with pytest.raises(ValueError, match=r"writable field 'boss' holds a recursive class") as caught:
+
+        class Org(Component):
+            citry = app
+            State = state
+            template = """
+              <p></p>
+            """
+
+    assert "remove a strict model setting, or set _model" in str(caught.value)
+
+
+def test_a_strict_state_with_a_recursive_model_outside_its_writable_fields_registers() -> None:
+    state = _strict_tree_state(SNode, ())
+
+    class Org(Component):
+        citry = _citry()
+        State = state
+        template = """
+          <p></p>
+        """
+
+    assert Org.State is state
+
+
+def test_a_strict_state_whose_recursive_model_has_a_wrap_validator_counts_each_level() -> None:
+    # The copy counts the author's wrap validator in JSON mode too, so the
+    # State registers and deep writes stop at the nesting limit.
+    state = _strict_tree_state(WSNode, ("boss",))
+
+    class Org(Component):
+        citry = _citry()
+        State = state
+        template = """
+          <p></p>
+        """
+
+    with bounded.request_work(), pytest.raises(StateUpdateError) as caught:
+        apply_state_updates(state(), {"boss": _node_chain(bounded.MAX_CHECK_DEPTH + 10)}, model_fields=("boss",))
+
+    assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+    assert Org.State is state
+
+
+_STRICT_STATE_WRITTEN_ON_A_SMALL_STACK = r"""
+from __future__ import annotations
+
+import json
+import threading
+
+import pydantic
+
+from citry.ext.events import _pydantic_bounded as bounded
+from citry.ext.events.tokens import StateUpdateError, apply_state_updates
+
+
+class Node(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(strict=True)
+    c: Node | None = None
+
+    @pydantic.model_validator(mode="wrap")
+    @classmethod
+    def around(cls, value, handler):
+        return handler(value)
+
+
+class Tree(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(strict=True)
+    boss: Node | None = None
+    _model = ("boss",)
+
+
+# Within the 200 levels a JSON text may nest, and deep enough to end a
+# 768 KiB thread when nothing counts the levels.
+value = {}
+for _ in range(190):
+    value = {"c": value}
+results = []
+
+
+def write():
+    try:
+        with bounded.request_work():
+            apply_state_updates(Tree(), {"boss": value}, model_fields=("boss",))
+    except StateUpdateError as err:
+        results.append(err.fields)
+    else:
+        results.append(None)
+
+
+threading.stack_size(768 * 1024)
+thread = threading.Thread(target=write)
+thread.start()
+thread.join()
+print(json.dumps(results))
+"""
+
+
+def test_a_deep_write_to_a_strict_state_is_refused_on_a_thread_with_a_small_stack() -> None:
+    # The write runs in a process of its own, so a thread that runs out of
+    # stack cannot affect the other tests.
+    done = subprocess.run(
+        [sys.executable, "-c", _STRICT_STATE_WRITTEN_ON_A_SMALL_STACK],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert json.loads(done.stdout) == [{"_state": bounded.TOO_DEEP_MESSAGE}]

@@ -508,16 +508,28 @@ Citry sends `fieldErrors._args` or `fieldErrors._state`, so show those
 messages too ([how](/events/forms/#eventerror-field-errors)).
 
 Citry refuses data that nests more than 32 levels of models, dataclasses,
-TypedDicts, unions, and wrap validators, when a Pydantic v2 class checks
-it. Each model, dataclass, TypedDict, and wrap validator that a value
+TypedDicts, unions, wrap validators, and `Iterable` fields, when a
+Pydantic v2 class checks it. Each model, dataclass, TypedDict, wrap
+validator, and `Iterable[...]` or `Generator[...]` field that a value
 passes through counts one level. So does each union whose
 members could read the value, so a tree of nodes counts about two levels
 per node, or one when its union has a discriminator
-([trees](#trees-in-event-data)). Deeper data fails with a 422 under
+([trees](#trees-in-event-data)). Citry checks the items of an
+`Iterable[...]` field before the handler runs, and the handler gets an
+iterator over the checked items. Deeper data fails with a 422 under
 `fieldErrors._args` (`fieldErrors._state` for a State write) that says
 the data is nested too deeply, and Citry logs a warning naming the class.
 The limit applies to event data and to browser writes to State, not to
 restoring State the server saved. You cannot change it.
+
+When Citry can check a State only as JSON text
+([which ones](#schemas-citry-refuses)), it counts only wrap validators
+and `Iterable` fields, because counting each class would change how the
+class reads JSON. So defining the component raises `ValueError` when a
+field the browser may write holds a recursive model, dataclass, or
+TypedDict (one that can hold itself) with no wrap validator on the way
+back to itself. Fix it by removing what makes Citry check the State only
+as JSON, or by leaving the field out of `_model`.
 
 Each level takes room on the stack of the thread that checks the data.
 Citry sets the limit so a check of data at the limit fits in a 1 MiB
@@ -734,6 +746,8 @@ can check the write only as JSON text when the State has one of these:
 
 Without any of these, Citry checks the write as Python values first.
 When that check accepts the write, Citry then reads it as JSON text.
+A State checked only as JSON text cannot let the browser write a
+recursive class ([nesting limit](#check-event-data)).
 
 ### Use Pydantic in events { #pydantic-classes-in-events }
 

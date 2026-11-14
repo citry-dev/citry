@@ -442,6 +442,18 @@ change.
   requests on threads with less than 1 MiB of stack, raise it with
   `threading.stack_size()`
   ([details](https://citry.dev/security/#check-event-data)).
+  A State that Citry checks only as JSON text, such as one with
+  `ConfigDict(strict=True)`, cannot let the browser write a recursive
+  model, dataclass, or TypedDict: defining the component raises
+  `ValueError`. Remove the strict setting, or leave that field out of
+  `_model`. A wrap validator on the recursive class also works, since
+  Citry counts it at each level.
+- Events now checks every item of an `Iterable[...]` or `Generator[...]`
+  field in event data or a State write before the handler runs, within
+  the same limits as the rest of the data. A bad item now fails the call
+  with a 422 instead of raising when the handler reads it, and a union
+  whose member is such a field now tries its next member. The handler
+  gets an iterator over the checked items.
 
 ## v0.7.0
 

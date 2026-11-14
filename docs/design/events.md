@@ -1982,6 +1982,24 @@ Error modes:
       wrap validator, and each union whose members can read a value adds
       one level while it runs, and the data is refused past
       `MAX_CHECK_DEPTH` (32). Lists and dicts do not count.
+    - `Iterable[...]` and `Generator[...]` fields: Pydantic checks their
+      items only when the handler reads them, after the check has
+      returned. The copy puts a function after each such node that reads
+      every item before the copy returns (`_read_items_now`), so the
+      tally, the work budget, and the CPU time apply to the items, and
+      the first bad item fails the call with a 422, or makes a union
+      try its next member. Each such function adds one level while it
+      reads, because each item is checked by a separate call into
+      pydantic-core on top of it, which no other wrapper sees when the
+      items are not objects. The handler gets an iterator over the
+      checked items.
+    - A model State read only as JSON (`json_mode_differs`): its copy
+      wraps no class, since a Python wrapper would change how a strict
+      class reads JSON; only an author's wrap validator and an
+      `Iterable` read count a level there. Registration therefore
+      refuses a writable field that reaches a class able to hold itself
+      without an author's wrap validator on the way
+      (`_RECURSIVE_CLASS_REASON`).
     - How the limit is sized: each level takes room on the C stack of
       the thread that checks, so data at the limit must be checked in
       512 KiB, half of the 1 MiB stack a thread gets in a Windows
