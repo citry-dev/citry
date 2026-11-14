@@ -643,7 +643,7 @@ def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_se
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def refuse(size: int = 0) -> int:
-        # What Pyodide and other platforms without settable stacks do.
+        # What platforms without a settable stack size do.
         msg = "setting stack size not supported"
         raise ValueError(msg)
 
@@ -702,9 +702,20 @@ def test_the_cpu_clock_falls_back_where_reading_a_clock_fails(monkeypatch: pytes
     assert bounded._choose_cpu_clock() is time.perf_counter
 
 
+def test_the_cpu_clock_is_the_process_clock_where_reading_the_thread_clock_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unsupported() -> float:
+        raise OSError(95, "Operation not supported")
+
+    monkeypatch.setattr(time, "thread_time", unsupported)
+
+    assert bounded._choose_cpu_clock() is time.process_time
+
+
 def test_events_import_where_the_thread_clock_is_missing() -> None:
-    # citry 0.8.0 read time.thread_time at import and failed to import on
-    # Pyodide. A fresh process imports the module without the clock, since
+    # Importing Citry must not need time.thread_time, which Pyodide lacks.
+    # A fresh process imports the module without the clock, since
     # importing it again here would replace the state other tests use.
     script = (
         "import time\n"

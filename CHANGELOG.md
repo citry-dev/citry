@@ -9,7 +9,8 @@
   'thread_time'`, because the Events limit on CPU time read a clock that
   Pyodide does not have. Citry now uses the CPU time of the calling
   thread where the platform has it, then the CPU time of the process,
-  then the wall clock.
+  then the wall clock. Linux, macOS and Windows keep using the CPU time
+  of the calling thread.
 
 ## v0.8.0
 

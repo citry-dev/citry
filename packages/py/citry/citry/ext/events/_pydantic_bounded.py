@@ -115,7 +115,9 @@ def _choose_cpu_clock() -> Callable[[], float]:
     platforms lack it: Pyodide's ``time`` module has no ``thread_time``, and a
     platform may define it but raise ``OSError`` when it is read. The time of
     the whole process comes next, and the wall clock last, so that importing
-    Citry never fails over the choice of clock.
+    Citry never fails over the choice of clock. Both fallbacks also count
+    the work of other threads, so they can stop a request sooner, never
+    later. Linux, macOS and Windows all have the thread clock.
     """
     for name in ("thread_time", "process_time"):
         clock = getattr(time, name, None)
@@ -152,8 +154,9 @@ WORK_BUDGET = 60_000_000
 # limit; this one stops a request once its checks that may run again have
 # used a fixed amount of CPU time, whatever the steps say.
 WORK_SECONDS = 1.0
-# The clock behind WORK_SECONDS: the CPU time of the calling thread, or a
-# coarser clock where the platform lacks it (see `_choose_cpu_clock`). On
+# The clock behind WORK_SECONDS: the CPU time of the calling thread, or,
+# where the platform lacks it, the process's CPU time or the wall clock,
+# which also count other threads' work (see `_choose_cpu_clock`). On
 # Windows it moves in steps of about 15.6 ms, so a check that runs for less
 # than one step can read no time at all, and the time counted for each check
 # can be off by up to one step. It is a module-level name so that a test can
@@ -2580,8 +2583,8 @@ def _on_large_stack(build: Callable[[], Any]) -> Any:
             finally:
                 threading.stack_size(previous)
     except (RuntimeError, ValueError):
-        # A platform without threads, or without a settable stack size (such
-        # as Pyodide), builds on the calling thread, as Pydantic itself does.
+        # A platform that cannot start threads (such as Pyodide) or cannot
+        # set the stack size builds on the calling thread, as Pydantic does.
         return build()
     worker.join()
     succeeded, value = outcome[0]

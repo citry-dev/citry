@@ -1920,7 +1920,10 @@ same class, built by the same schema. The copy differs in these ways:
    thread does not count. The time is read from the thread's CPU clock
    (`time.thread_time`), which on Windows moves in steps of about
    15.6 ms, so on Windows the time counted for each check can be off by
-   up to one step.
+   up to one step. Where the platform has no thread clock (such as
+   Pyodide), Citry reads the process's CPU time, and failing that the
+   wall clock. Both also count other threads' work, so a request can
+   stop sooner.
 
 A schema whose worst case is fixed and small (no recursion, no extra
 keys, no wrap validator, and a small fixed number of errors) gets only
