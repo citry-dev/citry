@@ -16,7 +16,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
-import time
+from pathlib import Path
 
 import pytest
 
@@ -24,19 +24,23 @@ from citry import Citry, Component
 from citry.ext.debug import Debug
 from citry.serialize import _looks_like_document
 
-# Generous, so a slow CI machine never fails a pattern whose time grows in
-# step with the length.
-_BOUND_SECONDS = 0.5
-# A pattern that tries every way of splitting a run of comments takes about
-# 2 s for 25 comments, so this count fails the bound quickly instead of
-# hanging the test run.
-_FEW_COMMENTS = 25
+from ._growth import assert_grows_in_step
+
+# A pattern that tries every way of splitting a run of comments takes twice
+# as long for each added comment. Twice the comments is therefore enough to
+# tell it apart from a check that reads the text once, and the longer run
+# still ends quickly instead of hanging the test run.
+_FEW_COMMENTS = 10
+_TWICE_AS_MANY = 2 * _FEW_COMMENTS
+# For the long runs, a child process compares this many comments with eight
+# times as many.
 _MANY_COMMENTS = 50_000
+_GROWTH_FACTOR = 8
 
 _COMMENT_RUNS = [
-    "<!-- r -->" * _FEW_COMMENTS + "x",
-    "<!---->" * _FEW_COMMENTS + "x",
-    "<!--" + "--><!--" * _FEW_COMMENTS + "x",
+    lambda count: "<!-- r -->" * count + "x",
+    lambda count: "<!---->" * count + "x",
+    lambda count: "<!--" + "--><!--" * count + "x",
 ]
 
 
@@ -73,41 +77,47 @@ def test_document_root_answers(html: str, *, expected: bool) -> None:
     assert _looks_like_document(html) is expected
 
 
-@pytest.mark.parametrize("html", _COMMENT_RUNS, ids=["comments", "empty-comments", "joined-comments"])
-def test_a_run_of_comments_does_not_double_the_time(html: str) -> None:
-    start = time.perf_counter()
-    result = _looks_like_document(html)
-    elapsed = time.perf_counter() - start
-    # The input must be one the check refuses, or the timing proves nothing.
-    assert result is False
-    assert elapsed < _BOUND_SECONDS
+@pytest.mark.parametrize("build", _COMMENT_RUNS, ids=["comments", "empty-comments", "joined-comments"])
+def test_a_run_of_comments_does_not_double_the_time(build) -> None:
+    def refuse(html: str) -> None:
+        # The input must be one the check refuses, or the timing proves nothing.
+        assert _looks_like_document(html) is False
+
+    # Twice the comments may take about twice as long, not a thousand times.
+    assert_grows_in_step(refuse, build(_FEW_COMMENTS), build(_TWICE_AS_MANY), factor=2)
 
 
-def test_long_runs_of_comments_finish_quickly() -> None:
+def test_long_runs_of_comments_grow_in_step_with_their_length() -> None:
     # A pattern that splits a run of comments in every way would never
-    # finish on these, so they run in a child process with a time limit
-    # and a regression fails the test instead of hanging the run.
+    # finish on these, so they run in a child process. The child compares
+    # each run with one eight times as long. The process timeout only stops
+    # a hang, and is far above what a check that reads the text once needs.
     script = textwrap.dedent(
         f"""
-        import time
+        import sys
+
+        sys.path.append({str(Path(__file__).parent)!r})
+        from _growth import assert_grows_in_step
         from citry.serialize import _looks_like_document
 
-        n = {_MANY_COMMENTS}
-        inputs = [
-            "<!-- r -->" * n + "x",
-            "<!---->" * n + "x",
-            "<!--" + "--><!--" * n + "x",
-            "<!--" + "-->" * n + "x",
-            "<!--" + "--> " * n + "<htm",
-            "<!--" * n + "x",
+        shapes = [
+            lambda n: "<!-- r -->" * n + "x",
+            lambda n: "<!---->" * n + "x",
+            lambda n: "<!--" + "--><!--" * n + "x",
+            lambda n: "<!--" + "-->" * n + "x",
+            lambda n: "<!--" + "--> " * n + "<htm",
+            lambda n: "<!--" * n + "x",
         ]
-        for html in inputs:
-            start = time.perf_counter()
+
+        def refuse(html):
             assert _looks_like_document(html) is False
-            assert time.perf_counter() - start < {_BOUND_SECONDS}
+
+        few, many = {_MANY_COMMENTS}, {_GROWTH_FACTOR * _MANY_COMMENTS}
+        for shape in shapes:
+            assert_grows_in_step(refuse, shape(few), shape(many), factor={_GROWTH_FACTOR}, repeats=3)
         """
     )
-    subprocess.run([sys.executable, "-c", script], check=True, timeout=30)
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=120)
 
 
 def _debug_app() -> Citry:
@@ -131,13 +141,14 @@ def test_debug_boundary_around_comments_from_data_is_quick() -> None:
             <c-for each="x in items"><!-- r --></c-for>x
         """
 
-    start = time.perf_counter()
-    html = str(Rows(items=list(range(_FEW_COMMENTS))))
-    elapsed = time.perf_counter() - start
-    # Not a document, so Debug draws its boundary around it.
-    assert html.startswith('<div class="citry-debug citry-debug-component"')
-    assert html.count("<!-- r -->") == _FEW_COMMENTS
-    assert elapsed < _BOUND_SECONDS
+    def render(count: int) -> None:
+        html = str(Rows(items=list(range(count))))
+        # Not a document, so Debug draws its boundary around it.
+        assert html.startswith('<div class="citry-debug citry-debug-component"')
+        assert html.count("<!-- r -->") == count
+
+    # Twice the items may take about twice as long, not a thousand times.
+    assert_grows_in_step(render, _FEW_COMMENTS, _TWICE_AS_MANY, factor=2)
 
 
 def test_debug_omits_boundary_around_document_after_comments_from_data() -> None:

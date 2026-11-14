@@ -76,6 +76,7 @@ import contextlib
 import contextvars
 import functools
 import inspect
+import os
 import re
 import sys
 import threading
@@ -122,6 +123,23 @@ WORK_BUDGET = 60_000_000
 # limit; this one stops a request once its checks that may run again have
 # used a fixed amount of CPU time, whatever the steps say.
 WORK_SECONDS = 1.0
+# The clock behind WORK_SECONDS: the CPU time of the calling thread. On
+# Windows it moves in steps of about 15.6 ms, so a check that runs for less
+# than one step can read no time at all, and the time counted for each check
+# can be off by up to one step. It is a module-level name so that a test can
+# replace it with a clock it moves by hand.
+cpu_clock = time.thread_time
+# How many of Citry's counting wrappers may be checking inside each other:
+# each Pydantic model, dataclass, TypedDict and wrap validator a value
+# passes through counts one, and so does each union whose members can read
+# it. Data that nests deeper is refused with TOO_DEEP_MESSAGE. Each level
+# takes room on the thread's stack, so the limit keeps a check within a
+# fixed amount of it. It is sized so data at the limit, in the shapes that
+# measured heaviest per level, is checked in 512 KiB, half the 1 MiB thread
+# stack of a Windows program that embeds Python with the linker's default
+# and of the official Python images for Alpine Linux. The test with a
+# 512 KiB thread checks those shapes.
+MAX_CHECK_DEPTH = 32
 # What one more check of a list or object costs besides the values inside it,
 # in steps: the Python wrappers around it run on every check.
 ENTRY_STEPS = 32
@@ -196,7 +214,8 @@ class ValidationTooCostly(Exception):
     Attributes:
         reason: ``"errors"`` when the validation kept too many errors,
             ``"work"`` when the request spent its work budget, ``"time"``
-            when the request's checks used up their CPU time, ``"depth"``
+            when the request's checks used up their CPU time, ``"nesting"``
+            when the data nests deeper than ``MAX_CHECK_DEPTH``, ``"depth"``
             when the data nests deeper than Python can follow.
 
     """
@@ -275,7 +294,7 @@ class WorkBudget:
         """Spend ``steps`` steps, and stop the validation once they are gone."""
         self.left -= steps
         if self.left < 0:
-            raise ValidationTooCostly("work")
+            raise _stopped("work")
 
     def spend_time(self, steps: int) -> None:
         """Spend ``steps`` steps before a check that may run long, and stop once the steps or CPU time are gone."""
@@ -283,8 +302,8 @@ class WorkBudget:
         # Read the clock only here, before each check that may run again,
         # not at every wrapper call: reading it costs about a tenth of a call.
         clock = self._clocks.get(threading.get_ident())
-        if clock is not None and time.thread_time() - clock[0] > self._seconds_left:
-            raise ValidationTooCostly("time")
+        if clock is not None and cpu_clock() - clock[0] > self._seconds_left:
+            raise _stopped("time")
 
     def spend_on(self, value: Any, times: int = 1, container_values: int = CONTAINER_STEPS) -> None:
         """
@@ -430,7 +449,7 @@ class WorkBudget:
         thread = threading.get_ident()
         clock = self._clocks.get(thread)
         if clock is None:
-            self._clocks[thread] = [time.thread_time(), 1]
+            self._clocks[thread] = [cpu_clock(), 1]
         else:
             clock[1] += 1
 
@@ -442,13 +461,13 @@ class WorkBudget:
             return
         clock[1] -= 1
         if clock[1] == 0:
-            self._seconds_left -= time.thread_time() - clock[0]
+            self._seconds_left -= cpu_clock() - clock[0]
             del self._clocks[thread]
 
     def out_of_time(self) -> bool:
         """Return whether the request's CPU time is used up, counting what the check on this thread has used so far."""
         clock = self._clocks.get(threading.get_ident())
-        used = time.thread_time() - clock[0] if clock is not None else 0.0
+        used = cpu_clock() - clock[0] if clock is not None else 0.0
         return used > self._seconds_left
 
     def skip_time(self, seconds: float) -> None:
@@ -503,6 +522,9 @@ def _frame(value: Any) -> list[Any]:
 
 
 _REQUEST_WORK: contextvars.ContextVar[WorkBudget | None] = contextvars.ContextVar("citry_events_work", default=None)
+# Whether a validation that starts now applies MAX_CHECK_DEPTH. Only a
+# restore of server-written values turns it off (see `unbudgeted`).
+_LIMIT_NESTING: contextvars.ContextVar[bool] = contextvars.ContextVar("citry_events_limit_nesting", default=True)
 
 
 @contextmanager
@@ -539,7 +561,7 @@ def unbudgeted() -> Iterator[None]:
     which the app built or Citry checked when the browser wrote them, so a
     deep tree the app built must restore. The copy still stops each list at
     its first bad item and counts errors, which bounds what a failing
-    restore keeps, but no work budget or CPU limit applies.
+    restore keeps, but no work budget, CPU limit or nesting limit applies.
 
     A check of the request's data may already be running when this
     starts, as when a write to a dataclass State with a model validator
@@ -548,16 +570,21 @@ def unbudgeted() -> Iterator[None]:
     the request keep the CPU time that the browser's data had left.
     """
     outer = current_work()
-    started = time.thread_time()
+    started = cpu_clock()
     work = _REQUEST_WORK.set(None)
     tally = _TALLY.set(None)
+    # The values were written by the server or checked when the browser
+    # wrote them, so a tree the app built deeper than the nesting limit
+    # still restores.
+    nesting = _LIMIT_NESTING.set(False)
     try:
         yield
     finally:
+        _LIMIT_NESTING.reset(nesting)
         _TALLY.reset(tally)
         _REQUEST_WORK.reset(work)
         if outer is not None:
-            outer.skip_time(time.thread_time() - started)
+            outer.skip_time(cpu_clock() - started)
 
 
 def current_work() -> WorkBudget | None:
@@ -578,17 +605,29 @@ class _Tally:
         "_limit",
         "active",
         "budget",
+        "depth",
         "errors",
+        "limits_nesting",
         "longest_message",
         "member_floor",
         "payload",
         "repeating",
+        "stop",
         "strings_hold_keys",
         "values_read",
     )
 
     def __init__(self, payload: Any) -> None:
         self.errors = 0
+        # How many `_counted` checks are running inside each other now, and
+        # whether MAX_CHECK_DEPTH applies to them (see `unbudgeted`).
+        self.depth = 0
+        self.limits_nesting = _LIMIT_NESTING.get()
+        # The first stop for work, time or nesting. A part of the schema that
+        # drops an item on any error, such as `OnErrorOmit`, would otherwise
+        # swallow the stop and accept the data without that item, so
+        # `_counting` raises it again when the validation returns.
+        self.stop: ValidationTooCostly | None = None
         # How many values a Pydantic v1 check has read, so it reads the
         # clock once for every few hundred (see `guarding_pydantic_v1`).
         self.values_read = 0
@@ -634,6 +673,15 @@ class _Tally:
 
 
 _TALLY: contextvars.ContextVar[_Tally | None] = contextvars.ContextVar("citry_events_tally", default=None)
+
+
+def _stopped(reason: str) -> ValidationTooCostly:
+    """Return the stop for ``reason``, kept on the running validation's tally so it cannot be swallowed."""
+    stop = ValidationTooCostly(reason)
+    tally = _current_tally()
+    if tally is not None and tally.stop is None:
+        tally.stop = stop
+    return stop
 
 
 @contextmanager
@@ -830,9 +878,14 @@ def _counted(value: Any, handler: Any) -> Any:
             return handler(value)
         except pydantic_core.SchemaError as err:
             raise _signal(err) from None
+    # Every object and every union that can reach a value runs this, so
+    # counting here bounds how deep the check goes on the thread's stack.
+    if tally.limits_nesting and tally.depth >= MAX_CHECK_DEPTH:
+        raise _stopped("nesting")
     if tally.repeating and tally.budget is not None:
         tally.budget.spend(PYTHON_CALL_STEPS)
     before = tally.errors
+    tally.depth += 1
     try:
         result = handler(value)
     except pydantic_core.ValidationError as err:
@@ -845,6 +898,8 @@ def _counted(value: Any, handler: Any) -> Any:
         # The node chose to drop the value or use its default: nothing is kept.
         tally.errors = before
         raise _signal(err) from None
+    finally:
+        tally.depth -= 1
     # A success throws away any errors made below it, for example by a union.
     tally.errors = before
     return result
@@ -2330,9 +2385,81 @@ def core_schema_of(cls: type) -> dict[str, Any] | None:
     return root if type(root) is dict else None
 
 
+# The stack of the thread that builds a copy of a validator, in bytes: 16
+# times the 1 MB of a Windows thread, on which a chain of about 250 nested
+# models overflowed. On Windows the system sets this memory aside for the
+# thread, which ends with the build.
+_BUILD_STACK_BYTES = 16 * 1024 * 1024
+# Keeps Citry's own builds from setting the process-wide stack size at once.
+_BUILD_STACK_LOCK = threading.Lock()
+
+
+def _new_build_stack_lock() -> None:
+    """Give a forked child a new lock, since a thread of the parent may have held the old one at the fork."""
+    global _BUILD_STACK_LOCK  # noqa: PLW0603 - the module's one lock is replaced, not shared
+    _BUILD_STACK_LOCK = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_new_build_stack_lock)
+
+
+def _on_large_stack(build: Callable[[], Any]) -> Any:
+    """
+    Run ``build`` on a new thread with a large stack, and return its result or raise its exception.
+
+    pydantic-core builds a validator by walking the schema through nested
+    calls on the C stack, and the copy nests deeper than the class's own
+    schema because of its wrappers. A chain of a few hundred nested models
+    overflows a small stack and ends the process, with no Python exception
+    to catch. The first call to a class builds its copy, so the build runs
+    on whatever thread serves that request, and that thread's stack can be
+    small: Windows gives a thread 1 MB, and a thread that Python did not
+    start keeps the size its creator chose. Running the build on a thread
+    with a fixed large stack makes the depth of class it handles the same
+    everywhere. The build runs once per class, so the extra thread costs
+    little; checking a value with the copy runs on the caller's thread.
+    """
+    outcome: list[Any] = []
+
+    def run() -> None:
+        try:
+            outcome.append((True, build()))
+        except BaseException as error:  # noqa: BLE001 - handed to the calling thread, which raises it
+            outcome.append((False, error))
+
+    # The same context as the caller, so the build sees what it would see there.
+    context = contextvars.copy_context()
+    try:
+        # The stack size applies to every thread the process starts while it
+        # is set, so it is put back right after this start. Another thread
+        # started in this short window also gets the large stack.
+        with _BUILD_STACK_LOCK:
+            previous = threading.stack_size(_BUILD_STACK_BYTES)
+            try:
+                worker = threading.Thread(target=context.run, args=(run,), name="citry-validator-build", daemon=True)
+                worker.start()
+            finally:
+                threading.stack_size(previous)
+    except (RuntimeError, ValueError):
+        # A platform without threads, or without a settable stack size (such
+        # as Pyodide), builds on the calling thread, as Pydantic itself does.
+        return build()
+    worker.join()
+    succeeded, value = outcome[0]
+    if not succeeded:
+        raise value
+    return value
+
+
 def _build(schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False) -> Any:
-    copied = _Rewriter(schema, wrapped=wrapped, by_name=by_name, text_wrappers=text_wrappers).rewrite(schema.root)
-    return pydantic_core.SchemaValidator(copied, _top_config(schema.root), _use_prebuilt=False)
+    def build() -> Any:
+        rewriter = _Rewriter(schema, wrapped=wrapped, by_name=by_name, text_wrappers=text_wrappers)
+        copied = rewriter.rewrite(schema.root)
+        return pydantic_core.SchemaValidator(copied, _top_config(schema.root), _use_prebuilt=False)
+
+    # The rewrite builds validators too, for the labels of union members.
+    return _on_large_stack(build)
 
 
 def checker_for(cls: type, *, state: bool = False, by_name: bool = False, repeated: bool = False) -> Checker | None:
@@ -2461,9 +2588,14 @@ def fields_checker_for(cls: type) -> FieldsCheck | None:
                 for entry in node.get("fields", ())
             ],
         }
-        try:
+
+        def build() -> Any:
             copied = _Rewriter(_Schema(root), wrapped=True).rewrite(unfrozen)  # type: ignore[arg-type]
-            validator = pydantic_core.SchemaValidator(copied, config, _use_prebuilt=False)
+            return pydantic_core.SchemaValidator(copied, config, _use_prebuilt=False)
+
+        try:
+            # A large stack, as for the copy of a whole class (see `_on_large_stack`).
+            validator = _on_large_stack(build)
         except Exception:  # noqa: BLE001 - the caller then refuses the write, as for a class it cannot copy
             logger.exception(f"Citry could not build its copy of the field checks of {cls.__qualname__}.")
         else:
@@ -2684,7 +2816,7 @@ _WARNED_WORK: WeakKeyDictionary[type, frozenset[str]] = WeakKeyDictionary()
 
 def warn_if_stopped(cls: type, stop: ValidationTooCostly) -> None:
     """
-    Warn once per class when a check stopped for work, CPU time or call depth.
+    Warn once per class when a check stopped for work, CPU time, nesting or call depth.
 
     Stay quiet when it stopped for too many errors, because the client sent
     bad data. Every place that catches a stop calls this one function, so
@@ -2696,7 +2828,7 @@ def warn_if_stopped(cls: type, stop: ValidationTooCostly) -> None:
 
 def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True) -> None:
     """
-    Warn once per class and kind that a call ran out of work, CPU time or call depth (``reason``), naming the fix.
+    Warn once per class and kind that a check stopped for work, time, nesting or depth (``reason``), naming the fix.
 
     Pass ``refused=False`` for a browser write to a Pydantic v1 State whose
     check finished before Citry could stop it. Citry reads the clock once
@@ -2716,6 +2848,14 @@ def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True) ->
         if key in warned:
             return
         _WARNED_WORK[cls] = warned | {key}
+    if reason == "nesting":
+        logger.warning(
+            f"Data for {cls.__qualname__} was refused because it nests more than {MAX_CHECK_DEPTH} objects,"
+            " unions and wrap validators inside each other, which is as deep as Citry checks event data and"
+            " State. If valid data nests this deeply, give the recursive union a discriminator, or use fewer"
+            " nested classes and wrap validators."
+        )
+        return
     if reason == "depth":
         # No traceback: it would list every frame, and any client can send
         # such data again.
@@ -2794,7 +2934,16 @@ def _counting(checker: Checker, payload: Any) -> Iterator[_Tally]:
         before = tally.errors
         try:
             yield tally
+            # The validation returned, but a part of the schema may have
+            # swallowed a stop on the way (see `_Tally.stop`).
+            if tally.stop is not None:
+                raise tally.stop
         except pydantic_core.ValidationError as err:
+            # A part of the schema that swallowed a stop for work, time or
+            # nesting must not leave only the other errors to report: the data
+            # gets the stop's answer, as it would without that part.
+            if tally.stop is not None:
+                raise tally.stop from None
             # A copy without wrappers counts here, after the call. A wrapped
             # copy's outer object already set the same total.
             tally.errors = before + err.error_count()

@@ -1917,7 +1917,10 @@ same class, built by the same schema. The copy differs in these ways:
    such an attempt spends as it would inside a Pydantic tree. A request
    also stops once its checks have used a fixed amount of CPU time,
    counted only while Citry checks, so another request on the same
-   thread does not count.
+   thread does not count. The time is read from the thread's CPU clock
+   (`time.thread_time`), which on Windows moves in steps of about
+   15.6 ms, so on Windows the time counted for each check can be off by
+   up to one step.
 
 A schema whose worst case is fixed and small (no recursion, no extra
 keys, no wrap validator, and a small fixed number of errors) gets only
@@ -1965,12 +1968,41 @@ Error modes:
   making the recursive classes Pydantic models with such a
   discriminator, because Citry's own check reads no discriminator. With
   a Pydantic class whose union members hold their children in fields of
-  the same name, a valid chain with one child per level fits up to about
-  15 levels, and a tree whose nodes each hold two children about 8; more
-  children or more data in each node fit fewer levels. The figures
-  depend on the classes: members with different field names nest much
-  deeper before the budget runs out, and Citry's own check of a plain
-  class or dataclass reaches the budget at different depths.
+  the same name, a tree whose nodes each hold two children fits about 8
+  levels; more children or more data in each node fit fewer levels. A
+  chain with one child per level reaches the nesting limit below first,
+  at about 14 levels. Citry's own check of a plain class or dataclass
+  reaches the budget at different depths.
+- Over the nesting limit: a 422 that says the data is nested too deeply
+  to check, and a warning naming the class, once per class, for `data`
+  and for State writes.
+    - What counts: Citry keeps one count for each validation, called its
+      tally, of the errors kept and of how deeply its wrappers are
+      checking inside each other. The wrapper around each object, each
+      wrap validator, and each union whose members can read a value adds
+      one level while it runs, and the data is refused past
+      `MAX_CHECK_DEPTH` (32). Lists and dicts do not count.
+    - How the limit is sized: each level takes room on the C stack of
+      the thread that checks, so data at the limit must be checked in
+      512 KiB, half of the 1 MiB stack a thread gets in a Windows
+      program that embeds Python with the linker's default and in the
+      official Python images for Alpine Linux. A test checks data at the
+      limit on a 512 KiB thread in its own process, in shapes that take
+      a lot of stack per level. The heaviest measured, a wrap validator
+      on the model and another on its field, sets the limit: it needs
+      about 400 KiB on macOS with Python 3.11, a margin of about 2.5x on
+      a 1 MiB thread. The other shapes measured on CI leave about 2.9x
+      on Linux and macOS and several times that on Windows.
+    - Depths that fit: a model with one nested model per level and a
+      discriminated tree fit about 30 levels, a union without a
+      discriminator about 14, and the model-and-field wrap shape about 9.
+    - What cannot absorb the refusal: a part of the schema that drops an
+      item on any error, such as `OnErrorOmit`. The tally records the
+      first stop for work, time, or nesting, and the check raises it
+      again when it returns or fails.
+    - Restoring State does not apply the limit (`unbudgeted` turns it
+      off), because it reads only values the server wrote or already
+      checked.
 - Data nested so deeply that Python runs out of stack frames while Citry
   checks it: a 422 that says the data is nested too deeply to check.
 - A copy that cannot be built: Citry logs the error once, with the class

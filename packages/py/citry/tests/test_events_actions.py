@@ -23,6 +23,7 @@ from citry import Citry, Component
 from citry._vue.events import default_events_producer
 from citry.citry_render import CitryRender
 from citry.ext.events import actions
+from citry.ext.events import errors as errors_module
 from citry.ext.events.errors import (
     MAX_FIELD_ERRORS_TEXT,
     MAX_FIELD_MESSAGE,
@@ -1153,42 +1154,87 @@ class TestFieldErrors:
             assert got == expected, (containers, fields)
             assert list(got[0]) == list(expected[0])
 
-    def test_a_path_with_many_dots_is_limited_quickly(self):
+    def test_a_path_with_many_dots_is_limited_in_time_in_step_with_its_length(self):
         # A dict key from the request can hold any number of dots, and
         # limiting the paths must take time in step with the key's length.
-        fields = {f"scores.{'.' * 40_000}": "Bad."} | {f"scores.{index}": "Bad." for index in range(24)}
-        started = time.perf_counter()
-        kept, dropped = _limited(fields, {"scores"})
-        assert time.perf_counter() - started < 0.5
-        assert (len(kept), dropped) == (20, 5)
+        def best_time(dots: int) -> float:
+            # The best of three runs keeps one slow run of a busy machine out
+            # of the ratio.
+            best = float("inf")
+            for _run in range(3):
+                fields = {f"scores.{'.' * dots}": "Bad."} | {f"scores.{index}": "Bad." for index in range(24)}
+                started = time.perf_counter()
+                kept, dropped = _limited(fields, {"scores"})
+                best = min(best, time.perf_counter() - started)
+                assert (len(kept), dropped) == (20, 5)
+            return best
 
-    def test_a_long_key_under_many_messages_is_read_once(self):
-        # Every message shares the pair of its dict key, so the key's text is
-        # written only for the kept messages. This key is longer than the text
-        # cap, so only the first message is kept, and the rest are counted.
+        # Ten times the dots takes about ten times as long, and up to about
+        # thirty times on a busy machine. Time growing with the square of the
+        # length takes about ninety times as long.
+        assert best_time(40_000) < 45 * best_time(4_000)
+
+    @staticmethod
+    def _many_messages_under_one_key(key: str, count: int) -> FieldErrors:
+        """Return a collector with ``count`` messages, one per list item, under one dict key."""
         errors = FieldErrors()
-        key_path = ((None, "scores"), "a" * 100_000)
+        key_path = ((None, "scores"), key)
         errors.add_container((None, "scores"))
         errors.add_container(key_path)
-        for index in range(100_000):
+        for index in range(count):
             errors.add((key_path, index), "Bad.")
-        started = time.perf_counter()
-        kept, dropped = errors.limited()
-        assert time.perf_counter() - started < 1
-        assert list(kept) == ["scores." + "a" * 100_000 + ".0"]
-        assert dropped == 99_999
+        return errors
 
-    def test_a_shorter_key_under_many_messages_keeps_twenty_and_is_read_once(self):
-        errors = FieldErrors()
-        key_path = ((None, "scores"), "a" * 2_000)
-        errors.add_container((None, "scores"))
-        errors.add_container(key_path)
-        for index in range(100_000):
-            errors.add((key_path, index), "Bad.")
-        started = time.perf_counter()
-        kept, dropped = errors.limited()
-        assert time.perf_counter() - started < 1
-        assert (len(kept), dropped) == (20, 99_980)
+    @staticmethod
+    def _times_the_key_is_placed(monkeypatch, key: str) -> list[int]:
+        """Count each time the path tree makes or finds the node for ``key``, however it reads the key's text."""
+        placed = [0]
+        child = errors_module._PathNode.child
+
+        def counting_child(node, segment, *, root):
+            if segment == key:
+                placed[0] += 1
+            return child(node, segment, root=root)
+
+        monkeypatch.setattr(errors_module._PathNode, "child", counting_child)
+        return placed
+
+    def test_a_long_key_under_many_messages_is_placed_once(self, monkeypatch):
+        # Every message shares the pair of its dict key, so the key is placed
+        # in the path tree once, not once per message. This key is longer
+        # than the text cap, so only the first message is kept, and the rest
+        # are counted.
+        key = "a" * 100_000
+        placed = self._times_the_key_is_placed(monkeypatch, key)
+        kept, dropped = self._many_messages_under_one_key(key, 10_000).limited()
+        assert placed == [1]
+        assert list(kept) == ["scores." + key + ".0"]
+        assert dropped == 9_999
+
+    def test_a_shorter_key_under_many_messages_keeps_twenty_and_is_placed_once(self, monkeypatch):
+        key = "a" * 2_000
+        placed = self._times_the_key_is_placed(monkeypatch, key)
+        kept, dropped = self._many_messages_under_one_key(key, 10_000).limited()
+        assert placed == [1]
+        assert (len(kept), dropped) == (20, 9_980)
+
+    def test_the_path_text_of_many_messages_is_written_only_for_the_kept_ones(self):
+        # Writing the full path text of every message, kept or not, copies a
+        # long key once per message.
+        def best_time(key_length: int) -> float:
+            # The best of three runs keeps one slow run of a busy machine out
+            # of the ratio.
+            best = float("inf")
+            for _run in range(3):
+                errors = self._many_messages_under_one_key("a" * key_length, 10_000)
+                started = time.perf_counter()
+                errors.limited()
+                best = min(best, time.perf_counter() - started)
+            return best
+
+        # A key a thousand times longer takes about as long. Writing the text
+        # of all 10,000 paths takes about fifteen times as long.
+        assert best_time(1_000_000) < 4 * best_time(1_000)
 
     def test_the_first_message_is_kept_however_long_its_path(self):
         long_name = "a" * (2 * MAX_FIELD_ERRORS_TEXT)

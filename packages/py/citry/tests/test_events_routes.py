@@ -23,6 +23,7 @@ from citry._vue import events as vue_events
 from citry.contrib.asgi import asgi_app
 from citry.contrib.wsgi import wsgi_app
 from citry.ext.events import actions, event
+from citry.ext.events import errors as errors_module
 from citry.ext.events import routes as events_routes
 from citry.ext.events.codecs import (
     EnvelopeCodec,
@@ -1058,12 +1059,33 @@ class TestPerEventRoute:
         assert error["code"] == "payload_too_large"
         assert "larger than 64 bytes" in error["message"]
 
+    @staticmethod
+    def _count_path_tree_work(monkeypatch) -> dict[str, int]:
+        """Count each time the path tree makes or finds a node, and each time a node lists its children."""
+        work = {"placed": 0, "visited": 0}
+        child = errors_module._PathNode.child
+        ordered_children = errors_module._PathNode.ordered_children
+
+        def counting_child(node, segment, *, root):
+            work["placed"] += 1
+            return child(node, segment, root=root)
+
+        def counting_ordered_children(node):
+            work["visited"] += 1
+            return ordered_children(node)
+
+        monkeypatch.setattr(errors_module._PathNode, "child", counting_child)
+        monkeypatch.setattr(errors_module._PathNode, "ordered_children", counting_ordered_children)
+        return work
+
     @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
     @pytest.mark.parametrize("field", ["args", "state_updates"])
-    def test_a_dict_key_full_of_dots_is_rejected_quickly(self, adapter, field):
+    def test_a_dict_key_full_of_dots_is_rejected_quickly(self, adapter, field, monkeypatch):
         # A dict key is part of a field path, so a key full of dots makes a
-        # path with tens of thousands of segments. In Citry 0.7.0 the limit
-        # on item messages per field took 2.6 s for this key.
+        # path with tens of thousands of segments. Citry 0.7.0 spent seconds
+        # on the limit on item messages per field for this key. The test
+        # counts the path tree's work, which does not depend on how fast the
+        # machine is: each segment is placed once and visited once.
         c = _citry()
 
         class ScoresIn:
@@ -1090,15 +1112,17 @@ class TestPerEventRoute:
         else:
             call = {"args": {"scores": {}}, "stateToken": _token(Board), "stateUpdates": {"scores": {key: "many"}}}
         client = _landing_client(c, adapter)
+        work = self._count_path_tree_work(monkeypatch)
 
-        started = time.perf_counter()
         response = _post_call(client, Board, "save", call)
-        elapsed = time.perf_counter() - started
 
         error = response.json()["results"][0]["error"]
         assert error["status"] == 422
         assert error["fieldErrors"] == {f"scores.{key}": "Expected int, got str."}
-        assert elapsed < 1
+        # The key has 40,001 segments and the path has one more for "scores".
+        # Reading it again for each ancestor or item would multiply both counts.
+        assert work["placed"] <= 2 * len(key)
+        assert work["visited"] <= 2 * len(key)
 
     # What a call can reach, as (schema, field): a plain dataclass pair, a
     # Pydantic pair, and a Pydantic data class with a strict Pydantic State,
@@ -1199,32 +1223,46 @@ class TestPerEventRoute:
         assert peak < 32_000_000
 
     @BOARD_CASES
-    def test_a_dotted_key_over_many_bad_items_is_answered_quickly(self, field, schema):
+    def test_a_dotted_key_over_many_bad_items_is_answered_quickly(self, field, schema, monkeypatch):
         # A validator that kept every bad item would give each one its own
         # copy of the key, and building the path tree would take long if
-        # each copy were split at its dots.
+        # each copy were split at its dots. The test counts the segments the
+        # tree places, which does not depend on how fast the machine is.
         # The strict State is under the path limit here, so Pydantic runs.
         # Every schema lists its one error for the first bad item.
         c = _citry()
         board = self._board(c, schema=schema)
         call = self._long_key_call(board, field, {"." * 3_000: ["x"] * 2_000})
-        started = time.perf_counter()
+        work = self._count_path_tree_work(monkeypatch)
         response = _post_call(_landing_client(c, "wsgi"), board, "save", call)
-        assert time.perf_counter() - started < 0.3
         error = response.json()["results"][0]["error"]
         assert list(error["fieldErrors"]) == ["scores." + "." * 3_000 + ".0"]
         assert "more field error" not in error["message"]
+        # The key has 3,001 segments, and the path adds "scores" and the item
+        # index. Splitting the key once per bad item would place millions.
+        assert work["placed"] <= 2 * 3_000
+        assert work["visited"] <= 2 * 3_000
 
     @pytest.mark.parametrize("field", ["args", "state_updates"])
-    def test_a_long_key_over_many_good_items_is_accepted_quickly(self, field):
+    def test_a_long_key_over_many_good_items_is_accepted_quickly(self, field, monkeypatch):
         c = _citry()
         board = self._board(c, schema="dataclass")
         call = self._long_key_call(board, field, {"a" * 500_000: [1] * 100_000})
         client = _landing_client(c, "wsgi")
+        # A valid request records no messages, so the path tree has no work.
+        work = self._count_path_tree_work(monkeypatch)
+        # The first call warms up lazily built caches, so the timed call
+        # measures only the check.
+        _post_call(client, board, "save", call)
         started = time.perf_counter()
         response = _post_call(client, board, "save", call)
-        assert time.perf_counter() - started < 0.5
+        elapsed = time.perf_counter() - started
         assert "error" not in response.json()["results"][0]
+        assert work == {"placed": 0, "visited": 0}
+        # This takes about 0.06 s on a laptop. Copying the 500,000-character
+        # key for each of the 100,000 items would copy 50 GB, so a bound of
+        # 5 s keeps a slow machine from failing without hiding that.
+        assert elapsed < 5
 
     @BOARD_CASES
     def test_an_ordinary_large_request_is_checked_and_answered_with_one_error_per_collection(self, field, schema):

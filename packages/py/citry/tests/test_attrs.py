@@ -11,7 +11,6 @@ with a comment saying what changed and why.
 
 import random
 import re
-import time
 import tracemalloc
 
 import pytest
@@ -29,6 +28,8 @@ from citry import (
 )
 from citry.attrs import _split_style_declarations, _style_property_re, validate_html_attr_name
 from citry.nodes import ElementKeyNode
+
+from ._growth import assert_grows_in_step
 
 
 class TestFormatAttrs:
@@ -462,10 +463,13 @@ class TestStyleDeclarationSplit:
         assert _split_style_declarations(text) == self._VUE_SPLIT.split(text)
 
     def test_a_long_style_from_data_parses_quickly(self):
-        started = time.perf_counter()
-        assert parse_string_style(";" * 100_000 + "color: red") == {"color": "red"}
-        assert parse_string_style("(" + ";" * 100_000 + ")") == {}
-        assert time.perf_counter() - started < 0.5
+        def parse(semicolons):
+            assert parse_string_style(";" * semicolons + "color: red") == {"color": "red"}
+            assert parse_string_style("(" + ";" * semicolons + ")") == {}
+
+        # The regex took seconds for 100,000 semicolons. Eight times as many
+        # may take about eight times as long, not sixty-four.
+        assert_grows_in_step(parse, 12_500, 100_000, factor=8)
 
     def test_a_long_style_from_data_renders_quickly_on_the_static_and_vue_paths(self):
         app = Citry(secret="s" * 40)
@@ -494,12 +498,13 @@ class TestStyleDeclarationSplit:
                 $component({})
             """
 
-        style = ";" * 100_000 + "width: 1px"
         for component in (Plain, Interactive):
-            started = time.perf_counter()
-            html = str(component(attrs={"style": style}))
-            assert time.perf_counter() - started < 1
-            assert "width: 1px" in html
+
+            def render(semicolons, component=component):
+                html = str(component(attrs={"style": ";" * semicolons + "width: 1px"}))
+                assert "width: 1px" in html
+
+            assert_grows_in_step(render, 12_500, 100_000, factor=8)
 
 
 class TestStyleCommentRemoval:
@@ -553,11 +558,12 @@ class TestStyleCommentRemoval:
     # 1.3 s to 2.8 s on each of these texts.
     @pytest.mark.parametrize("unit", ["/* ", "/*a", "/*\n", "/* ;", "/*(", '"/*', "'/*", '/*"'])
     def test_many_unclosed_comments_parse_quickly(self, unit):
-        text = "a: 1; b: " + unit * (60_000 // len(unit))
-        started = time.perf_counter()
-        result = parse_string_style(text)
-        assert time.perf_counter() - started < 0.5
-        assert result["a"] == "1"
+        def parse(length):
+            result = parse_string_style("a: 1; b: " + unit * (length // len(unit)))
+            assert result["a"] == "1"
+
+        # Eight times as much text may take about eight times as long.
+        assert_grows_in_step(parse, 7_500, 60_000, factor=8)
 
     def test_a_style_from_data_with_unclosed_comments_renders_quickly(self):
         app = Citry(secret="s" * 40)
@@ -586,12 +592,13 @@ class TestStyleCommentRemoval:
                 $component({})
             """
 
-        style = "width: 1px; " + "/* " * 20_000
         for component in (Plain, Interactive):
-            started = time.perf_counter()
-            html = str(component(style=style))
-            assert time.perf_counter() - started < 1
-            assert "width: 1px" in html
+
+            def render(comments, component=component):
+                html = str(component(style="width: 1px; " + "/* " * comments))
+                assert "width: 1px" in html
+
+            assert_grows_in_step(render, 2_500, 20_000, factor=8)
 
 
 class TestConstMarkedValues:

@@ -15,7 +15,6 @@ import asyncio
 import io
 import json
 import threading
-import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -310,14 +309,23 @@ class TestAsgiSyncOffload:
         from citry.contrib.asgi import asgi_app
 
         finished = []
+        # The slow handler waits for the fast request instead of sleeping, so
+        # the order does not depend on how fast the machine is. The timeout
+        # lets a broken run end: a handler that blocked the loop would never
+        # see the fast request, and the test would fail on the order below.
+        wait_seconds = 10.0
+        slow_entered = threading.Event()
+        fast_done = threading.Event()
 
         def slow(_request):
-            time.sleep(0.5)
+            slow_entered.set()
+            fast_done.wait(wait_seconds)
             finished.append("slow")
             return RouteResponse(content="slow")
 
         def fast(_request):
             finished.append("fast")
+            fast_done.set()
             return RouteResponse(content="fast")
 
         engine = _engine(URLRoute("slow", handler=slow), URLRoute("fast", handler=fast))
@@ -338,7 +346,9 @@ class TestAsgiSyncOffload:
 
         async def race():
             slow_task = asyncio.create_task(hit("/ext/probe/slow"))
-            await asyncio.sleep(0.1)  # give the slow handler time to enter its sleep
+            # Wait for the slow handler to be running. The wait is in a thread,
+            # so the loop stays free, as the handler must leave it.
+            assert await asyncio.to_thread(slow_entered.wait, wait_seconds)
             fast_body = await hit("/ext/probe/fast")
             slow_body = await slow_task
             return fast_body, slow_body
@@ -346,7 +356,7 @@ class TestAsgiSyncOffload:
         fast_body, slow_body = asyncio.run(race())
         assert fast_body == b"fast"
         assert slow_body == b"slow"
-        # The fast request completed while the slow handler was still sleeping:
+        # The fast request completed while the slow handler was still waiting:
         # the sync handler ran off the loop instead of blocking it.
         assert finished == ["fast", "slow"]
 

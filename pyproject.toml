@@ -472,6 +472,10 @@ testpaths = [
 # before it loads `-p` plugins, whether pytest starts as `uv run pytest` or
 # `python -m pytest`.
 pythonpath = ["."]
+# A test that runs longer than this has every thread's stack written to the
+# output, so a hang shows where it waits. The slowest test takes under a
+# minute on CI. This only reports: the test keeps running.
+faulthandler_timeout = 300
 markers = [
     "e2e: browser end-to-end test (needs Playwright and a browser binary)",
     "qualification: slow boundary proof kept in full integration and version-matrix runs",

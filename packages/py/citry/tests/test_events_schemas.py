@@ -1710,10 +1710,10 @@ class TestPydanticItemErrorLimit:
         Node.model_rebuild(_types_namespace={"Node": Node})
 
         def best_time(depth: int) -> float:
-            # The best of three runs keeps one slow run of a busy machine out
+            # The best of seven runs keeps slow runs of a busy machine out
             # of the ratio.
             best = float("inf")
-            for _run in range(3):
+            for _run in range(7):
                 value: dict[str, Any] = {"c": [1] * 3_000, **{f"v{index:02d}": "x" for index in range(30)}}
                 for _level in range(depth - 1):
                     value = {"c": [value]}
@@ -1725,11 +1725,17 @@ class TestPydanticItemErrorLimit:
                 assert result.unlisted_fields == 11
             return best
 
-        # Writing the text of each list for each error made the time grow
-        # with the square of the depth: five times the depth took about 19
-        # times as long. Reading each error once takes about 5 times as long,
-        # and the bound leaves room for a slow machine.
-        assert best_time(200) < 10 * best_time(40)
+        # Writing the text of each list for each error would make the time
+        # grow with the square of the depth: nine times the depth took about
+        # 17 times as long (measured at 36 levels against 4). Reading each
+        # error once takes about 3.5 times as long, and the bound leaves room
+        # for a slow machine. The deeper value stays within the nesting
+        # Citry checks (MAX_CHECK_DEPTH).
+        # The shallow run takes about 0.7 ms on a laptop, and a run that
+        # short is noisy, so its time is floored at 0.5 ms. The floor stays
+        # below the shallow run's own time, so the comparison still measures
+        # growth with depth rather than a fixed bound.
+        assert best_time(27) < 9 * max(best_time(3), 0.0005)
 
     @pytest.mark.parametrize("data_class", ["top", "nested"])
     def test_a_list_field_with_an_empty_alias_lists_its_first_bad_item(self, data_class):
@@ -1786,6 +1792,20 @@ class TestPydanticPathText:
             return build(schema, wrapped=wrapped)
 
         monkeypatch.setattr(bounded, "_build", refuse_wrappers)
+
+    @staticmethod
+    def _count_json_text_reads(monkeypatch) -> dict[str, int]:
+        """Count the reads of text inside a `Json` field, and the characters they scan in all."""
+        reads = {"calls": 0, "scanned": 0}
+        read = schemas_module._json_text_paths
+
+        def counting_read(text, length, costs):
+            reads["calls"] += 1
+            reads["scanned"] += len(text)
+            return read(text, length, costs)
+
+        monkeypatch.setattr(schemas_module, "_json_text_paths", counting_read)
+        return reads
 
     def _passes(self, payload, model=None):
         return pydantic_can_report(payload, model or self.Model, FieldErrors())
@@ -1919,13 +1939,18 @@ class TestPydanticPathText:
         payload = {"data": {"a" * 200_000: [text] * 1_000}}
         assert not self._passes(json.loads(json.dumps(payload)), WithJson)
 
-    def test_text_that_ends_in_a_backslash_is_read_in_one_pass(self):
+    def test_text_that_ends_in_a_backslash_is_read_in_one_pass(self, monkeypatch):
         class WithJson(pydantic.BaseModel):
             data: pydantic.Json[list[str]]
 
-        started = perf_counter()
-        self._passes({"data": '\\"' * 100_000 + "\\"}, WithJson)
-        assert perf_counter() - started < 0.5
+        text = '\\"' * 100_000 + "\\"
+        reads = self._count_json_text_reads(monkeypatch)
+        self._passes({"data": text}, WithJson)
+        # The text is scanned once, plus the short text one decoded string
+        # holds. Scanning from each backslash again would grow with the
+        # square of the length.
+        assert reads["scanned"] <= 2 * len(text)
+        assert reads["calls"] <= 3
 
     def test_json_text_inside_json_text_counts(self):
         class Twice(pydantic.BaseModel):
@@ -1941,13 +1966,18 @@ class TestPydanticPathText:
         text = json.dumps({"a" * 56_000: json.dumps(["x"] * 14_000)})
         assert not self._passes({"data": text}, Nested)
 
-    def test_a_string_of_nested_quotes_is_read_in_a_few_passes(self):
+    def test_a_string_of_nested_quotes_is_read_in_a_few_passes(self, monkeypatch):
         class WithJson(pydantic.BaseModel):
             data: pydantic.Json[list[str]]
 
-        started = perf_counter()
-        self._passes({"data": '"[\\"' * 40_000}, WithJson)
-        assert perf_counter() - started < 1
+        text = '"[\\"' * 40_000
+        reads = self._count_json_text_reads(monkeypatch)
+        self._passes({"data": text}, WithJson)
+        # Each nested level of quotes holds a decoded string, but the text of
+        # the whole payload is scanned once and each inner text is much
+        # shorter, so the characters scanned stay near the payload's length.
+        assert reads["scanned"] <= 2 * len(text)
+        assert reads["calls"] <= 10
 
     def test_json_text_that_opens_a_bracket_at_every_character_is_read_in_little_memory(self):
         class WithJson(pydantic.BaseModel):
@@ -2262,7 +2292,7 @@ class TestPydanticPathText:
             assert result.fields == {"rows.a.tags": "Input should be a valid list"}
 
     @pytest.mark.parametrize("limited", [False, True], ids=["copy", "limit"])
-    def test_many_nested_models_share_the_limit(self, limited, request):
+    def test_many_nested_models_share_the_limit(self, limited, request, monkeypatch):
         if limited:
             request.getfixturevalue("without_wrappers")
 
@@ -2275,9 +2305,20 @@ class TestPydanticPathText:
         Data = make_dataclass("Data", [(f"row{index:03d}", Row) for index in range(100)])
 
         payload = {f"row{index:03d}": {"scores": {"." * 1_000: ["x"] * 2_000}} for index in range(100)}
-        started = perf_counter()
+        # Count the messages recorded instead of timing the call: a check that
+        # kept every bad item would record 200,000 of them, and the count
+        # does not depend on how fast the machine is.
+        recorded = [0]
+        add = FieldErrors.add
+
+        def counting_add(self, path, message):
+            recorded[0] += 1
+            return add(self, path, message)
+
+        monkeypatch.setattr(FieldErrors, "add", counting_add)
         result = validate_args(Data, payload)
-        assert perf_counter() - started < 1
+        # Each row records its first bad item and no other.
+        assert recorded[0] == 100
         # Each row keeps one error, and the field messages are cut off at their own text limit.
         assert len(result.fields) + result.unlisted_fields == 100
         messages = [result.fields[name] for name in result.fields]

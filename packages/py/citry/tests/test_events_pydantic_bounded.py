@@ -23,6 +23,8 @@ import json
 import logging
 import random
 import re
+import subprocess
+import sys
 import threading
 import time
 import tracemalloc
@@ -60,6 +62,42 @@ def _steady_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     # for a warning does not depend on which tests ran before it.
     monkeypatch.setattr(bounded, "WORK_SECONDS", 60.0)
     monkeypatch.setattr(bounded, "_WARNED_WORK", WeakKeyDictionary())
+
+
+class _HandClock:
+    """A CPU clock that moves only when a test moves it, so a test of the CPU limit does not depend on the machine."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A test of the work budget needs data deep enough for the budget to run
+    # out, which is past the nesting limit. pytest runs tests on the main
+    # thread, which has 8 MiB of stack on Linux and macOS. On Windows a
+    # check uses far less stack per level: CI measured more than 150 levels
+    # of these shapes in 512 KiB. So a limit of 100 still fits.
+    monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 100)
+
+
+@pytest.fixture
+def hand_clock(monkeypatch: pytest.MonkeyPatch) -> _HandClock:
+    # A real CPU clock moves in steps of about 15.6 ms on Windows, so a test
+    # that spins for a few milliseconds can read no time, or a whole step.
+    clock = _HandClock()
+    monkeypatch.setattr(bounded, "cpu_clock", clock)
+    return clock
+
+
+def _spend_cpu(seconds: float) -> None:
+    """Use ``seconds`` of CPU time on the hand clock that the test installed."""
+    clock = bounded.cpu_clock
+    assert isinstance(clock, _HandClock)
+    clock.now += seconds
 
 
 def _citry() -> Citry:
@@ -248,11 +286,13 @@ def test_a_few_undeclared_keys_still_get_a_message_each() -> None:
     assert result.fields == {"x": "Extra inputs are not permitted", "y": "Extra inputs are not permitted"}
 
 
-def test_a_chain_of_nested_models_deeper_than_the_recursion_limit_is_checked(
+def test_a_chain_of_nested_models_deeper_than_the_nesting_limit_is_refused(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     # Building the copy walks the schema with its own stack, so a chain of
-    # 300 different models still gets a copy, and Pydantic's own answer.
+    # 300 different models still gets a copy. Valid data 300 levels deep is
+    # past the nesting limit and gets the 422 for deep data, while a missing
+    # field near the top is reported before the check goes deeper.
     model: Any = pydantic.create_model("Level0", v=(int, ...))
     for index in range(1, 300):
         model = pydantic.create_model(f"Level{index}", c=(model, ...))
@@ -261,24 +301,376 @@ def test_a_chain_of_nested_models_deeper_than_the_recursion_limit_is_checked(
         payload = {"c": payload}
 
     with caplog.at_level(logging.ERROR, logger="citry"):
-        valid = validate_args(model, payload)
+        deep = validate_args(model, payload)
         missing = validate_args(model, {"c": {}})
 
-    assert valid.ok
+    assert deep.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
     assert missing.fields == {"c.c": "Field required"}
+    # Deep data is the sender's problem, not a fault in the app, so nothing
+    # is logged as an error.
     assert caplog.text == ""
+
+
+_CHAIN_BUILT_ON_A_SMALL_STACK = """
+import json
+import threading
+
+import pydantic
+
+from citry.ext.events import _pydantic_bounded as bounded
+
+model = pydantic.create_model("Level0", v=(int, ...))
+for index in range(1, 300):
+    model = pydantic.create_model(f"Level{index}", c=(model, ...))
+
+built = []
+
+
+def build():
+    built.append(bounded.checker_for(model).validator is not None)
+
+
+threading.stack_size(1024 * 1024)
+thread = threading.Thread(target=build)
+thread.start()
+thread.join()
+print(json.dumps(built))
+"""
+
+
+def test_the_copy_of_a_chain_of_nested_models_is_built_on_a_thread_with_a_small_stack() -> None:
+    # The first call to a class builds Citry's copy of its validator on the
+    # thread that serves the request, and that thread's stack can be small
+    # (1 MB on Windows). Building the copy of this chain on such a stack
+    # overflows it and ends the process, so the test runs it in a process
+    # of its own.
+    done = subprocess.run(
+        [sys.executable, "-c", _CHAIN_BUILT_ON_A_SMALL_STACK],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert json.loads(done.stdout) == [True]
+
+
+_CHECKED_AT_THE_LIMIT_ON_A_SMALL_STACK = r"""
+from __future__ import annotations
+
+import dataclasses
+import json
+import sys
+import threading
+from typing import Annotated, Literal, Optional, Union
+
+import pydantic
+import pydantic.dataclasses
+
+from citry.ext.events import _pydantic_bounded as bounded
+from citry.ext.events.schemas import validate_args
+
+# Only the nesting limit may stop these checks, so data reaches it in every
+# shape, including unions the work budget would stop sooner (see `check`).
+bounded.WORK_SECONDS = 600.0
+
+
+class WNode(pydantic.BaseModel):
+    c: Annotated[Optional[WNode], pydantic.WrapValidator(lambda v, h: h(v))] = None
+    v: int = 0
+
+
+# A wrap validator on the model and another on its field: the heaviest
+# shape per level measured, so it sets MAX_CHECK_DEPTH.
+class MWNode(pydantic.BaseModel):
+    c: Annotated[Optional[MWNode], pydantic.WrapValidator(lambda v, h: h(v))] = None
+    v: int = 0
+
+    @pydantic.model_validator(mode="wrap")
+    @classmethod
+    def around(cls, value, handler):
+        return handler(value)
+
+
+class UAnd(pydantic.BaseModel):
+    type: Literal["and"]
+    items: list[Union[UAnd, UOr, ULeaf]]
+
+
+class UOr(pydantic.BaseModel):
+    type: Literal["or"]
+    any: list[Union[UAnd, UOr, ULeaf]]
+
+
+class ULeaf(pydantic.BaseModel):
+    type: Literal["leaf"]
+    v: int
+
+
+@pydantic.dataclasses.dataclass
+class DAnd:
+    type: Literal["and"]
+    items: list[Union[DAnd, DOr, DLeaf]]
+
+
+@pydantic.dataclasses.dataclass
+class DOr:
+    type: Literal["or"]
+    any: list[Union[DAnd, DOr, DLeaf]]
+
+
+@pydantic.dataclasses.dataclass
+class DLeaf:
+    type: Literal["leaf"]
+    v: int
+
+
+@dataclasses.dataclass
+class PNode:
+    c: Optional[Union[PNode, int]] = None
+
+
+class LTree(pydantic.BaseModel):
+    c: list[LTree] = []
+    v: int = 0
+
+
+class TAnd(pydantic.BaseModel):
+    type: Literal["and"]
+    items: list[Annotated[Union[TAnd, TLeaf], pydantic.Field(discriminator="type")]]
+
+
+class TLeaf(pydantic.BaseModel):
+    type: Literal["leaf"]
+    v: int
+
+
+for model in (WNode, MWNode, UAnd, UOr, LTree, TAnd):
+    model.model_rebuild()
+for data_class in (DAnd, DOr):
+    pydantic.dataclasses.rebuild_dataclass(
+        data_class, _types_namespace={"DAnd": DAnd, "DOr": DOr, "DLeaf": DLeaf}
+    )
+
+
+def holder(annotation):
+    return pydantic.create_model("Holder", x=(annotation, ...))
+
+
+# The "or" nodes hold their children under another name, so a member that
+# does not match a node fails at once. With one name the check would try
+# every member at every level and take seconds, while each level takes the
+# same stack either way.
+FIELDS = {"and": "items", "or": "any"}
+
+
+def tagged(depth, leaf, tags):
+    value = {"type": "leaf", "v": leaf}
+    for level in range(depth):
+        tag = tags[level % len(tags)]
+        value = {"type": tag, FIELDS[tag]: [value]}
+    return value
+
+
+def chained(depth, leaf, wrap):
+    value = leaf
+    for _ in range(depth):
+        value = wrap(value)
+    return value
+
+
+SHAPES = {
+    "wrap validator": (holder(WNode), lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": c})),
+    "model and field wrap validators": (
+        holder(MWNode),
+        lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": c}),
+    ),
+    "union of models": (holder(Union[UAnd, UOr, ULeaf]), lambda n, leaf: tagged(n, leaf, ("and", "or"))),
+    "union of Pydantic dataclasses": (
+        holder(Union[DAnd, DOr, DLeaf]),
+        lambda n, leaf: tagged(n, leaf, ("and", "or")),
+    ),
+    "plain dataclass union": (holder(PNode), lambda n, leaf: chained(n, {"c": leaf}, lambda c: {"c": c})),
+    "list of models": (holder(LTree), lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": [c]})),
+    "discriminated union": (holder(TAnd), lambda n, leaf: tagged(n, leaf, ("and",))),
+}
+
+
+def check(cls, payload):
+    with bounded.request_work() as budget:
+        budget.left = 10**12
+        return validate_args(cls, payload)
+
+
+def answer(cls, payload):
+    return json.dumps(check(cls, payload).fields, sort_keys=True)
+
+
+too_deep = json.dumps({"_args": bounded.TOO_DEEP_MESSAGE})
+cases = []
+for name, (cls, build) in SHAPES.items():
+    # On the main thread's large stack, find the deepest data the limit
+    # accepts. The next level must be refused by the limit itself.
+    depth = 1
+    while check(cls, {"x": build(depth + 1, 1)}).ok:
+        depth += 1
+    assert answer(cls, {"x": build(depth + 1, 1)}) == too_deep, name
+    for payload in ({"x": build(depth, 1)}, {"x": build(depth, "bad")}, {"x": build(depth + 1, 1)}):
+        cases.append((name, depth, cls, payload, answer(cls, payload)))
+
+results = []
+
+
+def check_all():
+    for name, depth, cls, payload, expected in cases:
+        # Name the case first, so a run that does not finish shows the last
+        # case it reached.
+        print(f"checking {name} at {depth} levels", file=sys.stderr, flush=True)
+        results.append([name, depth, answer(cls, payload) == expected])
+
+
+threading.stack_size(512 * 1024)
+thread = threading.Thread(target=check_all)
+thread.start()
+thread.join()
+print(json.dumps(results))
+"""
+
+
+def test_data_at_the_nesting_limit_gets_the_same_answer_on_a_thread_with_half_a_windows_stack() -> None:
+    # A server thread has 1 MiB of stack in a Windows program that embeds
+    # Python with the linker's default, and in the official Python images
+    # for Alpine Linux. The nesting limit must leave half of
+    # that free, so data at the limit, in shapes that take a lot of stack
+    # per level, must get the same answer on a 512 KiB thread as on the
+    # main thread. Valid data, data with a bad leaf, and data one level too
+    # deep are each checked. The check runs in a process of its own, so a
+    # thread that runs out of stack cannot affect the other tests.
+    done = subprocess.run(
+        [sys.executable, "-c", _CHECKED_AT_THE_LIMIT_ON_A_SMALL_STACK],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    results = json.loads(done.stdout)
+    assert len(results) == 21
+    assert [result for result in results if not result[2]] == []
+
+
+def test_data_past_the_nesting_limit_is_refused_and_logged_once(caplog: pytest.LogCaptureFixture) -> None:
+    class Node(pydantic.BaseModel):
+        c: Node | None = None
+
+    payload: dict[str, Any] = {}
+    for _ in range(bounded.MAX_CHECK_DEPTH):
+        payload = {"c": payload}
+
+    with caplog.at_level(logging.WARNING, logger="citry"):
+        first = validate_args(Node, payload)
+        second = validate_args(Node, payload)
+
+    assert first.fields == second.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+    # Any client can send deep data again, so the warning comes once per class.
+    assert caplog.text.count(f"nests more than {bounded.MAX_CHECK_DEPTH} objects") == 1
+
+
+def test_a_part_that_drops_bad_items_does_not_swallow_the_nesting_limit() -> None:
+    # `OnErrorOmit` drops an item on any error, Citry's stops included.
+    # Without the stop kept on the tally, the data would be accepted with
+    # its deep part cut off.
+    class ONode(pydantic.BaseModel):
+        c: list[pydantic.OnErrorOmit[ONode]] = []
+
+    payload: dict[str, Any] = {}
+    for _ in range(bounded.MAX_CHECK_DEPTH + 10):
+        payload = {"c": [payload]}
+
+    assert validate_args(ONode, payload).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+@pydantic.dataclasses.dataclass
+class DeepNode:
+    c: DeepNode | None = None
+
+
+@pydantic.dataclasses.dataclass
+class DeepTreeState:
+    tree: DeepNode | None = None
+
+
+def test_a_dataclass_state_the_app_built_deeper_than_the_nesting_limit_restores() -> None:
+    # A restore reads values the server wrote, or Citry checked when the
+    # browser wrote them, so the nesting limit does not apply to it.
+    value: dict[str, Any] = {}
+    for _ in range(bounded.MAX_CHECK_DEPTH + 10):
+        value = {"c": value}
+
+    state = restore_state(DeepTreeState, {"tree": value})
+
+    depth = 0
+    node = state.tree
+    while node is not None:
+        depth += 1
+        node = node.c
+    assert depth == bounded.MAX_CHECK_DEPTH + 11
+
+
+def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse(size: int = 0) -> int:
+        # What Pyodide and other platforms without settable stacks do.
+        msg = "setting stack size not supported"
+        raise ValueError(msg)
+
+    monkeypatch.setattr(threading, "stack_size", refuse)
+    built_on: list[int] = []
+
+    def build() -> str:
+        built_on.append(threading.get_ident())
+        return "built"
+
+    assert bounded._on_large_stack(build) == "built"
+    assert built_on == [threading.get_ident()]
+
+
+def test_a_forked_child_gets_a_new_build_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A thread of the parent may hold the lock at the fork, and the child has
+    # no thread that would release it.
+    held = threading.Lock()
+    held.acquire()
+    monkeypatch.setattr(bounded, "_BUILD_STACK_LOCK", held)
+
+    bounded._new_build_stack_lock()
+
+    assert bounded._BUILD_STACK_LOCK is not held
+    assert bounded._on_large_stack(lambda: "built") == "built"
+
+
+def test_an_error_while_building_a_copy_reaches_the_caller() -> None:
+    def build() -> None:
+        msg = "cannot build"
+        raise TypeError(msg)
+
+    with pytest.raises(TypeError, match="cannot build"):
+        bounded._on_large_stack(build)
 
 
 # --- recursive unions and the work budget -------------------------------------------
 
 
-def test_a_valid_filter_chain_fifteen_levels_deep_is_accepted() -> None:
-    result = validate_args(Query, {"q": _chain(15, 1)})
+def test_a_valid_filter_chain_fourteen_levels_deep_is_accepted() -> None:
+    result = validate_args(Query, {"q": _chain(14, 1)})
 
     assert result.ok
-    assert result.value == Query.model_validate({"q": _chain(15, 1)})
+    assert result.value == Query.model_validate({"q": _chain(14, 1)})
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_valid_filter_chain_too_deep_to_check_is_refused_and_logged(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING, logger="citry"):
         result = validate_args(Query, {"q": _chain(20, 1)})
@@ -288,20 +680,25 @@ def test_a_valid_filter_chain_too_deep_to_check_is_refused_and_logged(caplog: py
     assert "discriminator" in caplog.text
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_bad_deep_filter_chain_stops_without_walking_every_member() -> None:
     def elapsed(depth: int) -> float:
-        start = time.perf_counter()
-        result = validate_args(Query, {"q": _chain(depth, "x")})
-        assert result.fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
-        return time.perf_counter() - start
+        # The best of three runs keeps one slow run of a busy machine out of
+        # the comparison.
+        best = float("inf")
+        for _run in range(3):
+            start = time.perf_counter()
+            result = validate_args(Query, {"q": _chain(depth, "x")})
+            best = min(best, time.perf_counter() - start)
+            assert result.fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
+        return best
 
-    elapsed(20)
-    # The request's work budget stops a bad chain, so 40 more levels cost
-    # about the same.
-    assert elapsed(60) < 3 * elapsed(20) + 0.05
+    # The request's work budget stops a bad chain, so 25 more levels cost
+    # about the same. Past 45 levels the nesting limit refuses it first.
+    assert elapsed(45) < 3 * elapsed(20) + 0.05
 
 
-def test_a_discriminated_recursive_union_has_no_depth_limit() -> None:
+def test_a_discriminated_recursive_union_is_limited_only_by_the_nesting_limit() -> None:
     class TAnd(pydantic.BaseModel):
         type: Literal["and"]
         items: list[Annotated[TAnd | TLeaf, pydantic.Field(discriminator="type")]]
@@ -315,11 +712,18 @@ def test_a_discriminated_recursive_union_has_no_depth_limit() -> None:
     class TQuery(pydantic.BaseModel):
         q: TAnd
 
-    value: dict[str, Any] = {"type": "leaf", "v": 1}
-    for _ in range(100):
-        value = {"type": "and", "items": [value]}
+    def chain(depth: int) -> dict[str, Any]:
+        value: dict[str, Any] = {"type": "leaf", "v": 1}
+        for _ in range(depth):
+            value = {"type": "and", "items": [value]}
+        return {"q": value}
 
-    assert validate_args(TQuery, {"q": value}).ok
+    # Each level of a discriminated union counts once toward the nesting
+    # limit, so 28 levels pass, twice the depth at which a union without a
+    # discriminator stops (see the filter chain tests above). A chain past
+    # the limit gets the 422 for deep data.
+    assert validate_args(TQuery, chain(28)).ok
+    assert validate_args(TQuery, chain(bounded.MAX_CHECK_DEPTH)).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
 
 
 Tree = TypeAliasType("Tree", "dict[str, Tree] | list[Tree] | int")
@@ -1325,6 +1729,7 @@ def _twice_chain(depth: int) -> dict[str, Any]:
     return value
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_state_write_too_deep_to_check_is_logged(caplog: pytest.LogCaptureFixture) -> None:
     # Below a wrap validator Citry's wrappers run in the JSON read too, so
     # such a State registers and its writes run on the work budget.
@@ -2237,30 +2642,25 @@ def test_a_chain_of_small_lists_keeps_one_measure_per_large_list_only() -> None:
     assert len(budget._sizes) == 1 + 50
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_restore_inside_a_check_leaves_its_time_off_the_checks_clock() -> None:
     with bounded.request_work() as budget:
         budget.clock_on()
         thread = threading.get_ident()
         start = budget._clocks[thread][0]
         with bounded.unbudgeted():
-            inside = time.thread_time()
-            # Spin: the clock counts CPU time, which a sleep would not add.
-            while time.thread_time() - inside < 0.02:
-                pass
-            spent = time.thread_time() - inside
-        # The clock starts later by at least the time spent inside, so a
-        # later check of the request keeps that time.
-        assert budget._clocks[thread][0] - start >= spent
+            _spend_cpu(0.02)
+        # The clock starts later by the time spent inside, so a later check
+        # of the request keeps that time.
+        assert budget._clocks[thread][0] - start == pytest.approx(0.02)
         budget.clock_off()
 
 
+@pytest.mark.usefixtures("hand_clock")
 @pytest.mark.parametrize("version", ["v1", "v2"])
 def test_a_restore_that_pydantic_runs_itself_counts_toward_the_checks_clock(version: str) -> None:
     def spin(value: str) -> str:
-        # Busy-wait, because the clock counts CPU time and a sleep adds none.
-        inside = time.thread_time()
-        while time.thread_time() - inside < 0.02:
-            pass
+        _spend_cpu(0.02)
         return value
 
     if version == "v1":
@@ -2288,12 +2688,13 @@ def test_a_restore_that_pydantic_runs_itself_counts_toward_the_checks_clock(vers
         moved = budget._clocks[thread][0] - start
         budget.clock_off()
     if version == "v1":
-        assert moved < 0.01
+        assert moved == 0
     else:
         # Citry's copy of a v2 class restores off the clock.
-        assert moved >= 0.02
+        assert moved == pytest.approx(0.02)
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_write_to_a_pydantic_v1_state_counts_toward_the_requests_cpu_limit() -> None:
     v1 = pytest.importorskip("pydantic.v1")
 
@@ -2303,10 +2704,7 @@ def test_a_write_to_a_pydantic_v1_state_counts_toward_the_requests_cpu_limit() -
 
         @v1.validator("note")
         def slow(cls, value: str) -> str:  # noqa: N805 - Pydantic v1 passes the class
-            # Busy-wait, because the clock counts CPU time and a sleep adds none.
-            inside = time.thread_time()
-            while time.thread_time() - inside < 0.02:
-                pass
+            _spend_cpu(0.02)
             return value
 
     with bounded.request_work() as budget:
@@ -2328,15 +2726,13 @@ def _slow_v1_board(spent: float) -> Any:
         # a validator function it has already seen unless it is told to allow it.
         @v1.validator("note", allow_reuse=True)
         def slow(cls, value: str) -> str:  # noqa: N805 - Pydantic v1 passes the class
-            # Busy-wait, because the clock counts CPU time and a sleep adds none.
-            inside = time.thread_time()
-            while time.thread_time() - inside < spent:
-                pass
+            _spend_cpu(spent)
             return value
 
     return Board
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_is_accepted_and_the_next_one_refused(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -2364,6 +2760,7 @@ def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_is_accepted_and_the
     assert "Pydantic v2 model" in caplog.text
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_and_fails_is_logged(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -2375,10 +2772,7 @@ def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_and_fails_is_logged
 
         @v1.validator("note")
         def slow_and_strict(cls, value: str) -> str:  # noqa: N805 - Pydantic v1 passes the class
-            # Busy-wait, because the clock counts CPU time and a sleep adds none.
-            inside = time.thread_time()
-            while time.thread_time() - inside < 0.05:
-                pass
+            _spend_cpu(0.05)
             if value == "bad":
                 msg = "not allowed"
                 raise ValueError(msg)
@@ -2396,6 +2790,7 @@ def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_and_fails_is_logged
     assert "Board used up the CPU time" in caplog.text
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_pydantic_v1_state_write_after_the_cpu_time_was_used_up_is_refused_before_it_runs(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -2416,6 +2811,7 @@ def test_a_pydantic_v1_state_write_after_the_cpu_time_was_used_up_is_refused_bef
     assert "ended before Citry could stop it" not in caplog.text
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_pydantic_v1_state_write_within_the_cpu_time_is_not_logged(caplog: pytest.LogCaptureFixture) -> None:
     board = _slow_v1_board(0.001)
 
@@ -2505,11 +2901,16 @@ def test_a_check_that_parses_text_spends_for_it_only_inside_a_check_that_may_run
     assert bounded.WORK_BUDGET - budget.left == bounded.PYTHON_CALL_STEPS + 64_000 * bounded.TEXT_STEPS["url"] // 64
 
 
-def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check() -> None:
-    budget = bounded.WorkBudget(seconds=0.0)
-    # Outside a check the clock does not run, so nothing stops.
+def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check(hand_clock: _HandClock) -> None:
+    clock = hand_clock
+    budget = bounded.WorkBudget(seconds=0.5)
+    # Outside a check the clock does not count, so nothing stops.
+    clock.now += 1.0
     budget.spend_time(1)
     budget.clock_on()
+    clock.now += 0.4
+    budget.spend_time(1)
+    clock.now += 0.2
     with pytest.raises(bounded.ValidationTooCostly) as stopped:
         budget.spend_time(1)
     budget.clock_off()
@@ -2519,16 +2920,21 @@ def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check() -> N
     assert stopped.value.message == bounded.TOO_SLOW_MESSAGE
 
 
-def test_cpu_time_between_the_checks_of_a_request_does_not_count() -> None:
-    budget = bounded.WorkBudget(seconds=0.05)
+def test_cpu_time_between_the_checks_of_a_request_does_not_count(hand_clock: _HandClock) -> None:
+    clock = hand_clock
+    budget = bounded.WorkBudget(seconds=0.5)
     budget.clock_on()
+    clock.now += 0.3
     budget.clock_off()
     # Another request on the same thread (an async server) runs here.
-    started = time.thread_time()
-    while time.thread_time() - started < 0.1:
-        pass
+    clock.now += 10.0
     budget.clock_on()
+    clock.now += 0.1
     budget.spend_time(1)
+    # The two checks together used 0.4 s of the 0.5 s, and 0.2 s more is over.
+    clock.now += 0.2
+    with pytest.raises(bounded.ValidationTooCostly):
+        budget.spend_time(1)
     budget.clock_off()
 
 
@@ -2538,6 +2944,16 @@ def test_a_deep_union_that_runs_out_of_cpu_time_is_refused_with_its_own_message(
     payload = {"q": _chain(5, 1)}
     assert validate_args(Query, payload).ok
 
+    # Every read of the clock finds a millisecond more used. A real CPU clock
+    # can read the same time across a short check (on Windows it moves in
+    # steps of about 15.6 ms), and then a limit of zero never fires.
+    clock = _HandClock()
+
+    def ticking() -> float:
+        clock.now += 0.001
+        return clock.now
+
+    monkeypatch.setattr(bounded, "cpu_clock", ticking)
     monkeypatch.setattr(bounded, "WORK_SECONDS", 0.0)
 
     assert validate_args(Query, payload).fields == {"_args": bounded.TOO_SLOW_MESSAGE}

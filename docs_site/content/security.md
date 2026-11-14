@@ -507,6 +507,40 @@ A form that shows only the message next to each field shows nothing when
 Citry sends `fieldErrors._args` or `fieldErrors._state`, so show those
 messages too ([how](/events/forms/#eventerror-field-errors)).
 
+Citry refuses data that nests more than 32 levels of models, dataclasses,
+TypedDicts, unions, and wrap validators, when a Pydantic v2 class checks
+it. Each model, dataclass, TypedDict, and wrap validator that a value
+passes through counts one level. So does each union whose
+members could read the value, so a tree of nodes counts about two levels
+per node, or one when its union has a discriminator
+([trees](#trees-in-event-data)). Deeper data fails with a 422 under
+`fieldErrors._args` (`fieldErrors._state` for a State write) that says
+the data is nested too deeply, and Citry logs a warning naming the class.
+The limit applies to event data and to browser writes to State, not to
+restoring State the server saved. You cannot change it.
+
+Each level takes room on the stack of the thread that checks the data.
+Citry sets the limit so a check of data at the limit fits in a 1 MiB
+thread stack with room to spare. On Windows, threads that Python starts
+get about 1.9 MiB under `python.exe`, and 1 MiB in a program that embeds
+Python and keeps the linker's default. On Linux with musl, such as
+Alpine, the size depends on how
+Python was built: the official Python images for Alpine give 1 MiB,
+Alpine's own `python3` package gives 2 MiB, and a Python built without
+either setting gets musl's default of 128 KiB. Linux with glibc and
+macOS give 8 MiB or more. If your server's request threads have less
+than 1 MiB, call `threading.stack_size()` before the server starts them.
+It applies only to threads Python starts after the call:
+
+```python
+import threading
+
+threading.stack_size(1024 * 1024)
+```
+
+A server that starts its threads outside Python has its own setting for
+their stack size.
+
 Citry stops checking a request's data once its checks have used about 1
 second of CPU time. The call then fails with a 422 that says the data
 took too long to check, and Citry logs a warning naming the class. A slow
@@ -556,16 +590,16 @@ classes can hold more nodes. Deeper data fails with a 422 error under
 `fieldErrors._args` that says the data is too large or nested too deeply
 to check, and Citry logs a warning naming the class.
 
-How deep depends on your classes. When `And` and `Or` hold their
-children in fields of the same name, a Pydantic model fits about 15
-levels with one child per node, and about 8 with two children per node.
-More children, or more data in each node, lower those numbers. With
-different field names, such as `items` and `any`, data can nest much
-deeper.
+How deep depends on your classes. A Pydantic model fits about 14 levels
+with one child per node, where the [nesting limit](#check-event-data)
+stops it. When `And` and `Or` hold their children in fields of the same
+name, it fits about 8 levels with two children per node. More children,
+or more data in each node, lower that number.
 
 To check deeper trees, declare the discriminator where you define the
 recursive type (a type that contains itself, here `Node`), and give each
-class a `Literal` tag field:
+class a `Literal` tag field. Then each node counts one level toward the
+nesting limit, so a tree can nest about 30 levels:
 
 ```python
 from typing import Annotated, Literal

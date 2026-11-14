@@ -8,20 +8,24 @@ rejected after one scan of the regex. Any other route with several
 parameters in one path segment is matched by ``match_route_pattern``
 without the regex, which would try every way to split the segment between
 the parameters. These tests lock the matched values, the one-pass
-behaviour, and that ``match_route_pattern`` gives the regex's answer.
+behaviour, and that ``match_route_pattern`` gives the regex's answer. The
+timing tests compare a path with one eight times as long, so the result
+does not depend on how fast the machine is.
 """
 
 from __future__ import annotations
 
 import random
-import time
 
 import pytest
 
 from citry import Citry, Extension
 from citry.util.routing import RouteResponse, URLRoute, compile_route_pattern, match_route, match_route_pattern
 
-_BOUND_SECONDS = 0.5
+from ._growth import assert_grows_in_step
+
+# Each timing test compares a path with one this many times as long.
+_GROWTH_FACTOR = 8
 
 
 def _builtin_cache_routes() -> list:
@@ -52,12 +56,16 @@ def test_builtin_cache_routes_reject_a_long_path_in_one_pass() -> None:
     # A long run of `.`-separated parts with a final `/` never matches. With
     # the parameters stopping at each `.`, this is one scan rather than a
     # search over every way to split the dots.
-    path = "cache/" + "a." * 20_000 + "/"
+    def path(parts: int) -> str:
+        return "cache/" + "a." * parts + "/"
+
     for route in _builtin_cache_routes():
         pattern = compile_route_pattern(route.path, route.dotless_params)
-        start = time.perf_counter()
-        assert pattern.match(path) is None
-        assert time.perf_counter() - start < _BOUND_SECONDS
+
+        def reject(request_path: str, pattern=pattern) -> None:
+            assert pattern.match(request_path) is None
+
+        assert_grows_in_step(reject, path(2_500), path(20_000), factor=_GROWTH_FACTOR)
 
 
 @pytest.mark.parametrize(
@@ -122,40 +130,48 @@ def test_several_parameters_in_one_segment(route: str, path: str, expected: dict
 
 
 @pytest.mark.parametrize(
-    ("route", "dotless", "path"),
+    ("route", "dotless", "build", "length"),
     [
         # Each path almost matches and then fails at its end, so the regex
-        # tries every split of the long segment: about 5 s, 2 s and 1.5 s.
-        # A final `/` or a missing suffix is caught before the segment is split.
-        ("{a}-{b}", frozenset(), "-" * 50_000 + "/"),
-        ("{a}-{b}-{c}", frozenset(), "-" * 1_500 + "/"),
-        ("{a}{b}{c}{d}", frozenset(), "x" * 300 + "/"),
-        ("{a}-{b}-{c}x", frozenset(), "-" * 1_500),
+        # tries every split of the long segment: about 5 s, 2 s and 1.5 s at
+        # the longest length listed. A final `/` or a missing suffix is
+        # caught before the segment is split.
+        ("{a}-{b}", frozenset(), lambda n: "-" * n + "/", 50_000),
+        ("{a}-{b}-{c}", frozenset(), lambda n: "-" * n + "/", 1_500),
+        ("{a}{b}{c}{d}", frozenset(), lambda n: "x" * n + "/", 300),
+        ("{a}-{b}-{c}x", frozenset(), lambda n: "-" * n, 1_500),
         # These pass the quick checks, so the segment is split between the
         # parameters before the last one fails at the `.`: about 4 s and 2.5 s
         # on the regex.
-        ("{a}-{b}-{c}", frozenset({"c"}), "-" * 1_500 + "."),
-        ("{a}{b}{c}{d}", frozenset({"d"}), "x" * 300 + "."),
+        ("{a}-{b}-{c}", frozenset({"c"}), lambda n: "-" * n + ".", 1_500),
+        ("{a}{b}{c}{d}", frozenset({"d"}), lambda n: "x" * n + ".", 300),
     ],
     ids=["two", "three", "four-adjacent", "three-with-suffix", "three-split", "four-split"],
 )
 def test_several_parameters_in_one_segment_reject_a_long_path_quickly(
-    route: str, dotless: frozenset[str], path: str
+    route: str, dotless: frozenset[str], build, length: int
 ) -> None:
-    start = time.perf_counter()
-    assert match_route_pattern(route, dotless, path) is None
-    assert time.perf_counter() - start < _BOUND_SECONDS
+    def reject(path: str) -> None:
+        assert match_route_pattern(route, dotless, path) is None
+
+    # The length listed is the longest the regex finishes in a few seconds.
+    # The path is compared with one an eighth as long.
+    short = length // _GROWTH_FACTOR
+    assert_grows_in_step(reject, build(short), build(length), factor=_GROWTH_FACTOR)
 
 
 def test_several_parameters_in_one_segment_split_a_long_path_quickly() -> None:
     # A route without dotless parameters: the regex takes time growing with
     # the square of the run of `-` when the `.` is missing.
     route = "pkg/{name}-{version}.{build}"
-    start = time.perf_counter()
-    matched = match_route_pattern(route, frozenset(), "pkg/" + "-" * 80_000 + ".1")
-    assert match_route_pattern(route, frozenset(), "pkg/" + "-" * 80_000) is None
-    assert time.perf_counter() - start < _BOUND_SECONDS
-    assert matched == {"name": "-" * 79_998, "version": "-", "build": "1"}
+    length = 80_000
+
+    def match_both(dashes: int) -> None:
+        matched = match_route_pattern(route, frozenset(), "pkg/" + "-" * dashes + ".1")
+        assert match_route_pattern(route, frozenset(), "pkg/" + "-" * dashes) is None
+        assert matched == {"name": "-" * (dashes - 2), "version": "-", "build": "1"}
+
+    assert_grows_in_step(match_both, length // _GROWTH_FACTOR, length, factor=_GROWTH_FACTOR)
 
 
 def test_an_extension_route_with_several_parameters_in_one_segment_matches_quickly() -> None:
@@ -171,6 +187,8 @@ def test_an_extension_route_with_several_parameters_in_one_segment_matches_quick
     assert matched is not None
     assert matched.params == {"name": "my-lib", "version": "1.2", "build": "3"}
 
-    start = time.perf_counter()
-    assert match_route(app.urls, "ext/probe/pkg/" + "-" * 1_500 + "/") is None
-    assert time.perf_counter() - start < _BOUND_SECONDS
+    def reject(dashes: int) -> None:
+        assert match_route(app.urls, "ext/probe/pkg/" + "-" * dashes + "/") is None
+
+    # The regex takes seconds at 1,500 characters.
+    assert_grows_in_step(reject, 1_500 // _GROWTH_FACTOR, 1_500, factor=_GROWTH_FACTOR)
