@@ -328,14 +328,13 @@ class StaticWrapper(Extension):
     render_cache_version = 1
 ```
 
-`"payload"` is experimental, so it and its two methods,
-`export_render_cache()` and `stage_render_cache()`, may change in a minor
-release. `"deny"` and `"stateless"` are stable. Use `"payload"` when
-reusing the output must also restore data your extension keeps. Return
-that data as plain JSON values from `export_render_cache()`. In
-`stage_render_cache()`, check the data and describe the changes to make,
-without changing anything yet. Citry applies them only after every
-extension accepts the cached entry.
+Use `"payload"` when reusing the output must also restore data your
+extension keeps. Return that data as plain JSON values from
+`export_render_cache()`. In `stage_render_cache()`, check the data and
+describe the changes to make, without changing anything yet. Citry applies
+them only after every extension accepts the cached entry. `"payload"` and
+its two methods are experimental and may change in a minor release;
+`"deny"` and `"stateless"` are not.
 
 `"stateless"` and `"payload"` require a positive `render_cache_version`;
 without one, creating the `Citry` instance raises `ValueError`. Increase

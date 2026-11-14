@@ -365,6 +365,6 @@ def test_route_fields_after_handler_are_keyword_only() -> None:
 
 
 def test_route_has_no_extra_field() -> None:
-    # `extra=` was never read, so it is refused rather than silently stored.
+    # URLRoute takes no `extra=` argument, so passing one raises TypeError.
     with pytest.raises(TypeError, match="extra"):
         URLRoute("status", _handler, extra={})  # type: ignore[call-arg]

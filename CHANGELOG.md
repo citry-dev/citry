@@ -115,7 +115,8 @@ does. The upgrade notes below list what can change.
 
     ```python
     Citry(extensions=[MyExtension])  # not Citry([MyExtension])
-    URLRoute("status", status, name="status")  # path, handler
+    # the path and the handler stay positional
+    URLRoute("status", status, name="status")
     ```
 
 - **Remove `extra=` from `URLRoute`:** Citry never read it, and passing it
@@ -132,8 +133,9 @@ does. The upgrade notes below list what can change.
 - `Citry.runtime_url()` returns the URL of Citry's browser runtime, for a
   page whose HTML you write yourself. See
   [Link the runtime by hand](https://citry.dev/advanced/web-frameworks/#link-the-runtime-by-hand).
-- You can now import `safe_eval` and `unsafe`, which run and restrict
-  sandboxed expressions, from `citry`
+- You can now import `safe_eval`, which runs an expression in Citry's
+  sandbox, and `unsafe`, which marks a function that sandboxed
+  expressions must not call, from `citry`
   ([Sandbox template code](https://citry.dev/security/#sandbox-python-template-expressions)).
   The `citry_core.safe_eval` import still works.
 - You can turn Citry's deprecation warnings into test errors with
@@ -220,8 +222,8 @@ does. The upgrade notes below list what can change.
   will not cover them and they may change in a minor release. Their
   behavior does not change in this release:
     - the template analysis API that `citry check`, `citry format` and
-      the `citry-lsp` language server use, and
-      `Citry.template_analysis()`;
+      the `citry-lsp` language server use (except `LspPosition` and
+      `LspRange`), and `Citry.template_analysis()`;
     - embedding Citry tags in another template engine: `CompiledBody`,
       `render_compiled_body`, `collect_compiled_body_fills`, the
       `Foreign*` types, and the hooks `on_template_foreign_spans` and

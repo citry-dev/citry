@@ -425,10 +425,11 @@ class ForeignCompileContext(Protocol):
 @dataclass(frozen=True, slots=True)
 class OnTemplateForeignSpansContext:
     """
-    Give [`Extension.on_template_foreign_spans()`][citry.Extension.on_template_foreign_spans] the template source.
+    Hold the template source that a foreign-spans hook receives.
 
-    A provider extension reads ``content`` and marks the parts that
-    another template engine owns.
+    [`Extension.on_template_foreign_spans()`][citry.Extension.on_template_foreign_spans]
+    gets this object. The extension that implements the hook reads
+    ``content`` and marks the parts that another template engine owns.
 
     Experimental:
         Part of the experimental API for embedding Citry tags in another
@@ -1114,9 +1115,9 @@ class Extension:
         Describe the fixed Vue plugin installed before an interactive app mounts.
 
         Experimental:
-            This method is experimental. It and the types it takes and
-            returns may change in a minor release without a deprecation
-            period.
+            This method and the types it takes and returns are
+            experimental. They may change in a minor release without a
+            deprecation period.
         """
         return None
 
@@ -1128,9 +1129,9 @@ class Extension:
         Project this extension's selected render records into prepared browser data.
 
         Experimental:
-            This method is experimental. It and the types it takes and
-            returns may change in a minor release without a deprecation
-            period.
+            This method and the types it takes and returns are
+            experimental. They may change in a minor release without a
+            deprecation period.
         """
         return None
 
@@ -3048,9 +3049,9 @@ class ExtensionManager:
         wait for another thread that renders: that thread waits for the
         reset to finish, so both can hang.
 
-        Internal: Citry calls this manager method itself, and it may change
-        in any release. The ``on_files_reset`` method an extension defines
-        is public.
+        Internal: Citry calls this method itself. It is not covered by Citry's
+        API stability promise and may change in any release. The
+        ``on_files_reset`` method an extension defines is public.
         """
         self.emit(
             "on_files_reset",
