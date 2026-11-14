@@ -57,7 +57,10 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
 
     Raises:
         ValueError: If ``prefix`` does not start with ``/``, or is the root
-            ``"/"``. The app is left unchanged.
+            ``"/"``, or if a route's full path (its parents' paths followed
+            by its own) has two parameters side by side (such as ``{a}{b}``)
+            or uses one parameter name twice (see
+            [`URLRoute`][citry.URLRoute]). The app is left unchanged.
 
     """
     # Validate before touching the app: a failure after the wsgi_app swap

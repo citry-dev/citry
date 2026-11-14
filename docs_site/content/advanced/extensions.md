@@ -356,8 +356,19 @@ class Health(Extension):
 ```
 
 The handler receives a [`RouteRequest`][citry.RouteRequest] and returns a
-[`RouteResponse`][citry.RouteResponse]. `{name}` segments in the path reach
-the handler as keyword arguments.
+[`RouteResponse`][citry.RouteResponse]. Each `{name}` parameter in the path
+reaches the handler as a keyword argument, as a string:
+
+```python
+URLRoute("users/{user_id}", handler=self.show_user)
+```
+
+With Citry mounted at `/citry`, the path
+`/citry/ext/health/users/42` calls
+`show_user(request, user_id="42")`. A parameter takes one or more
+characters and never a `/`, and its name must be a Python identifier;
+other text in braces, such as `{user-id}`, must appear in the path as
+written.
 
 Set `content_type` to the type of the body you return; the default is
 `text/plain`. Citry sends every
@@ -370,7 +381,8 @@ to change it. Citry answers any other method with `405 Method Not Allowed`
 before the handler runs. A route that lists `GET` also accepts `HEAD`.
 
 The request path must match the route's path exactly. With Citry mounted
-at `/citry`, the route above answers `/citry/ext/health/status`, while
+at `/citry`, the `status` route of the `Health` example answers
+`/citry/ext/health/status`, while
 `/citry//ext/health/status`, with a second `/`, gets `404 Not Found`. So a
 rule in your web framework that checks the path, such as middleware that
 requires a login for every path starting with `/citry/ext/health`, covers
@@ -410,6 +422,56 @@ route = URLRoute(
 
 A function that returns something other than a whole number of 0 or more
 makes the request fail with status 500.
+
+### Stop a value at a dot
+
+A parameter ends at the next `/`, or where the fixed text after it in
+the route begins. When that text can also appear inside the value, the earlier
+parameter takes as much as it can: `files/{name}.{ext}` matches
+`files/report.v2.txt` with `name="report.v2"` and `ext="txt"`.
+
+To make a parameter stop at the first `.`, pass its name in
+`dotless_params`, a `frozenset` of parameter names:
+
+```python
+URLRoute(
+    "files/{name}.{ext}",
+    handler=serve_file,
+    dotless_params=frozenset({"name"}),
+)
+```
+
+This route gives `name="report"` and `ext="v2.txt"` for the same path.
+Use it when the first part never holds a dot, such as an id followed by
+`.js`.
+
+### Separate two parameters
+
+Citry cannot tell where one value ends and the next begins when two
+parameters have nothing between them, such as `{year}{month}`. So
+`asgi_app()`, `wsgi_app()`, the Flask and FastAPI `mount()`, and
+Django's `urlpatterns()` raise `ValueError` for such a route when your
+app starts, and the message names the route. Put text between the
+parameters, such as `{year}-{month}`. A path that uses one parameter
+name twice raises `ValueError` the same way.
+
+A route can hold other routes in `children`. Each child's path is added
+to its parent's path as plain text, so end the parent's path with `/`
+when the child should start a new path segment. This one adds a file
+extension instead:
+
+```python
+URLRoute(
+    "files/{name}",
+    children=[URLRoute(".{ext}", handler=serve_file)],
+)
+```
+
+Below the extension's prefix, this child answers `files/report.txt` with
+`name="report"` and `ext="txt"`. A child path of `{ext}` would put
+the two parameters side by side and raise the same error. A parent's
+`dotless_params` has no effect on its children; set it on the route
+that has the handler.
 
 See [Web frameworks](/advanced/web-frameworks/) for mounting Citry's routes in your
 application.

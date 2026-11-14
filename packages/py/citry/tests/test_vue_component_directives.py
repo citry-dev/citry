@@ -754,7 +754,7 @@ class TestSlotDirectives:
             """
 
         with pytest.raises(
-            RuntimeError, match=rf"Vue directive '{re.escape(key)}' is not supported on '<c-slot>'"
+            VueCodeError, match=rf"Vue directive '{re.escape(key)}' is not supported on '<c-slot>'"
         ) as caught:
             Page().render()
         # An uppercase spelling gets the same advice as the lowercase one.

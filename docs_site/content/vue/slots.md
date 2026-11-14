@@ -296,10 +296,13 @@ A `v-for` alias or the `v-slot` on a Vue component has the same limit on
 These cases fail with an error when the page renders.
 
 **`:` props or `v-slot` in `c-bind`.** A `c-bind` dict with a key such
-as `":row"` or `"v-slot"` fails, because Python data must not choose the
-code the browser runs. A `c-bind` key that matches the name of a `:`
-prop on the same `<c-slot>` fails too, and so does a `data` or
-`fallback` name on `<c-fill>` that the fill's `v-slot` also uses.
+as `":row"` or `"v-slot"` fails with
+[`VueCodeError`][citry.VueCodeError], because Python data must not
+choose the code the browser runs. Elements and component tags raise the
+same error for such a key. A `c-bind` key that matches the name of a `:`
+prop on the same `<c-slot>` fails too, with `RuntimeError`, and so does
+a `data` or `fallback` name on `<c-fill>` that the fill's `v-slot` also
+uses.
 
 **Components that render their slot in place.** `<c-provide>`,
 `<c-cache>`, `<c-element>`, and components with `transparent = True`

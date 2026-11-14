@@ -81,9 +81,11 @@ from citry._vue import native_walk as _native_walk
 from citry.attrs import (
     C_ELEMENT_HANDLER_FIX,
     TEMPLATE_EMPTY_VALUE,
+    VueCodeError,
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
     _merge_resolved_attrs,
+    exact_str,
     format_attrs,
     is_vue_code_attr_name,
     is_vue_directive_name,
@@ -171,7 +173,11 @@ def _reject_dynamic_translation_binding(name: Any, *, tag_name: str) -> None:
     # The same family test as the binding parser, so `$c-tr`, `$C-TR.x`, or
     # `$c-tr[title]` cannot pass as an ordinary name.
     if isinstance(name, str) and looks_like_i18n_binding(name):
-        raise RuntimeError(
+        # A `$c-tr` name from Python data is Vue code, so it raises the same
+        # error as every other tag that refuses one. The other tags refuse
+        # it earlier with `is_vue_code_attr_name`, so this raise is reached
+        # only from `<c-slot>` and `<c-fill>`.
+        raise VueCodeError(
             f"{name!r} resolved on <{tag_name}>, but $c-tr is valid only on a literal final plain HTML element."
         )
 
@@ -2209,7 +2215,9 @@ class ComponentNode(Node):
                         )
                         raise TypeError(msg)
                     else:
-                        resolved_bound_key = bound_key
+                        # A `str` subclass can override `startswith` and hide its
+                        # text from the State and client-binding checks below.
+                        resolved_bound_key = exact_str(bound_key)
                     # A mapping key is Python data, so it may not name Vue
                     # code, even with a None value that would only remove it.
                     if is_vue_code_attr_name(resolved_bound_key):
@@ -2967,6 +2975,22 @@ class ForNode(Node):
         return f"ForNode(branches={len(self.branches)})"
 
 
+# The advice in the error for a `c-*` attribute on `<c-slot>` whose name is Vue
+# code. The tag's attributes become Python slot data, so such a name has
+# nowhere to go.
+_SLOT_VUE_CODE_ATTR_HINT = (
+    "A '<c-slot>' passes its 'c-' attributes to the fill as Python slot data, so a 'c-' attribute cannot name "
+    "a $c-tr binding or a Vue directive. Write the $c-tr binding on an HTML element in the template."
+)
+
+# The advice in the error for a `c-bind` key on `<c-slot>` that is Vue code but
+# has no slot-specific message.
+_SLOT_VUE_CODE_KEY_HINT = (
+    "A '<c-slot>' passes its 'c-bind' keys to the fill as Python slot data, so a key that Vue would read as code "
+    "is refused. Remove the key from the mapping."
+)
+
+
 @final
 class SlotNode(Node):
     """
@@ -3011,6 +3035,20 @@ class SlotNode(Node):
         # The names the fill receives, as Vue writes them, for the clash
         # check against Python data that `c-bind` adds at render.
         self._vue_prop_names = frozenset(_camelize(key.split(":", 1)[1]) for key, _ in self.vue_props)
+        # A `c-*` attribute becomes slot data named without its `c-`, so one
+        # such as `c-$c-tr:x` would put a Vue-code name into the data. Its
+        # name is fixed in the template, so it is found once here and every
+        # render only checks this one field.
+        self._vue_code_attr_key = next(
+            (
+                attr.key.removeprefix("c-")
+                for attr in attrs
+                if attr.key.startswith("c-")
+                and attr.key != "c-bind"
+                and is_vue_code_attr_name(attr.key.removeprefix("c-"))
+            ),
+            None,
+        )
 
     @override
     def render(self, context: CitryContext) -> RenderPart:
@@ -3412,7 +3450,23 @@ class SlotNode(Node):
         ``required`` keys land on the slot; everything else is slot data).
         Every remaining attribute is slot data, with the ``c-`` prefix dropped
         from evaluated keys, the same rule as component kwargs.
+
+        Raises:
+            VueCodeError: When a ``c-bind`` key is one Vue would read as
+                code, such as ``":row"`` or ``"v-slot"``, or a ``$c-tr``
+                binding, or when a ``c-*`` attribute is named like a
+                ``$c-tr`` binding.
+
         """
+        # Checked before any attribute resolves, so the error is the same on
+        # every page, whether or not the page goes on to start Vue.
+        if self._vue_code_attr_key is not None:
+            raise vue_code_error(
+                self._vue_code_attr_key,
+                tag_name="c-slot",
+                origin="c-attr",
+                hint=_SLOT_VUE_CODE_ATTR_HINT,
+            )
         name: Any = "default"
         required: Any = False
         data: dict[str, Any] = {}
@@ -3425,17 +3479,31 @@ class SlotNode(Node):
                 if not isinstance(spread, Mapping):
                     msg = f"'c-bind' on <c-slot> must resolve to a mapping, got {type(spread).__name__}."
                     raise RuntimeError(msg)
-                for spread_key, spread_value in spread.items():
-                    if not isinstance(spread_key, str):
+                for raw_key, spread_value in spread.items():
+                    if not isinstance(raw_key, str):
                         msg = (
-                            "'c-bind' on <c-slot> must use string keys, "
-                            f"got {type(spread_key).__name__} key {spread_key!r}."
+                            f"'c-bind' on <c-slot> must use string keys, got {type(raw_key).__name__} key {raw_key!r}."
                         )
                         raise TypeError(msg)
+                    # A `str` subclass can override `startswith` and hide its
+                    # text from the checks below, so they and the slot data
+                    # use an exact copy.
+                    spread_key = exact_str(raw_key)
                     _reject_dynamic_translation_binding(spread_key, tag_name="c-slot")
                     # The parser rejects authored Vue directives here; a spread
                     # key would otherwise become slot data the fill never uses.
                     unsupported = unsupported_slot_tag_directive_message(spread_key)
+                    # A name Vue reads as code raises `VueCodeError`, as on
+                    # every other tag. The rule decides, not the message, so
+                    # a name with no slot-specific message is still refused.
+                    if is_vue_code_attr_name(spread_key):
+                        if unsupported is None:
+                            raise vue_code_error(
+                                spread_key, tag_name="c-slot", origin="c-bind", hint=_SLOT_VUE_CODE_KEY_HINT
+                            )
+                        raise VueCodeError(unsupported)
+                    # Citry's own `@c-*` and `:c-*` names are not Vue code, so
+                    # a slot refuses those with `RuntimeError`.
                     if unsupported is not None:
                         raise RuntimeError(unsupported)
                     if spread_key == "name":
@@ -3559,6 +3627,12 @@ class FillNode(Node):
         ``fallback`` are static values, ``c-name`` is evaluated, and ``c-bind``
         spreads a mapping whose recognized keys are ``name``, ``data``, and
         ``fallback``.
+
+        Raises:
+            VueCodeError: When a ``c-bind`` key is one Vue would read as
+                code, such as ``"v-slot"`` or ``":row"``, or a ``$c-tr``
+                binding.
+
         """
         props: dict[str, Any] = {}
         for attr in self.attrs:
@@ -3570,19 +3644,26 @@ class FillNode(Node):
                 if not isinstance(spread, Mapping):
                     msg = f"'c-bind' on <c-fill> must resolve to a mapping, got {type(spread).__name__}."
                     raise RuntimeError(msg)
-                for spread_key, spread_value in spread.items():
-                    if not isinstance(spread_key, str):
+                for raw_key, spread_value in spread.items():
+                    if not isinstance(raw_key, str):
                         msg = (
-                            "'c-bind' on <c-fill> must use string keys, "
-                            f"got {type(spread_key).__name__} key {spread_key!r}."
+                            f"'c-bind' on <c-fill> must use string keys, got {type(raw_key).__name__} key {raw_key!r}."
                         )
                         raise TypeError(msg)
+                    # A `str` subclass can override `__eq__` or `startswith`, so
+                    # the checks below and the stored key use an exact copy.
+                    spread_key = exact_str(raw_key)
                     _reject_dynamic_translation_binding(spread_key, tag_name="c-fill")
                     if spread_key not in ("name", "data", "fallback"):
                         msg = (
                             f"'c-bind' on <c-fill> got an unsupported key {spread_key!r}. "
                             "Allowed keys: 'name', 'data', 'fallback'."
                         )
+                        # A name Vue reads as code (a `v-slot` pattern, say)
+                        # raises `VueCodeError`, as on every other tag. Any
+                        # other unknown key is a plain mistake.
+                        if is_vue_code_attr_name(spread_key):
+                            raise VueCodeError(msg)
                         raise RuntimeError(msg)
                     if spread_key == "data" and isinstance(spread_value, FillDataBinding):
                         msg = (

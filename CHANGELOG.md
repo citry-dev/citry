@@ -2,16 +2,65 @@
 
 ## Unreleased
 
+### Upgrading from 0.8.x
+
+- **Put text between two route parameters:** a `URLRoute` path such as
+  `"{year}{month}"` now raises `ValueError` naming the route when your
+  app starts, in `asgi_app()`, `wsgi_app()`, the Flask and FastAPI
+  `mount()`, and Django's `urlpatterns()`. Before, it matched, and the
+  first parameter took all but the last character. Citry cannot tell
+  where one value ends and the next begins, so write `"{year}-{month}"`
+  or another separator.
+  ([details](https://citry.dev/advanced/extensions/#separate-two-parameters))
+- The same error comes from a parent route whose path ends in a
+  parameter and a child whose path starts with one, such as
+  `"files/{name}"` with `"{ext}"`, because a child's path is added to its
+  parent's as plain text. The message names both routes. End the
+  parent's path with `/`, or start the child's path with text such as
+  `.`.
+- Routes with text between their parameters, such as
+  `"files/{name}.{ext}"`, match the same paths with the same values as
+  before.
+
 ### Changed
 
+- **Breaking:** a `c-bind` key such as `":row"` or `"v-slot"` on
+  `<c-slot>` or `<c-fill>` now raises `VueCodeError`, the error that
+  elements and component tags already raise for such a key, instead of
+  `RuntimeError`. The render failed before too. Code that catches
+  `RuntimeError` around it must catch `VueCodeError` or `TypeError`
+  as well.
+- **Breaking:** `<c-slot>` now refuses two names that it used to pass to
+  the fill as slot data, with `VueCodeError`: a `$c-tr` binding written
+  as a `c-` attribute (`<c-slot c-$c-tr:x="y" />`), and a `c-bind` key
+  that is just `"."`. Write a `$c-tr` binding on an HTML element, and
+  remove a `"."` key from the `c-bind` mapping.
 - A template now fails to load when a `v-for` alias or the `v-slot` on a
   Vue component uses a name that starts with `$`, `_`, or `citry`, as in
   `v-for="(_, index) in items"`. Citry keeps those prefixes for the values
   it gives the template, such as `$i18n`, and such a name could hide one.
   Rename it; the error suggests a name.
+- A `URLRoute` path that uses one parameter name twice, such as
+  `"{id}/{id}"`, now raises `ValueError` naming the route when your app
+  starts. Before, it raised a regular expression error: under Django
+  when `urlpatterns()` ran, and under ASGI and WSGI on every request that
+  reached the route.
+  ([details](https://citry.dev/advanced/extensions/#separate-two-parameters))
+- `URLRoute(dotless_params=...)` now raises `TypeError` when the route is
+  built unless it is a `frozenset` of parameter names. Before, a set or a
+  list failed when Django's `urlpatterns()` ran, or on the first request
+  under ASGI, WSGI, Flask and FastAPI.
+- Django's `reverse()` for a Citry route now raises `NoReverseMatch` for
+  a value that is empty, holds a `/`, or holds a `.` for a parameter in
+  `dotless_params`. Before, it could return a URL that the route splits
+  into different values, such as `cache/a.b.js` for `class_id="a.b"`,
+  which Citry reads as `class_id="a"`.
 
 ### Fixes
 
+- Django's `reverse()` for a Citry route with several parameters in one
+  path segment, such as `{name}-{version}`, now takes time in step with
+  the length of the values you pass.
 - **Citry imports on Pyodide again:** Citry 0.8.0 failed to import on
   Pyodide with `AttributeError: module 'time' has no attribute
   'thread_time'`, because the Events limit on CPU time read a clock that
@@ -19,6 +68,13 @@
   thread where the platform has it, then the CPU time of the process,
   then the wall clock. Linux, macOS and Windows keep using the CPU time
   of the calling thread.
+- A `c-bind` key that is a `str` subclass with its own `startswith` or
+  `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
+  and component tags.
+- `citry preview` no longer fails with a Vue compile error at
+  `<!doctype>` for components that use Events. The preview now renders
+  them, and their event handlers work. The same applies when a template
+  places a whole-page template through a variable, such as `{{ page }}`.
 
 ## v0.8.0
 

@@ -337,3 +337,71 @@ class TestEventsBatchRoute:
         # The check above means something only if the ordinary request runs the handler.
         assert self._post(app, "POST", "/ext/events/call", body) == "200 OK"
         assert calls == ["bump"]
+
+
+def _ambiguous_engine() -> Citry:
+    # A parent ending in a parameter and a child starting with one: neither
+    # path looks wrong alone, but their join puts `{name}{ext}` side by side.
+    class Probe(Extension):
+        name = "probe"
+        urls = [URLRoute("files/{name}", children=[URLRoute("{ext}", handler=lambda _request, **_params: None)])]
+
+    return Citry(extensions=[Probe])
+
+
+def _mount_asgi(engine: Citry) -> None:
+    asgi_app(engine)
+
+
+def _mount_wsgi(engine: Citry) -> None:
+    wsgi_app(engine)
+
+
+def _mount_flask(engine: Citry) -> None:
+    flask = pytest.importorskip("flask", reason="the Flask mount tests need flask")
+    from citry.contrib.flask import mount
+
+    app = flask.Flask(__name__)
+    original = app.wsgi_app
+    try:
+        mount(app, engine)
+    finally:
+        # The refused mount leaves the Flask app serving only its own routes.
+        assert app.wsgi_app == original
+
+
+def _mount_fastapi(engine: Citry) -> None:
+    fastapi = pytest.importorskip("fastapi", reason="the FastAPI mount tests need fastapi")
+    from citry.contrib.fastapi import mount
+
+    app = fastapi.FastAPI()
+    routes_before = list(app.routes)
+    try:
+        mount(app, engine)
+    finally:
+        assert list(app.routes) == routes_before
+
+
+def _mount_django(engine: Citry) -> None:
+    django = pytest.importorskip("django", reason="the Django adapter tests need django")
+    from django.conf import settings
+
+    if not settings.configured:
+        settings.configure(ALLOWED_HOSTS=["*"])
+        django.setup()
+    from citry.contrib.django import urlpatterns
+
+    urlpatterns(engine, prefix="/citry")
+
+
+@pytest.mark.parametrize(
+    "mount",
+    [_mount_asgi, _mount_wsgi, _mount_flask, _mount_fastapi, _mount_django],
+    ids=["asgi", "wsgi", "flask", "fastapi", "django"],
+)
+def test_every_adapter_refuses_adjacent_parameters_when_mounting(mount: Any) -> None:
+    engine = _ambiguous_engine()
+    with pytest.raises(ValueError, match=r"joined to the path before it, 'files/\{name\}'"):
+        mount(engine)
+    # Nothing was recorded on the instance either.
+    assert engine.mounted_prefix is None
