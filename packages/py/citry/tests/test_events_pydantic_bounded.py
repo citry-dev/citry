@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import contextvars
 import dataclasses
 import datetime
 import decimal
 import enum
+import functools
+import gc
 import ipaddress  # noqa: TC003 - Pydantic reads the test classes' annotations at run time
 import json
 import logging
@@ -31,7 +34,7 @@ import tracemalloc
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, cast, get_args
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, ref
 
 import pydantic
 import pydantic.dataclasses
@@ -77,10 +80,8 @@ class _HandClock:
 @pytest.fixture
 def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     # A test of the work budget needs data deep enough for the budget to run
-    # out, which is past the nesting limit. pytest runs tests on the main
-    # thread, which has 8 MiB of stack on Linux and macOS. On Windows a
-    # check uses far less stack per level: CI measured more than 150 levels
-    # of these shapes in 512 KiB. So a limit of 100 still fits.
+    # out before the nesting limit stops it, so these tests raise the limit
+    # to 100, which the stack of a check thread holds many times over.
     monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 100)
 
 
@@ -339,11 +340,11 @@ print(json.dumps(built))
 
 
 def test_the_copy_of_a_chain_of_nested_models_is_built_on_a_thread_with_a_small_stack() -> None:
-    # The first call to a class builds Citry's copy of its validator on the
-    # thread that serves the request, and that thread's stack can be small
-    # (1 MB on Windows). Building the copy of this chain on such a stack
-    # overflows it and ends the process, so the test runs it in a process
-    # of its own.
+    # The first call to a class builds Citry's copy of its validator, and
+    # the thread that serves the request can have a small stack (1 MB on
+    # Windows). Building the copy of this chain needs more than that, so
+    # Citry builds it on a check thread. The test runs it in a process of
+    # its own, so it cannot stop the rest of the test run.
     done = subprocess.run(
         [sys.executable, "-c", _CHAIN_BUILT_ON_A_SMALL_STACK],
         capture_output=True,
@@ -356,7 +357,7 @@ def test_the_copy_of_a_chain_of_nested_models_is_built_on_a_thread_with_a_small_
     assert json.loads(done.stdout) == [True]
 
 
-_CHECKED_AT_THE_LIMIT_ON_A_SMALL_STACK = r"""
+_CHECKED_AT_THE_LIMIT_ON_HALF_A_CHECK_STACK = r"""
 from __future__ import annotations
 
 import dataclasses
@@ -375,6 +376,9 @@ from citry.ext.events.schemas import validate_args
 # Only the nesting limit may stop these checks, so data reaches it in every
 # shape, including unions the work budget would stop sooner (see `check`).
 bounded.WORK_SECONDS = 600.0
+# The check threads start with half the stack Citry gives them, so data at
+# the limit must be checked in half of it.
+bounded.CHECK_STACK_BYTES //= 2
 
 
 class WNode(pydantic.BaseModel):
@@ -550,7 +554,9 @@ def check_all():
         results.append([name, depth, answer(cls, payload) == expected])
 
 
-threading.stack_size(512 * 1024)
+# A calling thread with musl's default stack: the checks run on the check
+# threads whatever its size.
+threading.stack_size(128 * 1024)
 thread = threading.Thread(target=check_all)
 thread.start()
 thread.join()
@@ -558,17 +564,18 @@ print(json.dumps(results))
 """
 
 
-def test_data_at_the_nesting_limit_gets_the_same_answer_on_a_thread_with_half_a_windows_stack() -> None:
-    # A server thread has 1 MiB of stack in a Windows program that embeds
-    # Python with the linker's default, and in the official Python images
-    # for Alpine Linux. The nesting limit must leave half of
-    # that free, so data at the limit, in shapes that take a lot of stack
-    # per level, must get the same answer on a 512 KiB thread as on the
-    # main thread. Valid data, data with a bad leaf, and data one level too
-    # deep are each checked. The check runs in a process of its own, so a
-    # thread that runs out of stack cannot affect the other tests.
+def test_data_at_the_nesting_limit_is_checked_in_half_the_stack_of_a_check_thread() -> None:
+    # Each level takes room on the stack of the check thread, and the
+    # nesting limit must leave half of that stack free. So data at the
+    # limit, in shapes that take a lot of stack per level, is checked on
+    # check threads started with half the stack, from a calling thread with
+    # a small stack, and must get the same answer there as from the main
+    # thread. Valid data, data with a bad leaf, and data one level too deep
+    # are each checked. The check runs in a process of its own, because it
+    # changes process-wide settings (the thread stack size and
+    # CHECK_STACK_BYTES).
     done = subprocess.run(
-        [sys.executable, "-c", _CHECKED_AT_THE_LIMIT_ON_A_SMALL_STACK],
+        [sys.executable, "-c", _CHECKED_AT_THE_LIMIT_ON_HALF_A_CHECK_STACK],
         capture_output=True,
         text=True,
         timeout=300,
@@ -624,9 +631,12 @@ class DeepTreeState:
 
 def test_a_dataclass_state_the_app_built_deeper_than_the_nesting_limit_restores() -> None:
     # A restore reads values the server wrote, or Citry checked when the
-    # browser wrote them, so the nesting limit does not apply to it.
+    # browser wrote them, so the nesting limit does not apply to it. The
+    # value nests 3 levels past the nesting limit, which stays within
+    # Pydantic's own limit for a recursive type (254 levels pass); that
+    # limit still applies to a restore.
     value: dict[str, Any] = {}
-    for _ in range(bounded.MAX_CHECK_DEPTH + 10):
+    for _ in range(bounded.MAX_CHECK_DEPTH + 3):
         value = {"c": value}
 
     state = restore_state(DeepTreeState, {"tree": value})
@@ -636,10 +646,10 @@ def test_a_dataclass_state_the_app_built_deeper_than_the_nesting_limit_restores(
     while node is not None:
         depth += 1
         node = node.c
-    assert depth == bounded.MAX_CHECK_DEPTH + 11
+    assert depth == bounded.MAX_CHECK_DEPTH + 4
 
 
-def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_set(
+def test_a_check_runs_on_the_calling_thread_with_the_lower_limit_where_the_stack_size_cannot_be_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def refuse(size: int = 0) -> int:
@@ -647,37 +657,52 @@ def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_se
         msg = "setting stack size not supported"
         raise ValueError(msg)
 
-    monkeypatch.setattr(threading, "stack_size", refuse)
-    built_on: list[int] = []
+    # A pool with no thread yet, so the call must try to start one.
+    pool = bounded._CheckThreads()
+    pool.stack_size = refuse
+    monkeypatch.setattr(bounded, "_CHECK_THREADS", pool)
+    ran_on: list[tuple[int, int]] = []
 
-    def build() -> str:
-        built_on.append(threading.get_ident())
-        return "built"
+    def check() -> str:
+        ran_on.append((threading.get_ident(), bounded.nesting_limit()))
+        return "checked"
 
-    assert bounded._on_large_stack(build) == "built"
-    assert built_on == [threading.get_ident()]
+    assert bounded.run_on_check_thread(check) == "checked"
+    # The calling thread's stack is not known, so the limit sized for a
+    # small stack applies there.
+    assert ran_on == [(threading.get_ident(), bounded.SMALL_STACK_CHECK_DEPTH)]
 
 
-def test_a_copy_is_built_on_the_calling_thread_where_threads_cannot_start(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def refuse(self: threading.Thread) -> None:
+def test_a_check_runs_on_the_calling_thread_where_threads_cannot_start() -> None:
+    stack_sizes: list[int] = [0]
+
+    def stack_size(size: int = 0) -> int:
+        previous = stack_sizes[-1]
+        stack_sizes.append(size)
+        return previous
+
+    def refuse(function: Any, args: Any) -> None:
         # What Pyodide does: it sets the stack size but starts no thread.
         msg = "can't start new thread"
         raise RuntimeError(msg)
 
-    monkeypatch.setattr(threading.Thread, "start", refuse)
-    before = threading.stack_size()
-    built_on: list[int] = []
+    pool = bounded._CheckThreads()
+    pool.stack_size = stack_size
+    pool.start_thread = refuse
+    ran_on: list[tuple[int, int]] = []
 
-    def build() -> str:
-        built_on.append(threading.get_ident())
-        return "built"
+    def check() -> str:
+        ran_on.append((threading.get_ident(), bounded.nesting_limit()))
+        return "checked"
 
-    assert bounded._on_large_stack(build) == "built"
-    assert built_on == [threading.get_ident()]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(bounded, "_CHECK_THREADS", pool)
+        assert bounded.run_on_check_thread(check) == "checked"
+
+    assert ran_on == [(threading.get_ident(), bounded.SMALL_STACK_CHECK_DEPTH)]
     # The large stack size must not stay set for the threads started later.
-    assert threading.stack_size() == before
+    assert stack_sizes == [0, bounded.CHECK_STACK_BYTES, 0]
+    assert pool.count == 0
 
 
 def test_the_cpu_clock_is_the_thread_clock_where_the_platform_has_one() -> None:
@@ -728,26 +753,279 @@ def test_events_import_where_the_thread_clock_is_missing() -> None:
     assert done.returncode == 0, done.stderr[-2000:]
 
 
-def test_a_forked_child_gets_a_new_build_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_check_runs_on_a_check_thread_with_the_full_limit_and_the_callers_context() -> None:
+    seen: contextvars.ContextVar[str] = contextvars.ContextVar("seen", default="unset")
+    seen.set("caller")
+    ran_on: list[Any] = []
+
+    def check() -> str:
+        ran_on.append((threading.get_ident(), bounded.on_check_thread(), bounded.nesting_limit(), seen.get()))
+        # A change stays with the check thread's copy of the context.
+        seen.set("check thread")
+        # A check inside a check runs at once on the same thread.
+        return bounded.run_on_check_thread(threading.get_ident)
+
+    inner = bounded.run_on_check_thread(check)
+
+    assert ran_on == [(inner, True, bounded.MAX_CHECK_DEPTH, "caller")]
+    assert inner != threading.get_ident()
+    assert seen.get() == "caller"
+    assert not bounded.on_check_thread()
+
+
+def test_check_threads_are_os_threads_when_threading_is_replaced_after_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # gevent patched after Citry was imported (gunicorn with --preload)
+    # makes `threading.Thread` start a greenlet, which would never run
+    # while the caller waits on an OS lock. The pool keeps the functions
+    # it found at import.
+    class Greenlet:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            msg = "a greenlet, not an OS thread"
+            raise AssertionError(msg)
+
+    monkeypatch.setattr(threading, "Thread", Greenlet)
+    monkeypatch.setattr(bounded, "_CHECK_THREADS", bounded._CheckThreads())
+
+    assert bounded.run_on_check_thread(bounded.on_check_thread) is True
+
+
+def test_a_check_thread_lets_go_of_the_request_data_once_the_check_returns() -> None:
+    # A kept check thread can sit idle for a long time, so it must not keep
+    # the last request's data, context or result alive.
+    class Payload:
+        pass
+
+    held: contextvars.ContextVar[Payload | None] = contextvars.ContextVar("held", default=None)
+    pool = bounded._CheckThreads()
+    payload, in_context = Payload(), Payload()
+    gone = [ref(payload), ref(in_context)]
+
+    def check(data: Payload) -> Payload:
+        return data
+
+    def first_check(data: Payload, kept: Payload) -> None:
+        held.set(kept)
+        assert pool.run(functools.partial(check, data)) == (True, data)
+
+    contextvars.copy_context().run(first_check, payload, in_context)
+    del payload, in_context
+    gc.collect()
+
+    assert [alive() for alive in gone] == [None, None]
+    assert pool.count == 1
+
+
+def test_a_check_that_raises_lets_go_of_the_request_data_without_the_cycle_collector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Payload:
+        pass
+
+    class Refused(Exception):
+        pass
+
+    def check(data: Payload) -> None:
+        raise Refused
+
+    monkeypatch.setattr(bounded, "_CHECK_THREADS", bounded._CheckThreads())
+    payload = Payload()
+    gone = ref(payload)
+    gc.disable()
+    try:
+        with pytest.raises(Refused):
+            bounded.run_on_check_thread(check, payload)
+        del payload
+        # Without the cycle collector, only plain reference counting frees it.
+        assert gone() is None
+    finally:
+        gc.enable()
+
+
+def test_a_check_keeps_its_outcome_when_the_thread_loop_fails_after_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Broken:
+        def __bool__(self) -> bool:
+            msg = "broken queue"
+            raise RuntimeError(msg)
+
+    pool = bounded._CheckThreads()
+    # The thread reads the queue after the check, so its loop fails there.
+    pool.queue = cast("Any", Broken())
+    logged: list[object] = []
+    monkeypatch.setattr(bounded.logger, "exception", lambda *args, **_: logged.append(args[0]))
+
+    assert pool.run(lambda: "checked") == (True, "checked")
+    # The failed thread gives its place back for the next check.
+    assert pool.count == 0
+    assert not pool.idle
+    assert logged == ["Citry's check thread stopped unexpectedly."]
+
+
+def test_a_failure_to_set_the_stack_size_back_is_logged(monkeypatch: pytest.MonkeyPatch) -> None:
+    sizes = iter([0])
+    logged: list[object] = []
+
+    def stack_size(size: int = 0) -> int:
+        # The first call sets the size; the call that sets it back fails.
+        for previous in sizes:
+            return previous
+        msg = "stack size"
+        raise ValueError(msg)
+
+    pool = bounded._CheckThreads()
+    pool.stack_size = stack_size
+    monkeypatch.setattr(bounded.logger, "exception", lambda *args, **_: logged.append(args[0]))
+
+    # The thread started, so the check runs there and is not run again.
+    succeeded, ran_on = cast("tuple[bool, int]", pool.run(threading.get_ident))
+    assert succeeded
+    assert ran_on != threading.get_ident()
+    assert len(logged) == 1
+    assert "stack size back" in str(logged[0])
+
+
+_HANDLER_DUMPS_DATA_AT_THE_LIMIT_ON_A_HALF_MEGABYTE_THREAD = r"""
+from __future__ import annotations
+
+import threading
+from typing import Optional
+
+import pydantic
+
+from citry.ext.events import _pydantic_bounded as bounded
+
+
+class Node(pydantic.BaseModel):
+    c: Optional[Node] = None
+
+
+done = []
+
+
+def handler():
+    node = None
+    for _ in range(bounded.MAX_CHECK_DEPTH):
+        node = Node(c=node)
+    node.model_dump()
+    node.model_dump_json()
+    done.append(True)
+
+
+threading.stack_size(512 * 1024)
+thread = threading.Thread(target=handler)
+thread.start()
+thread.join()
+assert done == [True]
+"""
+
+
+def test_a_handler_can_write_out_data_at_the_limit_on_a_half_megabyte_thread() -> None:
+    # The handler gets the checked data on the server's own thread, so the
+    # nesting limit must leave room there; the docs tell servers to give
+    # request threads at least 512 KiB. A process of its own, since too
+    # little room ends the process.
+    done = subprocess.run(
+        [sys.executable, "-c", _HANDLER_DUMPS_DATA_AT_THE_LIMIT_ON_A_HALF_MEGABYTE_THREAD],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+
+
+def test_only_a_refusal_of_the_whole_json_text_counts_as_too_deep() -> None:
+    deep = "[" * 1000 + "]" * 1000
+    whole = SchemaValidator(pydantic_core_schema.any_schema())
+    field = pydantic.create_model("Holder", f=(pydantic.Json[Any], ...))
+
+    with pytest.raises(pydantic.ValidationError) as text:
+        whole.validate_json(deep)
+    with pytest.raises(pydantic.ValidationError) as inside:
+        field.model_validate({"f": deep})
+
+    assert bounded._json_too_deep(text.value)
+    # The field's own text: that field's error, not the whole data's.
+    assert not bounded._json_too_deep(inside.value)
+
+
+def test_a_forked_child_gets_new_check_threads(monkeypatch: pytest.MonkeyPatch) -> None:
     # A thread of the parent may hold the lock at the fork, and the child has
-    # no thread that would release it.
+    # none of the parent's check threads.
     held = threading.Lock()
     held.acquire()
-    monkeypatch.setattr(bounded, "_BUILD_STACK_LOCK", held)
+    monkeypatch.setattr(bounded, "_STACK_SIZE_LOCK", held)
+    old = bounded._CHECK_THREADS
+    monkeypatch.setattr(bounded, "_CHECK_THREADS", old)
 
-    bounded._new_build_stack_lock()
+    bounded._new_check_threads()
 
-    assert bounded._BUILD_STACK_LOCK is not held
-    assert bounded._on_large_stack(lambda: "built") == "built"
+    assert bounded._STACK_SIZE_LOCK is not held
+    assert bounded._CHECK_THREADS is not old
+    assert bounded.run_on_check_thread(bounded.on_check_thread) is True
 
 
-def test_an_error_while_building_a_copy_reaches_the_caller() -> None:
+def test_an_error_on_a_check_thread_reaches_the_caller_with_its_traceback() -> None:
     def build() -> None:
         msg = "cannot build"
         raise TypeError(msg)
 
-    with pytest.raises(TypeError, match="cannot build"):
-        bounded._on_large_stack(build)
+    with pytest.raises(TypeError, match="cannot build") as raised:
+        bounded.run_on_check_thread(build)
+
+    # The traceback reaches into the function that raised on the check thread.
+    assert raised.traceback[-1].name == "build"
+
+
+def test_checks_past_the_thread_limit_wait_for_a_free_check_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bounded, "_CHECK_THREADS", bounded._CheckThreads())
+    monkeypatch.setattr(bounded, "MAX_CHECK_THREADS", 2)
+    release = threading.Event()
+    started = threading.Semaphore(0)
+    idents: list[int] = []
+
+    def held() -> None:
+        idents.append(threading.get_ident())
+        started.release()
+        release.wait(30)
+
+    callers = [threading.Thread(target=bounded.run_on_check_thread, args=(held,)) for _ in range(3)]
+    for caller in callers:
+        caller.start()
+    # Two checks start at once; the third waits for one of their threads.
+    assert started.acquire(timeout=30)
+    assert started.acquire(timeout=30)
+    assert not started.acquire(timeout=0.2)
+    assert bounded._CHECK_THREADS.count == 2
+    release.set()
+    assert started.acquire(timeout=30)
+    for caller in callers:
+        caller.join(30)
+    assert len(set(idents)) == 2
+
+
+@pytest.mark.usefixtures("hand_clock")
+def test_a_check_inside_a_validation_counts_its_cpu_time_on_the_check_thread() -> None:
+    # The caller opens a validation on its own thread, as a direct caller
+    # of `validate_python` does. The check thread's CPU time counts toward
+    # the request, and the caller's thread only waits.
+    spent: list[float] = []
+
+    def check() -> None:
+        _spend_cpu(0.25)
+        budget = bounded.current_work()
+        assert budget is not None
+        spent.append(budget._clocks[threading.get_ident()][0])
+
+    with bounded.request_work() as budget, bounded.validation_scope({}):
+        bounded.run_on_check_thread(check)
+        left = budget._seconds_left
+
+    # The check thread's clock ended and took its 0.25 s from the request.
+    assert spent == [0.0]
+    assert left == pytest.approx(bounded.WORK_SECONDS - 0.25)
 
 
 # --- recursive unions and the work budget -------------------------------------------
@@ -2767,7 +3045,10 @@ def test_a_restore_that_pydantic_runs_itself_counts_toward_the_checks_clock(vers
     else:
         state_cls = pydantic.create_model("Board", note=(Annotated[str, pydantic.AfterValidator(spin)], ""))
 
-    with bounded.request_work() as budget:
+    def inside_a_check() -> float:
+        # A running check is on a check thread, where the restore runs too.
+        budget = bounded.current_work()
+        assert budget is not None
         budget.clock_on()
         thread = threading.get_ident()
         start = budget._clocks[thread][0]
@@ -2777,6 +3058,10 @@ def test_a_restore_that_pydantic_runs_itself_counts_toward_the_checks_clock(vers
         # How far the clock's start moved: the time taken off the clock.
         moved = budget._clocks[thread][0] - start
         budget.clock_off()
+        return moved
+
+    with bounded.request_work():
+        moved = bounded.run_on_check_thread(inside_a_check)
     if version == "v1":
         assert moved == 0
     else:
@@ -3629,3 +3914,208 @@ def test_a_deep_write_to_a_strict_state_is_refused_on_a_thread_with_a_small_stac
 
     assert done.returncode == 0, done.stderr[-2000:]
     assert json.loads(done.stdout) == [{"_state": bounded.TOO_DEEP_MESSAGE}]
+
+
+_DEEP_DATA_FROM_A_SMALL_THREAD = r"""
+from __future__ import annotations
+
+import json
+import threading
+from typing import Any
+
+import pydantic
+from typing_extensions import TypeAliasType
+
+from citry.ext.events import _pydantic_bounded as bounded
+from citry.ext.events.schemas import validate_args
+from citry.ext.events.state import restore_state
+from citry.ext.events.tokens import StateUpdateError, apply_state_updates
+
+Lists = TypeAliasType("Lists", "list[Lists]")
+
+
+class Node(pydantic.BaseModel):
+    c: Node | None = None
+
+
+class Again(pydantic.BaseModel):
+    c: Any = None
+
+    @pydantic.field_validator("c", mode="before")
+    @classmethod
+    def again(cls, value: Any) -> Any:
+        return Again.model_validate(value) if isinstance(value, dict) else value
+
+
+class Board(pydantic.BaseModel):
+    tree: Lists = []
+    _model = ("tree",)
+
+
+def chain(leaf, wrap):
+    value = leaf
+    for _ in range(1000):
+        value = wrap(value)
+    return value
+
+
+def holder(annotation):
+    return pydantic.create_model("Holder", x=(annotation, ...))
+
+
+CASES = {
+    "case 1": (holder(Node), chain({}, lambda c: {"c": c})),
+    "case 2": (holder(Lists), chain([], lambda c: [c])),
+    "case 3": (holder(pydantic.Json[Any]), "[" * 1000 + "]" * 1000),
+    "case 4": (holder(Again), chain({}, lambda c: {"c": c})),
+}
+answers = {}
+
+
+def check_all():
+    for name, (cls, value) in CASES.items():
+        answers[name] = validate_args(cls, {"x": value}).ok
+    try:
+        with bounded.request_work():
+            apply_state_updates(Board(), {"tree": chain([], lambda c: [c])}, model_fields=("tree",))
+        answers["a State write"] = True
+    except StateUpdateError:
+        answers["a State write"] = False
+    try:
+        restore_state(Node, chain({}, lambda c: {"c": c}))
+        answers["a restore"] = True
+    except ValueError:
+        answers["a restore"] = False
+
+
+threading.stack_size(128 * 1024)
+thread = threading.Thread(target=check_all)
+thread.start()
+thread.join()
+print(json.dumps(answers))
+"""
+
+
+def test_deep_data_checked_from_a_thread_with_a_small_stack_is_refused() -> None:
+    # A server thread can have as little as 128 KiB of stack (musl's
+    # default). Each check runs on a check thread with a large stack, so
+    # the answer to deeply nested data does not depend on the calling
+    # thread's stack. The check runs in a process of its own, because it
+    # changes the process-wide thread stack size.
+    done = subprocess.run(
+        [sys.executable, "-c", _DEEP_DATA_FROM_A_SMALL_THREAD],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert json.loads(done.stdout) == {
+        "case 1": False,
+        "case 2": False,
+        "case 3": False,
+        "case 4": False,
+        "a State write": False,
+        "a restore": False,
+    }
+
+
+_DEEP_STATE_WRITE_DISPATCHED_FROM_A_SMALL_THREAD = r"""
+from __future__ import annotations
+
+import json
+import threading
+from typing import Optional
+
+import pydantic
+
+from citry import Citry, Component
+from citry.ext.events import _pydantic_bounded as bounded
+from citry.ext.events import actions
+from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
+from citry.ext.events.tokens import mint_state_token
+
+citry = Citry(secret="k")
+citry.set_mounted_prefix("/citry")
+
+
+class Node(pydantic.BaseModel):
+    c: Optional[Node] = None
+
+
+class Board(pydantic.BaseModel):
+    tree: Optional[Node] = None
+    _model = ("tree",)
+    _public = ("tree",)
+
+
+class Tree(Component):
+    citry = citry
+    State = Board
+
+    class Events:
+        def keep(self, state):
+            return None
+
+        def change(self, state):
+            state.tree = Node(c=state.tree)
+
+        def render(self, state):
+            # Plain data, so Citry builds and checks the nodes for the render.
+            return actions.Render(Tree(tree=value))
+
+    template = '''
+      <div>x</div>
+    '''
+
+
+# As deep as the nesting limit accepts: the State, then one level per node.
+value = None
+for _ in range(bounded.MAX_CHECK_DEPTH - 1):
+    value = {"c": value}
+answers = {}
+
+
+def dispatch():
+    for handler in ("keep", "change", "render"):
+        token = mint_state_token(Board(), class_id=Tree.class_id, secret="k", max_age=None, max_bytes=10**7)
+        call = {
+            "componentClassId": Tree.class_id,
+            "handlerName": handler,
+            "args": {},
+            "stateToken": token,
+            "stateUpdates": {"tree": value},
+            "sendSequence": 1,
+            "callerRenderId": "r0",
+        }
+        envelope = {"protocol": "citry-events/1", "requestId": "r1", "calls": [call]}
+        result = EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=citry))
+        answers[handler] = result["results"][0]["ok"]
+
+
+threading.stack_size(128 * 1024)
+thread = threading.Thread(target=dispatch)
+thread.start()
+thread.join()
+print(json.dumps(answers))
+"""
+
+
+def test_a_deep_state_write_is_accepted_and_written_back_from_a_thread_with_a_small_stack() -> None:
+    # After the check accepts the write, Citry writes the State out for
+    # its fingerprint, its new token and its public values, checks a State
+    # the handler changed, and builds State for a render. That work runs on
+    # check threads too, so State as deep as the check accepts is handled
+    # whatever stack the calling thread has. The calls run in a process of
+    # their own, because they change the process-wide thread stack size.
+    done = subprocess.run(
+        [sys.executable, "-c", _DEEP_STATE_WRITE_DISPATCHED_FROM_A_SMALL_THREAD],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert json.loads(done.stdout) == {"keep": True, "change": True, "render": True}

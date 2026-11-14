@@ -976,32 +976,40 @@ def _set_on_pydantic_dataclass(state: Any, to_apply: list[tuple[str, Any]], erro
     checks_assignment = bool(getattr(state_cls, "__pydantic_config__", {}).get("validate_assignment"))
     # A field with `init=False` can still be unset, and has nothing to restore.
     before = {name: getattr(state, name) for name, _ in to_apply if hasattr(state, name)}
-    # The writes of one batch share one error total.
-    with bounded.validation_scope(dict(to_apply)):
-        try:
-            if checker is not None and checks_assignment:
-                for name, value in to_apply:
-                    try:
-                        bounded.validate_assignment(checker, state, name, value)
-                    except ValueError as error:
-                        _record_model_errors(error, errors, state_cls)
-            elif checker is not None:
-                _check_dataclass_batch(state, to_apply, errors)
-            if not errors and not checks_assignment:
-                for name, value in to_apply:
-                    # The class keeps an assignment as it is without
-                    # `validate_assignment`; an unfinished class is refused
-                    # by Pydantic at the restore.
-                    setattr(state, name, value)
-        except bounded.ValidationTooCostly as stop:
-            bounded.warn_if_stopped(state_cls, stop)
-            errors.add((None, "_state"), stop.message)
-        except Exception:  # noqa: BLE001 - the author's validator must not fail the whole request
-            # A validator that fails with an error Pydantic does not report
-            # as a field error (it reports ValueError and AssertionError) is
-            # the author's bug. The batch is refused as for a model State.
-            logger.exception(f"A State validator raised while checking browser writes to {state_cls.__qualname__}.")
-            errors.add((None, "_state"), _NOT_CHECKED_MESSAGE)
+
+    def check() -> None:
+        # The writes of one batch share one error total.
+        with bounded.validation_scope(dict(to_apply)):
+            try:
+                if checker is not None and checks_assignment:
+                    for name, value in to_apply:
+                        try:
+                            bounded.validate_assignment(checker, state, name, value)
+                        except ValueError as error:
+                            _record_model_errors(error, errors, state_cls)
+                elif checker is not None:
+                    _check_dataclass_batch(state, to_apply, errors)
+                if not errors and not checks_assignment:
+                    for name, value in to_apply:
+                        # The class keeps an assignment as it is without
+                        # `validate_assignment`; an unfinished class is refused
+                        # by Pydantic at the restore.
+                        setattr(state, name, value)
+            except bounded.ValidationTooCostly as stop:
+                bounded.warn_if_stopped(state_cls, stop)
+                errors.add((None, "_state"), stop.message)
+            except Exception:  # noqa: BLE001 - the author's validator must not fail the whole request
+                # A validator that fails with an error Pydantic does not report
+                # as a field error (it reports ValueError and AssertionError) is
+                # the author's bug. The batch is refused as for a model State.
+                logger.exception(
+                    f"A State validator raised while checking browser writes to {state_cls.__qualname__}."
+                )
+                errors.add((None, "_state"), _NOT_CHECKED_MESSAGE)
+
+    # On a check thread, whose large stack fits data at the nesting limit,
+    # whatever stack the server gives the calling thread.
+    bounded.run_on_check_thread(check)
     if errors:
         # A failed batch leaves the State as it was, as for every other State.
         for name, value in before.items():
@@ -1153,7 +1161,9 @@ def _apply_model_state_updates(state: Any, updates: Mapping[str, Any], writable:
     merged = {**state_wire_values(state), **updates}
     check = _model_state_check(state_cls, updates, merged, errors)
     try:
-        checked = check()
+        # On a check thread, whose large stack fits data at the nesting
+        # limit, whatever stack the server gives the calling thread.
+        checked = bounded.run_on_check_thread(check)
     except ValueError as error:
         _record_model_errors(error, errors, state_cls)
         raise _rejected_updates(errors) from error
