@@ -45,9 +45,6 @@
 - Django's `reverse()` for a Citry route with several parameters in one
   path segment, such as `{name}-{version}`, now takes time in step with
   the length of the values you pass.
-
-### Fixes
-
 - **Citry imports on Pyodide again:** Citry 0.8.0 failed to import on
   Pyodide with `AttributeError: module 'time' has no attribute
   'thread_time'`, because the Events limit on CPU time read a clock that
