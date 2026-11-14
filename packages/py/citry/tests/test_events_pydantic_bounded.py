@@ -23,6 +23,8 @@ import json
 import logging
 import random
 import re
+import subprocess
+import sys
 import threading
 import time
 import tracemalloc
@@ -293,6 +295,84 @@ def test_a_chain_of_nested_models_deeper_than_the_recursion_limit_is_checked(
     assert valid.ok
     assert missing.fields == {"c.c": "Field required"}
     assert caplog.text == ""
+
+
+_CHAIN_ON_A_SMALL_STACK = """
+import json
+import sys
+import threading
+
+import pydantic
+
+from citry.ext.events.schemas import validate_args
+
+model = pydantic.create_model("Level0", v=(int, ...))
+for index in range(1, 300):
+    model = pydantic.create_model(f"Level{index}", c=(model, ...))
+payload = {"v": 1}
+for _ in range(299):
+    payload = {"c": payload}
+
+answers = []
+
+
+def check():
+    answers.append(validate_args(model, payload).fields)
+    answers.append(validate_args(model, {"c": {}}).fields)
+
+
+threading.stack_size(1024 * 1024)
+thread = threading.Thread(target=check)
+thread.start()
+thread.join()
+print(json.dumps(answers))
+"""
+
+
+def test_a_chain_of_nested_models_is_checked_on_a_thread_with_a_small_stack() -> None:
+    # The first call to a class builds Citry's copy of its validator on the
+    # thread that serves the request, and a server's threads can have small
+    # stacks (1 MB on Windows). Building the copy of this chain there
+    # overflows the stack and ends the process, so the test runs it in a
+    # process of its own.
+    done = subprocess.run(
+        [sys.executable, "-c", _CHAIN_ON_A_SMALL_STACK], capture_output=True, text=True, timeout=300, check=False
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    valid, missing = json.loads(done.stdout)
+    # Checking the valid chain may still run out of this small stack, and
+    # Citry then refuses it with a message instead of ending the process.
+    assert valid in ({}, {"_args": bounded.TOO_DEEP_MESSAGE})
+    assert missing in ({"c.c": "Field required"}, {"_args": bounded.TOO_DEEP_MESSAGE})
+
+
+def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse(size: int = 0) -> int:
+        # What Pyodide and other platforms without settable stacks do.
+        msg = "setting stack size not supported"
+        raise ValueError(msg)
+
+    monkeypatch.setattr(threading, "stack_size", refuse)
+    built_on: list[int] = []
+
+    def build() -> str:
+        built_on.append(threading.get_ident())
+        return "built"
+
+    assert bounded._on_large_stack(build) == "built"
+    assert built_on == [threading.get_ident()]
+
+
+def test_an_error_while_building_a_copy_reaches_the_caller() -> None:
+    def build() -> None:
+        msg = "cannot build"
+        raise TypeError(msg)
+
+    with pytest.raises(TypeError, match="cannot build"):
+        bounded._on_large_stack(build)
 
 
 # --- recursive unions and the work budget -------------------------------------------

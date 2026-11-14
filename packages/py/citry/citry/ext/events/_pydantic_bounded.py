@@ -2336,9 +2336,67 @@ def core_schema_of(cls: type) -> dict[str, Any] | None:
     return root if type(root) is dict else None
 
 
+# The stack of the thread that builds a copy of a validator, in bytes. The
+# system reserves this much address space and uses only what the build needs.
+_BUILD_STACK_BYTES = 64 * 1024 * 1024
+_BUILD_STACK_LOCK = threading.Lock()
+
+
+def _on_large_stack(build: Callable[[], Any]) -> Any:
+    """
+    Run ``build`` on a new thread with a large stack, and return its result or raise its exception.
+
+    pydantic-core builds a validator by walking the schema through nested
+    calls on the C stack, and the copy nests deeper than the class's own
+    schema because of its wrappers. A chain of a few hundred nested models
+    overflows the stack and ends the process, with no Python exception to
+    catch. The first call to a class builds its copy, so the build runs on
+    whatever thread serves that request, and a server's threads can have
+    small stacks: 1 MB on Windows, 512 KB by default on macOS. Running the
+    build on a thread with a fixed large stack makes the depth it handles
+    the same everywhere. Checking a value with the copy takes far less
+    stack than building it (a chain of 300 models checks within the 1 MB of
+    a Windows thread), so only the build moves.
+    """
+    outcome: list[Any] = []
+
+    def run() -> None:
+        try:
+            outcome.append((True, build()))
+        except BaseException as error:  # noqa: BLE001 - handed to the calling thread, which raises it
+            outcome.append((False, error))
+
+    # The same context as the caller, so the build sees what it would see there.
+    context = contextvars.copy_context()
+    try:
+        # The stack size applies to every thread started while it is set,
+        # so it is set and put back around this one start only.
+        with _BUILD_STACK_LOCK:
+            previous = threading.stack_size(_BUILD_STACK_BYTES)
+            try:
+                worker = threading.Thread(target=context.run, args=(run,), name="citry-validator-build", daemon=True)
+                worker.start()
+            finally:
+                threading.stack_size(previous)
+    except (RuntimeError, ValueError):
+        # A platform without threads, or without a settable stack size (such
+        # as Pyodide), builds on the calling thread, as Pydantic itself does.
+        return build()
+    worker.join()
+    succeeded, value = outcome[0]
+    if not succeeded:
+        raise value
+    return value
+
+
 def _build(schema: _Schema, *, wrapped: bool, by_name: bool = False, text_wrappers: bool = False) -> Any:
-    copied = _Rewriter(schema, wrapped=wrapped, by_name=by_name, text_wrappers=text_wrappers).rewrite(schema.root)
-    return pydantic_core.SchemaValidator(copied, _top_config(schema.root), _use_prebuilt=False)
+    def build() -> Any:
+        rewriter = _Rewriter(schema, wrapped=wrapped, by_name=by_name, text_wrappers=text_wrappers)
+        copied = rewriter.rewrite(schema.root)
+        return pydantic_core.SchemaValidator(copied, _top_config(schema.root), _use_prebuilt=False)
+
+    # The rewrite builds validators too, for the labels of union members.
+    return _on_large_stack(build)
 
 
 def checker_for(cls: type, *, state: bool = False, by_name: bool = False, repeated: bool = False) -> Checker | None:
@@ -2467,9 +2525,14 @@ def fields_checker_for(cls: type) -> FieldsCheck | None:
                 for entry in node.get("fields", ())
             ],
         }
-        try:
+
+        def build() -> Any:
             copied = _Rewriter(_Schema(root), wrapped=True).rewrite(unfrozen)  # type: ignore[arg-type]
-            validator = pydantic_core.SchemaValidator(copied, config, _use_prebuilt=False)
+            return pydantic_core.SchemaValidator(copied, config, _use_prebuilt=False)
+
+        try:
+            # A large stack, as for the copy of a whole class (see `_on_large_stack`).
+            validator = _on_large_stack(build)
         except Exception:  # noqa: BLE001 - the caller then refuses the write, as for a class it cannot copy
             logger.exception(f"Citry could not build its copy of the field checks of {cls.__qualname__}.")
         else:
