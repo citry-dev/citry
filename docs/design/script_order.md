@@ -1,10 +1,12 @@
 # Component script order
 
-Status: design with the maintainer's decisions recorded (issue
-[#145](https://github.com/citry-dev/citry/issues/145)). Nothing here is
-built yet. It targets 0.9.0, which the maintainer plans as the last
-release with breaking changes before 1.0.0. "Decisions" at the end lists
-each choice and the part of the design it shaped.
+Status: built for 0.9.0 (issue
+[#145](https://github.com/citry-dev/citry/issues/145)), which the
+maintainer plans as the last release with breaking changes before 1.0.0.
+"Decisions" at the end lists each choice and the part of the design it
+shaped, and "How it was built" lists where the code differs from the
+text above. The measurement of item 7 is not done yet. Line numbers in
+"What Citry does today" describe `main` before the change.
 
 ## What this decides
 
@@ -619,3 +621,32 @@ in brackets.
 6. Accept the measurement thresholds in "What would show this wrong":
    about 10 ms or 10% of the time to `citry:ready` for building Option 2,
    and half of the time to `citry:ready` for reconsidering Option 3.
+
+## How it was built
+
+The code follows the design, with these details settled while building
+it:
+
+- **How the browser knows which scripts report a finish.** The server
+  adds a `finishKey` to the manifest entry of each component's own `js`:
+  the SHA-256 of the script as the page would run it without the `try`.
+  The wrapper calls `__citryRuntime.finishScript(key)` when the script
+  ends, or `finishScript(key, error)` when it throws. Python and the
+  browser both refuse a `finishKey` on an extension's script or on a
+  script given by URL.
+- **The results belong to the page, not to one app.** A component
+  script runs once per page and a fragment reuses it, so the browser
+  keeps one record per `finishKey` for the whole page, in a `Map`.
+- **Only a script Citry put inside its own function gets the `try`.** A
+  component script with `wrap=False`, or with a `type` that has
+  parameters (which `Script` does not wrap), keeps its own top level and
+  gets no `finishKey`, so a throw there does not stop the app.
+- **First-mount callbacks run from one queue.** Each `mounted` hook
+  outside a server render adds its callback to a queue, and one task
+  runs the queue in the order of item 3. A component that a callback
+  removes before its turn gets no callback. A component that a callback
+  shows, also during a server render's callbacks, is queued and runs
+  after the callbacks of that pass. A callback that fails after startup
+  logs the error and stops the app, as a failed server render does.
+- **A skipped third-party file is requested once per startup or server
+  render,** even when several component types list it.
