@@ -643,7 +643,7 @@ def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_se
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def refuse(size: int = 0) -> int:
-        # What Pyodide and other platforms without settable stacks do.
+        # What platforms without a settable stack size do.
         msg = "setting stack size not supported"
         raise ValueError(msg)
 
@@ -656,6 +656,76 @@ def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_se
 
     assert bounded._on_large_stack(build) == "built"
     assert built_on == [threading.get_ident()]
+
+
+def test_a_copy_is_built_on_the_calling_thread_where_threads_cannot_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse(self: threading.Thread) -> None:
+        # What Pyodide does: it sets the stack size but starts no thread.
+        msg = "can't start new thread"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(threading.Thread, "start", refuse)
+    before = threading.stack_size()
+    built_on: list[int] = []
+
+    def build() -> str:
+        built_on.append(threading.get_ident())
+        return "built"
+
+    assert bounded._on_large_stack(build) == "built"
+    assert built_on == [threading.get_ident()]
+    # The large stack size must not stay set for the threads started later.
+    assert threading.stack_size() == before
+
+
+def test_the_cpu_clock_is_the_thread_clock_where_the_platform_has_one() -> None:
+    assert bounded._choose_cpu_clock() is time.thread_time
+
+
+def test_the_cpu_clock_falls_back_where_the_thread_clock_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Pyodide's time module has no thread_time.
+    monkeypatch.delattr(time, "thread_time")
+
+    assert bounded._choose_cpu_clock() is time.process_time
+
+
+def test_the_cpu_clock_falls_back_where_reading_a_clock_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A platform may define a clock that raises when it is read.
+    def unsupported() -> float:
+        raise OSError(95, "Operation not supported")
+
+    monkeypatch.setattr(time, "thread_time", unsupported)
+    monkeypatch.setattr(time, "process_time", unsupported)
+
+    assert bounded._choose_cpu_clock() is time.perf_counter
+
+
+def test_the_cpu_clock_is_the_process_clock_where_reading_the_thread_clock_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unsupported() -> float:
+        raise OSError(95, "Operation not supported")
+
+    monkeypatch.setattr(time, "thread_time", unsupported)
+
+    assert bounded._choose_cpu_clock() is time.process_time
+
+
+def test_events_import_where_the_thread_clock_is_missing() -> None:
+    # Importing Citry must not need time.thread_time, which Pyodide lacks.
+    # A fresh process imports the module without the clock, since
+    # importing it again here would replace the state other tests use.
+    script = (
+        "import time\n"
+        "del time.thread_time\n"
+        "from citry.ext.events import _pydantic_bounded as bounded\n"
+        "assert bounded.cpu_clock is time.process_time, bounded.cpu_clock\n"
+    )
+    done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120, check=False)
+
+    assert done.returncode == 0, done.stderr[-2000:]
 
 
 def test_a_forked_child_gets_a_new_build_lock(monkeypatch: pytest.MonkeyPatch) -> None:
