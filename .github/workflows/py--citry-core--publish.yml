@@ -55,7 +55,7 @@ env:
 
 jobs:
   verify-version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.package-version.outputs.version }}
     steps:
@@ -79,7 +79,7 @@ jobs:
   linux:
     if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Match Rust's s390x baseline when assembling stack-switching code.
       CFLAGS_s390x_unknown_linux_gnu: -march=z10
@@ -204,7 +204,7 @@ jobs:
   musllinux:
     if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -404,7 +404,7 @@ jobs:
   sdist:
     if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Every cargo run in the checkout uses Rust 1.97.0, the version the
       # wheels are built with, not the nightly that rust-toolchain.toml names.
@@ -458,7 +458,7 @@ jobs:
     name: PyEmscripten reproducibility build ${{ matrix.copy }}
     if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -553,7 +553,7 @@ jobs:
     name: Compare PyEmscripten reproducibility builds
     if: ${{ inputs.operation == 'qualify' }}
     needs: [verify-version, pyemscripten-build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
     steps:
@@ -579,7 +579,7 @@ jobs:
     name: Verify complete distribution inventory
     if: ${{ inputs.operation == 'qualify' }}
     needs: [linux, musllinux, windows, macos, sdist, pyemscripten]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       attestations: write
       contents: read
@@ -624,7 +624,7 @@ jobs:
     name: Verify the selected candidate artifact
     if: ${{ inputs.operation == 'promote' }}
     needs: verify-version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
@@ -658,7 +658,7 @@ jobs:
     name: Promote qualified bytes and release
     if: ${{ inputs.operation == 'promote' }}
     needs: [verify-version, select-qualification]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: pypi
     env:
       CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
@@ -776,7 +776,7 @@ jobs:
     permissions:
       contents: read
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: release-maintenance
     env:
       PACKAGE: citry-core
@@ -813,7 +813,7 @@ jobs:
   closeout:
     name: Create the GitHub Release and notify
     needs: [verify-version, release, tag]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: read

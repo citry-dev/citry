@@ -30,7 +30,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Only the canonical main workflow can prepare release updates.
     if: github.repository == 'citry-dev/citry' && github.ref == 'refs/heads/main'
     permissions:
@@ -178,7 +178,7 @@ jobs:
 
   commit:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: release-maintenance
     permissions:
       contents: read
