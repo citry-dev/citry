@@ -1,6 +1,7 @@
 # Design: the V3 template grammar
 
-**Status (2026-11-14): current, and frozen for 1.x** (see
+**Status (2026-11-14): current. From 1.0.0 the syntax is frozen for 1.x**
+(see
 [Reserved names and the 1.x freeze](#reserved-names-and-the-1x-freeze)).
 This describes the Pest grammar and the
 parse-time validation contract for citry's V3 `<c-*>` template syntax. The
@@ -320,9 +321,13 @@ component input and the component writes `#c-key` on the markup it owns.
 ## Reserved names and the 1.x freeze
 
 The V3 syntax is frozen for 1.x. A 1.x release does not remove syntax that
-this document describes or change what it means. When Citry adds syntax in
-1.x, it takes a name from the reserved set below, so a template or component
-that works on 1.0.0 keeps working. Citry reserves three groups of names.
+this document describes or change what it means, so a template or component
+that works on 1.0.0 keeps working. When Citry adds a tag or a `$c-` or `#c-`
+attribute in 1.x, it takes a name from the reserved set below. Citry adds no
+new fixed `c-*` attribute directive (such as `c-if` or `c-bind`) in 1.x:
+every other `c-*` attribute is already a dynamic attribute, so a new
+directive would change what an existing template means. Citry reserves
+three groups of names.
 
 ### Built-in tag names
 
@@ -344,11 +349,12 @@ names.
 
 A component cannot take any of these 22 names. Every way a component gets a
 name (its class name, its `name` attribute, an alias passed to
-`Citry.register()`, autodiscovery, and a component library) goes through
-the registry, and the registry compares the lowercased name with the list:
+`Citry.register()`, autodiscovery, and a component library) is checked
+against the list, after Citry lowercases the name and, for a class name,
+also converts it to kebab-case:
 
 - A component class defined or registered under a reserved name raises
-  `AlreadyRegistered`. The message names the reserved tag, for example
+  `AlreadyRegistered` from the registry. The message names the reserved tag, for example
   "the name is reserved for a future built-in <c-lazy> tag".
 - A `ComponentLibrary` that contains a definition with a reserved name
   raises `ValueError` when the library is constructed, before any app
@@ -376,7 +382,7 @@ in its dynamic spelling (`c-$c-tr:greeting`).
 
 | Name | Owner | Where it is handled |
 |---|---|---|
-| `$c-tr` | The i18n extension (`citry.ext.i18n`) | `I18N_BINDING_ROOT` in [`_i18n_directives.py`](../../packages/py/citry/citry/_i18n_directives.py); the directive's syntax is in [`i18n.md`](i18n.md) |
+| `$c-tr` | The i18n extension (`citry.ext.i18n`) | The extension applies it in `citry/ext/i18n/bindings.py`; its syntax is parsed in the core module [`_i18n_directives.py`](../../packages/py/citry/citry/_i18n_directives.py) (`I18N_BINDING_ROOT`) and described in [`i18n.md`](i18n.md) |
 | `$c-props` | The template parser | `CLIENT_PROPS_ATTR` in `constants.rs`; the parser rejects `$c-props` and `c-$c-props` with an error that points to Vue's `:prop` and `v-bind` syntax |
 
 The list lives in this document rather than in code because no code reads

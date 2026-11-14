@@ -1294,6 +1294,8 @@ class TestDuplicateDetection:
             class Teleport(Component):
                 citry = c
 
+        assert not c.has("teleport")
+
     def test_future_tag_name_raises_for_alias(self):
         c = Citry()
 

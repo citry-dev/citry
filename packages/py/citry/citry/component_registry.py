@@ -43,7 +43,7 @@ FUTURE_TAG_NAMES: Final = frozenset({"lazy", "teleport", "transition", "suspense
 
 Registering a component under one of them fails now, so adding the tag in a
 1.x release cannot clash with an existing user component. The full list of
-reserved names is in ``docs/design/template_grammar.md`` ("Reserved names").
+reserved names is in ``docs/design/template_grammar.md`` ("Reserved names and the 1.x freeze").
 """
 
 RESERVED_COMPONENT_NAMES: Final = STRUCTURAL_TAG_NAMES | BUILTIN_COMPONENT_NAMES | FUTURE_TAG_NAMES

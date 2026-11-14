@@ -294,7 +294,7 @@ You cannot give a component the name of a built-in tag (`if`, `slot`,
 `cache`, `mark` and the others above). Four more names are kept for
 built-in tags Citry plans to add: `lazy`, `teleport`, `transition` and
 `suspense`. A component class named `Teleport`, or one registered as
-`teleport`, fails when it is defined:
+`teleport`, fails when it is defined or registered:
 
 ```text
 AlreadyRegistered: Cannot register 'Teleport' as 'teleport': the name
