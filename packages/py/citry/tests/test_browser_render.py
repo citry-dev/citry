@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -400,12 +401,37 @@ $component({});
     assert 'data-citry-vue-style-app="' in html
 
 
+class _ScriptCollector(HTMLParser):
+    """Collects each script element as (opening tag, body), in page order."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.scripts: list[tuple[str, list[str]]] = []
+        self._open: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        # The parser lowercases tag names and reads script content as raw text up to the closing
+        # tag, the way a browser does, so upper-case tags and `</script >` are found too.
+        if tag == "script":
+            self._open = []
+            self.scripts.append((self.get_starttag_text() or "", self._open))
+
+    def handle_data(self, data: str) -> None:
+        # Script text can arrive in several chunks, so the body is joined at the end.
+        if self._open is not None:
+            self._open.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self._open = None
+
+
 def _script_tags(html: str) -> list[tuple[str, str]]:
     """Each script tag of a page as (opening tag, body), in page order."""
-    return [
-        (match["tag"], match["body"])
-        for match in re.finditer(r"(?P<tag><script[^>]*>)(?P<body>.*?)</script>", html, re.DOTALL)
-    ]
+    collector = _ScriptCollector()
+    collector.feed(html)
+    collector.close()
+    return [(tag, "".join(body)) for tag, body in collector.scripts]
 
 
 def _plugin_page(*, mounted: bool) -> str:
