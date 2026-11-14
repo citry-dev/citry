@@ -1141,60 +1141,29 @@ def _manifest_json(
     return "{" + ",".join(entry for entry in entries if entry) + "}"
 
 
-def _start_script_with_reload(app_id: str, runtime_url: str, *, can_reload: bool) -> str:
+def _start_script_for_mounted_page(app_id: str, runtime_url: str) -> str:
     """
-    Return the start script of a mounted page, which reloads the page once when its runtime is gone.
+    Return the start script of a mounted page, which says so in the console when the runtime is missing.
 
     A page rendered before a deploy may link a runtime hash that no worker
-    holds any more. The script then reloads at most once, and only when the
-    app said the page answers GET or HEAD (``can_reload``), this load is not
-    already a reload, this tab has not already reloaded for this URL,
-    and the server answers ``404`` for the runtime. In every other case the
-    server HTML stays and the console says why. The rule is
+    holds any more, so the runtime never defines ``__citryRuntime``. The
+    page then keeps its server HTML, and the script writes one
+    ``console.error`` that names the runtime URL, rather than the bare
+    ``ReferenceError`` a direct call would raise. The rule is
     ``docs/design/runtime_hashed_urls.md`` section 3.5.
     """
     # Page markup can take over plain names: `<div id="__citryRuntime">` is
     # found as `window.__citryRuntime`. So the script reads its two window
-    # names only as own properties, which an element's id never is. The
-    # other names it uses (`fetch`, `location`, `performance`,
-    # `sessionStorage`, `console`) are window members that markup cannot hide.
-    # Every value is written as JSON, so the URL never closes the string.
+    # names only as own properties, which an element's id never is. Every
+    # value is written as JSON, so the URL never closes the string.
     return (
         "var w = window, own = Object.prototype.hasOwnProperty;\n"
         f'if (own.call(w, "__citryRuntime")) w.__citryRuntime.startDocument({script_json(app_id)});\n'
         # A page with several apps has one start script per app; the first
-        # one to find the runtime missing handles it for all of them.
+        # one to find the runtime missing reports it for all of them.
         'else if (!own.call(w, "__citryRuntimeMissing")) {\n'
         "  w.__citryRuntimeMissing = true;\n"
-        f'  var url = {script_json(runtime_url)}, key = "citry:runtime-reload";\n'
-        f"  var canReload = {'true' if can_reload else 'false'};\n"
-        '  var fail = function () { console.error("Citry could not load its runtime: " + url); };\n'
-        # A tab that already reloaded for this URL does not reload again, so a
-        # CDN or page cache that keeps whole pages costs one reload, not one
-        # per page.
-        "  var stored = function () {\n"
-        "    try { return w.sessionStorage.getItem(key) === url; } catch (e) { return false; }\n"
-        "  };\n"
-        # The navigation entry says whether this load is already a reload,
-        # without storage, so the page reloads at most once even in a
-        # sandboxed iframe where storage throws. When the browser cannot
-        # tell, it never reloads.
-        "  var reloaded = function () {\n"
-        "    var p = w.performance;\n"
-        '    var nav = p && p.getEntriesByType ? p.getEntriesByType("navigation")[0] : null;\n'
-        '    if (nav) return nav.type === "reload";\n'
-        "    if (p && p.navigation) return p.navigation.type === 1;\n"
-        "    return true;\n"
-        "  };\n"
-        "  if (!canReload || reloaded() || stored()) fail();\n"
-        # Only a 404 means the server lost this runtime; a network error, a
-        # blocked request, or a runtime that loaded but did not start would
-        # fail again after a reload.
-        '  else fetch(url, {method: "HEAD", cache: "no-store"}).then(function (r) {\n'
-        "    if (r.status !== 404) return fail();\n"
-        "    try { w.sessionStorage.setItem(key, url); } catch (e) {}\n"
-        "    w.location.reload();\n"
-        "  }, fail);\n"
+        f'  console.error("Citry could not load its runtime: " + {script_json(runtime_url)});\n'
         "}"
     )
 
@@ -1209,15 +1178,8 @@ def prepare_vue_serialization(
     early_selected_tree: Any = None,
     hydration_candidate: bool = False,
     server_html: Callable[[], str] | None = None,
-    _can_reload: bool = False,
 ) -> VueSerializationPlan | None:
-    """
-    Prepare a browser app only when selected typed metadata requires Vue.
-
-    ``_can_reload`` is ``True`` only when the app said the page answers GET or
-    HEAD (the ``request_method`` argument of ``serialize()``), so only such a
-    page reloads itself once when its runtime is missing.
-    """
+    """Prepare a browser app only when selected typed metadata requires Vue."""
     requirements = (analysis or analyze_vue_serialization(ctx.selected_render)).runtime_requirements
     if ctx.selected_render.render_target != "prepared" or not requirements:
         return None
@@ -1350,13 +1312,6 @@ def prepare_vue_serialization(
     if mounted:
         configuration["endpoint"] = ctx.citry.build_url("ext/events/call")
         configuration["eventBaseUrl"] = ctx.citry.build_url("ext/events/e/")
-    # A full page reads this to decide whether it may reload once when a
-    # browser plugin script is missing. Only a mounted page links scripts by
-    # URL, and a fragment's configuration is copied into the page it joins,
-    # so an unmounted page and a fragment do not carry it.
-    reload_rule_applies = mounted and ctx.deps_strategy == "document"
-    if reload_rule_applies:
-        configuration["canReload"] = _can_reload
     serialized = _script_json(configuration)
     manifest_slot = json.dumps(_MANIFEST_SLOT)
     if serialized.count(manifest_slot) != 1:
@@ -1465,14 +1420,15 @@ def prepare_vue_serialization(
     # browser has parsed the whole page, so starting the app (tens of ms on a
     # large page) never delays the first paint of the server HTML. It still
     # runs after the classic runtime and plugin scripts above it, and before
-    # DOMContentLoaded. It carries the app id and, on a mounted page, the
-    # runtime URL and whether the page may reload, but never page data, so
-    # its CSP hash depends only on the app id, the URL and that flag.
+    # DOMContentLoaded. It carries the app id and, on a mounted full page,
+    # the runtime URL, but never page data, so its CSP hash depends only on
+    # the app id and the URL. An unmounted page (whose runtime is inline, so
+    # it cannot go missing) keeps the one-line call.
     start_script = Script(
         kind="core",
         content=(
-            _start_script_with_reload(app_id, runtime_resource.url, can_reload=_can_reload)
-            if reload_rule_applies
+            _start_script_for_mounted_page(app_id, runtime_resource.url)
+            if mounted and ctx.deps_strategy == "document"
             else f"__citryRuntime.startDocument({script_json(app_id)});"
         ),
         attrs={"type": "module"},
@@ -1517,6 +1473,9 @@ def prepare_vue_serialization(
                 _record_hydration_admission(
                     ctx.selected_render, replace(admission, server_html=server_contents is not None)
                 )
+    # None when the host holds no server HTML, so the later check that the
+    # host survived the serialization hooks is skipped.
+    owned_host: str | None
     if hydration_html is not None:
         owned_host = f'<div id="{host_id}">{hydration_html}</div>'
         shell_html = _vue_shell(ctx.html, owned_host)

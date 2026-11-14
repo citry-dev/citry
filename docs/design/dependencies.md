@@ -633,7 +633,7 @@ sit next to each other, in this order:
 <script type="application/json" data-citry-vue-document="APP_ID">{...}</script>
 <script type="module">
   /* calls __citryRuntime.startDocument("APP_ID"), or, when the
-     runtime is missing, may reload the page once (below) */
+     runtime is missing, writes one console.error (below) */
 </script>
 ```
 
@@ -682,29 +682,19 @@ supply a configuration. In script-integrity mode only the start script's hash
 is listed in `csp_script_hashes`; the data block is not executable, so it
 needs no CSP hash (the per-script records in `serialized.security.scripts`
 still describe it). The start script's text holds the app id and, on a mounted
-document, the runtime URL and the `canReload` value described below. It never
-contains page data.
+document, the runtime URL described below. It never contains page data.
 
 On a mounted document the runtime is linked as `<prefix>/citry.<sha256>.js`
 (section 9.1), and a page rendered before a deploy can name a hash that no
-worker holds any more. The start script there carries the runtime URL and a
-`canReload` value, both written with `script_json`:
+worker holds any more. The start script there carries the runtime URL, written
+with `script_json`:
 
 - When `window.__citryRuntime` is an own property, it starts the app.
-- Otherwise it reloads the page at most once, and only when `canReload` is
-  `true`, this load is not already a reload, this tab has not already reloaded
-  for the same URL, and a `HEAD` request for the runtime URL answers `404`. In
-  every other case it writes a `console.error` and leaves the server HTML.
-- The server writes `canReload` as `true` only when the app passes
-  `request_method="GET"` or `"HEAD"` (in any letter case) to `serialize()`.
-  Any other method, and a missing one, writes `false`, because reloading a
-  page that answered a form `POST` sends the form again, and Chrome does that
-  without asking.
-- The configuration JSON of a mounted `document` render carries the same
-  `canReload` field, which the runtime reads when a browser plugin script is
-  missing.
-- The script's CSP hash changes when the runtime file changes, and the text
-  has two forms, one for each `canReload` value.
+- Otherwise it writes one `console.error` that names the runtime URL and
+  leaves the server HTML. A page with several apps writes it once. The page
+  does not reload by itself; issue
+  [#665](https://github.com/citry-dev/citry/issues/665) tracks that.
+- The script's CSP hash changes when the runtime file changes.
 
 The full rule is [`runtime_hashed_urls.md`](runtime_hashed_urls.md) section
 3.5.
@@ -789,9 +779,10 @@ and fail its integrity check. The design is
 type, missing hashed entry, or unknown runtime hash answers `404` with
 `Cache-Control: no-store`, because another worker may store the entry a
 moment later. The unknown runtime hash, and a missing Events definition or
-stylesheet, also send `Access-Control-Allow-Origin: *`, so a page in a
-sandboxed iframe (every request counts as cross-origin there) can read the
-status of its `HEAD` request.
+stylesheet, also send `Access-Control-Allow-Origin: *`, so a page that loads
+the file with `crossorigin` (or from a sandboxed iframe, where every request
+counts as cross-origin) sees the `404` in the console rather than a CORS
+error.
 
 Handlers stay framework-neutral by keeping the logic out of them: the
 endpoint body is a plain function on the extension,
@@ -955,11 +946,10 @@ Error modes:
   affects only a page that links the stable URL.
 - **A cached page outlives a Citry upgrade.** The page names the old runtime
   hash. The browser runs the copy it kept, or a worker serves the old bytes
-  from the shared cache. When neither has it, the server answers `404`, and a
-  page whose app passed `request_method="GET"` reloads once to get fresh HTML.
-  A page cached whole by a CDN or page cache returns the same HTML, stays as
-  server HTML, and does not reload again. The app owner should clear full-page
-  caches on upgrade.
+  from the shared cache. When neither has it, the server answers `404`, and the
+  page keeps its server HTML and writes the `console.error`. A reload gets
+  fresh HTML, except from a CDN or page cache that keeps whole pages. The app
+  owner should clear full-page caches on upgrade.
 - **A hook points an owned tag at another URL.** Citry leaves both attributes
   off, because it does not know the bytes at the new URL. With
   `security_script_integrity="citry"`, the same edit to a script raises.

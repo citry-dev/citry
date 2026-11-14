@@ -58,10 +58,10 @@ def is_content_digest(value: object) -> bool:
 
 def not_found() -> RouteResponse:
     """Answer a request for a file this worker does not hold, with an empty body nobody may store."""
-    # In a sandboxed iframe every request counts as cross-origin, so the
-    # page can read the 404 status of its check for a missing runtime only
-    # when the answer allows any origin. The body is empty and depends only
-    # on the URL, so the header exposes nothing a visitor cannot already see.
+    # A page that loads the runtime with `crossorigin` (Citry adds it next to
+    # `integrity`) would see a 404 without this header as a CORS failure in
+    # the browser console, which hides the real cause. The body is empty and depends only on the URL, so the
+    # header exposes nothing a visitor cannot already see.
     return RouteResponse(
         "",
         status=404,

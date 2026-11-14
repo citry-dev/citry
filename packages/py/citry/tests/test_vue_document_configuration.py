@@ -12,7 +12,6 @@ import pytest
 from citry import Citry, Component
 from citry._vue.serialization import _reserve_vue_app_id
 from citry.ext.dependencies.routes import SHARED_RUNTIME
-from citry.serialize import serialize_render, serialize_render_result
 from citry.util.html import script_json
 
 # Strings that would end or hide a script element's text if the JSON carried
@@ -143,21 +142,53 @@ def _source_hash(text: str) -> str:
     return "'sha384-" + base64.b64encode(hashlib.sha384(text.encode()).digest()).decode() + "'"
 
 
-def test_a_mounted_start_script_names_the_hashed_runtime_and_reads_it_as_an_own_property() -> None:
+def test_a_mounted_start_script_names_the_hashed_runtime_it_reports() -> None:
     html = _page(_mounted(), {})().render().serialize()
 
     [match] = _blocks(html)
     start = match["start"]
-    # The runtime URL is one JSON string, so no character of it can close the string.
-    assert f"var url = {script_json(f'/citry/{SHARED_RUNTIME.hashed_path}')}, " in start
+    url = f"/citry/{SHARED_RUNTIME.hashed_path}"
+    # The page links this URL, and the report names the same one, so the
+    # message tells the reader which file is missing.
+    assert f'src="{url}"' in html
+    # The URL is one JSON string joined to the message, so no character of it
+    # can close the string.
+    assert f'console.error("Citry could not load its runtime: " + {script_json(url)});' in start
     assert f'w.__citryRuntime.startDocument("{match["app"]}")' in start
-    # A page element with id="__citryRuntime" answers the plain name, so
-    # window names are read only as own properties, which an element's id never is.
+
+
+def test_a_mounted_start_script_reads_both_window_names_as_own_properties() -> None:
+    html = _page(_mounted(), {})().render().serialize()
+
+    [match] = _blocks(html)
+    start = match["start"]
+    # A page element with id="__citryRuntime" answers the plain name, so the
+    # script reads each window name only as an own property, which an element's
+    # id never is.
     assert 'own.call(w, "__citryRuntime")' in start
     assert 'own.call(w, "__citryRuntimeMissing")' in start
-    assert re.findall(r'(?<![\w."])__citryRuntime\b', start) == []
-    # The page links the same URL the script probes.
-    assert f'src="/citry/{SHARED_RUNTIME.hashed_path}"' in html
+    # Neither name is read as a bare identifier, which would find such an element.
+    assert re.findall(r'(?<![\w."])__citryRuntime(?:Missing)?\b', start) == []
+
+
+def test_a_mounted_start_script_text_is_locked() -> None:
+    html = _page(_mounted(), {})().render().serialize()
+
+    [match] = _blocks(html)
+    url = script_json(f"/citry/{SHARED_RUNTIME.hashed_path}")
+    # Locked as a whole because a host that sends CSP hashes lists the hash of
+    # this exact text, and because each line is a rule: both window names are
+    # read as own properties, the own property `__citryRuntimeMissing` keeps a
+    # page with several apps to one report, and the script sends no request,
+    # does not navigate, and stores nothing.
+    assert match["start"] == (
+        "var w = window, own = Object.prototype.hasOwnProperty;\n"
+        f'if (own.call(w, "__citryRuntime")) w.__citryRuntime.startDocument("{match["app"]}");\n'
+        'else if (!own.call(w, "__citryRuntimeMissing")) {\n'
+        "  w.__citryRuntimeMissing = true;\n"
+        f'  console.error("Citry could not load its runtime: " + {url});\n'
+        "}"
+    )
 
 
 @pytest.mark.parametrize("prefix", ["/a\\b", "/a\u2028b", "/a</script", "/a<!--b"])
@@ -171,166 +202,67 @@ def test_a_mount_prefix_cannot_end_the_start_script_or_its_string(prefix: str) -
     assert "</script" not in start.lower()
     assert "<!--" not in start
     assert "\u2028" not in start
-    literal = re.search(r'var url = (".*?"), key', start)
+    literal = re.search(r'runtime: " \+ (".*?")\);\n', start)
     assert literal is not None
     # The string reads back as the exact URL the page links.
     assert json.loads(literal.group(1)) == f"{prefix}/{SHARED_RUNTIME.hashed_path}"
 
 
-@pytest.mark.parametrize(
-    ("method", "can_reload"),
-    [
-        ("GET", True),
-        ("get", True),
-        ("Head", True),
-        ("HEAD", True),
-        ("POST", False),
-        ("put", False),
-        ("PATCH", False),
-        ("DELETE", False),
-        ("OPTIONS", False),
-        ("QUERY", False),
-        # Citry cannot tell what the page answers, and a browser may resend a form silently on reload.
-        (None, False),
-    ],
-)
-def test_request_method_chooses_whether_the_page_may_reload(method: str | None, can_reload: bool) -> None:
-    html = _page(_mounted(), {})().render().serialize(request_method=method)
+def test_a_mounted_start_script_carries_no_page_data() -> None:
+    first = _blocks(_page(_mounted(), {"note": "first row"})().render().serialize())
+    second = _blocks(_page(_mounted(), {"note": "second row"})().render().serialize())
 
-    [match] = _blocks(html)
-    expected = "true" if can_reload else "false"
-    # The start script runs when the runtime is missing, so it carries its own copy of the answer.
-    assert f"  var canReload = {expected};\n" in match["start"]
-    # The runtime reads the same answer from the data it starts with, for a missing browser plugin.
-    assert json.loads(match["json"])["canReload"] is can_reload
-    assert f'"canReload":{expected}' in match["json"]
-
-
-def test_leaving_request_method_out_stops_the_reload() -> None:
-    html = _page(_mounted(), {})().render().serialize()
-
-    [match] = _blocks(html)
-    # Chrome resends a POST on location.reload() without asking, so an unknown method never reloads.
-    assert "  var canReload = false;\n" in match["start"]
-    assert json.loads(match["json"])["canReload"] is False
-
-
-def test_the_two_start_scripts_differ_only_in_the_reload_answer() -> None:
-    page = _page(_mounted(), {})
-    [reloads] = _blocks(page().render().serialize(request_method="GET"))
-    [stays] = _blocks(page().render().serialize(request_method="POST"))
-
+    [first_match], [second_match] = first, second
+    assert "first row" not in first_match["start"]
     # Every render gets its own app id, so compare the scripts with it taken out.
-    reloading = reloads["start"].replace(reloads["app"], "APP")
-    staying = stays["start"].replace(stays["app"], "APP")
-    assert reloading.replace("var canReload = true;", "var canReload = false;") == staying
-    assert reloading != staying
+    # What is left depends only on the runtime URL, so two renders differ
+    # only in the app id.
+    assert first_match["start"].replace(first_match["app"], "APP") == second_match["start"].replace(
+        second_match["app"], "APP"
+    )
 
 
-@pytest.mark.parametrize("value", ["", "GE T", "GET\n", " GET", "GET,POST", "GET/1.1", 5, b"GET", ["GET"], True])
-def test_a_request_method_that_is_not_a_method_name_raises(value: object) -> None:
-    page = _page(_mounted(), {})
-
-    with pytest.raises(ValueError, match="request_method"):
-        page().render().serialize(request_method=value)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize("deps_strategy", ["simple", "fragment", "ignore"])
-def test_a_wrong_request_method_raises_even_when_no_start_script_is_written(deps_strategy: str) -> None:
-    page = _page(_mounted(), {})
-
-    # The rendered output carries no start script here, but a wrong value is
-    # reported the first time the view runs, not only on a document render.
-    with pytest.raises(ValueError, match="request_method"):
-        page().render().serialize(deps_strategy=deps_strategy, request_method="GE T")  # type: ignore[arg-type]
-    assert page().render().serialize(deps_strategy=deps_strategy, request_method="POST")  # type: ignore[arg-type]
-
-
-def test_a_wrong_request_method_raises_on_a_page_with_no_vue_component() -> None:
-    registry = _mounted()
-
-    class Plain(Component):
-        citry = registry
-        template = "<p>plain</p>"
-
-    with pytest.raises(ValueError, match="request_method"):
-        Plain().render().serialize(request_method="")
-    assert ">plain</p>" in Plain().render().serialize(request_method="POST")
-
-
-def test_a_page_that_writes_no_start_script_accepts_a_valid_request_method() -> None:
-    registry = _mounted()
-
-    class Plain(Component):
-        citry = registry
-        template = "<p>plain</p>"
-
-    html = Plain().render().serialize(request_method="POST")
-    assert "canReload" not in html
-    assert 'type="module"' not in html
-
-
-def test_a_fragment_never_carries_the_reload_answer() -> None:
-    html = _page(_mounted(), {})().render().serialize(deps_strategy="fragment", request_method="POST")
-
-    match = re.search(r'<script type="application/json" data-citry-vue-fragment>(.*?)</script>', html, re.DOTALL)
-    assert match is not None
-    # A fragment's configuration is copied into the page it joins, and a fragment must not reload that page.
-    assert '"canReload"' not in match.group(1)
-    assert "canReload" not in html
-
-
-def test_an_unmounted_document_keeps_the_one_line_start_script_and_no_reload_answer() -> None:
-    page = _page(Citry(autodiscover=False), {})
-    for method in (None, "GET", "POST"):
-        html = page().render().serialize(request_method=method)
-
-        [match] = _blocks(html)
-        # The runtime is inline here, so there is no URL that could go missing.
-        assert match["start"] == f'__citryRuntime.startDocument("{match["app"]}");'
-        assert "canReload" not in json.loads(match["json"])
-
-
-def test_serialize_result_and_the_serialize_functions_take_request_method() -> None:
-    page = _page(_mounted(), {})
-
-    posted = page().render().serialize_result(request_method="POST")
-    assert "  var canReload = false;\n" in posted.html
-    assert "  var canReload = true;\n" in page().render().serialize_result(request_method="GET").html
-    assert "  var canReload = false;\n" in serialize_render_result(page().render(), request_method="POST").html
-    assert "  var canReload = false;\n" in serialize_render(page().render(), request_method="POST")
-    for call in (
-        lambda: page().render().serialize_result(request_method=5),
-        lambda: serialize_render_result(page().render(), request_method=5),
-        lambda: serialize_render(page().render(), request_method=5),
-    ):
-        with pytest.raises(ValueError, match="request_method"):
-            call()  # type: ignore[arg-type]
-
-
-def test_a_mounted_start_script_is_a_csp_hash_source_in_both_forms() -> None:
+def test_a_mounted_start_script_is_a_csp_hash_source() -> None:
     page = _page(_mounted(security_script_integrity="citry"), {})
-    hashes = {}
-    for method in ("GET", "POST"):
-        result = page().render().serialize_result(request_method=method)
-        [match] = _blocks(result.html)
-        # The exact text the browser runs is what the page's CSP must allow.
-        assert _source_hash(match["start"]) in result.security.csp_script_hashes
-        hashes[method] = _source_hash(match["start"])
-        # The data block never runs, so it is not a CSP source.
-        assert _source_hash(match["json"]) not in result.security.csp_script_hashes
-    # The two forms are two different scripts, so a host that sends hashes lists the one it rendered.
-    assert hashes["GET"] != hashes["POST"]
+    result = page().render().serialize_result()
+
+    [match] = _blocks(result.html)
+    # The exact text the browser runs is what the page's CSP must allow.
+    assert _source_hash(match["start"]) in result.security.csp_script_hashes
+    # The data block never runs, so it is not a CSP source.
+    assert _source_hash(match["json"]) not in result.security.csp_script_hashes
 
 
 def test_a_mounted_start_script_carries_the_nonce() -> None:
     registry = _mounted(security_csp="strict")
-    html = _page(registry, {})().render().serialize(csp_nonce="requestNonce", request_method="POST")
+    html = _page(registry, {})().render().serialize(csp_nonce="requestNonce")
 
     [match] = _blocks(html)
     assert 'nonce="requestNonce"' in match["start_attrs"]
     assert 'nonce="requestNonce"' in match["attrs"]
-    assert "  var canReload = false;\n" in match["start"]
+    # This is the mounted form of the script, not the one-line call.
+    assert "console.error(" in match["start"]
+
+
+def test_an_unmounted_document_keeps_the_one_line_start_script() -> None:
+    html = _page(Citry(autodiscover=False), {})().render().serialize()
+
+    [match] = _blocks(html)
+    # The runtime is inline here, so there is no URL that could go missing and nothing to report.
+    assert match["start"] == f'__citryRuntime.startDocument("{match["app"]}");'
+    assert "__citryRuntimeMissing" not in html
+
+
+def test_a_fragment_writes_no_start_script() -> None:
+    page = _page(_mounted(), {})
+
+    html = page().render().serialize(deps_strategy="fragment")
+
+    # A fragment is started by the loader it carries, not by a start script,
+    # and that loader reports a failed runtime itself.
+    assert "startDocument" not in html
+    assert "__citryRuntimeMissing" not in html
+    assert _blocks(html) == []
 
 
 def test_several_apps_on_one_page_each_get_their_own_block() -> None:

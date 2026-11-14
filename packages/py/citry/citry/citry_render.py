@@ -468,7 +468,6 @@ class CitryRender:
         security_javascript: SecurityJavascriptMode | None = None,
         security_script_integrity: SecurityScriptIntegrityMode | None = None,
         ssr: bool | None = None,
-        request_method: str | None = None,
     ) -> str:
         """
         Turn this render into a final HTML string.
@@ -531,16 +530,6 @@ class CitryRender:
                 for this render.
             ssr: Override the engine's initial Vue HTML hydration setting.
                 ``None`` uses the [`ssr`][citry.CitrySettings.ssr] setting.
-            request_method: The HTTP method of the request this page
-                answers, such as ``request.method``. When the page's
-                runtime file is missing after a deploy, a page that
-                answers ``GET`` or ``HEAD`` (in any letter case) reloads
-                once to fetch fresh HTML. Any other page does not reload,
-                because some browsers send a form again without asking
-                when a page that answered a ``POST`` reloads. ``None``
-                (the default) means Citry cannot tell, so the page does
-                not reload. It keeps its server HTML and logs an error in
-                the browser console.
 
         Raises:
             RuntimeError: If a child component was left unrendered, which can
@@ -548,8 +537,7 @@ class CitryRender:
                 if the same render is placed more than once in the output;
                 or if ``deps_strategy="fragment"`` needs a mounted web
                 integration and none is mounted.
-            ValueError: If an argument is invalid, such as a
-                ``request_method`` that is not an HTTP method name; if
+            ValueError: If an argument is invalid; if
                 ``security_csp="strict"`` rejects the output or the output
                 needs ``csp_nonce`` and none was given; or if
                 ``security_javascript="forbid"`` finds a component that
@@ -566,7 +554,6 @@ class CitryRender:
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
             ssr=ssr,
-            request_method=request_method,
         ).html
 
     def serialize_result(
@@ -579,7 +566,6 @@ class CitryRender:
         security_javascript: SecurityJavascriptMode | None = None,
         security_script_integrity: SecurityScriptIntegrityMode | None = None,
         ssr: bool | None = None,
-        request_method: str | None = None,
     ) -> SerializedRender:
         """
         Return final HTML together with security metadata for those exact bytes.
@@ -602,7 +588,6 @@ class CitryRender:
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
             ssr=ssr,
-            request_method=request_method,
         )
 
     def __str__(self) -> str:

@@ -62,10 +62,6 @@ For complete, runnable apps, see the
 [starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
 for FastAPI, Django, Flask, bare ASGI, and bare WSGI.
 
-After you upgrade Citry, a page whose runtime is gone recovers by itself
-only when its view passes the request method to `serialize()`. See
-[Pass the request method](#pass-the-request-method).
-
 ## Link the runtime by hand
 
 Citry links the runtime in a full page that contains interactive
@@ -380,8 +376,8 @@ Django cache through `DjangoCache` (see
 without an expiry time, because a page that is already open may ask for
 them at any later time. Give the backend enough room that it does not drop
 them while such pages are still in use. Browser runtimes are the
-exception: Citry keeps each one for 30 days after it was last written,
-which covers pages rendered before a deploy (see
+exception: the shared cache keeps each one for 30 days after a worker
+last wrote it, which covers pages rendered before a deploy (see
 [Deploy a Citry upgrade](#deploy-a-new-version)).
 
 A single process without a configured cache keeps the compiled code,
@@ -577,60 +573,26 @@ starts anyway when the browser kept that file, or when a
 The cache keeps each runtime for 30 days after it was last written. To
 keep every page working after an upgrade:
 
-- pass the request method to `serialize()`, so a page whose runtime is
-  gone can reload itself once (below);
 - clear whole-page caches when you deploy;
 - give every worker one shared cache.
 
 When neither the browser nor the server has the old runtime, the server
 answers `404`. The page keeps the HTML the server sent: links and plain
-forms work, interactive components do not start, and the browser console
-shows `Citry could not load its runtime`. A page whose view passed the
-request method then reloads once to get fresh HTML. Any other page stays
-as it is until the visitor opens it again.
+forms work, but interactive components do not start, and the browser
+console shows `Citry could not load its runtime` with the runtime's URL.
+Reloading the page gets fresh HTML that names the current runtime.
+Citry does not reload the page by itself
+([#665](https://github.com/citry-dev/citry/issues/665) tracks that).
 
-The reload comes from the script Citry writes to start the page. A page
-that links the runtime with a `<script>` tag you wrote yourself does not
-reload. It picks up the new runtime the next time your view builds the
-page.
-
-### Pass the request method
-
-Pass the request's method to `serialize()` in every view that returns a
-page:
-
-```python
-@app.get("/contact")
-async def contact(request: Request) -> HTMLResponse:
-    contact_page = ContactPage()
-    page = contact_page.render()
-    html = page.serialize(request_method=request.method)
-    return HTMLResponse(html)
-```
-
-`str(ContactPage())`, `str(page)`, and `bytes(page)` pass no method, so
-use `serialize()`. The same expression, `request.method`, works in
-Django and Flask.
-
-Only a page that answers `GET` or `HEAD` reloads, and the reload repeats
-that `GET` request. A page that answers anything else, such as a form
-`POST`, never reloads, because reloading it would send the form again,
-and some browsers do that without asking the visitor. A page rendered
-without `request_method` never reloads either.
-
-Pass the method the request really used. If repeating a `GET` request
-is not harmless, for example because the view uses up a one-time link,
-do not pass `request_method` from that view.
-
-Pass `request.method` as it is; `get` and `GET` both count. A value that
-is not an HTTP method name raises `ValueError`. Citry never writes the
-value to the page.
+A page that links the runtime with a `<script>` tag you wrote yourself
+shows the browser's own error for the failed file instead. It picks up
+the new runtime the next time your view builds the page.
 
 ### Clear whole-page caches
 
 A CDN or page cache that stores whole HTML pages keeps serving pages that
-name the old runtime after a deploy, and a page that reloads itself gets
-the same page again. Clear those caches when you deploy a Citry upgrade.
+name the old runtime after a deploy, and reloading such a page gets the
+same page again. Clear those caches when you deploy a Citry upgrade.
 
 ### Handle rolling deploys { #rolling-deploys }
 

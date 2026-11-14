@@ -1649,14 +1649,8 @@ random for each response. Compute the hashes for each response, as for
 any page with inline scripts.
 
 On a page that links the runtime by URL, the script also names that URL,
-so its hash changes when the runtime file changes. The script then has
-two forms: one for a page whose view passed `request_method` with `GET`
-or `HEAD`, and one for every other page. Take the hash from
-`csp_script_hashes` each time. That script may also send a `HEAD`
-request for the runtime URL when the runtime is missing, so a
-`connect-src` (or `default-src`) that blocks this URL stops the page
-from reloading itself; see
-[Deploy a Citry upgrade](/advanced/web-frameworks/#deploy-a-new-version).
+so its hash changes when the runtime file changes. Take the hash from
+`csp_script_hashes` each time.
 
 The page's data, such as the rows of a table, is JSON that the browser
 never runs. `csp_script_hashes` leaves it out, because your policy does not
@@ -1720,8 +1714,9 @@ Citry:
 
 - **A cache in front of Citry's files.** The stable `/citry/citry.js`
   keeps its URL across Citry upgrades, and Citry marks it `no-store`. A
-  cache that ignores this keeps serving the old file, so a page that
-  links this URL runs the old runtime until you clear the cache. Pages
+  cache that ignores this keeps serving the old file until you clear the
+  cache. A page that links this URL then runs the old runtime, or, when
+  its tag carries `integrity`, the browser refuses the file. Pages
   that Citry renders link a URL that changes when the file changes, so
   they are not affected.
 - **A cache of whole pages.** A page cached before an upgrade names the
@@ -1734,10 +1729,9 @@ Citry:
   processes run the new Citry version and some the old one. A page from
   one version can ask a process on the other version for its runtime. That
   process answers from a shared cache if you set one. Without a shared
-  cache it answers `404`, and a page whose view passed `request_method`
-  reloads once. If the reload reaches a process without the file again,
-  the page stays without its interactive components until the visitor's
-  next visit. This ends when every process runs the new version. See
+  cache it answers `404`, and the page's interactive components do not
+  start until the visitor reloads it. This ends when
+  every process runs the new version. See
   [Handle rolling deploys](/advanced/web-frameworks/#rolling-deploys).
 
 ## How we check advisories { #how-we-check }

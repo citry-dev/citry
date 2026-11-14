@@ -1142,8 +1142,9 @@ keeps one copy of the file.
 A digest that is not 64 lowercase hex characters, or one the server does not
 hold, gets `404` with an empty body. The answer carries
 `Cache-Control: no-store`, so neither the browser nor a CDN keeps the miss.
-It also carries `Access-Control-Allow-Origin: *`, so a page in a sandboxed
-iframe (every request counts as cross-origin there) can read the status. A
+It also carries `Access-Control-Allow-Origin: *`, so a page that loads the
+file with `crossorigin`, or from a sandboxed iframe where every request counts
+as cross-origin, sees the `404` in the console rather than a CORS error. A
 path with an extra dot matches no route. The ASGI and WSGI apps, and FastAPI
 and Flask through them, answer it with `Not Found` and
 `Cache-Control: no-store`; Django answers with the project's own `404`.

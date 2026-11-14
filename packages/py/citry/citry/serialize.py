@@ -88,10 +88,6 @@ _VALUED_MARKER_RE = re.compile(r'^[^\s"\'=<>/]+="[^"<>]*"$')
 _DEPS_STRATEGIES = get_args(DepsStrategy)
 _DEPS_POSITIONS = get_args(DepsPosition)
 _CSP_NONCE_RE = re.compile(r"^[A-Za-z0-9+/_-]+={0,2}$")
-# An HTTP method name is a "token" (RFC 9110 section 5.6.2).
-_REQUEST_METHOD_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
-# Reloading a page that answered one of these sends no form again.
-_RELOADABLE_METHODS = frozenset({"GET", "HEAD"})
 # Matches HTML that starts like a whole document: optional whitespace and a
 # byte order mark, optional leading comments, then a doctype or `<html>`.
 # The leading comments are read as one span, from the first `<!--` to a
@@ -552,8 +548,6 @@ class _SerializationSession:
     security_javascript: SecurityJavascriptMode
     security_script_integrity: SecurityScriptIntegrityMode
     csp_nonce: str | None
-    # Whether the page may reload itself once when its runtime is missing.
-    can_reload: bool = False
     _script_security: _ScriptSecurityMaterializer | None = field(init=False, default=None)
     _javascript_policy: _JavascriptPolicy | None = field(init=False, default=None)
 
@@ -589,7 +583,6 @@ class _SerializationSession:
         security_csp: SecurityCspMode | None,
         security_javascript: SecurityJavascriptMode | None,
         security_script_integrity: SecurityScriptIntegrityMode | None,
-        request_method: str | None = None,
     ) -> _SerializationSession:
         component = root.context.component
         owner_citry = (
@@ -607,16 +600,12 @@ class _SerializationSession:
         if security_script_integrity is not None:
             effective_integrity = _validate_security_script_integrity(security_script_integrity)
         effective_nonce = _validate_csp_nonce(csp_nonce)
-        # Checked on every call, even one that writes no start script, so a
-        # wrong value shows up the first time the app runs the view.
-        can_reload = _can_reload_for_method(request_method)
 
         return cls(
             security_csp=effective_csp,
             security_javascript=effective_javascript,
             security_script_integrity=effective_integrity,
             csp_nonce=effective_nonce,
-            can_reload=can_reload,
         )
 
     def freeze(self) -> SerializedSecurity:
@@ -642,7 +631,6 @@ def serialize_render(
     security_javascript: SecurityJavascriptMode | None = None,
     security_script_integrity: SecurityScriptIntegrityMode | None = None,
     ssr: bool | None = None,
-    request_method: str | None = None,
 ) -> str:
     """Compatibility wrapper returning only the serialized HTML string."""
     return serialize_render_result(
@@ -654,7 +642,6 @@ def serialize_render(
         security_javascript=security_javascript,
         security_script_integrity=security_script_integrity,
         ssr=ssr,
-        request_method=request_method,
     ).html
 
 
@@ -668,7 +655,6 @@ def serialize_render_result(
     security_javascript: SecurityJavascriptMode | None = None,
     security_script_integrity: SecurityScriptIntegrityMode | None = None,
     ssr: bool | None = None,
-    request_method: str | None = None,
 ) -> SerializedRender:
     """Serialize a render tree and return its HTML and security metadata."""
     # The Vue serialization step leaves notes in the root context's extra for
@@ -691,7 +677,6 @@ def serialize_render_result(
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
             ssr=ssr,
-            request_method=request_method,
         )
     finally:
         for key in SERIALIZATION_NOTE_KEYS:
@@ -709,7 +694,6 @@ def _serialize_render_result(
     security_javascript: SecurityJavascriptMode | None,
     security_script_integrity: SecurityScriptIntegrityMode | None,
     ssr: bool | None,
-    request_method: str | None,
 ) -> SerializedRender:
     """
     Serialize a render tree; ``serialize_render_result`` clears and restores
@@ -735,7 +719,6 @@ def _serialize_render_result(
         security_csp=security_csp,
         security_javascript=security_javascript,
         security_script_integrity=security_script_integrity,
-        request_method=request_method,
     )
     session.require_implemented_modes()
     csp_validator = None if session.security_csp == "off" else _CspRenderValidator(session.security_csp)
@@ -1085,7 +1068,6 @@ def _serialize_render_result(
                 early_selected_tree=early_selected_tree,
                 hydration_candidate=hydration_candidate,
                 server_html=server_html,
-                _can_reload=session.can_reload,
             )
             html = root_citry.extensions.on_serialize(
                 context=root.context,
@@ -1161,26 +1143,6 @@ def _serialize_render_result(
         html = session._script_security.finalize(html)
 
     return SerializedRender(html=html, security=session.freeze())
-
-
-def _can_reload_for_method(value: str | None) -> bool:
-    """
-    Return whether a page that answered ``value`` may reload itself, after checking it is a method name.
-
-    ``None`` means the app did not say, so the page might answer a form
-    ``POST``. Chrome sends the form again without asking when such a page
-    calls ``location.reload()``, so an unknown method never reloads.
-    """
-    if value is None:
-        return False
-    if type(value) is not str or _REQUEST_METHOD_RE.fullmatch(value) is None:
-        raise ValueError(
-            "Invalid request_method: expected an HTTP method name such as 'GET' or 'POST' "
-            "(pass the request's method, such as request.method)."
-        )
-    # Method names are case-sensitive in HTTP, but frameworks report them in
-    # upper case, so "get" is read as GET rather than as an unknown method.
-    return value.upper() in _RELOADABLE_METHODS
 
 
 def _validate_csp_nonce(value: str | None) -> str | None:

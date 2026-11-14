@@ -76,8 +76,7 @@ attribute from a template value; see
 
 If the runtime does not load, for example because the page names an old
 runtime after a Citry upgrade, inserted fragments do not start, and the
-browser console shows the failed request. A fragment never reloads the
-page. When a fragment's own loader adds the runtime (see
+browser console shows the failed request. When a fragment's own loader adds the runtime (see
 [Insert into other pages](#insert-into-other-pages)) and the file fails,
 the console also shows `Citry could not load its runtime`.
 

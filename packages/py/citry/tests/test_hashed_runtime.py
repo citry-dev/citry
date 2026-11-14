@@ -28,8 +28,9 @@ from citry.util.routing import RouteRequest, RouteResponse, match_route
 
 PACKAGE = Path(citry_package.__file__).parent
 THIRTY_DAYS = 30 * 24 * 60 * 60
-# A miss tells the browser nothing about the file but its status, and a frame with no
-# origin can read that status only when the answer allows any origin. Nothing may keep it.
+# A page on another origin (a sandboxed frame, or one that loads the runtime from a CDN)
+# loads it with `crossorigin`. Without this header its console shows a CORS error that
+# hides the 404. No browser or CDN may store a miss.
 MISS_HEADERS = (("Access-Control-Allow-Origin", "*"), ("Cache-Control", "no-store"))
 
 # Each runtime with the files it is read from, the stable URL that serves the

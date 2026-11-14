@@ -5,23 +5,25 @@ These browser tests check the claims in ``docs/design/runtime_hashed_urls.md``
 section 7, the results that would show the design is wrong:
 
 - a second page load reuses the browser's copy of the runtime;
-- a page whose runtime the server no longer holds reloads at most once, and
-  never when it cannot tell whether it already reloaded, when the app marked
-  it as answering a form POST, or when the runtime failed for another reason;
-- a missing i18n plugin script follows the same rule;
+- a page whose runtime the server no longer holds keeps its server HTML,
+  writes exactly one console error that names the runtime URL (also on a page
+  with two apps), sends no request of its own, and does not reload;
+- a missing i18n plugin script gives the runtime's own plugin error and the
+  page does not reload;
 - a page reopened with the back button runs the runtime its HTML names.
 
 The server is a real WSGI app with Citry's routes mounted under ``/citry``.
 It logs every request it receives, so the tests count what reached the server
-(including the ``HEAD`` probe) rather than what Playwright saw. Playwright's
-``page.route`` turns the browser's HTTP cache off, so the tests that depend on
-that cache change answers on the server instead.
+rather than what Playwright saw. Playwright's ``page.route`` turns the
+browser's HTTP cache off, so the tests that depend on that cache change
+answers on the server instead.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import threading
 from collections.abc import Callable
 from socketserver import ThreadingMixIn
@@ -46,23 +48,18 @@ PREFIX = "/citry"
 RUNTIME_PATH = f"{PREFIX}/{SHARED_RUNTIME.hashed_path}"
 I18N_PATH = f"{PREFIX}/{I18N_RUNTIME.hashed_path}"
 MISSING_MESSAGE = "Citry could not load its runtime"
+PLUGIN_ERROR = "missing or incompatible Citry browser plugin: i18n"
 # A well-formed digest that names no runtime this server holds.
 UNKNOWN_DIGEST = "0" * 64
+MISSING_PATH = f"{PREFIX}/citry.{UNKNOWN_DIGEST}.js"
 
 # Each page counts as a fresh load only when the browser did not restore it
 # from the back/forward cache, which would skip its scripts entirely.
 _RECORD_PAGESHOW = "addEventListener('pageshow', e => { window.__pageshowPersisted = e.persisted; });"
-_BLOCK_SESSION_STORAGE = """
-Object.defineProperty(window, 'sessionStorage', {
-  get() { throw new DOMException('blocked by the test', 'SecurityError'); },
-});
-"""
-# Removes both sources the start script reads to tell a reload from a first
-# load, as in a browser that offers neither.
-_REMOVE_NAVIGATION_TYPE = """
-delete Performance.prototype.getEntriesByType;
-delete Performance.prototype.navigation;
-"""
+# Page markup can take over plain window names, so these two elements answer
+# `window.__citryRuntime` and `window.__citryRuntimeMissing` until a script
+# sets a property of that name.
+_TAKEOVER_MARKUP = '<div id="__citryRuntime"></div><div id="__citryRuntimeMissing"></div>'
 
 Response = tuple[int, list[tuple[str, str]], bytes]
 Handler = Callable[[str, str], "Response | None"]
@@ -163,9 +160,9 @@ def _page_class(app: Citry) -> type[Component]:
     return Page
 
 
-def _get_page(app: Citry) -> str:
-    """Render the probe page as the answer to a GET, the only kind of page that may reload itself."""
-    return _page_class(app)().render().serialize(request_method="GET")
+def _page_html(app: Citry) -> str:
+    """Render the probe page as a full document, the way a host sends it."""
+    return _page_class(app)().render().serialize()
 
 
 def _missing(html: str, digest: str = UNKNOWN_DIGEST) -> str:
@@ -175,7 +172,7 @@ def _missing(html: str, digest: str = UNKNOWN_DIGEST) -> str:
 
 
 def _record_console(page: Any) -> tuple[list[str], list[str]]:
-    """Collect the runtime-missing errors and every page error, across reloads."""
+    """Collect the runtime-missing console errors and every page error."""
     missing: list[str] = []
     errors: list[str] = []
     page.on("console", lambda m: m.type == "error" and MISSING_MESSAGE in m.text and missing.append(m.text))
@@ -189,9 +186,14 @@ def _wait_for(page: Any, items: list[Any], count: int, *, quiet_ms: int = 600) -
         if len(items) >= count:
             break
         page.wait_for_timeout(10)
-    # A second reload would come after the probe, so keep watching a while.
+    # A second report or a reload would come after the first, so keep watching a while.
     page.wait_for_timeout(quiet_ms)
     assert len(items) == count, items
+
+
+def _requests_other_than_get(server: Server) -> list[tuple[str, str]]:
+    """Return every request the server saw that was not a GET; a page that only loads and starts sends none."""
+    return [entry for entry in server.log if entry[0] != "GET"]
 
 
 # -- 1. Repeat loads ---------------------------------------------------------
@@ -219,119 +221,129 @@ def test_a_second_page_reuses_the_browsers_copy_of_the_runtime(
     assert server.count("GET", f"{PREFIX}/citry.js") == 0
 
 
-# -- 2. A missing runtime reloads the page at most once ----------------------
+# -- 2. A missing runtime keeps the server HTML and says so once --------------
 
 
-@pytest.mark.parametrize("variant", ["plain", "session-storage-blocked", "new-hash-on-every-load"])
-def test_a_missing_runtime_reloads_the_page_once(page: Any, serve: Callable[..., Server], variant: str) -> None:
+@pytest.mark.parametrize("failure", ["not-found", "aborted"])
+def test_a_missing_runtime_keeps_the_server_html_and_says_so_once(
+    page: Any, serve: Callable[..., Server], failure: str
+) -> None:
     app = _engine("citry")
-    html = _get_page(app)
-    loads = [0]
-
-    def handler(method: str, path: str) -> Response | None:
-        if path != "/page":
-            return None
-        loads[0] += 1
-        # Stands in for a host whose cache answers each load with a page from
-        # yet another old deploy.
-        digest = f"{loads[0]:064x}" if variant == "new-hash-on-every-load" else UNKNOWN_DIGEST
-        return _html(_missing(html, digest))
-
-    if variant == "session-storage-blocked":
-        page.add_init_script(_BLOCK_SESSION_STORAGE)
-    missing, _ = _record_console(page)
-    server = serve(app, handler)
+    html = _page_html(app)
+    url = RUNTIME_PATH
+    if failure == "not-found":
+        # A page from an older deploy names a hash that no worker holds, so the
+        # server answers 404 for it.
+        html = _missing(html)
+        url = MISSING_PATH
+    else:
+        # The same message when the request fails as on a dropped connection:
+        # the start script only sees that the runtime never defined its name.
+        page.route(f"**{RUNTIME_PATH}", lambda route: route.abort())
+    missing, errors = _record_console(page)
+    server = serve(app, _pages({"/page": html}))
 
     page.goto(server.url + "/page")
     _wait_for(page, missing, 1)
 
-    assert server.count("GET", "/page") == 2
-    heads = [path for method, path in server.log if method == "HEAD"]
-    assert len(heads) == 1
-    # The reload kept the server HTML; it is still all the user sees.
+    assert missing == [f"{MISSING_MESSAGE}: {url}"]
+    # The page asked for itself once, never reloaded, and sent no request of its own.
+    assert server.count("GET", "/page") == 1
+    assert _requests_other_than_get(server) == []
+    if failure == "not-found":
+        # The 404 is stored nowhere, so a second request for the file would
+        # show that the page retries it, or that its preload hint and script
+        # tag disagree.
+        assert server.count("GET", url) == 1
+    assert page.evaluate("performance.getEntriesByType('navigation')[0].type") == "navigate"
+    assert page.evaluate("sessionStorage.length") == 0
+    # The server HTML is still all the visitor sees, and the report is the only failure.
     assert page.locator(".server").text_content() == "Server copy"
     assert page.locator(".probe").text_content() == "fallback"
+    assert errors == []
 
 
-def test_a_missing_runtime_reloads_a_sandboxed_frame_with_no_origin_once(
-    page: Any, serve: Callable[..., Server]
+def test_a_sandboxed_frame_with_no_origin_reports_a_missing_runtime_once(
+    page: Any, serve: Callable[..., Server], browser_name: str
 ) -> None:
     app = _engine("citry")
-    html = _missing(_get_page(app))
+    html = _missing(_page_html(app))
+    # A sandboxed frame has no origin, so its storage throws and every request
+    # it sends is cross-origin. The start script must still report once.
     frame = '<!doctype html><iframe sandbox="allow-scripts" src="/page"></iframe>'
     pages = {"/page": html, "/frame": frame}
-    missing, _ = _record_console(page)
+    missing, errors = _record_console(page)
+    console: list[str] = []
+    page.on("console", lambda message: console.append(message.text))
     server = serve(app, _pages(pages))
 
     page.goto(server.url + "/frame")
     _wait_for(page, missing, 1)
 
     assert page.frames[1].evaluate("self.origin") == "null"
-    heads = [path for method, path in server.log if method == "HEAD"]
-    assert len(heads) == 1
-    assert server.count("GET", "/page") == 2
-
-
-@pytest.mark.parametrize("variant", ["no-navigation-type", "request-method-post", "no-request-method"])
-def test_a_missing_runtime_does_not_reload_when_the_page_must_not(
-    page: Any, serve: Callable[..., Server], variant: str
-) -> None:
-    app = _engine("citry")
-    render = _page_class(app)().render()
-    if variant == "request-method-post":
-        html = render.serialize(request_method="POST")
-    elif variant == "no-request-method":
-        # Citry cannot tell which method the page answers, so it never reloads.
-        html = render.serialize()
-    else:
-        html = render.serialize(request_method="GET")
-        # The page cannot tell a reload from a first load, so it never reloads.
-        page.add_init_script(_REMOVE_NAVIGATION_TYPE)
-    missing, errors = _record_console(page)
-    server = serve(app, _pages({"/page": _missing(html)}))
-
-    page.goto(server.url + "/page")
-    _wait_for(page, missing, 1)
-
+    assert missing == [f"{MISSING_MESSAGE}: {MISSING_PATH}"]
+    if browser_name != "firefox":
+        # The 404 allows any origin, so the browser reports the missing file
+        # itself and not a CORS failure that would hide it. Firefox words a
+        # blocked script as a CORS failure even then, so it is left out.
+        assert [text for text in console if re.search(r"cors|cross-origin|access-control", text, re.IGNORECASE)] == []
     assert server.count("GET", "/page") == 1
-    assert [entry for entry in server.log if entry[0] == "HEAD"] == []
-    assert page.locator(".server").text_content() == "Server copy"
+    assert _requests_other_than_get(server) == []
     assert errors == []
 
 
-# -- 3. A runtime that fails for another reason never reloads ---------------
-
-
-@pytest.mark.parametrize("probe", ["answers-200", "aborted"])
-def test_a_runtime_that_fails_to_load_without_a_404_keeps_the_server_html(
-    page: Any, serve: Callable[..., Server], probe: str
-) -> None:
+def test_two_apps_on_one_page_report_a_missing_runtime_once(page: Any, serve: Callable[..., Server]) -> None:
     app = _engine("citry")
-    html = _get_page(app)
-    missing, _ = _record_console(page)
+    # Two documents joined into one page, as a host layout might, give two
+    # start scripts; the first one to find the runtime missing reports for both.
+    page_class = _page_class(app)
+    html = _missing(page_class().render().serialize() + page_class().render().serialize())
+    missing, errors = _record_console(page)
     server = serve(app, _pages({"/page": html}))
 
-    def route(route: Any) -> None:
-        # The runtime itself fails as on a dropped connection; the probe
-        # either reaches the server, which holds this runtime, or fails too.
-        if route.request.method == "HEAD" and probe == "answers-200":
-            route.continue_()
-        else:
-            route.abort()
-
-    page.route(f"**{RUNTIME_PATH}", route)
     page.goto(server.url + "/page")
     _wait_for(page, missing, 1)
 
+    assert page.locator(".server").count() == 2
+    assert html.count('data-citry-vue-document="') == 2
+    assert missing == [f"{MISSING_MESSAGE}: {MISSING_PATH}"]
     assert server.count("GET", "/page") == 1
-    assert server.count("HEAD", RUNTIME_PATH) == (1 if probe == "answers-200" else 0)
-    assert page.locator(".server").text_content() == "Server copy"
+    assert errors == []
 
 
-# -- 4. A missing i18n plugin script ------------------------------------------
+@pytest.mark.parametrize("runtime", ["present", "missing"])
+def test_markup_that_takes_the_runtime_names_does_not_change_the_outcome(
+    page: Any, serve: Callable[..., Server], wait_for_citry_ready: Any, runtime: str
+) -> None:
+    app = _engine("citry")
+    html = _page_html(app).replace("<body>", f"<body>{_TAKEOVER_MARKUP}", 1)
+    assert _TAKEOVER_MARKUP in html
+    if runtime == "missing":
+        html = _missing(html)
+    missing, errors = _record_console(page)
+    server = serve(app, _pages({"/page": html}))
+
+    page.goto(server.url + "/page")
+    if runtime == "present":
+        # The elements answer the plain names, but the start script reads
+        # only window's own properties, so it still finds the runtime and
+        # starts the app.
+        wait_for_citry_ready(1)
+        assert page.locator(".probe").text_content() == "mounted"
+        assert missing == []
+    else:
+        # It also still finds that the runtime is missing, and the elements do
+        # not stand in for it or for the flag that keeps the report to one.
+        _wait_for(page, missing, 1)
+        assert missing == [f"{MISSING_MESSAGE}: {MISSING_PATH}"]
+        assert page.locator(".probe").text_content() == "fallback"
+    assert errors == []
 
 
-def _i18n_page_html(*, request_method: str | None = None) -> tuple[Citry, str]:
+# -- 3. A missing i18n plugin script ------------------------------------------
+
+
+def _i18n_page_html() -> tuple[Citry, str]:
     app = _engine(extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}})
 
     class Page(Component):
@@ -347,22 +359,24 @@ def _i18n_page_html(*, request_method: str | None = None) -> tuple[Citry, str]:
             </html>
         """
 
-    html = Page().render().serialize(request_method=request_method)
+    html = Page().render().serialize()
     assert I18N_PATH in html
     return app, html
 
 
-@pytest.mark.parametrize("request_method", ["GET", None, "POST"])
-def test_a_missing_i18n_plugin_reloads_a_full_page_once(
-    page: Any, serve: Callable[..., Server], request_method: str | None
+def test_a_missing_i18n_plugin_gives_the_runtimes_plugin_error_and_no_reload(
+    page: Any, serve: Callable[..., Server]
 ) -> None:
-    app, html = _i18n_page_html(request_method=request_method)
-    # The app fails to start with this error on every load, including the
-    # first load of a page that then reloads.
-    failed_starts: list[str] = []
-    page.on("pageerror", lambda error: "browser plugin: i18n" in str(error) and failed_starts.append(str(error)))
+    app, html = _i18n_page_html()
+    plugin_errors: list[str] = []
+    other_errors: list[str] = []
+    page.on(
+        "pageerror",
+        lambda error: (plugin_errors if PLUGIN_ERROR in str(error) else other_errors).append(str(error)),
+    )
+    missing, _ = _record_console(page)
 
-    def handler(method: str, path: str) -> Response | None:
+    def handler(_method: str, path: str) -> Response | None:
         if path == "/page":
             return _html(html)
         # Stands in for a worker on another version that lacks this plugin.
@@ -371,88 +385,41 @@ def test_a_missing_i18n_plugin_reloads_a_full_page_once(
         return None
 
     server = serve(app, handler)
-    # Only a page the app marked as answering a GET may reload.
-    expected_loads = 2 if request_method == "GET" else 1
     page.goto(server.url + "/page")
-    _wait_for(page, failed_starts, expected_loads)
+    _wait_for(page, plugin_errors, 1)
 
-    assert server.count("GET", "/page") == expected_loads
-    assert server.count("HEAD", I18N_PATH) == expected_loads - 1
-    assert server.count("HEAD", RUNTIME_PATH) == 0
+    # The runtime loaded, so the only report is its own plugin error.
+    assert missing == []
+    assert other_errors == []
+    assert server.count("GET", "/page") == 1
+    assert _requests_other_than_get(server) == []
+    assert page.evaluate("performance.getEntriesByType('navigation')[0].type") == "navigate"
+    assert page.evaluate("sessionStorage.length") == 0
     assert page.locator(".locale").text_content() == "fallback"
 
 
-# -- 5. A page that answers a form POST --------------------------------------
-
-
-_FORM = '<!doctype html><form method="post" action="/submit"><button>send</button></form>'
-
-
-def _submit(page: Any, server: Server) -> list[str]:
-    """Send the form, dismiss any dialog the browser shows, and return the dialogs it showed."""
-    dialogs: list[str] = []
-
-    def dismiss(dialog: Any) -> None:
-        dialogs.append(f"{dialog.type}: {dialog.message}")
-        dialog.dismiss()
-
-    page.on("dialog", dismiss)
-    page.goto(server.url + "/form")
-    page.locator("button").click()
-    return dialogs
-
-
-@pytest.mark.parametrize("request_method", ["POST", None])
-def test_a_page_that_answers_a_post_does_not_reload(
-    page: Any, serve: Callable[..., Server], request_method: str | None
-) -> None:
-    """
-    Answer a form POST with a page whose runtime is missing, and check that it never reloads.
-
-    A reload of such a page sends the form again. Playwright's Chromium,
-    headless and headed, and Google Chrome resend the POST without asking;
-    Firefox asks first and WebKit reloads with a GET. So a page reloads only
-    when the app passes ``request_method="GET"`` or ``"HEAD"``, and a page
-    rendered without ``request_method`` keeps its server HTML like a POST
-    page does.
-    """
-    app = _engine("citry")
-    html = _missing(_page_class(app)().render().serialize(request_method=request_method))
-    pages = {("GET", "/form"): _FORM, ("POST", "/submit"): html}
-    missing, _ = _record_console(page)
-    server = serve(app, lambda method, path: _html(pages[method, path]) if (method, path) in pages else None)
-
-    dialogs = _submit(page, server)
-    _wait_for(page, missing, 1, quiet_ms=1500)
-
-    assert server.count("POST", "/submit") == 1
-    assert [entry for entry in server.log if entry[0] == "HEAD"] == []
-    assert dialogs == []
-    assert page.locator(".server").text_content() == "Server copy"
-
-
-# -- 6. Prerendering -----------------------------------------------------------
+# -- 4. Prerendering -----------------------------------------------------------
 
 
 # Only Chromium acts on speculation rules.
 @pytest.mark.only_browser("chromium")
-def test_a_visit_after_prerendering_behaves_like_an_ordinary_load(page: Any, serve: Callable[..., Server]) -> None:
+def test_a_visit_after_prerendering_reports_a_missing_runtime_once(page: Any, serve: Callable[..., Server]) -> None:
     """
     Prerender a page whose runtime is missing, then follow the link to it.
 
     Headless Chromium fetches the page for speculation rules before the click
     but runs none of its scripts until the user arrives, so this shows only
-    that the visit then costs at most one reload, like any other load. It
-    does not reach a reload started inside a prerendered page.
+    that the visit then reports once and fetches the page no second time. It
+    does not reach a script started inside a prerendered page.
     """
     app = _engine("citry")
-    html = _missing(_get_page(app))
+    html = _missing(_page_html(app))
     start = (
         '<!doctype html><a href="/page">go</a><script type="speculationrules">'
         '{"prerender": [{"source": "list", "urls": ["/page"]}]}</script>'
     )
     pages = {"/start": start, "/page": html}
-    missing, _ = _record_console(page)
+    missing, errors = _record_console(page)
     server = serve(app, _pages(pages))
 
     page.goto(server.url + "/start")
@@ -461,16 +428,18 @@ def test_a_visit_after_prerendering_behaves_like_an_ordinary_load(page: Any, ser
             break
         page.wait_for_timeout(10)
     assert server.count("GET", "/page") == 1
-    assert server.count("GET", RUNTIME_PATH) == 0
+    assert server.count("GET", MISSING_PATH) == 0
     page.locator("a").click()
     _wait_for(page, missing, 1)
 
-    # The visit used the prerendered HTML, probed once, and reloaded once.
-    assert server.count("GET", "/page") == 2
-    assert server.count("HEAD", f"{PREFIX}/citry.{UNKNOWN_DIGEST}.js") == 1
+    # The visit used the prerendered HTML and did not ask for the page again.
+    assert missing == [f"{MISSING_MESSAGE}: {MISSING_PATH}"]
+    assert server.count("GET", "/page") == 1
+    assert _requests_other_than_get(server) == []
+    assert errors == []
 
 
-# -- 7. The back button never pairs a page with another runtime --------------
+# -- 5. The back button never pairs a page with another runtime --------------
 
 
 @pytest.mark.parametrize("integrity", ["off", "citry"])
@@ -488,7 +457,7 @@ def test_a_page_reopened_with_the_back_button_runs_the_runtime_its_html_names(
     first runtime from the browser's copy, never the second one.
     """
     app = _engine(integrity)
-    page_a = _get_page(app)
+    page_a = _page_html(app)
     upgraded_bytes = SHARED_RUNTIME.content.encode() + b"\nwindow.__citryRuntimeMarker = 'upgraded';\n"
     upgraded_digest = hashlib.sha256(upgraded_bytes).hexdigest()
     page_b = page_a.replace(SHARED_RUNTIME.digest, upgraded_digest)

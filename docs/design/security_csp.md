@@ -714,24 +714,15 @@ The start script's text never holds page data. A page rendered without a mount
 prefix inlines the runtime and gets the one-line
 `__citryRuntime.startDocument("APP_ID")`, which holds only the random app id.
 A mounted `document` render links the runtime at `<prefix>/citry.<sha256>.js`,
-so its start script also holds that URL and a `canReload` value of `true` or
-`false`. When the runtime failed to load, the script uses them to reload the
-page at most once, after a `HEAD` request for that URL answers `404`
+so its start script also holds that URL. When the runtime failed to load, the
+script names the URL in a `console.error`
 ([`runtime_hashed_urls.md`](runtime_hashed_urls.md) section 3.5). The URL and
-the app id are written with `script_json`. Two things follow for an app that
-sends script hashes in its policy:
-
-- The start script's hash changes whenever a Citry release changes the runtime
-  file, because the runtime URL carries a hash of the runtime's bytes.
-- The text has two forms, one for each `canReload` value. The server writes
-  `true` only when the app passes `serialize(request_method=...)` with `GET`
-  or `HEAD`, and `false` otherwise.
-
-Serialization reports the hash for each render in `csp_script_hashes`, so an
-app that copies the hashes from there picks up the new values. A policy that
-blocks the `HEAD` request through `connect-src` (or through `default-src` when
-it has no `connect-src`) only stops the reload: the page keeps its server HTML
-and the console shows the error.
+the app id are written with `script_json`. The script has one form, so its
+hash depends only on the app id and the runtime URL, and it changes whenever
+a Citry release changes the runtime file, because the runtime URL carries a
+hash of the runtime's bytes. Serialization reports the hash for each render in
+`csp_script_hashes`, so an app that copies the hashes from there picks up the
+new value. The script sends no request, so `connect-src` does not affect it.
 
 The per-script records in `serialized.security.scripts` still describe the
 data block with its digest, as they do for every inert structured script.

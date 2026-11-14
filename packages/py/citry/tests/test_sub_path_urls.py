@@ -438,8 +438,9 @@ class TestRuntimeUrl:
             html = page().render().serialize()
             linked = re.findall(r'src="(/shop/citry/citry\.[^"]*)"', html)
             assert linked == [engine.runtime_url()]
-            # The start script probes the same URL, with the sub-path in it.
-            assert json.dumps(engine.runtime_url()) in html
+            # The start script reports the same URL, with the sub-path in it.
+            report = f'console.error("Citry could not load its runtime: " + {json.dumps(engine.runtime_url())});'
+            assert report in html
 
 
 class TestRenderCache:

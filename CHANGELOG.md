@@ -68,14 +68,13 @@ does. The upgrade notes below list what can change.
   the request's thread holds, or, under gevent or eventlet, for anything
   another greenlet holds
   ([details](https://citry.dev/security/#check-event-data)).
-
-- **Pass `request_method` in your page views:** a page whose runtime is
-  missing after a deploy reloads itself once to get fresh HTML, but only
-  when its view passes `serialize(request_method=request.method)` and the
-  request was a `GET` or `HEAD`. Without it, the page keeps its server
-  HTML and its interactive components do not start until the visitor
-  opens it again. See
-  [Pass the request method](https://citry.dev/advanced/web-frameworks/#pass-the-request-method).
+- **A page can outlive the runtime it links:** pages now link Citry's
+  runtime by a URL that changes with each release (see Changed). When
+  a page rendered before a deploy names a runtime that neither the
+  browser nor a shared cache still holds, the page keeps its server
+  HTML, its interactive components do not start, and the browser
+  console shows `Citry could not load its runtime: <url>`. Reloading
+  the page fixes it, unless a cache serves the whole page (next item).
 - **Clear whole-page caches when you deploy, and give every worker the
   same cache during rolling deploys:** a page cached before a deploy
   names the old runtime's URL. During a rolling deploy, give every
@@ -84,10 +83,7 @@ does. The upgrade notes below list what can change.
 - **Fixed app ids get a new script hash:** if you set `id_generator` so
   the script that starts a page's Vue app has the same CSP hash on every
   response, that hash now also changes when Citry's runtime file
-  changes. It also differs between pages whose view passes
-  `request_method` with `GET` or `HEAD` and pages that pass anything
-  else or nothing. Take the hashes from `csp_script_hashes`, as
-  before.
+  changes. Take the hashes from `csp_script_hashes`, as before.
 - **Interactive renders now write to your cache:** with a cache backend
   set, every render that links the runtime by URL, fragments included,
   makes sure the runtime is stored there, checking at most once a minute
@@ -100,9 +96,6 @@ does. The upgrade notes below list what can change.
 - `Citry.runtime_url()` returns the URL of Citry's browser runtime, for a
   page whose HTML you write yourself. See
   [Link the runtime by hand](https://citry.dev/advanced/web-frameworks/#link-the-runtime-by-hand).
-- `serialize()` and `serialize_result()` take a `request_method`
-  keyword, which lets a page reload itself once when its runtime is
-  missing after a deploy.
 
 ### Changed
 

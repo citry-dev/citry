@@ -866,8 +866,9 @@ def _preloader_script(
         f"{integrity_line}"
         f"{crossorigin_line}"
         f"{nonce_line}"
-        # A fragment never reloads the page, which would lose the user's
-        # work, so a runtime that fails to load is only reported.
+        # Name the missing file in the console; without this the browser
+        # shows only a failed request, and the fragment's components never
+        # start, with no message.
         f'  s.onerror = function () {{ console.error("Citry could not load its runtime: " + {url_literal}); }};\n'
         '  member("head").appendChild(s);\n'
         "}\n"

@@ -662,7 +662,7 @@ def test_the_stable_runtime_urls_send_the_hashed_runtimes_bytes_uncached(adapter
 @pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
 def test_head_on_a_hashed_runtime_answers_like_get_without_asking_for_the_body(adapter: str) -> None:
     app = _app()
-    # The page's start script sends this request to learn whether the server still holds the runtime.
+    # A CDN or a health check may ask for a runtime with HEAD, so it must get the status and headers GET would.
     for path in (f"/{SHARED_RUNTIME.hashed_path}", f"/{I18N_RUNTIME.hashed_path}"):
         status, lines = _header_lines(adapter, app, "HEAD", path)
         assert status == 200, path
@@ -688,8 +688,9 @@ def test_a_runtime_hash_this_worker_lacks_is_a_404_that_nothing_keeps(adapter: s
         status, lines = _header_lines(adapter, app, "GET", path)
         assert status == 404, path
         assert [value for name, value in lines if name == "cache-control"] == ["no-store"], path
-        # A page in a frame with no origin probes the runtime with a cross-origin
-        # request and reads the status only when the answer allows any origin.
+        # A page on another origin (a sandboxed frame, or one that loads the
+        # runtime from a CDN) loads it with `crossorigin`. Without this header
+        # its console shows a CORS error that hides the 404.
         assert [value for name, value in lines if name == CORS] == ["*"], path
 
 

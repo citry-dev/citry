@@ -854,12 +854,12 @@ class TestPerEventRoute:
         )
         [action] = response.json()["results"][0]["actions"]
         url = json.dumps(f"/citry/{SHARED_RUNTIME.hashed_path}")
-        # The page that receives this HTML may not have the runtime yet, so the result carries the loader for it.
+        # The page that receives this HTML may not have the runtime yet, so the
+        # result carries the loader for it, and the loader reports a runtime
+        # that fails to load.
         assert f"s.src = {url};" in action["html"]
         assert f'console.error("Citry could not load its runtime: " + {url});' in action["html"]
         assert "/citry/citry.js" not in action["html"]
-        # A fragment never reloads the page it joins, and carries no reload answer.
-        assert "canReload" not in action["html"]
 
     def test_error_statuses_mirror_onto_http(self):
         c = _citry()

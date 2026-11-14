@@ -307,38 +307,18 @@ def _client_page(app: Citry) -> type[Component]:
     return Page
 
 
-def test_mounted_manifest_entry_names_the_hashed_i18n_script() -> None:
+@pytest.mark.parametrize("mounted", [True, False])
+def test_the_manifest_entry_carries_only_the_keys_the_browser_runtime_accepts(mounted: bool) -> None:
     app = _app()
-    app.set_mounted_prefix("/citry")
-
-    _rendered, manifest = _prepared_manifest(_client_page(app)())
-
-    entry = manifest["extensions"]["i18n"]  # type: ignore[index]
-    # A page whose plugin script fails to load probes this URL before it reloads, so it is the URL the page links.
-    assert entry["scriptUrl"] == f"/citry/{I18N_RUNTIME.hashed_path}"
-    assert set(entry) == {"payload", "schemaVersion", "scriptUrl", "templateContextNames"}
-
-
-def test_unmounted_manifest_entry_has_no_script_url() -> None:
-    app = _app()
-
-    _rendered, manifest = _prepared_manifest(_client_page(app)())
-
-    entry = manifest["extensions"]["i18n"]  # type: ignore[index]
-    # The plugin is inlined, so there is no URL that could fail to load.
-    assert set(entry) == {"payload", "schemaVersion", "templateContextNames"}
-
-
-def test_the_manifest_in_a_mounted_document_carries_the_script_url_the_page_links() -> None:
-    app = _app()
-    app.set_mounted_prefix("/citry")
+    if mounted:
+        app.set_mounted_prefix("/citry")
 
     html = _client_page(app)().render().serialize()
 
     block = html.split("data-citry-vue-document=", 1)[1].split(">", 1)[1].split("</script>", 1)[0]
     entry = json.loads(block)["manifest"]["extensions"]["i18n"]
-    assert entry["scriptUrl"] == f"/citry/{I18N_RUNTIME.hashed_path}"
-    assert f'src="{entry["scriptUrl"]}"' in html
+    # The runtime rejects an extension entry with any other key, mounted or not.
+    assert set(entry) == {"payload", "schemaVersion", "templateContextNames"}
 
 
 def test_the_shared_cache_holds_the_i18n_runtime_a_mounted_page_links() -> None:

@@ -1054,9 +1054,8 @@ always names the runtime it was rendered for. `ext/events/runtime.js` stays
 as a stable alias that serves the same bytes with `no-store`, for pages
 rendered by older versions and for apps that link the runtime by hand. A
 digest in the URL is still the only version marker: there is no query-string
-version. The design, including the one-reload rule for a page whose runtime
-is gone after a deploy, is
-[`runtime_hashed_urls.md`](runtime_hashed_urls.md).
+version. The design, including what a page whose runtime is gone after a
+deploy does, is [`runtime_hashed_urls.md`](runtime_hashed_urls.md).
 
 **Amendment due (2026-07-16, the client-model round; owned by WP22):**
 the per-class descriptor gained the `latest_wins`/`bundle` carriage
