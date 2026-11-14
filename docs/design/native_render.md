@@ -713,8 +713,8 @@ refusal at each limit and one past it, the output on both sides, and the
 debug message. Its last tests render at the limit and one past it on a
 fresh 128 KiB thread, in a separate interpreter so a crash fails one test.
 CI runs those in one Linux cell (`CITRY_NATIVE_DEPTH_PROBES=1`, on the
-release build `uv sync` makes), and a local run always does, so a
-`maturin develop` run checks the debug limits.
+shared `release-wheel` build of citry-core), and a local run always does,
+so a `maturin develop` run checks the debug limits.
 
 ## 9. Where the code lives
 
