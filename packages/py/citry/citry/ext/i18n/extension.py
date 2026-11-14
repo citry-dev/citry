@@ -108,21 +108,29 @@ def _record_to_wire(
     instance: int,
     local_by_id: dict[str, int],
     external_by_id: dict[str, int],
+    outside_bindings: _BindingsAllocatedOutside | None = None,
 ) -> dict[str, object]:
     usage = record.server_usage
     record.bindings.assert_ready()
-    binding_index = {binding.id: index for index, binding in enumerate(record.bindings.records)}
+    # The stored output also uses bindings that a component outside it
+    # allocated. They go after this record's own bindings, as if this record
+    # had allocated them, so replay gives them fresh IDs like any other binding.
+    bindings = record.bindings.records
+    markers = record.bindings.markers
+    if outside_bindings is not None:
+        bindings = [*bindings, *outside_bindings.records]
+        markers = [*markers, *outside_bindings.markers]
+    binding_index = {binding.id: index for index, binding in enumerate(bindings)}
     return {
         "binding_markers": [
             {
                 "ids": [binding_index[binding_id] for binding_id in marker],
                 "value": " ".join(marker),
             }
-            for marker in record.bindings.markers
+            for marker in markers
         ],
         "bindings": [
-            _binding_to_wire(binding, local_by_id=local_by_id, external_by_id=external_by_id)
-            for binding in record.bindings.records
+            _binding_to_wire(binding, local_by_id=local_by_id, external_by_id=external_by_id) for binding in bindings
         ],
         "class_id": record.class_id,
         "client_barrier": record.client_barrier,
@@ -135,6 +143,85 @@ def _record_to_wire(
         "parsers": [{"operation": item.operation, "profile": item.profile} for item in usage.parsers],
         "provider": _provider_to_wire(record.provider, local_by_id=local_by_id, external_by_id=external_by_id),
     }
+
+
+@dataclass(frozen=True, slots=True)
+class _BindingsAllocatedOutside:
+    """The bindings a component outside the stored output allocated, and the markers that list them."""
+
+    records: list[Any]
+    markers: list[tuple[str, ...]]
+
+
+def _bindings_allocated_outside(
+    ctx: OnRenderCacheExportContext, records: dict[str, I18nRenderRecord]
+) -> _BindingsAllocatedOutside:
+    """
+    Find the bindings the stored output uses that a component outside it allocated.
+
+    A `$c-tr` element takes its binding ID from the component whose template
+    contains it. Slot content the caller passes to a cached component, or
+    elements the component holding `<c-cache>` wrote inside it, therefore carry
+    IDs from a component that renders again on every request. Stored as they
+    are, those IDs would name definitions that only the first render sent.
+    """
+    # Imported here because these modules import the render machinery, which
+    # imports this extension while it loads.
+    from citry.ext.cache.errors import CacheArtifactError  # noqa: PLC0415
+
+    from .bindings import BINDING_HELPER, split_binding_id  # noqa: PLC0415
+
+    outside = _BindingsAllocatedOutside([], [])
+    used = ctx.browser_binding_operands.get(BINDING_HELPER, frozenset())
+    if not used:
+        return outside
+    # Only the stored components' records are read here. Looking through every
+    # record of the render would make each export slower as the page holds more
+    # cached parts.
+    inside: set[str] = set()
+    for render_id in ctx.selected_render_ids:
+        stored = records.get(render_id)
+        if stored is not None:
+            inside.update(stored.bindings.record_by_id)
+    wanted = used - inside
+    missing: list[str] = []
+    owners: dict[str, tuple[str, int]] = {}
+    for binding_id in wanted:
+        split = split_binding_id(binding_id)
+        if split is None:
+            missing.append(binding_id)
+        else:
+            owners[binding_id] = split
+    seen_markers: set[tuple[str, ...]] = set()
+    # Ordered by owner and number, so the stored order does not depend on how
+    # the set of used IDs happens to iterate.
+    for binding_id in sorted(owners, key=owners.__getitem__):
+        owner_id = owners[binding_id][0]
+        # An owner inside the stored output that lacks the ID has no definition to copy.
+        owner = None if owner_id in ctx.selected_render_ids else records.get(owner_id)
+        # This owner may still be rendering, so its bindings are read as they
+        # stand now. Everything the stored output uses has been allocated by now.
+        binding = None if owner is None else owner.bindings.record_by_id.get(binding_id)
+        if owner is None or binding is None:
+            missing.append(binding_id)
+            continue
+        outside.records.append(binding)
+        marker = owner.bindings.marker_by_id.get(binding_id)
+        if marker is None or marker in seen_markers:
+            continue
+        # One marker is one attribute value that lists several IDs, so replay
+        # renames it as a whole and it cannot be stored with only some of them.
+        if not wanted.issuperset(marker):
+            raise CacheArtifactError("An i18n binding marker lists IDs both used and not used by the stored output.")
+        seen_markers.add(marker)
+        outside.markers.append(marker)
+    if missing:
+        # Storing an ID with no definition would replay a page the browser rejects.
+        raise CacheArtifactError(
+            f"The stored output uses i18n binding(s) {', '.join(sorted(missing))} "
+            "that no component's i18n record holds."
+        )
+    return outside
 
 
 def _binding_to_wire(
@@ -322,12 +409,14 @@ def _bindings_from_wire(
         I18nBindingCollector,
         I18nBindingRecord,
         I18nBindingTarget,
+        is_binding_id,
     )
 
     if type(raw_bindings) is not list or type(raw_markers) is not list:
         raise CacheArtifactError(f"{path}.bindings and {path}.binding_markers must be exact lists.")
     records: list[I18nBindingRecord] = []
     old_ids: list[str] = []
+    seen_old_ids: set[str] = set()
     for index, raw in enumerate(raw_bindings):
         item_path = f"{path}.bindings[{index}]"
         expected = {"id", "message", "output", "owner", "target", "values", "values_expression"}
@@ -335,9 +424,16 @@ def _bindings_from_wire(
             raise CacheArtifactError(f"{item_path} has an invalid field set.")
         item = cast("dict[str, object]", raw)
         old_id = item["id"]
-        expected_suffix = f"~i18n-{index}"
-        if type(old_id) is not str or not old_id.endswith(expected_suffix):
-            raise CacheArtifactError(f"{item_path}.id is not the expected artifact-local binding ID.")
+        fresh_suffix = f"~i18n-{index}"
+        # A record can hold bindings that a component outside the stored output
+        # allocated, so their IDs do not share this record's render ID. The
+        # stored ID is only the key that the stored HTML and data are renamed
+        # from, so it has to look like an ID the collector writes and be unique.
+        if not is_binding_id(old_id):
+            raise CacheArtifactError(f"{item_path}.id must look like '<render ID>~i18n-<number>', got {old_id!r}.")
+        if old_id in seen_old_ids:
+            raise CacheArtifactError(f"{item_path}.id repeats an earlier binding ID.")
+        seen_old_ids.add(old_id)
         message = item["message"]
         output = item["output"]
         if type(message) is not str or not message:
@@ -353,6 +449,13 @@ def _bindings_from_wire(
         )
         if owner is None:
             raise CacheArtifactError(f"{item_path}.owner must name a client provider.")
+        # The stored output was made under a client provider outside it. When
+        # the replaying render has no such provider, the owner resolves to the
+        # placeholder, and the page could not define this binding for the
+        # browser. Skipping the entry makes the part render again as plain text,
+        # where a hit would fail the request later.
+        if owner == AMBIENT_CLIENT_OWNER:
+            raise CacheArtifactError(f"{item_path}.owner is a client provider that this render does not have.")
         expression = item["values_expression"]
         if expression is not None and (type(expression) is not str or not expression):
             raise CacheArtifactError(f"{item_path}.values_expression must be null or a non-empty string.")
@@ -387,7 +490,7 @@ def _bindings_from_wire(
         old_ids.append(old_id)
         records.append(
             I18nBindingRecord(
-                id=f"{render_id}{expected_suffix}",
+                id=f"{render_id}{fresh_suffix}",
                 owner=owner,
                 message=message,
                 output=cast("str | None", output),
@@ -1350,6 +1453,7 @@ class I18nExtension(Extension):
         """Install the checked Vue i18n plugin before the app mounts."""
         if not self.configured:
             return None
+        from .bindings import BINDING_HELPER  # noqa: PLC0415
         from .emission import client_runtime_resource, vue_plugin_js  # noqa: PLC0415
 
         if self.citry.mounted_prefix is None:
@@ -1362,7 +1466,7 @@ class I18nExtension(Extension):
             schema_version=1,
             script=script,
             allows_late_component_assets=True,
-            template_context_names=("$citryI18nBinding", "$i18n"),
+            template_context_names=(BINDING_HELPER, "$i18n"),
         )
 
     def prepare_browser_render(self, ctx: OnBrowserRenderPrepareContext) -> BrowserRenderContribution | None:
@@ -1392,6 +1496,19 @@ class I18nExtension(Extension):
             external_by_id[ancestor.id] = len(external_by_id)
             ancestor = ancestor.parent
         records: dict[str, I18nRenderRecord] = ctx.root_context.extra.get(EXTRA_KEY, {})
+        outside = _bindings_allocated_outside(ctx, records)
+        # The bindings allocated outside the stored output go in the record of
+        # the first instance: the `<c-cache>` component for a fragment cache, or
+        # the cached component for a component cache. Replay renames them along
+        # with that record, so it is stored even when it has nothing else.
+        boundary_id = ctx.instances[0].render_id
+        if (outside.records or outside.markers) and boundary_id not in records:
+            from citry.ext.cache.errors import CacheArtifactError  # noqa: PLC0415
+
+            raise CacheArtifactError(
+                "The cache boundary has no i18n record to hold the bindings that components outside the cached "
+                "output allocated."
+            )
         return {
             "records": [
                 _record_to_wire(
@@ -1399,6 +1516,7 @@ class I18nExtension(Extension):
                     instance=local_by_id[record.render_id],
                     local_by_id=local_by_id,
                     external_by_id=external_by_id,
+                    outside_bindings=outside if record.render_id == boundary_id and outside.records else None,
                 )
                 for record in records.values()
                 if record.render_id in ctx.selected_render_ids
@@ -1409,6 +1527,7 @@ class I18nExtension(Extension):
                     or record.bindings.records
                     or record.provider is not None
                     or record.client_barrier
+                    or (record.render_id == boundary_id and outside.records)
                 )
             ]
         }

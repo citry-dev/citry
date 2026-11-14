@@ -116,6 +116,12 @@ does. The upgrade notes below list what can change.
   `<!doctype>` for components that use Events. The preview now renders
   them, and their event handlers work. The same applies when a template
   places a whole-page template through a variable, such as `{{ page }}`.
+- `<c-cache>` around an element with a `$c-tr` attribute (the one that
+  updates the element's text when the language changes) no longer breaks
+  the page when a request is served from the cache. The browser console
+  showed `binding ... is not active` and the Vue app did not start. The
+  same fix covers `$c-tr` elements in slot content that a caller passes
+  to a cached component.
 
 ## v0.8.0
 

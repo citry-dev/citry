@@ -46,12 +46,14 @@ from citry.ext.cache import component_cache_key
 from citry.ext.cache.artifact import (
     _RENDER_CONTRACT,
     ArtifactAttribute,
+    ArtifactBrowserBinding,
     ArtifactDirectPythonComponentPart,
     ArtifactDirectSlotPart,
     ArtifactElementOpenPart,
     ArtifactExtension,
     ArtifactFrame,
     ArtifactFramePart,
+    ArtifactLeafProgramPart,
     ArtifactPreparedBinding,
     ArtifactPreparedCall,
     ArtifactSourceTextPart,
@@ -64,9 +66,11 @@ from citry.ext.cache.artifact import (
     FrozenJsonObject,
     _decode_artifact,
     _encode_artifact,
+    _freeze_json_value,
 )
 from citry.ext.cache.errors import CacheArtifactError, _CacheArtifactCompatibilityError
 from citry.ext.cache.replay import (
+    _browser_binding_operands,
     _export_typed_leaf,
     _replay_typed_leaf,
     _source_fingerprint,
@@ -1664,6 +1668,61 @@ def test_i18n_cache_hit_rebinds_typed_binding_marker_to_fresh_occurrence() -> No
     assert len(markers) == 2
     assert markers[0] != markers[1]
     assert operands == markers
+
+
+def test_browser_binding_operands_are_grouped_by_helper() -> None:
+    def binding(helper: str, operand: object, target: str = "text") -> ArtifactBrowserBinding:
+        name = "title" if target == "attribute" else None
+        return ArtifactBrowserBinding(helper, _freeze_json_value(operand, "operand"), target, name, None, None)
+
+    text = ArtifactTextValuePart("{{ a }}", (0, 7), "a", binding("$one", "text-id"))
+    plain_text = ArtifactTextValuePart("{{ b }}", (0, 7), "b")
+    opening = ArtifactElementOpenPart(
+        "<p>",
+        (0, 3),
+        "p",
+        (),
+        is_void=False,
+        is_self_closing=False,
+        element_metadata=None,
+        event_bindings=(),
+        browser_bindings=(
+            binding("$one", "attribute-id", "attribute"),
+            binding("$two", "other-helper-id"),
+            # An operand that is not a string cannot be an ID, so it is skipped.
+            binding("$one", {"id": "object-operand"}),
+        ),
+    )
+    # A leaf program keeps its own typed parts, and its bindings count too.
+    leaf = ArtifactLeafProgramPart(
+        template="",
+        element_bindings=(),
+        browser_requirements=(),
+        safe_body=True,
+        prepared_data=FrozenJsonObject(()),
+        vue_errors=(),
+        typed_parts=(ArtifactTextValuePart("{{ c }}", (0, 7), "c", binding("$one", "leaf-id")),),
+        static_parts=(),
+    )
+
+    def frame(*parts: object) -> ArtifactFrame:
+        return ArtifactFrame(
+            instance=None,
+            class_id=None,
+            class_name=None,
+            is_component_root=False,
+            root_markers=(),
+            parts=parts,  # type: ignore[arg-type]
+        )
+
+    # A frame that is not written yet (None) is skipped; an artifact never leaves one.
+    operands = _browser_binding_operands([frame(text, plain_text), None, frame(opening, leaf)])
+
+    assert operands == {
+        "$one": frozenset({"text-id", "attribute-id", "leaf-id"}),
+        "$two": frozenset({"other-helper-id"}),
+    }
+    assert _browser_binding_operands([]) == {}
 
 
 def test_prepared_browser_bindings_round_trip_with_data_and_provenance(monkeypatch: pytest.MonkeyPatch) -> None:

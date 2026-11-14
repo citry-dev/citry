@@ -979,6 +979,14 @@ subtree view and returns strict JSON with no live-object references. Its import
 hook validates against the replay ID/anchor map and returns an immutable staged
 contribution; core alone commits it.
 
+The exporter's view also lists the browser bindings the stored parts carry.
+`browser_binding_operands` maps each binding helper name (the browser function
+that receives the binding) to the string operands the stored parts pass it. An
+extension whose operand is an ID it made for the page can use this to find IDs
+that belong to a component outside the selected subtree. The artifact holds no
+saved data for that component, so the extension must store what each ID needs.
+A binding whose operand is not a string is left out.
+
 The declarative mode/version fields and their ordered physical-key
 compatibility tuple ship in Phase 1. Phase 2 adds enforcement during artifact
 publication plus payload export and staged replay import.
@@ -1098,6 +1106,18 @@ Artifact export represents that relationship through the lexical-writer and
 fill anchors. Replaying the same fragment under a second writer binds to that
 writer and must not retain the first writer's render ID, context, provide
 mapping, sibling metadata, or ownership graph.
+
+Output can also name an ID built from the render ID of a component outside the
+cached subtree. The i18n extension's `$c-tr` attribute makes an element's text
+update in the browser when the language changes, and the browser finds each such
+element by a binding ID. That ID is built from the render ID of the component
+whose template contains the element, and that component renders again on every
+request. Replay must not put the first render's ID in the page. The i18n
+extension stores each such binding under its old ID, together with the
+boundary's own data. Replay uses the old ID only to find and rename every
+mention of it, so the page gets one definition for each fresh ID. Section 7.5
+describes how an exporter finds these IDs, and [`i18n.md`](i18n.md) describes
+how the i18n payload stores them.
 
 ### 8.5 Const and compiled-template caches
 

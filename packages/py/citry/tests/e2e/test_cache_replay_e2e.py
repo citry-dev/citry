@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+import re
+import sys
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -12,6 +14,9 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from citry import Citry, Component, Markup
 from citry.ext.cache.extension import CacheExtension
 from citry.ext.events.renderers import dispatcher_for
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 pytestmark = pytest.mark.e2e
 
@@ -247,6 +252,106 @@ def test_component_cache_replays_i18n_bindings_with_fresh_occurrences(page: Any)
     except PlaywrightTimeoutError:
         pytest.fail(f"faults={faults!r}; html={page.content()!r}")
     assert page.locator(".cached-message").count() == 2
+    assert faults == []
+
+
+def test_fragment_cache_replays_i18n_bindings_allocated_outside_it(
+    page: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page.set_default_timeout(3000)
+    package = tmp_path / "outer_binding_catalog"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf8")
+    (package / "citry-i18n.toml").write_text(
+        'schema_version = 1\nowner = "outer-binding-test"\nsource_locale = "en-US"\n',
+        encoding="utf8",
+    )
+    for locale, loading, hint in (("en-US", "Loading", "Hint"), ("cs-CZ", "Načítání", "Nápověda")):
+        locale_root = package / "locales" / locale
+        locale_root.mkdir(parents=True)
+        (locale_root / "common.ftl").write_text(f"loading = {loading}\nhint = {hint}\n", encoding="utf8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    sys.modules.pop("outer_binding_catalog", None)
+    app = Citry(
+        autodiscover=False,
+        mode="development",
+        extensions_defaults={
+            "i18n": {
+                "source_locale": "en-US",
+                "locales": ("en-US", "cs-CZ"),
+                "catalogs": ("outer_binding_catalog",),
+            }
+        },
+    )
+
+    class Panel(Component):
+        citry = app
+        # Panel's own template holds this element, so Panel allocates its
+        # binding ID, while the cached HTML is the `<c-cache>` content.
+        template = """
+        <c-cache key="panel">
+          <div class="cached">
+            <output class="panel-text" $c-tr:loading>{{ tr("loading") }}</output>
+          </div>
+        </c-cache>
+        """
+
+    class Page(Component):
+        citry = app
+        messages = """
+        loading = Loading
+        hint = Hint
+        """
+        template = """
+        <html><body>
+          <c-i18n c-client="True" tag="main">
+            <output class="own-text" $c-tr:loading>{{ tr("loading") }}</output>
+            <c-cache key="page-fragment">
+              <output class="cached-text" $c-tr:loading>{{ tr("loading") }}</output>
+              <button
+                class="cached-hint"
+                c-title="tr('hint')"
+                $c-tr:hint[title]
+              >
+                hint
+              </button>
+            </c-cache>
+            <c-panel />
+            <button id="switch" @click="$i18n.switchLocale('cs-CZ')">switch</button>
+          </c-i18n>
+        </body></html>
+        """
+
+    first = Page().render().serialize()
+    html = Page().render().serialize()
+    marker = re.compile(r'data-citry-i18n-binding="([^"]*)"')
+    first_ids = {binding for value in marker.findall(first) for binding in value.split()}
+    replayed_ids = {binding for value in marker.findall(html) for binding in value.split()}
+    # Four elements carry one binding each. The second render must not reuse an ID the first one sent.
+    assert len(first_ids) == len(replayed_ids) == 4
+    assert first_ids.isdisjoint(replayed_ids)
+
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
+    page.goto("http://citry.test/", wait_until="commit")
+    texts = "[...document.querySelectorAll('.own-text, .cached-text, .panel-text')].map(x => x.textContent).join('|')"
+    try:
+        page.wait_for_function(f"() => {texts} === 'Loading|Loading|Loading'")
+    except PlaywrightTimeoutError:
+        pytest.fail(f"faults={faults!r}; html={page.content()!r}")
+    assert page.locator(".cached-hint").get_attribute("title") == "Hint"
+
+    # A language switch updates only bindings the browser knows, so every element showing text
+    # must have received a definition.
+    page.locator("#switch").click()
+    try:
+        page.wait_for_function(f"() => {texts} === 'Načítání|Načítání|Načítání'")
+    except PlaywrightTimeoutError:
+        pytest.fail(f"faults={faults!r}; html={page.content()!r}")
+    assert page.locator(".cached-hint").get_attribute("title") == "Nápověda"
     assert faults == []
 
 
