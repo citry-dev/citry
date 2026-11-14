@@ -324,7 +324,14 @@ class PreparedComponentBinding:
 
 @dataclass(frozen=True, slots=True)
 class RenderFrame:
-    """Immutable identity needed to traverse and serialize one render frame."""
+    """
+    Immutable identity needed to traverse and serialize one render frame.
+
+    Experimental:
+        `RenderFrame`, the `CitryRender.frame` attribute and the `frame=`
+        argument of `CitryRender` are experimental. They may change in a
+        minor release without a deprecation period.
+    """
 
     render_id: str | None
     class_id: str | None
@@ -409,6 +416,11 @@ class RenderFrame:
 class CitryRender:
     """
     The result of rendering a ``CitryElement`` (the render-phase output).
+
+    Experimental:
+        `RenderFrame`, the `CitryRender.frame` attribute and the `frame=`
+        argument of `CitryRender` are experimental. They may change in a
+        minor release without a deprecation period.
 
     Attributes:
         parts: Ordered list of ``str`` or nested ``CitryRender`` fragments.

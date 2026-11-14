@@ -34,7 +34,7 @@ import asyncio
 import inspect
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import KW_ONLY, dataclass, field
 from functools import cache
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
@@ -244,11 +244,13 @@ class URLRoute:
     # The Awaitable side of the union admits `async def` handlers, which the
     # ASGI adapter awaits (the sync adapters reject them).
     handler: Callable[..., RouteResponse | Awaitable[RouteResponse]] | None = None
+    # Every field after `handler` is keyword-only, so a new field can be
+    # added anywhere without shifting what a positional call passes.
+    _: KW_ONLY
     handler_async: Callable[..., Awaitable[RouteResponse]] | None = None
     children: tuple[URLRoute, ...] = ()
     name: str | None = None
     methods: tuple[str, ...] = ("GET",)
-    extra: dict[str, Any] = field(default_factory=dict)
     max_body_bytes: Callable[[], int] | None = None
     # Path parameters whose values never hold a `.`; each ends at the first
     # `.`. Citry's own cache routes use this so a class id followed by

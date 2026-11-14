@@ -14,9 +14,10 @@ from types import MappingProxyType
 
 import pytest
 
+import citry
 from citry import Citry, Component, SecurityError
 from citry_core.safe_eval import SecurityError as CoreSecurityError
-from citry_core.safe_eval import compile_expr
+from citry_core.safe_eval import compile_expr, safe_eval, unsafe
 
 from ._render_paths import render_both
 
@@ -269,3 +270,10 @@ def test_simple_vue_components_read_a_lone_surrogate_escape_as_python_does(
         monkeypatch,
     )
     assert rust.result == "SURR"
+
+
+def test_root_package_reexports_the_sandbox_helpers():
+    # The security guide imports these from citry, so they must be the same
+    # objects citry-core defines, not copies that could drift.
+    assert citry.safe_eval is safe_eval
+    assert citry.unsafe is unsafe

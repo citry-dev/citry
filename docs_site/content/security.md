@@ -952,8 +952,7 @@ blocked access fails with [`SecurityError`][citry.SecurityError] only when
 the expression runs:
 
 ```python
-from citry import SecurityError
-from citry_core.safe_eval import safe_eval
+from citry import SecurityError, safe_eval
 
 compiled = safe_eval("f('1+1')")
 try:
@@ -1024,7 +1023,7 @@ To stop templates from calling one of your functions, decorate it with
 blocked the same way:
 
 ```python
-from citry_core.safe_eval import unsafe
+from citry import unsafe
 
 @unsafe
 def delete_account(user):

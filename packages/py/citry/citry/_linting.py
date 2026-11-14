@@ -40,7 +40,14 @@ _RULE_SEVERITIES = {"ignore", "warning", "error"}
 
 @dataclass(frozen=True, slots=True)
 class TemplateVariableInfo:
-    """Describe one known template variable using detached portable text."""
+    """
+    Describe one known template variable using detached portable text.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     name: str
     type_display: str | None
@@ -185,7 +192,14 @@ _OPTIONAL_LINT_INFO_FIELDS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class TemplateLintInfo:
-    """Carry one component's effective lint rule and known global variables."""
+    """
+    Carry one component's effective lint rule and known global variables.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     rule_unknown_template_variable: LintSeverity
     template_variables: tuple[TemplateVariableInfo, ...]

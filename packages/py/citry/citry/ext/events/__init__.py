@@ -26,7 +26,7 @@ This extension owns that contract:
 - Which methods are handlers: every public ``def`` on the component's own
   ``Events`` class, and nothing else. Underscore ``def``s are private
   helpers; underscore attributes are configuration (``_guard``, ``_context``,
-  ``_csrf``, ``_methods``, ``_debounce``, ``_throttle``, ``_topics``).
+  ``_csrf``, ``_methods``, ``_debounce``, ``_throttle``).
 - The handler signature: parameters come from the fixed vocabulary
   ``data``, ``state``, ``context``, ``request``, ``event``, and anything
   else fails at class definition.

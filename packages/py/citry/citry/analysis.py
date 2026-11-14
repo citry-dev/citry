@@ -252,6 +252,11 @@ class TemplateLintConsumer:
     """
     Describe one proven component namespace used by a physical template.
 
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+
     Attributes:
         known_names: Root names available to this component's template.
         namespace_policy: Whether those names exhaust normalized template data.
@@ -288,7 +293,14 @@ class TemplateLintConsumer:
 
 @dataclass(frozen=True, slots=True)
 class TemplateLintFinding:
-    """Report one parser-proven free root missing from a known namespace."""
+    """
+    Report one parser-proven free root missing from a known namespace.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     name: str
     message: str
@@ -486,6 +498,11 @@ class ComponentSourceLint:
     another module. The rule then keeps the severity it has without an
     application: the ``LintSettings`` default, except that an invalid
     attribute value is a warning.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Attributes:
         rule_alpine_attribute: ``Lint.rule_alpine_attribute``, when readable.
@@ -813,6 +830,11 @@ def lint_unknown_template_variables(
 ) -> tuple[TemplateLintFinding, ...]:
     """
     Diagnose free roots missing from at least one proven component namespace.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Args:
         template: Parsed Citry template AST. Its parser-reported free variables
@@ -2810,6 +2832,11 @@ class TemplateAnalysis:
     """
     A complete, immutable snapshot of one Citry component registry.
 
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+
     Attributes:
         component_names: Normalized registered names without the ``c-`` tag
             prefix. The set includes aliases and built-in component names.
@@ -3003,6 +3030,11 @@ class PythonTemplateSourceMap:
     valid Python or
     [`from_coordinates`][citry.PythonTemplateSourceMap.from_coordinates] for a
     literal region found by a conservative lexical scanner.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Attributes:
         template_source: Decoded, common-indent-normalized Citry template text
@@ -3784,6 +3816,11 @@ class PythonTemplateRegion:
     """
     One definite direct literal template on a Citry component class.
 
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+
     Attributes:
         component_name: Name of the class that declares the template.
         source_map: Maps template offsets back to the Python source.
@@ -3803,7 +3840,14 @@ class PythonTemplateRegion:
 
 @dataclass(frozen=True, slots=True)
 class PythonTemplateNotice:
-    """One definite component template skipped for an explicit reason."""
+    """
+    One definite component template skipped for an explicit reason.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     component_name: str
     message: str
@@ -3967,7 +4011,14 @@ def project_module_exists(module: str, level: int, *, file: Path, root: Path) ->
 
 @dataclass(frozen=True, slots=True)
 class PythonTemplateDiscovery:
-    """Conservative inline template regions and non-parser notices."""
+    """
+    Conservative inline template regions and non-parser notices.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     regions: tuple[PythonTemplateRegion, ...]
     notices: tuple[PythonTemplateNotice, ...]
@@ -3991,6 +4042,11 @@ def discover_python_templates(
     ``Component`` or ``LibraryComponent`` from ``citry``, or a component
     class defined earlier in the same file. A tool that has loaded the
     application can name more classes in ``app_components``.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Args:
         source: Complete Python module source.
@@ -4031,7 +4087,14 @@ def discover_python_templates(
 
 @dataclass(frozen=True, slots=True)
 class PythonTemplateFormatResult:
-    """One validated, atomic Python template-formatting result."""
+    """
+    One validated, atomic Python template-formatting result.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     source: str
     changed_component_names: tuple[str, ...]
@@ -4041,6 +4104,11 @@ class PythonTemplateFormatResult:
 class PythonTemplateFormatError(ValueError):
     """
     A formatting refusal that never exposes a partial Python candidate.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Attributes:
         code: Stable formatter failure code.
@@ -4073,7 +4141,14 @@ class PythonTemplateFormatError(ValueError):
 
 
 class PythonComponentAssetKind(str, Enum):
-    """A direct Citry component asset selected for formatting."""
+    """
+    A direct Citry component asset selected for formatting.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     TEMPLATE = "template"
     JS = "js"
@@ -4084,6 +4159,11 @@ class PythonComponentAssetKind(str, Enum):
 class PythonComponentAssetRegion:
     """
     One definite direct literal asset on a Citry component class.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Attributes:
         component_name: Name of the declaring component class.
@@ -4099,7 +4179,14 @@ class PythonComponentAssetRegion:
 
 @dataclass(frozen=True, slots=True)
 class PythonComponentAssetFile:
-    """One statically proven direct component asset-file declaration."""
+    """
+    One statically proven direct component asset-file declaration.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     component_name: str
     kind: PythonComponentAssetKind
@@ -4108,7 +4195,14 @@ class PythonComponentAssetFile:
 
 @dataclass(frozen=True, slots=True)
 class PythonComponentAssetNotice:
-    """A component-specific reason why one asset was skipped or unchanged."""
+    """
+    A component-specific reason why one asset was skipped or unchanged.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     component_name: str
     kind: PythonComponentAssetKind
@@ -4119,7 +4213,14 @@ class PythonComponentAssetNotice:
 
 @dataclass(frozen=True, slots=True)
 class PythonComponentAssetDiscovery:
-    """Conservative direct literal and static file component assets."""
+    """
+    Conservative direct literal and static file component assets.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+    """
 
     regions: tuple[PythonComponentAssetRegion, ...]
     files: tuple[PythonComponentAssetFile, ...]
@@ -4131,6 +4232,11 @@ class PythonComponentAssetDiscovery:
 class PythonComponentAssetRequest:
     """
     One standalone JavaScript or CSS document offered to a provider.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Attributes:
         plan_id: Identity of the source-bound Python formatting plan.
@@ -4174,6 +4280,11 @@ class PythonComponentAssetPlan:
     Provider work may happen asynchronously before the caller passes every
     reply to [`finish_python_component_assets`][citry.finish_python_component_assets].
 
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+
     Attributes:
         id: Stable source and selection identity echoed by provider results.
         source: Complete original Python source.
@@ -4195,6 +4306,11 @@ class PythonComponentAssetPlan:
 class PythonComponentAssetFormatResult:
     """
     One validated, atomic Python component-asset formatting result.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Attributes:
         source: Complete formatted Python source.
@@ -4221,6 +4337,11 @@ def discover_python_component_assets(
     Discovery recognizes direct ``template``, ``js``, and ``css`` literals,
     plus constant ``template_file``, ``js_file``, and ``css_file`` paths. It
     never imports the module or evaluates a computed declaration.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Args:
         source: Complete Python module source.
@@ -4264,6 +4385,11 @@ def prepare_python_component_assets(
     Safe ``script`` and ``style`` bodies, plus direct ``js`` and ``css``
     literals, become standalone provider requests. The returned plan makes no
     source edit, so callers may resolve those requests asynchronously.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Args:
         source: Complete Python module source.
@@ -4459,6 +4585,11 @@ def finish_python_component_assets(
     Python parse, asset rediscovery, and decoded-value check succeeds. A
     failure raises without exposing a partial source candidate.
 
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+
     Args:
         plan: Exact plan returned by
             [`prepare_python_component_assets`][citry.prepare_python_component_assets].
@@ -4644,6 +4775,11 @@ def format_python_component_assets(
     must be asynchronous. With no provider, template formatting still runs
     while JavaScript and CSS requests remain unchanged with notices.
 
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
+
     Args:
         source: Complete Python module source.
         kinds: Explicit ``template``, ``js``, and ``css`` kinds to select.
@@ -4713,6 +4849,11 @@ def format_python_templates(
     host offset selects only the literal content containing that Python string
     position. The result preserves string prefixes, delimiters, and all host
     text outside the exact decoded-template rewrite hunks.
+
+    Experimental:
+        Part of the experimental template analysis API that `citry check`,
+        `citry format` and citry-lsp use. It may change in a minor release
+        without a deprecation period.
 
     Args:
         source: Complete Python module source.

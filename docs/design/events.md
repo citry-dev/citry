@@ -1241,8 +1241,9 @@ surfaces** (`__all__` and imports, never logic), so API definition and
 implementation never share a file. The docs build points griffe at
 exactly these entrypoints, making the API reference the enforcement of
 the rule (docs as contract). The complete list of public entrypoints is
-therefore three shapes and nothing else: `citry`, `citry.contrib.<name>`,
-and `citry.ext.<name>`. (The extensions directory itself is renamed
+therefore `citry`, `citry.contrib.<name>`, `citry.ext.<name>`, and the
+`citry.reload` module that the hot reload guide teaches (a single module,
+so its `__all__` sits beside its code). (The extensions directory itself is renamed
 `citry/extensions/` to `citry/ext/`, the SQLAlchemy precedent; a
 mechanical pre-1.0 task alongside the v0 substrate work.)
 
@@ -1316,7 +1317,6 @@ The component-level config surface, exhaustively:
 | `_csrf` | `"auto"` \| `False` \| `callable(request) -> None` (raise to reject) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only citry's own token layer (the baseline never turns off, and a host framework's token check, like Django's `CsrfViewMiddleware`, is governed by the host and stays on, 7.4); a callable replaces citry's token check and runs on top of the baseline and any host check. |
 | `_methods` | tuple of HTTP method names | `("POST",)` | The allowed methods for handlers that do not set `@event(methods=...)`. GET opts a handler into read-only, cacheable-in-principle (served `no-store` until GET caching lands, section 16), pasteable-URL calls (7.4). |
 | `_debounce` / `_throttle` | `int`, milliseconds | none | Component-wide client-timing defaults; see the `@event` row below for the mechanics. |
-| `_topics` | tuple of topic-name templates formatted from State fields, e.g. `("project:{project_id}",)` | `()` | v2 server push (section 8): the serializer formats and signs these at render time; a client can subscribe only to topics it was handed. |
 
 State's own meta lives on State (`_public` / `_model`, sections 3.2 and
 7.2), not here: Events holds handlers, State holds state.
@@ -5297,9 +5297,10 @@ Deferred, with the extension points designed now and a v1 stopgap:
   can later send updates to everyone watching the same thing: a
   component showing project 42 subscribes to `project:42`, and a view or
   background task pushes actions to that name whenever the project
-  changes. A component declares
+  changes. A component will declare
   topic templates formatted from its State at render time
-  (`Events._topics = ("project:{project_id}",)`); the serializer stamps the
+  (`Events._topics = ("project:{project_id}",)`, a setting Citry accepts
+  only once server push ships); the serializer stamps the
   **signed topic names** into the events manifest (Turbo's signed stream
   names), so a client can only subscribe to topics it was handed. Server
   API: `citry_instance.extensions.get_extension("events").push(topic, *actions)`

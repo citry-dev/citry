@@ -7,8 +7,8 @@
 # For the Rust-powered parser and compiler, see citry_core.
 #
 # API stability: the public API is the names in `citry.__all__`, plus the
-# names in the `__all__` of each `citry.ext.<name>` package and each
-# `citry.contrib.<name>` module. Features marked experimental in their docs
+# names in the `__all__` of each `citry.ext.<name>` package, each
+# `citry.contrib.<name>` module, and the `citry.reload` module. Features marked experimental in their docs
 # and docstrings, such as `ComponentGraph`, may still change in a minor
 # release. Deeper modules (citry.ext.events.handlers, ...), other submodules
 # (citry.slots, citry.nodes, ...), and any name that starts with `_` are
@@ -16,6 +16,7 @@
 
 from markupsafe import Markup
 
+from citry._caller_warnings import CitryDeprecationWarning
 from citry._linting import TemplateLintInfo, TemplateVariableInfo
 from citry._nested_declarations import NestedSchemaReplacedWarning
 from citry.analysis import (
@@ -220,7 +221,7 @@ from citry.slots import (
     SlotResult,
 )
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, URLRoute
-from citry_core.safe_eval import SecurityError
+from citry_core.safe_eval import SecurityError, safe_eval, unsafe
 
 __all__ = [
     "AlreadyRegistered",
@@ -229,6 +230,7 @@ __all__ = [
     "Citry",
     "CitryCache",
     "CitryContext",
+    "CitryDeprecationWarning",
     "CitryElement",
     "CitryLifecycleInProgress",
     "CitryRender",
@@ -417,4 +419,6 @@ __all__ = [
     "parse_string_style",
     "prepare_python_component_assets",
     "render_compiled_body",
+    "safe_eval",
+    "unsafe",
 ]

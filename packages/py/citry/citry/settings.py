@@ -199,7 +199,7 @@ _TEMPLATE_RULE_FIELDS = (
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class LintSettings:
     """
     Configure Citry's template and browser lint rules, analysis-only variables, and the render-time input type check.
@@ -633,7 +633,7 @@ class LintSettings:
             raise TypeError(msg)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CitrySettings:
     """
     Immutable settings for a ``Citry`` instance.
@@ -641,6 +641,11 @@ class CitrySettings:
     Every security mode is enforced during serialization. The defaults
     preserve established output; restrictive JavaScript modes inventory,
     omit, or reject client behavior without changing render-cache data.
+
+    Experimental:
+        The `event_result_resolvers` and `event_payload_codecs` settings are
+        experimental. What a resolver or a codec receives and returns may
+        change in a minor release without a deprecation period.
 
     Attributes:
         extensions: The extensions to install on the instance. Each entry is

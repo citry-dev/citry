@@ -17,7 +17,14 @@ if TYPE_CHECKING:
 
 
 class PreviewError(ValueError):
-    """A preview declaration, selection, or rendering request is invalid."""
+    """
+    A preview declaration, selection, or rendering request is invalid.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
+    """
 
 
 def _text(value: object, name: str, *, empty: bool = False) -> None:
@@ -29,6 +36,11 @@ def _text(value: object, name: str, *, empty: bool = False) -> None:
 class Viewport:
     """
     Browser dimensions and pixel scale used to capture one variant.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
 
     Args:
         width: CSS width from 1 through 8192 pixels.
@@ -55,6 +67,11 @@ class Viewport:
 class Variant:
     """
     One named example with display metadata and ordinary Python inputs.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
 
     Args:
         slug: Stable lowercase name, using letters, digits, and single hyphens.
@@ -96,7 +113,14 @@ def variant(
     params: Mapping[str, Any] | None = None,
     viewport: Viewport | None = None,
 ) -> Variant:
-    """Declare one preview variant with metadata and component or template params."""
+    """
+    Declare one preview variant with metadata and component or template params.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
+    """
     return Variant(
         slug=slug, label=label, description=description, params={} if params is None else params, viewport=viewport
     )
@@ -109,6 +133,11 @@ class Layout:
 
     Exactly one source is required. The layout receives ``preview`` and a
     named ``content`` slot. Component classes must belong to the rendering app.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
 
     Args:
         template: Trusted inline Citry template source.
@@ -138,7 +167,14 @@ class Layout:
 
 @dataclass(frozen=True)
 class PreviewComponent:
-    """Display metadata for one component, without its live class or inputs."""
+    """
+    Display metadata for one component, without its live class or inputs.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
+    """
 
     id: str
     name: str
@@ -147,7 +183,14 @@ class PreviewComponent:
 
 @dataclass(frozen=True)
 class PreviewVariant:
-    """Display metadata for one variant, without its Python params."""
+    """
+    Display metadata for one variant, without its Python params.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
+    """
 
     slug: str
     label: str
@@ -158,7 +201,14 @@ class PreviewVariant:
 
 @dataclass(frozen=True)
 class PreviewMetadata:
-    """Component and variant metadata supplied to an example or variant layout."""
+    """
+    Component and variant metadata supplied to an example or variant layout.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
+    """
 
     component: PreviewComponent
     variant: PreviewVariant
@@ -166,7 +216,14 @@ class PreviewMetadata:
 
 @dataclass(frozen=True)
 class PreviewItem:
-    """Variant metadata paired with lazily rendered content for a page layout."""
+    """
+    Variant metadata paired with lazily rendered content for a page layout.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
+    """
 
     variant: PreviewVariant
     content: Slot
@@ -174,7 +231,14 @@ class PreviewItem:
 
 @dataclass(frozen=True)
 class PreviewGroup:
-    """One component's metadata and ordered preview items."""
+    """
+    One component's metadata and ordered preview items.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
+    """
 
     component: PreviewComponent
     items: tuple[PreviewItem, ...]
@@ -182,7 +246,14 @@ class PreviewGroup:
 
 @dataclass(frozen=True)
 class PreviewPage:
-    """Ordered component groups supplied to a single-preview or gallery layout."""
+    """
+    Ordered component groups supplied to a single-preview or gallery layout.
+
+    Experimental:
+        Part of the experimental `citry.ext.preview` extension, which may
+        change in a minor release without a deprecation period. See
+        [`PreviewExtension`][citry.ext.preview.PreviewExtension].
+    """
 
     selection: Literal["variant", "component", "all"]
     components: tuple[PreviewGroup, ...]

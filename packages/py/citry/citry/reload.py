@@ -17,6 +17,9 @@ straight into ``Citry.invalidate_file``.
 
 Typical use is through the ``citry watch`` command; the design and the host
 entry points are in ``docs/design/hot_reload.md``.
+
+The public names are the ones in ``__all__``, which the hot reload guide
+teaches. ``default_watcher`` is internal.
 """
 
 from __future__ import annotations
@@ -32,6 +35,15 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
 
+__all__ = [
+    "FileWatcher",
+    "PollingWatcher",
+    "WatchHandle",
+    "WatchdogWatcher",
+    "WatchfilesWatcher",
+    "watch",
+]
+
 
 # How often the dependency-free poller re-scans, and how long stop() waits for
 # the watcher thread to exit, both in seconds.
@@ -41,13 +53,20 @@ _DEFAULT_STOP_TIMEOUT = 5.0
 
 class FileWatcher(Protocol):
     """
-    A source of file-change events.
+    The interface a file-watching backend implements.
 
-    ``run`` blocks, calling ``on_change`` with a set of changed paths for each
-    batch of events, until another thread calls ``stop``. Implementations should
-    coalesce the burst of events a single editor save produces into as few
-    ``on_change`` calls as they can, and must return from ``run`` promptly once
-    ``stop`` is called. Bring your own by passing one to :func:`watch`.
+    Citry calls `run()` on a background thread. `run()` blocks and calls
+    `on_change` with the set of changed paths for each batch of changes,
+    until another thread calls `stop()`. A backend should group the burst
+    of events one editor save produces into as few `on_change` calls as it
+    can, and must return from `run()` soon after `stop()` is called.
+
+    Citry ships three backends: [`WatchfilesWatcher`][citry.reload.WatchfilesWatcher],
+    [`WatchdogWatcher`][citry.reload.WatchdogWatcher] and
+    [`PollingWatcher`][citry.reload.PollingWatcher]. To use your own,
+    pass an object with these two methods as `watcher=` to
+    [`watch()`][citry.reload.watch] or
+    [`reload_lifespan()`][citry.contrib.asgi.reload_lifespan].
     """
 
     def run(self, roots: Sequence[Path], on_change: Callable[[set[Path]], None]) -> None:
@@ -61,12 +80,19 @@ class FileWatcher(Protocol):
 
 class WatchfilesWatcher:
     """
-    A :class:`FileWatcher` backed by ``watchfiles`` (native inotify/FSEvents/
-    ReadDirectoryChangesW, with a polling fallback for network mounts).
+    Watch files with the `watchfiles` package, the fastest backend.
 
-    Needs the ``watcher-watchfiles`` extra (``pip install
-    citry[watcher-watchfiles]``); the import is deferred to ``run`` so this
-    class can be referenced without the extra installed.
+    `watchfiles` listens to your operating system's file-change events. It
+    needs the `watcher-watchfiles` extra
+    (`pip install "citry[watcher-watchfiles]"`). Citry imports `watchfiles`
+    only when the watcher starts, so you can create this class without the
+    extra installed.
+
+    Args:
+        force_polling: Check the directories on a timer instead of using
+            operating system events, for example on a network drive that
+            sends no events.
+
     """
 
     def __init__(self, *, force_polling: bool = False) -> None:
@@ -92,11 +118,15 @@ class WatchfilesWatcher:
 
 class PollingWatcher:
     """
-    A dependency-free :class:`FileWatcher` that re-scans ``roots`` on a timer.
+    Watch files by checking their modification times on a timer.
 
-    Portable and needs no extra, but slower and less efficient than
-    :class:`WatchfilesWatcher`; it is the fallback when no native watcher is
-    installed. ``interval`` is the seconds between scans.
+    It needs nothing installed, but it is slower than
+    [`WatchfilesWatcher`][citry.reload.WatchfilesWatcher]. Citry uses it when
+    neither `watchfiles` nor `watchdog` is installed.
+
+    Args:
+        interval: The seconds between two checks.
+
     """
 
     def __init__(self, *, interval: float = _DEFAULT_POLL_INTERVAL) -> None:
@@ -144,15 +174,17 @@ class PollingWatcher:
 
 class WatchdogWatcher:
     """
-    A :class:`FileWatcher` backed by ``watchdog`` (its own native OS-event
-    observers, with watchdog's polling observer as an internal fallback).
+    Watch files with the `watchdog` package.
 
-    Needs the ``watcher-watchdog`` extra (``pip install citry[watcher-watchdog]``);
-    the import is deferred to ``run`` so the class can be referenced without it.
-    Prefer :class:`WatchfilesWatcher`; this exists for projects already
-    standardized on watchdog. watchdog reports one event at a time (no batching),
-    so a single save can invalidate the same file more than once; each
-    invalidation is a cheap cache drop, so the extra calls are harmless.
+    Use it in a project that already depends on `watchdog`; otherwise prefer
+    [`WatchfilesWatcher`][citry.reload.WatchfilesWatcher]. It needs the
+    `watcher-watchdog` extra (`pip install "citry[watcher-watchdog]"`).
+    Citry imports `watchdog` only when the watcher starts, so you can create
+    this class without the extra installed.
+
+    `watchdog` reports one change at a time, so one save can make Citry
+    drop the same file's cached work more than once. Dropping it again
+    costs little.
     """
 
     def __init__(self) -> None:
@@ -191,9 +223,11 @@ class WatchdogWatcher:
 
 class WatchHandle:
     """
-    A running watcher. Call :meth:`stop` to tear it down, or :meth:`wait` to
-    block until it stops (the ``citry watch`` command waits, then stops on
-    Ctrl-C). Returned by :func:`watch`.
+    A running watcher, returned by [`watch()`][citry.reload.watch].
+
+    Call `stop()` to end it, or `wait()` to block until it stops. The
+    `citry watch` command calls `wait()`, then `stop()` when you press
+    Ctrl-C.
     """
 
     def __init__(self, watcher: FileWatcher, thread: threading.Thread) -> None:
@@ -264,19 +298,47 @@ def watch(
     on_reload: Callable[[set[Path], list[type[Component]]], None] | None = None,
 ) -> WatchHandle:
     """
-    Start watching ``roots`` and invalidate ``engine``'s caches in place on
-    every change. Returns a :class:`WatchHandle`; call ``.stop()`` to end it.
+    Watch component files and reload them in place when they change.
 
-    ``roots`` defaults to ``engine.settings.dirs``. ``watcher`` defaults to
-    :func:`default_watcher`. ``on_reload(changed_paths, reset_classes)`` is
-    called after each batch is invalidated, with resolved, de-duplicated paths
-    and the classes that were reset (the ``citry watch`` command uses it to
-    print what reloaded).
+    For each changed file, the watcher calls
+    [`Citry.invalidate_file()`][citry.Citry.invalidate_file], so the next
+    render reads the new template, JavaScript or CSS. The watcher runs on
+    a background thread, so `watch()` returns at once.
 
-    The watcher runs on a background daemon thread, so this returns immediately.
-    Changes to files no component has loaded yet are no-ops (there is nothing
-    cached to drop); a brand-new component file or a Python edit is restart-class
-    and belongs to the host's own reloader. See ``docs/design/hot_reload.md``.
+    A change to a file no component has loaded yet does nothing, because
+    nothing is cached for it. A new component file or a change to Python
+    code needs a restart, which your web framework's own reloader does.
+
+    Args:
+        engine: The Citry instance whose components to reload.
+        roots: The directories to watch. Defaults to `engine.settings.dirs`.
+        watcher: The file-watching backend. Defaults to the best one
+            installed: [`WatchfilesWatcher`][citry.reload.WatchfilesWatcher],
+            then [`WatchdogWatcher`][citry.reload.WatchdogWatcher], then
+            [`PollingWatcher`][citry.reload.PollingWatcher].
+        on_reload: A function Citry calls after each batch of changes, with
+            the set of changed paths (absolute, each listed once) and the
+            list of component classes it reset.
+
+    Returns:
+        A [`WatchHandle`][citry.reload.WatchHandle]. Call its `stop()` to
+        end the watcher.
+
+    Raises:
+        ValueError: When none of the directories to watch exists.
+
+    Example:
+        ```python
+        from citry.reload import watch
+        from myapp import engine
+
+        handle = watch(engine)
+        try:
+            handle.wait()
+        except KeyboardInterrupt:
+            handle.stop()
+        ```
+
     """
     resolved_roots = _resolve_roots(engine, roots)
     impl = watcher if watcher is not None else default_watcher()

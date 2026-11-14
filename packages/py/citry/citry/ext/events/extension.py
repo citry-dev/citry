@@ -46,7 +46,6 @@ from citry.ext.events.handlers import (
     validate_methods_value,
     validate_route_methods,
     validate_timing_value,
-    validate_topics_value,
 )
 from citry.ext.events.openapi import OpenApiCommand
 from citry.ext.events.routes import events_routes
@@ -57,7 +56,6 @@ from citry.ext.events.state import (
     check_replaced_state,
     convert_state_class,
     resolve_state_meta,
-    state_field_names,
     validate_state_class,
 )
 from citry.ext.events.view_events import view_events_routes
@@ -141,7 +139,6 @@ _FACTORY_DEFAULTS: dict[str, Any] = {
     "_methods": ("POST",),
     "_debounce": None,
     "_throttle": None,
-    "_topics": (),
 }
 
 
@@ -209,8 +206,6 @@ class EventsInfo:
         methods: The component-level allowed HTTP methods, uppercase.
         debounce: The component-level debounce in milliseconds, or ``None``.
         throttle: The component-level throttle in milliseconds, or ``None``.
-        topics: The v2 server-push topic templates; stored and validated,
-            not yet consumed.
 
     """
 
@@ -224,7 +219,6 @@ class EventsInfo:
     methods: tuple[str, ...]
     debounce: int | None
     throttle: int | None
-    topics: tuple[str, ...]
 
 
 _EVENTS_INFO_ATTR = "_citry_events_info"
@@ -269,6 +263,13 @@ class EventsExtension(Extension):
     directly. Extension and tooling authors can retrieve it from the instance's
     [`ExtensionManager`][citry.ExtensionManager] to inspect resolved handler or
     State metadata.
+
+    Experimental:
+        The hooks this extension fires for other extensions, `on_event`,
+        `on_event_result` and `on_event_error`, are experimental. Their
+        names, context objects and return values may change in a minor
+        release without a deprecation period.
+
     """
 
     name = "events"
@@ -312,7 +313,7 @@ class EventsExtension(Extension):
 
         Underscore names are configuration and must be one of the recognized
         config attributes (``_guard``, ``_context``, ``_csrf``, ``_methods``,
-        ``_debounce``, ``_throttle``, ``_topics``, plus the engine-wide
+        ``_debounce``, ``_throttle``, plus the engine-wide
         ``_max_body_bytes``, ``_max_form_fields``, and ``_csrf_field_names``, which only
         ``extensions_defaults`` may set);
         on a component's ``Events`` class an underscore ``def`` is a private
@@ -725,12 +726,6 @@ class EventsExtension(Extension):
             f"Component {comp_name}: Events._throttle",
             self._resolve_config_value(raw_events, "_throttle", defaults),
         )
-        state_fields = state_field_names(state_cls) if state_cls is not None else None
-        topics = validate_topics_value(
-            f"Component {comp_name}: Events._topics",
-            self._resolve_config_value(raw_events, "_topics", defaults),
-            state_fields,
-        )
 
         handlers: dict[str, EventHandler] = {}
         if raw_events is not None:
@@ -790,7 +785,6 @@ class EventsExtension(Extension):
             methods=methods,
             debounce=debounce,
             throttle=throttle,
-            topics=topics,
         )
 
     def _resolve_config_value(self, raw_events_cls: type | None, name: str, defaults: Mapping[str, Any]) -> Any:

@@ -544,3 +544,20 @@ class TestSettingsNormalizedAtDirectConstruction:
         from_citry = Citry(**common).settings
         from_direct = CitrySettings(**common)
         assert from_citry == from_direct
+
+
+class TestKeywordOnlyConstructors:
+    # Every setting is passed by name, so a setting added later, anywhere in
+    # the list, cannot change what an existing call means.
+
+    def test_citry_rejects_positional_arguments(self):
+        with pytest.raises(TypeError, match="positional"):
+            Citry(())  # type: ignore[misc]
+
+    def test_citry_settings_rejects_positional_arguments(self):
+        with pytest.raises(TypeError, match="positional"):
+            CitrySettings(())  # type: ignore[misc]
+
+    def test_lint_settings_rejects_positional_arguments(self):
+        with pytest.raises(TypeError, match="positional"):
+            LintSettings("error")  # type: ignore[misc]

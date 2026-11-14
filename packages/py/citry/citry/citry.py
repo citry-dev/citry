@@ -165,6 +165,7 @@ class Citry:
 
     def __init__(
         self,
+        *,
         extensions: Sequence[type[Extension] | Extension | str] = (),
         extensions_defaults: Mapping[str, Mapping[str, Any]] | None = None,
         dirs: Sequence[str | Path] = (),
@@ -178,7 +179,6 @@ class Citry:
         secret: str | list[str] | None = None,
         event_result_resolvers: Sequence[Any] = (),
         event_payload_codecs: Sequence[Any] = (),
-        *,
         security_csp: SecurityCspMode = "off",
         security_javascript: SecurityJavascriptMode = "allow",
         security_script_integrity: SecurityScriptIntegrityMode = "off",
@@ -1509,6 +1509,11 @@ class Citry:
         keeps normalized registered names and parse-time input and slot rules
         together, so tooling cannot observe a partial registry. Call it again
         after component registration or reload to capture the new state.
+
+        Experimental:
+            Part of the experimental template analysis API that `citry
+            check`, `citry format` and citry-lsp use. It may change in a
+            minor release without a deprecation period.
 
         Returns:
             An immutable [`TemplateAnalysis`][citry.TemplateAnalysis] snapshot.

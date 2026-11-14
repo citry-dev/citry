@@ -366,7 +366,7 @@ The worked example is the events extension's two-tier rule:
 
 - **Underscore names are configuration** and must be one of the recognized
   config attributes (`_guard`, `_context`, `_csrf`, `_methods`, `_debounce`,
-  `_throttle`, `_topics`). An unknown underscore name fails with a "did you
+  `_throttle`). An unknown underscore name fails with a "did you
   mean" hint (`'_guardd' is not a recognized Events config attribute; ...
   Did you mean '_guard'?`). On a component's `Events` class an underscore
   `def` is exempt: those are private helpers.

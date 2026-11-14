@@ -107,15 +107,58 @@ does. The upgrade notes below list what can change.
   too deeply, as a Pydantic model's data already did. Before, Citry's
   own check of such a class did not count levels. If valid data nests
   this deeply, flatten the data.
+- **Pass the settings of `Citry(...)`, `CitrySettings`, `LintSettings`
+  and `URLRoute` by name:** these now raise `TypeError` for an argument
+  passed by position, so a setting added later cannot change what your
+  call means. `URLRoute` still takes the path and the handler by
+  position.
+
+  ```python
+  Citry(extensions=[MyExtension])  # not Citry([MyExtension])
+  URLRoute("status", status, name="status")
+  ```
+- **Remove `extra=` from `URLRoute`:** Citry never read it, and passing it
+  now raises `TypeError`. Keep your own data on the handler instead, for
+  example in a closure.
+- **Delete `_topics` from your `Events` classes:** Citry stored it for
+  server push but never used it. A component that sets it now raises
+  `ValueError` when the class is defined.
 
 ### Added
 
 - `Citry.runtime_url()` returns the URL of Citry's browser runtime, for a
   page whose HTML you write yourself. See
   [Link the runtime by hand](https://citry.dev/advanced/web-frameworks/#link-the-runtime-by-hand).
+- You can now import `safe_eval` and `unsafe` from `citry`, so the
+  expression sandbox no longer needs an import from `citry_core`
+  ([Sandbox template code](https://citry.dev/security/#sandbox-python-template-expressions)).
+- `CitryDeprecationWarning` is the warning class Citry will use for every
+  deprecated feature. Add `"error::citry.CitryDeprecationWarning"` to
+  pytest's `filterwarnings` to turn them into errors in your tests.
+- `citry.reload` now lists its public names in `__all__` (`watch`,
+  `WatchHandle`, `FileWatcher` and the three watcher classes), and they
+  have a page in the API reference.
+- `I18nExtension`, the class `get_extension("i18n")` returns, is now in
+  `citry.ext.i18n.__all__`, so it is covered by the API stability promise.
 
 ### Changed
 
+- These areas are now marked experimental in their docs and docstrings:
+  the template analysis classes and functions that `citry check`,
+  `citry format` and citry-lsp use, with `Citry.template_analysis()`;
+  the API for embedding Citry tags in
+  another template engine; `citry.ext.preview`; the `"payload"` render
+  cache mode; `Extension.browser_plugin()` and
+  `Extension.prepare_browser_render()`; the `on_event`,
+  `on_event_result` and `on_event_error` hooks; the
+  `event_result_resolvers` and `event_payload_codecs` settings; and
+  `RenderFrame`. The 1.0.0 stability promise will not cover them, so
+  they may change in a minor release. Nothing about how they work
+  changes now.
+- The `on_*` methods of `ExtensionManager` (and
+  `has_attrs_resolved_hook`) are now documented as internal: Citry calls
+  them itself, and they may change in any release. To react to a hook,
+  implement it on your `Extension` subclass.
 - **Breaking:** a `c-bind` key such as `":row"` or `"v-slot"` on
   `<c-slot>` or `<c-fill>` now raises `VueCodeError`, the error that
   elements and component tags already raise for such a key, instead of

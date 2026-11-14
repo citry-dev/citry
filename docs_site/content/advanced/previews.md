@@ -13,6 +13,12 @@ review visual changes. The idea is similar to
 [Storybook](https://storybook.js.org/){: target="_blank" rel="noopener"},
 but simpler.
 
+!!! warning "Experimental"
+
+    The preview extension, its `Preview` options, and its commands are
+    experimental. They may change in a minor release without a
+    deprecation period.
+
 The preview extension adds two commands:
 
 - `serve` runs a local web server with a gallery of your previews.

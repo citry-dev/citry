@@ -74,10 +74,11 @@ def public_entrypoints() -> list[str]:
     """
     The dotted paths of citry's public import surfaces.
 
-    The public API is three entrypoint shapes and nothing else: the root
-    ``citry`` package, each ``citry.contrib.<name>`` module, and each
+    The public API is these entrypoints and nothing else: the root
+    ``citry`` package, each ``citry.contrib.<name>`` module, each
     ``citry.ext.<name>`` extension package (docs/design/events.md section
-    3.4). Any deeper module is internal. The reference pages must cover
+    3.4), and the ``citry.reload`` module that the hot reload guide teaches.
+    Any deeper module is internal. The reference pages must cover
     everything these entrypoints export, which is what makes the API
     reference the enforcement of that rule; the docs-site test
     ``test_categories_cover_the_public_api`` checks it.
@@ -91,6 +92,7 @@ def public_entrypoints() -> list[str]:
             for name, member in sorted(members.items())
             if member.kind.value == "module" and not name.startswith("_")
         )
+    entrypoints.append("citry.reload")
     return entrypoints
 
 

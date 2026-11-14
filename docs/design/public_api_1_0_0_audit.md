@@ -59,26 +59,42 @@ as it is would also be acceptable.
 
 ### 1.1 Proposed changes
 
-| # | What | Proposed change | Uses | Risk | Must or fine |
-|---|---|---|---|---|---|
-| 1 | Template analysis names (the classes and functions `citry check`, `citry format` and citry-lsp use to find and read templates in Python source): 27 names in `citry.__all__` (all of `citry.analysis` except `LspPosition` and `LspRange`, plus `TemplateLintInfo` and `TemplateVariableInfo`) and the method `Citry.template_analysis()` | Mark experimental | 11 / 4 (site 1) / 0 / 9 | Low: docstrings and one reference intro. No code changes, and citry-lsp needs no change | Must |
-| 2 | Host template names (the hooks and types that let another template engine, such as Django templates, embed Citry tags): `CompiledBody`, `ForeignClaim`, `ForeignCompileContext`, `ForeignSpan`, `ForeignSpanSet`, `OnTemplateForeignSpansContext`, `OnTemplateForeignCompiledContext`, `render_compiled_body`, `collect_compiled_body_fills`, and the hooks `on_template_foreign_spans` and `on_template_foreign_compiled` | Mark experimental | 11 / 4 (site 1) / 0 / 9 | Low: docstrings, two reference intros, one note in `advanced/extensions.md` | Must |
-| 3 | `citry.ext.preview` (all 12 exports) and the `citry ext run preview` commands | Mark experimental | 6 / 4 / 0 / 7 | Low: docs badge and docstrings | Must |
-| 4 | Render cache `"payload"` mode, where an extension saves its own data with a cached render and restores it on a cache hit: `render_cache_mode = "payload"`, `Extension.export_render_cache()`, `Extension.stage_render_cache()` | Mark experimental | 4 / 2 / 0 / 2 | Low | Must. Their five context and return types are not exported, so leaving the mode stable without exporting them is the one clearly wrong option |
-| 5 | `Extension.browser_plugin()` and `Extension.prepare_browser_render()` | Mark experimental | 5 / 5 / 0 / 8 | Low | Must. Their types are not exported either |
-| 6 | Events extension hooks `on_event`, `on_event_result`, `on_event_error` | Mark experimental | 3 / 9 / 0 / 2 | Low | Fine. Their contexts are not exported and no guide teaches them; the 0.6.0 upgrade guide names `on_event_result` |
-| 7 | Settings `event_result_resolvers` and `event_payload_codecs` | Mark experimental | 5 / 3 (site 0) / 0 / 2 and 4 / 3 (site 0) / 0 / 2 | Low | Must. The setting is public but the shape of a resolver or codec is defined only in internal modules (`PayloadCodec` in `citry.ext.events.codecs`) and the design doc |
-| 8 | `RenderFrame`, and the `CitryRender.frame` attribute and `CitryRender(frame=...)` parameter that use it | Mark experimental. Stopping the export instead would leave the public `CitryRender.frame` typed with a class that is not exported | 6 / 8 (site 0) / 0 / 3 | Low: docstrings only | Must, unless extensions may replace `ctx.render.frame` as a supported feature (see 1.4) |
-| 9 | `ExtensionManager.on_*` (21 methods the engine calls to run every extension's hook) and `ExtensionManager.has_attrs_resolved_hook` | Say in their docstrings that they are internal and not covered. Renaming them to `_on_*` can follow later, because the note already leaves them free to change | 13 / 1 (site 0) / 0 / 0 | Low for the note. The rename would touch at least 37 call lines in 13 core files | Must (the note) |
-| 10 | Keyword-only constructors: `Citry(...)` takes 13 parameters by position, and every field of `CitrySettings`, `LintSettings` and `URLRoute` can be passed by position | Move the `*` in `Citry.__init__` right after `self`; add `kw_only=True` to `CitrySettings` and `LintSettings`; make `URLRoute` keyword-only after `handler`. Accept the rest in writing: `Component.__init__(id, kwargs, slots, parent, provides)`, `InMemoryCache(max_entries)` and `CitryRender.serialize(deps_strategy, deps_position)` stay positional | No positional call found in code, docs, examples or tests | Low | Fine, but cheap now and impossible later without a deprecation |
-| 11 | `Events._topics` config name | Stop accepting it until server push exists | 3 / 3 (site 0) / 0 / 1 | Low: validated and stored, but only tests read it. The `citry.ext.events` module docstring mentions it (`ext/events/__init__.py:29`), so that line goes too | Fine |
-| 12 | `URLRoute.extra` field | Remove, but only together with the `URLRoute` part of row 10. `extra` sits before `max_body_bytes` and `dotless_params`, so removing it alone would silently shift a positional `max_body_bytes` | 1 / 0 / 0 / 0 | Low: fits the `URLRoute` note #602 already adds | Fine |
-| 13 | `citry.ext.debug.Debug` | Optional rename to `DebugExtension` | 2 / 13 (site 2) / 0 / 6 (searching `citry.ext.debug`) | Low | Fine. **Recommended: keep.** It is the only built-in extension class without the suffix, and it shares its name with the nested `class Debug:` users write, but it is a consistency fix, not a correctness one |
+The maintainer decided every row; the Decision column records it. The
+0.9.0 pull request that lands these decisions also updated the code, so
+the "Uses" counts describe the code before it.
 
-Rows 1 to 9 change only docstrings and docs, and need a "now marked
-experimental" (or "internal") note in `CHANGELOG.md`. Rows 10 to 12
-change what users may pass, and each needs one bullet under "Upgrading
-from 0.8.x". Row 13 is the only rename, and it is optional.
+| # | What | Proposed change | Uses | Risk | Must or fine | Decision |
+|---|---|---|---|---|---|---|
+| 1 | Template analysis names (the classes and functions `citry check`, `citry format` and citry-lsp use to find and read templates in Python source): 27 names in `citry.__all__` (all of `citry.analysis` except `LspPosition` and `LspRange`, plus `TemplateLintInfo` and `TemplateVariableInfo`) and the method `Citry.template_analysis()` | Mark experimental | 11 / 4 (site 1) / 0 / 9 | Low: docstrings and one reference intro. No code changes, and citry-lsp needs no change | Must | Approved, done in 0.9.0 |
+| 2 | Host template names (the hooks and types that let another template engine, such as Django templates, embed Citry tags): `CompiledBody`, `ForeignClaim`, `ForeignCompileContext`, `ForeignSpan`, `ForeignSpanSet`, `OnTemplateForeignSpansContext`, `OnTemplateForeignCompiledContext`, `render_compiled_body`, `collect_compiled_body_fills`, and the hooks `on_template_foreign_spans` and `on_template_foreign_compiled` | Mark experimental | 11 / 4 (site 1) / 0 / 9 | Low: docstrings, two reference intros, one note in `advanced/extensions.md` | Must | Approved, done in 0.9.0 |
+| 3 | `citry.ext.preview` (all 12 exports) and the `citry ext run preview` commands | Mark experimental | 6 / 4 / 0 / 7 | Low: docs badge and docstrings | Must | Approved, done in 0.9.0 |
+| 4 | Render cache `"payload"` mode, where an extension saves its own data with a cached render and restores it on a cache hit: `render_cache_mode = "payload"`, `Extension.export_render_cache()`, `Extension.stage_render_cache()` | Mark experimental | 4 / 2 / 0 / 2 | Low | Must. Their five context and return types are not exported, so leaving the mode stable without exporting them is the one clearly wrong option | Approved, done in 0.9.0 |
+| 5 | `Extension.browser_plugin()` and `Extension.prepare_browser_render()` | Mark experimental | 5 / 5 / 0 / 8 | Low | Must. Their types are not exported either | Approved, done in 0.9.0 |
+| 6 | Events extension hooks `on_event`, `on_event_result`, `on_event_error` | Mark experimental | 3 / 9 / 0 / 2 | Low | Fine. Their contexts are not exported and no guide teaches them; the 0.6.0 upgrade guide names `on_event_result` | Approved, done in 0.9.0 |
+| 7 | Settings `event_result_resolvers` and `event_payload_codecs` | Mark experimental | 5 / 3 (site 0) / 0 / 2 and 4 / 3 (site 0) / 0 / 2 | Low | Must. The setting is public but the shape of a resolver or codec is defined only in internal modules (`PayloadCodec` in `citry.ext.events.codecs`) and the design doc | Approved, done in 0.9.0 |
+| 8 | `RenderFrame`, and the `CitryRender.frame` attribute and `CitryRender(frame=...)` parameter that use it | Mark experimental. Stopping the export instead would leave the public `CitryRender.frame` typed with a class that is not exported | 6 / 8 (site 0) / 0 / 3 | Low: docstrings only | Must, unless extensions may replace `ctx.render.frame` as a supported feature (see 1.4) | Approved, done in 0.9.0 |
+| 9 | `ExtensionManager.on_*` (21 methods the engine calls to run every extension's hook) and `ExtensionManager.has_attrs_resolved_hook` | Say in their docstrings that they are internal and not covered. Renaming them to `_on_*` can follow later, because the note already leaves them free to change | 13 / 1 (site 0) / 0 / 0 | Low for the note. The rename would touch at least 37 call lines in 13 core files | Must (the note) | Approved, done in 0.9.0 |
+| 10 | Keyword-only constructors: `Citry(...)` takes 13 parameters by position, and every field of `CitrySettings`, `LintSettings` and `URLRoute` can be passed by position | Move the `*` in `Citry.__init__` right after `self`; add `kw_only=True` to `CitrySettings` and `LintSettings`; make `URLRoute` keyword-only after `handler`. Accept the rest in writing: `Component.__init__(id, kwargs, slots, parent, provides)`, `InMemoryCache(max_entries)` and `CitryRender.serialize(deps_strategy, deps_position)` stay positional | No positional call found in code, docs, examples or tests | Low | Fine, but cheap now and impossible later without a deprecation | Approved, done in 0.9.0 |
+| 11 | `Events._topics` config name | Stop accepting it until server push exists | 3 / 3 (site 0) / 0 / 1 | Low: validated and stored, but only tests read it. The `citry.ext.events` module docstring mentions it (`ext/events/__init__.py:29`), so that line goes too | Fine | Approved, done in 0.9.0: `_topics` now fails at class definition as an unknown config attribute |
+| 12 | `URLRoute.extra` field | Remove, but only together with the `URLRoute` part of row 10. `extra` sits before `max_body_bytes` and `dotless_params`, so removing it alone would silently shift a positional `max_body_bytes` | 1 / 0 / 0 / 0 | Low: fits the `URLRoute` note #602 already adds | Fine | Approved, done in 0.9.0 |
+| 13 | `citry.ext.debug.Debug` | Optional rename to `DebugExtension` | 2 / 13 (site 2) / 0 / 6 (searching `citry.ext.debug`) | Low | Fine. **Recommended: keep.** It is the only built-in extension class without the suffix, and it shares its name with the nested `class Debug:` users write, but it is a consistency fix, not a correctness one | Not approved: `Debug` keeps its name |
+
+Rows 1 to 9 change only docstrings and docs, and have one "now marked
+experimental" line and one "documented as internal" line under Changed
+in `CHANGELOG.md`. Rows 10 to 12 change what users may pass, and each
+has a bullet under "Upgrading from 0.8.x". Row 13 was the only rename,
+and it was not approved.
+
+**The experimental marker (open question 8).** Every experimental name
+carries an `Experimental:` section in its docstring, the one
+`ComponentGraph` uses (#629). The API reference renders it as a box
+titled "Experimental", in the same style as the "Example" box. The
+reference intro of a category that holds only experimental names says
+so in one sentence, and a guide page that teaches an experimental
+feature has a `!!! warning "Experimental"` box
+(`advanced/component-discovery.md`, `advanced/previews.md`) or one
+sentence where the feature is a paragraph of a larger page
+(`advanced/extensions.md`). There is no separate badge.
 
 Already done:
 
@@ -88,11 +104,18 @@ Already done:
 - The i18n editor index is back at version 1 in `citry` and citry-lsp
   (same commit). The #624 task can be ticked.
 - The API comment in `citry/__init__.py:9-15` already names the
-  `__all__` of `citry.ext.<name>` and `citry.contrib.<name>`.
+  `__all__` of `citry.ext.<name>` and `citry.contrib.<name>`. 0.9.0 adds
+  `citry.reload` to it (1.2).
 
 ### 1.2 Additions that #624 already asks for, or that close a gap
 
-These only add names, so none needs an upgrade note.
+These only add names, so none needs an upgrade note. All four were
+approved and are done in 0.9.0. `CitryDeprecationWarning` is a
+`DeprecationWarning` subclass. `citry.reload.__all__` is `watch`,
+`WatchHandle`, `FileWatcher`, `WatchfilesWatcher`, `WatchdogWatcher` and
+`PollingWatcher`; `default_watcher` stays internal. The docs site counts
+`citry.reload` as a public entrypoint, so the reference test checks that
+every name in its `__all__` has a reference page.
 
 | What | Change | Risk | Must or fine |
 |---|---|---|---|
@@ -142,11 +165,13 @@ a breaking change. Making a lenient default stricter later is.
 3. **`RenderFrame` and extensions.** `tests/test_render.py:78-95` has an
    extension replace `ctx.render.frame`. If that is a supported feature,
    keep `RenderFrame` stable and accept that its fields are frozen;
-   otherwise row 8 stands.
+   otherwise row 8 stands. Decided: row 8 was approved, so replacing
+   `ctx.render.frame` is experimental too.
 4. **Host template hooks.** The design promised them as supported
    (`template_host_interop.md:13-17`), but the only user is a Django
    proof of concept whose Citry patch is not public. If that counts as an
-   outside user, keep row 2 stable.
+   outside user, keep row 2 stable. Decided: row 2 was approved, so the
+   hooks are experimental.
 5. **Underscore names users set.** The Events config (`_guard`, `_csrf`,
    `_max_body_bytes`, ...) and State options (`_public`, `_storage`,
    `_max_age`, ...) start with `_` on purpose, so they do not clash with
@@ -170,10 +195,8 @@ a breaking change. Making a lenient default stricter later is.
 7. **`EventsDispatcher` and `TransportContext`** pass the Events v1 call
    and result data. If the Events v1 task keeps that format internal,
    mark both experimental; if it freezes it, keep them.
-8. **One experimental marker.** `ComponentGraph` uses an `Experimental:`
-   docstring section, a sentence in the reference intro, and a warning
-   box on the guide page. Decision 9 says "badge". Choose one marker
-   before rows 1 to 7 copy it.
+8. **One experimental marker.** Decided: the `Experimental:` docstring
+   section, as described after the table in 1.1.
 
 ## 2. What changed since the 0.6.0 audit
 
@@ -215,6 +238,10 @@ the tables below means no guide page teaches the name.
 ## 4. Inventory
 
 ### 4.1 `citry.__all__` (194 names)
+
+These counts are from the audit commit. 0.9.0 adds
+`CitryDeprecationWarning`, `safe_eval` and `unsafe` (1.2), which makes
+197 names.
 
 151 keep, 37 mark experimental (27 in row 1, 9 in row 2, 1 in row 8),
 and 6 already experimental. `ComponentNode` is listed once, under
@@ -325,7 +352,7 @@ out. citry-lsp imports two `citry.ext.events` internals (1.4 question 1).
 | `ExtensionManager.get_extension`, `emit`, `has_hook`, `commands`, `urls`, `get_extension_command` | keep |
 | `ExtensionManager.on_*` (21 methods), `has_attrs_resolved_hook` | internal, by docstring note (row 9) |
 | `URLRoute.path`, `handler`, `handler_async`, `children`, `name`, `methods`, `max_body_bytes`, `dotless_params` | keep (#602 changes matching in 0.9.0) |
-| `URLRoute.extra` | remove (row 12) |
+| `URLRoute.extra` | removed (row 12) |
 
 Decision 9 names "the extension hooks no outside extension uses yet" as
 experimental candidates. Read literally, that is every hook, because no
@@ -406,7 +433,7 @@ Built-in extension settings, all keep except where noted:
 
 | Extension | Settings |
 |---|---|
-| events (component `Events` or `extensions_defaults["events"]`) | `_guard`, `_context`, `_csrf` (`"auto"`), `_methods` (`("POST",)`), `_debounce`, `_throttle`; engine only: `_max_body_bytes` (1 MiB), `_max_form_fields` (1000), `_csrf_field_names`, `_csp_nonce`. `_topics`: stop accepting it (row 11). `_debounce` and `_throttle` work but have no docs page |
+| events (component `Events` or `extensions_defaults["events"]`) | `_guard`, `_context`, `_csrf` (`"auto"`), `_methods` (`("POST",)`), `_debounce`, `_throttle`; engine only: `_max_body_bytes` (1 MiB), `_max_form_fields` (1000), `_csrf_field_names`, `_csp_nonce`. `_topics` is no longer accepted (row 11). `_debounce` and `_throttle` work but have no docs page |
 | events State options | `_public`, `_model`, `_storage` (`"signed"`), `_max_bytes` (8192 signed, 65536 server), `_max_age` (see 1.3) |
 | i18n | `source_locale`, `locales`, `default_locale`, `fallbacks`, `catalogs`, `formats`; component: `messages_locale`, `client_messages` |
 | cache | `ttl` (300), `namespace`, `generation`, `max_entry_bytes`; component: `enabled` (`False`), `vary`, `version` (1) |
