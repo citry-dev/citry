@@ -57,10 +57,15 @@ def _pydantic_supports(method: str, parameter: str) -> bool:
 # fields out of a dump; older releases get the closest equivalent.
 _VALIDATES_BY_NAME = _pydantic_supports("model_validate_json", "by_name")
 _DUMP_EXCLUDES_COMPUTED = _pydantic_supports("model_dump", "exclude_computed_fields")
-# The message of the plain ValueError Pydantic raises when it stops writing a
-# value nested past its depth limit. Pydantic gives this stop no class of
-# its own, so the message is the only way to tell it from other errors.
+# The message of the ValueError Pydantic raises when it stops writing a value
+# nested past its depth limit. Pydantic gives this stop no class of its own,
+# so the message is the only way to tell it from other errors. A custom
+# serializer function that meets the stop passes it on with this message at
+# the end of its own.
 _DUMP_TOO_DEEP = "Maximum serialization depth exceeded"
+# The error `state_wire_values` raises for that stop. The app built the State,
+# so the message is for the app's author rather than for a browser.
+_STATE_TOO_DEEP_TO_WRITE = "the State nests deeper than Pydantic can write as JSON"
 
 
 # The full State meta surface. Every other underscore attribute on a State
@@ -190,8 +195,8 @@ def state_wire_values(state: Any) -> dict[str, Any]:
 
     Raises:
         ValueError: A model State nests deeper than Pydantic writes on this
-            platform. The error is the one `restore_state` raises for data
-            nested too deeply.
+            platform. Its cause is the depth stop `restore_state` gives for
+            data nested too deeply.
 
     """
     # On a check thread: State that passed the nesting limit can nest as
@@ -212,15 +217,15 @@ def _state_wire_values(state: Any) -> dict[str, Any]:
         try:
             return cast("dict[str, Any]", state.model_dump(**options))
         except ValueError as error:
-            if type(error) is not ValueError or str(error) != _DUMP_TOO_DEEP:
+            if not str(error).endswith(_DUMP_TOO_DEEP):
                 raise
             # Pydantic stops writing a value nested past its own limit, and
-            # sets that limit by platform (99 levels on Windows, 255 on Linux
-            # and macOS). The callers get the ValueError a restore raises for
-            # data nested too deeply, so they report the same reason, at
-            # whichever depth the platform stops.
-            stop = bounded.ValidationTooCostly("depth")
-            raise ValueError(stop.message) from stop
+            # sets that limit by platform (99 levels on Windows and PyPy, 255
+            # on CPython for Linux and macOS). The cause is the depth stop a
+            # restore gives for data nested too deeply, so
+            # `check_changed_state` reports the same reason at whichever
+            # depth the platform stops.
+            raise ValueError(_STATE_TOO_DEEP_TO_WRITE) from bounded.ValidationTooCostly("depth")
     if kind == "v1":
         # Pydantic v1 writes a nested model with the fields of its runtime
         # class, which may be a subclass State does not declare. Reading the

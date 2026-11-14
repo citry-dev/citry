@@ -4198,11 +4198,12 @@ def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() ->
 @pytest.mark.parametrize(
     "depth",
     [
-        # Pydantic's JSON reader refuses more than 200 levels, so on Linux
-        # and macOS the State is written out but cannot be read back from
-        # its token. Pydantic stops writing at 99 levels on Windows.
+        # Pydantic's JSON reader refuses more than 200 levels, so on CPython
+        # for Linux and macOS the State is written out but cannot be read
+        # back from its token. On Windows and PyPy, Pydantic stops writing
+        # at 99 levels.
         pytest.param(250, id="past-the-reader"),
-        # Pydantic stops writing past 255 levels on every platform.
+        # 300 levels is past Pydantic's writing limit on every platform.
         pytest.param(300, id="past-the-writer"),
     ],
 )
@@ -4490,8 +4491,7 @@ def nest(name, depth):
     return value
 
 
-def pydantic_takes(board, value):
-    adapter = pydantic.TypeAdapter(board)
+def pydantic_takes(adapter, value):
     try:
         adapter.validate_json(adapter.dump_json(adapter.validate_python({"t": value})))
     except ValueError:
@@ -4504,10 +4504,11 @@ def deepest(board, name):
     # limit on request JSON bounds them: the envelope, its calls, the call
     # and its State updates take four levels, which leaves 196. Pydantic
     # also stops checking and writing a JsonValue past its own limit, which
-    # it sets lower on Windows (99 levels) than on Linux and macOS (255), so
-    # the value nests as deeply as both allow on this platform.
+    # it sets lower on Windows and PyPy (99 levels) than on CPython for Linux
+    # and macOS (255), so the value nests as deeply as both allow here.
+    adapter = pydantic.TypeAdapter(board)
     depth = 196
-    while depth > 0 and not pydantic_takes(board, nest(name, depth)):
+    while depth > 0 and not pydantic_takes(adapter, nest(name, depth)):
         depth -= 1
     return depth
 
@@ -4539,6 +4540,15 @@ def dispatch():
             # The depth, so the test can check the value was still deep, and
             # a refusal's reason, so a failure shows why.
             answers[f"{board.__name__} {name}"] = [depth, first["ok"] or json.dumps(first["error"])[:300]]
+            if depth < 196:
+                # Where Pydantic refuses the full 196 levels, the browser's
+                # write is refused before the handler runs, with the field's
+                # error.
+                call = {**call, "stateUpdates": {"t": nest(name, 196)}}
+                envelope = {**envelope, "calls": [call]}
+                result = EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=citry))
+                refused = result["results"][0].get("error", {})
+                answers[f"{board.__name__} {name} at 196"] = [refused.get("status"), refused.get("code")]
 
 
 threading.stack_size(512 * 1024)
@@ -4568,9 +4578,14 @@ def test_a_handler_renders_with_deep_state_the_browser_wrote_from_a_thread_with_
 
     assert done.returncode == 0, done.stderr[-2000:]
     answers = json.loads(done.stdout)
-    assert answers.keys() == {"ModelBoard lists", "ModelBoard dicts", "DataclassBoard lists", "DataclassBoard dicts"}
-    for name, (depth, outcome) in answers.items():
+    # Pydantic takes the full 196 levels on CPython for Linux and macOS, and
+    # about 98 on Windows and PyPy, where its limit is 99.
+    lower_limit = sys.platform == "win32" or sys.implementation.name == "pypy"
+    for name in ("ModelBoard lists", "ModelBoard dicts", "DataclassBoard lists", "DataclassBoard dicts"):
+        depth, outcome = answers[name]
         assert outcome is True, f"{name} at {depth} levels: {outcome}"
-        # 49 levels is the lowest limit Pydantic sets on any platform, so a
-        # shallower value means the depth search went wrong.
-        assert depth >= 49, f"{name} nested only {depth} levels"
+        if lower_limit:
+            assert depth >= 90, f"{name} nested only {depth} levels"
+            assert answers[f"{name} at 196"] == [422, "invalid_args"]
+        else:
+            assert depth == 196
