@@ -1033,7 +1033,8 @@ def delete_account(user):
 ```
 
 A template that calls `delete_account(...)` then fails with
-`SecurityError`.
+`SecurityError`. The mark works only while the sandbox is on: with
+`sandbox_expressions=False`, templates can call the function.
 
 ### Turn the sandbox off { #turning-the-sandbox-off }
 

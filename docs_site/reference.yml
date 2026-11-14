@@ -24,7 +24,9 @@ description_overrides:
     sandbox Citry uses for template expressions. Call the result with a
     mapping of the names the expression may read. A blocked call,
     attribute, or name raises [`SecurityError`][citry.SecurityError] when
-    the expression runs. See
+    the expression runs. Pass only expression text that you or the
+    template author wrote, never text from a request or from stored user
+    data, because the sandbox does not block everything. See
     [Sandbox template code](/security/#sandbox-python-template-expressions)
     for what the sandbox blocks and what it misses.
   citry.unsafe: >-
