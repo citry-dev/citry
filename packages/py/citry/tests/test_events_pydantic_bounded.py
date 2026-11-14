@@ -4215,7 +4215,24 @@ def test_a_state_too_deep_for_pydantic_to_write_and_read_back_is_reported_as_too
     for _ in range(depth):
         value = [value]
 
-    assert check_changed_state(holder(data=value)) == (None, TOO_DEEP_TO_SIGN)
+    # TEMPORARY DIAGNOSTIC
+    import traceback  # noqa: PLC0415
+
+    from citry.ext.events.state import _check_changed_state, restore_state, state_wire_values  # noqa: PLC0415
+
+    notes = []
+    st = holder(data=value)
+    for label, fn in (
+        ("wire", lambda: state_wire_values(st)),
+        ("dump", lambda: st.model_dump(mode="json", by_alias=False, round_trip=True, warnings=False)),
+        ("restore", lambda: restore_state(type(st), state_wire_values(st))),
+        ("direct", lambda: _check_changed_state(st)),
+    ):
+        try:
+            notes.append((label, "ok", repr(fn())[:80]))
+        except BaseException as error:  # noqa: BLE001
+            notes.append((label, repr(error)[:300], repr(error.__cause__)[:200], traceback.format_exc()[-1500:]))
+    assert check_changed_state(holder(data=value)) == (None, TOO_DEEP_TO_SIGN), notes
 
 
 def test_a_pydantic_v1_state_that_a_handler_nests_too_deeply_is_reported_as_too_deep_to_sign() -> None:
