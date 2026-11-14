@@ -2563,6 +2563,17 @@ _NESTED_SHOWN = """name => {
 }"""
 
 
+# Whether a click at the middle of a level's dialog reaches that dialog, so
+# no other open level covers it. A modal dialog that entered the top layer
+# before its enclosing one sits below it and loses this check.
+_NESTED_ON_TOP = """name => {
+  const dialog = document.querySelector('#' + name + '-root dialog');
+  const box = dialog.getBoundingClientRect();
+  const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+  return Boolean(hit) && dialog.contains(hit);
+}"""
+
+
 def _nested_state(page: Any, names: tuple[str, ...]) -> dict[str, bool]:
     return page.evaluate(_NESTED_OPEN, list(names))
 
@@ -2581,6 +2592,8 @@ def _open_level_by_user(page: Any, name: str) -> None:
         ("cdialog", "cdrawer"),
         ("cdrawer", "cdrawer"),
         ("cdrawer", "cdialog", "cdrawer"),
+        ("cdialog", "ccommand_palette"),
+        ("cdrawer", "ccommand_palette"),
     ],
     ids=lambda levels: "-in-".join(reversed(levels)),
 )
@@ -2606,6 +2619,11 @@ def test_server_close_of_an_outer_overlay_closes_an_open_inner_one_and_releases_
         for name in names[1:]:
             _open_level_by_user(page, name)
     page.wait_for_function(f"(({_NESTED_OPEN})({list(names)!r})).inner === true")
+    settle_timers()
+    # Every level is open and modal, and the innermost one is on top, however
+    # it was opened.
+    assert [page.evaluate(_NESTED_SHOWN, name) for name in names] == [{"open": True, "modal": True}] * len(names)
+    assert page.evaluate(_NESTED_ON_TOP, names[-1]), f"{label}: the innermost level is covered"
     opened = page.evaluate("window.__openChanges")
 
     _server_event(page, send_event, "#close-outer-on-server", "close_outer_on_server", 2)

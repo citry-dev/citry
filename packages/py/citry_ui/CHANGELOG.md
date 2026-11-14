@@ -17,6 +17,21 @@
   value, as the browser does. It used to read the last one, so it could
   accept an element that the browser makes focusable, or refuse one that
   is fine.
+- The components below keep working when a server event re-renders
+  the component around them, now that Citry runs `onServerRender`
+  callbacks with children before their parent. Before this fix, under
+  that order:
+  - an open `CDatePicker`, `CDateRange` or `CTimePicker` popup closed,
+    and so did an open `CPopover` inside another open `CPopover`;
+  - when one server render opened a `CDialog` or `CDrawer` and a
+    `CDialog`, `CDrawer` or `CCommandPalette` inside it, they did not
+    both open, or the inner one opened behind the outer one;
+  - an open `CDrawer` inside a `CDialog`, or an open `CCommandPalette`
+    inside a `CDrawer`, stayed open when the server closed the outer
+    one;
+  - `CAccordion` did not report, through `onValueChange`, the open
+    items that a re-render removed, and did not move focus to the
+    nearest item when the focused item was removed.
 
 ## [0.4.0] - 2026-11-02
 

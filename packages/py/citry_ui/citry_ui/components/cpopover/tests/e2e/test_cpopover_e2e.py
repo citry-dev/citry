@@ -1142,3 +1142,120 @@ def test_owner_focus_move_in_on_open_change_survives_the_popover_closing(
     final = page.evaluate(_TWO_FRAMES_ACTIVE_ID)
     assert final == "target"
     assert errors == []
+
+
+def _nested_popover_events_page() -> tuple[Citry, str]:
+    app = Citry(secret="citry-ui-popover-nested-e2e", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(citry_ui)
+
+    class NestedPopovers(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+
+        class State(Kwargs):
+            pass
+
+        class Slots:
+            pass
+
+        class Events:
+            def advance(self, state):
+                state.step += 1
+                return NestedPopovers(step=state.step)
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:
+            return {"step": kwargs.step}
+
+        # Both popovers log every `onOpenChange` call, so the test can tell
+        # that the re-render reported no close.
+        template = """
+          <section data-nested-specimen>
+            <output id="nested-step">{{ step }}</output>
+            <button class="advance-nested" type="button" @c-click="advance">
+              Advance
+            </button>
+            <c-CPopover
+              id="outer-popover"
+              :onOpenChange="(open, detail) => log('outer', open, detail)"
+            >
+              <c-fill name="activator" data="{ activator_attrs }">
+                <c-CButton c-attrs="activator_attrs">Open outer</c-CButton>
+              </c-fill>
+              <c-fill name="title">Outer</c-fill>
+              <c-fill name="default">
+                <c-CPopover
+                  id="inner-popover"
+                  :onOpenChange="(open, detail) => log('inner', open, detail)"
+                >
+                  <c-fill name="activator" data="{ activator_attrs }">
+                    <c-CButton c-attrs="activator_attrs">Open inner</c-CButton>
+                  </c-fill>
+                  <c-fill name="title">Inner</c-fill>
+                  <c-fill name="default">Inner content</c-fill>
+                </c-CPopover>
+              </c-fill>
+            </c-CPopover>
+          </section>
+        """
+
+        js = """
+          $component({
+            methods: {
+              log(name, open, detail) {
+                (window.__openChanges ||= []).push({ name, open, reason: detail.reason });
+              },
+            },
+          });
+        """
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <c-css />
+            </head>
+            <body>
+              <c-nested-popovers />
+              <c-js />
+            </body>
+          </html>
+        """
+
+    return app, str(Page())
+
+
+def test_server_rerender_keeps_a_popover_open_inside_an_open_popover(
+    page: Any,
+    serve_citry_ui_live: Any,
+    settle_timers: Any,
+) -> None:
+    """A server event that re-renders both popovers leaves the inner one open inside the outer one."""
+    app, html = _nested_popover_events_page()
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    page.wait_for_function(
+        """() => [...document.querySelectorAll('[data-citry-popover-host]')]
+          .every((host) => host.hasAttribute('data-citry-popover-initialized'))"""
+    )
+    page.get_by_role("button", name="Open outer").click()
+    page.get_by_role("button", name="Open inner").click()
+    page.wait_for_function("document.querySelector('#inner-popover').matches(':popover-open')")
+    opened = page.evaluate("window.__openChanges")
+    assert [(change["name"], change["open"]) for change in opened] == [("outer", True), ("inner", True)]
+
+    page.evaluate("() => Citry.events.send(document.querySelector('.advance-nested'), 'advance', {})")
+    page.wait_for_function("document.querySelector('#nested-step').textContent === '1'")
+    # A close scheduled by the re-render would run on a timer or a frame.
+    settle_timers()
+
+    assert page.evaluate(
+        """() => ['#outer-popover', '#inner-popover']
+          .map((selector) => document.querySelector(selector).matches(':popover-open'))"""
+    ) == [True, True]
+    assert page.evaluate("window.__openChanges") == opened
+    assert page.evaluate("window[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length") == 2

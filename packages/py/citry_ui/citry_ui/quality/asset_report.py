@@ -212,9 +212,11 @@ class AssetBytes:
 # 839 bytes under its ceiling, so a single new component tripped the budget before
 # anyone had a chance to weigh whether its cost was reasonable. Raise a limit only
 # as a deliberate edit, and change `tests/test_asset_budgets.py` in the same commit
-# so the new ceiling is visible in review.
+# so the new ceiling is visible in review. The JavaScript gzip and brotli limits
+# rose by 8 KiB and 4 KiB when the overlays and CAccordion learned to keep their
+# state through a server render that runs children's callbacks first.
 _CATALOG_ASSET_LIMITS = {
-    "javascript": AssetBytes(raw=1152 * 1024, gzip=232 * 1024, brotli=168 * 1024),
+    "javascript": AssetBytes(raw=1152 * 1024, gzip=240 * 1024, brotli=172 * 1024),
     "css": AssetBytes(raw=400 * 1024, gzip=52 * 1024, brotli=44 * 1024),
 }
 

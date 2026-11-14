@@ -375,7 +375,7 @@ def test_asset_report_is_deterministic_and_covers_every_family():
         "color-picker",
     ]
     assert first["catalog"]["limits"] == {
-        "javascript": {"raw": 1_179_648, "gzip": 237_568, "brotli": 172_032},
+        "javascript": {"raw": 1_179_648, "gzip": 245_760, "brotli": 176_128},
         "css": {"raw": 409_600, "gzip": 53_248, "brotli": 45_056},
     }
     for kind in ("javascript", "css"):
@@ -480,14 +480,17 @@ def test_command_palette_assets_stay_within_the_family_budgets():
 
     assert incremental["baseline_components"] == ["CCombobox", "CDialog"]
     assert incremental["javascript"]["raw"] < 48 * 1024
-    assert incremental["javascript"]["gzip"] < 10 * 1024
-    assert incremental["javascript"]["brotli"] < 9 * 1024
+    assert incremental["javascript"]["gzip"] < 11 * 1024
+    assert incremental["javascript"]["brotli"] < 10 * 1024
     assert family["javascript"]["raw"] < 112 * 1024
     # Running a closing command's onAction after the close (#420), with its
     # handling of owner errors, reopening and unmounting, adds about 2.3 KiB
     # raw (0.6 KiB gzip) to a family that had under 0.1 KiB of headroom.
-    assert family["javascript"]["gzip"] < int(21.5 * 1024)
-    assert family["javascript"]["brotli"] < int(18.5 * 1024)
+    # Waiting to open until an enclosing dialog that the same server render
+    # opens is modal, in the palette and in CDialog, adds about 3.9 KiB raw
+    # (1.1 KiB gzip).
+    assert family["javascript"]["gzip"] < int(22.75 * 1024)
+    assert family["javascript"]["brotli"] < int(19.5 * 1024)
     assert family["css"]["raw"] < 10 * 1024
     assert family["css"]["gzip"] < int(2.25 * 1024)
     assert family["css"]["brotli"] < 2 * 1024

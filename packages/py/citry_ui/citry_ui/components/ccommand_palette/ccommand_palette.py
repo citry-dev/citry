@@ -1533,6 +1533,9 @@ class CCommandPalette(LibraryComponent):
           let active = true;
           let watcher = null;
           let controller = null;
+          // Counts open and close requests, so a deferred open (see
+          // openFromOwner) runs only when nothing changed the palette after it.
+          let openRequest = 0;
           let collection = null;
           let configuration = {
             disabled: defaults.disabled,
@@ -1646,7 +1649,24 @@ class CCommandPalette(LibraryComponent):
             const timer = setTimeout(removeFormGuard, 0);
             formGuard = { form, listener, timer };
           };
+          // CDialog and CDrawer list their open dialogs in one shared runtime
+          // object, and CDrawer closes the listed dialogs inside it when it
+          // closes. The palette joins that list while it is open, so an
+          // enclosing drawer that closes after this palette's callback has run
+          // (a server render runs the palette's callback first) still closes it.
+          const sharedDialogs = () => {
+            const key = Symbol.for("citry-ui:dialog-runtime");
+            globalThis[key] ??= { dialogs: [], overflow: "", paddingInlineEnd: "" };
+            return globalThis[key].dialogs;
+          };
+          const syncSharedDialog = (open) => {
+            const dialogs = sharedDialogs();
+            const index = dialogs.indexOf(dialog);
+            if (open && index < 0) dialogs.push(dialog);
+            if (!open && index >= 0) dialogs.splice(index, 1);
+          };
           const reflect = () => {
+            syncSharedDialog(logicalOpen);
             dialog.toggleAttribute("data-open", logicalOpen);
             dialog.toggleAttribute("data-disabled", configuration.disabled);
             dialog.dataset.size = configuration.size;
@@ -1757,10 +1777,36 @@ class CCommandPalette(LibraryComponent):
             pendingAction = null;
             if (action !== null) runAction(action.value, action.detail);
           };
+          // Any open or close supersedes an open that is still waiting.
+          const setControllerOpen = (nextOpen, source) => {
+            openRequest += 1;
+            controller.setOpen(nextOpen, source);
+          };
+          // Opens the palette for its `open` input. An enclosing dialog that the
+          // same server render opens runs its callback after this one, so a
+          // palette opened now would enter the top layer below that dialog and
+          // stay hidden behind it. Wait a task, after every callback of the
+          // render has run, and try again (see enclosingDialogWait). While it
+          // waits the palette stays closed and keeps the owner's `open`.
+          const openFromOwner = (attempts = 0) => {
+            if (dialogRuntime.enclosingDialogWait(dialog, attempts) > 0) {
+              const request = ++openRequest;
+              setTimeout(() => {
+                if (!active || request !== openRequest || configuration.disabled) return;
+                openFromOwner(attempts + 1);
+                reflect();
+                filter({ preserveActive: false });
+              }, 0);
+              return;
+            }
+            setControllerOpen(true, null);
+            logicalOpen = controller.isOpen();
+            internalOpen = logicalOpen;
+          };
           const commitVisibility = (nextOpen, reason, source, { notify = false } = {}) => {
             const next = Boolean(nextOpen) && !configuration.disabled;
             const wasOpen = logicalOpen;
-            controller.setOpen(next, source);
+            setControllerOpen(next, source);
             logicalOpen = controller.isOpen();
             internalOpen = logicalOpen;
             reflect();
@@ -1779,7 +1825,7 @@ class CCommandPalette(LibraryComponent):
               callbacks.open?.(Boolean(nextOpen), { reason, controlled: true, source });
               if (props.open === Boolean(nextOpen)) {
                 const wasOpen = logicalOpen;
-                controller.setOpen(Boolean(nextOpen) && !configuration.disabled, source);
+                setControllerOpen(Boolean(nextOpen) && !configuration.disabled, source);
                 logicalOpen = controller.isOpen();
                 reflect();
                 filter({ preserveActive: wasOpen });
@@ -2099,6 +2145,10 @@ class CCommandPalette(LibraryComponent):
           watcher = watchPalette(host, registration);
 
           effect(() => {
+            // Each pass of this effect decides the open state again, so an open
+            // that an earlier pass deferred no longer applies; the code below
+            // defers it again when it still should.
+            openRequest += 1;
             const priorDisabled = configuration.disabled;
             configuration = {
               disabled: resolveBoolean("disabled", configuration.disabled),
@@ -2153,7 +2203,7 @@ class CCommandPalette(LibraryComponent):
             }
             if (configuration.disabled && logicalOpen) {
               const wasControlled = openControlled;
-              controller.setOpen(false, dialog);
+              setControllerOpen(false, dialog);
               logicalOpen = false;
               internalOpen = false;
               callbacks.open?.(false, {
@@ -2166,9 +2216,13 @@ class CCommandPalette(LibraryComponent):
               const expected = Boolean(ownerOpen);
               if (expected !== logicalOpen) {
                 const wasOpen = logicalOpen;
-                controller.setOpen(expected, null);
-                logicalOpen = controller.isOpen();
-                internalOpen = logicalOpen;
+                if (expected) {
+                  openFromOwner();
+                } else {
+                  setControllerOpen(false, null);
+                  logicalOpen = controller.isOpen();
+                  internalOpen = logicalOpen;
+                }
                 if (wasOpen && !logicalOpen) {
                   const close = pendingControlledClose ?? { reason: "owner", source: null };
                   settleCloseQuery(close.reason, close.source);
@@ -2176,7 +2230,7 @@ class CCommandPalette(LibraryComponent):
               }
             }
             if (!configuration.disabled && priorDisabled && openControlled && props.open === true) {
-              controller.setOpen(true, null);
+              setControllerOpen(true, null);
               logicalOpen = controller.isOpen();
             }
             pendingControlledClose = logicalOpen ? pendingControlledClose : null;
@@ -2192,6 +2246,10 @@ class CCommandPalette(LibraryComponent):
           const teardown = (diagnose = false) => {
             if (!active) return;
             active = false;
+            // An open this run deferred must not touch the dialog after it.
+            openRequest += 1;
+            // The next run lists the dialog again if it keeps it open.
+            syncSharedDialog(false);
             owner.active = false;
             actionGeneration += 1;
             compositionGeneration += 1;

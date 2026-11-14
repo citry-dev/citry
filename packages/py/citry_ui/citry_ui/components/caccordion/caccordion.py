@@ -708,6 +708,12 @@ class CAccordion(LibraryComponent):
             ? [...runtimeState.itemOrder]
             : [];
           let focusedValue = runtimeState.focusedValue;
+          // Kept items run their own callbacks before this one after a server render, so
+          // they are already registered when this run starts. Only reconcileStructure can
+          // tell which open or focused items the render removed, so nothing applies the
+          // item state until it has run once; an earlier applyState would drop the removed
+          // values silently and skip the removal report and the focus fallback.
+          let structureReconciled = false;
           let controlled = false;
           let onValueChange = null;
           let configuration = {
@@ -950,7 +956,7 @@ class CAccordion(LibraryComponent):
             root.dataset.indicatorPos = configuration.indicatorPosition;
           };
           const applyState = ({ animate = false, items = orderedItems() } = {}) => {
-            if (items.length === 0) {
+            if (!structureReconciled || items.length === 0) {
               return;
             }
             const itemValues = items.map((item) => item.value);
@@ -1067,7 +1073,8 @@ class CAccordion(LibraryComponent):
               invalidEpisodes.delete("value");
               return false;
             }
-            if (itemValues.length === 0) {
+            // Reading `props.value` above keeps the effect subscribed while it waits.
+            if (!structureReconciled || itemValues.length === 0) {
               return false;
             }
             const normalized = normalizeClientValue(supplied, itemValues);
@@ -1081,6 +1088,7 @@ class CAccordion(LibraryComponent):
             return true;
           };
           const reconcileStructure = () => {
+            structureReconciled = true;
             applyConfiguration();
             const items = orderedItems();
             const itemValues = items.map((item) => item.value);
@@ -1222,6 +1230,16 @@ class CAccordion(LibraryComponent):
               applyState({ animate: true });
             }
           });
+          // Items run their callbacks before this one, so on the first mount and
+          // after a server render they are usually registered already. Reconcile
+          // them now, after the effects above have read the callbacks and
+          // configuration, so the state applies in this run rather than one task
+          // later. Items that register after this point still schedule a reconcile.
+          if (registrations.size > 0) {
+            clearTimeout(reconciliationTimer);
+            reconciliationTimer = null;
+            reconcileStructure();
+          }
 
           const ancestorFieldsets = [];
           for (let ancestor = parentElementOf(root); ancestor; ancestor = parentElementOf(ancestor)) {

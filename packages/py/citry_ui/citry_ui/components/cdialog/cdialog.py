@@ -389,8 +389,24 @@ class CDialog(LibraryComponent):
             }
           };
           let controller;
-          const applyOpen = (nextOpen, source = null, returnValue = "") => {
+          // Counts open requests, so a deferred open (see applyOpen) runs only
+          // when no later request or cleanup came after it.
+          let openRequest = 0;
+          const applyOpen = (nextOpen, source = null, returnValue = "", attempts = 0) => {
+            // Counted before the early return, so a close that arrives while a
+            // deferred open waits still cancels it.
+            const request = ++openRequest;
             if (nextOpen === appliedOpen && dialog.open === nextOpen) {
+              return;
+            }
+            // An enclosing dialog that the same server render opens runs its
+            // callback after this one, so opening now would put this dialog
+            // below it. Wait a task, after every callback of the render has
+            // run, and try again (see enclosingDialogWait).
+            if (nextOpen && controllerRuntime.enclosingDialogWait(dialog, attempts) > 0) {
+              setTimeout(() => {
+                if (request === openRequest) applyOpen(true, source, returnValue, attempts + 1);
+              }, 0);
               return;
             }
             controller.setOpen(nextOpen, source, returnValue);
@@ -588,6 +604,8 @@ class CDialog(LibraryComponent):
           }
 
           return () => {
+            // A deferred open of this run must not touch the dialog after it.
+            openRequest += 1;
             host.removeEventListener("click", onHostClick);
             dialog[serverOpenKey] = data.open;
             // A server revision runs this cleanup and then the callback again on the
