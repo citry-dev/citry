@@ -1,5 +1,16 @@
 # Release notes
 
+## v0.8.1
+
+### Fixes
+
+- **Citry imports on Pyodide again:** Citry 0.8.0 failed to import on
+  Pyodide with `AttributeError: module 'time' has no attribute
+  'thread_time'`, because the Events limit on CPU time read a clock that
+  Pyodide does not have. Citry now uses the CPU time of the calling
+  thread where the platform has it, then the CPU time of the process,
+  then the wall clock.
+
 ## v0.8.0
 
 Citry 0.8.0 makes Events refuse event data and State writes that are

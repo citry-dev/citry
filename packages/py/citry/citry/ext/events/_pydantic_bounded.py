@@ -106,6 +106,30 @@ except ImportError:  # pragma: no cover - exercised only without Pydantic instal
     _core_schema = None  # type: ignore[assignment]
 
 
+def _choose_cpu_clock() -> Callable[[], float]:
+    """
+    Return the clock that measures the CPU time a check spends, picking one this platform has.
+
+    The CPU time of the calling thread is the best measure, because an async
+    server or a thread pool runs other requests in the same process. Some
+    platforms lack it: Pyodide's ``time`` module has no ``thread_time``, and a
+    platform may define it but raise ``OSError`` when it is read. The time of
+    the whole process comes next, and the wall clock last, so that importing
+    Citry never fails over the choice of clock.
+    """
+    for name in ("thread_time", "process_time"):
+        clock = getattr(time, name, None)
+        if clock is None:
+            continue
+        # Read it once, since a defined clock may still be unsupported.
+        try:
+            clock()
+        except OSError:
+            continue
+        return cast("Callable[[], float]", clock)
+    return time.perf_counter
+
+
 ################################################
 # LIMITS
 ################################################
@@ -128,12 +152,13 @@ WORK_BUDGET = 60_000_000
 # limit; this one stops a request once its checks that may run again have
 # used a fixed amount of CPU time, whatever the steps say.
 WORK_SECONDS = 1.0
-# The clock behind WORK_SECONDS: the CPU time of the calling thread. On
+# The clock behind WORK_SECONDS: the CPU time of the calling thread, or a
+# coarser clock where the platform lacks it (see `_choose_cpu_clock`). On
 # Windows it moves in steps of about 15.6 ms, so a check that runs for less
 # than one step can read no time at all, and the time counted for each check
 # can be off by up to one step. It is a module-level name so that a test can
 # replace it with a clock it moves by hand.
-cpu_clock = time.thread_time
+cpu_clock = _choose_cpu_clock()
 # How many of Citry's counting wrappers may be checking inside each other:
 # each Pydantic model, dataclass, TypedDict and wrap validator a value
 # passes through counts one, and so does each union whose members can read
