@@ -33,6 +33,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/citry-core-wheel/**"
+      - "scripts/citry_core_wheel.py"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -64,6 +66,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/citry-core-wheel/**"
+      - "scripts/citry_core_wheel.py"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -81,16 +85,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'push' }}
 permissions:
   contents: read
-
-env:
-  # Docs only need the workspace MSRV. They build with it, not the
-  # repository's nightly, so all Ubuntu docs jobs can reuse one citry-core
-  # build cache that stays valid when the nightly date moves.
-  RUSTUP_TOOLCHAIN: "1.97.0"
-  # Share compiler objects across simultaneous cold jobs; rust-cache below also
-  # preserves the assembled Cargo target directory between workflow runs.
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
 
 jobs:
   docs-check:
@@ -114,33 +108,26 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Rust is needed because `uv sync` builds the citry_core extension through
-      # the maturin backend, and the docs import `citry`, which depends on it.
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-
-      - name: Set up shared Rust compiler cache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          # Both docs jobs compile the same CPython 3.14 extension on Ubuntu.
-          shared-key: docs-citry-core-py314
-          add-job-id-key: false
-          # Preserve the expensive compile even when a later docs guard fails.
-          cache-on-failure: true
+      # Reuses the citry-core wheel built from these exact Rust sources by any
+      # earlier run, and builds it only when no cached wheel matches. The docs
+      # import `citry`, which needs the extension.
+      - name: Restore or build the citry-core wheel
+        id: core
+        uses: ./.github/actions/citry-core-wheel
 
       # The `docs` extra pulls the guard/build dependencies (lxml, pagefind,
       # minify-html, ...). The site imports Citry and Citry UI, but not the LSP,
       # so do not make this docs-only job build every workspace package.
       - name: Install the workspace with the docs extra
         id: install
+        env:
+          CORE_WHEEL_DIR: ${{ steps.core.outputs.wheel-dir }}
+          CORE_WHEEL_CACHE_KEY: ${{ steps.core.outputs.cache-key }}
         run: >-
-          uv sync --locked --package citry-monorepo --package citry
-          --package citry-ui --extra docs
+          python scripts/citry_core_wheel.py install
+          --wheel-dir "$CORE_WHEEL_DIR"
+          --cache-key "$CORE_WHEEL_CACHE_KEY"
+          -- --package citry-monorepo --package citry --package citry-ui --extra docs
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -205,30 +192,29 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-
-      - name: Set up shared Rust compiler cache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          shared-key: docs-citry-core-py314
-          add-job-id-key: false
-          cache-on-failure: true
+      # Reuses the citry-core wheel built from these exact Rust sources by any
+      # earlier run, and builds it only when no cached wheel matches. The docs
+      # import `citry`, which needs the extension.
+      - name: Restore or build the citry-core wheel
+        id: core
+        uses: ./.github/actions/citry-core-wheel
 
       - name: Install the workspace with the docs extra
+        env:
+          CORE_WHEEL_DIR: ${{ steps.core.outputs.wheel-dir }}
+          CORE_WHEEL_CACHE_KEY: ${{ steps.core.outputs.cache-key }}
         run: >-
-          uv sync --locked --package citry-monorepo --package citry
-          --package citry-ui --extra docs
+          python scripts/citry_core_wheel.py install
+          --wheel-dir "$CORE_WHEEL_DIR"
+          --cache-key "$CORE_WHEEL_CACHE_KEY"
+          -- --package citry-monorepo --package citry --package citry-ui --extra docs
 
       # The e2e group belongs to the citry workspace package. Install it
-      # additively so uv retains the root project's docs extra from above.
+      # additively so uv retains the root project's docs extra from above, and
+      # leave citry-core alone so uv keeps the wheel rather than building the
+      # editable package.
       - name: Install the browser test dependencies
-        run: uv sync --locked --package citry --group e2e --inexact
+        run: uv sync --locked --package citry --group e2e --inexact --no-install-package citry-core
 
       # Two docs E2E cases run the pinned axe bundle directly from the root
       # Node workspace, so the browser job needs that runtime as well.

@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Snapshot builds need only the workspace MSRV. Keep it fixed so release
-  # docs reuse the same citry-core cache as the ordinary Pages workflows.
+  # Snapshot builds compile citry-core with the workspace MSRV, the compiler
+  # the published wheels use; the toolchain validator checks this pin.
   RUSTUP_TOOLCHAIN: "1.97.0"
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"

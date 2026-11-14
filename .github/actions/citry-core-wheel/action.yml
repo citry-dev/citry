@@ -1,0 +1,94 @@
+name: Citry Core wheel
+description: >-
+  Restore the citry-core wheel built from this checkout's Rust and Python
+  sources, or build it when no cached wheel matches. Jobs install this wheel
+  instead of letting `uv sync` compile the Rust extension again. Run it after
+  actions/checkout, astral-sh/setup-uv and actions/setup-python, then install
+  the wheel with `python scripts/citry_core_wheel.py install`.
+
+inputs:
+  cache-rust:
+    description: >-
+      Cache Cargo's build output for a miss. Pass "false" when the job already
+      runs Swatinem/rust-cache itself, so two caches do not save one target
+      folder.
+    required: false
+    default: "true"
+
+outputs:
+  wheel-dir:
+    description: The folder holding the wheel and its manifest.json.
+    value: ${{ steps.key.outputs.wheel_dir }}
+  cache-key:
+    description: The cache key the wheel is stored under.
+    value: ${{ steps.key.outputs.cache_key }}
+  cache-hit:
+    description: '"true" when the wheel came from the cache and nothing was built.'
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    # The key hashes every tracked file that can change the wheel (see
+    # scripts/citry_core_wheel.py), so a change to the Rust code always
+    # misses the cache and builds, and a Python-only change reuses the wheel.
+    - name: Name the citry-core wheel by its build inputs
+      id: key
+      shell: bash
+      env:
+        RUNNER_OS_NAME: ${{ runner.os }}
+        RUNNER_ARCH_NAME: ${{ runner.arch }}
+      run: |
+        python scripts/citry_core_wheel.py cache-key \
+          --runner-os "$RUNNER_OS_NAME" \
+          --runner-arch "$RUNNER_ARCH_NAME" \
+          --image-os "${ImageOS:?the hosted runner image sets ImageOS}" \
+          --github-output "$GITHUB_OUTPUT"
+        # The later steps and the calling job read the folder from here.
+        echo "wheel_dir=$RUNNER_TEMP/citry-core-wheel" >> "$GITHUB_OUTPUT"
+
+    # Only an exact key match is used: no restore-keys, so a wheel built from
+    # other sources can never be installed.
+    - name: Restore the citry-core wheel
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.key.outputs.wheel_dir }}
+        key: ${{ steps.key.outputs.cache_key }}
+
+    # Only a build reads the Ruff sources in the third_party/rust/ruff
+    # submodule, so the action fetches the submodule only on a miss.
+    - name: Initialize the native submodules
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: git submodule update --init --recursive
+
+    - name: Install the Rust toolchain
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: ./.github/actions/install-rust
+
+    # One shared key across workflows: every job that builds this wheel
+    # compiles the same crates with the same profile and features.
+    - name: Cache Rust dependencies
+      if: steps.restore.outputs.cache-hit != 'true' && inputs.cache-rust == 'true'
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      with:
+        shared-key: citry-core-wheel
+
+    - name: Build the citry-core wheel
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        CACHE_KEY: ${{ steps.key.outputs.cache_key }}
+        WHEEL_DIR: ${{ steps.key.outputs.wheel_dir }}
+      run: python scripts/citry_core_wheel.py build --wheel-dir "$WHEEL_DIR" --cache-key "$CACHE_KEY"
+
+    # The build step imported the wheel before recording it, so only a
+    # working wheel is saved. Two jobs that miss at once both build; the
+    # second save is refused with a warning and the job carries on.
+    - name: Save the citry-core wheel
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.key.outputs.wheel_dir }}
+        key: ${{ steps.key.outputs.cache_key }}

@@ -48,8 +48,9 @@ PYPROJECTS = [
 TESTS_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--tests.yml"
 
 _CLASSIFIER_RE = re.compile(r"Programming Language :: Python :: (\d+)\.(\d+)")
-# The test job's matrix is one expression that picks a JSON cell list by
-# event; the list after `||` is the full set that pushes to main run.
+# Each per-OS test job's matrix is one expression that picks a JSON cell list
+# by event; the list after `||` is the full set that pushes to main run, and
+# the union of those lists is what the workflow tests.
 _FULL_MATRIX_RE = re.compile(r"\|\|\s*'(\[.*?\])'")
 _CELL_VERSION_RE = re.compile(r'"python-version":"(\d+)\.(\d+)"')
 
@@ -90,10 +91,14 @@ def declared_classifiers(pyproject: Path) -> set[PyVersion]:
 
 
 def matrix_versions(workflow: Path) -> set[PyVersion]:
-    match = _FULL_MATRIX_RE.search(workflow.read_text(encoding="utf-8"))
-    if not match:
-        return set()
-    return {(int(a), int(b)) for a, b in _CELL_VERSION_RE.findall(match.group(1))}
+    text = workflow.read_text(encoding="utf-8")
+    # Linux leaves out the Python that the Check workflow runs, so only the
+    # union over every OS's full list names every tested version.
+    return {
+        (int(a), int(b))
+        for match in _FULL_MATRIX_RE.finditer(text)
+        for a, b in _CELL_VERSION_RE.findall(match.group(1))
+    }
 
 
 def _diff_lines(label: str, declared: set[PyVersion], supported: set[PyVersion]) -> list[str]:
@@ -146,7 +151,7 @@ def cmd_generate() -> int:
     print("classifiers (both pyproject.toml files):")
     for version in versions:
         print(f'    "Programming Language :: Python :: {version}",')
-    print("\n.github/workflows/py--tests.yml matrix (the `include` expression):")
+    print("\n.github/workflows/py--tests.yml matrices (the `include` expressions of the per-OS test jobs):")
     print(f"    full set: every version on Windows, the newest and oldest on macOS: {', '.join(versions)}")
     print(f"    pull requests: Windows on {floor} and {versions[-1]}, macOS on {versions[-1]}")
     print("    test_ci_workflows.py pins both sets; update _SUPPORTED_PYTHONS there too.")

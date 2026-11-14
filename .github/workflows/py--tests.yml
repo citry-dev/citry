@@ -16,6 +16,7 @@ on:
       - "scripts/build_citry_core_pyodide_wheel.py"
       - "scripts/build_constraints.py"
       - "scripts/check_package_sizes.py"
+      - "scripts/citry_core_wheel.py"
       - "scripts/release_links.py"
       - "scripts/select_citry_core_qualification.py"
       - "scripts/sync_protocol_python.py"
@@ -31,6 +32,7 @@ on:
       - "Cargo.lock"
       - "rust-toolchain.toml"
       - ".github/actions/install-rust/**"
+      - ".github/actions/citry-core-wheel/**"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -109,6 +111,7 @@ jobs:
             scripts/build_citry_core_pyodide_wheel.py
             scripts/build_constraints.py
             scripts/check_package_sizes.py
+            scripts/citry_core_wheel.py
             scripts/release_links.py
             scripts/select_citry_core_qualification.py
             scripts/sync_protocol_python.py
@@ -124,6 +127,7 @@ jobs:
             Cargo.lock
             rust-toolchain.toml
             .github/actions/install-rust/**
+            .github/actions/citry-core-wheel/**
             pyproject.toml
             uv.lock
             package.json
@@ -180,13 +184,76 @@ jobs:
           echo "Python inputs changed: $python"
           echo "python=$python" >> "$GITHUB_OUTPUT"
 
-  i18n-release-qualification:
+  # Compiling the citry-core Rust extension takes about 5 minutes on Linux,
+  # 12 on Windows and 20 on macOS. These three jobs build its wheel once per
+  # OS, or restore it from the cache when no Rust input changed, and every job
+  # below installs that wheel rather than compiling the extension in
+  # `uv sync`. Each OS has its own wheel job and its own test job, so no test
+  # waits for a slower OS's build.
+  citry-core-wheel-linux:
     # Skips only when `changes` reports that no Python input changed. When
     # `changes` fails, or does not run (a push or a manual run), this job
     # runs, so a broken `changes` cannot let a required check pass untested.
     # The `closed` event still skips it.
     needs: changes
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
+    runs-on: ubuntu-latest
+    # The Windows and macOS wheel jobs reuse these steps through the anchor.
+    steps: &core-wheel-steps
+      # Only a cache miss compiles anything, and the action fetches the Ruff
+      # submodule itself in that case.
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          prune-cache: true
+          version: "0.13.5"
+
+      # The limited-API wheel runs on every supported CPython, so one
+      # interpreter builds it for all the test cells.
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Restore or build the citry-core wheel
+        id: core
+        uses: ./.github/actions/citry-core-wheel
+
+      # The jobs below download the wheel from this run rather than the
+      # cache, so a cache eviction between jobs cannot fail them.
+      - name: Upload the citry-core wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: citry-core-wheel-${{ runner.os }}
+          path: ${{ steps.core.outputs.wheel-dir }}
+          if-no-files-found: error
+          retention-days: 7
+
+  citry-core-wheel-windows:
+    # Gated like `citry-core-wheel-linux`.
+    needs: changes
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
+    runs-on: windows-latest
+    steps: *core-wheel-steps
+
+  citry-core-wheel-macos:
+    # Gated like `citry-core-wheel-linux`.
+    needs: changes
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
+    runs-on: macos-latest
+    steps: *core-wheel-steps
+
+  i18n-release-qualification:
+    # Installs the Linux citry-core wheel built once above. It skips only when
+    # that build skipped. GitHub's default condition would skip it on every
+    # push, because `changes` is skipped there, and would also skip it when
+    # the build fails; a skipped check counts as passing, so a broken build
+    # could pass a required check. When the build failed, the download below
+    # fails, and so does this job.
+    needs: citry-core-wheel-linux
+    if: ${{ !cancelled() && needs.citry-core-wheel-linux.result != 'skipped' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -204,18 +271,17 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install Rust toolchain
-        uses: ./.github/actions/install-rust
+      - name: Download the citry-core wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: citry-core-wheel-${{ runner.os }}
+          path: ${{ runner.temp }}/citry-core-wheel
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-
+      # The wheel is built with the optimized `release-wheel` profile, which
+      # the benchmark's release-build check accepts.
       - name: Install the workspace
-        run: uv sync --locked --all-packages
-
-      - name: Build the release i18n runtime
-        working-directory: packages/py/citry_core
-        run: uv run --no-sync maturin develop --release
+        shell: bash
+        run: python scripts/citry_core_wheel.py install --wheel-dir "$RUNNER_TEMP/citry-core-wheel" -- --all-packages
 
       - name: Run server and large-catalog qualification
         run: uv run --no-sync python benchmarks/i18n.py --json > i18n-qualification.json
@@ -233,13 +299,14 @@ jobs:
           path: i18n-qualification.json
           if-no-files-found: error
 
-  test:
-    # Skips only when `changes` reports that no Python input changed. When
-    # `changes` fails, or does not run (a push or a manual run), this job
-    # runs, so a broken `changes` cannot let a required check pass untested.
-    # The `closed` event still skips it.
-    needs: changes
-    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
+  # One test job per OS, each named `test`, so the cells keep their check
+  # names, such as `test (3.11, ubuntu-latest)`. Each needs only its own OS's
+  # wheel job. It skips only when that build skipped, for the reasons given
+  # on `i18n-release-qualification`.
+  test-linux:
+    name: test
+    needs: citry-core-wheel-linux
+    if: ${{ !cancelled() && needs.citry-core-wheel-linux.result != 'skipped' }}
     runs-on: ${{ matrix.os }}
     # The slowest cell takes about 30 minutes. A worker process that crashes
     # can leave pytest-xdist waiting for good on Windows, so the job stops
@@ -247,26 +314,28 @@ jobs:
     timeout-minutes: 75
     strategy:
       # A failure on one interpreter must not hide portability results from
-      # the other supported Windows and Linux versions.
+      # the other supported versions.
       fail-fast: false
-      # The one place that decides which cells run. A pull request runs a
-      # trimmed set: Linux on every Python, Windows on the oldest and newest
-      # Python, and macOS on the newest. Every other event (a push to main or
-      # dev, or a manual run) runs the full set, so a failure that shows only
-      # on Windows 3.12 to 3.14 or on macOS 3.11 is caught right after merge.
-      # Linux 3.14 is left out of both: the Check workflow (repo--check.yml)
-      # runs this same suite there on every pull request (test_ci_workflows.py
-      # keeps the two in step and pins both sets).
+      # The three test jobs' matrices together decide which cells run. A pull
+      # request runs a trimmed set: Linux on every Python, Windows on the
+      # oldest and newest Python, and macOS on the newest. Every other event
+      # (a push to main or dev, or a manual run) runs the full set, so a
+      # failure that shows only on Windows 3.12 to 3.14 or on macOS 3.11 is
+      # caught right after merge. Linux 3.14 is left out of both: the Check
+      # workflow (repo--check.yml) runs this same suite there on every pull
+      # request (test_ci_workflows.py keeps this suite and the Check workflow
+      # in step and pins both sets).
       matrix:
         include: >-
           ${{ fromJSON(github.event_name == 'pull_request'
-          && '[{"python-version":"3.11","os":"ubuntu-latest"},{"python-version":"3.12","os":"ubuntu-latest"},{"python-version":"3.13","os":"ubuntu-latest"},{"python-version":"3.15","os":"ubuntu-latest"},{"python-version":"3.11","os":"windows-latest"},{"python-version":"3.15","os":"windows-latest"},{"python-version":"3.15","os":"macos-latest"}]'
-          || '[{"python-version":"3.11","os":"ubuntu-latest"},{"python-version":"3.12","os":"ubuntu-latest"},{"python-version":"3.13","os":"ubuntu-latest"},{"python-version":"3.15","os":"ubuntu-latest"},{"python-version":"3.11","os":"windows-latest"},{"python-version":"3.12","os":"windows-latest"},{"python-version":"3.13","os":"windows-latest"},{"python-version":"3.14","os":"windows-latest"},{"python-version":"3.15","os":"windows-latest"},{"python-version":"3.11","os":"macos-latest"},{"python-version":"3.15","os":"macos-latest"}]') }}
+          && '[{"python-version":"3.11","os":"ubuntu-latest"},{"python-version":"3.12","os":"ubuntu-latest"},{"python-version":"3.13","os":"ubuntu-latest"},{"python-version":"3.15","os":"ubuntu-latest"}]'
+          || '[{"python-version":"3.11","os":"ubuntu-latest"},{"python-version":"3.12","os":"ubuntu-latest"},{"python-version":"3.13","os":"ubuntu-latest"},{"python-version":"3.15","os":"ubuntu-latest"}]') }}
 
-    steps:
+    # The Windows and macOS test jobs reuse these steps through the anchor.
+    steps: &python-test-steps
       - uses: actions/checkout@v7
         with:
-          # Initialize the vendored Ruff submodule (a build/runtime dependency)
+          # Some tests read files in the Ruff submodule.
           submodules: recursive
 
       - name: Install uv
@@ -280,18 +349,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Rust is needed because `uv sync` builds the citry_core extension through
-      # the maturin backend, so the toolchain must be in place before the sync.
-      - name: Install Rust toolchain
-        uses: ./.github/actions/install-rust
+      - name: Download the citry-core wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: citry-core-wheel-${{ runner.os }}
+          path: ${{ runner.temp }}/citry-core-wheel
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-
-      # One command builds citry_core (maturin) and installs citry editable,
-      # plus every package's dev group, from the locked workspace.
+      # Syncs the locked workspace with every package's dev group, leaving out
+      # the editable citry-core, then installs the wheel built above in its
+      # place, so no Rust is compiled here.
       - name: Install the workspace
-        run: uv sync --locked --all-packages
+        shell: bash
+        run: python scripts/citry_core_wheel.py install --wheel-dir "$RUNNER_TEMP/citry-core-wheel" -- --all-packages
 
       # The real-server reload tests start development servers, so they run
       # once, in one process rather than across the four pytest workers, in
@@ -308,7 +377,7 @@ jobs:
       # always does (packages/py/citry/tests/test_native_render_depth.py).
       - name: Run Python tests
         env:
-          CITRY_NATIVE_DEPTH_PROBES: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14') && '1' || '' }}
+          CITRY_NATIVE_DEPTH_PROBES: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13') && '1' || '' }}
         run: >-
           uv run --no-sync pytest
           -m "not e2e"
@@ -318,17 +387,43 @@ jobs:
           --durations 30
           ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11') && '--python-render-path' || '' }}
 
+  test-windows:
+    name: test
+    needs: citry-core-wheel-windows
+    if: ${{ !cancelled() && needs.citry-core-wheel-windows.result != 'skipped' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJSON(github.event_name == 'pull_request'
+          && '[{"python-version":"3.11","os":"windows-latest"},{"python-version":"3.15","os":"windows-latest"}]'
+          || '[{"python-version":"3.11","os":"windows-latest"},{"python-version":"3.12","os":"windows-latest"},{"python-version":"3.13","os":"windows-latest"},{"python-version":"3.14","os":"windows-latest"},{"python-version":"3.15","os":"windows-latest"}]') }}
+    steps: *python-test-steps
+
+  test-macos:
+    name: test
+    needs: citry-core-wheel-macos
+    if: ${{ !cancelled() && needs.citry-core-wheel-macos.result != 'skipped' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJSON(github.event_name == 'pull_request'
+          && '[{"python-version":"3.15","os":"macos-latest"}]'
+          || '[{"python-version":"3.11","os":"macos-latest"},{"python-version":"3.15","os":"macos-latest"}]') }}
+    steps: *python-test-steps
+
   # Browser end-to-end tests, including Citry UI's co-located component tests,
   # run in Chromium for PR-time speed. The weekly cross-browser workflow runs
   # the same paths on all three engines. The `test` job above excludes `e2e`
   # explicitly and does not sync that dependency group.
   e2e:
-    # Skips only when `changes` reports that no Python input changed. When
-    # `changes` fails, or does not run (a push or a manual run), this job
-    # runs, so a broken `changes` cannot let a required check pass untested.
-    # The `closed` event still skips it.
-    needs: changes
-    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
+    # Installs the Linux citry-core wheel, under the condition explained on
+    # `i18n-release-qualification`.
+    needs: citry-core-wheel-linux
+    if: ${{ !cancelled() && needs.citry-core-wheel-linux.result != 'skipped' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -346,14 +441,17 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install Rust toolchain
-        uses: ./.github/actions/install-rust
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Download the citry-core wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: citry-core-wheel-${{ runner.os }}
+          path: ${{ runner.temp }}/citry-core-wheel
 
       - name: Install the workspace with the e2e group
-        run: uv sync --locked --all-packages --group e2e
+        shell: bash
+        run: >-
+          python scripts/citry_core_wheel.py install --wheel-dir "$RUNNER_TEMP/citry-core-wheel"
+          -- --all-packages --group e2e
 
       - name: Install the chromium browser
         run: uv run --no-sync playwright install --with-deps chromium
@@ -441,12 +539,10 @@ jobs:
           if-no-files-found: error
 
   citry-ui-wheel-build:
-    # Skips only when `changes` reports that no Python input changed. When
-    # `changes` fails, or does not run (a push or a manual run), this job
-    # runs, so a broken `changes` cannot let a required check pass untested.
-    # The `closed` event still skips it.
-    needs: changes
-    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
+    # Installs the Linux citry-core wheel, under the condition explained on
+    # `i18n-release-qualification`.
+    needs: citry-core-wheel-linux
+    if: ${{ !cancelled() && needs.citry-core-wheel-linux.result != 'skipped' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -464,19 +560,30 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install Rust toolchain
-        uses: ./.github/actions/install-rust
-
       - name: Build the Citry UI wheel and source distribution
         run: uv build --package citry-ui --out-dir dist
 
       - name: Build the matching local Citry wheel
         run: uv build --package citry --wheel --out-dir dist
 
-      - name: Build the matching local Citry Core wheel
-        run: >-
-          uv build --package citry-core --wheel --out-dir dist
-          --config-setting 'maturin.build-args=--features abi3-py311'
+      # The citry-core wheel built once above, with the same feature and
+      # profile as the published CPython wheel; only the wheel joins dist/,
+      # not its manifest.
+      - name: Download the matching local Citry Core wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: citry-core-wheel-${{ runner.os }}
+          path: ${{ runner.temp }}/citry-core-wheel
+
+      - name: Add the Citry Core wheel to the distributions
+        shell: bash
+        run: |
+          core_wheels=("$RUNNER_TEMP"/citry-core-wheel/citry_core-[0-9]*.whl)
+          if [[ ${#core_wheels[@]} -ne 1 || ! -f ${core_wheels[0]} ]]; then
+            printf 'Expected exactly one Citry Core wheel, found: %s\n' "${core_wheels[*]}" >&2
+            exit 1
+          fi
+          cp "${core_wheels[0]}" dist/
 
       # These two packages build in seconds, so the job builds them only for
       # the checks below.
@@ -798,12 +905,10 @@ jobs:
   # pull requests. The scheduled cross-browser workflow retains the broader
   # all-e2e sweep.
   vue-conformance:
-    # Skips only when `changes` reports that no Python input changed. When
-    # `changes` fails, or does not run (a push or a manual run), this job
-    # runs, so a broken `changes` cannot let a required check pass untested.
-    # The `closed` event still skips it.
-    needs: changes
-    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
+    # Installs the Linux citry-core wheel, under the condition explained on
+    # `i18n-release-qualification`.
+    needs: citry-core-wheel-linux
+    if: ${{ !cancelled() && needs.citry-core-wheel-linux.result != 'skipped' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -825,14 +930,17 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install Rust toolchain
-        uses: ./.github/actions/install-rust
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Download the citry-core wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: citry-core-wheel-${{ runner.os }}
+          path: ${{ runner.temp }}/citry-core-wheel
 
       - name: Install the workspace with the e2e group
-        run: uv sync --locked --all-packages --group e2e
+        shell: bash
+        run: >-
+          python scripts/citry_core_wheel.py install --wheel-dir "$RUNNER_TEMP/citry-core-wheel"
+          -- --all-packages --group e2e
 
       - name: Install the ${{ matrix.browser }} browser
         run: uv run --no-sync playwright install --with-deps ${{ matrix.browser }}

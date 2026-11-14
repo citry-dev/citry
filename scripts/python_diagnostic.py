@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import platform
 import re
 import shutil
@@ -14,18 +13,19 @@ import sysconfig
 from pathlib import Path, PurePosixPath
 from typing import Final
 
+try:
+    from scripts import citry_core_wheel
+except ImportError:  # Run as `python scripts/<name>.py`, where scripts/ itself is on sys.path.
+    import citry_core_wheel  # type: ignore[no-redef]
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _WHEEL_CACHE_VERSION: Final = "v1"
-_NATIVE_PATHS: Final = (
-    ".cargo",
+# The diagnostic wheel is built for one interpreter by this workflow, so its
+# recipe files and the Python lockfile join the shared native inputs.
+_RECIPE_PATHS: Final = (
     ".github/workflows/py--diagnostic.yml",
-    "Cargo.lock",
-    "Cargo.toml",
-    "crates",
-    "packages/py/citry_core",
-    "rust-toolchain.toml",
+    "scripts/citry_core_wheel.py",
     "scripts/python_diagnostic.py",
-    "third_party/rust/ruff",
     "uv.lock",
 )
 _PROFILE_ROOTS: Final = {
@@ -91,54 +91,11 @@ def validate_pytest_target(profile: str, target: str, *, repo_root: Path = _REPO
     return resolved_target
 
 
-def _git_index_records(repo_root: Path) -> bytes:
-    command = [_executable("git"), "ls-files", "--stage", "-z", "--", *_NATIVE_PATHS]
-    result = subprocess.run(command, cwd=repo_root, check=True, capture_output=True)
-    selected = []
-    for record in result.stdout.split(b"\0"):
-        if not record:
-            continue
-        metadata, separator, raw_path = record.partition(b"\t")
-        if not separator:
-            msg = "unexpected Git index record while identifying native inputs"
-            raise RuntimeError(msg)
-        path = PurePosixPath(raw_path.decode("utf-8"))
-        if _is_native_wheel_input(path):
-            selected.append(metadata + separator + raw_path + b"\0")
-    if not selected:
-        msg = "native cache inputs were not found in the Git index"
-        raise RuntimeError(msg)
-    return b"".join(selected)
-
-
-def _is_native_wheel_input(path: PurePosixPath) -> bool:
-    if path.as_posix() in {
-        ".github/workflows/py--diagnostic.yml",
-        "Cargo.lock",
-        "Cargo.toml",
-        "rust-toolchain.toml",
-        "scripts/python_diagnostic.py",
-        "uv.lock",
-    }:
-        return True
-    if path.parts[:1] == (".cargo",):
-        return True
-    if path.as_posix() == "third_party/rust/ruff":
-        return True
-    if path.parts[:1] == ("crates",):
-        return path.name in {"Cargo.toml", "build.rs"} or "src" in path.parts[2:]
-    if path.parts[:3] == ("packages", "py", "citry_core"):
-        return path.name in {"pyproject.toml", "README.md", "LICENSE"} or path.parts[3:4] == ("citry_core",)
-    return False
-
-
 def native_source_digest(*, repo_root: Path = _REPO_ROOT) -> str:
     """Hash tracked native build inputs, including the Ruff submodule commit."""
-    digest = hashlib.sha256()
-    digest.update(_WHEEL_CACHE_VERSION.encode())
-    digest.update(b"\0")
-    digest.update(_git_index_records(repo_root))
-    return digest.hexdigest()
+    return citry_core_wheel.native_source_digest(
+        repo_root=repo_root, version=_WHEEL_CACHE_VERSION, extra_paths=_RECIPE_PATHS
+    )
 
 
 def _rustc_identity() -> tuple[str, str]:
@@ -199,40 +156,14 @@ def cache_identity(
     }
 
 
-def _one_wheel(wheel_dir: Path) -> Path:
-    wheels = sorted(wheel_dir.glob("*.whl"))
-    if len(wheels) != 1:
-        msg = f"expected exactly one cached citry-core wheel, found {len(wheels)}"
-        raise RuntimeError(msg)
-    return wheels[0]
-
-
 def record_wheel(wheel_dir: Path, cache_key: str) -> Path:
     """Record the cache identity and wheel digest beside a newly built wheel."""
-    wheel = _one_wheel(wheel_dir)
-    manifest = {
-        "cache_key": cache_key,
-        "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
-        "wheel": wheel.name,
-    }
-    (wheel_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return wheel
+    return citry_core_wheel.record_wheel(wheel_dir, cache_key)
 
 
 def verified_wheel(wheel_dir: Path, expected_cache_key: str) -> Path:
     """Reject incomplete, misplaced, or modified wheel-cache contents."""
-    wheel = _one_wheel(wheel_dir)
-    manifest_path = wheel_dir / "manifest.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        msg = "cached citry-core wheel has no valid manifest"
-        raise RuntimeError(msg) from error
-    expected_digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    if manifest != {"cache_key": expected_cache_key, "sha256": expected_digest, "wheel": wheel.name}:
-        msg = "cached citry-core wheel does not match its cache identity or digest"
-        raise RuntimeError(msg)
-    return wheel
+    return citry_core_wheel.verified_wheel(wheel_dir, expected_cache_key)
 
 
 def install_profile(profile: str, wheel_dir: Path, expected_cache_key: str) -> None:

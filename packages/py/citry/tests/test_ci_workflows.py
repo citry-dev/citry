@@ -240,9 +240,39 @@ _RUNS_UNLESS_NOTHING_CHANGED = (
     "${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}"
 )
 
-# The condition on a job below the wheel build. GitHub's default condition
-# would skip it on every push, because `changes` is skipped there.
-_RUNS_AFTER_THE_WHEEL_BUILD = "${{ !cancelled() && needs.citry-ui-wheel-build.result == 'success' }}"
+
+def _runs_after(*parents: str) -> str:
+    """
+    Return the condition on a job below other gated jobs.
+
+    GitHub's default condition would skip such a job on every push, because
+    `changes` is skipped there, so the job checks each parent's result itself.
+    """
+    results = " && ".join(f"needs.{parent}.result == 'success'" for parent in parents)
+    return f"${{{{ !cancelled() && {results} }}}}"
+
+
+def _runs_unless_skipped(*parents: str) -> str:
+    """
+    Return the condition on a job that installs the shared citry-core wheel.
+
+    The job runs after a failed wheel build too, so its own download fails and
+    a required check such as `citry-ui-wheel-build` cannot pass as skipped.
+    """
+    results = " && ".join(f"needs.{parent}.result != 'skipped'" for parent in parents)
+    return f"${{{{ !cancelled() && {results} }}}}"
+
+
+# The jobs that build the shared citry-core wheel once per OS.
+_CORE_WHEEL_JOBS = ("citry-core-wheel-linux", "citry-core-wheel-windows", "citry-core-wheel-macos")
+
+# The test job for each OS and the wheel job it installs from. Each is named
+# `test`, so the cells keep their check names, such as `test (3.11, ubuntu-latest)`.
+_TEST_JOBS = {
+    "test-linux": ("ubuntu-latest", "citry-core-wheel-linux"),
+    "test-windows": ("windows-latest", "citry-core-wheel-windows"),
+    "test-macos": ("macos-latest", "citry-core-wheel-macos"),
+}
 
 
 def test_python_tests_start_on_every_pull_request_and_skip_without_python_changes() -> None:
@@ -270,21 +300,36 @@ def test_python_tests_start_on_every_pull_request_and_skip_without_python_change
         assert not any(char in body for char in "*?[]!+{}"), pattern
 
     jobs = workflow["jobs"]
+    parents_of: dict[str, list[str]] = {}
     for name, job in jobs.items():
         if name == "changes":
             continue
         needs = job.get("needs")
         needs = needs if isinstance(needs, list) else [needs]
         assert needs != [None], f"{name} must need `changes` or a job that does"
+        parents_of[name] = needs
         if "changes" in needs:
+            assert needs == ["changes"], name
             assert job["if"] == _RUNS_UNLESS_NOTHING_CHANGED, name
         else:
-            # A job below a gated one must check its parent's result itself.
+            # A job below a gated one must check every parent's result itself.
             # GitHub's default check skips it whenever any job further up was
             # skipped, and `changes` is skipped on every push.
-            assert needs == ["citry-ui-wheel-build"], name
-            assert job["if"] == _RUNS_AFTER_THE_WHEEL_BUILD, name
-    assert "citry-ui-wheel-build" in jobs
+            condition = " ".join(job["if"].split())
+            if all(parent in _CORE_WHEEL_JOBS for parent in needs):
+                assert condition == _runs_unless_skipped(*needs), name
+            else:
+                assert condition == _runs_after(*needs), name
+
+    # Every job must reach `changes` through its parents, so none runs on a
+    # pull request that changes no Python input.
+    def reaches_changes(name: str) -> bool:
+        return name == "changes" or all(reaches_changes(parent) for parent in parents_of[name])
+
+    assert all(reaches_changes(name) for name in parents_of)
+    # The required check builds on the Linux wheel, so a failed wheel build
+    # must fail it rather than skip it.
+    assert parents_of["citry-ui-wheel-build"] == ["citry-core-wheel-linux"]
 
 
 # The files the wheel build job produces that have a size cap, as the
@@ -423,20 +468,44 @@ def test_the_changes_job_matches_files_like_the_push_path_filter(
 _SUPPORTED_PYTHONS = ["3.11", "3.12", "3.13", "3.14", "3.15"]
 
 
+_MATRIX_BY_EVENT = re.compile(
+    r"\$\{\{ fromJSON\(github\.event_name == 'pull_request' && '(?P<pr>\[.*?\])' \|\| '(?P<full>\[.*?\])'\) \}\}"
+)
+
+
 def _python_test_cells() -> dict[str, set[tuple[str, str]]]:
     """Return the (OS, Python) cells py--tests.yml runs on a pull request and on every other event."""
-    expression = _load_workflow("py--tests.yml")["jobs"]["test"]["strategy"]["matrix"]["include"]
-    # The matrix is one expression that picks a JSON list by event, so the
-    # two lists are read out of its two quoted strings.
-    match = re.fullmatch(
-        r"\$\{\{ fromJSON\(github\.event_name == 'pull_request' && '(?P<pr>\[.*?\])' \|\| '(?P<full>\[.*?\])'\) \}\}",
-        expression.strip(),
-    )
-    assert match is not None, expression
-    return {
-        name: {(cell["os"], cell["python-version"]) for cell in json.loads(match.group(name))}
-        for name in ("pr", "full")
-    }
+    jobs = _load_workflow("py--tests.yml")["jobs"]
+    cells: dict[str, set[tuple[str, str]]] = {"pr": set(), "full": set()}
+    for job_name, (runner, _wheel_job) in _TEST_JOBS.items():
+        expression = jobs[job_name]["strategy"]["matrix"]["include"]
+        # Each matrix is one expression that picks a JSON list by event, so
+        # the two lists are read out of its two quoted strings.
+        match = _MATRIX_BY_EVENT.fullmatch(" ".join(expression.split()))
+        assert match is not None, expression
+        for name in ("pr", "full"):
+            job_cells = {(cell["os"], cell["python-version"]) for cell in json.loads(match.group(name))}
+            # A job runs only its own OS, so it needs only that OS's wheel.
+            assert {os_name for os_name, _ in job_cells} == {runner}, job_name
+            cells[name] |= job_cells
+    return cells
+
+
+def test_each_os_tests_with_its_own_wheel_and_the_same_steps() -> None:
+    jobs = _load_workflow("py--tests.yml")["jobs"]
+    assert "test" not in jobs
+    steps = jobs["test-linux"]["steps"]
+    for job_name, (runner, wheel_job) in _TEST_JOBS.items():
+        job = jobs[job_name]
+        assert job["name"] == "test", job_name
+        assert job["needs"] == wheel_job, job_name
+        assert job["runs-on"] == "${{ matrix.os }}", job_name
+        # One interpreter's failure must not cancel the others' results.
+        assert job["strategy"]["fail-fast"] is False, job_name
+        # The YAML anchor gives every OS the same steps.
+        assert job["steps"] == steps, job_name
+        assert jobs[wheel_job]["runs-on"] == runner, wheel_job
+        assert jobs[wheel_job]["steps"] == jobs["citry-core-wheel-linux"]["steps"], wheel_job
 
 
 def test_the_full_python_matrix_runs_every_supported_python_on_every_os() -> None:
@@ -470,7 +539,7 @@ def test_the_full_python_matrix_runs_every_supported_python_on_every_os() -> Non
     assert "if" not in gate
     # And while both select the same tests: the matrix runs every non-browser
     # test except the reload file, which check.py runs in its own phase.
-    tests_steps = {step.get("name"): step for step in _load_workflow("py--tests.yml")["jobs"]["test"]["steps"]}
+    tests_steps = {step.get("name"): step for step in _load_workflow("py--tests.yml")["jobs"]["test-linux"]["steps"]}
     matrix_run = tests_steps["Run Python tests"]["run"]
     assert '-m "not e2e"' in matrix_run
     assert matrix_run.count("--ignore") == 1
@@ -662,3 +731,39 @@ def test_generated_files_workflow_runs_on_every_change() -> None:
     for event in ("push", "pull_request"):
         assert "paths" not in (events[event] or {})
         assert "paths-ignore" not in (events[event] or {})
+
+
+# A step condition that singles out one matrix cell, such as
+# `matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'`.
+_CELL_CONDITION = re.compile(r"matrix\.os == '(?P<os>[^']+)' && matrix\.python-version == '(?P<python>[^']+)'")
+
+
+def test_every_cell_a_test_step_singles_out_exists_on_every_event() -> None:
+    # A condition naming a cell that no matrix runs is silently false, so the
+    # option or variable it sets never reaches any run.
+    cells = _python_test_cells()
+    steps = _load_workflow("py--tests.yml")["jobs"]["test-linux"]["steps"]
+    named = [
+        (match["os"], match["python"])
+        for step in steps
+        for text in (step.get("run", ""), *map(str, (step.get("env") or {}).values()))
+        for match in _CELL_CONDITION.finditer(text)
+    ]
+    assert named
+    for cell in named:
+        assert cell in cells["pr"], cell
+        assert cell in cells["full"], cell
+
+
+def test_the_small_thread_depth_probes_run_in_one_native_path_cell() -> None:
+    # The probes skip on CI unless this variable is "1", so it must select a
+    # real cell, and not the one that renders with the Python render path.
+    steps = {step.get("name"): step for step in _load_workflow("py--tests.yml")["jobs"]["test-linux"]["steps"]}
+    run_step = steps["Run Python tests"]
+    probes = _CELL_CONDITION.search(run_step["env"]["CITRY_NATIVE_DEPTH_PROBES"])
+    python_path = _CELL_CONDITION.search(run_step["run"])
+    assert probes is not None
+    assert python_path is not None
+    probe_cell = (probes["os"], probes["python"])
+    assert probe_cell in _python_test_cells()["pr"]
+    assert probe_cell != (python_path["os"], python_path["python"])

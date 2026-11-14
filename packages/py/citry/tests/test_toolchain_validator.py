@@ -86,9 +86,10 @@ def test_a_floating_setup_uv_tag_fails(root):
 def test_a_setup_uv_step_without_cache_pruning_fails(root):
     _replace_once(root / ".github/workflows/py--tests.yml", "prune-cache: true", "prune-cache: false")
     errors = pinned_action_errors(root, _UV_PIN)
-    assert len(errors) == 1
-    assert "py--tests.yml" in errors[0]
-    assert "must set prune-cache: true" in errors[0]
+    # The first setup-uv step sits in the steps the three wheel jobs share
+    # through a YAML anchor, so each job reports it.
+    assert errors
+    assert all("py--tests.yml" in error and "must set prune-cache: true" in error for error in errors)
 
 
 @pytest.mark.parametrize(

@@ -52,16 +52,34 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Rust is needed for the cargo fmt/clippy/test phases and to build the
-      # citry_core extension during `uv sync`.
+      # Rust is needed for the cargo fmt/clippy/test phases.
       - name: Install Rust toolchain
         uses: ./.github/actions/install-rust
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
+      # Reuses the citry-core wheel built from these exact Rust sources by any
+      # earlier run, and builds it only when no cached wheel matches. The
+      # cache step above already saves the target folder, so the action does
+      # not add a second Rust cache.
+      - name: Restore or build the citry-core wheel
+        id: core
+        uses: ./.github/actions/citry-core-wheel
+        with:
+          cache-rust: "false"
+
+      # Syncs the locked workspace with every package's dev group, leaving out
+      # the editable citry-core, then installs the wheel in its place.
       - name: Install the workspace
-        run: uv sync --locked --all-packages
+        env:
+          CORE_WHEEL_DIR: ${{ steps.core.outputs.wheel-dir }}
+          CORE_WHEEL_CACHE_KEY: ${{ steps.core.outputs.cache-key }}
+        run: >-
+          python scripts/citry_core_wheel.py install
+          --wheel-dir "$CORE_WHEEL_DIR"
+          --cache-key "$CORE_WHEEL_CACHE_KEY"
+          -- --all-packages
 
       # Node runs the gate's pinned pyright, the package-local checks for the
       # protocol packages, client, docs playground, and VS Code extension, and

@@ -19,13 +19,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # Link checks only need the workspace MSRV. A fixed compiler lets this weekly
-  # job reuse the same citry-core build cache as the other Ubuntu docs jobs.
-  RUSTUP_TOOLCHAIN: "1.97.0"
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
-
 jobs:
   external-links:
     runs-on: ubuntu-latest
@@ -51,29 +44,24 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Rust is needed because `uv sync` builds the citry_core extension through
-      # the maturin backend, and the docs import `citry`, which depends on it.
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-
-      - name: Set up shared Rust compiler cache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          shared-key: docs-citry-core-py314
-          add-job-id-key: false
-          cache-on-failure: true
+      # Reuses the citry-core wheel built from these exact Rust sources by any
+      # earlier run, and builds it only when no cached wheel matches. The docs
+      # import `citry`, which needs the extension.
+      - name: Restore or build the citry-core wheel
+        id: core
+        uses: ./.github/actions/citry-core-wheel
 
       # The `docs` extra pulls the build dependencies (lxml, pagefind,
       # minify-html, ...). The site imports Citry and Citry UI, but not the LSP.
       - name: Install the workspace with the docs extra
+        env:
+          CORE_WHEEL_DIR: ${{ steps.core.outputs.wheel-dir }}
+          CORE_WHEEL_CACHE_KEY: ${{ steps.core.outputs.cache-key }}
         run: >-
-          uv sync --locked --package citry-monorepo --package citry
-          --package citry-ui --extra docs
+          python scripts/citry_core_wheel.py install
+          --wheel-dir "$CORE_WHEEL_DIR"
+          --cache-key "$CORE_WHEEL_CACHE_KEY"
+          -- --package citry-monorepo --package citry --package citry-ui --extra docs
 
       # Search, social cards, and minify do not change which links appear in the
       # rendered HTML, so skip them for speed. Build into a dedicated directory
