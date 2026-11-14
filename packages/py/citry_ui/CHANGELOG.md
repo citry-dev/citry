@@ -1,14 +1,16 @@
 # Changelog
 
-## Unreleased
+## [0.5.0] - 2026-11-14
 
 ### Changed
 
-- With Citry 0.9.0 or later, a component that checks its rendered
-  fills, such as `CDisclosure`'s panel, reads a numeric character
-  reference in an attribute value as the browser does. For example,
-  `popover="man&#1;ual"` is now refused, because the browser reads it as
-  `man`, the character U+0001, and `ual`, which is not `manual`.
+- **Breaking:** Citry UI now requires `citry` 0.9.0 or newer, so upgrade
+  both together. Its checks of rendered fills use Citry's HTML parser.
+  That parser reads a numeric character reference in an attribute value
+  the way the browser does only from Citry 0.9.0. For example,
+  `CDisclosure`'s panel now refuses `popover="man&#1;ual"`, because the
+  browser reads it as `man`, the character U+0001, and `ual`, which is
+  not `manual`.
 
 ### Fixed
 
@@ -17,10 +19,9 @@
   value, as the browser does. It used to read the last one, so it could
   accept an element that the browser makes focusable, or refuse one that
   is fine.
-- The components below keep working when a server event re-renders
-  the component around them, now that Citry runs `onServerRender`
-  callbacks with children before their parent. Before this fix, under
-  that order:
+- Citry 0.9.0 runs `onServerRender` callbacks with children before
+  their parent. These components now work with that order when a server
+  event re-renders the component around them. Without this fix:
   - an open `CDatePicker`, `CDateRange` or `CTimePicker` popup closed,
     and so did an open `CPopover` inside another open `CPopover`;
   - when one server render opened a `CDialog` or `CDrawer` and a
