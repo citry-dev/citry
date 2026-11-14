@@ -287,6 +287,10 @@ On both tags:
   and Python slot data such as `:row` with `c-row`, or a `v-slot` name that
   the fill's `data="..."` or `fallback="..."` also names.
 
+A `v-for` alias or the `v-slot` on a Vue component has the same limit on
+`$`, `_`, and `citry`; see
+[Pick loop and slot names](/syntax/vue/#reserved-browser-names).
+
 ### Errors when rendering { #scoped-slot-limits }
 
 These cases fail with an error when the page renders.

@@ -35,6 +35,11 @@
   as a `c-` attribute (`<c-slot c-$c-tr:x="y" />`), and a `c-bind` key
   that is just `"."`. Write a `$c-tr` binding on an HTML element, and
   remove a `"."` key from the `c-bind` mapping.
+- A template now fails to load when a `v-for` alias or the `v-slot` on a
+  Vue component uses a name that starts with `$`, `_`, or `citry`, as in
+  `v-for="(_, index) in items"`. Citry keeps those prefixes for the values
+  it gives the template, such as `$i18n`, and such a name could hide one.
+  Rename it; the error suggests a name.
 - A `URLRoute` path that uses one parameter name twice, such as
   `"{id}/{id}"`, now raises `ValueError` naming the route when your app
   starts. Before, it raised a regular expression error: under Django

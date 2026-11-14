@@ -2557,7 +2557,7 @@ fn validate_slot_prop(
             "'{name}' cannot be a slot prop: Citry sets the slot's own 'key'. Give the prop another name."
         ));
     }
-    if camel.starts_with(['$', '_']) || camel.starts_with("citry") {
+    if crate::browser::is_reserved_browser_name(&camel) {
         return fail(format!(
             "'{name}' cannot be a slot prop: names that start with '$', '_', or 'citry' are reserved for the props Citry passes to every fill. Use a name without that prefix."
         ));
@@ -2621,6 +2621,20 @@ fn validate_fill_tag_vue_directives(
         ));
     }
     Ok(())
+}
+
+/// The sentence that tells the author how to rename a reserved name in a
+/// `v-for` or a Vue component's `v-slot`.
+///
+/// A name from an object shorthand, as in `{ _id }`, also names the property
+/// it reads, so the fix keeps the property and renames only the variable.
+fn reserved_binding_fix(reserved: &crate::browser::ReservedBinding) -> String {
+    let (name, suggestion) = (&reserved.name, &reserved.suggestion);
+    if reserved.shorthand {
+        format!("Rename it and keep the property it reads, as in '{{ {name}: {suggestion} }}'.")
+    } else {
+        format!("Rename it, for example to '{suggestion}'.")
+    }
 }
 
 /// Check the value of `<c-fill v-slot="...">`.
@@ -2689,13 +2703,19 @@ fn validate_fill_slot_pattern(
         })
         .flatten()
         .collect();
+    // No `<c-slot>` prop can carry a reserved prefix, so a shorthand such as
+    // `{ _id }` reads nothing the author passed, and the fix is a plain
+    // rename rather than keeping the property.
+    if let Some(reserved) =
+        crate::browser::find_reserved_binding(&[(value, "props")], &python_names)
+    {
+        return fail(format!(
+            "'{}' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill, and no '<c-slot>' prop can use them. Rename it, for example to '{}'.",
+            reserved.name, reserved.suggestion
+        ));
+    }
     for binding in &analysis.bindings {
         let local = binding.name.as_str();
-        if local.starts_with(['$', '_']) || local.starts_with("citry") {
-            return fail(format!(
-                "'{local}' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill. Use a name without that prefix."
-            ));
-        }
         if python_names.contains(&local) {
             return fail(format!(
                 "'{local}' is named by both 'v-slot' and the Python 'data' or 'fallback' of this '<c-fill>'. Rename the Vue name or the Python name."
@@ -2892,6 +2912,10 @@ fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<()
 /// their own checks. A custom directive may use any case (`v-Tooltip`),
 /// because Vue looks it up by that name (and its camelCase and PascalCase
 /// forms), never in lowercase.
+///
+/// A `v-for` alias or a `v-slot` pattern may not bind a name that starts with
+/// `$`, `_`, or `citry`, because it could hide a value Citry gives the
+/// template (see `browser::is_reserved_browser_name`).
 fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
     if has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
@@ -2909,6 +2933,32 @@ fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Resu
                 format!("'{name}' on <{tag_name}> (line {line}, column {col}) {problem}"),
             ))
         };
+        // A `v-for` alias and a `v-slot` pattern (on a Vue component or a
+        // `<template>`) declare names in the browser, next to the names
+        // Citry gives the template. Vue's compiler binds them with or
+        // without modifiers, so only the part before `:` or `.` counts.
+        // `#c-*` metadata was skipped above, so a `#` name here is Vue's
+        // slot shorthand.
+        let directive = &name[..name.find([':', '.']).unwrap_or(name.len())];
+        if let Some(value) = attr.inner_value.as_ref() {
+            let reserved = if directive == "v-for" {
+                crate::browser::find_reserved_binding(
+                    &crate::browser::v_for_alias_parts(&value.content),
+                    &[],
+                )
+            } else if directive == "v-slot" || name.starts_with('#') {
+                crate::browser::find_reserved_binding(&[(value.content.as_str(), "props")], &[])
+            } else {
+                None
+            };
+            if let Some(reserved) = reserved {
+                let local = &reserved.name;
+                return fail(format!(
+                    "uses the name '{local}', which starts with a prefix Citry reserves ('$', '_', or 'citry') for the values it gives the template, such as '$i18n'. A name like this could hide one of those values. {}",
+                    reserved_binding_fix(&reserved)
+                ));
+            }
+        }
         let (prefix, rest) = match (name.strip_prefix("v-"), name.strip_prefix("V-")) {
             (Some(rest), _) => ("v-", rest),
             (None, Some(rest)) => ("V-", rest),
