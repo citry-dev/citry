@@ -1731,11 +1731,11 @@ class TestPydanticItemErrorLimit:
         # error once takes about 3.5 times as long, and the bound leaves room
         # for a slow machine. The deeper value stays within the nesting
         # Citry checks (MAX_CHECK_DEPTH).
-        # The shallow run takes 1 to 2 ms on a laptop, and a run that short
-        # is mostly noise, so its time is floored at 1 ms. The floor is close
-        # to the shallow run's own time, so a regression that makes the deep
-        # run 15 times slower still fails the bound.
-        assert best_time(27) < 9 * max(best_time(3), 0.001)
+        # The shallow run takes about 0.7 ms on a laptop, and a run that
+        # short is noisy, so its time is floored at 0.5 ms. The floor stays
+        # below the shallow run's own time, so the comparison still measures
+        # growth with depth rather than a fixed bound.
+        assert best_time(27) < 9 * max(best_time(3), 0.0005)
 
     @pytest.mark.parametrize("data_class", ["top", "nested"])
     def test_a_list_field_with_an_empty_alias_lists_its_first_bad_item(self, data_class):

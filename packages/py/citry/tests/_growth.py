@@ -7,7 +7,13 @@ a small input and on one several times larger, on the same machine in the
 same run, and compare the two. An operation that reads its input once takes
 about ``factor`` times longer on the larger input. One that reads it again
 for every character takes about ``factor`` squared times longer, which the
-bound rejects. The speed of the machine cancels out of the comparison.
+bound rejects once the smaller run takes longer than the floor below. The
+speed of the machine cancels out of the comparison.
+
+When the smaller run is faster than the floor, the comparison works as a
+bound of ``3 * factor`` milliseconds on the larger run. That still refuses
+the slow code these tests guard against, which took seconds, but it does
+not notice a small slowdown on such short inputs.
 """
 
 from __future__ import annotations
@@ -18,10 +24,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# The smaller time is never taken as less than this, so a timer that reads
-# in coarse steps cannot turn a tiny first time into a large ratio. Choose
-# an input for which the smaller run takes several times this long, or the
-# floor hides growth.
+# The smaller time is never taken as less than this, so timing noise on a
+# run of a few microseconds cannot turn into a large ratio. An input for
+# which the smaller run takes several times this long gets a true growth
+# comparison; a faster one gets the fixed bound the docstring describes.
 _FLOOR_SECONDS = 0.001
 # How far above the linear ratio the larger run may go. Timing noise on a
 # busy machine stays well under this multiple, while an operation that grows

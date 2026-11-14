@@ -539,8 +539,9 @@ print(json.dumps(results))
 
 
 def test_data_at_the_nesting_limit_gets_the_same_answer_on_a_thread_with_half_a_windows_stack() -> None:
-    # A server thread has 1 MiB of stack on Windows and in the official
-    # Python images for Alpine Linux. The nesting limit must leave half of
+    # A server thread has 1 MiB of stack in a Windows program that embeds
+    # Python with the linker's default, and in the official Python images
+    # for Alpine Linux. The nesting limit must leave half of
     # that free, so data at the limit, in shapes that take a lot of stack
     # per level, must get the same answer on a 512 KiB thread as on the
     # main thread. Valid data, data with a bad leaf, and data one level too

@@ -136,8 +136,9 @@ cpu_clock = time.thread_time
 # takes room on the thread's stack, so the limit keeps a check within a
 # fixed amount of it. It is sized so data at the limit, in the shapes that
 # measured heaviest per level, is checked in 512 KiB, half the 1 MiB thread
-# stack of Windows and of the official Python images for Alpine Linux. The
-# test with a 512 KiB thread checks those shapes.
+# stack of a Windows program that embeds Python with the linker's default
+# and of the official Python images for Alpine Linux. The test with a
+# 512 KiB thread checks those shapes.
 MAX_CHECK_DEPTH = 32
 # What one more check of a list or object costs besides the values inside it,
 # in steps: the Python wrappers around it run on every check.
@@ -2938,6 +2939,11 @@ def _counting(checker: Checker, payload: Any) -> Iterator[_Tally]:
             if tally.stop is not None:
                 raise tally.stop
         except pydantic_core.ValidationError as err:
+            # A part of the schema that swallowed a stop for work, time or
+            # nesting must not leave only the other errors to report: the data
+            # gets the stop's answer, as it would without that part.
+            if tally.stop is not None:
+                raise tally.stop from None
             # A copy without wrappers counts here, after the call. A wrapped
             # copy's outer object already set the same total.
             tally.errors = before + err.error_count()

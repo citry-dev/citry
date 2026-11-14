@@ -436,11 +436,11 @@ change.
   your page sets `<base href>` on purpose, write these URLs as paths that
   start with `/`.
 - Events now refuses event data and State writes that nest more than 32
-  levels of objects, unions, and wrap validators, when a Pydantic v2 class
-  checks them. The call
-  gets a 422 that says the data is nested too deeply, and Citry logs a
-  warning naming the class. If your server runs requests on threads with
-  less than 1 MiB of stack, raise it with `threading.stack_size()`
+  levels of objects, unions, and wrap validators, when a Pydantic v2
+  class checks them. The call gets a 422 that says the data is nested too
+  deeply, and Citry logs a warning naming the class. If your server runs
+  requests on threads with less than 1 MiB of stack, raise it with
+  `threading.stack_size()`
   ([details](https://citry.dev/security/#check-event-data)).
 
 ## v0.7.0

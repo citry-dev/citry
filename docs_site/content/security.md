@@ -507,9 +507,10 @@ A form that shows only the message next to each field shows nothing when
 Citry sends `fieldErrors._args` or `fieldErrors._state`, so show those
 messages too ([how](/events/forms/#eventerror-field-errors)).
 
-Citry refuses data that nests more than 32 levels deep, when a Pydantic
-v2 class checks it. Each model, dataclass, TypedDict, and wrap validator
-that a value passes through counts one level. So does each union whose
+Citry refuses data that nests more than 32 levels of models, dataclasses,
+TypedDicts, unions, and wrap validators, when a Pydantic v2 class checks
+it. Each model, dataclass, TypedDict, and wrap validator that a value
+passes through counts one level. So does each union whose
 members could read the value, so a tree of nodes counts about two levels
 per node, or one when its union has a discriminator
 ([trees](#trees-in-event-data)). Deeper data fails with a 422 under
@@ -520,8 +521,10 @@ restoring State the server saved. You cannot change it.
 
 Each level takes room on the stack of the thread that checks the data.
 Citry sets the limit so a check of data at the limit fits in a 1 MiB
-thread stack with room to spare. Threads that Python starts get 1 MiB on
-Windows. On Linux with musl, such as Alpine, the size depends on how
+thread stack with room to spare. On Windows, threads that Python starts
+get about 1.9 MiB under `python.exe`, and 1 MiB in a program that embeds
+Python and keeps the linker's default. On Linux with musl, such as
+Alpine, the size depends on how
 Python was built: the official Python images for Alpine give 1 MiB,
 Alpine's own `python3` package gives 2 MiB, and a Python built without
 either setting gets musl's default of 128 KiB. Linux with glibc and
