@@ -58,15 +58,17 @@ _NATIVE_PATHS: Final = (
 # The recipe that builds the shared wheel. A change to either file changes the
 # key, so a wheel built by an earlier recipe is never reused.
 _RECIPE_PATHS: Final = (
+    ".gitattributes",
     ".github/actions/citry-core-wheel/action.yml",
+    ".github/actions/install-rust/action.yml",
     "scripts/citry_core_wheel.py",
 )
 
 # The feature and profile the release workflow uses for the CPython wheel:
 # one limited-API wheel serves every supported GIL-enabled CPython, and the
-# tests run the optimization settings users install. The compiler is still
-# the nightly that rust-toolchain.toml pins, where releases use the minimum
-# supported Rust.
+# tests run the optimization settings users install. The compiler differs:
+# this build uses the nightly that rust-toolchain.toml pins, while releases
+# use the minimum supported Rust.
 _MATURIN_BUILD_ARGS: Final = "--features abi3-py311 --profile release-wheel"
 
 # Crate folders whose files never reach the compiled library.
@@ -266,8 +268,21 @@ def _smoke_test(wheel: Path) -> None:
 # them and always uses the toolchain rust-toolchain.toml names and the flags
 # Cargo.toml sets.
 _UNHASHED_BUILD_VARIABLES: Final = frozenset(
-    {"RUSTUP_TOOLCHAIN", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS", "CARGO_BUILD_TARGET"}
+    {
+        "CARGO_BUILD_RUSTFLAGS",
+        "CARGO_BUILD_TARGET",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "MACOSX_DEPLOYMENT_TARGET",
+        "MATURIN_PEP517_ARGS",
+        "RUSTFLAGS",
+        "RUSTUP_TOOLCHAIN",
+    }
 )
+# Prefixes of the same kind: per-profile and per-target Cargo settings
+# (CARGO_TARGET_DIR goes too, so the build writes to ./target, the folder
+# rust-cache saves), and PyO3's interpreter overrides (maturin sets those it
+# needs itself).
+_UNHASHED_BUILD_PREFIXES: Final = ("CARGO_PROFILE_", "CARGO_TARGET_", "PYO3_")
 
 
 def _build_environment(environment: Mapping[str, str]) -> dict[str, str]:
@@ -275,7 +290,7 @@ def _build_environment(environment: Mapping[str, str]) -> dict[str, str]:
     return {
         name: value
         for name, value in environment.items()
-        if name not in _UNHASHED_BUILD_VARIABLES and not name.startswith("CARGO_PROFILE_")
+        if name not in _UNHASHED_BUILD_VARIABLES and not name.startswith(_UNHASHED_BUILD_PREFIXES)
     }
 
 

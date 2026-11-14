@@ -264,7 +264,15 @@ def _runs_unless_skipped(*parents: str) -> str:
 
 
 # The jobs that build the shared citry-core wheel once per OS.
-_CORE_WHEEL_JOBS = ("citry-core-wheel-linux", "citry-core-wheel-windows-macos")
+_CORE_WHEEL_JOBS = ("citry-core-wheel-linux", "citry-core-wheel-windows", "citry-core-wheel-macos")
+
+# The test job for each OS and the wheel job it installs from. Each is named
+# `test`, so the cells keep their check names, such as `test (3.11, ubuntu-latest)`.
+_TEST_JOBS = {
+    "test-linux": ("ubuntu-latest", "citry-core-wheel-linux"),
+    "test-windows": ("windows-latest", "citry-core-wheel-windows"),
+    "test-macos": ("macos-latest", "citry-core-wheel-macos"),
+}
 
 
 def test_python_tests_start_on_every_pull_request_and_skip_without_python_changes() -> None:
@@ -460,20 +468,44 @@ def test_the_changes_job_matches_files_like_the_push_path_filter(
 _SUPPORTED_PYTHONS = ["3.11", "3.12", "3.13", "3.14", "3.15"]
 
 
+_MATRIX_BY_EVENT = re.compile(
+    r"\$\{\{ fromJSON\(github\.event_name == 'pull_request' && '(?P<pr>\[.*?\])' \|\| '(?P<full>\[.*?\])'\) \}\}"
+)
+
+
 def _python_test_cells() -> dict[str, set[tuple[str, str]]]:
     """Return the (OS, Python) cells py--tests.yml runs on a pull request and on every other event."""
-    expression = _load_workflow("py--tests.yml")["jobs"]["test"]["strategy"]["matrix"]["include"]
-    # The matrix is one expression that picks a JSON list by event, so the
-    # two lists are read out of its two quoted strings.
-    match = re.fullmatch(
-        r"\$\{\{ fromJSON\(github\.event_name == 'pull_request' && '(?P<pr>\[.*?\])' \|\| '(?P<full>\[.*?\])'\) \}\}",
-        expression.strip(),
-    )
-    assert match is not None, expression
-    return {
-        name: {(cell["os"], cell["python-version"]) for cell in json.loads(match.group(name))}
-        for name in ("pr", "full")
-    }
+    jobs = _load_workflow("py--tests.yml")["jobs"]
+    cells: dict[str, set[tuple[str, str]]] = {"pr": set(), "full": set()}
+    for job_name, (runner, _wheel_job) in _TEST_JOBS.items():
+        expression = jobs[job_name]["strategy"]["matrix"]["include"]
+        # Each matrix is one expression that picks a JSON list by event, so
+        # the two lists are read out of its two quoted strings.
+        match = _MATRIX_BY_EVENT.fullmatch(" ".join(expression.split()))
+        assert match is not None, expression
+        for name in ("pr", "full"):
+            job_cells = {(cell["os"], cell["python-version"]) for cell in json.loads(match.group(name))}
+            # A job runs only its own OS, so it needs only that OS's wheel.
+            assert {os_name for os_name, _ in job_cells} == {runner}, job_name
+            cells[name] |= job_cells
+    return cells
+
+
+def test_each_os_tests_with_its_own_wheel_and_the_same_steps() -> None:
+    jobs = _load_workflow("py--tests.yml")["jobs"]
+    assert "test" not in jobs
+    steps = jobs["test-linux"]["steps"]
+    for job_name, (runner, wheel_job) in _TEST_JOBS.items():
+        job = jobs[job_name]
+        assert job["name"] == "test", job_name
+        assert job["needs"] == wheel_job, job_name
+        assert job["runs-on"] == "${{ matrix.os }}", job_name
+        # One interpreter's failure must not cancel the others' results.
+        assert job["strategy"]["fail-fast"] is False, job_name
+        # The YAML anchor gives every OS the same steps.
+        assert job["steps"] == steps, job_name
+        assert jobs[wheel_job]["runs-on"] == runner, wheel_job
+        assert jobs[wheel_job]["steps"] == jobs["citry-core-wheel-linux"]["steps"], wheel_job
 
 
 def test_the_full_python_matrix_runs_every_supported_python_on_every_os() -> None:
@@ -507,7 +539,7 @@ def test_the_full_python_matrix_runs_every_supported_python_on_every_os() -> Non
     assert "if" not in gate
     # And while both select the same tests: the matrix runs every non-browser
     # test except the reload file, which check.py runs in its own phase.
-    tests_steps = {step.get("name"): step for step in _load_workflow("py--tests.yml")["jobs"]["test"]["steps"]}
+    tests_steps = {step.get("name"): step for step in _load_workflow("py--tests.yml")["jobs"]["test-linux"]["steps"]}
     matrix_run = tests_steps["Run Python tests"]["run"]
     assert '-m "not e2e"' in matrix_run
     assert matrix_run.count("--ignore") == 1

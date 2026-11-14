@@ -56,8 +56,8 @@ runs:
         path: ${{ steps.key.outputs.wheel_dir }}
         key: ${{ steps.key.outputs.cache_key }}
 
-    # The jobs that only install the wheel do not need the Ruff copy, so the
-    # submodule is fetched only when the wheel has to be built.
+    # Only a build reads the Ruff sources in the third_party/rust/ruff
+    # submodule, so the action fetches the submodule only on a miss.
     - name: Initialize the native submodules
       if: steps.restore.outputs.cache-hit != 'true'
       shell: bash
@@ -71,7 +71,7 @@ runs:
     # compiles the same crates with the same profile and features.
     - name: Cache Rust dependencies
       if: steps.restore.outputs.cache-hit != 'true' && inputs.cache-rust == 'true'
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       with:
         shared-key: citry-core-wheel
 

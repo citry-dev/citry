@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
 import shutil
 import subprocess
 import sys
@@ -9,6 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import tomllib
 from scripts import citry_core_wheel
 
 if TYPE_CHECKING:
@@ -93,30 +95,65 @@ def repo(tmp_path: Path) -> _Repo:
     return result
 
 
-@pytest.mark.parametrize(
-    ("relative", "text"),
-    [
-        ("crates/demo/src/lib.rs", "pub fn two() {}\n"),
-        ("third_party/rust/vize_atelier_core/src/lib.rs", "two\n"),
-        ("pyproject.toml", '[tool.uv]\nbuild-constraint-dependencies = ["maturin==2.0.0"]\n'),
-    ],
-)
-def test_native_source_digest_changes_with_a_build_input(repo: _Repo, relative: str, text: str) -> None:
+# One file per `_NATIVE_PATHS` entry, so every selected folder or file is shown
+# to change the digest. Cutting an entry from the selection fails its case, and
+# adding an entry without a sample fails the coverage check below.
+_NATIVE_SAMPLES = {
+    ".cargo": ".cargo/config.toml",
+    "Cargo.lock": "Cargo.lock",
+    "Cargo.toml": "Cargo.toml",
+    "crates": "crates/demo/src/lib.rs",
+    "packages/py/citry_core": "packages/py/citry_core/pyproject.toml",
+    "rust-toolchain.toml": "rust-toolchain.toml",
+    "third_party/rust": "third_party/rust/vize_atelier_core/src/lib.rs",
+}
+
+
+def test_every_native_path_has_a_digest_sample() -> None:
+    assert set(_NATIVE_SAMPLES) == set(citry_core_wheel._NATIVE_PATHS)
+    for sample in _NATIVE_SAMPLES.values():
+        assert citry_core_wheel._is_native_wheel_input(PurePosixPath(sample))
+
+
+@pytest.mark.parametrize("relative", sorted(_NATIVE_SAMPLES.values()))
+def test_native_source_digest_changes_with_each_native_path(repo: _Repo, relative: str) -> None:
+    # Edit a file that is already tracked, so the change shows only if the
+    # folder or file is selected, not merely because a new entry appeared.
+    repo.write(relative, "one\n")
     before = repo.digest(extra_paths=())
 
-    repo.write(relative, text)
+    repo.write(relative, "two\n")
 
     assert repo.digest(extra_paths=()) != before
 
 
-def test_native_source_digest_changes_with_a_recipe_path(repo: _Repo) -> None:
-    repo.write("scripts/recipe.py", "one\n")
-    recipe = ("scripts/recipe.py",)
-    before = repo.digest(extra_paths=recipe)
+def test_native_source_digest_changes_with_the_python_half_of_the_package(repo: _Repo) -> None:
+    relative = "packages/py/citry_core/citry_core/__init__.py"
+    repo.write(relative, "one\n")
+    before = repo.digest(extra_paths=())
 
-    repo.write("scripts/recipe.py", "two\n")
+    repo.write(relative, "two\n")
 
-    assert repo.digest(extra_paths=recipe) != before
+    assert repo.digest(extra_paths=()) != before
+
+
+def test_native_source_digest_changes_with_a_build_constraint(repo: _Repo) -> None:
+    before = repo.digest(extra_paths=())
+
+    repo.write("pyproject.toml", '[tool.uv]\nbuild-constraint-dependencies = ["maturin==2.0.0"]\n')
+
+    assert repo.digest(extra_paths=()) != before
+
+
+@pytest.mark.parametrize("relative", citry_core_wheel._RECIPE_PATHS)
+def test_native_source_digest_changes_with_each_default_recipe_path(repo: _Repo, relative: str) -> None:
+    repo.write(relative, "one\n")
+    # The default `extra_paths` are the real recipe, so dropping one fails here.
+    before = repo.digest()
+
+    repo.write(relative, "two\n")
+
+    assert repo.digest() != before
 
 
 def test_native_source_digest_changes_with_the_ruff_submodule_commit(repo: _Repo) -> None:
@@ -156,6 +193,117 @@ def test_native_source_digest_refuses_a_repo_with_no_native_inputs(tmp_path: Pat
 
     with pytest.raises(RuntimeError, match="native cache inputs were not found"):
         citry_core_wheel.native_source_digest(repo_root=tmp_path, extra_paths=())
+
+
+_DEPENDENCY_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
+
+
+def _path_dependencies(manifest: dict[str, Any], directory: str) -> set[str]:
+    """Return the repo-relative folder of every `path` dependency a Cargo manifest names."""
+    tables: list[dict[str, Any]] = []
+    workspace = manifest.get("workspace", {})
+    tables.append(workspace.get("dependencies", {}))
+    # `[patch.<registry>]` tables swap a published crate for a local folder.
+    tables.extend(manifest.get("patch", {}).values())
+    for holder in (manifest, *manifest.get("target", {}).values()):
+        tables.extend(holder.get(name, {}) for name in _DEPENDENCY_TABLES)
+    return {
+        posixpath.normpath(posixpath.join(directory, specification["path"]))
+        for table in tables
+        for specification in table.values()
+        if isinstance(specification, dict) and "path" in specification
+    }
+
+
+def _tracked_files(repo_root: Path, pathspec: str) -> list[PurePosixPath]:
+    """
+    Return the tracked entries `pathspec` names, from the index.
+
+    A folder inside a submodule has no entries of its own, so the submodule's
+    own entry (the Ruff checkout shows up as one) stands in for it.
+    """
+    git = shutil.which("git")
+    assert git is not None
+
+    def listing(spec: str) -> list[tuple[str, str, str]]:
+        result = subprocess.run(
+            [git, "ls-files", "--stage", "-z", "--", spec],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return [record.partition("\t") for record in result.stdout.split("\0") if record]
+
+    entries = [PurePosixPath(path) for _metadata, _separator, path in listing(pathspec)]
+    if entries:
+        return entries
+    # The root ("." in `parents`) would list the whole index, so stop before it.
+    for parent in PurePosixPath(pathspec).parents:
+        if parent == PurePosixPath("."):
+            break
+        submodules = [
+            PurePosixPath(path)
+            for metadata, _separator, path in listing(parent.as_posix())
+            if metadata.startswith("160000 ") and path == parent.as_posix()
+        ]
+        if submodules:
+            return submodules
+    return []
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is unavailable")
+def test_the_native_selection_covers_every_path_the_real_wheel_build_reads() -> None:
+    # The wheel is built from the real checkout, so a new path dependency or
+    # license file outside the selection would let a stale wheel be reused.
+    root = citry_core_wheel._REPO_ROOT
+    root_manifest = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
+    members = list(root_manifest["workspace"]["members"])
+    crates = {*members, *_path_dependencies(root_manifest, ".")}
+    for member in members:
+        member_manifest = tomllib.loads((root / member / "Cargo.toml").read_text(encoding="utf-8"))
+        crates |= _path_dependencies(member_manifest, member)
+
+    package = "packages/py/citry_core"
+    pyproject = tomllib.loads((root / package / "pyproject.toml").read_text(encoding="utf-8"))
+    maturin_manifest = posixpath.normpath(posixpath.join(package, pyproject["tool"]["maturin"]["manifest-path"]))
+    crates.add(posixpath.dirname(maturin_manifest))
+    # Each metadata file is a tracked file the wheel packs, not a folder.
+    files = {f"{package}/pyproject.toml", f"{package}/{pyproject['project']['readme']}"}
+    files |= {f"{package}/{pattern}" for pattern in pyproject["project"]["license-files"]}
+
+    # A parser that finds nothing would pass the checks below, so require what is known to exist.
+    assert members
+    assert any(crate.startswith("third_party/rust/ruff/") for crate in crates)
+    assert any(crate.startswith("third_party/rust/vize_") for crate in crates)
+
+    problems = []
+    required = [(f"{crate}/Cargo.toml", crate) for crate in sorted(crates)] + [(file, file) for file in sorted(files)]
+    for target, source in required:
+        under_native_path = any(
+            source == native or source.startswith(f"{native}/") for native in citry_core_wheel._NATIVE_PATHS
+        )
+        accepted = any(citry_core_wheel._is_native_wheel_input(entry) for entry in _tracked_files(root, target))
+        if not (under_native_path and accepted):
+            problems.append(f"{source} (under a native path: {under_native_path}, input accepted: {accepted})")
+
+    assert not problems, "the wheel build reads these paths but the cache key does not cover them:\n" + "\n".join(
+        problems
+    )
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is unavailable")
+def test_the_recipe_paths_name_tracked_files_that_build_the_wheel() -> None:
+    # The digest skips a recipe path that Git does not track, so a rename
+    # would silently drop the file from the key.
+    assert set(citry_core_wheel._RECIPE_PATHS) >= {
+        ".gitattributes",
+        ".github/actions/citry-core-wheel/action.yml",
+        ".github/actions/install-rust/action.yml",
+        "scripts/citry_core_wheel.py",
+    }
+    for relative in citry_core_wheel._RECIPE_PATHS:
+        assert _tracked_files(citry_core_wheel._REPO_ROOT, relative) == [PurePosixPath(relative)]
 
 
 def _fake_uv_version(monkeypatch: pytest.MonkeyPatch, uv_version: list[str]) -> None:
@@ -327,6 +475,11 @@ def test_build_environment_drops_settings_the_key_does_not_cover() -> None:
         "CARGO_BUILD_TARGET": "x86_64-unknown-linux-musl",
         "CARGO_PROFILE_RELEASE_LTO": "off",
         "CARGO_PROFILE_RELEASE_WHEEL_OPT_LEVEL": "0",
+        "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS": "-Ctarget-cpu=native",
+        "CARGO_TARGET_DIR": "/elsewhere/target",
+        "PYO3_PYTHON": "/usr/bin/python3.9",
+        "MATURIN_PEP517_ARGS": "--features other",
+        "MACOSX_DEPLOYMENT_TARGET": "10.9",
     }
 
     assert citry_core_wheel._build_environment(environment) == {

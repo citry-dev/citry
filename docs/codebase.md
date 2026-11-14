@@ -89,8 +89,9 @@ reaches the project only when someone moves that date on purpose (see
 
 The published `citry-core` wheels, the docs release build and the
 example-project tests use the minimum version, Rust 1.97.0, so moving the
-nightly date does not change what users install. The other CI jobs install a
-wheel built with the nightly (see [CI Dependencies](#ci-dependencies)). Inside the checkout, `rust-toolchain.toml`
+nightly date does not change what users install. Most Python and docs CI
+jobs install a citry-core wheel built with the nightly (see
+[CI Dependencies](#ci-dependencies)). Inside the checkout, `rust-toolchain.toml`
 takes priority over a toolchain that `dtolnay/rust-toolchain` installs, so
 every job that installs Rust that way also sets `RUSTUP_TOOLCHAIN` to the
 same version. The wheel jobs get the same result from maturin-action, which
@@ -1320,8 +1321,9 @@ uv sync --all-packages
 
 CI installs the workspace from the lockfile, but it does not let `uv sync`
 compile the citry-core Rust extension in every job. Compiling it takes about
-5 minutes on Linux, 12 on Windows and 20 on macOS, most of it in the final
-optimization of the one library crate, which no Rust cache can skip. Instead,
+5 minutes on Linux, 12 on Windows and 20 on macOS, most of it in the
+link-time optimization step that runs when `citry_core_py` is linked, which
+no Rust cache can skip. Instead,
 CI builds one citry-core wheel per OS, caches it, and installs it in each job:
 
 1. The [`citry-core-wheel`](../.github/actions/citry-core-wheel/action.yml)
@@ -1355,19 +1357,24 @@ license files of `packages/py/citry_core`, the root `pyproject.toml`'s
 script themselves, the uv version, and the runner's OS, architecture and
 image family. So a pull request that changes Rust code always builds and
 tests a new wheel, and one that changes only Python reuses the wheel the
-last run built from the same Rust sources. The script reads the hashes from
+last run built from the same Rust sources. A change to the Python files
+inside `packages/py/citry_core/citry_core` also rebuilds the wheel on every
+OS, because those files ship in it. The script reads the hashes from
 the Git index, so it computes the key before the Ruff submodule is checked
-out. The build also drops `RUSTUP_TOOLCHAIN`, `RUSTFLAGS` and similar
-variables, because the key does not cover them.
+out. The build also drops `RUSTUP_TOOLCHAIN`, `RUSTFLAGS`, `MATURIN_PEP517_ARGS`
+and similar variables, because the key does not cover them.
 
-`py--tests.yml` builds the wheel once per run in two jobs,
-`citry-core-wheel-linux` and `citry-core-wheel-windows-macos`, which upload
-it as a run artifact. The test, e2e, Vue conformance, i18n qualification and
+`py--tests.yml` builds the wheel once per run in three jobs,
+`citry-core-wheel-linux`, `citry-core-wheel-windows` and
+`citry-core-wheel-macos`, which upload it as a run artifact. The test, e2e, Vue conformance, i18n qualification and
 `citry-ui-wheel-build` jobs download that artifact rather than reading the
 cache, so a cache eviction during a run cannot fail them. They run whenever
 their wheel job ran, even after it failed, so a broken build fails the
 required `citry-ui-wheel-build` check rather than letting it pass as
-skipped. The Linux-only jobs wait only for the Linux build. The Check, docs
+skipped. The test matrix is split into one job per OS (`test-linux`,
+`test-windows`, `test-macos`, all shown as `test`), so each cell waits only
+for its own OS's build, and the Linux-only jobs wait only for the Linux
+build. The Check, docs
 check, docs deploy, Lighthouse, external-link and cross-browser workflows
 call the action directly, so they build the wheel themselves only when no
 earlier run cached it.
@@ -1379,8 +1386,8 @@ again without `--inexact --no-install-package citry-core`, and must call
 `uv run` with `--no-sync`; otherwise uv replaces the wheel with the editable
 package and compiles it.
 
-The jobs that test other interpreters or the release artifacts still build
-their own extension: `py--alt-interpreters.yml` (free-threaded CPython and
+The jobs that test other interpreters or the release artifacts build their
+own extension: `py--alt-interpreters.yml` (free-threaded CPython and
 PyPy, which the limited-API wheel does not serve), the publish workflows,
 `repo--docs-release.yml` and the example-project tests (which build with the
 minimum supported Rust), and `py--diagnostic.yml`, which caches a wheel for
@@ -2645,7 +2652,7 @@ The paths are:
 
 **What it tests**:
 
-- Installs the whole workspace with `uv sync --locked --all-packages --no-install-package citry-core` and then the citry-core wheel that the `citry-core-wheel-linux` and `citry-core-wheel-windows-macos` jobs build once per run (see [CI Dependencies](#ci-dependencies)), so every package's suite runs
+- Installs the whole workspace with `uv sync --locked --all-packages --no-install-package citry-core` and then the citry-core wheel that the `citry-core-wheel-*` jobs build once per run (see [CI Dependencies](#ci-dependencies)), so every package's suite runs
 - Runs the portable Python tests via
   `uv run --no-sync pytest -m "not e2e" --ignore packages/py/citry/tests/test_server_reload.py -n 4 --dist loadfile --durations 30`;
   four file-level workers share one GitHub runner
@@ -2661,8 +2668,9 @@ The paths are:
 - Both sets leave out the Linux cell for the Python that `repo--check.yml`
   uses (3.14), because that workflow runs the same tests there on every pull
   request
-- The `include:` expression in the `test` job's matrix is the one place that
-  picks the set; `test_ci_workflows.py` pins both sets
+- The `include:` expressions in the `test-linux`, `test-windows` and
+  `test-macos` matrices pick the set for their OS; `test_ci_workflows.py`
+  pins both sets
 - Only the two wheel jobs install Rust, and only when no cached wheel matches
   the Rust sources
 
@@ -2693,7 +2701,7 @@ with `BROWSERS=chromium,firefox,webkit`.
 result. Because of the filter, it cannot be a required check; the unfiltered
 table check in `repo--generated.yml` covers the table matching its inputs.
 
-### Docs workflow Rust cache
+### Docs workflows and the citry-core extension
 
 The docs workflows need the local `citry_core` extension because the rendered
 site imports Citry. `repo--docs-check.yml`, `repo--docs-deploy.yml`,
@@ -2704,7 +2712,8 @@ sources. `repo--docs-release.yml` compiles the extension itself, with
 the workspace MSRV (`RUSTUP_TOOLCHAIN=1.97.0`), `sccache`'s GitHub Actions
 backend, and the `docs-citry-core-py314` Rust cache, which omits the job ID
 and is saved even when a later step fails; the toolchain validator checks
-those settings.
+those settings. Only docs-release fills that cache, and it runs weeks
+apart, so it usually starts cold.
 
 The docs workflows sync the root tooling package and Citry (which brings in
 citry-core and the docs lexer); docs validation reads or builds Citry UI source
