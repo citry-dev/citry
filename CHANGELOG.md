@@ -1,14 +1,72 @@
 # Release notes
 
-## Unreleased
+## v0.8.0
 
-Events now refuses event data and State writes that are too large, too
-deeply nested, or too slow to check, and Pydantic classes in Events need
-Pydantic 2.13.0 or newer. The upgrade notes below list what can fail or
-change.
+Citry 0.8.0 makes Events refuse event data and State writes that are
+too large, too deeply nested, or too slow to check. Pydantic classes in
+Events now need Pydantic 2.13.0 or newer. Signed State tokens from
+earlier versions stop working. The output checks `security_javascript`
+and `security_csp` now find more scripts and event handlers that
+browsers run, so a page that passed them before can now be reported.
+Tags for files that Citry serves now carry `integrity`, and event calls
+send the CSRF token only to the page's own origin. The upgrade notes
+below list what can fail or change.
 
 ### Upgrading from 0.7.x
 
+- **Signed State tokens from earlier versions stop working:** State
+  tokens in the default signed storage now use a key that Citry derives
+  from your secret only for State tokens, so values that other code
+  signs with the same secret (such as Django's `SECRET_KEY`) cannot be
+  used as State. After you upgrade, a page that was open before the
+  upgrade asks the visitor to reload on its next event call. During a
+  rolling deploy, old and new processes reject each other's signed
+  tokens until every process runs the new version.
+- **Pages that passed the output checks can now be reported:** the
+  `security_javascript` and `security_csp` checks now read a page in
+  each way a browser may build it, and with
+  `security_javascript="forbid"` such a page raises `ValueError`. The
+  checks also refuse a page that would take too long to read every way.
+  Citry also writes the ESC character in an escaped value as `&#27;`,
+  which `<style>`, `<xmp>` and `<script type="text/plain">` show as
+  written. The Fixes below list each case.
+- **Clear proxy, CDN, and whole-page caches when you upgrade:** script
+  and stylesheet tags that Citry writes for files it serves now carry
+  `integrity` and `crossorigin="anonymous"` at every
+  `security_script_integrity` value, including `/citry/citry.js` and
+  `local_files = "serve"` files. The browser now refuses a file that a
+  proxy or CDN changed, and a `citry.js` from a different version than
+  the page, so a page cached before the upgrade fails to load its files.
+  A CDN that serves these files from another host must send
+  `Access-Control-Allow-Origin`. During a rolling deploy, a page can
+  fail until a reload reaches the same version.
+- **An empty or non-string secret now raises an error:**
+  `Citry(secret=...)` raises `ValueError` for a secret, or an entry of a
+  list, that is empty or only whitespace, and `TypeError` for an entry
+  that is not a plain `str`. The error gives the entry's position. If
+  your secret can come out empty, for example
+  `[os.environ["NEW"], os.environ.get("OLD", "")]`, leave out keys that
+  are not set. `citry.contrib.django.secret()` skips such entries for
+  you. The setting takes a string, a list, or a tuple; pass any other
+  collection as a list.
+- **Event calls send the CSRF token only to the page's origin and no
+  longer follow a redirect:** event calls to an events `url` on another
+  origin now carry no token from the built-in transport, and a redirect
+  answer makes the call fail. Return `actions.Redirect` to send the
+  visitor to another page. `Citry.events.configure({csrf})` now rejects
+  a header name that `Citry.configure` rejects.
+- **A `<base>` element no longer changes where Citry's requests and URL
+  actions go:** event calls, `$i18n` message requests, and the
+  `Redirect`, `PushUrl`, and `ReplaceUrl` actions now resolve a relative
+  URL against the page's own address. If your page sets `<base href>` on
+  purpose, write these URLs as paths that start with `/`.
+- **Upgrade every process that shares a cache:** a `css_data()`
+  stylesheet in a configured cache is now built again from its stored
+  values each time it is served. One stored by an earlier version
+  returns 404 until a page with the same values renders again, and a
+  cached component with `css_data()` values renders again once. A
+  process on an earlier version keeps writing entries that the new
+  version does not serve.
 - **A State that holds a filter tree needs a discriminator:** if a field
   the browser may write holds a tree of nodes of different classes, such
   as `And | Or | Cond` where `And` and `Or` hold more nodes, and the
@@ -95,7 +153,16 @@ change.
     - items that can fail with several errors, in a list or dict inside a
       `Json[...]` field that has a wrap validator around it (a validator
       that receives the value and the next validator), such as a list of
-      models.
+      models;
+    - a recursive model, dataclass, or TypedDict (one that can hold
+      itself) with no wrap validator on the way back to itself, in a
+      model State where Citry reads browser writes only as JSON text, as
+      it does with `ConfigDict(strict=True)`.
+
+    To fix the last case, remove the setting that makes Citry read the
+    State only as JSON text (the strict setting, for example), leave the
+    field out of `_model`, or add a wrap validator to the recursive
+    class, which makes Citry apply the 32-level limit there.
 
     The details list every case, including the ones that are fine
     ([details](https://citry.dev/security/#schemas-citry-refuses)).
@@ -170,17 +237,42 @@ change.
   get the "took too long" 422.
   Run more than one worker process so one slow request does not delay
   others ([details](https://citry.dev/security/#check-event-data)).
-- **Deeply nested trees in event data are refused:** event data that
+- **Deep trees in event data need a discriminator:** event data that
   holds a tree like the one above, with no discriminator on the union of
-  node classes, fails with a 422 under `fieldErrors._args` that says it
-  is too large or nested too deeply to check. When `And` and `Or` hold
-  their children in fields of the same name, a Pydantic model fits about
-  15 levels with one child per node, and about 8 with two. More
-  children, or more data in each node, lower those numbers. Declare the discriminator as above to check deeper trees.
+  node classes, fails with a 422 under `fieldErrors._args` that says the
+  data is nested too deeply to check, or too large or nested too deeply
+  to check. A Pydantic model fits about 14 levels with one child per
+  node. When `And` and `Or` hold their children in fields of the same
+  name, it fits about 8 levels with two. More children, or more data in
+  each node, lower those numbers. Declare the discriminator as above and
+  a tree can nest about 30 levels.
   Citry checks a plain class or dataclass itself, without reading
   discriminators, so make the node classes Pydantic models, or keep the
   nesting shallow
   ([details](https://citry.dev/security/#trees-in-event-data)).
+- **Data nested more than 32 levels is refused:** a Pydantic v2 class
+  that checks event data or a browser State write now stops at 32
+  levels, and the call fails with a 422 under `fieldErrors._args`
+  (`fieldErrors._state` for a State write) that says the data is nested
+  too deeply. Citry logs a warning naming the class. A model,
+  dataclass, TypedDict, wrap validator, `Iterable[...]` or
+  `Generator[...]` field, or union of classes each counts as one level
+  (a model State that Citry reads only as JSON text counts only wrap
+  validators, as explained above). Send data with fewer levels, or give
+  a recursive union a discriminator. The limit does not apply when
+  Citry restores State that the server saved. If your server runs
+  requests on threads with less than 1 MiB of stack (some Windows and
+  Alpine setups), call `threading.stack_size(1024 * 1024)` before the
+  server starts them
+  ([details](https://citry.dev/security/#check-event-data)).
+- **Events checks every item of an `Iterable` field before the handler
+  runs:** a bad item of an `Iterable[...]` or `Generator[...]` field in
+  event data or a State write now fails the call with a 422. Before, it
+  raised a `ValidationError` when the handler read the item, so a `try`
+  around your loop no longer catches it. A union whose `Iterable`
+  member has a bad item now tries its next member. The handler gets an
+  iterator over the checked items, and the items count toward the same
+  limits as the rest of the data.
 - **Pydantic dataclass State writes are checked when they arrive:**
   without `validate_assignment`, on a browser write Citry runs the
   class's field validators, model validators, `__post_init__`, and any
@@ -257,37 +349,11 @@ change.
 
 ### Changed
 
-- State tokens in the default signed storage now use a key that Citry
-  derives from your secret for this one use, so values that other code
-  signs with the same secret (such as Django's `SECRET_KEY`) cannot be
-  used as State. Signed tokens from earlier versions stop working when
-  you upgrade: an open page asks the visitor to reload on its next event
-  call. During a rolling deploy, old and new processes reject each
-  other's signed tokens until every process runs the new version.
-- Script and stylesheet tags that Citry writes for files it serves now
-  carry `integrity` and `crossorigin="anonymous"` at every
-  `security_script_integrity` value, including `/citry/citry.js` and
-  `local_files = "serve"` files. The browser now refuses a file that a
-  proxy or CDN changed, and a `citry.js` from a different version than the
-  page, so clear proxy, CDN, and whole-page caches when you upgrade. A CDN
-  that serves these files from another host must send
-  `Access-Control-Allow-Origin`. During a rolling deploy, a page can fail
-  until a reload reaches the same version.
 - The security guide now recommends `base-uri 'self'` in your Content
   Security Policy.
 
 ### Fixes
 
-- `css_data()` now raises `ValueError` for a value with a control
-  character outside a quoted string, so the browser reads the value the
-  way Citry checked it. Tab, newline, carriage return and form feed are
-  still allowed. Remove the character, or keep it inside a quoted string.
-- A `css_data()` stylesheet in a configured cache is now built again from
-  its stored values each time it is served. One stored by an earlier
-  version returns 404 until a page with the same values renders again,
-  and a cached component with `css_data()` values renders again once.
-  Upgrade every process that shares the cache: one on an earlier
-  version keeps writing entries that the new version does not serve.
 - `$i18n.switchLocale()` no longer fails with status 403 on Django: the
   request that loads the new locale's messages now sends the page's CSRF
   token, the same way event calls do.
@@ -296,7 +362,9 @@ change.
   a route with several parameters in one path segment (such as
   `{name}-{version}`, which an extension can add), and, in the
   browser, a `Redirect` URL with a long run of spaces. Each now takes
-  time in step with its length and gives the same result as before.
+  time in step with its length. The style and route results are the
+  same as before, and a `Redirect` URL is refused for its scheme exactly
+  when it was before.
 - Parsing a long `style` value, or an event request with long strings,
   now uses less memory.
 - When an event call's arguments or State updates hold a very long
@@ -326,11 +394,6 @@ change.
   longer ends the whole request: only its call fails. An `EventError`
   keeps its own status, any other error becomes a `handler_error` (500),
   and the request's other calls still run.
-
-## v0.8.0
-
-### Fixes
-
 - `security_javascript` now counts a `<script>` as running when its
   `type` holds a character such as U+3000, and finds a `data:` URL in a
   `<meta http-equiv="refresh">` padded the same way. Chromium skips these
@@ -412,48 +475,13 @@ change.
   take minutes. It now takes time in step with the length of the HTML.
   The same fix applies to third-party extensions that, like `Debug`, skip
   their wrapper around a whole HTML document.
-- `Citry(secret=...)` now raises an error for a secret that is empty or
-  only whitespace, whether passed alone or as an entry of a list, and for
-  an entry that is not a plain `str`. Before, Citry accepted such a
-  secret, and a request could then send State signed with it. If your
-  secret can come out empty, for example
-  `[os.environ["NEW"], os.environ.get("OLD", "")]`, `Citry(...)` now
-  raises a `ValueError` that gives the entry's position; leave out keys
-  that are not set. `citry.contrib.django.secret()` skips such entries
-  for you. The setting takes a string, a list, or a tuple; pass any other
-  collection as a list.
 - After you change a component's `State._storage`, a page rendered before
   the change gets a `stale_state` error on its next event call, and the
   visitor is asked to reload.
-- Event calls sent by the built-in transport now send the CSRF token only
-  to the page's own origin, and a redirect answer makes the call fail
-  instead of being followed. Return `actions.Redirect` to send the visitor
-  to another page. `Citry.events.configure({csrf})` now rejects a header
-  name that `Citry.configure` rejects.
-- Event calls, `$i18n` message requests, and the `Redirect`, `PushUrl`,
-  and `ReplaceUrl` actions now resolve a relative URL against the page's
-  own address, so a `<base>` element no longer changes where they go. If
-  your page sets `<base href>` on purpose, write these URLs as paths that
-  start with `/`.
-- Events now refuses event data and State writes that nest more than 32
-  levels of objects, unions, and wrap validators, when a Pydantic v2
-  class checks them. The call gets a 422 that says the data is nested too
-  deeply, and Citry logs a warning naming the class. If your server runs
-  requests on threads with less than 1 MiB of stack, raise it with
-  `threading.stack_size()`
-  ([details](https://citry.dev/security/#check-event-data)).
-  A State that Citry checks only as JSON text, such as one with
-  `ConfigDict(strict=True)`, cannot let the browser write a recursive
-  model, dataclass, or TypedDict: defining the component raises
-  `ValueError`. Remove the strict setting, or leave that field out of
-  `_model`. A wrap validator on the recursive class also works, since
-  Citry counts it at each level.
-- Events now checks every item of an `Iterable[...]` or `Generator[...]`
-  field in event data or a State write before the handler runs, within
-  the same limits as the rest of the data. A bad item now fails the call
-  with a 422 instead of raising when the handler reads it, and a union
-  whose member is such a field now tries its next member. The handler
-  gets an iterator over the checked items.
+- `css_data()` now raises `ValueError` for a value with a control
+  character outside a quoted string, so the browser reads the value the
+  way Citry checked it. Tab, newline, carriage return and form feed are
+  still allowed. Remove the character, or keep it inside a quoted string.
 
 ## v0.7.0
 
