@@ -24,6 +24,17 @@
 
 ### Changed
 
+- **Breaking:** a `c-bind` key such as `":row"` or `"v-slot"` on
+  `<c-slot>` or `<c-fill>` now raises `VueCodeError`, the error that
+  elements and component tags already raise for such a key, instead of
+  `RuntimeError`. The render failed before too. Code that catches
+  `RuntimeError` around it must catch `VueCodeError` or `TypeError`
+  as well.
+- **Breaking:** `<c-slot>` now refuses two names that it used to pass to
+  the fill as slot data, with `VueCodeError`: a `$c-tr` binding written
+  as a `c-` attribute (`<c-slot c-$c-tr:x="y" />`), and a `c-bind` key
+  that is just `"."`. Write a `$c-tr` binding on an HTML element, and
+  remove a `"."` key from the `c-bind` mapping.
 - A `URLRoute` path that uses one parameter name twice, such as
   `"{id}/{id}"`, now raises `ValueError` naming the route when your app
   starts. Before, it raised a regular expression error: under Django
@@ -52,6 +63,9 @@
   thread where the platform has it, then the CPU time of the process,
   then the wall clock. Linux, macOS and Windows keep using the CPU time
   of the calling thread.
+- A `c-bind` key that is a `str` subclass with its own `startswith` or
+  `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
+  and component tags.
 - `citry preview` no longer fails with a Vue compile error at
   `<!doctype>` for components that use Events. The preview now renders
   them, and their event handlers work. The same applies when a template
