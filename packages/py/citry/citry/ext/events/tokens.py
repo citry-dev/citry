@@ -1107,13 +1107,38 @@ _LONE_SURROGATE_MESSAGE = "This text holds an unpaired surrogate character, whic
 
 def _holds_lone_surrogate(value: Any) -> bool:
     """Whether ``value`` holds text, as a string or a key, with a lone surrogate, which UTF-8 cannot encode."""
-    try:
-        json.dumps(value, ensure_ascii=False).encode("utf-8")
-    except UnicodeEncodeError:
-        return True
-    except (TypeError, ValueError, RecursionError):
-        # Not JSON, or nested too deep to write; the field's own check reports it.
-        return False
+    # This runs on the server's own thread, before any check limits how
+    # deeply the write nests, so the walk keeps its own list of what is left
+    # to read. A recursive walk, `json.dumps` among them, takes stack for
+    # each level, and on Python 3.13 a thread with a small stack can end
+    # the process before Python's recursion limit stops it.
+    pending = [value]
+    # A value from a direct caller can hold itself; each list, dict or tuple is read once.
+    seen: set[int] = set()
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            texts: Iterable[Any] = (item,)
+        elif isinstance(item, (dict, list, tuple)):
+            if id(item) in seen:
+                continue
+            seen.add(id(item))
+            if isinstance(item, dict):
+                texts = item.keys()
+                pending.extend(item.values())
+            else:
+                texts = ()
+                pending.extend(item)
+        else:
+            # Numbers, booleans and None hold no text, and a value that is
+            # not JSON gets its message from the field's own check.
+            continue
+        for text in texts:
+            if isinstance(text, str):
+                try:
+                    text.encode("utf-8")
+                except UnicodeEncodeError:
+                    return True
     return False
 
 
@@ -1301,6 +1326,15 @@ def _model_state_check(
                 # deeply, and log it once per class without a traceback.
                 stopped = True
                 raise bounded.ValidationTooCostly("depth") from None
+            except ValueError as error:
+                # The restore turns running out of Python frames into a
+                # ValueError (see `state._restore_state`); the write gets
+                # the same answer and log as a check stopped for depth.
+                cause = error.__cause__
+                if isinstance(cause, bounded.ValidationTooCostly) and cause.reason == "depth":
+                    stopped = True
+                    raise cause from None
+                raise
             finally:
                 # The check ends with the time gone, without being stopped,
                 # when the time ran out inside one validator function, where

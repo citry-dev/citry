@@ -50,8 +50,14 @@ from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import MAX_FIELD_ERRORS_TEXT, FieldErrors
 from citry.ext.events.schemas import validate_args
-from citry.ext.events.state import restore_state
-from citry.ext.events.tokens import StateUpdateError, apply_state_updates, mint_state_token
+from citry.ext.events.state import TOO_DEEP_TO_SIGN, check_changed_state, restore_state
+from citry.ext.events.tokens import (
+    _LONE_SURROGATE_MESSAGE,
+    StateUpdateError,
+    _holds_lone_surrogate,
+    apply_state_updates,
+    mint_state_token,
+)
 
 SIGNING_KEY = "test-secret-key"
 
@@ -4022,6 +4028,159 @@ def test_deep_data_checked_from_a_thread_with_a_small_stack_is_refused() -> None
         "a State write": False,
         "a restore": False,
     }
+
+
+def _deep_v1_board(*, writable: bool = False) -> tuple[type, type]:
+    """Return a Pydantic v1 State with a tree field, and the class of its nodes."""
+    v1 = pytest.importorskip("pydantic.v1")
+
+    class Node(v1.BaseModel):  # type: ignore[name-defined]
+        c: Node | None = None
+
+    Node.update_forward_refs(Node=Node)
+
+    class Board(v1.BaseModel):  # type: ignore[name-defined]
+        tree: Node | None = None
+
+    # The file's annotations are text, which v1 reads only once told the names.
+    Board.update_forward_refs(Node=Node)
+    if writable:
+        Board._model = ("tree",)  # type: ignore[attr-defined]
+    return Board, Node
+
+
+def _v1_chain(node_cls: type, depth: int) -> Any:
+    """Return ``depth`` nodes of ``node_cls``, each holding the next."""
+    value = None
+    for _ in range(depth):
+        value = node_cls(c=value)
+    return value
+
+
+def _dict_chain(depth: int) -> Any:
+    """Return the JSON form of ``depth`` nodes, each holding the next under ``c``."""
+    value: Any = None
+    for _ in range(depth):
+        value = {"c": value}
+    return value
+
+
+def test_a_pydantic_v1_state_deeper_than_python_can_restore_is_refused_as_nested_too_deeply() -> None:
+    # Pydantic v1 checks each level of a model with several Python calls,
+    # so 300 levels go past Python's recursion limit on every version.
+    # The restore answers with the ValueError it documents, which the
+    # dispatcher answers with stale_state, not as an unexpected error.
+    board, _ = _deep_v1_board()
+
+    with pytest.raises(ValueError, match="nested too deeply") as caught:
+        restore_state(board, {"tree": _dict_chain(300)})
+
+    assert str(caught.value) == bounded.TOO_DEEP_MESSAGE
+
+
+def test_a_deep_browser_write_to_a_pydantic_v1_state_is_refused_as_nested_too_deeply(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # The write check restores the written values, so the restore running
+    # out of Python frames refuses the write as nested too deeply, and the
+    # log names the class.
+    board, _ = _deep_v1_board(writable=True)
+
+    with caplog.at_level(logging.WARNING, logger="citry"), bounded.request_work():
+        with pytest.raises(StateUpdateError) as caught:
+            apply_state_updates(board(), {"tree": _dict_chain(190)}, model_fields=("tree",))
+
+    assert caught.value.fields == {"_state": bounded.TOO_DEEP_MESSAGE}
+    assert board.__qualname__ in caplog.text
+
+
+@dataclasses.dataclass
+class _Notes:
+    items: Any = None
+    _model = ("items",)
+
+
+def test_a_lone_surrogate_deep_inside_a_state_write_is_refused() -> None:
+    # The scan for lone surrogates, which UTF-8 cannot encode, runs on the
+    # server's own thread before any nesting check, so it reads the write
+    # with its own stack: however deeply the text sits, the write is
+    # refused before any check. On a thread with a small stack, the subprocess
+    # test above shows the scan no longer ends the process on Python 3.13.
+    value: Any = ["\ud800"]
+    for _ in range(1000):
+        value = [value]
+
+    with pytest.raises(StateUpdateError) as caught:
+        apply_state_updates(_Notes(), {"items": value}, model_fields=("items",))
+
+    assert caught.value.fields == {"items": _LONE_SURROGATE_MESSAGE}
+
+
+def test_the_lone_surrogate_scan_ends_on_a_value_that_holds_itself() -> None:
+    # Only a direct caller can pass such a value; the scan must still end,
+    # and still find a surrogate behind the loop, in a dict key or a tuple.
+    looped: list[Any] = ["text"]
+    looped.append(looped)
+    shared = ["text"]
+
+    assert _holds_lone_surrogate([looped, shared, shared]) is False
+    assert _holds_lone_surrogate([looped, ("\ud800",)]) is True
+    assert _holds_lone_surrogate([looped, {"\udc00": 1}]) is True
+
+
+def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() -> None:
+    # A token Citry signed can hold a v1 State that Python cannot read back
+    # at the recursion limit of the request, as when the limit was raised
+    # while minting. The call answers stale_state, as for any State that no
+    # longer fits, rather than as an unexpected error.
+    board, node = _deep_v1_board()
+    app = _citry()
+
+    class Deep(Component):
+        citry = app
+        State = board
+        template = """
+          <p></p>
+        """
+
+        class Events:
+            def read(self, state: Any) -> None:
+                pass
+
+    limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(20_000)
+    try:
+        token = mint_state_token(
+            board(tree=_v1_chain(node, 150)), class_id=Deep.class_id, secret=SIGNING_KEY, max_age=None, max_bytes=10**6
+        )
+    finally:
+        sys.setrecursionlimit(limit)
+
+    item = _dispatch(Deep, stateToken=token, sendSequence=1, callerRenderId="r0")
+
+    assert item["ok"] is False
+    assert (item["error"]["status"], item["error"]["code"]) == (409, "stale_state")
+
+
+def test_a_state_too_deep_for_pydantics_json_reader_is_reported_as_too_deep_to_sign() -> None:
+    # Pydantic writes 250 nested lists out, but its JSON reader refuses
+    # more than 200 levels, so the State could not be read back from its
+    # token; the problem says why.
+    holder = pydantic.create_model("Holder", data=(Any, None))
+    value: Any = []
+    for _ in range(250):
+        value = [value]
+
+    assert check_changed_state(holder(data=value)) == (None, TOO_DEEP_TO_SIGN)
+
+
+def test_a_pydantic_v1_state_that_a_handler_nests_too_deeply_is_reported_as_too_deep_to_sign() -> None:
+    # Writing the State out and reading it back both follow Python's own
+    # limit, so the problem names the depth rather than surfacing as an
+    # unexpected error.
+    board, node = _deep_v1_board()
+
+    assert check_changed_state(board(tree=_v1_chain(node, 300))) == (None, TOO_DEEP_TO_SIGN)
 
 
 _DEEP_STATE_WRITE_DISPATCHED_FROM_A_SMALL_THREAD = r"""

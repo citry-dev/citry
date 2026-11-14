@@ -380,13 +380,34 @@ def restore_state(state_cls: type, values: dict[str, Any]) -> Any:
 
 def _restore_state(state_cls: type, values: dict[str, Any]) -> Any:
     """Build State from a verified token's values as ``restore_state`` describes, on the running thread."""
+    try:
+        return _restore_or_reuse_state(state_cls, values)
+    except RecursionError:
+        # The restore applies no nesting limit, so a deep tree meets
+        # Python's own limit instead: in `json.dumps`, whose limit differs
+        # by Python version, or in a Pydantic v1 class's check, which takes
+        # several frames per level. Where that happens depends on the Python
+        # version and on the frames already in use, so no depth can be
+        # checked first. The restore raises the ValueError its docstring
+        # promises for data nested too deeply. Its cause, a depth stop, lets
+        # the v1 write check log the class as it does for any depth stop. A
+        # validator that calls itself without end gets the same answer, and
+        # the log then shows no traceback.
+        stop = bounded.ValidationTooCostly("depth")
+        raise ValueError(stop.message) from stop
+
+
+def _restore_or_reuse_state(state_cls: type, values: dict[str, Any]) -> Any:
+    """Restore State, or copy a restore of the same values this request kept (see ``restore_state``)."""
     budget = bounded.current_work()
     key = None
     if budget is not None:
         try:
             text = json.dumps(values, allow_nan=False)
-        except (TypeError, ValueError):
-            # Not JSON, so not from a token; it is restored without the store.
+        except (TypeError, ValueError, RecursionError):
+            # Not JSON, so not from a token, or nested past what `json.dumps`
+            # can follow here; it is restored without the store, and the
+            # restore itself decides whether it fits.
             text = None
         if text is not None:
             key = (state_cls, hashlib.sha256(text.encode()).digest())
@@ -482,6 +503,11 @@ def _restore_state_values(state_cls: type, values: dict[str, Any]) -> Any:
     return _parse_v1(state_cls, text, hand_out=True)
 
 
+# The problem `check_changed_state` reports for a State nested too deeply to
+# write out as JSON and read back.
+TOO_DEEP_TO_SIGN = "the State nests too deeply to write as JSON and read back"
+
+
 def check_changed_state(state: Any) -> tuple[str | None, str] | None:
     """
     Check that a changed model State can be signed and restored again, and adopt Pydantic's values.
@@ -510,7 +536,17 @@ def _check_changed_state(state: Any) -> tuple[str | None, str] | None:
         restored = restore_state(state_cls, state_wire_values(state))
         again = restore_state(state_cls, state_wire_values(restored))
     except ValueError as error:
+        # A restore stopped for depth carries no field errors, so the
+        # handler's author gets the reason rather than the bare class name.
+        cause = error.__cause__
+        if isinstance(cause, bounded.ValidationTooCostly) and cause.reason in ("depth", "nesting"):
+            return None, TOO_DEEP_TO_SIGN
         return _first_error(error)
+    except RecursionError:
+        # Writing a Pydantic v1 State out as JSON follows Python's own
+        # limit too, and the handler built that State, so the call fails
+        # with the reason rather than as an unexpected error.
+        return None, TOO_DEEP_TO_SIGN
     except (TypeError, UnicodeDecodeError) as error:
         return None, f"a value could not be written as JSON ({type(error).__name__})"
     # Models compare their field values, so a set in another order is the

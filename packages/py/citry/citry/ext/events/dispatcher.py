@@ -81,6 +81,7 @@ from citry.ext.events.results import (
 )
 from citry.ext.events.schemas import StringArgs, declared_field_names, validate_args
 from citry.ext.events.state import (
+    TOO_DEEP_TO_SIGN,
     check_changed_state,
     public_state_values,
     restore_state,
@@ -403,7 +404,9 @@ def _state_fingerprint(state: Any) -> str | None:
     try:
         values = state_wire_values(state)
         return json.dumps(values, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
+        # A State nested past Python's recursion limit has no fingerprint, so
+        # it counts as changed, and `check_changed_state` reports the depth.
         return None
 
 
@@ -1155,11 +1158,12 @@ class EventsDispatcher:
             if problem is not None:
                 field, detail = problem
                 where = f" field {field!r}" if field is not None else ""
-                advice = (
-                    " Remove the field's serializer, or use a type whose JSON reads back as the same value."
-                    if "does not read back" in detail
-                    else " Assign a value of the field's declared type."
-                )
+                if detail == TOO_DEEP_TO_SIGN:
+                    advice = " Keep State nested fewer levels deep."
+                elif "does not read back" in detail:
+                    advice = " Remove the field's serializer, or use a type whose JSON reads back as the same value."
+                else:
+                    advice = " Assign a value of the field's declared type."
                 msg = (
                     f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} left State{where}"
                     f" with a value Citry cannot sign: {detail}.{advice}"
