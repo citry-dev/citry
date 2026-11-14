@@ -645,19 +645,26 @@ def _validate_object(
             ok = False
 
     values: dict[str, Any] = {}
-    for spec in specs:
-        if spec.name in mapping:
-            coerced = _coerce(
-                mapping[spec.name], spec.annotation, (parent, spec.name), errors, bind_strings=bind_strings
-            )
-            if coerced is _INVALID:
+    # Citry builds the objects inside this one before this one, so the
+    # Pydantic check of a Pydantic dataclass below sees its children already
+    # built and adds only its own level, so the chain would count as one
+    # level. Counting the fields as one level deeper while they are built
+    # makes each object count once, so a chain of objects is refused past
+    # the nesting limit, as a chain of models is.
+    with bounded.counted_level():
+        for spec in specs:
+            if spec.name in mapping:
+                coerced = _coerce(
+                    mapping[spec.name], spec.annotation, (parent, spec.name), errors, bind_strings=bind_strings
+                )
+                if coerced is _INVALID:
+                    ok = False
+                else:
+                    values[spec.name] = coerced
+            elif spec.required:
+                errors.add((parent, spec.name), _REQUIRED_MESSAGE)
+                bounded.count_errors()
                 ok = False
-            else:
-                values[spec.name] = coerced
-        elif spec.required:
-            errors.add((parent, spec.name), _REQUIRED_MESSAGE)
-            bounded.count_errors()
-            ok = False
 
     if not ok:
         return _INVALID

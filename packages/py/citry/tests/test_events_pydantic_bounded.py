@@ -4119,3 +4119,223 @@ def test_a_deep_state_write_is_accepted_and_written_back_from_a_thread_with_a_sm
 
     assert done.returncode == 0, done.stderr[-2000:]
     assert json.loads(done.stdout) == {"keep": True, "change": True, "render": True}
+
+
+@pydantic.dataclasses.dataclass
+class SelfNestingPydanticData:
+    c: SelfNestingPydanticData | None = None
+
+
+@dataclasses.dataclass
+class SelfNestingPlainData:
+    c: SelfNestingPlainData | None = None
+
+
+class SelfNestingModelData(pydantic.BaseModel):
+    c: SelfNestingModelData | None = None
+
+
+def _chain_of_objects(depth: int) -> dict[str, Any] | None:
+    value: dict[str, Any] | None = None
+    for _ in range(depth):
+        value = {"c": value}
+    return value
+
+
+@pytest.mark.parametrize(
+    "data_cls",
+    [SelfNestingPydanticData, SelfNestingPlainData, SelfNestingModelData],
+    ids=["pydantic dataclass", "plain dataclass", "model"],
+)
+def test_each_class_kind_counts_one_level_per_object(data_cls: type) -> None:
+    # Citry checks a dataclass `data` class with its own code, which builds
+    # each object after the objects inside it, so the Pydantic check of a
+    # Pydantic dataclass sees only one level at a time. Each object still
+    # counts one level, so a chain of any of these class kinds is accepted
+    # at the limit and refused one level past it.
+    accepted = validate_args(data_cls, _chain_of_objects(bounded.MAX_CHECK_DEPTH))
+    refused = validate_args(data_cls, _chain_of_objects(bounded.MAX_CHECK_DEPTH + 1))
+
+    assert accepted.ok
+    assert refused.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+
+
+@dataclasses.dataclass
+class _Leaf:
+    v: int
+
+
+@dataclasses.dataclass
+class _Other:
+    w: str
+
+
+@dataclasses.dataclass
+class _ManySiblings:
+    items: list[_Leaf | _Other]
+
+
+def test_sibling_objects_and_failed_union_members_leave_the_level_count_balanced() -> None:
+    # Each object leaves its level when it is built or fails, so many
+    # siblings in a list, each tried first as a member that fails, add no
+    # depth: the count goes back to where it was after each one.
+    payload = {"items": [{"w": "x"}] * (bounded.MAX_CHECK_DEPTH * 4)}
+
+    result = validate_args(_ManySiblings, payload)
+
+    assert result.ok
+    assert len(result.value.items) == bounded.MAX_CHECK_DEPTH * 4
+
+
+# A row with so many required fields that one empty row passes the error
+# limit, so its check stops with an error inside the nested objects.
+_ManyFieldRow = dataclasses.make_dataclass("_ManyFieldRow", [(f"f{index}", int) for index in range(1300)])
+
+
+@dataclasses.dataclass
+class _RowsInner:
+    rows: list[_ManyFieldRow]  # type: ignore[valid-type]
+
+
+@dataclasses.dataclass
+class _RowsOther:
+    rows: list[Any]
+
+
+@dataclasses.dataclass
+class _RowsOuter:
+    items: list[_RowsInner | _RowsOther]
+
+
+def test_a_member_stopped_for_errors_leaves_the_level_count_balanced() -> None:
+    # Each item is tried first as `_RowsInner`, whose rows stop the check
+    # for too many errors while two objects are being built, and then fits
+    # `_RowsOther`. The stop leaves those levels on its way out, so forty
+    # such items do not add up to the nesting limit.
+    payload = {"items": [{"rows": [{}] * 200} for _ in range(40)]}
+
+    result = validate_args(_RowsOuter, payload)
+
+    assert result.ok
+    assert len(result.value.items) == 40
+
+
+_HANDLER_RENDERS_A_DEEP_JSON_VALUE_FROM_A_SMALL_THREAD = r"""
+from __future__ import annotations
+
+import json
+import threading
+
+import pydantic
+import pydantic.dataclasses
+
+from citry import Citry, Component
+from citry.ext.events import actions
+from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
+from citry.ext.events.tokens import mint_state_token
+
+citry = Citry(secret="k")
+citry.set_mounted_prefix("/citry")
+
+
+class ModelBoard(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(validate_assignment=True)
+    t: pydantic.JsonValue = None
+    _model = ("t",)
+    _public = ("t",)
+
+
+@pydantic.dataclasses.dataclass(config=pydantic.ConfigDict(validate_assignment=True))
+class DataclassBoard:
+    t: pydantic.JsonValue = None
+    _model = ("t",)
+    _public = ("t",)
+
+
+class ModelTree(Component):
+    citry = citry
+    State = ModelBoard
+
+    class Events:
+        def render(self, state):
+            return actions.Render(ModelTree(t=state.t))
+
+    template = '''
+      <div>x</div>
+    '''
+
+
+class DataclassTree(Component):
+    citry = citry
+    State = DataclassBoard
+
+    class Events:
+        def render(self, state):
+            return actions.Render(DataclassTree(t=state.t))
+
+    template = '''
+      <div>x</div>
+    '''
+
+
+# Lists do not count toward the nesting limit, so only the 200-level limit
+# on request JSON bounds them: the envelope, its calls, the call and its
+# State updates take four levels, which leaves 196.
+lists = 0
+for _ in range(196):
+    lists = [lists]
+dicts = 0
+for _ in range(196):
+    dicts = {"a": dicts}
+answers = {}
+
+
+def dispatch():
+    for board, tree in ((ModelBoard, ModelTree), (DataclassBoard, DataclassTree)):
+        for name, value in (("lists", lists), ("dicts", dicts)):
+            token = mint_state_token(board(), class_id=tree.class_id, secret="k", max_age=None, max_bytes=10**7)
+            call = {
+                "componentClassId": tree.class_id,
+                "handlerName": "render",
+                "args": {},
+                "stateToken": token,
+                "stateUpdates": {"t": value},
+                "sendSequence": 1,
+                "callerRenderId": "r0",
+            }
+            envelope = {"protocol": "citry-events/1", "requestId": "r1", "calls": [call]}
+            result = EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=citry))
+            answers[f"{board.__name__} {name}"] = result["results"][0]["ok"]
+
+
+threading.stack_size(512 * 1024)
+thread = threading.Thread(target=dispatch)
+thread.start()
+thread.join()
+print(json.dumps(answers))
+"""
+
+
+def test_a_handler_renders_with_deep_state_the_browser_wrote_from_a_thread_with_a_small_stack() -> None:
+    # A State with `validate_assignment` checks each value again when Citry
+    # writes the State fields back for the page. Lists and dicts do not
+    # count toward the nesting limit, so a browser write can nest them as
+    # deeply as the request allows. That write back runs on a check thread
+    # too, so a render from a 512 KiB thread (the smallest the docs allow)
+    # handles it. A process of its own, since too little stack ends the
+    # process and the stack size is process-wide.
+    done = subprocess.run(
+        [sys.executable, "-c", _HANDLER_RENDERS_A_DEEP_JSON_VALUE_FROM_A_SMALL_THREAD],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert json.loads(done.stdout) == {
+        "ModelBoard lists": True,
+        "ModelBoard dicts": True,
+        "DataclassBoard lists": True,
+        "DataclassBoard dicts": True,
+    }

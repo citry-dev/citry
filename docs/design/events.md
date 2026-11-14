@@ -1995,6 +1995,13 @@ Error modes:
       `MAX_CHECK_DEPTH` (64) on a check thread (below), or past
       `SMALL_STACK_CHECK_DEPTH` (32) where no check thread can start.
       Lists and dicts do not count.
+    - Citry's own check of a plain class or dataclass `data` class, and
+      of a Pydantic dataclass one, builds each object after the objects
+      in its fields, so the Pydantic check of a Pydantic dataclass sees
+      its children built already and adds only its own level. While
+      Citry's check builds an object's fields, it counts one extra level
+      (`counted_level`), so each object counts once, as a model does, and
+      a chain of such objects is refused past the limit.
     - `Iterable[...]` and `Generator[...]` fields: Pydantic checks their
       items only when the handler reads them, after the check has
       returned. The copy puts a function after each such node that reads
@@ -2035,8 +2042,13 @@ Error modes:
           State the check accepted nests as deeply as the limit allows:
           writing it out (`state_wire_values`, for the fingerprint, the
           token and the public values), the round trip and comparison
-          in `check_changed_state`, and building and type-checking State
-          for a render (`_built_and_checked_state`). The app's own
+          in `check_changed_state`, building and type-checking State
+          for a render (`_built_and_checked_state`), and writing each
+          field back without its constant marker before the token is
+          made (`_write_plain_values` in `emission.py`), which a State
+          with `validate_assignment` checks again. Lists and dicts do not
+          count toward the limit, so these steps can meet data as deep as
+          the 200-level request limit allows. The app's own
           `state_data()` and handlers run on the request's thread.
         - The call sees a copy of the caller's context variables, and an
           exception reaches the caller with its traceback. Context

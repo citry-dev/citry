@@ -90,6 +90,13 @@ does. The upgrade notes below list what can change.
   per process. A cache backend error therefore fails the render. Citry
   calls the backend's `set` with `ttl=` as a keyword argument, so a custom
   backend's `set` must accept it under that name.
+- **Event data checked as a plain class or dataclass now has the 64-level
+  nesting limit:** when an event's `data` class is a plain class, a
+  dataclass or a Pydantic dataclass, data that nests more than 64 of its
+  objects inside each other now gets a 422 that says the data is nested
+  too deeply, as a Pydantic model's data already did. Before, Citry's
+  own check of such a class did not count levels. If valid data nests
+  this deeply, flatten the data.
 
 ### Added
 
@@ -175,6 +182,11 @@ does. The upgrade notes below list what can change.
   runs the check where the platform has it, then the CPU time of the
   process, then the wall clock. Linux, macOS and Windows keep using the
   thread's CPU time.
+- **Writing State back for the page now runs on Citry's own threads:**
+  a State with `validate_assignment=True` checks each value again when
+  Citry writes it back, so a State value nested about 196 levels deep no
+  longer ends the process on a server whose threads have 1 MiB of stack
+  or less.
 - A `c-bind` key that is a `str` subclass with its own `startswith` or
   `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
   and component tags.

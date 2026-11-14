@@ -968,6 +968,34 @@ def _counted(value: Any, handler: Any) -> Any:
     return result
 
 
+@contextmanager
+def counted_level() -> Iterator[None]:
+    """
+    Count one object that Citry's own Python check builds as one level of nesting, as ``_counted`` does.
+
+    Citry checks a plain class or dataclass ``data`` class, and a Pydantic
+    dataclass one, with its own code, which builds each nested object
+    before the object that holds it. The Pydantic check of each such
+    object then sees children that are already built, so ``_counted``
+    alone never sees more than one level. Counting each object here
+    refuses a chain of such objects past the nesting limit, as a chain of
+    models is. Called outside a validation check, it counts nothing.
+    """
+    tally = _current_tally()
+    if tally is None:
+        yield
+        return
+    if tally.depth >= tally.depth_limit:
+        raise _stopped("nesting", tally.depth_limit)
+    tally.depth += 1
+    try:
+        yield
+    finally:
+        # Balanced on every exit, so a member of a union that fails, or a
+        # stop raised below, leaves the count where it was.
+        tally.depth -= 1
+
+
 def _discarded(value: Any, handler: Any) -> Any:
     """
     Check a part whose errors the node above may throw away, so they leave the total.

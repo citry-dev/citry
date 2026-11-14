@@ -516,6 +516,20 @@ read the value. Citry checks the items of an `Iterable[...]` field
 before the handler runs, and the handler gets an iterator over the
 checked items.
 
+The limit also applies when Citry checks a plain class, a dataclass or a
+Pydantic dataclass `data` class with its own code: each object counts
+one level.
+
+Lists and dicts do not count, so a `pydantic.JsonValue` field accepts
+data nested as deeply as the 200-level limit on request JSON. Citry's
+own work with such a value runs on its threads, described below. Code
+of yours that checks or writes out the value again on your thread needs
+much more stack than data at the limit: on Python 3.11, `model_dump()`
+of 196 nested lists ended the process with 1 MiB of stack, and so did
+rendering a component whose Pydantic `Kwargs` class takes the value.
+Give such threads more stack, or accept a model in place of
+`JsonValue`.
+
 Deeper data fails with a 422 under `fieldErrors._args`
 (`fieldErrors._state` for a State write) that says the data is nested
 too deeply, and Citry logs a warning naming the class.
@@ -541,12 +555,14 @@ threading.stack_size(512 * 1024)
 
 Citry checks the data on a thread of its own with a 16 MiB stack, so the
 limit is the same whatever stack size your server gives its threads.
-Citry also builds State for a render, writes State out for its token,
-and checks State a handler changed, all on those threads. Your request
-thread waits each time Citry hands work to such a thread, which takes
-about 10 to 40 microseconds (measured on macOS); a call that writes
-State does this about a dozen times. Citry starts these threads when
-checks need them, keeps up to two idle, and runs at most 32 per server
+Citry also builds State for a render, writes State out for its token
+and for the page, and checks State a handler changed, all on those
+threads. Your request thread waits each time Citry hands work to such
+a thread, which takes about 10 to 40 microseconds (measured on macOS);
+a call that writes State does this about a dozen times, and each render
+of a component with State does it a few times. Citry starts these
+threads when checks need them, keeps up to two idle, and runs at most
+32 per server
 process; a check that finds all 32 busy waits for one to finish its
 current check. A validator that waits for the network or a database
 keeps its thread busy while it waits, so slow validators can make other
