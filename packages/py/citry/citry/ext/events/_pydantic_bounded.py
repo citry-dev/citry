@@ -182,7 +182,10 @@ cpu_clock = _choose_cpu_clock()
 # 0.9 MiB. The tighter bound is the handler, which gets the checked data on
 # the server's own thread: a handler that calls `model_dump()` on a chain
 # of models fits about 100 levels in 512 KiB (macOS, Python 3.14), so 64
-# leaves room to spare there.
+# leaves room to spare there. Lists and dicts do not count, so a handler
+# can meet a `JsonValue` nested 196 levels deep, which needed 2 MiB on
+# Python 3.11 (it ended the process at 1 MiB); the docs tell servers to
+# give request threads at least that.
 MAX_CHECK_DEPTH = 64
 # The nesting limit for a check that runs on a thread whose stack Citry did
 # not choose, which happens only where no check thread can start (see

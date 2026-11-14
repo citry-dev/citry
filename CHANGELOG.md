@@ -151,11 +151,14 @@ does. The upgrade notes below list what can change.
   about 60 levels.
 
   Your handler still gets the checked data on your server's own thread,
-  so give request threads at least 512 KiB of stack with
-  `threading.stack_size()`. On macOS with Python 3.14, a handler that
-  calls `model_dump()` on a chain of models fits about 100 levels in
-  512 KiB, so data at the limit fits with room to spare, but only about
-  22 levels in 128 KiB, the default on musl Linux such as Alpine.
+  so give request threads at least 2 MiB of stack with
+  `threading.stack_size()`. Lists and dicts do not count toward the
+  64-level limit, and on Python 3.11, 196 nested lists in a `JsonValue`
+  field ended the process with 1 MiB of stack and passed with 2 MiB.
+  The official `python:3.12-alpine` image gives a Python thread about
+  1 MiB (measured on arm64), so set a larger size there. macOS gives a
+  thread that Python does not start only 512 KiB, against 16 MiB for
+  one that it starts.
 
   Where Python cannot start threads, as in Pyodide (Python in the
   browser), the limit stays at 32

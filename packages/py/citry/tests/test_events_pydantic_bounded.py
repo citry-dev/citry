@@ -554,8 +554,8 @@ def check_all():
         results.append([name, depth, answer(cls, payload) == expected])
 
 
-# A calling thread with musl's default stack: the checks run on the check
-# threads whatever its size.
+# A calling thread with 128 KiB of stack, the size musl gives a thread that
+# nobody sized: the checks run on the check threads whatever its size.
 threading.stack_size(128 * 1024)
 thread = threading.Thread(target=check_all)
 thread.start()
@@ -922,9 +922,10 @@ assert done == [True]
 
 def test_a_handler_can_write_out_data_at_the_limit_on_a_half_megabyte_thread() -> None:
     # The handler gets the checked data on the server's own thread, so the
-    # nesting limit must leave room there; the docs tell servers to give
-    # request threads at least 512 KiB. A process of its own, since too
-    # little room ends the process.
+    # nesting limit must leave room there: a chain of models at the limit
+    # fits in 512 KiB. Lists and dicts do not count, so the docs tell
+    # servers to give request threads at least 2 MiB. A process of its
+    # own, since too little room ends the process.
     done = subprocess.run(
         [sys.executable, "-c", _HANDLER_DUMPS_DATA_AT_THE_LIMIT_ON_A_HALF_MEGABYTE_THREAD],
         capture_output=True,
@@ -3997,11 +3998,13 @@ print(json.dumps(answers))
 
 
 def test_deep_data_checked_from_a_thread_with_a_small_stack_is_refused() -> None:
-    # A server thread can have as little as 128 KiB of stack (musl's
-    # default). Each check runs on a check thread with a large stack, so
-    # the answer to deeply nested data does not depend on the calling
-    # thread's stack. The check runs in a process of its own, because it
-    # changes the process-wide thread stack size.
+    # A server thread can have as little as 128 KiB of stack (the size
+    # musl gives a thread that nobody sized; a Python thread in the
+    # official python:3.12-alpine image gets about 1 MiB). Each check
+    # runs on a check thread with a large stack, so the answer to deeply
+    # nested data does not depend on the calling thread's stack. The
+    # check runs in a process of its own, because it changes the
+    # process-wide thread stack size.
     done = subprocess.run(
         [sys.executable, "-c", _DEEP_DATA_FROM_A_SMALL_THREAD],
         capture_output=True,
@@ -4321,9 +4324,10 @@ def test_a_handler_renders_with_deep_state_the_browser_wrote_from_a_thread_with_
     # writes the State fields back for the page. Lists and dicts do not
     # count toward the nesting limit, so a browser write can nest them as
     # deeply as the request allows. That write back runs on a check thread
-    # too, so a render from a 512 KiB thread (the smallest the docs allow)
-    # handles it. A process of its own, since too little stack ends the
-    # process and the stack size is process-wide.
+    # too, so a render from a 512 KiB thread handles it, though the docs
+    # tell servers to give request threads at least 2 MiB. A process of
+    # its own, since too little stack ends the process and the stack size
+    # is process-wide.
     done = subprocess.run(
         [sys.executable, "-c", _HANDLER_RENDERS_A_DEEP_JSON_VALUE_FROM_A_SMALL_THREAD],
         capture_output=True,
