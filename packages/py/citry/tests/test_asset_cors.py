@@ -11,10 +11,12 @@ responses, assets and request routes alike, also carries
 ``X-Content-Type-Options: nosniff``.
 
 Each public file also tells the browser how long it may keep a copy: a URL
-that carries a hash of its content is kept for a year, and a URL whose content
-can change (``cache/<class_id>.js``) is checked with the server before each
-use. The browser runtimes (``citry.js`` and the Events and i18n scripts) are
-never stored.
+that carries a hash of its content is kept for a year (the runtimes at
+``citry.<sha256>.js`` and ``ext/i18n/runtime.<sha256>.js`` among them), and a
+URL whose content can change (``cache/<class_id>.js``) is checked with the
+server before each use. The stable runtime URLs (``citry.js`` and the Events
+and i18n scripts) are never stored. A request that finds nothing is never
+stored either.
 """
 
 from __future__ import annotations
@@ -34,8 +36,9 @@ from citry._vue.serialization import _manifest_script_preloads
 from citry.contrib.asgi import asgi_app
 from citry.contrib.wsgi import wsgi_app
 from citry.ext.dependencies.emission import _preloader_script
-from citry.ext.dependencies.routes import script_url
+from citry.ext.dependencies.routes import SHARED_RUNTIME, script_url
 from citry.ext.dependencies.scripts import cache_asset
+from citry.ext.i18n.emission import I18N_RUNTIME
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
 
 if TYPE_CHECKING:
@@ -152,6 +155,9 @@ def _asset_paths(app: Citry) -> list[str]:
         stylesheet.removeprefix("/citry"),
         # The stylesheet built from css_data() has a hashed URL of its own.
         f"/cache/{Widget.class_id}.{record.css_vars_hash}.css",
+        # The two runtimes, each at the URL that names its bytes.
+        f"/{SHARED_RUNTIME.hashed_path}",
+        f"/{I18N_RUNTIME.hashed_path}",
     ]
 
 
@@ -290,9 +296,9 @@ def test_request_routes_do_not_send_a_cors_header(adapter: str) -> None:
         ("POST", f"/ext/events/e/{Clicker.class_id}/on_click", b"{}"),
         ("POST", "/ext/i18n/messages", b"{}"),
         ("POST", f"/ext/events/e/{Clicker.class_id}", b"{}"),
-        # Misses on an asset route and on the adapter itself stay plain too.
-        ("GET", f"/ext/events/definitions/{'0' * 64}.js", b""),
+        # A miss on the adapter itself, which no asset route answered, stays plain too.
         ("GET", "/no-such-route", b""),
+        ("GET", f"/citry.{'a' * 64}.x.js", b""),
     ]
     for method, path, body in requests:
         headers = _wsgi(app, method, path, body)[1] if adapter == "wsgi" else _asgi(app, method, path, body)[1]
@@ -435,9 +441,9 @@ def _get(
 def test_every_public_asset_route_sends_a_cache_policy(adapter: str) -> None:
     app = _app()
     paths = _asset_paths(app)
-    # The three browser runtimes share one unversioned URL each and keep
-    # `no-store`, as the Events plan's runtime-route amendment decided;
-    # every other file says how long the browser may reuse its copy.
+    # The three stable runtime URLs keep `no-store`, so a copy reused on back/forward
+    # navigation never pairs a page with the wrong runtime. The URLs that name
+    # the runtime bytes, like every other hashed URL, are kept for a year.
     expected = {
         "/citry.js": "no-store",
         "/ext/events/runtime.js": "no-store",
@@ -449,6 +455,8 @@ def test_every_public_asset_route_sends_a_cache_policy(adapter: str) -> None:
         paths[7]: IMMUTABLE_CACHE_CONTROL,
         # A variables stylesheet's text can change with Citry, so the browser checks it before each use.
         paths[8]: "no-cache",
+        paths[9]: IMMUTABLE_CACHE_CONTROL,
+        paths[10]: IMMUTABLE_CACHE_CONTROL,
     }
     assert set(expected) == set(paths)
     for path, cache_control in expected.items():
@@ -566,10 +574,152 @@ def test_a_missing_file_is_never_kept() -> None:
         "cache/Nope_000000.js",
         f"cache/{Widget.class_id}.html",
         "asset/000000000000.js",
+        # A compiled definition or stylesheet that no worker holds yet, and a
+        # digest that is not a digest at all.
+        f"ext/events/definitions/{'0' * 64}.js",
+        f"ext/events/definitions/{'A' * 64}.js",
+        f"ext/events/assets/{'0' * 64}.css",
+        f"ext/events/assets/{'g' * 64}.css",
+        # A runtime hash this worker does not hold, whatever the hash looks like.
+        f"citry.{'0' * 64}.js",
+        f"citry.{'A' * 64}.js",
+        f"ext/i18n/runtime.{'0' * 64}.js",
+        f"ext/i18n/runtime.{'a' * 63}.js",
     ):
         response = _serve(app, path)
         assert response.status == 404, path
         assert dict(response.headers)["Cache-Control"] == "no-store", path
+
+
+def _header_lines(adapter: str, app: Citry, method: str, path: str) -> tuple[int, list[tuple[str, str]]]:
+    """Run one request through the named adapter and return the status and every header line it sent."""
+    if adapter == "wsgi":
+        captured: dict[str, Any] = {}
+
+        def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+            captured["status"] = int(status.split(" ", 1)[0])
+            captured["headers"] = headers
+
+        environ = {
+            "REQUEST_METHOD": method,
+            "PATH_INFO": path,
+            "SCRIPT_NAME": "",
+            "QUERY_STRING": "",
+            "wsgi.input": io.BytesIO(b""),
+        }
+        b"".join(wsgi_app(app)(environ, start_response))
+        return captured["status"], [(name.lower(), value) for name, value in captured["headers"]]
+
+    messages: list[dict[str, Any]] = []
+
+    async def receive() -> dict[str, Any]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        messages.append(message)
+
+    scope = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+    }
+    asyncio.run(asgi_app(app)(scope, receive, send))
+    start = next(message for message in messages if message["type"] == "http.response.start")
+    return start["status"], [
+        (name.decode("latin-1").lower(), value.decode("latin-1")) for name, value in start["headers"]
+    ]
+
+
+@pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
+def test_a_hashed_runtime_sends_one_cache_control_line_on_the_wire(adapter: str) -> None:
+    app = _app()
+    for path in (f"/{SHARED_RUNTIME.hashed_path}", f"/{I18N_RUNTIME.hashed_path}"):
+        status, lines = _header_lines(adapter, app, "GET", path)
+        assert status == 200, path
+        # Two policies on one response would leave a proxy to choose between them.
+        assert [value for name, value in lines if name == "cache-control"] == [IMMUTABLE_CACHE_CONTROL], path
+        assert [value for name, value in lines if name == CORS] == ["*"], path
+
+
+@pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
+def test_the_stable_runtime_urls_send_the_hashed_runtimes_bytes_uncached(adapter: str) -> None:
+    app = _app()
+    for stable, hashed in (
+        ("/citry.js", SHARED_RUNTIME.hashed_path),
+        ("/ext/events/runtime.js", SHARED_RUNTIME.hashed_path),
+        ("/ext/i18n/runtime.js", I18N_RUNTIME.hashed_path),
+    ):
+        status, lines = _header_lines(adapter, app, "GET", stable)
+        assert status == 200, stable
+        assert [value for name, value in lines if name == "cache-control"] == ["no-store"], stable
+        assert [value for name, value in lines if name == CORS] == ["*"], stable
+        assert _serve(app, stable.removeprefix("/")).body == _serve(app, hashed).body, stable
+
+
+@pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
+def test_head_on_a_hashed_runtime_answers_like_get_without_asking_for_the_body(adapter: str) -> None:
+    app = _app()
+    # A CDN or a health check may ask for a runtime with HEAD, so it must get the status and headers GET would.
+    for path in (f"/{SHARED_RUNTIME.hashed_path}", f"/{I18N_RUNTIME.hashed_path}"):
+        status, lines = _header_lines(adapter, app, "HEAD", path)
+        assert status == 200, path
+        assert [value for name, value in lines if name == "cache-control"] == [IMMUTABLE_CACHE_CONTROL], path
+        assert [value for name, value in lines if name == "content-type"] == ["text/javascript; charset=utf-8"], path
+    for path in (f"/citry.{'0' * 64}.js", f"/ext/i18n/runtime.{'0' * 64}.js"):
+        status, lines = _header_lines(adapter, app, "HEAD", path)
+        assert status == 404, path
+        assert [value for name, value in lines if name == "cache-control"] == ["no-store"], path
+        assert [value for name, value in lines if name == CORS] == ["*"], path
+
+
+@pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
+def test_a_runtime_hash_this_worker_lacks_is_a_404_that_nothing_keeps(adapter: str) -> None:
+    app = _app()
+    for path in (
+        f"/citry.{'0' * 64}.js",
+        f"/citry.{'A' * 64}.js",
+        f"/citry.{'a' * 63}.js",
+        f"/ext/i18n/runtime.{'0' * 64}.js",
+        f"/ext/i18n/runtime.{'a' * 65}.js",
+    ):
+        status, lines = _header_lines(adapter, app, "GET", path)
+        assert status == 404, path
+        assert [value for name, value in lines if name == "cache-control"] == ["no-store"], path
+        # A page on another origin (a sandboxed frame, or one that loads the
+        # runtime from a CDN) loads it with `crossorigin`. Without this header
+        # its console shows a CORS error that hides the 404.
+        assert [value for name, value in lines if name == CORS] == ["*"], path
+
+
+@pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
+def test_a_path_that_matches_no_route_is_a_404_that_nothing_keeps(adapter: str) -> None:
+    app = _app()
+    # A path with no route now may have one after a deploy (a new runtime hash), so a CDN must not keep the miss.
+    for path in (
+        "/no-such-route",
+        f"/citry.{'a' * 64}.x.js",
+        f"/ext/i18n/runtime.{'a' * 64}.x.js",
+        "/citry.a.b.js",
+    ):
+        status, lines = _header_lines(adapter, app, "GET", path)
+        assert status == 404, path
+        assert [value for name, value in lines if name == "cache-control"] == ["no-store"], path
+        # No route answered this path, so no asset route's CORS header belongs on it.
+        assert CORS not in dict(lines), path
+
+
+@pytest.mark.parametrize("adapter", ["wsgi", "asgi"])
+def test_a_hash_the_worker_lacks_is_a_404_through_the_events_routes_too(adapter: str) -> None:
+    app = _app()
+    for path in (f"/ext/events/definitions/{'0' * 64}.js", f"/ext/events/assets/{'0' * 64}.css"):
+        status, lines = _header_lines(adapter, app, "GET", path)
+        assert status == 404, path
+        assert [value for name, value in lines if name == "cache-control"] == ["no-store"], path
+        # These are public asset routes, so their misses answer any origin like the hits do.
+        assert [value for name, value in lines if name == CORS] == ["*"], path
 
 
 def test_every_worker_gives_a_file_the_same_tag() -> None:

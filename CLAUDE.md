@@ -334,6 +334,9 @@ brief use that list:
   `X-Content-Type-Options`, `Cache-Control`, `Content-Disposition` on a
   `Download`, the text of error bodies, and error output shown in the
   page, such as the error fallback.
+- **CORS headers.** The `Access-Control-Allow-Origin: *` on the runtime
+  routes and on their `404` answers lets any site read whether a URL
+  exists, so only public files may carry it.
 
 Then follow these steps:
 

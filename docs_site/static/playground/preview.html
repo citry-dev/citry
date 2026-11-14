@@ -33,9 +33,12 @@
         // exist in the Python Worker, so the preview swaps each one for a Blob
         // URL before the runtime sees it. The digest is the file's SHA-256,
         // which the browser checks against the Blob's bytes through the
-        // integrity attribute the runtime sets.
+        // integrity attribute the runtime sets. A current Citry also names its
+        // runtimes by hash (`citry.<sha256>.js`, `ext/i18n/runtime.<sha256>.js`)
+        // inside the start script and the fragment loader, which fetch that URL
+        // when the runtime is missing, so those paths get the same Blob URL.
         const VUE_ASSET_PATTERN =
-          /\/__citry_playground__\/ext\/events\/(?:definitions\/[0-9a-f]{64}\.js|assets\/[0-9a-f]{64}\.css)/g;
+          /\/__citry_playground__\/(?:ext\/events\/(?:definitions\/[0-9a-f]{64}\.js|assets\/[0-9a-f]{64}\.css)|citry\.[0-9a-f]{64}\.js|ext\/i18n\/runtime\.[0-9a-f]{64}\.js)/g;
         // Session, run, and nonce identify the one parent and render allowed to
         // control this document after the initial window-message handshake.
         let session = "";
@@ -263,9 +266,8 @@
 
         function collectPreparedAssetReferences(root) {
           const references = [];
-          const pattern = /\/__citry_playground__\/ext\/events\/(?:definitions|assets)\/[0-9a-f]{64}\.(?:js|css)/g;
           for (const element of root.querySelectorAll("script:not([src])")) {
-            const paths = [...new Set(element.textContent.match(pattern) || [])];
+            const paths = [...new Set(element.textContent.match(VUE_ASSET_PATTERN) || [])];
             for (const path of paths) references.push({ element, path });
           }
           return references;

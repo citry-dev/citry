@@ -6,9 +6,10 @@ description: Mount Citry on FastAPI, Starlette, Flask, Django, or bare ASGI/WSGI
 # Web frameworks
 
 Citry renders HTML in any Python program, but an interactive page also
-needs URLs: the browser downloads Citry's runtime and your components' code
-from them, and sends server events to them. Mounting Citry on your web
-framework adds those URLs to your app.
+needs URLs: the browser downloads Citry's runtime (the JavaScript that
+starts interactive components and sends server events, Vue included) and
+your components' code from them, and sends server events to them. Mounting
+Citry on your web framework adds those URLs to your app.
 
 You must mount Citry when you:
 
@@ -61,6 +62,32 @@ For complete, runnable apps, see the
 [starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
 for FastAPI, Django, Flask, bare ASGI, and bare WSGI.
 
+## Link the runtime by hand
+
+Citry links the runtime in a full page that contains interactive
+components. A page that only receives
+[HTML fragments](/advanced/html-fragments/) must link it itself, whether
+you write its HTML or render it with Citry. Get the runtime's URL from
+[`citry.runtime_url()`][citry.Citry.runtime_url] in the view that builds
+the page:
+
+```python
+from citry import citry
+
+runtime_src = citry.runtime_url()
+# For example "/citry/citry.<hash>.js". Put it in the page as
+# <script src="..."></script>.
+```
+
+The URL includes the mount prefix and any sub-path your app is served
+below. `runtime_url()` raises `RuntimeError` when Citry is not mounted on
+your web app, because the URL would point nowhere.
+
+Call it each time you build the page. A static HTML file that you write
+once would keep the old hash after you upgrade Citry, so link the stable
+`/citry/citry.js` from such a file instead. The browser downloads that
+file on every page load.
+
 ## `initialize()` at startup
 
 Mounting adds the routes, but it does not import your component modules.
@@ -103,7 +130,6 @@ async def lifespan(_app):
 
 app = FastAPI(lifespan=lifespan)
 # Serves Citry under /citry, the default prefix.
-# The browser runtime is then at /citry/citry.js.
 mount(app, citry)
 ```
 
@@ -336,8 +362,8 @@ add the `DispatcherMiddleware`.
 ## Share the cache { #share-the-cache-between-worker-processes }
 
 With several worker processes, an interactive page can show its HTML but
-never start: the browser console shows 404 responses for component code or
-stylesheets.
+never start: the browser console shows 404 responses for component code,
+stylesheets, or Citry's runtime.
 
 This happens because the worker that renders a page stores that page's
 compiled component code, stylesheets, and CSS variables. The browser
@@ -349,7 +375,10 @@ Django cache through `DjangoCache` (see
 [Cache backends](/performance/cache-backends/)). Citry stores these entries
 without an expiry time, because a page that is already open may ask for
 them at any later time. Give the backend enough room that it does not drop
-them while such pages are still in use.
+them while such pages are still in use. Browser runtimes are the
+exception: the shared cache keeps each one for 30 days after a worker
+last wrote it, which covers pages rendered before a deploy (see
+[Deploy a Citry upgrade](#deploy-a-new-version)).
 
 A single process without a configured cache keeps the compiled code,
 stylesheets, and `css_data()` stylesheets in memory, up to the
@@ -472,8 +501,15 @@ you run, and on Flask, wrap it after `mount()`
 
 Under the prefix, Citry serves:
 
-- `{prefix}/citry.js`: the browser runtime, which includes Vue and the code
-  that starts interactive components and sends server events;
+- `{prefix}/citry.{hash}.js`: the browser runtime. `{hash}` is a hash of
+  the file, so the URL changes whenever a Citry release changes the file.
+  Pages that Citry renders link this URL;
+- `{prefix}/citry.js`: the same runtime at a stable URL, one that stays
+  the same across releases, for a page that cannot link the hashed URL
+  (see [Link the runtime by hand](#link-the-runtime-by-hand));
+- `{prefix}/ext/i18n/runtime.{hash}.js` and its stable URL
+  `{prefix}/ext/i18n/runtime.js`: the browser code for translations,
+  which pages that translate text in the browser link;
 - `{prefix}/cache/{class_id}.{script_type}`: a component's JavaScript or
   CSS;
 - `{prefix}/cache/{class_id}.{hash}.{script_type}`: the same, named by a
@@ -484,13 +520,14 @@ Under the prefix, Citry serves:
   `{prefix}/ext/events/assets/{digest}.css`: the compiled component code
   and stylesheets that interactive pages load.
 
-The built-in Events extension also serves its own browser script, the URL
-the browser posts event calls to, and one URL per event handler. See
+The built-in Events extension also serves
+`{prefix}/ext/events/runtime.js` (the same runtime as `citry.js`), the
+URL the browser posts event calls to, and one URL per event handler. See
 [Server events](/events/), and read
 [Security](/security/#protect-event-posts-from-csrf) before you deploy
 those routes.
 
-### How browsers cache files
+### Check cache headers { #how-browsers-cache-files }
 
 A component's script or stylesheet named by a hash of its content
 (`{prefix}/cache/{class_id}.{hash}.js`), a file served from
@@ -506,15 +543,74 @@ you upgrade Citry. Citry sends them with `Cache-Control: no-cache` and an
 `ETag`. The browser keeps a copy but asks before each use, and Citry
 answers `304 Not Modified`, with no body, while the copy is current.
 
-The browser runtimes, `{prefix}/citry.js`,
-`{prefix}/ext/events/runtime.js`, and `{prefix}/ext/i18n/runtime.js`, are
-sent with `Cache-Control: no-store`, so the browser downloads them on each
-page load and a page always runs with the runtime the server has now.
+The browser runtimes that pages link, `{prefix}/citry.{hash}.js` and
+`{prefix}/ext/i18n/runtime.{hash}.js`, are also named by a hash of their
+content and sent as `immutable`. The browser downloads each one again
+only after a Citry release changes the file, not on every page load. A
+page always names the runtime it was rendered for, so it never starts
+with a runtime from another release.
+
+The stable runtime URLs, `{prefix}/citry.js`,
+`{prefix}/ext/events/runtime.js`, and `{prefix}/ext/i18n/runtime.js`, keep
+their address across releases. Citry sends them with
+`Cache-Control: no-store`, so the browser downloads them on each page load.
 
 A missing file gets `404` with `no-store`, because another worker may
-store it a moment later.
+store it a moment later. On FastAPI, Flask, and bare ASGI or WSGI apps, a
+path under the prefix that matches no route also gets `404` with
+`no-store`. On Django, such a path gets your project's own `404` page.
 
 A CDN or proxy in front of your app should pass these headers through
-unchanged. If it stores a runtime anyway, the browser refuses the old file
-after you upgrade Citry. See
+unchanged. If it stores a stable runtime URL anyway, a page that links
+that URL runs the old runtime after you upgrade Citry. See
 [Keep files unchanged](/security/#keep-files-unchanged).
+
+## Deploy a Citry upgrade { #deploy-a-new-version }
+
+A page rendered before you upgrade Citry still links the old runtime. It
+starts anyway when the browser kept that file, or when a
+[shared cache](#share-the-cache-between-worker-processes) still holds it.
+The cache keeps each runtime for 30 days after it was last written. To
+keep every page working after an upgrade:
+
+- clear whole-page caches when you deploy;
+- give every worker one shared cache.
+
+When neither the browser nor the server has the old runtime, the server
+answers `404`. The page keeps the HTML the server sent: links and plain
+forms work, but interactive components do not start, and the browser
+console shows `Citry could not load its runtime` with the runtime's URL.
+Reloading the page gets fresh HTML that names the current runtime.
+Citry does not reload the page by itself
+([#665](https://github.com/citry-dev/citry/issues/665) tracks that).
+
+A page that links the runtime with a `<script>` tag you wrote yourself
+shows the browser's own error for the failed file instead. It picks up
+the new runtime the next time your view builds the page.
+
+### Clear whole-page caches
+
+A CDN or page cache that stores whole HTML pages keeps serving pages that
+name the old runtime after a deploy, and reloading such a page gets the
+same page again. Clear those caches when you deploy a Citry upgrade.
+
+### Handle rolling deploys { #rolling-deploys }
+
+During a rolling deploy, a page rendered by a worker on the new release
+can ask a worker still on the old release for its runtime. Give every
+worker the same [shared cache](#share-the-cache-between-worker-processes),
+or use sticky sessions so that one visitor's requests reach one worker.
+Each worker writes the runtimes it links to the shared cache, so any
+worker can answer for them. Workers on Citry 0.8.0 or earlier cannot
+serve these runtimes, even from a shared cache.
+
+### Stop CDNs caching 404s
+
+Citry sends a `404` for its files with `Cache-Control: no-store`. Most
+CDNs follow that header. Some have a setting that caches error answers,
+such as `404`, for a fixed time whatever the headers say. Turn it off for
+URLs under your Citry prefix, or a runtime that one worker could not
+serve during a deploy keeps failing after every worker has it. Citry
+0.8.0 and earlier send their `404` without `no-store`, so after you
+upgrade from those versions, clear any `404` answers your CDN stored
+under your Citry prefix.

@@ -455,6 +455,66 @@ FragmentLoader()
     assert "background-color" in contents
 
 
+_HASHED_RUNTIME_PROGRAM = '''
+import json
+import runpy
+import sys
+
+from citry.ext.dependencies.routes import SHARED_RUNTIME
+from citry.ext.i18n.emission import I18N_RUNTIME
+
+adapter = runpy.run_path(sys.argv[1])
+source = """
+from citry import Component
+
+
+class Clicker(Component):
+    template = '<button type="button">Click</button>'
+
+    js = 'window.__clicked = true;'
+
+
+Clicker()
+"""
+rendered = json.loads(adapter["run_source_json"](source, 7))
+prefix = "/__citry_playground__/"
+paths = [
+    prefix + SHARED_RUNTIME.hashed_path,
+    prefix + "citry.js",
+    prefix + "ext/events/runtime.js",
+]
+assets = json.loads(adapter["load_playground_assets_json"](json.dumps(paths), 7))
+# The playground mounts no i18n routes, so only the allowlist entry can be
+# checked: it must use the route pattern the library registers.
+i18n_allowed = (I18N_RUNTIME.route_path, "citry_i18n_runtime_hashed") in adapter["_ALLOWED_ASSET_ROUTES"]
+print(json.dumps({
+    "html": rendered["html"],
+    "paths": paths,
+    "assets": {asset["path"]: asset["content"] for asset in assets},
+    "shared": SHARED_RUNTIME.content,
+    "i18nAllowed": i18n_allowed,
+}))
+'''
+
+
+def test_browser_asset_loader_serves_hashed_and_stable_runtimes() -> None:
+    # A current wheel links the runtimes by hash, while the published wheel
+    # that runtime.json pins links the stable URLs, so the loader allows both.
+    completed = subprocess.run(
+        [sys.executable, "-c", _HASHED_RUNTIME_PROGRAM, _EXECUTOR.as_posix()],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    result = json.loads(completed.stdout)
+
+    hashed = result["paths"][0]
+    # The page links the hashed URL, and every runtime URL serves the same bytes.
+    assert hashed in result["html"]
+    assert result["assets"] == dict.fromkeys(result["paths"], result["shared"])
+    assert result["i18nAllowed"]
+
+
 def test_browser_asset_loader_rejects_unowned_and_stale_requests() -> None:
     program = f"""
 import json

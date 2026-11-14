@@ -110,7 +110,8 @@ def _client_active_tabs_page() -> tuple[str, list[dict[str, str]]]:
 
     assets = [
         {
-            "path": "/__citry_playground__/citry.js",
+            # The page links the runtime by its hash, so serve it at that URL.
+            "path": app.runtime_url(),
             "contentType": "text/javascript",
             "content": _runtime_js(),
         }

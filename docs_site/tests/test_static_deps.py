@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import re
 import threading
@@ -12,6 +13,7 @@ from urllib.request import urlopen
 
 from citry import Component
 from citry import citry as default_citry
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 from docs_site._internal.static_deps import (
     CITRY_MOUNT_PREFIX,
     StaticSiteRequestHandler,
@@ -61,14 +63,16 @@ def test_export_runtime_writes_under_mount_prefix(tmp_path: Path) -> None:
 
     dest = export_runtime(tmp_path, default_citry)
 
-    # Written where the pages reference it: <prefix>/citry.js.
+    # The stable path comes back; the hashed file pages link sits beside it.
     assert dest == tmp_path / "citry" / "citry.js"
-    assert dest.is_file()
-    assert dest.read_text(encoding="utf-8").strip()  # non-empty runtime source
+    runtime = SHARED_RUNTIME.content.encode()
+    assert runtime.strip()
 
+    hashed = tmp_path / "citry" / f"citry.{hashlib.sha256(runtime).hexdigest()}.js"
     events_runtime = tmp_path / "citry" / "ext" / "events" / "runtime.js"
-    assert events_runtime.is_file()
-    assert events_runtime.read_text(encoding="utf-8").strip()
+    # Every URL that names the runtime serves the same bytes, as the routes do.
+    for path in (hashed, dest, events_runtime):
+        assert path.read_bytes() == runtime
 
 
 def test_export_prepared_page_assets_uses_only_the_generated_manifest(tmp_path: Path, monkeypatch: object) -> None:

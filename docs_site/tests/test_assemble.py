@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+
+import pytest
 
 from docs_site._internal._vendor.mike_versions import Versions
 from docs_site._internal.assemble import (
@@ -14,6 +17,7 @@ from docs_site._internal.assemble import (
     _rewrite_meta_robots,
     _rewrite_mounted_breadcrumbs,
     _rewrite_mounted_pagefind_path,
+    _share_snapshot_runtimes,
     assemble_site,
 )
 from docs_site._internal.build import BuildOutcome, build_site
@@ -58,6 +62,9 @@ def test_version_mode_writes_a_committed_snapshot(tmp_path: Path) -> None:
     assert not (versions / "1.0.0" / "blog").exists()
     # Site-wide crawl files belong to the root build, not the snapshot.
     assert not (versions / "1.0.0" / "sitemap.xml").exists()
+    # The snapshot keeps the runtime its pages link by hash; assemble shares it.
+    assert len(list((versions / "1.0.0" / "citry").glob("citry.*.js"))) == 1
+    assert not (versions / "1.0.0" / "citry" / "citry.js").exists()
 
 
 def test_assemble_mounts_versions_and_enables_picker(tmp_path: Path) -> None:
@@ -137,6 +144,74 @@ def test_assemble_without_build_replaces_stale_version_mounts(tmp_path: Path) ->
 
     assert third.published == []
     assert list((site / "v").iterdir()) == []
+
+
+def _runtime_name(stem: str, content: bytes) -> str:
+    return f"{stem}.{hashlib.sha256(content).hexdigest()}.js"
+
+
+def test_assemble_shares_snapshot_runtimes_at_the_site_root(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    site = config.site_dir
+    versions = config.versions_dir
+    current = b"current runtime"
+    old = b"old runtime"
+    i18n = b"old i18n runtime"
+    # The root build already holds the current runtime under its hash.
+    (site / "citry").mkdir(parents=True)
+    (site / "citry" / _runtime_name("citry", current)).write_bytes(current)
+    snapshot_files = {
+        "1.0.0": {
+            _runtime_name("citry", old): old,
+            f"ext/i18n/{_runtime_name('runtime', i18n)}": i18n,
+            # Not named by a hash: the root build owns the stable runtime path.
+            "citry.js": b"stale stable runtime",
+            "cache/Widget_abc123.js": b"component script",
+        },
+        # A second version that shipped the current runtime shares the root file.
+        "2.0.0": {_runtime_name("citry", current): current},
+    }
+    for version, files in snapshot_files.items():
+        (versions / version).mkdir(parents=True)
+        (versions / version / "index.html").write_text(version, encoding="utf-8")
+        for name, content in files.items():
+            path = versions / version / "citry" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        update_manifest(versions, version)
+
+    outcome = assemble_site(config=config, build=False)
+
+    assert outcome.shared_runtime_files == 2
+    root_files = {
+        path.relative_to(site / "citry").as_posix() for path in (site / "citry").rglob("*") if path.is_file()
+    }
+    assert root_files == {
+        _runtime_name("citry", current),
+        _runtime_name("citry", old),
+        f"ext/i18n/{_runtime_name('runtime', i18n)}",
+    }
+    assert (site / "citry" / _runtime_name("citry", old)).read_bytes() == old
+
+
+def test_share_snapshot_runtimes_rejects_bytes_that_do_not_match_the_name(tmp_path: Path) -> None:
+    dest_v = tmp_path / "v"
+    root_citry = tmp_path / "citry"
+    name = _runtime_name("citry", b"expected")
+    (dest_v / "1.0.0" / "citry").mkdir(parents=True)
+    (dest_v / "1.0.0" / "citry" / name).write_bytes(b"tampered")
+
+    with pytest.raises(RuntimeError, match="does not match the hash in its name"):
+        _share_snapshot_runtimes(dest_v, root_citry)
+    assert not (root_citry / name).exists()
+
+    # A damaged root copy under the same name must stop the deploy rather than be overwritten.
+    (dest_v / "1.0.0" / "citry" / name).write_bytes(b"expected")
+    root_citry.mkdir()
+    (root_citry / name).write_bytes(b"damaged")
+    with pytest.raises(RuntimeError, match="does not match the snapshot's copy"):
+        _share_snapshot_runtimes(dest_v, root_citry)
+    assert (root_citry / name).read_bytes() == b"damaged"
 
 
 def test_assemble_rejects_partial_current_build(tmp_path: Path, monkeypatch) -> None:

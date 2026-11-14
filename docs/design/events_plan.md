@@ -1044,6 +1044,19 @@ unwrap in `capture_instance`).
 unversioned route `ext/events/runtime.js` and answers `Cache-Control: no-store`.
 There is no runtime query-version compatibility protocol.
 
+**Hashed runtime URL amendment, accepted 2026-11-13, implemented for 0.9.0
+(issue #578):** Events pages link the shared runtime at
+`<prefix>/citry.<sha256>.js`, the URL the Dependencies extension serves,
+where `<sha256>` is the SHA-256 of `_vue/runtime.js` as 64 lowercase hex
+characters. That route answers `Cache-Control: public, max-age=31536000,
+immutable`, so the browser keeps the file between page loads, and a page
+always names the runtime it was rendered for. `ext/events/runtime.js` stays
+as a stable alias that serves the same bytes with `no-store`, for pages
+rendered by older versions and for apps that link the runtime by hand. A
+digest in the URL is still the only version marker: there is no query-string
+version. The design, including what a page whose runtime is gone after a
+deploy does, is [`runtime_hashed_urls.md`](runtime_hashed_urls.md).
+
 **Amendment due (2026-07-16, the client-model round; owned by WP22):**
 the per-class descriptor gained the `latest_wins`/`bundle` carriage
 (events.md 4.4), which the runtime reads at queue time (events.md
@@ -1090,6 +1103,9 @@ served, for the runtime.js precedent WP13 will mirror),
   component. The route path is
   `citry.build_url("ext/events/runtime.js")`. The route path remains fixed by
   design 3.8, and the test asserts the emitted URL before the route exists.
+  (Since the 2026-11-13 hashed runtime URL amendment above, the tag
+  links the shared hashed URL `citry.<sha256>.js`, and this route is its
+  stable alias.)
 - Emit the inline bootstrap stub through the manifest (design 5.2 "Load
   ordering"): this WP wires the emission with the stub body held in
   `_EVENTS_BOOTSTRAP_STUB` in the events manifest-emission module;
@@ -1237,7 +1253,8 @@ after Python-resolved final attributes, and against Alpine-mutated live types.
 The compiled State-binding object has one exact direction discriminant and is
 decoded strictly on both server and client. This is a hard cut with no alias
 decoder; the pre-1.0 rendered-cache payload stays at version 1 and the client
-runtime URL remains unversioned.
+runtime URL carries no version number. (Since the 2026-11-13 hashed runtime
+URL amendment in WP10, the URL carries a hash of the runtime's bytes.)
 
 **Goal:** `@c-*` and `:c-*` attributes rewrite to `data-cev-*` specs at
 template load (stage one) and via `on_attrs_resolved` (stage two), with
@@ -2251,8 +2268,10 @@ for effects, direct listeners, dispatch, morph preservation, pending timers,
 and update piggyback. A live type becoming invalid or changing value/event
 semantics cancels stale drafts and timing state; a later valid type rebuilds
 exactly one effect/listener set. The committed browser bundle is paired with
-rendered HTML through the stable unversioned runtime route, whose response is
-`Cache-Control: no-store`.
+rendered HTML through the runtime URL. That URL was the stable unversioned
+route with `Cache-Control: no-store` when this amendment landed; since the
+2026-11-13 hashed runtime URL amendment in WP10, it is
+`citry.<sha256>.js`, which names the exact bytes.
 Tests cover invalid-type cancellation and recovery, text-to-checkbox event and
 value-shape replacement, malformed compiled-spec suppression, and hidden
 one-way application while preserving the separate accepted-work rule for

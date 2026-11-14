@@ -14,6 +14,7 @@ import pytest
 from citry import Citry, Component, InMemoryCache
 from citry._vue.capture import render_prepared_direct
 from citry._vue.events import default_events_producer
+from citry.ext.i18n.emission import I18N_RUNTIME
 from citry.ext.i18n.usage import CLIENT_CONTEXT_KEY, EXTRA_KEY
 from citry.util.routing import RouteHeaders, RouteRequest, match_route
 
@@ -222,8 +223,9 @@ def test_mounted_i18n_runtime_integrity_matches_route_body() -> None:
         messages = "client-title = Client title"
 
     result = Page().render().serialize_result()
-    url = "/citry/ext/i18n/runtime.js"
-    matched = match_route(app.urls, "ext/i18n/runtime.js")
+    # The page links the hashed URL, so the check requests that route, not the stable alias.
+    url = f"/citry/{I18N_RUNTIME.hashed_path}"
+    matched = match_route(app.urls, I18N_RUNTIME.hashed_path)
     assert matched is not None
     response = matched.route.handler(None, **matched.params)
     digest = f"sha384-{base64.b64encode(hashlib.sha384(response.body).digest()).decode('ascii')}"
@@ -289,7 +291,48 @@ def test_mounted_document_inlines_only_the_current_locale_partition() -> None:
 
     assert set(requirement["artifacts"]) == {"en-US"}
     assert manifest["messages_url"] == "/citry/ext/i18n/messages"
-    assert 'src="/citry/ext/i18n/runtime.js" integrity="sha384-' in html
+    assert f'src="/citry/{I18N_RUNTIME.hashed_path}" integrity="sha384-' in html
+
+
+def _client_page(app: Citry) -> type[Component]:
+    class Page(Component):
+        citry = app
+        template = """
+            <c-i18n c-client="True" tag="main">
+                <output v-text="$i18n.tr('client-title')"></output>
+            </c-i18n>
+        """
+        messages = "client-title = Client title"
+
+    return Page
+
+
+@pytest.mark.parametrize("mounted", [True, False])
+def test_the_manifest_entry_carries_only_the_keys_the_browser_runtime_accepts(mounted: bool) -> None:
+    app = _app()
+    if mounted:
+        app.set_mounted_prefix("/citry")
+
+    html = _client_page(app)().render().serialize()
+
+    block = html.split("data-citry-vue-document=", 1)[1].split(">", 1)[1].split("</script>", 1)[0]
+    entry = json.loads(block)["manifest"]["extensions"]["i18n"]
+    # The runtime rejects an extension entry with any other key, mounted or not.
+    assert set(entry) == {"payload", "schemaVersion", "templateContextNames"}
+
+
+def test_the_shared_cache_holds_the_i18n_runtime_a_mounted_page_links() -> None:
+    cache = InMemoryCache()
+    app = Citry(
+        cache=cache,
+        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
+    )
+    app.set_mounted_prefix("/citry")
+
+    _client_page(app)().render().serialize()
+
+    # Another worker that gets the request for this hash answers from here.
+    assert cache.get(f"citry:i18n-runtime:{I18N_RUNTIME.digest}") == I18N_RUNTIME.content
 
 
 def test_fragment_attaches_literal_client_roots_to_its_external_provider() -> None:

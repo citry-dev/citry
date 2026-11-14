@@ -21,6 +21,7 @@ import pytest
 from citry import Citry, Component
 from citry._protocol.events import build_call, build_call_envelope
 from citry._sub_path import normalize_sub_path, recording_sub_path, request_sub_path
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 
 _SECRET = "s" * 40
 
@@ -409,6 +410,37 @@ class TestDjango:
 
         _engine, build = project
         self._check(Client(build(None)), "", "/")
+
+
+class TestRuntimeUrl:
+    def _engine(self):
+        engine = Citry(secret=_SECRET)
+        engine.set_mounted_prefix("/citry")
+        # The reader an integration's mount() registers, here reading only
+        # what the request recorded.
+        engine._set_sub_path_reader(lambda: request_sub_path() or "")
+        return engine
+
+    def test_the_url_starts_with_the_sub_path_of_the_request(self):
+        engine = self._engine()
+        with recording_sub_path("/shop"):
+            inside = engine.runtime_url()
+        # Both spellings of the sub-path give the same URL, and the site root has no sub-path.
+        with recording_sub_path("/shop/"):
+            assert engine.runtime_url() == inside
+        assert inside == f"/shop/citry/{SHARED_RUNTIME.hashed_path}"
+        assert engine.runtime_url() == f"/citry/{SHARED_RUNTIME.hashed_path}"
+
+    def test_the_page_links_the_url_the_method_returns(self):
+        engine = self._engine()
+        page = _page_class(engine)
+        with recording_sub_path("/shop"):
+            html = page().render().serialize()
+            linked = re.findall(r'src="(/shop/citry/citry\.[^"]*)"', html)
+            assert linked == [engine.runtime_url()]
+            # The start script reports the same URL, with the sub-path in it.
+            report = f'console.error("Citry could not load its runtime: " + {json.dumps(engine.runtime_url())});'
+            assert report in html
 
 
 class TestRenderCache:

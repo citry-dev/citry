@@ -1,3 +1,4 @@
+from app.citry_app import citry_app
 from app.data import get_contact
 from app.main import web_app
 from fastapi.testclient import TestClient
@@ -10,6 +11,9 @@ def test_page_serves_local_htmx_and_citry_scripts() -> None:
         brand_mark = client.get("/static/citry-mark.svg")
         htmx = client.get("/static/htmx.min.js")
         citry = client.get("/citry/citry.js")
+        # The page links the runtime by its hash; the stable URL above stays for hand-written pages.
+        hashed_runtime_url = citry_app.runtime_url()
+        hashed_citry = client.get(hashed_runtime_url)
 
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
@@ -35,6 +39,9 @@ def test_page_serves_local_htmx_and_citry_scripts() -> None:
     assert "2.0.10" in htmx.text
     assert citry.status_code == 200
     assert citry.headers["content-type"].startswith("text/javascript")
+    assert f'<script src="{hashed_runtime_url}"></script>' in page.text
+    assert hashed_citry.status_code == 200
+    assert hashed_citry.text == citry.text
 
 
 def test_search_response_includes_component_html_and_dependencies() -> None:

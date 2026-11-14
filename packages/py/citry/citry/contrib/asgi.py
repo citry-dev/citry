@@ -48,6 +48,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
+from citry._hashed_runtime import NO_STORE_HEADERS
 from citry.reload import watch
 from citry.util.routing import (
     BODYLESS_METHODS,
@@ -182,7 +183,9 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
         full_path = path if path.startswith(root_path) else root_path + path
         matched = match_path_below_mount(citry_instance.urls, full_path[len(root_path) :])
         if matched is None:
-            await _send_response(send, RouteResponse(content="Not Found", status=404))
+            # A path that matches nothing now may match after a deploy (a new
+            # runtime hash), so neither the browser nor a CDN may keep the miss.
+            await _send_response(send, RouteResponse(content="Not Found", status=404, headers=NO_STORE_HEADERS))
             return
         method: str = scope["method"]
         # The shared rule keeps HEAD off POST-only routes, the same on every adapter.

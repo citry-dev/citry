@@ -14,6 +14,7 @@ import pytest
 
 from citry import Citry, Component, Extension, Markup
 from citry.ext.dependencies import Script, Style
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 from citry.util.html import (
     decode_attribute_entities,
     decode_character_references,
@@ -344,12 +345,13 @@ class TestExternalIntegrity:
                 return {"count": 2}
 
         result = Widget().render().serialize_result(deps_strategy="fragment")
-        runtime_digest = _sha384(_serve(c, "/citry/citry.js").body)
+        runtime_url = f"/citry/{SHARED_RUNTIME.hashed_path}"
+        runtime_digest = _sha384(_serve(c, runtime_url).body)
         assert f's.integrity = "{runtime_digest}";' in result.html
         prepared = _vue_fragment(result.html)["prepared"]
         assert prepared["manifest"]["scripts"][0]["source"]["sha256"]
         assert result.security.scripts[0].location == "inline"
-        assert result.security.scripts[1].url == "/citry/citry.js"
+        assert result.security.scripts[1].url == runtime_url
 
     def test_mounted_document_runtimes_match_their_route_bodies(self):
         c = Citry(security_script_integrity="citry")
@@ -361,7 +363,7 @@ class TestExternalIntegrity:
 
         result = Widget().render().serialize_result()
 
-        for url in ("/citry/citry.js",):
+        for url in (f"/citry/{SHARED_RUNTIME.hashed_path}",):
             record = next(script for script in result.security.scripts if script.url == url)
             digest = _sha384(_serve(c, url).body)
             assert record.digests == (digest,)
@@ -1117,7 +1119,7 @@ class TestCspSerializationModes:
                 """
 
             html = Card().render().serialize(csp_nonce="requestNonce")
-            assert ('src="/citry/citry.js"' in html) is mounted
+            assert (f'src="/citry/{SHARED_RUNTIME.hashed_path}"' in html) is mounted
             assert ("Citry interactive runtime" in html) is not mounted
             assert 'nonce="requestNonce"' in html
 

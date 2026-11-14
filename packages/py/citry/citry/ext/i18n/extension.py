@@ -1454,12 +1454,12 @@ class I18nExtension(Extension):
         if not self.configured:
             return None
         from .bindings import BINDING_HELPER  # noqa: PLC0415
-        from .emission import client_runtime_resource, vue_plugin_js  # noqa: PLC0415
+        from .emission import I18N_RUNTIME, vue_plugin_js  # noqa: PLC0415
 
         if self.citry.mounted_prefix is None:
             script = Script(kind="core", content=vue_plugin_js(), wrap=False)
         else:
-            resource = client_runtime_resource(self.citry)
+            resource = I18N_RUNTIME.resource(self.citry)
             script = Script(kind="core", url=resource.url)
             script._owned_resource = resource
         return BrowserPluginDescriptor(

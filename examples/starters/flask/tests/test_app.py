@@ -17,7 +17,8 @@ def test_page_and_citry_runtime_are_served() -> None:
     assert page.content_type.startswith("text/html")
     assert "Project Explorer" in page.text
     assert "Atlas" in page.text
-    assert "/citry/citry.js" in page.text
+    # The page links the runtime by its hash; the stable URL fetched above stays for hand-written pages.
+    assert citry_app.runtime_url() in page.text
     assert runtime.status_code == 200
     assert runtime.content_type.startswith("text/javascript")
     assert events_runtime.status_code == 200

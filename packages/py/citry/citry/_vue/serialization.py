@@ -1141,6 +1141,33 @@ def _manifest_json(
     return "{" + ",".join(entry for entry in entries if entry) + "}"
 
 
+def _start_script_for_mounted_page(app_id: str, runtime_url: str) -> str:
+    """
+    Return the start script of a mounted page, which says so in the console when the runtime is missing.
+
+    A page rendered before a deploy may link a runtime hash that no worker
+    holds any more, so the runtime never defines ``__citryRuntime``. The
+    page then keeps its server HTML, and the script writes one
+    ``console.error`` that names the runtime URL, rather than the bare
+    ``ReferenceError`` a direct call would raise. The rule is
+    ``docs/design/runtime_hashed_urls.md`` section 3.5.
+    """
+    # Page markup can take over plain names: `<div id="__citryRuntime">` is
+    # found as `window.__citryRuntime`. So the script reads its two window
+    # names only as own properties, which an element's id never is. Every
+    # value is written as JSON, so the URL never closes the string.
+    return (
+        "var w = window, own = Object.prototype.hasOwnProperty;\n"
+        f'if (own.call(w, "__citryRuntime")) w.__citryRuntime.startDocument({script_json(app_id)});\n'
+        # A page with several apps has one start script per app; the first
+        # one to find the runtime missing reports it for all of them.
+        'else if (!own.call(w, "__citryRuntimeMissing")) {\n'
+        "  w.__citryRuntimeMissing = true;\n"
+        f'  console.error("Citry could not load its runtime: " + {script_json(runtime_url)});\n'
+        "}"
+    )
+
+
 def prepare_vue_serialization(
     ctx: OnSerializeContext,
     script_security: _ScriptSecurityMaterializer | None,
@@ -1169,7 +1196,7 @@ def prepare_vue_serialization(
         return None
 
     from citry._vue.events import default_events_producer, definition_bundle  # noqa: PLC0415
-    from citry.ext.events.routes import EVENTS_RUNTIME_SRC, RUNTIME_PATH, _runtime_resource  # noqa: PLC0415
+    from citry.ext.dependencies.emission import _runtime_js, _runtime_resource  # noqa: PLC0415
 
     app_id = _reserve_vue_app_id(ctx.context, ctx.citry)
     producer = default_events_producer(ctx.citry)
@@ -1291,15 +1318,18 @@ def prepare_vue_serialization(
         raise RuntimeError("the Vue configuration lost its manifest position")
     serialized = serialized.replace(manifest_slot, manifest_json, 1)
     scripts: list[Script] = []
+    # The runtime is the Dependencies extension's file at its hashed URL, so
+    # the browser stores one copy whichever extension links it.
+    runtime_resource = _runtime_resource(ctx.citry)
     if mounted:
-        runtime = Script(kind="core", url=ctx.citry.build_url(RUNTIME_PATH))
-        runtime._owned_resource = _runtime_resource(ctx.citry)
+        runtime = Script(kind="core", url=runtime_resource.url)
+        runtime._owned_resource = runtime_resource
         scripts.append(runtime)
         # The runtime adds the manifest's scripts only once the app starts, so plugin scripts
         # written here run before every component script.
         scripts.extend(cast("Any", plugin).script for plugin in browser_plugins.values())
     else:
-        scripts.append(Script(kind="core", content=EVENTS_RUNTIME_SRC.read_text()))
+        scripts.append(Script(kind="core", content=_runtime_js()))
         for digest in dict.fromkeys(item["sha256"] for item in manifest["definitions"]):
             bundle = definition_bundle(ctx.citry, digest)
             if bundle is None:
@@ -1390,11 +1420,17 @@ def prepare_vue_serialization(
     # browser has parsed the whole page, so starting the app (tens of ms on a
     # large page) never delays the first paint of the server HTML. It still
     # runs after the classic runtime and plugin scripts above it, and before
-    # DOMContentLoaded. It carries only the app id, so its CSP hash is short
-    # to compute and its text never includes page data.
+    # DOMContentLoaded. It carries the app id and, on a mounted full page,
+    # the runtime URL, but never page data, so its CSP hash depends only on
+    # the app id and the URL. An unmounted page (whose runtime is inline, so
+    # it cannot go missing) keeps the one-line call.
     start_script = Script(
         kind="core",
-        content=f"__citryRuntime.startDocument({script_json(app_id)});",
+        content=(
+            _start_script_for_mounted_page(app_id, runtime_resource.url)
+            if mounted and ctx.deps_strategy == "document"
+            else f"__citryRuntime.startDocument({script_json(app_id)});"
+        ),
         attrs={"type": "module"},
     )
     scripts.extend((configuration_block, start_script))
@@ -1437,6 +1473,9 @@ def prepare_vue_serialization(
                 _record_hydration_admission(
                     ctx.selected_render, replace(admission, server_html=server_contents is not None)
                 )
+    # None when the host holds no server HTML, so the later check that the
+    # host survived the serialization hooks is skipped.
+    owned_host: str | None
     if hydration_html is not None:
         owned_host = f'<div id="{host_id}">{hydration_html}</div>'
         shell_html = _vue_shell(ctx.html, owned_host)

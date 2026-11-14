@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from citry._owned_resource import JAVASCRIPT_CONTENT_TYPE, _OwnedResource
+from citry._hashed_runtime import HashedRuntime
 from citry.citry_render import selected_render_ids
 from citry.ext.dependencies.types import Script
 from citry.util.html import script_json
@@ -25,7 +24,6 @@ from .usage import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from citry.citry import Citry
     from citry.ext.dependencies.emission import OnDependenciesContext
 
     from .extension import I18nExtension
@@ -34,28 +32,27 @@ RUNTIME_PATH = "ext/i18n/runtime.js"
 MESSAGES_PATH = "ext/i18n/messages"
 _RUNTIME_SOURCE = Path(__file__).parent / "client" / "vue-plugin.source.js"
 
+I18N_RUNTIME = HashedRuntime(
+    stable_path=RUNTIME_PATH,
+    hashed_stem="ext/i18n/runtime",
+    cache_namespace="citry:i18n-runtime",
+    load=lambda: _RUNTIME_SOURCE.read_text(encoding="utf-8"),
+)
+"""
+The i18n browser runtime, served at ``ext/i18n/runtime.<sha256>.js`` and at the stable ``ext/i18n/runtime.js``.
 
-@cache
+Pages link the hashed URL, so the browser keeps the file between page loads.
+"""
+
+
 def client_runtime_js() -> str:
-    """Read the committed browser bundle once per process."""
-    return _RUNTIME_SOURCE.read_text(encoding="utf-8")
+    """Return the committed browser bundle, read once per process."""
+    return I18N_RUNTIME.content
 
 
-@cache
 def vue_plugin_js() -> str:
-    """Read the native Vue plugin source once per process."""
-    return client_runtime_js()
-
-
-def client_runtime_resource(citry: Citry) -> _OwnedResource:
-    """Return the shared source used by mounted emission and route serving."""
-    url = citry.build_url(RUNTIME_PATH) if citry.mounted_prefix is not None else RUNTIME_PATH
-    return _OwnedResource(
-        url=url,
-        content=client_runtime_js(),
-        content_type=JAVASCRIPT_CONTENT_TYPE,
-        headers=(("Cache-Control", "no-store"),),
-    )
+    """Return the native Vue plugin source, which is the same bundle."""
+    return I18N_RUNTIME.content
 
 
 def emit_i18n_dependencies(extension: I18nExtension, ctx: OnDependenciesContext) -> None:
@@ -103,7 +100,7 @@ def emit_i18n_dependencies(extension: I18nExtension, ctx: OnDependenciesContext)
     )
 
     if extension.citry.mounted_prefix is not None:
-        resource = client_runtime_resource(extension.citry)
+        resource = I18N_RUNTIME.resource(extension.citry)
         runtime = Script(kind="core", url=resource.url)
         runtime._owned_resource = resource
     else:
@@ -438,4 +435,4 @@ def _policy_to_wire(policy: ProviderFieldPolicy) -> dict[str, object]:
     return result
 
 
-__all__ = ["MESSAGES_PATH", "RUNTIME_PATH", "client_runtime_js", "emit_i18n_dependencies"]
+__all__ = ["I18N_RUNTIME", "MESSAGES_PATH", "RUNTIME_PATH", "client_runtime_js", "emit_i18n_dependencies"]

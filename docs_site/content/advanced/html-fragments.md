@@ -37,10 +37,20 @@ JavaScript and CSS, and [Rendering](/concepts/rendering/) explains the
 ## Insert into a Citry page
 
 Load Citry's runtime once in the page, then insert the response wherever
-you like:
+you like. Get the runtime's URL from
+[`citry.runtime_url()`][citry.Citry.runtime_url] in the route that
+renders the page, and pass it to the page's template:
 
-```html
-<script src="/citry/citry.js"></script>
+```python
+from citry import citry
+
+context = {"citry_runtime_url": citry.runtime_url()}
+```
+
+This example is a Jinja or Django template:
+
+```htmldjango
+<script src="{{ citry_runtime_url }}"></script>
 <div id="results"></div>
 <script>
   fetch('/search-fragment')
@@ -56,6 +66,25 @@ is missing, and starts the fragment's components as their own Vue app. A
 component script the page already loaded is not loaded or run again.
 Removing the fragment's elements from the page stops its Vue app.
 
+The URL looks like `/citry/citry.<hash>.js`. It names one version of the
+file, so the browser keeps it between page loads and downloads it again
+only after Citry changes the file. In a Citry template, return the URL
+from `template_data()` as `runtime_url` and write
+`<script c-src="runtime_url"></script>`. The `c-` prefix sets an
+attribute from a template value; see
+[`c-*` Python attrs](/syntax/attributes/#c-dynamic-attributes).
+
+If the runtime does not load, for example because the page names an old
+runtime after a Citry upgrade, inserted fragments do not start, and the
+browser console shows the failed request. When a fragment's own loader adds the runtime (see
+[Insert into other pages](#insert-into-other-pages)) and the file fails,
+the console also shows `Citry could not load its runtime`.
+
+A static HTML file that you write once cannot call `runtime_url()`, so
+link the stable `/citry/citry.js` from it instead. The browser downloads
+that file on every page load. See
+[Link the runtime by hand](/advanced/web-frameworks/#link-the-runtime-by-hand).
+
 Each fragment adds its own stylesheet link, so its styles stay in place even
 if the page's own Vue app is removed. The browser usually serves the
 repeated link from its cache.
@@ -65,8 +94,8 @@ because the fragment's HTML and the data block that describes its
 components must arrive together.
 
 When the page uses a Content Security Policy (CSP) nonce, put the nonce on
-the `<script src="/citry/citry.js">` tag and serialize the fragment with
-the same nonce. Otherwise the fragment does not start, and the browser
+the runtime's `<script>` tag and serialize the fragment with the same
+nonce. Otherwise the fragment does not start, and the browser
 console shows an error. See [Nonces in fragments](/security/#html-fragments).
 
 The browser does not check the content of a `<script>` tag you write

@@ -66,6 +66,7 @@ from citry.component_registry import (
     _RegistryState,
 )
 from citry.constness import ConstBodyCache
+from citry.ext.dependencies.routes import runtime_url as _shared_runtime_url
 from citry.extension import ExtensionManager
 from citry.introspection import _new_engine_id
 from citry.lifecycle import no_setup_wait
@@ -1641,6 +1642,43 @@ class Citry:
         # The browser resolves the URL from the site root, so an app served
         # below a sub-path needs the sub-path in front of the mount prefix.
         return f"{self._current_sub_path()}{self._mounted_prefix}/{path}"
+
+    def runtime_url(self) -> str:
+        """
+        Return the URL of Citry's browser runtime for a page you write by hand.
+
+        Pages that Citry renders already link the runtime. Call this when your
+        own HTML loads it, for example a page that only receives HTML
+        fragments. The URL holds a hash of the runtime file, so the browser
+        keeps the file between page loads. The hash, and so the URL, changes
+        when an upgrade changes the file. The URL includes the mount prefix
+        and any sub-path the app is served below, such as ``/shop``. When the
+        app sets [`cache`][citry.CitrySettings.cache], this call also stores
+        the runtime there, so another worker can serve it.
+
+        A static HTML file that you write once keeps the old hash after an
+        upgrade. Link the stable ``/citry/citry.js`` from that file instead;
+        the browser then downloads it on every page load.
+
+        Returns:
+            The runtime's URL path, such as ``/citry/citry.<hash>.js``.
+
+        Raises:
+            RuntimeError: If no web integration is mounted, because the URL
+                would point nowhere.
+            Exception: Any error the cache backend raises when it cannot
+                store the runtime.
+
+        Example:
+            ```python
+            from citry import citry
+
+            src = citry.runtime_url()
+            html = f'<script src="{src}"></script>'
+            ```
+
+        """
+        return _shared_runtime_url(self)
 
     def _current_sub_path(self) -> str:
         """Return the sub-path the host app is served below for the current request, or ``""`` at the site root."""

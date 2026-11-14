@@ -1,10 +1,17 @@
 # Design: serve the browser runtimes from content-hashed URLs
 
-**Status (2026-11-13): proposed. The maintainer settled seven design choices,
-recorded in section 6. Implement after 0.8.0 is released.**
+**Status (2026-11-14): implemented for Citry 0.9.0 in issue #578. The
+maintainer settled seven design choices, recorded in section 6. Where the
+implementation settled a detail this design left open, the section now
+describes the code. Recovering a page whose runtime is gone, by reloading it,
+is left for after 1.0.0 in issue
+[#665](https://github.com/citry-dev/citry/issues/665).**
 Tracking issue: [#578](https://github.com/citry-dev/citry/issues/578).
 
-## 1. What happens now and why it matters
+## 1. What happened before and why it mattered
+
+Sections 1 and 2 describe the code before issue #578, as the design found
+it. Sections 3 onward describe the change.
 
 Citry sends three JavaScript runtimes to the browser:
 
@@ -195,16 +202,23 @@ other stable URLs (section 3.4).
 
 ### 3.2 What the hashed route answers
 
-The server computes each runtime's bytes, SHA-256 and SHA-384 once per
-process and keeps them. The handler then:
+The server reads each runtime's bytes and computes their SHA-256 once per
+process and keeps them. The SHA-384 for `integrity` is also computed once per
+process, by the per-content cache that `_owned_resource.py` already keeps.
+The handler then:
 
 1. Checks the digest's shape. A digest that is not 64 lowercase hex
-   characters gets `404` with an empty body and `Cache-Control: no-store`.
+   characters gets `404` with an empty body, `Cache-Control: no-store` and
+   `Access-Control-Allow-Origin: *`. The page loads the runtime with
+   `crossorigin` when it checks integrity, and every request from a sandboxed
+   iframe counts as cross-origin; the CORS header lets the console show such
+   a page the `404` instead of a CORS error that hides it.
 2. Serves the current bytes when the digest matches them.
 3. Otherwise, when `settings.cache` is set, reads `citry:runtime:<digest>`
    (for i18n, `citry:i18n-runtime:<digest>`) from the shared cache, checks its
    SHA-256 against the digest, and serves it. A mismatch deletes the entry.
-4. Otherwise answers `404` with `no-store`.
+4. Otherwise answers the same `404`. The Events definition and stylesheet
+   routes answer a miss the same way.
 
 A hit answers `200` with `Content-Type: text/javascript; charset=utf-8`,
 `Cache-Control: public, max-age=31536000, immutable`,
@@ -232,18 +246,17 @@ harmless.
 A process that keeps emitting the hash writes the entry again after it
 expires, because `_store_if_missing` writes any entry the backend lacks.
 Between the expiry and that next render, a
-worker that lacks the bytes answers `404` and the page takes the reload path
-in section 3.5. So the cache holds one entry of about 400 KB for each version
+worker that lacks the bytes answers `404` and the page shows the console
+error in section 3.5. So the cache holds one entry of about 400 KB for each version
 of the shared runtime that a worker emitted in the last 30 days, plus a
 smaller one for i18n.
 
 ### 3.3 Where the page gets the hash
 
-Every place that writes a runtime URL will call one helper per runtime.
-`runtime_url(citry)` is the helper for the shared runtime. The Events
-serialization builds its URL inline today (`_vue/serialization.py:1295`,
-`ext/events/routes.py:277`) and switches to it. The i18n runtime gets its own
-helper. Both return the hashed URL, and the public method
+Every place that writes a runtime URL calls one helper per runtime.
+`runtime_url(citry)` is the helper for the shared runtime, and the Events
+serialization uses it too, through the Dependencies runtime resource. The i18n
+runtime has its own helper. Both return the hashed URL, and the public method
 `Citry.runtime_url()` (section 6, decision 5) calls the shared-runtime helper.
 So these all move together:
 
@@ -256,12 +269,16 @@ So these all move together:
 - the check in `_vue/serialization.py:655-686` that a serialization hook kept
   the runtime tag, which compares against the same helper's value.
 
-Integrity reads the stored SHA-384, so Citry does not hash the body on every
-render. The value stays SHA-384, so the `integrity` attribute does not change.
+Integrity reuses the SHA-384 that `_owned_resource.py` already computes once
+for each runtime's bytes, so Citry does not hash the body on every render. The
+value stays SHA-384, so the `integrity` attribute does not change.
 
 Without a mount prefix, document pages still inline the runtime. The fragment
-loader and the i18n resource keep the relative paths they use today, since no
-route serves them. The hashed URL applies only when a prefix is mounted.
+loader and the i18n resource keep the relative paths they used in 0.8.0, since
+no route serves them. The hashed URL applies only when a prefix is mounted.
+Such a page also keeps the one-line start script
+`__citryRuntime.startDocument(<app id>)`, because an inlined runtime cannot go
+missing.
 
 ### 3.4 The stable URLs stay as aliases
 
@@ -275,136 +292,70 @@ URLs. The stable URLs stay because:
   working across the upgrade;
 - the preview host's startup check, the starters, the demos and third-party
   tools fetch them;
-- a host that loads the runtime by hand needs one URL that always works;
+- an app that links the runtime by hand needs one URL that always works;
 - keeping each one costs a single route.
 
 ### 3.5 When a hashed runtime fails to load
 
-A page can ask for a hash that no server holds (section 4). The page needs to
-recover on its own, and it must never reload in a loop. The start script is
-the right place for this, because it already runs on every document page,
-carries the CSP nonce, and runs after the runtime script has loaded or failed.
+A page can ask for a hash that no server holds (section 4). The page then
+keeps its server HTML and says clearly in the browser console what went
+wrong. It does not reload itself. Recovering automatically, with a reload
+that never loops and never sends a form again, is tracked for after 1.0.0 in
+issue [#665](https://github.com/citry-dev/citry/issues/665).
 
-The rule: **reload at most once, and only when all three hold: the app did not
-mark the page as answering a request other than GET or HEAD, the browser can
-tell that this load is not already a reload, and the server says the runtime
-is gone.**
+The start script below is written only on a mounted `document` render
+(section 3.3). A fragment writes no start script; its loader reports a missing
+runtime (below). A page rendered without a mount prefix, whose runtime is
+inline and so cannot go missing, keeps the one-line
+`__citryRuntime.startDocument("<app id>");`.
 
 1. If `__citryRuntime` is an own property of `window`, the start script calls
-   `startDocument` as today. Reading it as an own property matters, because an
-   element with `id="__citryRuntime"` would otherwise answer the plain name.
-2. Otherwise, if another start script on the page has already handled the
-   failure (a flag on `window`), it stops. This keeps a page with several apps
-   from logging or reloading more than once.
-3. Otherwise, if the start script's `canReload` value is `false`, it writes a
-   `console.error` and stops. The server writes `false` when the app said,
-   through `request_method` (section 4), that the page answers a request
-   other than GET or HEAD, and `true` otherwise. If one page holds several
-   start scripts with different values, the first to run decides, because it
-   sets the flag in step 2.
-4. Otherwise it asks whether this load is already a reload. It reads the
-   navigation entry (`performance.getEntriesByType("navigation")[0].type`),
-   and falls back to the older `performance.navigation.type === 1` that
-   Safari before 15 offers. If this load is a reload, or neither source
-   exists, it writes a `console.error` and stops. A reload Citry started
-   counts, and so does one the user started. This check needs no storage, so
-   it holds when session storage is blocked or the page runs in a frame with
-   no origin, such as the docs playground preview.
-5. Otherwise, if session storage is readable and already holds this runtime
-   URL, it writes a `console.error` and stops. This keeps a site whose whole
-   pages are cached from reloading every page the user opens in that tab.
-   When storage throws, step 4 still limits the page to one reload per load.
-6. Otherwise it asks the server for the runtime with
-   `fetch(url, {method: "HEAD", cache: "no-store"})`. The router already
-   answers `HEAD` on `GET` routes (`util/routing.py:194`), so the probe does
-   not download the runtime again. Only a `404` stores the URL in session
-   storage (when it can) and calls `location.reload()`. A network error, a
-   blocked request, a `200` or any other status writes a `console.error` and
-   keeps the server HTML on screen. A reload would not help in any of these
-   four cases: a page opened from history while offline, a runtime blocked by
-   an extension or a proxy, a browser too old to run the runtime (the file
-   loads but defines nothing), and a probe that the page's CSP `connect-src`
-   blocks.
-
-A sketch, with lines kept short. Storage access is wrapped in `try` in the
-real script, and left out here:
+   `startDocument`, as Citry 0.8.0 did. Reading it as an own property matters,
+   because an element with `id="__citryRuntime"` would otherwise answer the
+   plain name.
+2. Otherwise, if another start script on the page has already reported the
+   failure (the own property `__citryRuntimeMissing` on `window`), it stops.
+   This keeps a page with several apps from logging more than once.
+3. Otherwise it sets that flag and writes
+   `console.error("Citry could not load its runtime: " + url)`. Without this
+   step the browser would show only `ReferenceError: __citryRuntime is not
+   defined`, which does not say which file is missing.
 
 ```js
 var w = window, own = Object.prototype.hasOwnProperty;
-var url = "<runtime url>", key = "citry:runtime-reload";
-var canReload = <true or false>;
-var fail = function () {
-  console.error("Citry could not load its runtime: " + url);
-};
-var reloaded = function () {
-  var p = w.performance, nav = p.getEntriesByType
-    ? p.getEntriesByType("navigation")[0] : null;
-  if (nav) return nav.type === "reload";
-  if (p.navigation) return p.navigation.type === 1;
-  return true;  // cannot tell, so never reload
-};
 if (own.call(w, "__citryRuntime")) {
   w.__citryRuntime.startDocument("<app id>");
 } else if (!own.call(w, "__citryRuntimeMissing")) {
   w.__citryRuntimeMissing = true;
-  if (!canReload || reloaded()
-      || sessionStorage.getItem(key) === url) fail();
-  else fetch(url, {method: "HEAD", cache: "no-store"})
-    .then(function (r) {
-      if (r.status !== 404) return fail();
-      sessionStorage.setItem(key, url);
-      location.reload();
-    }, fail);
+  console.error("Citry could not load its runtime: "
+    + "<runtime url>");
 }
 ```
 
-- The reload fetches fresh HTML, which links the hash the server holds now.
 - After a failure, the server HTML stays on screen. Links and plain forms keep
-  working. Events and Vue features do not start.
-- The three values in the script are the app id it carries today, the runtime
-  URL the server built, and `canReload`. All three are written with
-  `script_json`, and the URL is joined to the message with `+`, never pasted
-  into a string.
-- The start script's text includes the runtime URL, so its CSP hash changes
-  with each release. The text also has two forms, one for each value of
-  `canReload`. Serialization already reports the hash per render, so a host
-  that sends hashes picks up the new one.
+  working. Events and Vue features do not start. A reload by the visitor gets
+  fresh HTML, which links the hash the server holds now.
+- The two values in the script are the app id it carried in 0.8.0 and the
+  runtime URL the server built. Both are written with `script_json`, and the
+  URL is joined to the message with `+`, never pasted into a string.
+- The script sends no request and has one form. Its text includes the runtime
+  URL, so its CSP hash changes with each release. Serialization already
+  reports the hash per render, so an app that sends hashes picks up the new
+  one.
 
 **Browser plugins.** The start script checks only `__citryRuntime`, not any
 one extension's script. A plugin script, such as the i18n runtime, can also
-fail to load while the runtime loads. Today the runtime then throws "missing
-or incompatible Citry browser plugin" (`_vue/client.js:3307-3310`), from code
-that both `startDocument` and the fragment code (`citry-fragments.ts:95`)
-reach. The runtime handles it with the same rule, with three limits:
+fail to load while the runtime loads. The runtime then throws its existing
+"missing or incompatible Citry browser plugin: <name>" error, which the
+console shows, and the page keeps its server HTML. This works the same for
+any extension that registers a browser plugin.
 
-1. It applies the rule only when `startDocument` starts a full page and
-   `canReload` is `true`. The runtime reads `canReload` from the configuration
-   JSON, the data it reads when it starts, so the server writes the same value
-   there as in the start script. This changes that JSON in place, which is
-   allowed because the contract stays at version 1 while Citry is below 1.0.0.
-   A configuration without the field, or with any other value, never reloads:
-   a page rendered by 0.8.0 or earlier that loads this runtime has no field. A
-   fragment never reloads the page; it keeps today's error.
-2. It applies the rule only when the plugin is not registered at all. A
-   plugin that is registered but does not match (another schema version, or
-   the i18n "different build already registered" error) would fail on every
-   load, so it keeps today's error and never reloads.
-3. It probes the plugin's script URL as step 6 does. So the page's entry for
-   each extension in `manifest.extensions` (read at `_vue/client.js:3240`)
-   also carries the URL of its plugin script. This is a change to the JSON the
-   server writes for the runtime, made in place under version 1.
-
-The rule lives once in the runtime for plugins and once in the start script
-for the runtime itself, because the start script must work when the runtime
-is missing. One browser test matrix covers both. This works the same for any
-extension that registers a browser plugin.
-
-**The fragment loader** does not reload the page. It adds an `error` listener
-(a property set from JavaScript, so CSP allows it) that writes the same
-`console.error`. A fragment is a small part of a page, and reloading the whole
-page because of one fragment would lose the user's work. The fragment was
-rendered a moment earlier by a current worker, so this miss happens only during
-a rolling deploy.
+**The fragment loader** sets an `onerror` handler on the script element (a
+property set from JavaScript, so CSP allows it) that writes the same
+`console.error`. The fragment was rendered a moment earlier by a current
+worker, so this miss happens only during a rolling deploy. Each fragment
+that adds the runtime reports its own failure, so a page with several such
+fragments can log the message more than once.
 
 ## 4. Error modes
 
@@ -418,89 +369,43 @@ or reopened from history, asks for `citry.<old>.js`.
 2. If the browser does not have it and `settings.cache` is set, any worker
    serves it from the shared cache, until the entry expires 30 days after its
    last write (section 3.2).
-3. Otherwise the server answers `404` with `no-store`, and the page reloads
-   once (section 3.5) and gets the new HTML.
+3. Otherwise the server answers `404` with `no-store`. The page keeps its
+   server HTML and writes the `console.error` (section 3.5). A reload by the
+   visitor gets the new HTML.
 
-**The page answered a request other than GET or HEAD.** Many apps render a
-page directly in reply to a form POST. If that page reloaded, the browser would
-ask the user whether to send the form again, and a user who agrees would send
-it twice. So when the app tells Citry the method, such a page never reloads. It
-keeps its server HTML and writes the `console.error` (section 3.5). Citry's own
-routes that render pages (the preview routes, `ext/preview/routes.py`) answer
-only GET and HEAD, so they leave the method out. In every other case
-`serialize()` is not given the request, so the app's view passes the method:
-
-```python
-html = page.render().serialize(request_method=request.method)
-```
-
-- `request_method` is a keyword of `serialize()` that tells Citry which HTTP
-  method the page answers. `"GET"` and `"HEAD"`, in any letter case, leave the
-  reload on. Every other name turns it off. Citry carries the answer to the
-  browser as `canReload`, a `true` or `false` value (section 3.5).
-- When the app does not pass it, or passes `None`, Citry cannot tell, so the
-  page may reload. Browsers are expected to ask before they send the form
-  again, so nothing is sent silently. A browser test in section 7 checks this
-  before the design relies on it. The user docs tell apps that answer a POST
-  with a page to pass `request_method`. `str(render)`, `bytes(render)` and
-  `str(slot)` call `serialize()` with its defaults and cannot pass the method,
-  so they count as not passed.
-- A value that is not a method name (a non-empty string of characters that
-  HTTP allows in a method name) raises `ValueError`, as an invalid `csp_nonce`
-  does. Every serialization checks it, including one that writes no start
-  script, so a wrong value shows up in development.
-- The server writes `canReload` only for a `document` render, into the start
-  script and the configuration JSON. A render that writes neither
-  (`deps_strategy` of `"simple"`, `"ignore"` or `"fragment"`, a document with
-  no Vue component, or `security_javascript` set to `omit` or `forbid`)
-  accepts a valid value and ignores it. A fragment's configuration is copied
-  into the page's mount data (`_vue/serialization.py:1401-1409`), so it must
-  not carry the field.
-
-If such a page meets a missing runtime, the server HTML stays on screen, links
-and plain forms keep working, and Events and Vue features do not start until
-the user opens the page again with a GET request, for example by following a
-link. That happens only when neither the browser nor any worker can supply the
+The server HTML stays on screen, links and plain forms keep working, and
+Events and Vue features do not start until the visitor opens the page again.
+That happens only when neither the browser nor any worker can supply the
 runtime.
 
-**A host caches whole pages.** A CDN or a page cache in the app keeps HTML
-that links an old hash after the deploy. Steps 1 and 2 of the old-page list
-above still apply. In its step 3 the reload returns the same cached HTML, the
-navigation-type check stops a second reload, and the page stays as server HTML.
-The URL stored in
-session storage stops the reload on the next pages the user opens in that tab.
-When storage is blocked, each page the user opens reloads once, so every page
-load costs two. The user docs tell app authors to purge cached pages on
+**A CDN or page cache in front of the app keeps whole pages.** A CDN or a page
+cache in the app keeps HTML that links an old hash after the deploy. Steps 1
+and 2 of the old-page list above still apply. In its step 3 a reload by the
+visitor returns the same cached HTML, so the page stays as server HTML until
+the cache drops it. The user docs tell app authors to purge cached pages on
 deploy or to set `settings.cache`.
-
-**Prerendering.** A page prerendered by speculation rules that calls
-`location.reload()` is most likely thrown away by the browser, and the user
-then gets a normal load. This is unproven; the browser tests in section 7
-check it. A page restored from the back/forward cache does not run its scripts
-again, so it never reaches the rule.
 
 **Rolling deploys.** For a while, workers run different versions.
 
 | Page rendered by | Runtime request reaches | Result |
 |---|---|---|
-| 0.8.0 or earlier | Any worker | Stable URL, `no-store`, same as today |
+| 0.8.0 or earlier | Any worker | Stable URL, `no-store`, same as in 0.8.0 |
 | Version N | A worker on N | Served from memory |
 | Version N | A worker on M (both have this feature), shared cache set | Served from the shared cache, because N wrote it when it rendered the page (until it expires, section 3.2) |
-| Version N | A worker on M, no shared cache | `404` with `no-store`, at most one reload |
-| Version N | A worker on 0.8.0 or earlier | No such route, the adapter's `404`, at most one reload |
+| Version N | A worker on M, no shared cache | `404` with `no-store`, server HTML and the console error |
+| Version N | A worker on 0.8.0 or earlier | No such route, the adapter's `404`, server HTML and the console error |
 
-After the one reload, the new HTML may come from either version. If it comes
-from a worker on 0.8.0 or earlier, it links the stable URL and works. If its
-runtime request again reaches a worker that lacks the hash, the page stays as
-server HTML until a later visit, because the second load is a reload. The user
-docs recommend sticky sessions or a shared cache for rolling deploys. Citry
-does not retry the request on another worker, because the browser cannot
+When the visitor reloads, the new HTML may come from either version. If it
+comes from a worker on 0.8.0 or earlier, it links the stable URL and works. If
+its runtime request again reaches a worker that lacks the hash, the page stays
+as server HTML. The user docs recommend sticky sessions or a shared cache for
+rolling deploys. Citry does not retry the request on another worker, because the browser cannot
 choose one.
 
 The adapter's `404` for an unmatched path under the prefix sends no
-`Cache-Control` today (`contrib/asgi.py:175`, `contrib/wsgi.py:150`). This
-change adds `no-store` to it. That fixes later deploys, but a worker on 0.8.0
-or earlier still sends its old answer during the first deploy of this feature.
+`Cache-Control` in 0.8.0. This change adds `no-store` to it. That fixes later
+deploys, but a worker on 0.8.0 or earlier still sends its old answer during
+the first deploy of this feature.
 
 **A malformed or unknown hash.** Wrong length, upper case, or other characters:
 `404`, empty body, `no-store`, the same answer as an unknown well-formed hash.
@@ -509,12 +414,12 @@ The handler checks the shape before it builds a cache key.
 **A CDN in front of the app keeps `404` answers.** Every `404` from these routes
 sends `no-store`, which mainstream CDNs honor by default. While touching this,
 the Events definition and stylesheet `404`s gain the same `no-store` they lack
-today, since CLAUDE.md Mechanism 3 asks for sibling bugs to be fixed in the
+in 0.8.0, since CLAUDE.md Mechanism 3 asks for sibling bugs to be fixed in the
 same pass. A CDN configured to cache `404`s for a fixed time ignores the
-header. The user docs name that setting. The navigation-type check keeps such a
-page from looping.
+header. The user docs name that setting. Such a page keeps its server HTML and
+writes the `console.error`; it never reloads, so it cannot loop.
 
-**The runtime file changes while the process runs.** Like `citry.js` today,
+**The runtime file changes while the process runs.** Like `citry.js` in 0.8.0,
 the shared runtime is read once per process, and the Events alias serves those
 same bytes. The i18n route reads its file once per process too, so an edited
 file takes effect on restart. Editing the installed package is not a
@@ -565,13 +470,12 @@ The maintainer made these seven decisions on 2026-11-13.
 3. **The stable URLs stay permanently.** `citry.js`, `ext/events/runtime.js`
    and `ext/i18n/runtime.js` keep answering with `no-store` in every release,
    including after 1.0.0. Keeping each one costs a single route (section 3.4).
-4. **A page that answers a request other than GET or HEAD does not reload when
-   its runtime is missing.** The app passes the method as `request_method` to
-   `serialize()`. Without it, Citry cannot tell, and the page may reload. The
-   start script and the runtime carry the answer as `canReload` (sections 3.5
-   and 4). Not chosen: letting such a page reload and relying on the browser's
-   "send the form again?" question, and asking with a `confirm()` message like
-   the `promptReload` one the runtime already shows after a stale Events call.
+4. **A page whose runtime is missing does not reload itself.** It keeps its
+   server HTML and writes a `console.error` that names the missing file
+   (section 3.5). A safe reload needs to know each request's method,
+   because Chrome sends a form again without asking when a page that
+   answered a POST reloads. The maintainer moved that recovery to after 1.0.0, in
+   issue [#665](https://github.com/citry-dev/citry/issues/665).
 5. **A public `Citry.runtime_url()`.** App code that writes a page's HTML by
    hand calls it to get the hashed URL of the shared runtime. It works as
    `citry.runtime_url()` on the default engine and on any `Citry` instance.
@@ -580,8 +484,8 @@ The maintainer made these seven decisions on 2026-11-13.
    `RuntimeError` when no web integration (such as
    `citry.contrib.fastapi.mount(...)`) is mounted, as `Citry.build_url` does. A
    page that keeps the URL, such as a static file the app writes once, links a
-   stale hash after an upgrade and nothing reloads it; such a page links the
-   stable `/citry/citry.js`. Section 8 lists the hand-written links that switch
+   stale hash after an upgrade; such a page links the stable
+   `/citry/citry.js`. Section 8 lists the hand-written links that switch
    to it. Only the shared runtime has a public function; Citry links the i18n
    runtime itself.
 6. **Saving to the shared cache is automatic, with a 30-day expiry.** There is
@@ -591,8 +495,8 @@ The maintainer made these seven decisions on 2026-11-13.
    (section 3.2), which bounds how many deployed versions the cache keeps.
 7. **i18n in static export is a separate change.** Static export (the docs
    site build writes the runtime files into its output folder) writes
-   `citry.<sha256>.js` next to the files it writes today. It does not write the
-   i18n runtime, and adding it is its own change.
+   `citry.<sha256>.js` next to the files it wrote in 0.8.0. It does not write
+   the i18n runtime, and adding it is its own change.
 
 ## 7. What would show this design is wrong
 
@@ -601,32 +505,17 @@ The maintainer made these seven decisions on 2026-11-13.
   than after a forced reload, means a header or a `crossorigin` mismatch
   between the preload hint and the script keeps the browser from reusing its
   copy.
-- **The page reloads more than once.** A browser test serves a page whose
-  runtime answers `404` and expects exactly one reload, then a
-  `console.error`, then nothing more. It runs again with session storage
-  blocked, inside a sandboxed frame with no origin, with a server that links a
-  different missing hash on every load, with the navigation entry stubbed
-  out (no reload at all when neither navigation source exists), and with
-  `canReload` false (no probe and no reload).
-- **A missing plugin reloads from the wrong place.** A browser test blocks
-  the i18n runtime and expects one reload on a full page, none when a fragment
-  needs the plugin, none when the registered plugin does not match, and none
-  when `canReload` is false.
-- **The POST and prerender claims in section 4 fail.** A browser test renders
-  a page in reply to a form POST, with `request_method="POST"` and a missing
-  runtime, and expects no reload and one `console.error`. A second renders
-  the same page without `request_method` and checks that the browser asks
-  before sending the form again. Another prerenders a page with a missing
-  runtime and checks that the user's later visit loads normally.
-- **The page reloads when it should not.** A browser test makes the runtime
-  request fail with a network error and expects no reload and the server HTML
-  still on screen. The docs playground preview, on a current wheel, never
-  reaches the reload branch.
+- **A missing runtime leaves the developer without a clue.** A browser test
+  serves a page whose runtime answers `404` and expects the server HTML on
+  screen, exactly one `console.error` naming the runtime URL (also on a page
+  with two apps), no further request for the runtime, and no reload. Another
+  blocks the i18n runtime and expects the runtime's plugin error and no
+  reload.
 - **A page meets the wrong runtime.** A browser test renders a page, swaps the
   runtime bytes (and so the hash), uses the back button, and checks that the
   page runs with the runtime its HTML names, with integrity on and off.
 - **A hashed URL slips through a path.** A test renders a document, a
-  fragment, an Events `Render` result and a cached render, and checks that each
+  fragment and an Events `Render` result, and checks that each
   one names the hashed URL and never the stable one. It also checks that
   `citry.runtime_url()` returns the URL the document links.
 
@@ -654,28 +543,21 @@ moves (the package is below 1.0.0).
 - `citry/citry.py`: the public `Citry.runtime_url()`. Its docstring follows
   the public-docstring rules in `CLAUDE.md`: a one-sentence summary,
   `Returns:`, `Raises:` for the unmounted case, and an `Example:`.
-- `citry_render.py`, `serialize.py`: the `request_method` keyword on
-  `serialize()`, `serialize_result()`, `serialize_render_result()` and the
-  compatibility wrapper `serialize_render()`, its validation in
-  `_SerializationSession.for_render` (where `csp_nonce` is checked), and its
-  docstring entry. The value reaches the Vue code through a new private
-  keyword on `prepare_vue_serialization`. It is not a field of the public
-  `OnSerializeContext`, because that would change a public hook.
 - `contrib/asgi.py`, `contrib/wsgi.py`: `no-store` on the unmatched-path
   `404`.
 - `ext/dependencies/emission.py`: `_runtime_script()`, the fragment loader URL
-  and its `error` listener.
+  and its `onerror` handler.
 - `_vue/serialization.py`: the runtime tag, the preload hint, the hook check,
-  the new start script with its `canReload` value, the `canReload` field in the
-  configuration JSON, and the comment at `:1384-1389` that says the start
-  script carries only the app id.
-- `_vue/client.js`: the reload rule when a browser plugin is missing, on the
-  `startDocument` path only and when `canReload` is true. Then rebuild the
-  committed `_vue/runtime.js` (`packages/js/citry-client/build.mjs`), and add
-  JavaScript unit tests for the rule under `packages/js/citry-client/test/`.
-- `_vue/serialization.py` and the extension plugin objects: each entry in
-  `manifest.extensions` carries its plugin script URL.
-- `_serialization_security.py`: use the stored SHA-384.
+  the new start script that writes the `console.error`, and the comment at
+  `:1384-1389` that says the start script carries only the app id.
+- `_vue/client.js`: no change. The runtime keeps its error for a missing
+  browser plugin.
+- `_serialization_security.py`: no change. The SHA-384 of each runtime's bytes
+  is already computed once per process by the cache in `_owned_resource.py`.
+- `_hashed_runtime.py` (new, private): the shared code for both hashed
+  runtimes. It holds the digest check, the `404` answer with `no-store`, the
+  30-day expiry, and a `HashedRuntime` class that builds the URL, writes the
+  shared cache and serves the stable and hashed routes.
 - `ext/i18n/extension.py`: `browser_plugin()` links the hashed URL.
 
 **Hosts and tools:**
@@ -713,8 +595,8 @@ moves (the package is below 1.0.0).
   `:738-743` and `:852-855`.
 - `docs/design/events.md:1480,1937-1941`.
 - `docs/design/security_csp.md:701-721`: the start script carries the
-  runtime URL and the reload rule, its CSP hash changes with each release, and
-  its text has two forms.
+  runtime URL and the `console.error`, and its CSP hash changes with each
+  release.
 - `docs/design/public_api_0_6_0_audit.md` is a record of 0.6.0 and stays as
   it is.
 
@@ -722,7 +604,7 @@ moves (the package is below 1.0.0).
 
 - `docs_site/content/advanced/web-frameworks.md:106,474,508-513`: the new
   caching, purging cached pages on deploy, sticky sessions or a shared cache,
-  CDN `404` caching, and passing `request_method` when a page answers a POST.
+  CDN `404` caching, and what a page with a missing runtime shows.
 - `docs_site/content/security.md:1007`: the CORS list names all runtime routes.
 - Pages that show `/citry/citry.js` as the loaded URL
   (`guides/troubleshooting.md:116`, `guides/htmx.md:57`,
@@ -738,8 +620,8 @@ moves (the package is below 1.0.0).
   whose `src` the page's view or template fills in from it.
 - `CHANGELOG.md`: an entry along the lines of "The browser now keeps the
   Citry runtimes between page loads. Pages link them by a URL that changes
-  with each release.", and one entry for each new public name:
-  `Citry.runtime_url()` and the `request_method` keyword of `serialize()`.
+  with each release.", and one entry for the new public name
+  `Citry.runtime_url()`.
 
 **Tests that expect the hashed URL.** Each takes the digest from the runtime
 bytes, never from a copied literal:
@@ -752,7 +634,7 @@ bytes, never from a copied literal:
   `test_serialize_security.py:339-356,1112`, `test_vue_events.py:821,1168`,
   `test_check_app_rules.py:1855`.
 - `test_vue_document_configuration.py:61` and `test_vue_events.py:1241` match
-  the start script text, which now has the runtime URL and two forms.
+  the start script text, which now has the runtime URL.
 - `e2e/test_fragment_e2e.py`, `e2e/test_fragment_nonce_e2e.py`,
   `e2e/test_vue_transparent_root_e2e.py`: pages now load the hashed URL.
 - `docs_site/tests/test_static_deps.py`, `test_playground_executor.py`,
@@ -760,8 +642,8 @@ bytes, never from a copied literal:
 - `packages/py/citry_ui/citry_ui/quality/tests/test_routes.py`.
 - New: the shape check, the shared-cache read across two `Citry` instances,
   the mismatch delete, the 30-day expiry (a cache that records the `ttl` it is
-  given), the adapter `404` header, `request_method` validation with both
-  start-script forms, `Citry.runtime_url()` with and without a mounted prefix,
+  given), the adapter `404` header, the start script's `console.error`,
+  `Citry.runtime_url()` with and without a mounted prefix,
   and the browser tests in section 7.
 
 **Tests that use the stable URL and keep passing through the alias:**
@@ -781,10 +663,10 @@ schema, not compared with live output, so they stay as they are.
 
 **Left out on purpose:**
 
-- A fragment rendered by a newer version and inserted into a page that
-  already runs an older runtime. The fragment loader does not run in that
-  case, and the older runtime reads the newer fragment. That is true today and
-  this design does not change it.
+- A fragment rendered by a newer version and inserted into a page that already
+  runs an older runtime. The fragment loader does not run in that case, and
+  the older runtime reads the newer fragment. That was true in 0.8.0 and this
+  design does not change it.
 - Soft navigation (Turbo, `hx-boost`), which keeps the runtime already in
   `window` across body swaps. The guarantee in section 4 covers full page
   loads.
@@ -793,48 +675,42 @@ schema, not compared with live output, so they stay as they are.
 ## 9. Security pass routes
 
 Every URL this change adds comes from the server: the digest is computed from
-package bytes, and no request or template data chooses a runtime URL. The new
-inputs from a request are the digest in the path and, through the app, the
-method of the request that a page answers. The places from the
+package bytes, and no template data chooses a runtime URL. The only request
+data in it is the sub-path the app is served below, which `normalize_sub_path`
+checks as for every other Citry URL. The new input from a request is the
+digest in the path. The places from the
 CLAUDE.md list that this change touches, and the routes to check in the
 review:
 
 - **Responses Citry serves.** The hashed routes: `Content-Type`, `nosniff`,
   CORS, `immutable` only on bytes checked against their digest. Every `404`:
-  empty body, `no-store`, the path never echoed.
+  empty body, `no-store`, `Access-Control-Allow-Origin: *`, the path never
+  echoed.
 - **Addresses the browser code takes from the server.** The runtime URL in
   `<script src>`, in the preload hint, in the fragment loader's JavaScript
   string (written with `json.dumps` and `<` escaped), inside an Events
-  `Render` result, in the start script (written with `script_json`), and in
-  each plugin's entry in `manifest.extensions`. The URL is the mount prefix,
-  which the app author sets, plus a hex digest.
-- **The probe request.** The start script and the runtime send a same-origin
-  `HEAD` request to a URL the server chose, and read only its status.
+  `Render` result, in the start script of a mounted document (written with
+  `script_json`, and shown only in a `console.error`). The URL is the request's
+  sub-path (from `root_path` or `SCRIPT_NAME`, checked by `normalize_sub_path`:
+  `//host` becomes the site root, quotes and `<` are percent-encoded), the
+  mount prefix, which the app author sets, and a hex digest.
 - **The CSP nonce.** The runtime tag, the preload hint, the fragment loader's
   script, and the new start script all receive it, including fragments added
   after load. Under strict CSP the fragment loader is still omitted. The
-  start script's CSP hash changes with each release, its text has two
-  forms, and the hash is reported per render.
+  start script's CSP hash changes with each release, it has one form, and
+  the hash is reported per render.
 - **Element `id` and `name`.** The start script reads `__citryRuntime` and its
-  own flag as own properties of `window`. `location`, `performance`, `fetch`,
-  `sessionStorage` and `console` are own properties of `window`, so markup
-  cannot replace them.
-- **Navigation.** The start script and the runtime only call
-  `location.reload()`. Nothing chooses where the page goes.
+  own flag as own properties of `window`. `console` is an own property of
+  `window`, so markup cannot replace it.
 - **The opt-in output checks.** `security_script_integrity`,
   `security_csp` and `security_javascript` must treat the hashed URL as the
   Citry-owned runtime, and the hook check must find it.
-- **Cached renders.** The runtime tag, the start script and `canReload` are
-  written after replay, so a cached render always gets the current URL and the
-  current request's value. A page cached whole by the host links an old URL and
-  follows section 4.
+- **Cached renders.** The runtime tag and the start script are written after
+  replay, so a cached render always gets the current URL. A page cached whole
+  by a CDN or page cache links an old URL and follows section 4.
 - **The shared cache.** An entry is served only when its SHA-256 matches the
   digest in the URL. The 30-day expiry only shortens how long an entry exists;
   the check is the same.
-- **The request method.** `request_method` first comes from the request, and
-  the app passes it to `serialize()`. Citry compares it with `GET` and `HEAD`
-  and never writes it to the page. The page gets only `true` or `false`. An
-  invalid value raises `ValueError` before serialization writes anything.
 - **`citry.runtime_url()`.** It takes no input. Its value is the mount prefix
   and sub-path that `Citry.build_url` already uses
   ([review](../security/reviews/2026-10-28-sub-path-urls-479.md)), plus a hex

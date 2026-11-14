@@ -57,6 +57,11 @@ _ALLOWED_ASSET_ROUTES = frozenset(
         ("cache/{class_id}.{vars_hash}.{script_type}", "citry_cached_script_vars"),
         ("cache/{class_id}.{script_type}", "citry_cached_script"),
         ("asset/{file_name}", "citry_asset"),
+        # The runtimes at the URLs a current Citry links, named by their hash.
+        ("citry.{digest}.js", "citry_client_runtime_hashed"),
+        ("ext/i18n/runtime.{digest}.js", "citry_i18n_runtime_hashed"),
+        # The stable runtime URLs, which pages from the older published wheel
+        # that runtime.json pins still link.
         ("citry.js", "citry_client_runtime"),
         ("ext/events/runtime.js", "citry_events_runtime"),
         ("ext/events/definitions/{digest}.js", "citry_vue_definition"),

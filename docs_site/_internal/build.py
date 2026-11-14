@@ -83,6 +83,7 @@ from docs_site._internal.social_cards import generate_social_cards
 from docs_site._internal.static_deps import (
     CITRY_MOUNT_PREFIX,
     export_fragment_deps,
+    export_hashed_runtime,
     export_prepared_page_assets,
     export_runtime,
     validate_prepared_assets,
@@ -619,7 +620,12 @@ def _build_site_to_output(
     # The client runtime and the search index are also shared from the root: a
     # snapshot's pages reference the client and configured search assets at the
     # site root.
-    if not docs_version:
+    if docs_version:
+        # A snapshot's pages link the runtime by its hash, and the root build
+        # holds only the current one. The snapshot keeps its own copy, which
+        # `assemble` copies to the root next to the current runtime.
+        export_hashed_runtime(output_dir, default_citry)
+    else:
         # The client runtime, so a component's JavaScript loads from flat files.
         outcome.runtime = export_runtime(output_dir, default_citry)
         validate_prepared_assets(output_dir, default_citry)

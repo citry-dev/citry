@@ -43,10 +43,10 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlsplit
 
+from citry._hashed_runtime import is_content_digest, not_found
 from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, _OwnedResource
 from citry._protocol.events import (
     ProtocolValueError,
@@ -55,6 +55,7 @@ from citry._protocol.events import (
     build_rejected_call_envelope,
     validate_result_envelope,
 )
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 from citry.ext.events.codecs import decode_request
 from citry.ext.events.csrf import build_csrf_check
 from citry.ext.events.dispatcher import EventRequest, EventsDispatcher, TransportContext
@@ -76,7 +77,6 @@ if TYPE_CHECKING:
 __all__ = [
     "CALL_PATH",
     "DEFINITION_PATH",
-    "EVENTS_RUNTIME_SRC",
     "EVENT_PATH",
     "EVENT_ROUTE_METHODS",
     "MAX_BODY_BYTES",
@@ -87,9 +87,9 @@ __all__ = [
     "get_event_url",
 ]
 
-# The route paths, fixed by design 3.8. RUNTIME_PATH matches what the
-# serialize-time emission points the runtime script tag at
-# (citry/ext/events/emission.py; the path is design-pinned on both sides).
+# The route paths, fixed by design 3.8. RUNTIME_PATH is a stable alias of the
+# Dependencies runtime: pages link that runtime's hashed URL instead
+# (docs/design/runtime_hashed_urls.md).
 CALL_PATH = "ext/events/call"
 DEFINITION_PATH = "ext/events/definitions/{digest}.js"
 STYLE_ASSET_PATH = "ext/events/assets/{digest}.css"
@@ -98,9 +98,6 @@ EVENT_PATH = "ext/events/e/{class_id}/{event}"
 # EVENT_PATH admits EVENT_ROUTE_METHODS, the same fixed set a handler may
 # declare with ``@event(methods=...)``; ``handlers.py`` explains why the set
 # is fixed and defines it there so the decorator can check against it.
-
-# The committed browser bundle built from packages/js/citry-client.
-EVENTS_RUNTIME_SRC = Path(__file__).parents[2] / "_vue" / "runtime.js"
 
 # The default cap on one request body (design 7.4 abuse limits). The host
 # adapter stops reading one byte past it (one message past it under ASGI), and an oversized body answers
@@ -182,16 +179,19 @@ def events_routes(citry: Citry) -> list[URLRoute]:
     dispatcher = dispatcher_for(citry)
 
     def serve_runtime(_request: RouteRequest) -> RouteResponse:
-        return _runtime_resource(citry).response()
+        # A stable alias for pages rendered by older versions: Events pages
+        # link the Dependencies runtime's hashed URL, and this route serves
+        # the same per-process bytes so the two can never differ.
+        return SHARED_RUNTIME.serve_stable()
 
     def serve_definition(_request: RouteRequest, *, digest: str) -> RouteResponse:
         from citry._vue.events import definition_bundle  # noqa: PLC0415
 
-        if len(digest) != 64 or any(value not in "0123456789abcdef" for value in digest):
-            return RouteResponse("", status=404, content_type="text/plain")
+        if not is_content_digest(digest):
+            return not_found()
         content = definition_bundle(citry, digest)
         if content is None:
-            return RouteResponse("", status=404, content_type="text/plain")
+            return not_found()
         # Content-addressed and public; the response carries the CORS header that
         # lets the browser check the integrity the runtime puts on this request.
         return _OwnedResource(
@@ -203,11 +203,11 @@ def events_routes(citry: Citry) -> list[URLRoute]:
     def serve_style_asset(_request: RouteRequest, *, digest: str) -> RouteResponse:
         from citry._vue.events import style_asset  # noqa: PLC0415
 
-        if len(digest) != 64 or any(value not in "0123456789abcdef" for value in digest):
-            return RouteResponse("", status=404, content_type="text/plain")
+        if not is_content_digest(digest):
+            return not_found()
         content = style_asset(citry, digest)
         if content is None:
-            return RouteResponse("", status=404, content_type="text/plain")
+            return not_found()
         # Content-addressed and public; the response carries the CORS header that
         # lets the browser check the integrity the runtime puts on this request.
         return _OwnedResource(
@@ -269,16 +269,6 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             max_body_bytes=body_cap,
         ),
     ]
-
-
-def _runtime_resource(citry: Citry) -> _OwnedResource:
-    """Serve the same committed Vue runtime used by document serialization."""
-    return _OwnedResource(
-        url=citry.build_url(RUNTIME_PATH),
-        content=EVENTS_RUNTIME_SRC.read_text(encoding="utf8"),
-        content_type=JAVASCRIPT_CONTENT_TYPE,
-        headers=(("Cache-Control", "no-store"),),
-    )
 
 
 @dataclass(frozen=True, slots=True)

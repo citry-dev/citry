@@ -1,4 +1,5 @@
 import pytest
+from app.citry_app import citry_app
 from app.data import Project
 from app.main import web_app
 from fastapi.testclient import TestClient
@@ -16,7 +17,8 @@ def test_page_and_citry_runtime_are_served() -> None:
     assert "Atlas" in page.text
     assert ':c-query.debounce.300ms="refresh"' not in page.text
     assert "/citry/" in page.text
-    assert "/citry/citry.js" in page.text
+    # The page links the runtime by its hash; the stable URL fetched above stays for hand-written pages.
+    assert citry_app.runtime_url() in page.text
     assert runtime.status_code == 200
     assert runtime.headers["content-type"].startswith("text/javascript")
     assert events_runtime.status_code == 200

@@ -7,7 +7,8 @@ extensions own their paths directly; see ``ExtensionManager.urls``)::
     <prefix>/cache/{class_id}.{script_type}                  legacy/current class JS or CSS
     <prefix>/cache/{class_id}.{hash}.{script_type}           a class version or variables script
     <prefix>/asset/{file_name}                               a served Dependencies file (local_files="serve")
-    <prefix>/citry.js                                        Citry's Vue browser runtime
+    <prefix>/citry.{digest}.js                               Citry's Vue browser runtime, named by its hash
+    <prefix>/citry.js                                        the same runtime at a stable URL
 
 These are what HTML fragments fetch: a fragment carries URLs instead of
 inlined tags, so the same component used by many fragments is downloaded
@@ -22,9 +23,10 @@ Handlers are framework-neutral (they return ``RouteResponse``); the
 
 from __future__ import annotations
 
-from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from citry._hashed_runtime import HashedRuntime
 from citry._owned_resource import CSS_CONTENT_TYPE, JAVASCRIPT_CONTENT_TYPE, _OwnedResource
 from citry.cache import _forget_stored_key
 from citry.ext.dependencies.scripts import (
@@ -62,7 +64,20 @@ def asset_content_type(extension: str) -> str:
 _NO_STORE = (("Cache-Control", "no-store"),)
 
 RUNTIME_PATH = "citry.js"
-"""Route path of the client runtime (under the mounted prefix)."""
+"""Stable route path of the client runtime (under the mounted prefix). Pages link the hashed URL instead."""
+
+SHARED_RUNTIME = HashedRuntime(
+    stable_path=RUNTIME_PATH,
+    hashed_stem="citry",
+    cache_namespace="citry:runtime",
+    load=lambda: (Path(__file__).parents[2] / "_vue" / "runtime.js").read_text(encoding="utf8"),
+)
+"""
+The generated Vue runtime (``_vue/runtime.js``) every interactive page and fragment loads.
+
+The Events extension's ``ext/events/runtime.js`` serves these same bytes, so a
+page links one URL however it asks for the runtime.
+"""
 
 
 def script_url(comp_cls: type[Component], script_type: ScriptType, vars_hash: str | None = None) -> str:
@@ -81,8 +96,13 @@ def script_url(comp_cls: type[Component], script_type: ScriptType, vars_hash: st
 
 
 def runtime_url(citry: Citry) -> str:
-    """The URL the client runtime is served at. Requires a mounted web integration."""
-    return citry.build_url(RUNTIME_PATH)
+    """
+    The hashed URL pages link for the client runtime, such as ``/citry/citry.<sha256>.js``.
+
+    Requires a mounted web integration. With ``CitrySettings.cache`` set, it
+    also writes the runtime to the shared cache so other workers can serve it.
+    """
+    return SHARED_RUNTIME.url(citry)
 
 
 def dependency_routes(citry: Citry) -> list[URLRoute]:
@@ -154,17 +174,12 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
         ).immutable_response()
 
     def serve_runtime(request: RouteRequest | None) -> RouteResponse:  # noqa: ARG001 - unused
-        # Imported here, not at module load: emission imports this module's
-        # sibling helpers, so a top-level import back into it would be
-        # circular.
-        from citry.ext.dependencies.emission import _runtime_resource  # noqa: PLC0415
+        # Pages rendered by older versions and hand-written pages still load
+        # `citry.js`, so it keeps serving the current runtime, uncached.
+        return SHARED_RUNTIME.serve_stable()
 
-        # `citry.js` keeps its URL across upgrades and is the same file as
-        # the Events runtime, so it keeps that route's `no-store`: a stored
-        # copy reused on back/forward navigation could pair a page with the
-        # wrong runtime and fail its integrity check.
-        resource = _runtime_resource(citry)
-        return replace(resource, headers=(*resource.headers, *_NO_STORE)).response()
+    def serve_hashed_runtime(request: RouteRequest | None, *, digest: str) -> RouteResponse:  # noqa: ARG001 - unused
+        return SHARED_RUNTIME.serve_hashed(citry, digest)
 
     return [
         # Content-addressed Component.js/css and the variables stylesheet
@@ -189,7 +204,15 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
         # Dependencies extension assets from `Component.dependencies.js/css`, e.g. `asset/abc123.css`
         URLRoute("asset/{file_name}", handler=serve_asset, name="citry_asset"),
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_client_runtime"),
+        # The runtime named by its hash, e.g. `citry.<sha256>.js`. A digest
+        # never holds a dot, so this pattern never matches `citry.js`.
+        URLRoute(
+            SHARED_RUNTIME.route_path,
+            handler=serve_hashed_runtime,
+            name="citry_client_runtime_hashed",
+            dotless_params=frozenset({"digest"}),
+        ),
     ]
 
 
-__all__ = ["RUNTIME_PATH", "dependency_routes", "runtime_url", "script_url"]
+__all__ = ["RUNTIME_PATH", "SHARED_RUNTIME", "dependency_routes", "runtime_url", "script_url"]

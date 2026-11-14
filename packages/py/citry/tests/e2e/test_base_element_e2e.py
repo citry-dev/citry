@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from citry import Citry, Component
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -97,7 +98,8 @@ def test_runtime_from_another_site_does_not_run(
         # The request does reach the other site, so this also proves the
         # base element took effect and the browser refused the answer.
         page.wait_for_function("() => performance.getEntriesByType('resource').length > 0")
-        assert "/citry/citry.js" in other_seen
+        # The page names the runtime by its content hash.
+        assert f"/citry/{SHARED_RUNTIME.hashed_path}" in other_seen
         assert page.evaluate("document.documentElement.getAttribute('data-from-other')") is None
     finally:
         server.shutdown()

@@ -177,7 +177,8 @@ Visit `http://127.0.0.1:8000/`. You see the choice picker on the
 as it did without a server.
 
 To confirm that Citry's routes work, visit
-`http://127.0.0.1:8000/citry/citry.js`. You should see JavaScript.
+`http://127.0.0.1:8000/citry/citry.js`. You should see JavaScript,
+Citry's browser code.
 
 ## Next steps
 

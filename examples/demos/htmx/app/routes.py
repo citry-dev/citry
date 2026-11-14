@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, ValidationError
 
+from app.citry_app import citry_app
 from app.components.contact_detail import ContactDetail
 from app.components.contact_form import ContactForm
 from app.components.search_results import SearchResults
@@ -72,6 +73,9 @@ def _page_html() -> str:
     search_results = _search_results_fragment()
     team_picker = _fragment(TeamPicker(teams=list_teams("engineering")))
     department_options = "".join(f'<option value="{value}">{label}</option>' for value, label in DEPARTMENTS)
+    # The runtime URL carries a hash of the file, so the browser keeps it
+    # between page loads and fetches the new one after a Citry upgrade.
+    runtime_url = citry_app.runtime_url()
     return f"""<!doctype html>
 <html lang="en">
   <head>
@@ -80,7 +84,7 @@ def _page_html() -> str:
     <title>HTMX + Citry patterns</title>
     <link rel="stylesheet" href="/static/demo.css" />
     <script src="/static/htmx.min.js"></script>
-    <script src="/citry/citry.js"></script>
+    <script src="{runtime_url}"></script>
   </head>
   <body>
     <a class="skip-link" href="#demo-content">Skip to the demo</a>

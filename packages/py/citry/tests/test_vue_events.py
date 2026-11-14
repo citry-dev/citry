@@ -24,6 +24,7 @@ from citry._vue.serialization import _component_tags_for_manifest, _prepare_init
 from citry.browser_render import BrowserPluginDescriptor, BrowserRenderContribution
 from citry.citry_element import CitryElement
 from citry.component import ComponentMeta
+from citry.ext.dependencies.routes import SHARED_RUNTIME
 from citry.ext.dependencies.types import Script, Style
 from citry.ext.events import actions
 from citry.ext.events.emission import EXTRA_KEY, EventInstanceEntry
@@ -824,7 +825,7 @@ def test_default_events_renderer_bootstraps_selected_render_without_rendering_tw
     assert "data-citry-vue-document" in html
     assert '"endpoint":"/citry/ext/events/call"' in html
     assert '"eventBaseUrl":"/citry/ext/events/e/"' in html
-    assert 'src="/citry/citry.js"' in html
+    assert f'src="/citry/{SHARED_RUNTIME.hashed_path}"' in html
 
 
 def test_public_vue_serializer_compiles_before_materializing_html_frames(monkeypatch) -> None:
@@ -1171,7 +1172,7 @@ def test_mounted_renderer_without_initial_events_keeps_lazy_events_endpoint_avai
     html = App().render().serialize()
     assert '"endpoint":"/citry/ext/events/call"' in html
     assert '"eventBaseUrl":"/citry/ext/events/e/"' in html
-    assert html.count('src="/citry/citry.js"') == 1
+    assert html.count(f'src="/citry/{SHARED_RUNTIME.hashed_path}"') == 1
 
 
 def test_unconfigured_engine_keeps_static_serialization() -> None:
