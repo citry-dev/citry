@@ -15,7 +15,7 @@ import re
 import pytest
 
 import citry_ui
-from citry import Citry, Component, Extension, InMemoryCache, Slot
+from citry import Citry, Component, Extension, InMemoryCache, Slot, VueCodeError
 from citry._vue.capture import UnsupportedPreparedView, render_prepared_direct
 from citry._vue.compiler import NativeCompiler
 from citry._vue.direct_capture import assemble_typed_render
@@ -259,7 +259,9 @@ def test_a_slot_prop_from_python_data_fails(bind: dict[str, str], message: str) 
           <c-Child>x</c-Child>
         """
 
-    with pytest.raises(RuntimeError, match=message):
+    # The key is a name Vue reads as code, so it raises the same error as on
+    # every other tag.
+    with pytest.raises(VueCodeError, match=message):
         Page().render()
 
 
@@ -281,7 +283,7 @@ def test_a_fill_pattern_from_python_data_fails() -> None:
         def template_data(self, kwargs, slots):
             return {"attrs": {"name": "item", "v-slot": "{ row }"}}
 
-    with pytest.raises(RuntimeError, match="'c-bind' on <c-fill> got an unsupported key 'v-slot'"):
+    with pytest.raises(VueCodeError, match="'c-bind' on <c-fill> got an unsupported key 'v-slot'"):
         Page().render()
 
 

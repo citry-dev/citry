@@ -34,6 +34,7 @@ from citry.util.routing import (
     RouteRequest,
     RouteResponse,
     body_read_limit,
+    check_route_table,
     match_path_below_mount,
     route_allows_method,
     sent_content_type,
@@ -133,7 +134,16 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
     WSGI is synchronous, a request that reaches an ``async def`` handler
     raises ``TypeError`` before the handler runs, and the message points to
     the ASGI adapter.
+
+    Raises:
+        ValueError: If a route's full path (its parents' paths followed by
+            its own) has two parameters side by side (such as ``{a}{b}``)
+            or uses one parameter name twice. See [`URLRoute`][citry.URLRoute].
+
     """
+    # Checked here, when the routes are mounted, so a bad route fails at
+    # startup instead of on the first request.
+    check_route_table(citry_instance.urls)
 
     def app(environ: dict[str, Any], start_response: StartResponse) -> Iterable[bytes]:
         def respond(response: RouteResponse) -> Iterable[bytes]:

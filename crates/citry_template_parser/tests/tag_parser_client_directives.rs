@@ -372,6 +372,16 @@ mod tests {
                 r#"<c-fill name="row" v-slot="{ row: citryRow }">x</c-fill>"#,
                 "uses a reserved name",
             ),
+            // A fill's shorthand gets a plain rename, and the suggestion
+            // skips the fill's Python names.
+            (
+                r#"<c-fill name="row" v-slot="{ _id }">x</c-fill>"#,
+                "'_id' in 'v-slot' on '<c-fill>' uses a reserved name: names that start with '$', '_', or 'citry' belong to the props Citry passes to every fill, and no '<c-slot>' prop can use them. Rename it, for example to 'id'.",
+            ),
+            (
+                r#"<c-fill name="row" v-slot="{ row: _p }" data="p">x</c-fill>"#,
+                "Rename it, for example to 'props'.",
+            ),
             (
                 r#"<c-fill name="row" v-slot="{ row }" data="{ row }">x</c-fill>"#,
                 "'row' is named by both 'v-slot' and the Python 'data' or 'fallback'",
@@ -1130,6 +1140,172 @@ mod tests {
             r#"<div v-show.lazy="open">x</div>"#,
             "'v-show.lazy' on <div> (line 1, column 6) takes no argument or modifiers.",
         );
+    }
+
+    #[test]
+    fn v_for_aliases_with_a_reserved_prefix_are_rejected() {
+        assert_parse_error(
+            r#"<li v-for="$i18n in items">x</li>"#,
+            "'v-for' on <li> (line 1, column 5) uses the name '$i18n', which starts with a prefix Citry reserves ('$', '_', or 'citry') for the values it gives the template, such as '$i18n'. A name like this could hide one of those values. Rename it, for example to 'i18n'.",
+        );
+        // The item, key and index names, the names inside a destructuring
+        // pattern, the `of` form, empty alias positions, a modifier, and an
+        // element inside `<c-element>`.
+        for (input, attribute, fix) in [
+            (
+                r#"<li v-for="citrySlotKey in keys">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'slotKey'.",
+            ),
+            (
+                r#"<li v-for="(row, _i) in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'i'.",
+            ),
+            // The suggestion skips a name the directive already binds.
+            (
+                r#"<li v-for="(_i, i) in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'item'.",
+            ),
+            // With nothing left after the prefix, the position names it.
+            (
+                r#"<li v-for="(_, index) in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'item'.",
+            ),
+            (
+                r#"<li v-for="(item, _) in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'key'.",
+            ),
+            (
+                r#"<li v-for="(v, k, $index) of obj">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'index'.",
+            ),
+            // A shorthand also names the property it reads.
+            (
+                r#"<li v-for="{ $citryPrepared } in rows">x</li>"#,
+                "v-for",
+                "Rename it and keep the property it reads, as in '{ $citryPrepared: prepared }'.",
+            ),
+            (
+                r#"<li v-for="({ _id = 0, name }) in rows">x</li>"#,
+                "v-for",
+                "Rename it and keep the property it reads, as in '{ _id: id }'.",
+            ),
+            (
+                r#"<li v-for="({ id, label: _l }, i) in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'l'.",
+            ),
+            (
+                r#"<li v-for="[a, [citryB]] in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'b'.",
+            ),
+            (
+                r#"<li v-for="_class in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'item'.",
+            ),
+            (
+                r#"<li v-for="(, $i) in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'i'.",
+            ),
+            (
+                r#"<li v-for="(item, , $i) in rows">x</li>"#,
+                "v-for",
+                "Rename it, for example to 'i'.",
+            ),
+            (
+                r#"<li v-for.x="$i in rows">x</li>"#,
+                "v-for.x",
+                "Rename it, for example to 'i'.",
+            ),
+            (
+                r#"<template v-for="_row in rows"><b>x</b></template>"#,
+                "v-for",
+                "Rename it, for example to 'row'.",
+            ),
+            (
+                r#"<c-element c-is="tag"><li v-for="$t in items">x</li></c-element>"#,
+                "v-for",
+                "Rename it, for example to 't'.",
+            ),
+            (
+                r#"<c-element c-is="tag" v-for="$x in items">x</c-element>"#,
+                "v-for",
+                "Rename it, for example to 'x'.",
+            ),
+        ] {
+            assert_parse_error(input, &format!("'{attribute}' on <"));
+            assert_parse_error(
+                input,
+                "which starts with a prefix Citry reserves ('$', '_', or 'citry')",
+            );
+            assert_parse_error(input, fix);
+        }
+    }
+
+    #[test]
+    fn element_slot_patterns_with_a_reserved_prefix_are_rejected() {
+        // A Vue component or `<template>` slot pattern binds browser names
+        // the same way a `<c-fill v-slot>` pattern does.
+        for (input, attribute, name) in [
+            (
+                r#"<my-list v-slot="{ $i18n }">x</my-list>"#,
+                "v-slot",
+                "$i18n",
+            ),
+            (
+                r#"<my-list v-slot.x="{ $s }">x</my-list>"#,
+                "v-slot.x",
+                "$s",
+            ),
+            (
+                r##"<my-list><template #item="{ row: _row }">x</template></my-list>"##,
+                "#item",
+                "_row",
+            ),
+            (
+                r##"<my-list><template #[slot]="{ row: _row }">x</template></my-list>"##,
+                "#[slot]",
+                "_row",
+            ),
+            (
+                r#"<my-list><template v-slot:item="citryProps">x</template></my-list>"#,
+                "v-slot:item",
+                "citryProps",
+            ),
+        ] {
+            assert_parse_error(input, &format!("'{attribute}' on <"));
+            assert_parse_error(input, &format!("uses the name '{name}'"));
+        }
+    }
+
+    #[test]
+    fn v_for_and_slot_names_without_a_reserved_prefix_still_parse() {
+        for input in [
+            r#"<li v-for="item in items">x</li>"#,
+            r#"<li v-for="(item, index) in items">x</li>"#,
+            r#"<li v-for="({ id, label }, key, index) of obj">x</li>"#,
+            // A reserved name in the iterated value is read, not bound.
+            r#"<li v-for="row in $citryPrepared.rows">x</li>"#,
+            r#"<li v-for="i in 5">x</li>"#,
+            // A property key or a default only reads the name.
+            r#"<li v-for="({ _id: id, n = $x }) in rows">x</li>"#,
+            // A name that only contains a reserved prefix is fine.
+            r#"<li v-for="my_citry in items">x</li>"#,
+            r##"<my-list><template #item="{ row }">x</template></my-list>"##,
+            // Vue binds no names inside `v-pre`, so nothing is hidden.
+            r#"<div v-pre><li v-for="$i18n in items">x</li></div>"#,
+        ] {
+            parse_template(input, None, None)
+                .unwrap_or_else(|error| panic!("{input} should parse: {error}"));
+        }
     }
 
     #[test]

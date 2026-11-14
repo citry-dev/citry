@@ -190,6 +190,29 @@ class TestRejectedDirectives:
         with pytest.raises(RuntimeError, match=r"targets Citry-owned component identity"):
             page().render()
 
+    @pytest.mark.parametrize(
+        ("page_template", "attribute", "alias", "suggestion"),
+        [
+            ('<ul><li v-for="$i18n in [1]">x</li></ul>', "v-for", "$i18n", "i18n"),
+            ('<ul><li v-for="(row, citrySlotKey) in [1]">x</li></ul>', "v-for", "citrySlotKey", "slotKey"),
+            ('<ul><li v-for="({ id: _id }, i) of []">x</li></ul>', "v-for", "_id", "id"),
+            ('<my-list><template #row="{ row: $row }">x</template></my-list>', "#row", "$row", "row"),
+        ],
+    )
+    def test_browser_name_with_a_reserved_prefix_fails_to_load(self, page_template, attribute, alias, suggestion):
+        # Such a name would hide a value Citry gives the template, such as
+        # `$i18n`, so the template is refused instead of reading the wrong
+        # value in the browser.
+        page = _pages("<section>child</section>", page_template)
+
+        with pytest.raises(SyntaxError) as caught:
+            page().render()
+
+        message = str(caught.value)
+        assert f"'{attribute}' on <" in message
+        assert f"uses the name '{alias}'" in message
+        assert f"Rename it, for example to '{suggestion}'." in message
+
     def test_v_else_takes_no_value(self):
         page = _pages("<section>child</section>", '<main><c-child v-else="open" /></main>')
 
@@ -731,7 +754,7 @@ class TestSlotDirectives:
             """
 
         with pytest.raises(
-            RuntimeError, match=rf"Vue directive '{re.escape(key)}' is not supported on '<c-slot>'"
+            VueCodeError, match=rf"Vue directive '{re.escape(key)}' is not supported on '<c-slot>'"
         ) as caught:
             Page().render()
         # An uppercase spelling gets the same advice as the lowercase one.

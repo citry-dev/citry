@@ -169,7 +169,7 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
     return [
         # Content-addressed Component.js/css and the variables stylesheet
         # from `Component.css_data()`, e.g. `cache/abc123.def456.js`.
-        # NOTE: The more specific (two-parameter) pattern first: matching is
+        # NOTE: The more specific (three-parameter) pattern first: matching is
         # first-wins, and `{class_id}.{script_type}` would also match a
         # vars-script path.
         URLRoute(

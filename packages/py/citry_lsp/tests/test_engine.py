@@ -2281,6 +2281,20 @@ def test_vue_listener_modifier_errors_mark_the_attribute(attribute, message):
     )
 
 
+def test_v_for_alias_with_a_reserved_prefix_marks_the_attribute():
+    attribute = 'v-for="(row, $index) in rows"'
+    source = f"<ul>\n  <li {attribute}>x</li>\n</ul>"
+    document = _document(source, _syntax_state())
+
+    (diagnostic,) = document.diagnostics
+    assert diagnostic.code == "citry.parse.syntax"
+    assert "uses the name '$index'" in diagnostic.message
+    assert diagnostic.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+
+
 @pytest.mark.parametrize(
     ("source", "attribute"),
     [

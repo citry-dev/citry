@@ -649,3 +649,53 @@ def test_simple_preview_layout_rejects_named_content():
 
     with pytest.raises(TypeError, match="only default content"):
         _html(PreviewRenderer(ext), Example)
+
+
+def test_preview_page_of_component_with_events_serves_an_interactive_document():
+    # The default page template writes the doctype one render below the
+    # preview root, and only the body may reach the Vue compiler.
+    app = Citry(secret="preview-events-test-secret", extensions=[PreviewExtension])  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    renderer = PreviewRenderer(app.extensions.get_extension("preview"))
+
+    class CounterState:
+        count: int = 0
+
+        def render(self):
+            return Counter(count=self.count)
+
+    class Counter(Component):
+        citry = app
+
+        class Kwargs:
+            count: int = 0
+
+        State = CounterState
+
+        class Events:
+            def increment(self, state: CounterState):
+                state.count += 1
+                return state.render()
+
+        def template_data(self, kwargs, slots):
+            return {"count": kwargs.count}
+
+        template = """
+            <button @c-click="increment">Clicked {{ count }} times</button>
+        """
+
+        class Preview:
+            enabled = True
+
+    response = _route(renderer, f"render/{Counter.class_id}", {"variant": ("default",)})
+    assert response.status == 200
+    html = response.content
+    assert html.lstrip().lower().startswith("<!doctype html>")
+    assert "<title>Component previews</title>" in html
+    assert re.search(r'<body><div id="citry-vue-[^"]+"><button[^>]*>Clicked 0 times</button>', html)
+    data = re.search(r'<script type="application/json" data-citry-vue-document="[^"]+">([^<]*)</script>', html)
+    assert data is not None
+    occurrences = json.loads(data.group(1))["manifest"]["occurrences"]
+    [context] = [item["eventContext"] for item in occurrences if "eventContext" in item]
+    assert context["componentClassId"] == Counter.class_id
+    assert "increment" in context["descriptor"]["eventHandlers"]

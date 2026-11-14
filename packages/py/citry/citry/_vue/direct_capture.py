@@ -3838,14 +3838,66 @@ def assemble_typed_render(
 
 
 def _logical_typed_body(parts: list[RenderPart]) -> list[RenderPart]:
-    """Select logical body UI before assembling document-shell components."""
-    bounds = document_body_bounds(
-        parts,
-        text=lambda part: part.text if isinstance(part, PreparedSourceText) else None,
-        opening_tag=lambda part: part.tag if isinstance(part, PreparedElementOpen) else None,
-        closing_tag=lambda part: part.tag if isinstance(part, PreparedElementClose) else None,
-    )
-    return parts if bounds is None else parts[bounds[0] : bounds[1]]
+    """
+    Return the parts Vue compiles for a whole-page template: its `<body>` contents.
+
+    Parts without a page shell come back unchanged. The shell can sit one or
+    more nested renders down, as when a page template is passed into a
+    `{{ page }}` root. A nested render that is not a component's own output
+    is compiled into this occurrence's Vue template, so its doctype and
+    `<head>` would reach the Vue compiler too. When this level holds no
+    shell and only one nested render (apart from whitespace), the walk looks
+    inside it and returns a copy of that render that keeps its render frame
+    (render id and owner) but holds only the body contents. Content beside
+    the nested render, or a page passed as a component's slot fill, stops
+    the walk, and the shell then reaches the Vue compiler, which rejects it.
+    """
+    # The renders walked through so far, outermost first. A loop rather than
+    # recursion keeps the Python frame count fixed however deep they nest.
+    wrappers: list[CitryRender] = []
+    current = parts
+    while True:
+        bounds = document_body_bounds(
+            current,
+            text=lambda part: part.text if isinstance(part, PreparedSourceText) else None,
+            opening_tag=lambda part: part.tag if isinstance(part, PreparedElementOpen) else None,
+            closing_tag=lambda part: part.tag if isinstance(part, PreparedElementClose) else None,
+        )
+        if bounds is not None:
+            break
+        # Whitespace the outer template's author wrote around the nested render
+        # is source formatting, not page content, so it does not block the walk.
+        # It arrives as source text or as a run of static markup.
+        content = [
+            part
+            for part in current
+            if not (isinstance(part, PreparedSourceText) and not part.text.strip())
+            and not (isinstance(part, PreparedStaticRun) and not part.html.strip())
+            and part != ""
+        ]
+        # Only a plain render that is not a component's own output joins this
+        # occurrence. A component's output is assembled as its own occurrence
+        # and checks its own parts, and the render subclasses carry other
+        # meaning (slot projections, debug decorations, `simple='vue'` call
+        # records), so they stop here.
+        if len(content) != 1 or type(content[0]) is not CitryRender or content[0].frame.is_component_root:
+            return parts
+        wrappers.append(content[0])
+        current = content[0].parts
+    body = current[bounds[0] : bounds[1]]
+    # Rebuild the walked renders inside out so each keeps its frame, which
+    # carries the render id and owner that assembly records for its parts.
+    for wrapper in reversed(wrappers):
+        body = [
+            CitryRender(
+                body,
+                wrapper.context,
+                frame=wrapper.frame,
+                render_target=wrapper.render_target,
+                owner_citry=wrapper.owner_citry,
+            )
+        ]
+    return body
 
 
 _ItemT = TypeVar("_ItemT")
