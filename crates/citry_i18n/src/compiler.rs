@@ -4037,7 +4037,17 @@ struct ResolvedMessage<'a> {
     used_fallback: bool,
 }
 
-/// One escaped-text or structural-Slot part of a rich message.
+/// One piece of a rich message: a run of text, or the place a Slot goes.
+///
+/// A `Text` segment is the message text after Fluent filled in the
+/// arguments, split where the message uses a Slot variable. Nothing in it is
+/// escaped, so a `<` or `&` from the translation or from an argument comes
+/// back unchanged. A host binding must escape each `Text` segment for the
+/// place it writes it (HTML text or an attribute value). The Python
+/// `<c-trans>` component does this by writing each segment inside `{{ }}`,
+/// which escapes it. For the message `<b>Read</b> & { $link } now`, with
+/// `$link` a Slot, the segments are `Text { value: "<b>Read</b> & " }`,
+/// `Slot { name: "link" }`, and `Text { value: " now" }`.
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum RichSegment {
@@ -4801,6 +4811,9 @@ impl I18nRuntime {
     }
 
     /// Resolve a rich message and return text/Slot segments as strict JSON.
+    ///
+    /// The text segments are not escaped. The caller must escape them before
+    /// writing them to a page; see `RichSegment`.
     pub fn resolve_rich_json(
         &self,
         active_locale: &str,
