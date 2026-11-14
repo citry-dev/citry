@@ -1389,8 +1389,9 @@ The jobs that test other interpreters or the release artifacts build their
 own extension: `py--alt-interpreters.yml` (free-threaded CPython and
 PyPy, which the limited-API wheel does not serve), the publish workflows,
 the release-tag build in `repo--docs-release.yml` and the example-project
-tests (which build with the minimum supported Rust), and `py--diagnostic.yml`, which caches a wheel for
-one interpreter with the same input selection.
+tests (which build with the minimum supported Rust), and
+`py--diagnostic.yml`, which caches a wheel for one interpreter with the
+same input selection.
 
 ### Brand assets: the C3 logo, favicons, and icons
 
@@ -2710,11 +2711,13 @@ compile nothing unless no run has cached a wheel for the current Rust
 sources. `repo--docs-release.yml` installs the shared wheel for its checkout
 of `main` too, but its `build-tag` step then syncs the release tag in a
 separate worktree, which compiles that tag's extension. For that build it
-keeps the workspace MSRV (`RUSTUP_TOOLCHAIN=1.97.0`), `sccache`'s GitHub
-Actions backend, and the `docs-citry-core-py314` Rust cache, which omits the
-job ID and is saved even when a later step fails; the toolchain validator
-checks those settings. Only docs-release fills that cache, and it runs weeks
-apart, so it usually starts cold.
+keeps the minimum supported Rust version (`RUSTUP_TOOLCHAIN=1.97.0`) and
+`sccache`'s GitHub Actions backend. It also keeps the
+`docs-citry-core-py314` Rust cache, which omits the job ID and is saved
+even when a later step fails. That cache holds only the main checkout's
+target folder, so it speeds up a shared wheel build after a wheel cache
+miss, not the release-tag build; only `sccache` helps that build. The
+toolchain validator checks these settings.
 
 The docs workflows sync the root tooling package and Citry (which brings in
 citry-core and the docs lexer); docs validation reads or builds Citry UI source

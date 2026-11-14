@@ -16,10 +16,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # The tagged snapshot build compiles citry-core with the workspace MSRV,
-  # the compiler the published wheels use; the toolchain validator checks
-  # this pin. The shared wheel build drops this variable and uses
-  # rust-toolchain.toml.
+  # The tagged snapshot build compiles citry-core with the minimum supported
+  # Rust version, the compiler the published wheels use; the toolchain
+  # validator checks this pin. The shared wheel build ignores this variable
+  # and uses the compiler in rust-toolchain.toml.
   RUSTUP_TOOLCHAIN: "1.97.0"
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"
@@ -69,9 +69,11 @@ jobs:
         with:
           python-version: "3.14"
 
-      # `build-tag` below syncs the tagged checkout in its own environment,
-      # which compiles that tag's citry_core extension, so this job keeps a
-      # Rust toolchain and its caches for that build.
+      # `build-tag` below syncs the tagged checkout in its own worktree and
+      # environment, which compiles that tag's citry_core extension, so this
+      # job installs Rust 1.97.0 and sccache for that build. The Rust cache
+      # step saves only this checkout's target folder, which holds the
+      # shared wheel build when the wheel cache missed.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
@@ -87,17 +89,22 @@ jobs:
           add-job-id-key: false
           cache-on-failure: true
 
-      # `social-cards` adds Playwright so the per-page OG images render during the
-      # snapshot preparation. The site imports Citry and Citry UI, but not
-      # the LSP workspace package.
       # The checkout of main installs the shared citry-core wheel, built from
       # these exact Rust sources by an earlier run when one exists. The Rust
-      # cache step above already saves the target folder.
+      # cache step above already saves the target folder. The empty
+      # RUSTUP_TOOLCHAIN lets the wheel build install and log the compiler
+      # in rust-toolchain.toml instead of the 1.97.0 pin above.
       - name: Restore or build the citry-core wheel
         id: core
         uses: ./.github/actions/citry-core-wheel
+        env:
+          RUSTUP_TOOLCHAIN: ""
         with:
           cache-rust: "false"
+
+      # `social-cards` adds Playwright so the per-page OG images render during the
+      # snapshot preparation. The site imports Citry and Citry UI, but not
+      # the LSP workspace package.
 
       - name: Install the workspace with docs + social-card extras
         env:
