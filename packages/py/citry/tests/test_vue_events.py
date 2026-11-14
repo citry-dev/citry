@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 import threading
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -20,6 +21,7 @@ from citry._vue.events import (
 )
 from citry._vue.serialization import _component_tags_for_manifest, _prepare_initial_result, hydration_admission
 from citry.browser_render import BrowserPluginDescriptor, BrowserRenderContribution
+from citry.citry_element import CitryElement
 from citry.component import ComponentMeta
 from citry.ext.dependencies.types import Script, Style
 from citry.ext.events import actions
@@ -28,7 +30,10 @@ from citry.ext.events.renderers import VuePreparedRenderEncoder, dispatcher_for
 from citry.ext.events.results import RenderEncodingContext
 from citry.extension import Extension
 from citry.serialize import _can_skip_vue_document_body
-from citry.slots import Slot
+from citry.slots import Slot, SlotContext
+
+if TYPE_CHECKING:
+    from citry.citry_render import CitryRender
 
 
 def test_default_producer_reuses_ordinary_component_metadata_per_preparation(monkeypatch) -> None:
@@ -1202,6 +1207,57 @@ def test_vue_document_preserves_physical_shell_and_replaces_logical_body() -> No
     assert re.search(r'<body class="page"><div id="citry-vue-[^"]+"><button id="dynamic"', html)
     assert "data-citry-vue-document" in html
     assert "</body></html>" in html
+
+
+@pytest.mark.parametrize("wrapper", ["inline", "multiline", "component"])
+def test_vue_document_shell_inside_a_nested_template_root_compiles_only_its_body(wrapper: str) -> None:
+    # A page template passed into another template's `{{ page }}` joins the
+    # outer root's Vue template, so its doctype and head sit one render down.
+    # Only the body may reach the Vue compiler, which rejects `<!doctype>`.
+    # The multi-line wrappers add whitespace around `{{ page }}`, which must
+    # not stop the walk down to the page.
+    registry = Citry(autodiscover=False)
+
+    class Button(Component):
+        citry = registry
+        template = """
+            <button id="dynamic" :title="'ready'">ready</button>
+        """
+
+    page_source = """
+        <!doctype html>
+        <html lang="en">
+            <head><title>Nested</title></head>
+            <body class="page"><c-slot name="content" /></body>
+        </html>
+    """
+
+    def page(ctx: SlotContext) -> CitryRender:
+        content = Slot(lambda inner: CitryElement(Button, {}).render(provides=inner.provides))
+        return registry.render_template(page_source, slots={"content": content}, provides=ctx.provides)
+
+    class Wrapper(Component):
+        citry = registry
+
+        def template_data(self, kwargs, slots):
+            return {"page": Slot(page)}
+
+        template = """
+            {{ page }}
+        """
+
+    if wrapper == "component":
+        rendered = CitryElement(Wrapper, {}).render()
+    else:
+        source = "{{ page }}" if wrapper == "inline" else "\n    {{ page }}\n"
+        rendered = registry.render_template(source, {"page": Slot(page)})
+    html = rendered.serialize()
+
+    assert html.lstrip().startswith("<!doctype html>")
+    assert html.count("<!doctype html>") == 1
+    assert "<head><title>Nested</title>" in html
+    assert re.search(r'<body class="page"><div id="citry-vue-[^"]+"><button[^>]* id="dynamic"', html)
+    assert "data-citry-vue-document" in html
 
 
 def test_vue_document_append_dependencies_execute_before_bootstrap() -> None:
