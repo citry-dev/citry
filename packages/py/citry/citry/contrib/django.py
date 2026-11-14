@@ -56,7 +56,6 @@ from __future__ import annotations
 import inspect
 import io
 import posixpath
-import re
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -71,11 +70,13 @@ from citry.util.routing import (
     RouteHeaders,
     RouteRequest,
     body_read_limit,
-    compile_route_pattern,
+    check_route_table,
     flatten_routes,
     match_route_pattern,
     normalize_mount_prefix,
     route_allows_method,
+    route_param_names,
+    route_reverse_regex,
     sent_content_type,
     sent_headers,
 )
@@ -93,13 +94,6 @@ __all__ = ["DjangoCache", "enable_hot_reload", "secret", "urlpatterns"]
 # Every call to urlpatterns() asks the same Django project, so a later call
 # replaces the checker an earlier one registered.
 _DJANGO_PROJECT = object()
-
-_PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
-
-
-def _to_django_path(path: str) -> str:
-    """Convert citry's ``{param}`` placeholders to Django's ``<str:param>``."""
-    return _PARAM_RE.sub(r"<str:\1>", path)
 
 
 def _read_body(request: Any, limit: int | None) -> bytes:
@@ -229,7 +223,10 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
     The generated views are synchronous, so every route handler must be a
     plain function; an ``async def`` handler raises ``TypeError`` here,
-    pointing at the ASGI adapter as the fix.
+    pointing at the ASGI adapter as the fix. ``urlpatterns()`` also raises
+    ``ValueError`` when a route's full path (its parents' paths followed
+    by its own) has two parameters side by side (such as ``{a}{b}``) or
+    uses one parameter name twice.
 
     Calling it also lets ``citry check`` and the editor ask the project
     whether its URL patterns or static files serve each link path written in
@@ -241,6 +238,8 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
     # been accepted, so a rejected async handler leaves the instance untouched.
     if prefix is not None:
         normalize_mount_prefix(prefix)
+    # Refuse a bad route path before building any pattern, for the same reason.
+    check_route_table(citry_instance.urls)
 
     patterns = []
     for full_path, route in flatten_routes(citry_instance.urls):
@@ -254,10 +253,10 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
                 "make the handler a plain 'def'."
             )
             raise TypeError(msg)
-        # A route with parameters gets a pattern class that keeps the citry
-        # route's regex for `reverse()` and Django's URL checks, but matches
-        # each request the way Citry's own adapters do. Plain `path()` covers
-        # parameter-free routes.
+        # A route with parameters gets a pattern class that holds a regex of
+        # the route's shape for `reverse()` and Django's URL checks, but
+        # matches each request with Citry's own matcher, as the other
+        # adapters do. Plain `path()` covers parameter-free routes.
         if "{" in full_path:
             from django.urls import URLPattern  # noqa: PLC0415
 
@@ -278,25 +277,73 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
     return patterns
 
 
+class _ReverseConverter:
+    """
+    A Django URL converter that checks one value ``reverse()`` puts in a Citry route's URL.
+
+    The regex the route keeps (:func:`citry.util.routing.route_reverse_regex`)
+    lets any run of characters other than ``/`` stand for any parameter. So
+    the converter refuses a value the route could never give back for this
+    parameter: an empty one, one that holds a ``/``, or one that holds a
+    ``.`` when the parameter is dotless. When every value passes, the values
+    themselves are a split the route accepts, so ``reverse()`` returns a URL
+    the route matches. The route can still split that URL differently
+    when a value holds the text that follows another parameter: for
+    ``{name}-{ver}``, ``name="a"`` and ``ver="1-2"`` give ``a-1-2``, which
+    the route reads as ``name="a-1"`` and ``ver="2"``.
+    """
+
+    regex = "[^/]+"
+
+    def __init__(self, name: str, *, dotless: bool) -> None:
+        self._name = name
+        self._dotless = dotless
+
+    def to_python(self, value: str) -> str:
+        return value
+
+    def to_url(self, value: object) -> str:
+        # The same text reverse() puts in the URL for a value with no converter.
+        text = str(value)
+        if not text or "/" in text or (self._dotless and "." in text):
+            # reverse() treats ValueError from a converter as "this URL does not fit".
+            kind = (
+                "one or more characters other than '/' and '.'"
+                if self._dotless
+                else "one or more characters other than '/'"
+            )
+            msg = f"{self._name!r} must be {kind}; got {text!r}"
+            raise ValueError(msg)
+        return text
+
+
 @cache
 def _citry_route_pattern_class() -> type[Any]:
     """
     Return a Django URL pattern class that matches a request the way Citry's own adapters do.
 
-    Django would match a request against the route's regex, which can take
-    time that grows much faster than the path's length when one path segment
-    holds several parameters. This class keeps the regex, so ``reverse()``
-    and Django's URL checks work as for ``re_path()``, but matches a request
-    with :func:`citry.util.routing.match_route_pattern`, which gives the
-    same result in time that grows in step with the path's length. It is
-    built on first use because this module must import without Django.
+    The class matches each request with
+    :func:`citry.util.routing.match_route_pattern`, so Django splits a path
+    between parameters exactly as the other adapters do, in time that grows
+    in step with the path's length. For ``reverse()`` and Django's URL
+    checks it holds the regex from
+    :func:`citry.util.routing.route_reverse_regex`, which takes time in
+    step with the URL's length whatever the values hold, and a converter
+    per parameter that refuses a value the route could never give back, so
+    ``reverse()`` returns only URLs the route matches. The class is built
+    on first use because this module must import without Django.
     """
     from django.urls.resolvers import RegexPattern  # noqa: PLC0415
 
     class CitryRoutePattern(RegexPattern):  # type: ignore[misc]
         def __init__(self, route_path: str, dotless_params: frozenset[str], *, name: str | None) -> None:
-            super().__init__(compile_route_pattern(route_path, dotless_params).pattern, name=name, is_endpoint=True)
+            super().__init__(route_reverse_regex(route_path), name=name, is_endpoint=True)
             self._citry_route = (route_path, dotless_params)
+            # reverse() calls a converter's to_url() for each value it puts in the URL.
+            self.converters = {
+                param: _ReverseConverter(param, dotless=param in dotless_params)
+                for param in route_param_names(route_path)
+            }
 
         def match(self, path: str) -> tuple[str, tuple[()], dict[str, str]] | None:
             params = match_route_pattern(*self._citry_route, path)

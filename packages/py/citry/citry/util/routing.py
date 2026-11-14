@@ -21,9 +21,9 @@ loop carries both: the plain ``handler`` every adapter mounts, plus an
 
 Adapted from django-components' ``URLRoute`` (which was already
 framework-free), with two changes: ``methods`` is an explicit field (djc left
-method checks to each view), and path parameters use ``{name}`` (matching any
-characters except ``/`` and matched in route-definition order), so the
-adapters can route without a host framework.
+method checks to each view), and path parameters use ``{name}`` (one or more
+characters except ``/``), matched by Citry's own matcher in route-definition
+order, so the adapters can route without a host framework.
 
 Design: docs/design/dependencies.md section 9.
 """
@@ -36,6 +36,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import cache
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 if TYPE_CHECKING:
@@ -162,9 +163,10 @@ class URLRoute:
     """
     One framework-neutral route: either a ``handler`` or nested ``children``.
 
-    A child's full path is the parent's path followed by the child's (plain
-    concatenation; end a parent path with ``/``). ``{name}`` segments in the
-    path become keyword arguments of the handler.
+    A child's full path is the parent's path followed by the child's, joined
+    as plain text, so end a parent path with ``/`` when the child starts a
+    new segment. A ``{name}`` parameter
+    in the path becomes a keyword argument of the handler.
 
     ``handler_async`` optionally carries an ``async def`` twin of ``handler``
     (same signature and behavior). Adapters that run an event loop (ASGI)
@@ -176,14 +178,36 @@ class URLRoute:
     Example::
 
         URLRoute(
-            "cache/{class_id}.{script_type}",
-            handler=serve_script,
-            name="citry_cached_script",
+            "files/{folder}/{name}.{ext}",
+            handler=serve_file,
+            name="my_ext_file",
+            dotless_params=frozenset({"name"}),
         )
         URLRoute(
             "ext/",
             children=[URLRoute("my_ext/status", handler=status)],
         )
+
+    The request path must match the full path exactly. A parameter takes
+    one or more characters and never a ``/``, so a parameter ends at the
+    next ``/`` or at the fixed text that follows it. When that fixed text
+    could also fall inside the value, as with ``{name}.{ext}`` and the path
+    ``files/docs/report.v2.txt``, each parameter takes as much as it can,
+    the earlier one first: without ``dotless_params``, the route would give
+    ``name="report.v2"`` and ``ext="txt"``.
+
+    A parameter listed in ``dotless_params`` never holds a ``.`` and ends
+    at the first one, which gives ``name="report"`` and ``ext="v2.txt"``
+    in the route above. Only the ``dotless_params`` of the route that has
+    the handler applies, not a parent's, even for parameters in the
+    parent's path.
+
+    Two parameters with nothing between them, such as ``{year}{month}``,
+    have no single correct split, so the web framework integrations raise
+    ``ValueError`` for such a route when they mount the routes. That
+    includes a parent path that ends in a parameter joined to a child path
+    that starts with one. A path that uses one parameter name twice raises
+    ``ValueError`` the same way.
 
     ``methods`` is always a non-empty tuple of uppercase HTTP method names
     (``("GET",)``, ``("POST", "PUT")``), so an adapter can iterate it to
@@ -194,6 +218,9 @@ class URLRoute:
     also accepts ``HEAD`` (see :func:`route_allows_method`). When a route
     admits more methods than its handler serves, the handler answers 405
     for the rest.
+
+    ``dotless_params`` must be a ``frozenset`` of parameter names; any
+    other value raises ``TypeError`` when the route is built.
 
     ``max_body_bytes`` is an optional function that returns the largest
     request body the route accepts. Citry calls it for each request, so the
@@ -223,10 +250,9 @@ class URLRoute:
     methods: tuple[str, ...] = ("GET",)
     extra: dict[str, Any] = field(default_factory=dict)
     max_body_bytes: Callable[[], int] | None = None
-    # Path parameters whose values never hold a `.`; each matches up to the
-    # next `.` instead of the next `/`. Citry's own routes use this for a
-    # value that sits right before a literal `.`, so a path is matched in one
-    # pass instead of by trying every way to split it at the dots.
+    # Path parameters whose values never hold a `.`; each ends at the first
+    # `.`. Citry's own cache routes use this so a class id followed by
+    # `.js` or `.<hash>.css` splits at the first dot.
     dotless_params: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
@@ -241,6 +267,17 @@ class URLRoute:
             )
             raise ValueError(msg)
         _validate_route_methods(self.methods)
+        # The matcher caches each route by its dotless_params, so they must
+        # be hashable, and a set or list would otherwise fail later, on the
+        # first request or in Django's urlpatterns().
+        if not isinstance(self.dotless_params, frozenset) or not all(
+            isinstance(name, str) for name in self.dotless_params
+        ):
+            msg = (
+                "URLRoute(dotless_params=...) must be a frozenset of parameter names, such as"
+                f' frozenset({{"name"}}); got {self.dotless_params!r}.'
+            )
+            raise TypeError(msg)
         if self.max_body_bytes is not None and not callable(self.max_body_bytes):
             msg = (
                 "URLRoute(max_body_bytes=...) must be a function that returns the limit in bytes,"
@@ -376,30 +413,126 @@ def normalize_mount_prefix(prefix: str) -> str:
     return prefix.rstrip("/")
 
 
-# A path parameter: `{name}` where name is a Python identifier.
+# A path parameter: `{name}` where name is a Python identifier. Any other
+# text, including a `{` that does not start a parameter, is fixed text.
 _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
-@cache
-def compile_route_pattern(path: str, dotless_params: frozenset[str] = frozenset()) -> re.Pattern[str]:
+def check_route_table(routes: Iterable[URLRoute]) -> None:
     """
-    Compile a route path into a regex: ``{name}`` matches any characters except ``/``.
+    Check the full path of every handler route in a route tree.
 
-    A parameter named in ``dotless_params`` also excludes ``.``. When one
-    path segment holds several parameters, Python's regex engine can take
-    time that grows much faster than the path's length to match this regex, so
-    :func:`match_route_pattern` matches such a route without it and gives the
-    same result.
+    A route's full path is its parents' paths followed by its own, joined
+    as plain text, so a problem can come from the join itself. The web
+    framework integrations call this when they mount the routes, so a bad
+    route fails when the app starts rather than on a request.
+
+    Raises:
+        ValueError: If a full path uses one parameter name twice, or puts two
+            parameters next to each other with nothing between them (such as
+            ``{a}{b}``). The message names the route, and both the parent and
+            the child route when joining their paths made the problem.
+
     """
-    pattern = ""
-    last_end = 0
-    for match in _PARAM_RE.finditer(path):
-        pattern += re.escape(path[last_end : match.start()])
-        characters = "[^/.]" if match.group(1) in dotless_params else "[^/]"
-        pattern += f"(?P<{match.group(1)}>{characters}+)"
-        last_end = match.end()
-    pattern += re.escape(path[last_end:])
-    return re.compile(f"^{pattern}$")
+
+    def walk(chain: tuple[URLRoute, ...], items: Iterable[URLRoute]) -> None:
+        for route in items:
+            here = (*chain, route)
+            if route.handler is not None:
+                _check_full_path(tuple((item.path, item.name) for item in here))
+            walk(here, route.children)
+
+    walk((), routes)
+
+
+def _route_label(path: str, name: str | None) -> str:
+    """Describe one route for an error message: its own path, and its name when it has one."""
+    return f"{path!r} (name {name!r})" if name else repr(path)
+
+
+def _check_full_path(chain: tuple[tuple[str, str | None], ...]) -> None:
+    """
+    Raise ``ValueError`` when a route's full path repeats a parameter or puts two side by side.
+
+    ``chain`` holds the ``(path, name)`` of each route from the outermost
+    parent down to the route itself; their paths joined make the full path.
+    """
+    full_path = "".join(path for path, _name in chain)
+    # Where each route's own path starts in the full path, so a parameter
+    # can be traced back to the route that wrote it.
+    starts: list[int] = []
+    offset = 0
+    for path, _name in chain:
+        starts.append(offset)
+        offset += len(path)
+
+    def owner(position: int) -> int:
+        # The last route starting at or before the position wrote it; a
+        # route with an empty path starts where the next one does, so it is
+        # skipped.
+        return max(index for index, start in enumerate(starts) if start <= position)
+
+    own_path, own_name = chain[-1]
+    # The route's own path is what its author wrote; the full path shows
+    # what the parents added in front of it.
+    details = [f"name {own_name!r}"] if own_name else []
+    if len(chain) > 1:
+        details.append(f"full path {full_path!r}")
+    where = repr(own_path) + (f" ({', '.join(details)})" if details else "")
+
+    def written_by(index: int) -> str:
+        # Name the route whose own path holds the problem, which can be a
+        # parent of the route that has the handler.
+        if index == len(chain) - 1:
+            return where
+        return (
+            f"{_route_label(*chain[index])}, a parent of {_route_label(own_path, own_name)} (full path {full_path!r}),"
+        )
+
+    params = list(_PARAM_RE.finditer(full_path))
+
+    # The handler receives each parameter as a keyword argument, so two with
+    # one name could not both reach it.
+    first_seen: dict[str, int] = {}
+    for match in params:
+        name = match.group(1)
+        if name in first_seen:
+            earlier, later = owner(first_seen[name]), owner(match.start())
+            who = written_by(earlier) if earlier == later else where
+            msg = (
+                f"The URLRoute path {who} uses the parameter {{{name}}} twice. The handler receives each"
+                " parameter as a keyword argument, so give each one its own name."
+            )
+            if earlier != later:
+                msg += (
+                    f" One comes from the earlier path {_route_label(*chain[earlier])} and one from"
+                    f" {_route_label(*chain[later])}."
+                )
+            raise ValueError(msg)
+        first_seen[name] = match.start()
+
+    # Two parameters with nothing between them have no single place where
+    # one ends and the next begins, so the route has no one right split.
+    for current, following in pairwise(params):
+        if current.end() != following.start():
+            continue
+        names = f"{{{current.group(1)}}} and {{{following.group(1)}}}"
+        parent, child = owner(current.start()), owner(following.start())
+        if parent == child:
+            msg = (
+                f"The URLRoute path {written_by(parent)} puts the parameters {names} next to each other with nothing"
+                " between them, so Citry cannot tell where one ends and the next begins. Put fixed text"
+                " between them, such as '/' or '.'."
+            )
+        else:
+            msg = (
+                f"The URLRoute path {_route_label(*chain[child])} is joined to the path before it,"
+                f" {_route_label(*chain[parent])}, as plain text, which makes {full_path!r} and puts the"
+                f" parameters {names} next to each other with nothing between them. Citry cannot tell"
+                " where one ends and the next begins. End the parent path with '/', or start the child"
+                " path with fixed text."
+            )
+        raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,19 +551,16 @@ class _RouteSegment:
 
 
 @cache
-def _segments_to_scan(path: str, dotless_params: frozenset[str]) -> tuple[_RouteSegment, ...] | None:
+def _parse_route_path(path: str, dotless_params: frozenset[str]) -> tuple[_RouteSegment, ...]:
     """
-    Split a route path into segments when its regex could be slow, else return ``None``.
+    Split a full route path into its segments, after checking it.
 
-    The regex tries every place a parameter could end. That costs nothing
-    extra when each parameter that is followed by another one in the same
-    segment is dotless and the text after it starts with ``.``, because the
-    parameter can then only end at the first ``.``. Citry's own routes are
-    all of that shape. Any other segment with two or more parameters makes
-    the regex retry the rest of the segment from each place the earlier
-    parameters could end, so such a route is matched by
-    :func:`_match_segments` instead.
+    Raises the same ``ValueError`` as :func:`check_route_table`, so a route
+    that skipped that check (one built after the routes were mounted, or
+    matched with :func:`match_route` directly) is refused on every request
+    path rather than matched by an arbitrary split.
     """
+    _check_full_path(((path, None),))
     segments: list[_RouteSegment] = []
     literals = [""]
     params: list[tuple[str, bool]] = []
@@ -453,22 +583,59 @@ def _segments_to_scan(path: str, dotless_params: frozenset[str]) -> tuple[_Route
         last_end = match.end()
     add_text(path[last_end:])
     segments.append(_RouteSegment(tuple(literals), tuple(params)))
-
-    def regex_is_quick(segment: _RouteSegment) -> bool:
-        # Every parameter but the last must stop at a `.` that the next text starts with.
-        return all(
-            dotless and segment.literals[index + 1].startswith(".")
-            for index, (_name, dotless) in enumerate(segment.params[:-1])
-        )
-
-    if all(regex_is_quick(segment) for segment in segments):
-        return None
     return tuple(segments)
 
 
-def _match_segments(segments: tuple[_RouteSegment, ...], path: str) -> dict[str, str] | None:
-    """Match a request path against a route split by :func:`_segments_to_scan`."""
-    pieces = path.split("/")
+def route_param_names(path: str) -> tuple[str, ...]:
+    """Return the names of the ``{name}`` parameters in a route path, in order."""
+    return tuple(match.group(1) for match in _PARAM_RE.finditer(path))
+
+
+def route_reverse_regex(path: str) -> str:
+    """
+    Build the regex Django keeps for a route, for ``reverse()`` and its URL checks.
+
+    Django turns this regex into the URL template that ``reverse()`` fills
+    in, so the text around the parameters is written as plain text and each
+    ``{name}`` is a named group. ``reverse()`` then searches the URL it
+    built with the regex. Each group takes its parameter only up to the
+    first place where the text after it can start, inside an atomic group
+    that never gives characters back, so the search takes time in step with
+    the URL's length whatever the values hold. Every path that the route
+    matches also matches this regex: each group accepts any run of
+    characters other than ``/``, and the first place where each following
+    text can start leaves the most room for the rest. The regex
+    leaves out ``dotless_params``: leaving ``.`` out of a dotless parameter
+    there could make the regex refuse a URL the route matches, such as
+    ``pkg/my-lib.v2-3`` for ``pkg/{name}-{build}`` with ``build`` dotless.
+    The Django
+    integration checks each value that ``reverse()`` puts in the URL
+    instead, including that a dotless value holds no ``.``.
+
+    Raises:
+        ValueError: As :func:`check_route_table` does.
+
+    """
+    segments = _parse_route_path(path, frozenset())
+    parts: list[str] = []
+    for segment in segments:
+        part = re.escape(segment.literals[0])
+        for index, (name, _dotless) in enumerate(segment.params):
+            after = segment.literals[index + 1]
+            if index < len(segment.params) - 1:
+                # Up to the first place the next text starts, after at least one character.
+                group = f"(?>[^/]+?(?={re.escape(after)}))"
+            else:
+                # The last parameter of a segment runs to where the segment's
+                # closing text ends the segment.
+                group = rf"(?>[^/]+(?={re.escape(after)}(?:/|\Z)))"
+            part += f"(?P<{name}>{group}){re.escape(after)}"
+        parts.append(part)
+    return "^" + "/".join(parts) + "$"
+
+
+def _match_segments(segments: tuple[_RouteSegment, ...], pieces: list[str]) -> dict[str, str] | None:
+    """Match a request path, already split at each ``/``, against a route split by :func:`_parse_route_path`."""
     # Parameters never hold a `/`, so the path must have exactly as many
     # segments as the route.
     if len(pieces) != len(segments):
@@ -484,14 +651,14 @@ def _match_segment(segment: _RouteSegment, text: str, params: dict[str, str]) ->
     """
     Match one path segment and add its parameters to ``params``.
 
-    This gives the same answer and the same values as the route's regex.
-    The regex lets each parameter take as many characters as it can while
-    the rest of the segment still matches, the earlier parameter first. So
-    this first works out, from the end of the segment backwards, where the
-    rest can start, and then lets each parameter in turn take the longest
-    run that leaves a match for the rest. Each step looks at each character
-    of the segment once per parameter, so the time grows in step with the
-    segment's length.
+    Each parameter takes as many characters as it can while the rest of the
+    segment still matches, the earlier parameter first. So this first works
+    out, from the end of the segment backwards, where the rest can start,
+    and then lets each parameter in turn take the longest run that leaves a
+    match for the rest. Each step looks at each character of the segment
+    once per parameter, so the time grows in step with the segment's length.
+    Segments with one parameter, with no dotless parameter before the last,
+    or shaped like Citry's cache routes take a quicker path first.
     """
     literals, names = segment.literals, segment.params
     if not names:
@@ -504,6 +671,23 @@ def _match_segment(segment: _RouteSegment, text: str, params: dict[str, str]) ->
     # only the middle is split between the parameters.
     middle = text[len(head) : len(text) - len(tail)]
     size = len(middle)
+
+    # Most segments hold one parameter, which takes the whole middle.
+    if len(names) == 1:
+        name, dotless = names[0]
+        if dotless and "." in middle:
+            return False
+        params[name] = middle
+        return True
+    # Without a dotless parameter before the last, each split can be found
+    # with a search from the right, which is much quicker than the general
+    # walk below.
+    if not any(dotless for _name, dotless in names[:-1]):
+        return _split_from_the_right(literals, names, middle, params)
+    # Citry's own cache routes: each parameter before the last is dotless
+    # and followed by text that starts with `.`, so it ends at the next `.`.
+    if all(dotless and literals[index + 1].startswith(".") for index, (_name, dotless) in enumerate(names[:-1])):
+        return _split_at_dots(literals, names, middle, params)
 
     # next_dot[j] is the first `.` at or after j (or the end): where a
     # dotless parameter starting at j has to stop.
@@ -545,25 +729,93 @@ def _match_segment(segment: _RouteSegment, text: str, params: dict[str, str]) ->
     return True
 
 
+def _split_from_the_right(
+    literals: tuple[str, ...], names: tuple[tuple[str, bool], ...], middle: str, params: dict[str, str]
+) -> bool:
+    """
+    Split the middle of a segment where no parameter before the last is dotless.
+
+    Such a parameter accepts any run of one or more characters, so it can
+    end wherever the fixed text after it fits. Putting each fixed text as
+    far right as it can go, starting with the last, gives the split where
+    each parameter takes as much as it can. Each search runs once over
+    part of the middle.
+    """
+    size = len(middle)
+    last_dotless = names[-1][1]
+    # A dotless last parameter must start after the last `.`.
+    last_floor = middle.rfind(".") + 1 if last_dotless else 0
+    # The next parameter must start before `limit`, so it keeps at least one character.
+    limit = size
+    ends = [0] * (len(names) - 1)
+    for index in range(len(names) - 2, -1, -1):
+        between = literals[index + 1]
+        # The fixed text must end at or before limit - 1. A negative bound
+        # would count from the end, so rule it out first.
+        if limit - 1 < len(between):
+            return False
+        end = middle.rfind(between, 0, limit - 1)
+        if end < 0:
+            return False
+        if index == len(names) - 2 and end + len(between) < last_floor:
+            return False
+        ends[index] = end
+        limit = end
+    # The first parameter needs at least one character too.
+    if ends[0] < 1:
+        return False
+    start = 0
+    for index, (name, _dotless) in enumerate(names[:-1]):
+        params[name] = middle[start : ends[index]]
+        start = ends[index] + len(literals[index + 1])
+    params[names[-1][0]] = middle[start:]
+    return True
+
+
+def _split_at_dots(
+    literals: tuple[str, ...], names: tuple[tuple[str, bool], ...], middle: str, params: dict[str, str]
+) -> bool:
+    """
+    Split the middle of a segment where each parameter but the last is dotless and followed by a ``.``.
+
+    Such a parameter cannot hold a ``.`` and must be followed by one, so it
+    ends exactly at the next ``.``; there is only one possible split.
+    """
+    start = 0
+    for index, (name, _dotless) in enumerate(names[:-1]):
+        end = middle.find(".", start)
+        between = literals[index + 1]
+        # The parameter needs at least one character, and the fixed text
+        # after it must follow in full.
+        if end <= start or not middle.startswith(between, end):
+            return False
+        params[name] = middle[start:end]
+        start = end + len(between)
+    rest = middle[start:]
+    last_name, last_dotless = names[-1]
+    if not rest or (last_dotless and "." in rest):
+        return False
+    params[last_name] = rest
+    return True
+
+
 def match_route_pattern(route_path: str, dotless_params: frozenset[str], request_path: str) -> dict[str, str] | None:
     """
-    Match a request path against one route path and return its parameters, or ``None``.
+    Match a request path against one full route path and return its parameters, or ``None``.
 
-    The result is the same as ``compile_route_pattern(route_path,
-    dotless_params).fullmatch(request_path)`` would give, in time that grows
-    in step with the request path's length.
+    The whole request path must match. Each ``{name}`` takes one or more
+    characters other than ``/`` (and other than ``.`` when it is in
+    ``dotless_params``), and the fixed text must appear as written. Where a
+    segment could split between its parameters in more than one way, each
+    parameter takes as much as it can, the earlier one first. The time
+    grows in step with the request path's length.
+
+    Raises:
+        ValueError: If the route path uses one parameter name twice or puts
+            two parameters next to each other (see :func:`check_route_table`).
+
     """
-    # Compiled first, so a route the regex rejects (such as a repeated
-    # parameter name) raises the same error on every path.
-    pattern = compile_route_pattern(route_path, dotless_params)
-    segments = _segments_to_scan(route_path, dotless_params)
-    if segments is not None:
-        return _match_segments(segments, request_path)
-    # fullmatch, because the pattern's `$` also matches just before a
-    # final newline, so `call%0a` would otherwise reach the `call` route
-    # while a host rule comparing the exact path lets it through.
-    match = pattern.fullmatch(request_path)
-    return None if match is None else match.groupdict()
+    return _match_segments(_parse_route_path(route_path, dotless_params), request_path.split("/"))
 
 
 def match_path_below_mount(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
@@ -605,14 +857,16 @@ def match_route(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
     Resolve a request path (no leading slash) against a route tree.
 
     Routes are tried in definition order; the first match wins, so define
-    more specific patterns first (e.g. the two-parameter
-    ``cache/{class_id}.{vars_hash}.{script_type}`` before the one-parameter
-    ``cache/{class_id}.{script_type}``). The whole path must match. The
-    ASGI and WSGI adapters call :func:`match_path_below_mount`, which
-    prepares the request path first.
+    more specific patterns first (e.g. the three-parameter
+    ``cache/{class_id}.{vars_hash}.{script_type}`` before the two-parameter
+    ``cache/{class_id}.{script_type}``). The whole path must match, as
+    :func:`match_route_pattern` describes. The ASGI and WSGI adapters call
+    :func:`match_path_below_mount`, which prepares the request path first.
     """
+    # Split once and reuse the pieces for every route.
+    pieces = path.split("/")
     for full_path, route in flatten_routes(routes):
-        params = match_route_pattern(full_path, route.dotless_params, path)
+        params = _match_segments(_parse_route_path(full_path, route.dotless_params), pieces)
         if params is not None:
             return MatchedRoute(route=route, full_path=full_path, params=params)
     return None
