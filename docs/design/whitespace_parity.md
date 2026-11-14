@@ -2,9 +2,9 @@
 
 Status: design with the maintainer's decisions recorded (issue
 [#152](https://github.com/citry-dev/citry/issues/152)). Nothing here is
-built yet. It targets 0.9.0, which the maintainer plans as the last
-release with breaking changes before 1.0.0. "Decisions" at the end lists
-each choice and the part of the design it shaped.
+built yet. The maintainer moved it to a release after 1.0.0. That release
+is not chosen yet. "Decisions" at the end lists each choice and the part
+of the design it shaped.
 
 ## What this decides
 
@@ -16,7 +16,7 @@ removes or shortens some whitespace first. Vue calls this condensing. The
 same template can therefore show different text depending on how the
 page was sent.
 
-This document decides which whitespace rule Citry uses for 1.0.0, and where
+This document decides which whitespace rule Citry uses, and where
 that rule is applied so that every way of sending a page shows the same
 text.
 
@@ -319,7 +319,7 @@ Condense in Python behind a setting, leave vize alone, and document that
 the setting does not affect hydrated pages. Rejected: it keeps the text
 shift on declined pages, which is the bug.
 
-## Design for 0.9.0
+## Design
 
 The maintainer chose **Option 3**, with these parts:
 
@@ -338,10 +338,11 @@ The maintainer chose **Option 3**, with these parts:
      plan (`:829-830`; `lower` takes no options today, so it needs the
      same patch as the condense pass).
 
-   **The patched copy of `vize_atelier_dom`.** Citry adds the copy for
-   0.9.0 because asking upstream and waiting for a release would hold up
-   0.9.0. It follows the repository's convention for patched crates (see
-   `third_party/README.md` and "Patched Vize compiler crates" there):
+   **The patched copy of `vize_atelier_dom`.** Citry adds the copy in
+   the release that builds this because asking upstream and waiting for a
+   release would hold up that release. It follows the repository's
+   convention for patched crates (see `third_party/README.md` and
+   "Patched Vize compiler crates" there):
    - The source is the crates.io archive `vize_atelier_dom-0.420.0.crate`.
      The copy keeps the archive's normalized `Cargo.toml` and the
      registry's original manifest as `Cargo.upstream.toml`, and adds the
@@ -350,8 +351,8 @@ The maintainer chose **Option 3**, with these parts:
      and the exact patch.
    - The two existing patched crates share one version suffix (`+citry.7`
      today), and it moves when either changes. The new copy joins them,
-     so 0.9.0 raises the suffix on all three. The places that carry it
-     are `crates/citry_vue_compiler/src/lib.rs:764`,
+     so the release that builds this raises the suffix on all three. The
+     places that carry it are `crates/citry_vue_compiler/src/lib.rs:764`,
      `packages/py/citry/citry/_vue/compiler.py:392`,
      `packages/py/citry/tests/test_vue_prepared.py:348`,
      `scripts/verify_citry_core_distribution.py` (`PATCHED_CRATES`),
@@ -373,9 +374,9 @@ The maintainer chose **Option 3**, with these parts:
      snapshot files of `vize_atelier_core` only; the new copy gets one if
      it has snapshot files. The `third_party/README.md` entry and the
      "two" in its text change to match.
-   - Later, and not as part of 0.9.0, Citry offers the option to upstream
-     vize (a way to pass the whitespace strategy through
-     `vize_atelier_dom`), so the patched copy can be dropped once a
+   - Later, and not in the release that builds this, Citry offers the
+     option to upstream vize (a way to pass the whitespace strategy
+     through `vize_atelier_dom`), so the patched copy can be dropped once a
      released vize has it and Citry's regression tests pass.
      `third_party/README.md` states the same rule for the other two
      copies.
@@ -454,7 +455,7 @@ The maintainer chose **Option 3**, with these parts:
      needs `data-allow-mismatch`.
 4. **`<textarea>` and `<title>` keep their content as written**, as
    upstream Vue does. `Preserve` mode gives this for free.
-5. **No setting in 0.9.0.** Condensing can come later as an opt-in,
+5. **No setting in the release that builds this.** Condensing can come later as an opt-in,
    because adding it does not break anyone. It needs Option 1's three
    problems solved first; this document records them.
 6. **The authored text plan stays.** Under `Preserve` it holds only the
@@ -493,7 +494,7 @@ Why authored whitespace rather than Vue's rule:
 
 - vize and the Citry call sites in item 1, including the new patched
   copy and the files that list the patched crates. A `citry_core`
-  release must ship before `citry` 0.9.0.
+  release must ship before the `citry` release that builds this.
 - The shared root function in item 2, called from each writer of a
   component's Vue template and from the Python static writer. The
   `host-root` rule in
@@ -555,7 +556,7 @@ reach the page (Mechanism 7 in `CLAUDE.md`, "Text and markup").
 - **A template that is not HTML** (Markdown, plain text). Unchanged, as
   long as it does not become a Vue component; item 2 applies only to
   Vue component roots and the mount element of a Vue page.
-- **Cached renders from 0.8.0.** The render cache keys entries by the
+- **Cached renders from earlier releases.** The render cache keys entries by the
   template source, so entries stored before the upgrade may fail the
   replay check once and be rendered again (reported as a corrupt entry).
   Entries stamped with the old leaf template descriptor miss and render
@@ -569,7 +570,7 @@ reach the page (Mechanism 7 in `CLAUDE.md`, "Text and markup").
 
 ## Migration notes
 
-For the 0.9.0 upgrade guide:
+For the upgrade guide of the release that builds this:
 
 - **Pages that use Vue now keep the whitespace you wrote, like pages
   without Vue.** A line break between two inline elements, such as two
@@ -594,7 +595,7 @@ For the 0.9.0 upgrade guide:
   benchmark page, compare Vue's render and hydration time and the HTML
   size with and without condensing. If keeping whitespace makes hydration
   more than 5% slower or the compressed HTML more than 3% larger, prefer
-  Vue's rule and solve Option 1's three problems before 0.9.0 instead.
+  Vue's rule and solve Option 1's three problems before that release instead.
   The maintainer accepted these thresholds. Check first that the
   benchmark page still hydrates in both runs; a page that falls back to
   mounting without hydration would make the numbers meaningless.
@@ -608,7 +609,7 @@ For the 0.9.0 upgrade guide:
   finds Vue templates whose root it cannot reduce to one element without
   dropping text a user can see, keeping authored whitespace costs more
   than this document assumes.
-- **Visible damage on Vue pages.** Before 0.9.0, render the hydrated
+- **Visible damage on Vue pages.** Before that release, render the hydrated
   pages of the examples, the docs site and `citry_ui`'s components with
   and without condensing, and compare screenshots. If many components
   gain visible gaps that their authors would have to fix, the migration
@@ -627,7 +628,7 @@ The maintainer decided these. The part of the design each one shaped is
 in brackets.
 
 1. Keep the author's whitespace on every path, which is Option 3.
-   Condensing is not built for 0.9.0 (Options 1 and 2). [Option 3, items
+   Condensing is not built (Options 1 and 2). [Option 3, items
    4 and 5]
 2. Drop the whitespace around each Vue component's root, and in the
    page's mount element, with one shared function that runs on both
@@ -635,8 +636,8 @@ in brackets.
    server writer's rule stays as it is. [Item 2]
 3. Drop the line break after `<pre>` in Citry's own code that writes the
    Vue template, not in vize. [Item 3]
-4. Add a patched copy of `vize_atelier_dom` under `third_party/rust/` for
-   0.9.0, because asking upstream is too slow. The option should still be
+4. Add a patched copy of `vize_atelier_dom` under `third_party/rust/` in
+   that release, because asking upstream is too slow. The option should still be
    offered upstream later, so the patched copy can be dropped. [Item 1]
 5. Keep the authored text plan for a possible condense opt-in later.
    [Item 6]
