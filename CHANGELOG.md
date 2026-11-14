@@ -336,6 +336,10 @@ Tags for files that Citry serves now carry `integrity`, and event calls
 send the CSRF token only to the page's own origin. The upgrade notes
 below list what can fail or change.
 
+Citry 0.8.0 does not import on Pyodide (Python in the browser), so use
+Citry 0.9.0 or later there. For the same reason the docs site has no
+0.8.0 entry in its version picker.
+
 ### Upgrading from 0.7.x
 
 - **Signed State tokens from earlier versions stop working:** State
