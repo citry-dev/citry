@@ -1703,8 +1703,18 @@ def test_prepared_type_script_identity_hashes_exact_wrapped_served_bytes() -> No
     assert content is not None
     assert hashlib.sha256(content).hexdigest() == script["source"]["sha256"]
     assert script["source"]["url"].endswith(f"/{script['source']['sha256']}.js")
-    assert content.startswith(b"(function() {\nconst scopedName = 3;")
-    assert content.endswith(b"\n})();")
+    # The served bytes are the component's own function inside the `try` that reports whether it
+    # ran to its end, so the digest above covers the wrapper too.
+    inner = b"(function() {\nconst scopedName = 3;"
+    assert content.startswith(b"try {\n" + inner)
+    key = script["finishKey"]
+    assert content.endswith(
+        f'\n}})();\n__citryRuntime.finishScript("{key}");\n}} '
+        f'catch (error) {{\n__citryRuntime.finishScript("{key}", error);\n}}'.encode()
+    )
+    # The key names the component's script as the page would run it without the wrapper.
+    unwrapped = content.removeprefix(b"try {\n").partition(b"\n__citryRuntime.finishScript")[0]
+    assert key == hashlib.sha256(unwrapped).hexdigest()
 
 
 def test_custom_dependency_hook_disables_later_lazy_type_assets() -> None:

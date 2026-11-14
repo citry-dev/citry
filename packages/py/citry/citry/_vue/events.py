@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from citry.browser_render import PreparedBrowserExtension
     from citry.citry_render import CitryRender
     from citry.citry_template import CitryTemplate
-    from citry.ext.dependencies.types import Dependency, DependencyRecord
+    from citry.ext.dependencies.types import Dependency, DependencyRecord, Script
     from citry.ext.events.extension import EventsExtension
     from citry.ext.events.renderers import _VueMarkerTarget
     from citry.ext.events.results import RenderEncodingContext
@@ -1091,8 +1091,17 @@ class DirectVueEventsProducer:
             for dependency in values:
                 prepared_dependency = deferred_dependency(dependency)
                 source = _browser_loader_descriptor(prepared_dependency)
+                finish_key: str | None = None
                 if source["kind"] == "inline":
-                    content = cast("str", source.pop("content")).encode()
+                    text = cast("str", source.pop("content"))
+                    # A component's own `js` reports to the runtime whether it ran to its end, so a
+                    # script that throws or fails to parse stops startup with an error that names
+                    # the component. The wrapper is part of the published bytes, so the digest,
+                    # the integrity hash and any CSP hash below already cover it.
+                    if not is_style and dependency.kind == "component" and cast("Script", prepared_dependency).wrap:
+                        finish_key = hashlib.sha256(text.encode()).hexdigest()
+                        text = _report_component_script_finish(text, finish_key)
+                    content = text.encode()
                     digest = hashlib.sha256(content).hexdigest()
                     if is_style:
                         self._publish_style(digest, content)
@@ -1122,6 +1131,7 @@ class DirectVueEventsProducer:
                                 if not is_style
                                 else {}
                             ),
+                            **({"finishKey": finish_key} if finish_key is not None else {}),
                         }
                     )
 
@@ -1644,12 +1654,46 @@ def _validate_style_assets(styles: list[dict[str, object]], view: PreparedViewMe
         urls[url] = source
 
 
+def _report_component_script_finish(script: str, key: str) -> str:
+    """
+    Wrap a component's script so it tells the browser runtime whether it ran to its end.
+
+    ``script`` is the component's ``js`` as the page would run it, already inside its own
+    function, so its ``"use strict"`` and function hoisting keep working inside the ``try``. The
+    runtime's ``finishScript`` records the result under ``key``, which the manifest repeats as the
+    asset's ``finishKey``, and reports a caught error again so the page's ``error`` event still
+    sees it. A script that fails to parse never calls it, and the runtime treats the missing
+    record as a failure.
+    """
+    # The key is a hex digest, so it needs no escaping inside the string literal.
+    literal = f'"{key}"'
+    return (
+        f"try {{\n{script}\n__citryRuntime.finishScript({literal});\n}} "
+        f"catch (error) {{\n__citryRuntime.finishScript({literal}, error);\n}}"
+    )
+
+
 def _validate_script_assets(scripts: list[dict[str, object]]) -> None:
     urls: dict[str, dict[str, object]] = {}
     for script in scripts:
-        if type(script) is not dict or set(script) != {"owner", "source", "lazyAllowed", "registersOptions"}:
+        if type(script) is not dict or set(script) - {"finishKey"} != {
+            "owner",
+            "source",
+            "lazyAllowed",
+            "registersOptions",
+        }:
             raise ValueError("prepared script asset has an invalid shape")
         owner, source = script["owner"], script["source"]
+        # Only a component's own `js`, which the server published and wrapped, reports its finish.
+        if "finishKey" in script and (
+            type(script["finishKey"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", cast("str", script["finishKey"])) is None
+            or type(owner) is not dict
+            or owner.get("kind") != "component"
+            or type(source) is not dict
+            or source.get("kind") != "owned"
+        ):
+            raise ValueError("prepared script asset metadata is invalid")
         if type(owner) is not dict or type(source) is not dict or type(script["lazyAllowed"]) is not bool:
             raise ValueError("prepared script asset metadata is invalid")
         component = owner.get("kind") == "component"
