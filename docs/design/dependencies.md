@@ -1168,8 +1168,9 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    descriptor). The 9.4 `serve` mode for local files moves to phase 5.
 5. **Breadth - built** (except as noted). `citry.contrib.flask.mount`
    (wraps the app's `wsgi_app`, needs no Flask import);
-   `citry.contrib.django` (`urlpatterns()` over `Citry.urls`, using
-   `re_path` where two parameters share a path segment, plus the
+   `citry.contrib.django` (`urlpatterns()` over `Citry.urls`; a route
+   with parameters gets a Django pattern that keeps the route's regex for
+   `reverse()` but matches requests with Citry's own matcher, plus the
    `DjangoCache` wrapper); the cache adapters as
    `citry.contrib.caches.RedisCache` / `DiskCache` (one module, wrapping
    client objects the user constructs, so citry imports nothing from the

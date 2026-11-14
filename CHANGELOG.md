@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### Upgrading from 0.8.x
+
+- **Put text between two route parameters:** a `URLRoute` path such as
+  `"{year}{month}"` now raises `ValueError` naming the route when your
+  app starts, in `asgi_app()`, `wsgi_app()`, the Flask and FastAPI
+  `mount()`, and Django's `urlpatterns()`. Before, it matched, and the
+  first parameter took all but the last character. Citry cannot tell
+  where one value ends and the next begins, so write `"{year}-{month}"`
+  or another separator.
+  ([details](https://citry.dev/advanced/extensions/#separate-two-parameters))
+- The same error comes from a parent route whose path ends in a
+  parameter and a child whose path starts with one, such as
+  `"files/{name}"` with `"{ext}"`, because a child's path is added to its
+  parent's as plain text. The message names both routes. End the
+  parent's path with `/`, or start the child's path with text such as
+  `.`.
+- Routes with text between their parameters, such as
+  `"files/{name}.{ext}"`, match the same paths with the same values as
+  before.
+
+### Changed
+
+- A `URLRoute` path that uses one parameter name twice, such as
+  `"{id}/{id}"`, now raises `ValueError` naming the route when your app
+  starts. Before, it raised a regular expression error: under Django
+  when `urlpatterns()` ran, and under ASGI and WSGI on every request that
+  reached the route.
+  ([details](https://citry.dev/advanced/extensions/#separate-two-parameters))
+
 ### Fixes
 
 - **Citry imports on Pyodide again:** Citry 0.8.0 failed to import on

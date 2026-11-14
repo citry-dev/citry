@@ -56,7 +56,6 @@ from __future__ import annotations
 import inspect
 import io
 import posixpath
-import re
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -71,6 +70,7 @@ from citry.util.routing import (
     RouteHeaders,
     RouteRequest,
     body_read_limit,
+    check_route_table,
     compile_route_pattern,
     flatten_routes,
     match_route_pattern,
@@ -93,13 +93,6 @@ __all__ = ["DjangoCache", "enable_hot_reload", "secret", "urlpatterns"]
 # Every call to urlpatterns() asks the same Django project, so a later call
 # replaces the checker an earlier one registered.
 _DJANGO_PROJECT = object()
-
-_PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
-
-
-def _to_django_path(path: str) -> str:
-    """Convert citry's ``{param}`` placeholders to Django's ``<str:param>``."""
-    return _PARAM_RE.sub(r"<str:\1>", path)
 
 
 def _read_body(request: Any, limit: int | None) -> bytes:
@@ -229,7 +222,10 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
     The generated views are synchronous, so every route handler must be a
     plain function; an ``async def`` handler raises ``TypeError`` here,
-    pointing at the ASGI adapter as the fix.
+    pointing at the ASGI adapter as the fix. ``urlpatterns()`` also raises
+    ``ValueError`` when a route's full path (its parents' paths followed
+    by its own) has two parameters side by side (such as ``{a}{b}``) or
+    uses one parameter name twice.
 
     Calling it also lets ``citry check`` and the editor ask the project
     whether its URL patterns or static files serve each link path written in
@@ -241,6 +237,8 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
     # been accepted, so a rejected async handler leaves the instance untouched.
     if prefix is not None:
         normalize_mount_prefix(prefix)
+    # Refuse a bad route path before building any pattern, for the same reason.
+    check_route_table(citry_instance.urls)
 
     patterns = []
     for full_path, route in flatten_routes(citry_instance.urls):
@@ -254,10 +252,10 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
                 "make the handler a plain 'def'."
             )
             raise TypeError(msg)
-        # A route with parameters gets a pattern class that keeps the citry
-        # route's regex for `reverse()` and Django's URL checks, but matches
-        # each request the way Citry's own adapters do. Plain `path()` covers
-        # parameter-free routes.
+        # A route with parameters gets a pattern class that holds a regex of
+        # the route's shape for `reverse()` and Django's URL checks, but
+        # matches each request with Citry's own matcher, as the other
+        # adapters do. Plain `path()` covers parameter-free routes.
         if "{" in full_path:
             from django.urls import URLPattern  # noqa: PLC0415
 
@@ -283,12 +281,14 @@ def _citry_route_pattern_class() -> type[Any]:
     """
     Return a Django URL pattern class that matches a request the way Citry's own adapters do.
 
-    Django would match a request against the route's regex, which can take
-    time that grows much faster than the path's length when one path segment
-    holds several parameters. This class keeps the regex, so ``reverse()``
-    and Django's URL checks work as for ``re_path()``, but matches a request
-    with :func:`citry.util.routing.match_route_pattern`, which gives the
-    same result in time that grows in step with the path's length. It is
+    The class holds the regex from
+    :func:`citry.util.routing.compile_route_pattern`, which describes the
+    route's shape, so ``reverse()`` and Django's URL checks work as for
+    ``re_path()``. It matches each request with
+    :func:`citry.util.routing.match_route_pattern` instead of that regex,
+    because a regex with several parameters in one path segment can take
+    time that grows much faster than the path's length. So Django splits a
+    path between parameters exactly as the other adapters do. The class is
     built on first use because this module must import without Django.
     """
     from django.urls.resolvers import RegexPattern  # noqa: PLC0415

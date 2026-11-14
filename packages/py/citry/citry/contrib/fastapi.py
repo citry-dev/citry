@@ -68,7 +68,11 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     ``app.root_path`` too.
 
     Raises:
-        ValueError: If ``prefix`` does not start with ``/``.
+        ValueError: If ``prefix`` does not start with ``/``, or if a route's
+            full path (its parents' paths followed by its own) has two
+            parameters side by side (such as ``{a}{b}``) or uses one
+            parameter name twice (see [`URLRoute`][citry.URLRoute]). The app
+            is left unchanged.
 
     """
     # Check the prefix before handing it to Starlette, whose own check fails
