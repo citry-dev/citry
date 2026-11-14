@@ -1,6 +1,8 @@
 # Design: the V3 template grammar
 
-**Status (2026-07-01): current.** This describes the Pest grammar and the
+**Status (2026-11-14): current, and frozen for 1.x** (see
+[Reserved names and the 1.x freeze](#reserved-names-and-the-1x-freeze)).
+This describes the Pest grammar and the
 parse-time validation contract for citry's V3 `<c-*>` template syntax. The
 grammar itself lives in
 [`grammar.pest`](../../crates/citry_template_parser/src/grammar.pest); the
@@ -314,6 +316,76 @@ identity nodes and may carry `#c-key`. Template flags must be written
 explicitly on the tag. A `#c-*` mapping key arriving through `c-bind` is a
 render-time error, even when its value is `None`; callers pass an ordinary
 component input and the component writes `#c-key` on the markup it owns.
+
+## Reserved names and the 1.x freeze
+
+The V3 syntax is frozen for 1.x. A 1.x release does not remove syntax that
+this document describes or change what it means. When Citry adds syntax in
+1.x, it takes a name from the reserved set below, so a template or component
+that works on 1.0.0 keeps working. Citry reserves three groups of names.
+
+### Built-in tag names
+
+Citry owns 18 tag names today. The first eight are read by the template
+parser itself (`RESERVED_TAG_NAMES` in
+[`constants.rs`](../../crates/citry_template_parser/src/constants.rs)). The
+other ten are components that Citry registers in every `Citry` instance
+(`BUILTIN_COMPONENT_NAMES` in
+[`component_registry.py`](../../packages/py/citry/citry/component_registry.py)).
+
+| Read by the parser | Registered by Citry |
+|---|---|
+| `if`, `elif`, `else`, `for`, `empty`, `raw`, `fill`, `slot` | `provide`, `cache`, `component`, `element`, `error-fallback`, `js`, `css`, `i18n`, `trans`, `mark` |
+
+Four more names are kept free for built-in tags that Citry plans to add:
+`lazy`, `teleport`, `transition` and `suspense` (`FUTURE_TAG_NAMES` in
+`component_registry.py`). A new built-in tag in 1.x takes one of these four
+names.
+
+A component cannot take any of these 22 names. Every way a component gets a
+name (its class name, its `name` attribute, an alias passed to
+`Citry.register()`, autodiscovery, and a component library) goes through
+the registry, and the registry compares the lowercased name with the list:
+
+- A component class defined or registered under a reserved name raises
+  `AlreadyRegistered`. The message names the reserved tag, for example
+  "the name is reserved for a future built-in <c-lazy> tag".
+- A `ComponentLibrary` that contains a definition with a reserved name
+  raises `ValueError` when the library is constructed, before any app
+  installs it.
+
+Only the whole name is reserved. `LazyCard`, registered as `lazycard` and
+`lazy-card`, is allowed.
+
+### Attribute names starting with `#c-`
+
+Every attribute name that starts with `#c-` belongs to the template flags
+described [above](#template-flags). The template parser owns the channel and
+accepts only `#c-key` and `#c-ignore` (`META_ATTR_KEY` and
+`META_ATTR_IGNORE` in `constants.rs`). Any other `#c-` name is a parse error.
+A new flag in 1.x is added to the parser and to this list.
+
+### Attribute names starting with `$c-`
+
+Every attribute name that starts with `$c-` is a directive owned by one part
+of Citry, usually an extension. The table below is the one place that
+records which part owns each name. An extension or parser change that gives
+a `$c-` name a meaning adds a row here in the same change. A name counts
+with any suffix the owner defines (`$c-tr:greeting` belongs to `$c-tr`) and
+in its dynamic spelling (`c-$c-tr:greeting`).
+
+| Name | Owner | Where it is handled |
+|---|---|---|
+| `$c-tr` | The i18n extension (`citry.ext.i18n`) | `I18N_BINDING_ROOT` in [`_i18n_directives.py`](../../packages/py/citry/citry/_i18n_directives.py); the directive's syntax is in [`i18n.md`](i18n.md) |
+| `$c-props` | The template parser | `CLIENT_PROPS_ATTR` in `constants.rs`; the parser rejects `$c-props` and `c-$c-props` with an error that points to Vue's `:prop` and `v-bind` syntax |
+
+The list lives in this document rather than in code because no code reads
+it. Each owner checks its own names where it already handles them: the
+parser in `constants.rs`, an extension in its own package. A registry in
+code that nothing consults would be a second copy that can drift from the
+real handlers. Citry does not reject a `$c-` name that has no row here,
+so this table and code review are what keep the prefix free for new
+directives.
 
 ## Parse-time validation
 

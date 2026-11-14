@@ -23,6 +23,7 @@ registering or importing anything.
   [`<c-trans>`](#c-trans)
 - **Page assets:** [`<c-css>`](#c-css) and [`<c-js>`](#c-js)
 - **Literal template text:** [`<c-raw>`](#c-raw)
+- **Names you cannot use for a component:** [Reserved names](#reserved-names)
 
 ## Control flow
 
@@ -286,3 +287,19 @@ not evaluate expressions or component tags inside `<c-raw>`.
 covers what is trusted and the exact rules.
 
 [dependencies-guide]: /advanced/asset-placement/
+
+## Reserved names
+
+You cannot give a component the name of a built-in tag (`if`, `slot`,
+`cache`, `mark` and the others above). Four more names are kept for
+built-in tags Citry plans to add: `lazy`, `teleport`, `transition` and
+`suspense`. A component class named `Teleport`, or one registered as
+`teleport`, fails when it is defined:
+
+```text
+AlreadyRegistered: Cannot register 'Teleport' as 'teleport': the name
+is reserved for a future built-in <c-teleport> tag.
+```
+
+Rename the class, for example to `TeleportTarget`. A longer name that
+contains a reserved word, such as `LazyCard`, is allowed.

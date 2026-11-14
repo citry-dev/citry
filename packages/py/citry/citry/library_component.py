@@ -16,8 +16,7 @@ from citry.citry import Citry  # noqa: TC001 - required by public runtime annota
 from citry.citry_element import CitryElement  # noqa: TC001 - required by public runtime annotations
 from citry.citry_render import CitryRender  # noqa: TC001 - required by public runtime annotations
 from citry.component_registry import (
-    BUILTIN_COMPONENT_NAMES,
-    STRUCTURAL_TAG_NAMES,
+    RESERVED_COMPONENT_NAMES,
     _normalize_name,
     _pascal_to_kebab,
     _validate_component_name,
@@ -454,7 +453,9 @@ class ComponentLibrary:
 
             names = _component_names(definition)
             for component_name in names:
-                if component_name in STRUCTURAL_TAG_NAMES or component_name in BUILTIN_COMPONENT_NAMES:
+                # Checked here as well as in the registry so a library fails
+                # when it is declared, before any app installs it.
+                if component_name in RESERVED_COMPONENT_NAMES:
                     msg = f"Library component {definition.__name__!r} claims reserved name {component_name!r}."
                     raise ValueError(msg)
                 previous = claimed_names.get(component_name)

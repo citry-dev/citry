@@ -90,6 +90,15 @@ does. The upgrade notes below list what can change.
   per process. A cache backend error therefore fails the render. Citry
   calls the backend's `set` with `ttl=` as a keyword argument, so a custom
   backend's `set` must accept it under that name.
+- **Rename a component called `lazy`, `teleport`, `transition` or
+  `suspense`:** Citry keeps these names for built-in tags it plans to
+  add, so a component class such as `Teleport`, or one registered under
+  one of these names, now raises `AlreadyRegistered` when it is defined.
+  A component library that contains one raises `ValueError`. Rename it,
+  for example to `TeleportTarget`, and update the tags in your
+  templates. Names that only contain one of these words, such as
+  `LazyCard`, still work
+  ([reserved names](https://citry.dev/reference/builtins/#reserved-names)).
 
 ### Added
 
