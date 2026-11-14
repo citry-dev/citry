@@ -2047,11 +2047,72 @@ class I18nExtension(Extension):
         context: LocaleContext | None = None,
     ) -> dict[str, object]:
         """
-        Resolve one rich message to escaped text records and named Slot parts.
+        Resolve one rich message to raw text segments and named Slot segments.
 
-        This is the lower-level operation used by `<c-trans>`. Application code
-        should normally use that component so fills retain their Citry scope
-        and ownership.
+        A rich message has `Slot` variables, the places where your code fills
+        in markup such as a link. A segment is one piece of the message: a run
+        of text, or the place a Slot goes. This is the lower-level operation
+        used by `<c-trans>`. Application code should normally use that
+        component so fills retain their Citry scope and ownership.
+
+        The text segments are raw. Nothing in them is escaped, so a `<` or
+        `&` from the translation, or from a value in `values`, comes back as
+        written. Escape each text segment once before it reaches a page. In a
+        Citry template, `{{ }}` does this, as `<c-trans>` does, so do not
+        escape the segment first. If you build an HTML string in Python,
+        escape the segment for the place it goes, such as HTML text or an
+        attribute value. [`Markup.format()`][citry.Markup] does this for each
+        value you pass it.
+
+        A text segment can contain U+2068 and U+2069. These are two invisible
+        characters that Citry puts around values it fills in, such as text and
+        numbers, so text that runs the other way cannot reorder the words
+        around it. Leave them in. Escaping does not change them.
+
+        Returns:
+            A dict with these keys:
+
+            - `"segments"`: the pieces of the message, in the order the
+              translation gives them. Each is `{"type": "text", "value": str}`
+              or `{"type": "slot", "name": str}`.
+            - `"direction"`: `"ltr"` or `"rtl"`, the writing direction of the
+              message's locale.
+            - `"selected_locale"`, `"owner"`, `"selected_path"`, and the other
+              keys: which catalog entry supplied the message.
+
+        Example:
+            Suppose a component declares this message in its `messages`,
+            where `$link` is a `Slot`, and `app` is your `Citry` instance:
+
+            ```fluent
+            # @param {Slot} $link - Link to the terms page.
+            my-app-read-terms = <b>Read</b> & { $link } now
+            ```
+
+            `link_slot` stands for the fill you hold for `$link`. The keys of
+            `slots` must match the message's Slot variables. The first and
+            last segments keep the `<b>` tags and the bare `&`:
+
+            ```python
+            extension = app.extensions.get_extension("i18n")
+            result = extension.resolve_rich(
+                "my-app-read-terms",
+                values={},
+                slots={"link": link_slot},
+            )
+            result["segments"]
+            # [
+            #     {"type": "text", "value": "<b>Read</b> & "},
+            #     {"type": "slot", "name": "link"},
+            #     {"type": "text", "value": " now"},
+            # ]
+            ```
+
+            Put the first segment into an HTML string as it is, and the
+            browser reads `<b>` as a tag. A `<` in a value from a visitor does
+            the same. Written with `{{ segment["value"] }}` in a template,
+            the segment shows as the characters `<b>Read</b> & `.
+
         """
         self._validate_call(message_id, attr)
         self._load_project_sources()
