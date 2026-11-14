@@ -141,8 +141,10 @@ listens on a network port.
 
 The server advertises language-server version 0.3.0, component catalog v1, and
 client protocol v1. It accepts Citry 0.7.0 and newer without a version upper
-bound, and checks the catalog and client protocol contracts before returning
-registry-backed results.
+bound, and checks the catalog, the client protocol, and the version of the
+i18n data Citry writes for the editor before returning registry-backed
+results. When the i18n data version differs, the status names the package to
+upgrade.
 
 For editor setup and troubleshooting, see the
 [Citry IDE guide](https://citry.dev/ide/vscode/). Report problems through the

@@ -35,6 +35,12 @@
   as a `c-` attribute (`<c-slot c-$c-tr:x="y" />`), and a `c-bind` key
   that is just `"."`. Write a `$c-tr` binding on an HTML element, and
   remove a `"."` key from the `c-bind` mapping.
+- `Citry.inspect_component_graph()` and `ComponentGraph` are now marked
+  experimental: they and their JSON output may change in a minor release.
+- Upgrade citry-lsp together with this release. citry-lsp 0.3.0 and
+  earlier cannot read the editor data this release writes, so for every
+  project, even one without i18n, the editor falls back to checking
+  template syntax only.
 - A template now fails to load when a `v-for` alias or the `v-slot` on a
   Vue component uses a name that starts with `$`, `_`, or `citry`, as in
   `v-for="(_, index) in items"`. Citry keeps those prefixes for the values

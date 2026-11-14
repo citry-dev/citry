@@ -2,6 +2,16 @@
 
 All notable changes to `citry-lsp` are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Upgrade citry-lsp together with citry: this release reads only the
+  editor data that the matching citry release writes. With a citry whose
+  data it cannot read, the editor checks template syntax only, for every
+  project, and its status message names both versions and the package to
+  upgrade.
+
 ## [0.3.0] - 2026-11-02
 
 ### Added

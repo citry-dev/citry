@@ -52,7 +52,7 @@ categories:
   - kind: generated_python
     slug: component-graph
     title: Component graph
-    intro: Authored component dependencies, reverse references, source locations, and partial-analysis problems.
+    intro: Authored component dependencies, reverse references, source locations, and partial-analysis problems. Experimental, so these classes may change in a minor release.
     symbols:
       - citry.ComponentGraph
       - citry.ComponentGraphNode
