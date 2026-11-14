@@ -2646,6 +2646,8 @@ The paths are:
 - root Python, Cargo, pnpm, lockfile, and toolchain inputs
 - the exact release-helper scripts imported or executed by package tests or by
   the `citry-ui-wheel-build` job
+- `tools/pyodide-smoke/**` and `docs_site/_internal/frontend/src/runtime_packages.js` -
+  the Pyodide check described below and the package resolver it imports
 - `.github/workflows/py--tests.yml` plus the Pygments and Citry UI publish
   workflows whose safety contracts are tested
 - `.gitmodules` - Submodule configuration changes
@@ -2656,6 +2658,8 @@ The paths are:
 - Runs the portable Python tests via
   `uv run --no-sync pytest -m "not e2e" --ignore packages/py/citry/tests/test_server_reload.py -n 4 --dist loadfile --durations 30`;
   four file-level workers share one GitHub runner
+- Runs this checkout's `citry` and `citry-ui` in Pyodide (the `pyodide-smoke`
+  job, described under "The Pyodide check" below)
 
 **Configuration**:
 
@@ -2679,6 +2683,79 @@ unconsumed scripts, or unrelated workflows change. Includes `crates/**`
 because Python packages depend on Rust code via PyO3 bindings, and names the
 release helpers that the distribution tests import so those dependencies are
 not missed.
+
+**The Pyodide check**: The docs playground runs Citry in a browser on Pyodide,
+a Python for WebAssembly whose standard library lacks some functions that
+CPython has. Citry 0.8.0 read `time.thread_time` when it was imported, Pyodide
+has no such function, and no pull request job ran this checkout's Python
+there, so the break reached a release. The `pyodide-smoke` job (a short check
+that the packages import and render) runs on the same pull requests as the
+rest of `py--tests.yml` and does this:
+
+1. It builds the `citry` and `citry-ui` wheels from the checkout with
+   `uv build`. Both are pure Python, so it needs no Rust build.
+2. `tools/pyodide-smoke/smoke.mjs` starts, in Node, the Pyodide build that the
+   `pyodide` npm package in `tools/pyodide-smoke/package.json` provides.
+3. It installs the packages that `docs_site/static/playground/runtime.json`
+   lists, the way the playground does: the packages Pyodide ships, `tzdata`,
+   and the published Citry Core wheel for Pyodide, whose SHA-256 it compares
+   with the one PyPI lists for that file. The wheels from step 1 replace only
+   the `citry` and `citry-ui` entries. The script fails if an installed
+   version differs from the one it expects.
+4. `tools/pyodide-smoke/render_components.py` imports every module of both
+   packages (about 380), including the ones that Events, the reload server,
+   and the commands load later. It then renders a Citry component and a
+   Citry UI button with a value that contains markup, and fails unless the
+   markup comes out escaped.
+
+The check catches an import that fails on Pyodide and a render that breaks
+there. It does not run an Events request, i18n formatting, or other code that
+runs after the first render.
+
+To run it on your machine, build the wheels into an empty folder and give
+that folder to the script. The script stops if the folder holds more than one
+wheel for a package.
+
+```bash
+wheels=$(mktemp -d)
+uv build --package citry --wheel --out-dir "$wheels"
+uv build --package citry-ui --wheel --out-dir "$wheels"
+pnpm --dir tools/pyodide-smoke install
+node tools/pyodide-smoke/smoke.mjs "$wheels"
+```
+
+Four facts help when it fails or does not run:
+
+- **It tests the published Citry Core, not the one in the checkout.** Building
+  Citry Core for Pyodide needs Emscripten and takes minutes, so the release
+  qualification of `citry-core` does that. The Citry Core that `runtime.json`
+  pins can be older than the one `citry`'s `pyproject.toml` requires, because
+  the docs release workflow updates `runtime.json` only after a release. The
+  job also installs only the packages that `runtime.json` lists, without
+  resolving dependencies. A pull request that needs a newer Citry Core (for
+  example, one that changes the compiler in `crates/` together with the Python
+  that reads its output) or that adds a dependency therefore fails here until
+  the next docs release updates `runtime.json`. A traceback that points at a
+  Citry Core mismatch or a missing module, not at a missing Pyodide feature,
+  is that case.
+- **The Pyodide version has two pins.** `runtime.json` says which Pyodide the
+  playground serves, and `tools/pyodide-smoke/package.json` says which one
+  this check runs. `scripts/validators/toolchain.py` fails `scripts/validate.py`,
+  which the `check` job runs, when they differ, and `pnpm-lock.yaml` in that
+  folder must follow the change. Dependabot version updates do not touch this
+  pin, because it moves with `runtime.json` and `pyodide-build.json`.
+- **A change to `runtime.json` alone does not run the job.** The release site
+  update changes that file by itself, and listing it as an input would rerun
+  every Python job after each release. The pin check above and the playground
+  tests in the docs check, which run against the pins in that file, cover it.
+  Changes to `tools/pyodide-smoke/`, to the playground's `runtime_packages.js`
+  (the script imports it), and to the Python packages do run the job.
+- **It is not a required check.** The job needs the npm registry, PyPI, and
+  the Pyodide CDN, and it fails in the Citry Core case above, so it reports on
+  pull requests without blocking them. The required checks are `check` and
+  `citry-ui-wheel-build` (in the "Require checks for main" ruleset in GitHub
+  settings). The job has no matrix, so its check name is `pyodide-smoke` on
+  every run, and adding it to the ruleset later needs no workflow change.
 
 #### 5. `repo--dom-members.yml` - DOM member table in browsers
 
@@ -2852,11 +2929,13 @@ third-party actions are pinned to reviewed commits.
 
 The permanent browser build tuple lives in
 `packages/py/citry_core/pyodide-build.json`. Its Pyodide and Python versions
-must match `docs_site/static/playground/runtime.json`. The release site update pins
-the PyPI project, version, filename, and SHA-256 for that browser wheel. The
-worker resolves its public URL at runtime and accepts it only when PyPI reports
-the expected filename and digest. Keep the deployed pin on public packages
-until the new artifacts are available, as described in the release procedure.
+must match `docs_site/static/playground/runtime.json`, and so must the
+`pyodide` version in `tools/pyodide-smoke/package.json`. The release site
+update pins the PyPI project, version, filename, and SHA-256 for that browser
+wheel. The worker resolves its public URL at runtime and accepts it only when
+PyPI reports the expected filename and digest. Keep the deployed pin on public
+packages until the new artifacts are available, as described in the release
+procedure.
 
 ### Citry distribution qualification
 

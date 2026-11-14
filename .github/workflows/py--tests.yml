@@ -26,6 +26,8 @@ on:
       - "scripts/verify_citry_ui_distribution.py"
       - "scripts/verify_pygments_citry_distribution.py"
       - "scripts/verify_wheel_size.py"
+      - "tools/pyodide-smoke/**"
+      - "docs_site/_internal/frontend/src/runtime_packages.js"
       - "crates/**"
       - "third_party/**"
       - "Cargo.toml"
@@ -121,6 +123,8 @@ jobs:
             scripts/verify_citry_ui_distribution.py
             scripts/verify_pygments_citry_distribution.py
             scripts/verify_wheel_size.py
+            tools/pyodide-smoke/**
+            docs_site/_internal/frontend/src/runtime_packages.js
             crates/**
             third_party/**
             Cargo.toml
@@ -953,3 +957,66 @@ jobs:
           packages/py/citry/tests/e2e/test_vue_listener_modifiers_e2e.py
           packages/py/citry/tests/e2e/test_i18n_vue_formatting_e2e.py::test_vue_i18n_large_catalog_switch_stays_atomic
           --browser ${{ matrix.browser }}
+
+  # A short check (a "smoke" check) that imports every module of this
+  # checkout's Citry and Citry UI in Pyodide, the Python that runs the docs
+  # playground in a browser, and renders two components. Citry 0.8.0 read
+  # `time.thread_time` when it was imported, Pyodide has none, and no pull
+  # request job ran this checkout's Python there, so the break reached a
+  # release. The job needs no Rust build: both packages are pure Python, and
+  # the Rust extension (Citry Core) is the published wheel that
+  # docs_site/static/playground/runtime.json pins. It is small next to the jobs
+  # above and runs beside them, so the slowest job decides when the run ends.
+  # The job reads runtime.json but does not list it as an input: the release
+  # site update changes that file on its own, and the toolchain validator
+  # (scripts/validators/toolchain.py) checks its Pyodide version on every pull
+  # request.
+  pyodide-smoke:
+    # Skips only when `changes` reports that no Python input changed. When
+    # `changes` fails, or does not run (a push or a manual run), this job
+    # runs, so a broken `changes` cannot skip it silently. The `closed` event
+    # still skips it.
+    needs: changes
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}
+    runs-on: ubuntu-latest
+    # A download that hangs would otherwise hold the runner for six hours.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          prune-cache: true
+          version: "0.13.5"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # One wheel of each, from this checkout, in a folder that holds nothing
+      # else: the script requires exactly one wheel per package.
+      - name: Build the Citry and Citry UI wheels
+        run: |
+          uv build --package citry --wheel --out-dir "$RUNNER_TEMP/pyodide-wheels"
+          uv build --package citry-ui --wheel --out-dir "$RUNNER_TEMP/pyodide-wheels"
+
+      # pnpm goes first: setup-node's pnpm cache needs the pnpm binary.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          # tools/pyodide-smoke is its own pnpm root, outside the workspace.
+          cache-dependency-path: tools/pyodide-smoke/pnpm-lock.yaml
+
+      # The pinned `pyodide` npm package is the Pyodide build the script runs.
+      - name: Install Pyodide
+        run: pnpm --dir tools/pyodide-smoke install --frozen-lockfile
+
+      - name: Render components in Pyodide
+        run: node tools/pyodide-smoke/smoke.mjs "$RUNNER_TEMP/pyodide-wheels"
