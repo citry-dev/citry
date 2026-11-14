@@ -57,12 +57,14 @@ def _pydantic_supports(method: str, parameter: str) -> bool:
 # fields out of a dump; older releases get the closest equivalent.
 _VALIDATES_BY_NAME = _pydantic_supports("model_validate_json", "by_name")
 _DUMP_EXCLUDES_COMPUTED = _pydantic_supports("model_dump", "exclude_computed_fields")
-# The message of the ValueError Pydantic raises when it stops writing a value
-# nested past its depth limit. Pydantic gives this stop no class of its own,
-# so the message is the only way to tell it from other errors. A custom
-# serializer function that meets the stop passes it on with this message at
-# the end of its own.
-_DUMP_TOO_DEEP = "Maximum serialization depth exceeded"
+# The messages of the ValueError Pydantic raises when it stops writing a value
+# nested past its depth limit, which differ by release (pydantic-core 2.50.4
+# raises the first, 2.50.1 the second). Pydantic gives this stop no class of its own,
+# so the message is the only way to tell it from other errors, such as the
+# "(id repeated)" error for a value that contains itself. A custom serializer
+# function that meets the stop passes it on with the message at the end of
+# its own.
+_DUMP_TOO_DEEP = ("Maximum serialization depth exceeded", "Circular reference detected (depth exceeded)")
 # The error `state_wire_values` raises for that stop. The app built the State,
 # so the message is for the app's author rather than for a browser.
 _STATE_TOO_DEEP_TO_WRITE = "the State nests deeper than Pydantic can write as JSON"
