@@ -4542,8 +4542,8 @@ def dispatch():
             answers[f"{board.__name__} {name}"] = [depth, first["ok"] or json.dumps(first["error"])[:300]]
             if depth < 196:
                 # Where Pydantic refuses the full 196 levels, the browser's
-                # write is refused before the handler runs, with the field's
-                # error.
+                # write gets a 422 field error from Pydantic's JsonValue
+                # check.
                 call = {**call, "stateUpdates": {"t": nest(name, 196)}}
                 envelope = {**envelope, "calls": [call]}
                 result = EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=citry))
@@ -4578,14 +4578,17 @@ def test_a_handler_renders_with_deep_state_the_browser_wrote_from_a_thread_with_
 
     assert done.returncode == 0, done.stderr[-2000:]
     answers = json.loads(done.stdout)
-    # Pydantic takes the full 196 levels on CPython for Linux and macOS, and
-    # about 98 on Windows and PyPy, where its limit is 99.
-    lower_limit = sys.platform == "win32" or sys.implementation.name == "pypy"
+    # Pydantic takes the full 196 levels on CPython for Linux and macOS, about
+    # 98 on Windows and PyPy, where its limit is 99, and about 48 on Windows
+    # PyPy, where it is 49.
+    on_pypy = sys.implementation.name == "pypy"
+    lower_limit = sys.platform == "win32" or on_pypy
+    floor = 45 if on_pypy and sys.platform == "win32" else 90
     for name in ("ModelBoard lists", "ModelBoard dicts", "DataclassBoard lists", "DataclassBoard dicts"):
         depth, outcome = answers[name]
         assert outcome is True, f"{name} at {depth} levels: {outcome}"
         if lower_limit:
-            assert depth >= 90, f"{name} nested only {depth} levels"
+            assert depth >= floor, f"{name} nested only {depth} levels"
             assert answers[f"{name} at 196"] == [422, "invalid_args"]
         else:
             assert depth == 196
