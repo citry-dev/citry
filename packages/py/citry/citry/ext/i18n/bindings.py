@@ -6,7 +6,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeGuard, cast
 from weakref import ref
 
 from citry._i18n_directives import (
@@ -40,6 +40,7 @@ from citry.client_directives import (
 from citry.constness import const_value
 from citry.nodes import ElementAttrsNode, ExprNode, Node, StaticHtmlAttr, _reject_reserved_events_attr
 from citry.util.html import Markup, decode_attribute_entities, decode_character_references
+from citry.util.id import validate_render_id
 
 from .usage import CLIENT_CONTEXT_KEY
 
@@ -53,6 +54,42 @@ if TYPE_CHECKING:
 DIRECTIVE_PREFIX = I18N_BINDING_PREFIX
 MARKER_ATTRIBUTE = "data-citry-i18n-binding"
 ATTRIBUTE_TARGETS = I18N_BINDING_ATTRIBUTE_TARGETS
+# The name of the browser function that receives a binding ID. The render cache
+# also uses it to find this extension's bindings among the parts it stores.
+BINDING_HELPER = "$citryI18nBinding"
+# Between the owning component's render ID and the binding's number in an ID.
+_BINDING_ID_SEPARATOR = "~i18n-"
+# No component allocates a billion bindings, so a longer number in a stored ID
+# is not one this collector wrote. The limit also keeps `int()` away from the
+# huge digit strings that Python refuses to convert.
+_BINDING_NUMBER_MAX_DIGITS = 9
+
+
+def split_binding_id(value: object) -> tuple[str, int] | None:
+    """
+    Split an ID that `I18nBindingCollector.allocate_id` could have written.
+
+    Returns the render ID of the component that allocated it and its number, or
+    `None` for any other value. The shape is a render ID, then `~i18n-`, then a
+    number. Replay uses this to refuse a cache entry whose binding ID this
+    collector could not have written.
+    """
+    if type(value) is not str:
+        return None
+    owner, separator, number = value.rpartition(_BINDING_ID_SEPARATOR)
+    # `isdecimal` also accepts digits of other scripts, which `allocate_id` never writes.
+    if not separator or len(number) > _BINDING_NUMBER_MAX_DIGITS or not number.isascii() or not number.isdecimal():
+        return None
+    try:
+        validate_render_id(owner)
+    except (TypeError, ValueError):
+        return None
+    return owner, int(number)
+
+
+def is_binding_id(value: object) -> TypeGuard[str]:
+    """Return `True` when `value` has the shape `split_binding_id` accepts."""
+    return split_binding_id(value) is not None
 
 
 class CapturedTranslationText(str):
@@ -118,7 +155,9 @@ class I18nBindingCollector:
         "_counter",
         "_pending_text",
         "_sealed",
+        "marker_by_id",
         "markers",
+        "record_by_id",
         "records",
     )
 
@@ -130,6 +169,11 @@ class I18nBindingCollector:
         self._cache_text_replacements: tuple[tuple[str, str], ...] = ()
         self.records: list[I18nBindingRecord] = []
         self.markers: list[tuple[str, ...]] = []
+        # Lookups over the two lists above. The render cache needs the binding
+        # and the marker for one ID without scanning every one this component
+        # allocated, since a page can hold many cached parts that each ask.
+        self.record_by_id: dict[str, I18nBindingRecord] = {}
+        self.marker_by_id: dict[str, tuple[str, ...]] = {}
 
     @classmethod
     def restored(
@@ -139,8 +183,10 @@ class I18nBindingCollector:
     ) -> I18nBindingCollector:
         """Build already-checked state remapped from one render-cache artifact."""
         collector = cls(None)
-        collector.records.extend(records)
-        collector.markers.extend(markers)
+        for record in records:
+            collector._add_record(record)
+        for marker in markers:
+            collector._add_marker(marker)
         collector._counter = len(records)
         collector._sealed = True
         return collector
@@ -167,7 +213,7 @@ class I18nBindingCollector:
         component = self._component()
         if component is None:
             raise RuntimeError("The component owning an i18n binding was released during render.")
-        value = f"{component.id}~i18n-{self._counter}"
+        value = f"{component.id}{_BINDING_ID_SEPARATOR}{self._counter}"
         self._counter += 1
         return value
 
@@ -186,7 +232,7 @@ class I18nBindingCollector:
         _check_capture(pending.declaration, capture, destination="textContent")
         if pending.binding_id is not None:
             assert pending.owner is not None  # noqa: S101 - allocated IDs always have an owner
-            self.records.append(_binding_record(pending.binding_id, pending.owner, pending.declaration, capture))
+            self._add_record(_binding_record(pending.binding_id, pending.owner, pending.declaration, capture))
         return pending
 
     def finish_untranslated_text(self, ordinal: int) -> _PendingText:
@@ -201,7 +247,7 @@ class I18nBindingCollector:
             raise RuntimeError("An i18n text binding rendered without its start-tag declaration.") from error
         if pending.binding_id is not None:
             assert pending.owner is not None  # noqa: S101 - allocated IDs always have an owner
-            self.records.append(_binding_record(pending.binding_id, pending.owner, pending.declaration, None))
+            self._add_record(_binding_record(pending.binding_id, pending.owner, pending.declaration, None))
         return pending
 
     def pending_declaration(self, ordinal: int) -> _Declaration:
@@ -227,12 +273,21 @@ class I18nBindingCollector:
         if owner is None:
             return None
         binding_id = self.allocate_id()
-        self.records.append(_binding_record(binding_id, owner, declaration, capture))
+        self._add_record(_binding_record(binding_id, owner, declaration, capture))
         return binding_id
 
     def add_marker(self, ids: list[str]) -> None:
         if ids:
-            self.markers.append(tuple(ids))
+            self._add_marker(tuple(ids))
+
+    def _add_record(self, record: I18nBindingRecord) -> None:
+        self.records.append(record)
+        self.record_by_id[record.id] = record
+
+    def _add_marker(self, marker: tuple[str, ...]) -> None:
+        self.markers.append(marker)
+        for binding_id in marker:
+            self.marker_by_id[binding_id] = marker
 
     def seal(self) -> None:
         if self._pending_text:
@@ -427,7 +482,7 @@ class I18nBindingElementAttrsNode(Node):
                 marker_ids.append(binding_id)
                 browser_bindings.append(
                     prepared_browser_binding(
-                        helper="$citryI18nBinding",
+                        helper=BINDING_HELPER,
                         operand=binding_id,
                         target="attribute",
                         name=target_name,
@@ -525,7 +580,7 @@ def _text_browser_binding(pending: _PendingText, server_text: str) -> PreparedBr
     if pending.binding_id is None:
         return None
     return prepared_browser_binding(
-        helper="$citryI18nBinding",
+        helper=BINDING_HELPER,
         operand=pending.binding_id,
         target="text",
         values_expression=pending.declaration.values_expression,

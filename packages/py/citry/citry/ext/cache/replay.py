@@ -374,6 +374,10 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
             root_context=render.context,
             instances=tuple(instances),
             selected_render_ids=frozenset(selected_ids),
+            # An extension needs to know which browser binding IDs the stored
+            # output mentions: one may belong to a component outside the stored
+            # subtree, whose own record this artifact does not hold.
+            browser_binding_operands=_browser_binding_operands(frames),
         )
     )
     if any(type(item) is not ArtifactExtension for item in extensions):
@@ -381,6 +385,28 @@ def _export_boundary_artifact(render: CitryRender) -> CachedRenderArtifact:
     if any(item is None for item in frames):
         raise AssertionError("typed artifact frame export was incomplete")
     return CachedRenderArtifact(root_frame, tuple(frames), extensions)  # type: ignore[arg-type]
+
+
+def _browser_binding_operands(frames: list[ArtifactFrame | None]) -> dict[str, frozenset[str]]:
+    """Collect the string operand of every browser binding in the frames, grouped by the binding's helper name."""
+    found: dict[str, set[str]] = {}
+    # Every part sits in one frame's list, and a leaf program also holds parts
+    # of its own, so the walk queues those instead of recursing into them.
+    pending: list[ArtifactPart] = [part for frame in frames if frame is not None for part in frame.parts]
+    while pending:
+        part = pending.pop()
+        bindings: tuple[ArtifactBrowserBinding, ...] = ()
+        if type(part) is ArtifactTextValuePart:
+            bindings = () if part.browser_binding is None else (part.browser_binding,)
+        elif type(part) is ArtifactElementOpenPart:
+            bindings = part.browser_bindings
+        elif type(part) is ArtifactLeafProgramPart:
+            pending.extend(part.typed_parts)
+        for binding in bindings:
+            # Only a string operand names an ID; a binding with another kind of operand is skipped.
+            if type(binding.operand) is str:
+                found.setdefault(binding.helper, set()).add(binding.operand)
+    return {helper: frozenset(operands) for helper, operands in found.items()}
 
 
 def _replay_component_artifact(

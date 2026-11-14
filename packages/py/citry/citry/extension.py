@@ -310,6 +310,16 @@ class OnRenderCacheExportContext:
     root_context: CitryContext
     instances: tuple[RenderCacheInstance, ...]
     selected_render_ids: frozenset[str]
+    browser_binding_operands: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    """
+    The string operand of every browser binding in the stored output, grouped by helper name.
+
+    A browser binding names a function in the browser (its helper) and the value it receives
+    (its operand). An extension that sends the browser data under an ID, and passes that ID as
+    the operand, can use this list to see which IDs the stored output refers to. An ID can come
+    from a component outside the stored output, whose own saved data the stored output does not
+    include. A binding whose operand is not a string is left out.
+    """
 
 
 @dataclass(frozen=True, slots=True)

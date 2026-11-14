@@ -4,7 +4,6 @@ from decimal import Decimal
 
 from citry import Citry, Component, FormatRegistry, InMemoryCache, NumberFormat
 from citry.ext.i18n.usage import (
-    AMBIENT_CLIENT_OWNER,
     CLIENT_CONTEXT_KEY,
     EXTRA_KEY,
     MessageOutputUse,
@@ -285,9 +284,11 @@ def test_render_cache_remaps_translation_binding_records_and_html_markers() -> N
         messages = "cached-message = Cached"
 
     i18n = app.extensions.get_extension("i18n")
+    # A client provider outside the render: replay can only define the binding
+    # for the browser if the render says which provider it belongs to.
     provides = {
         "citry_i18n": i18n.make_context(locale="en-US"),
-        CLIENT_CONTEXT_KEY: AMBIENT_CLIENT_OWNER,
+        CLIENT_CONTEXT_KEY: "outside-provider",
     }
     first = CachedButton().render(provides=provides)
     second = CachedButton().render(provides=provides)
@@ -301,4 +302,4 @@ def test_render_cache_remaps_translation_binding_records_and_html_markers() -> N
     assert first_binding.id in str(first)
     assert second_binding.id in str(second)
     assert first_binding.id not in str(second)
-    assert second_binding.owner == AMBIENT_CLIENT_OWNER
+    assert second_binding.owner == "outside-provider"
