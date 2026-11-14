@@ -234,7 +234,9 @@ def test_a_const_function_that_renders_a_loaded_component_during_reset_template(
 
 def test_a_slow_on_template_loaded_hook_does_not_hold_up_renders_of_loaded_components() -> None:
     started = threading.Event()
-    hook_seconds = 1.0
+    # The hook waits for the test to release it, so "slow" does not depend
+    # on how fast the machine is. The timeout lets a broken run end.
+    release = threading.Event()
     classes: dict[str, type[Component]] = {}
 
     class SlowTemplate(Extension):
@@ -243,7 +245,7 @@ def test_a_slow_on_template_loaded_hook_does_not_hold_up_renders_of_loaded_compo
         def on_template_loaded(self, ctx: Any) -> None:
             if ctx.component_class is classes.get("slow"):
                 started.set()
-                time.sleep(hook_seconds)  # a template preprocessor
+                release.wait(_JOIN_TIMEOUT)  # a template preprocessor
 
     app = Citry(autodiscover=False, extensions=[SlowTemplate])
 
@@ -264,13 +266,15 @@ def test_a_slow_on_template_loaded_hook_does_not_hold_up_renders_of_loaded_compo
     loader = threading.Thread(target=Slow.get_template, daemon=True)
     loader.start()
     assert started.wait(_JOIN_TIMEOUT)
-    began = time.perf_counter()
-    Warm().render().serialize()
-    elapsed = time.perf_counter() - began
+    try:
+        # The hook is still inside its wait, so a render that finishes now
+        # did not wait for it.
+        Warm().render().serialize()
+        assert loader.is_alive()
+    finally:
+        release.set()
     loader.join(timeout=_JOIN_TIMEOUT)
     assert not loader.is_alive()
-    # Far below the hook's sleep: the render did not wait for it.
-    assert elapsed < hook_seconds / 2
 
 
 def test_two_compile_hooks_that_each_render_the_others_component_for_the_first_time() -> None:

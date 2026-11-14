@@ -623,12 +623,16 @@ def test_a_valid_filter_chain_too_deep_to_check_is_refused_and_logged(caplog: py
 @pytest.mark.usefixtures("deep_checks")
 def test_a_bad_deep_filter_chain_stops_without_walking_every_member() -> None:
     def elapsed(depth: int) -> float:
-        start = time.perf_counter()
-        result = validate_args(Query, {"q": _chain(depth, "x")})
-        assert result.fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
-        return time.perf_counter() - start
+        # The best of three runs keeps one slow run of a busy machine out of
+        # the comparison.
+        best = float("inf")
+        for _run in range(3):
+            start = time.perf_counter()
+            result = validate_args(Query, {"q": _chain(depth, "x")})
+            best = min(best, time.perf_counter() - start)
+            assert result.fields == {"_args": bounded.TOO_MUCH_WORK_MESSAGE}
+        return best
 
-    elapsed(20)
     # The request's work budget stops a bad chain, so 25 more levels cost
     # about the same. Past 45 levels the nesting limit refuses it first.
     assert elapsed(45) < 3 * elapsed(20) + 0.05

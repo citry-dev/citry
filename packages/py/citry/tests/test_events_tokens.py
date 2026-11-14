@@ -1780,10 +1780,10 @@ class TestPydanticStateItemErrors:
             tree: Node = Node()
 
         def best_time(depth: int) -> float:
-            # The best of three runs keeps one slow run of a busy machine out
+            # The best of seven runs keeps slow runs of a busy machine out
             # of the ratio.
             best = float("inf")
-            for _run in range(3):
+            for _run in range(7):
                 value: dict[str, typing.Any] = {"c": [1] * 10_000, **{f"v{index:02d}": "x" for index in range(30)}}
                 for _level in range(depth - 1):
                     value = {"c": [value]}
@@ -1801,7 +1801,11 @@ class TestPydanticStateItemErrors:
         # Writing the text of each list for each error took about 14 times
         # as long. The deeper value stays within the nesting Citry checks
         # (MAX_CHECK_DEPTH).
-        assert best_time(36) < 7 * best_time(4)
+        # The shallow run takes 1 to 2 ms on a laptop, and a run that short
+        # is mostly noise, so its time is floored at 1 ms. The floor is close
+        # to the shallow run's own time, so a regression that makes the deep
+        # run 15 times slower still fails the bound.
+        assert best_time(36) < 7 * max(best_time(4), 0.001)
 
     def test_an_ordinary_large_write_to_a_strict_state_reaches_pydantic(self):
         pydantic = pytest.importorskip("pydantic")

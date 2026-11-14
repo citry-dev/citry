@@ -770,14 +770,39 @@ def test_calls_that_reuse_a_v1_parse_each_get_their_own_state() -> None:
     assert seen == [["a"], ["a"], ["a"]]
 
 
+class _HandClock:
+    """A CPU clock that moves only when a test moves it, so a test of the CPU limit does not depend on the machine."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+# What one `_SlowWord` check costs on the hand clock.
+_WORD_SECONDS = 0.002
+
+
+@pytest.fixture
+def hand_clock(monkeypatch: pytest.MonkeyPatch) -> _HandClock:
+    # A real CPU clock moves in steps of about 15.6 ms on Windows, and a busy
+    # machine runs a check slower than a quiet one, so a test that counts
+    # what the CPU limit allows would get a different answer on each machine.
+    clock = _HandClock()
+    monkeypatch.setattr(bounded, "cpu_clock", clock)
+    return clock
+
+
 class _SlowWord(v1.BaseModel):
     text: str
 
     @v1.validator("text", allow_reuse=True)
     def burn(cls, value: str) -> str:  # noqa: N805 - Pydantic v1 passes the class
-        end = time.thread_time() + 0.002
-        while time.thread_time() < end:
-            pass
+        # Each check uses a fixed amount of CPU time on the test's hand clock.
+        clock = bounded.cpu_clock
+        assert isinstance(clock, _HandClock)
+        clock.now += _WORD_SECONDS
         return value
 
 
@@ -790,7 +815,7 @@ class _SlowServerStory(v1.BaseModel):
     words: List[_SlowWord] = []  # noqa: UP006 - Pydantic v1 reads the typing spelling
 
 
-def test_every_v1_state_read_counts_toward_the_cpu_limit() -> None:
+def test_every_v1_state_read_counts_toward_the_cpu_limit(hand_clock: _HandClock) -> None:
     with bounded.request_work() as budget:
         budget._seconds_left = 60.0
         state = _SlowStory()
@@ -846,7 +871,7 @@ def _slow_story_token(panel: type[Component], text: str) -> str:
     )
 
 
-def test_restoring_an_earlier_v1_token_counts_toward_the_cpu_limit() -> None:
+def test_restoring_an_earlier_v1_token_counts_toward_the_cpu_limit(hand_clock: _HandClock) -> None:
     # The first call writes to `_SlowStory`; the others only restore tokens
     # whose values an earlier request may have accepted from the browser.
     app = _app()
@@ -877,7 +902,7 @@ def test_restoring_an_earlier_v1_token_counts_toward_the_cpu_limit() -> None:
     assert left[1] - left[2] >= 0.015
 
 
-def test_v1_restores_that_use_up_the_cpu_time_refuse_the_later_calls() -> None:
+def test_v1_restores_that_use_up_the_cpu_time_refuse_the_later_calls(hand_clock: _HandClock) -> None:
     ran: list[str] = []
     app = _app()
     panel = _state_component(app, _SlowStory, lambda state: ran.append(state.words[0].text))
@@ -892,8 +917,9 @@ def test_v1_restores_that_use_up_the_cpu_time_refuse_the_later_calls() -> None:
         for index in range(4)
     ]
     with pytest.MonkeyPatch.context() as patch:
-        # Each read of a token checks ten slow words (20 ms), which cannot
-        # be stopped partway, so the first call or two use up the time.
+        # Each read of a token checks ten slow words (20 ms on the hand
+        # clock), which cannot be stopped partway. The first call's checks
+        # take 40 ms, past the 30 ms limit, so no later call is let in.
         patch.setattr(bounded, "WORK_SECONDS", 0.03)
         result = _dispatch(app, *calls)
 
@@ -901,7 +927,7 @@ def test_v1_restores_that_use_up_the_cpu_time_refuse_the_later_calls() -> None:
     accepted = statuses.count(200)
     # The later calls are refused before their restore, and their handlers
     # do not run.
-    assert 1 <= accepted <= 2
+    assert accepted == 1
     assert statuses == [200] * accepted + [422] * (4 - accepted)
     assert ran == [f"w{index}" for index in range(accepted)]
     assert result["results"][3]["error"]["fieldErrors"] == {"_state": bounded.TOO_SLOW_MESSAGE}
@@ -1104,7 +1130,12 @@ def test_a_v1_check_that_a_validator_calls_is_counted_and_stopped(monkeypatch: p
     assert not _hooks_in_place()
 
 
-def test_a_v1_check_that_a_validator_calls_gets_the_same_answer_while_another_thread_holds_the_hooks() -> None:
+def test_a_v1_check_that_a_validator_calls_gets_the_same_answer_while_another_thread_holds_the_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The error limit is under test, so the test raises the CPU limit out of
+    # reach: on a slow machine it could stop the check first, with its own message.
+    monkeypatch.setattr(bounded, "WORK_SECONDS", 60.0)
     payload = {"board": {"rows": [[]] * 5000}}
     alone = validate_args(HiddenV1, payload).fields
     got: list[Any] = []
