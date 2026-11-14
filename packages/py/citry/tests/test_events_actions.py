@@ -15,7 +15,7 @@ import logging
 import random
 import time
 from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Literal
 
 import pytest
 
@@ -23,6 +23,7 @@ from citry import Citry, Component
 from citry._vue.events import default_events_producer
 from citry.citry_render import CitryRender
 from citry.ext.events import actions
+from citry.ext.events import errors as errors_module
 from citry.ext.events.errors import (
     MAX_FIELD_ERRORS_TEXT,
     MAX_FIELD_MESSAGE,
@@ -1168,57 +1169,72 @@ class TestFieldErrors:
                 assert (len(kept), dropped) == (20, 5)
             return best
 
-        # Ten times the dots takes about ten times as long. Time growing with
-        # the square of the length would take about a hundred times as long.
-        assert best_time(40_000) < 30 * best_time(4_000)
+        # Ten times the dots takes about ten times as long, and up to about
+        # thirty times on a busy machine. Time growing with the square of the
+        # length takes about ninety times as long.
+        assert best_time(40_000) < 45 * best_time(4_000)
 
-    class _CountedKey(str):
-        """A key that counts how often its text is read, so a test can check that a shared key is read once."""
-
-        __slots__ = ()
-        reads = 0
-
-        def __format__(self, spec: str) -> str:
-            type(self).reads += 1
-            # The plain text, so the read is not counted again in __str__.
-            return format(str.__str__(self), spec)
-
-        def __str__(self) -> str:
-            type(self).reads += 1
-            return super().__str__()
-
-        def split(self, *args: Any, **kwargs: Any) -> list[str]:
-            type(self).reads += 1
-            return super().split(*args, **kwargs)
-
-    def _many_messages_under_one_key(self, key_length: int) -> tuple[dict[str, str], int, int]:
-        """Limit 10,000 messages under one dict key, and return the result and how often the key was read."""
-
-        class Key(self._CountedKey):
-            __slots__ = ()
-
+    @staticmethod
+    def _many_messages_under_one_key(key: str, count: int) -> FieldErrors:
+        """Return a collector with ``count`` messages, one per list item, under one dict key."""
         errors = FieldErrors()
-        key_path = ((None, "scores"), Key("a" * key_length))
+        key_path = ((None, "scores"), key)
         errors.add_container((None, "scores"))
         errors.add_container(key_path)
-        for index in range(10_000):
+        for index in range(count):
             errors.add((key_path, index), "Bad.")
-        kept, dropped = errors.limited()
-        return kept, dropped, Key.reads
+        return errors
 
-    def test_a_long_key_under_many_messages_is_read_once(self):
-        # Every message shares the pair of its dict key, so the key's text is
-        # read once, not once per message. This key is longer than the text
-        # cap, so only the first message is kept, and the rest are counted.
-        kept, dropped, reads = self._many_messages_under_one_key(100_000)
-        assert reads == 1
-        assert list(kept) == ["scores." + "a" * 100_000 + ".0"]
+    @staticmethod
+    def _times_the_key_is_placed(monkeypatch, key: str) -> list[int]:
+        """Count each time the path tree makes or finds the node for ``key``, however it reads the key's text."""
+        placed = [0]
+        child = errors_module._PathNode.child
+
+        def counting_child(node, segment, *, root):
+            if segment == key:
+                placed[0] += 1
+            return child(node, segment, root=root)
+
+        monkeypatch.setattr(errors_module._PathNode, "child", counting_child)
+        return placed
+
+    def test_a_long_key_under_many_messages_is_read_once(self, monkeypatch):
+        # Every message shares the pair of its dict key, so the key is placed
+        # in the path tree once, not once per message. This key is longer
+        # than the text cap, so only the first message is kept, and the rest
+        # are counted.
+        key = "a" * 100_000
+        placed = self._times_the_key_is_placed(monkeypatch, key)
+        kept, dropped = self._many_messages_under_one_key(key, 10_000).limited()
+        assert placed == [1]
+        assert list(kept) == ["scores." + key + ".0"]
         assert dropped == 9_999
 
-    def test_a_shorter_key_under_many_messages_keeps_twenty_and_is_read_once(self):
-        kept, dropped, reads = self._many_messages_under_one_key(2_000)
-        assert reads == 1
+    def test_a_shorter_key_under_many_messages_keeps_twenty_and_is_read_once(self, monkeypatch):
+        key = "a" * 2_000
+        placed = self._times_the_key_is_placed(monkeypatch, key)
+        kept, dropped = self._many_messages_under_one_key(key, 10_000).limited()
+        assert placed == [1]
         assert (len(kept), dropped) == (20, 9_980)
+
+    def test_the_path_text_of_many_messages_is_written_only_for_the_kept_ones(self):
+        # Writing the full path text of every message, kept or not, copies a
+        # long key once per message.
+        def best_time(key_length: int) -> float:
+            # The best of three runs keeps one slow run of a busy machine out
+            # of the ratio.
+            best = float("inf")
+            for _run in range(3):
+                errors = self._many_messages_under_one_key("a" * key_length, 10_000)
+                started = time.perf_counter()
+                errors.limited()
+                best = min(best, time.perf_counter() - started)
+            return best
+
+        # A key a thousand times longer takes about as long. Writing the text
+        # of all 10,000 paths takes about fifteen times as long.
+        assert best_time(1_000_000) < 4 * best_time(1_000)
 
     def test_the_first_message_is_kept_however_long_its_path(self):
         long_name = "a" * (2 * MAX_FIELD_ERRORS_TEXT)

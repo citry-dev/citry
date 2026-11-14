@@ -1725,9 +1725,9 @@ class TestPydanticItemErrorLimit:
                 assert result.unlisted_fields == 11
             return best
 
-        # Writing the text of each list for each error made the time grow
-        # with the square of the depth: nine times the depth took about 33
-        # times as long. Reading each error once takes about 6 times as long,
+        # Writing the text of each list for each error would make the time
+        # grow with the square of the depth: nine times the depth takes about
+        # 33 times as long. Reading each error once takes about 6 times as long,
         # and the bound leaves room for a slow machine. The deeper value
         # stays under pydantic-core's own recursion limit, which is lowest
         # on Windows, where a value nested past 99 levels is refused.

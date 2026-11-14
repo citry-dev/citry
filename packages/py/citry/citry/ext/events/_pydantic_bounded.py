@@ -124,9 +124,9 @@ WORK_BUDGET = 60_000_000
 WORK_SECONDS = 1.0
 # The clock behind WORK_SECONDS: the CPU time of the calling thread. On
 # Windows it moves in steps of about 15.6 ms, so a check that runs for less
-# than one step can read no time at all, and the limit can stop a request up
-# to one step late. A module name, so a test can give the budget a clock it
-# moves by hand.
+# than one step can read no time at all, and the time counted for each check
+# can be off by up to one step. It is a module-level name so that a test can
+# replace it with a clock it moves by hand.
 cpu_clock = time.thread_time
 # What one more check of a list or object costs besides the values inside it,
 # in steps: the Python wrappers around it run on every check.

@@ -62,6 +62,32 @@ def _steady_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(bounded, "_WARNED_WORK", WeakKeyDictionary())
 
 
+class _HandClock:
+    """A CPU clock that moves only when a test moves it, so a test of the CPU limit does not depend on the machine."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def hand_clock(monkeypatch: pytest.MonkeyPatch) -> _HandClock:
+    # A real CPU clock moves in steps of about 15.6 ms on Windows, so a test
+    # that spins for a few milliseconds can read no time, or a whole step.
+    clock = _HandClock()
+    monkeypatch.setattr(bounded, "cpu_clock", clock)
+    return clock
+
+
+def _spend_cpu(seconds: float) -> None:
+    """Use ``seconds`` of CPU time on the hand clock that the test installed."""
+    clock = bounded.cpu_clock
+    assert isinstance(clock, _HandClock)
+    clock.now += seconds
+
+
 def _citry() -> Citry:
     app = Citry(secret=SIGNING_KEY, autodiscover=False)
     app.set_mounted_prefix("/citry")
@@ -315,7 +341,7 @@ def test_a_discriminated_recursive_union_has_no_depth_limit() -> None:
     class TQuery(pydantic.BaseModel):
         q: TAnd
 
-    # Eighty levels, four times the depth at which the work budget stops a
+    # Eighty levels, about four times the depth at which the work budget stops a
     # union without a discriminator (see the filter chain tests above). It
     # stays under pydantic-core's own recursion limit, which is lowest on
     # Windows, where a value nested past 99 levels is refused.
@@ -2241,30 +2267,25 @@ def test_a_chain_of_small_lists_keeps_one_measure_per_large_list_only() -> None:
     assert len(budget._sizes) == 1 + 50
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_restore_inside_a_check_leaves_its_time_off_the_checks_clock() -> None:
     with bounded.request_work() as budget:
         budget.clock_on()
         thread = threading.get_ident()
         start = budget._clocks[thread][0]
         with bounded.unbudgeted():
-            inside = time.thread_time()
-            # Spin: the clock counts CPU time, which a sleep would not add.
-            while time.thread_time() - inside < 0.02:
-                pass
-            spent = time.thread_time() - inside
-        # The clock starts later by at least the time spent inside, so a
-        # later check of the request keeps that time.
-        assert budget._clocks[thread][0] - start >= spent
+            _spend_cpu(0.02)
+        # The clock starts later by the time spent inside, so a later check
+        # of the request keeps that time.
+        assert budget._clocks[thread][0] - start == pytest.approx(0.02)
         budget.clock_off()
 
 
+@pytest.mark.usefixtures("hand_clock")
 @pytest.mark.parametrize("version", ["v1", "v2"])
 def test_a_restore_that_pydantic_runs_itself_counts_toward_the_checks_clock(version: str) -> None:
     def spin(value: str) -> str:
-        # Busy-wait, because the clock counts CPU time and a sleep adds none.
-        inside = time.thread_time()
-        while time.thread_time() - inside < 0.02:
-            pass
+        _spend_cpu(0.02)
         return value
 
     if version == "v1":
@@ -2292,12 +2313,13 @@ def test_a_restore_that_pydantic_runs_itself_counts_toward_the_checks_clock(vers
         moved = budget._clocks[thread][0] - start
         budget.clock_off()
     if version == "v1":
-        assert moved < 0.01
+        assert moved == 0
     else:
         # Citry's copy of a v2 class restores off the clock.
-        assert moved >= 0.02
+        assert moved == pytest.approx(0.02)
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_write_to_a_pydantic_v1_state_counts_toward_the_requests_cpu_limit() -> None:
     v1 = pytest.importorskip("pydantic.v1")
 
@@ -2307,10 +2329,7 @@ def test_a_write_to_a_pydantic_v1_state_counts_toward_the_requests_cpu_limit() -
 
         @v1.validator("note")
         def slow(cls, value: str) -> str:  # noqa: N805 - Pydantic v1 passes the class
-            # Busy-wait, because the clock counts CPU time and a sleep adds none.
-            inside = time.thread_time()
-            while time.thread_time() - inside < 0.02:
-                pass
+            _spend_cpu(0.02)
             return value
 
     with bounded.request_work() as budget:
@@ -2332,15 +2351,13 @@ def _slow_v1_board(spent: float) -> Any:
         # a validator function it has already seen unless it is told to allow it.
         @v1.validator("note", allow_reuse=True)
         def slow(cls, value: str) -> str:  # noqa: N805 - Pydantic v1 passes the class
-            # Busy-wait, because the clock counts CPU time and a sleep adds none.
-            inside = time.thread_time()
-            while time.thread_time() - inside < spent:
-                pass
+            _spend_cpu(spent)
             return value
 
     return Board
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_is_accepted_and_the_next_one_refused(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -2368,6 +2385,7 @@ def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_is_accepted_and_the
     assert "Pydantic v2 model" in caplog.text
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_and_fails_is_logged(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -2379,10 +2397,7 @@ def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_and_fails_is_logged
 
         @v1.validator("note")
         def slow_and_strict(cls, value: str) -> str:  # noqa: N805 - Pydantic v1 passes the class
-            # Busy-wait, because the clock counts CPU time and a sleep adds none.
-            inside = time.thread_time()
-            while time.thread_time() - inside < 0.05:
-                pass
+            _spend_cpu(0.05)
             if value == "bad":
                 msg = "not allowed"
                 raise ValueError(msg)
@@ -2400,6 +2415,7 @@ def test_a_pydantic_v1_state_write_that_uses_up_the_cpu_time_and_fails_is_logged
     assert "Board used up the CPU time" in caplog.text
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_pydantic_v1_state_write_after_the_cpu_time_was_used_up_is_refused_before_it_runs(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -2420,6 +2436,7 @@ def test_a_pydantic_v1_state_write_after_the_cpu_time_was_used_up_is_refused_bef
     assert "ended before Citry could stop it" not in caplog.text
 
 
+@pytest.mark.usefixtures("hand_clock")
 def test_a_pydantic_v1_state_write_within_the_cpu_time_is_not_logged(caplog: pytest.LogCaptureFixture) -> None:
     board = _slow_v1_board(0.001)
 
@@ -2509,19 +2526,8 @@ def test_a_check_that_parses_text_spends_for_it_only_inside_a_check_that_may_run
     assert bounded.WORK_BUDGET - budget.left == bounded.PYTHON_CALL_STEPS + 64_000 * bounded.TEXT_STEPS["url"] // 64
 
 
-class _HandClock:
-    """A CPU clock that moves only when a test moves it, so a test of the CPU limit does not depend on the machine."""
-
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def __call__(self) -> float:
-        return self.now
-
-
-def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = _HandClock()
-    monkeypatch.setattr(bounded, "cpu_clock", clock)
+def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check(hand_clock: _HandClock) -> None:
+    clock = hand_clock
     budget = bounded.WorkBudget(seconds=0.5)
     # Outside a check the clock does not count, so nothing stops.
     clock.now += 1.0
@@ -2539,9 +2545,8 @@ def test_a_request_out_of_cpu_time_stops_at_its_next_spend_inside_a_check(monkey
     assert stopped.value.message == bounded.TOO_SLOW_MESSAGE
 
 
-def test_cpu_time_between_the_checks_of_a_request_does_not_count(monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = _HandClock()
-    monkeypatch.setattr(bounded, "cpu_clock", clock)
+def test_cpu_time_between_the_checks_of_a_request_does_not_count(hand_clock: _HandClock) -> None:
+    clock = hand_clock
     budget = bounded.WorkBudget(seconds=0.5)
     budget.clock_on()
     clock.now += 0.3

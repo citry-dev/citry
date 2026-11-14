@@ -640,7 +640,7 @@ def test_a_v1_check_reads_the_clock_once_for_every_few_hundred_values(monkeypatc
     assert 15 <= len(reads) <= 40
 
 
-def test_a_v1_state_write_ends_when_the_cpu_time_is_gone() -> None:
+def test_a_v1_state_write_ends_when_the_cpu_time_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
     class Slow(v1.BaseModel):
         x: int
 
@@ -652,6 +652,16 @@ def test_a_v1_state_write_ends_when_the_cpu_time_is_gone() -> None:
     class SlowBoard(v1.BaseModel):
         rows: list[Slow] = []
 
+    # Every read of the clock finds a millisecond more used. A real CPU clock
+    # can read the same time across a short check (on Windows it moves in
+    # steps of about 15.6 ms), and then a tiny limit never fires.
+    ticks = [0.0]
+
+    def ticking() -> float:
+        ticks[0] += 0.001
+        return ticks[0]
+
+    monkeypatch.setattr(bounded, "cpu_clock", ticking)
     with bounded.request_work() as budget:
         budget._seconds_left = 1e-9
         with pytest.raises(StateUpdateError) as caught:
@@ -1057,8 +1067,8 @@ def test_a_v1_state_is_not_refused() -> None:
 
 
 def test_a_v2_state_whose_validator_runs_a_v1_check_is_guarded(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The error limit is under test, so the CPU limit is out of reach: on a
-    # slow machine it could stop the check first, with its own message.
+    # The error limit is under test, so the test raises the CPU limit out of
+    # reach: on a slow machine it could stop the check first, with its own message.
     monkeypatch.setattr(bounded, "WORK_SECONDS", 60.0)
     state = V2StateWithHiddenV1Check()
 
@@ -1083,8 +1093,8 @@ with warnings.catch_warnings():
 
 
 def test_a_v1_check_that_a_validator_calls_is_counted_and_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The error limit is under test, so the CPU limit is out of reach: on a
-    # slow machine it could stop the check first, with its own message.
+    # The error limit is under test, so the test raises the CPU limit out of
+    # reach: on a slow machine it could stop the check first, with its own message.
     monkeypatch.setattr(bounded, "WORK_SECONDS", 60.0)
     _component(_app(), HiddenV1)
 
