@@ -1,13 +1,28 @@
 # Release notes
 
-## Unreleased
+## v0.9.0
 
-Citry now states the order in which a page's scripts and `onServerRender`
-callbacks run, and what happens when one of them fails; see
+Citry 0.9.0 states the order in which a page's scripts and
+`onServerRender` callbacks run, and what happens when one of them fails;
+see
 [When scripts run](https://citry.dev/advanced/js-and-css-dependencies/#when-scripts-run).
 A component script that throws now keeps the page's Vue app from
-starting, and a third-party script that an ad blocker refuses no longer
-does. The upgrade notes below list what can change.
+starting, and a third-party script that fails to load, such as one an ad
+blocker refuses, no longer keeps the Vue app from starting on a page
+served through a web framework integration. Pages now link Citry's
+runtimes by a URL that holds a hash of the file, so a deploy needs the
+cache steps in the upgrade notes. Several changes can break code that
+worked: `Citry(...)`, `CitrySettings`, `LintSettings` and `URLRoute`
+take their options by name, `URLRoute` no longer takes `extra=`, a
+`URLRoute` path with no text between two parameters, such as
+`"{year}{month}"`, raises an error when your app starts, a component
+cannot be named `lazy`, `teleport`, `transition` or `suspense`, a
+template whose `v-for` alias or `v-slot` pattern starts with `$`, `_` or
+`citry` fails to load, and `Events` classes can no longer set `_topics`.
+Citry now checks event data on threads of its own and allows 64 levels
+of nesting. Upgrade citry-lsp to 0.4.0 or later, and citry-ui to 0.5.0
+or later if you use it, at the same time. Citry imports on Pyodide
+again. The upgrade notes below list what can fail or change.
 
 ### Upgrading from 0.8.x
 
@@ -47,13 +62,15 @@ does. The upgrade notes below list what can change.
   before their parent, and siblings in the order they first mounted,**
   as on the first mount. Before, they ran in the order the server's
   response listed the components, which often put the parent first. If
-  your code relied on that, check it against the new order.
+  your code relied on that, check it against the new order. citry-ui
+  0.4.0 and earlier relied on the old order, so upgrade citry-ui to
+  0.5.0 or later.
 - **A callback that throws on the first mount now stops the callbacks
   after it,** as it already did after a server render. Catch an error
   you expect inside the callback.
 - **Extension scripts that register a browser plugin now run before
-  component scripts on every page.** Before, a page written without a
-  web framework integration ran them after. If you write an extension
+  component scripts on every interactive page.** Before, a page written
+  without a web framework integration ran them after. If you write an extension
   whose plugin script reads a value a component script sets, read it
   later, for example inside a callback.
 - **Citry runs your validators, State serializers and `__post_init__`
@@ -67,6 +84,14 @@ does. The upgrade notes below list what can change.
   waits for that transaction. A validator must not wait for a lock that
   the request's thread holds, or, under gevent or eventlet, for anything
   another greenlet holds
+  ([details](https://citry.dev/security/#check-event-data)).
+- **Raise the stack size you set for request threads to 2 MiB:** if you
+  followed the 0.8.0 advice and call `threading.stack_size(1024 * 1024)`
+  before your server starts its threads, change it to
+  `threading.stack_size(2 * 1024 * 1024)`. Your handler, and a Pydantic
+  `Kwargs`, `Slots` or `TemplateData` class that a render builds from
+  event data, still get the checked data on your server's threads, and
+  code of yours that walks it level by level needs the room
   ([details](https://citry.dev/security/#check-event-data)).
 - **A page can outlive the runtime it links:** pages now link Citry's
   runtime by a URL that changes with each release (see Changed). When
@@ -100,7 +125,7 @@ does. The upgrade notes below list what can change.
   templates. Longer names that contain one of these words, such as
   `LazyCard`, still work
   ([reserved names](https://citry.dev/reference/builtins/#reserved-names)).
-- **Event data checked as a plain class or dataclass now has the 64-level
+- **Event data for a plain class or dataclass now has the 64-level
   nesting limit:** when an event's `data` class is a plain class, a
   dataclass or a Pydantic dataclass, data that nests more than 64 of its
   objects inside each other now gets a 422 that says the data is nested
@@ -125,8 +150,35 @@ does. The upgrade notes below list what can change.
 - **Delete `_topics` from your `Events` classes and from
   `extensions_defaults["events"]`:** Citry did not use it. A component
   that sets it now raises `ValueError` when the class is defined, and
-  `Citry(...)` raises it for the default. `EventsInfo` no longer has a
-  `topics` field.
+  `Citry(...)` raises it for the default.
+- **A template with a reserved name in `v-for` or `v-slot` fails to
+  load:** Citry now refuses a `v-for` alias, or a `v-slot` or `#name`
+  pattern on a Vue component or `<template>`, that uses a name starting
+  with `$`, `_`, or `citry`, as in
+  `v-for="(_, index) in items"`. Citry keeps those prefixes for the
+  values it gives the template, such as `$i18n`, and such a name could
+  hide one. Rename it; the error suggests a name, and `citry check` and
+  the editor report the same error.
+- **`<c-slot>` and `<c-fill>` raise `VueCodeError` for a Vue-code
+  `c-bind` key:** a `c-bind` key such as `":row"` or `"v-slot"` on
+  `<c-slot>` or `<c-fill>` now raises `VueCodeError`, the error that
+  elements and component tags already raise for such a key, instead of
+  `RuntimeError`. The render failed before too. Code that catches
+  `RuntimeError` around it must also catch `TypeError`, which
+  `VueCodeError` subclasses.
+- **`<c-slot>` raises `VueCodeError` for two more bindings:** it used to
+  pass them to the fill as slot data, and now refuses a `$c-tr` binding
+  written as a `c-` attribute (`<c-slot c-$c-tr:x="y" />`) and a
+  `c-bind` key that is just `"."`. Write a `$c-tr` binding on an HTML
+  element, and remove a `"."` key from the `c-bind` mapping.
+- **Upgrade citry-lsp and citry-ui together with this release:**
+  citry-lsp 0.3.0 and earlier cannot read the editor data this release
+  writes, so for every project, even one without i18n, the editor falls
+  back to checking template syntax only. Install citry-lsp 0.4.0 or
+  later. citry-ui 0.4.0 and earlier break some overlays under the new
+  `onServerRender` order: the date and time pickers, nested popovers,
+  nested dialogs and drawers, and `CAccordion`. If you use citry-ui,
+  install 0.5.0 or later.
 
 ### Added
 
@@ -139,8 +191,8 @@ does. The upgrade notes below list what can change.
   ([Sandbox template code](https://citry.dev/security/#sandbox-python-template-expressions)).
   The `citry_core.safe_eval` import still works.
 - You can turn Citry's deprecation warnings into test errors with
-  `CitryDeprecationWarning`, the class Citry uses for every deprecated
-  feature: add `"error::citry.CitryDeprecationWarning"` to pytest's
+  `CitryDeprecationWarning`, the class Citry will use for every
+  deprecated feature (none is deprecated today): add `"error::citry.CitryDeprecationWarning"` to pytest's
   `filterwarnings`.
 - The hot reload API in `citry.reload` (`watch`, `WatchHandle`,
   `FileWatcher`, `WatchfilesWatcher`, `WatchdogWatcher` and
@@ -152,28 +204,8 @@ does. The upgrade notes below list what can change.
 
 ### Changed
 
-- **Breaking:** a `c-bind` key such as `":row"` or `"v-slot"` on
-  `<c-slot>` or `<c-fill>` now raises `VueCodeError`, the error that
-  elements and component tags already raise for such a key, instead of
-  `RuntimeError`. The render failed before too. Code that catches
-  `RuntimeError` around it must catch `VueCodeError` or `TypeError`
-  as well.
-- **Breaking:** `<c-slot>` now refuses two names that it used to pass to
-  the fill as slot data, with `VueCodeError`: a `$c-tr` binding written
-  as a `c-` attribute (`<c-slot c-$c-tr:x="y" />`), and a `c-bind` key
-  that is just `"."`. Write a `$c-tr` binding on an HTML element, and
-  remove a `"."` key from the `c-bind` mapping.
 - `Citry.inspect_component_graph()` and `ComponentGraph` are now marked
   experimental: they and their JSON output may change in a minor release.
-- Upgrade citry-lsp together with this release. citry-lsp 0.3.0 and
-  earlier cannot read the editor data this release writes, so for every
-  project, even one without i18n, the editor falls back to checking
-  template syntax only.
-- A template now fails to load when a `v-for` alias or the `v-slot` on a
-  Vue component uses a name that starts with `$`, `_`, or `citry`, as in
-  `v-for="(_, index) in items"`. Citry keeps those prefixes for the values
-  it gives the template, such as `$i18n`, and such a name could hide one.
-  Rename it; the error suggests a name.
 - A `URLRoute` path that uses one parameter name twice, such as
   `"{id}/{id}"`, now raises `ValueError` naming the route when your app
   starts. Before, it raised a regular expression error: under Django
@@ -199,8 +231,9 @@ does. The upgrade notes below list what can change.
   Your handler still gets the checked data on your server's own thread,
   so give request threads at least 2 MiB of stack with
   `threading.stack_size()`. Lists and dicts do not count toward the
-  64-level limit, and on Python 3.11, 196 nested lists in a `JsonValue`
-  field ended the process with 1 MiB of stack and passed with 2 MiB.
+  64-level limit, and on Python 3.11, calling `model_dump()` on 196
+  nested lists in a `JsonValue` field ended the process with 1 MiB of
+  stack and passed with 2 MiB.
   The official `python:3.12-alpine` image gives a Python thread about
   1 MiB (measured on arm64), so set a larger size there. macOS gives a
   thread that Python does not start only 512 KiB, against 16 MiB for
@@ -266,8 +299,8 @@ does. The upgrade notes below list what can change.
 - A browser write to a Pydantic model State that nests deeper than
   Pydantic can write as JSON now gets a 422 "nested too deeply" field
   error before the event handler runs. A call whose State token holds
-  a State nested deeper than this server's Pydantic can write now
-  answers `stale_state`, and the browser offers a reload.
+  a State nested deeper than this server's Pydantic or Python can write
+  now answers `stale_state`, and the browser offers a reload.
 - A `c-bind` key that is a `str` subclass with its own `startswith` or
   `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
   and component tags.
