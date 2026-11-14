@@ -1374,9 +1374,9 @@ broken build fails the required `citry-ui-wheel-build` check rather than
 letting it pass as skipped. The test matrix is split into one job per OS
 (`test-linux`, `test-windows`, `test-macos`, all shown as `test`), so each cell
 waits only for its own OS's build, and the Linux-only jobs wait only for the
-Linux build. The Check, docs check, docs deploy, Lighthouse, external-link and
-cross-browser workflows call the action directly, so they build the wheel
-themselves only when no earlier run cached it.
+Linux build. The Check, docs check, docs deploy, docs release, Lighthouse,
+external-link and cross-browser workflows call the action directly, so they
+build the wheel themselves only when no earlier run cached it.
 
 GitHub scopes the cache by branch: a wheel saved on `main` serves every pull
 request, and a wheel first saved on a pull request serves only that pull
@@ -1388,8 +1388,8 @@ package and compiles it.
 The jobs that test other interpreters or the release artifacts build their
 own extension: `py--alt-interpreters.yml` (free-threaded CPython and
 PyPy, which the limited-API wheel does not serve), the publish workflows,
-`repo--docs-release.yml` and the example-project tests (which build with the
-minimum supported Rust), and `py--diagnostic.yml`, which caches a wheel for
+the release-tag build in `repo--docs-release.yml` and the example-project
+tests (which build with the minimum supported Rust), and `py--diagnostic.yml`, which caches a wheel for
 one interpreter with the same input selection.
 
 ### Brand assets: the C3 logo, favicons, and icons
@@ -2707,11 +2707,13 @@ site imports Citry. `repo--docs-check.yml`, `repo--docs-deploy.yml`,
 `repo--docs-external-links.yml` and `repo--docs-lighthouse.yml` install the
 shared citry-core wheel (see [CI Dependencies](#ci-dependencies)), so they
 compile nothing unless no run has cached a wheel for the current Rust
-sources. `repo--docs-release.yml` compiles the extension itself, with
-the workspace MSRV (`RUSTUP_TOOLCHAIN=1.97.0`), `sccache`'s GitHub Actions
-backend, and the `docs-citry-core-py314` Rust cache, which omits the job ID
-and is saved even when a later step fails; the toolchain validator checks
-those settings. Only docs-release fills that cache, and it runs weeks
+sources. `repo--docs-release.yml` installs the shared wheel for its checkout
+of `main` too, but its `build-tag` step then syncs the release tag in a
+separate worktree, which compiles that tag's extension. For that build it
+keeps the workspace MSRV (`RUSTUP_TOOLCHAIN=1.97.0`), `sccache`'s GitHub
+Actions backend, and the `docs-citry-core-py314` Rust cache, which omits the
+job ID and is saved even when a later step fails; the toolchain validator
+checks those settings. Only docs-release fills that cache, and it runs weeks
 apart, so it usually starts cold.
 
 The docs workflows sync the root tooling package and Citry (which brings in
