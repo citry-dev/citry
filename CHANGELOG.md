@@ -200,6 +200,10 @@ does. The upgrade notes below list what can change.
   Citry writes it back, so a State value nested about 196 levels deep no
   longer ends the process on a server whose threads have 1 MiB of stack
   or less.
+- An event handler that leaves State nested deeper than Pydantic writes
+  as JSON now gets an error saying the State nests too deeply, on every
+  platform. Before, the error named only `ValueError`. Pydantic stops
+  writing at 99 levels on Windows and at 255 elsewhere.
 - A `c-bind` key that is a `str` subclass with its own `startswith` or
   `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
   and component tags.

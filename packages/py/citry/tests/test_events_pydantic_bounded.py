@@ -4195,13 +4195,23 @@ def test_a_signed_pydantic_v1_state_too_deep_to_restore_answers_stale_state() ->
     assert (item["error"]["status"], item["error"]["code"]) == (409, "stale_state")
 
 
-def test_a_state_too_deep_for_pydantics_json_reader_is_reported_as_too_deep_to_sign() -> None:
-    # Pydantic writes 250 nested lists out, but its JSON reader refuses
-    # more than 200 levels, so the State could not be read back from its
-    # token; the problem says why.
+@pytest.mark.parametrize(
+    "depth",
+    [
+        # Pydantic's JSON reader refuses more than 200 levels, so on Linux
+        # and macOS the State is written out but cannot be read back from
+        # its token. Pydantic stops writing at 99 levels on Windows.
+        pytest.param(250, id="past-the-reader"),
+        # Pydantic stops writing past 255 levels on every platform.
+        pytest.param(300, id="past-the-writer"),
+    ],
+)
+def test_a_state_too_deep_for_pydantic_to_write_and_read_back_is_reported_as_too_deep_to_sign(depth: int) -> None:
+    # Whichever of Pydantic's limits stops the State, the problem says why
+    # rather than naming a bare error class.
     holder = pydantic.create_model("Holder", data=(Any, None))
     value: Any = []
-    for _ in range(250):
+    for _ in range(depth):
         value = [value]
 
     assert check_changed_state(holder(data=value)) == (None, TOO_DEEP_TO_SIGN)
@@ -4473,21 +4483,46 @@ class DataclassTree(Component):
     '''
 
 
-# Lists do not count toward the nesting limit, so only the 200-level limit
-# on request JSON bounds them: the envelope, its calls, the call and its
-# State updates take four levels, which leaves 196.
-lists = 0
-for _ in range(196):
-    lists = [lists]
-dicts = 0
-for _ in range(196):
-    dicts = {"a": dicts}
+def nest(name, depth):
+    value = 0
+    for _ in range(depth):
+        value = [value] if name == "lists" else {"a": value}
+    return value
+
+
+def pydantic_takes(board, value):
+    adapter = pydantic.TypeAdapter(board)
+    try:
+        adapter.validate_json(adapter.dump_json(adapter.validate_python({"t": value})))
+    except ValueError:
+        return False
+    return True
+
+
+def deepest(board, name):
+    # Lists do not count toward the nesting limit, so only the 200-level
+    # limit on request JSON bounds them: the envelope, its calls, the call
+    # and its State updates take four levels, which leaves 196. Pydantic
+    # also stops checking and writing a JsonValue past its own limit, which
+    # it sets lower on Windows (99 levels) than on Linux and macOS (255), so
+    # the value nests as deeply as both allow on this platform.
+    depth = 196
+    while depth > 0 and not pydantic_takes(board, nest(name, depth)):
+        depth -= 1
+    return depth
+
+
+# Found on the main thread, whose stack is large enough for Pydantic to
+# check these values directly.
+depths = {(board, name): deepest(board, name) for board in (ModelBoard, DataclassBoard) for name in ("lists", "dicts")}
 answers = {}
 
 
 def dispatch():
     for board, tree in ((ModelBoard, ModelTree), (DataclassBoard, DataclassTree)):
-        for name, value in (("lists", lists), ("dicts", dicts)):
+        for name in ("lists", "dicts"):
+            depth = depths[board, name]
+            value = nest(name, depth)
             token = mint_state_token(board(), class_id=tree.class_id, secret="k", max_age=None, max_bytes=10**7)
             call = {
                 "componentClassId": tree.class_id,
@@ -4500,7 +4535,10 @@ def dispatch():
             }
             envelope = {"protocol": "citry-events/1", "requestId": "r1", "calls": [call]}
             result = EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=citry))
-            answers[f"{board.__name__} {name}"] = result["results"][0]["ok"]
+            first = result["results"][0]
+            # The depth, so the test can check the value was still deep, and
+            # a refusal's reason, so a failure shows why.
+            answers[f"{board.__name__} {name}"] = [depth, first["ok"] or json.dumps(first["error"])[:300]]
 
 
 threading.stack_size(512 * 1024)
@@ -4529,9 +4567,10 @@ def test_a_handler_renders_with_deep_state_the_browser_wrote_from_a_thread_with_
     )
 
     assert done.returncode == 0, done.stderr[-2000:]
-    assert json.loads(done.stdout) == {
-        "ModelBoard lists": True,
-        "ModelBoard dicts": True,
-        "DataclassBoard lists": True,
-        "DataclassBoard dicts": True,
-    }
+    answers = json.loads(done.stdout)
+    assert answers.keys() == {"ModelBoard lists", "ModelBoard dicts", "DataclassBoard lists", "DataclassBoard dicts"}
+    for name, (depth, outcome) in answers.items():
+        assert outcome is True, f"{name} at {depth} levels: {outcome}"
+        # 49 levels is the lowest limit Pydantic sets on any platform, so a
+        # shallower value means the depth search went wrong.
+        assert depth >= 49, f"{name} nested only {depth} levels"
