@@ -10,7 +10,12 @@ from typing import Any, ClassVar, Literal, TypedDict, cast
 from citry import LibraryComponent, SlotInput, const_value
 from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
-from citry_ui.components._validation import reject_owned_attrs, validate_boolean
+from citry_ui.components._validation import (
+    first_attribute_occurrences,
+    reject_owned_attrs,
+    validate_boolean,
+    visible_markup_text,
+)
 
 CListboxVariant = Literal["plain", "soft", "outline"]
 CListboxSize = Literal["sm", "md", "lg"]
@@ -306,7 +311,8 @@ class _ListboxOutputParser(LongReferenceSafeParser):
         self.problem: str | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        values = dict(attrs)
+        # Read each repeated attribute at its first occurrence, as the browser does.
+        values = dict(first_attribute_occurrences(attrs))
         raw_part = values.get("data-citry-ui-part")
         part = raw_part if raw_part in self._OWNED_PARTS else None
         in_slot = any(slot for _, slot in self.stack)
@@ -323,11 +329,11 @@ class _ListboxOutputParser(LongReferenceSafeParser):
                 or (contenteditable and contenteditable != "false")
                 or (tabindex is not None and tabindex != "-1")
             ):
-                self.problem = f"Option content contains interactive {tag}"
+                self.problem = f"Option content contains interactive {visible_markup_text(tag)}"
         if not in_slot and self.problem is None:
             parent = self.stack[-1][0] if self.stack else None
             if part is None and parent in self._ALLOWED and not starts_slot:
-                self.problem = f"{parent or 'document'} contains unsupported {tag}"
+                self.problem = f"{parent or 'document'} contains unsupported {visible_markup_text(tag)}"
             elif part is not None and part not in self._ALLOWED.get(parent, set()):
                 self.problem = f"{parent or 'document'} contains unsupported {part}"
         self.stack.append((part, option_region))

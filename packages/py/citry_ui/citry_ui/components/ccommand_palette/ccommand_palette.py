@@ -16,6 +16,7 @@ from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENC
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
 from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._validation import first_attribute_occurrences
 
 CCommandPaletteIntent = Literal["default", "danger"]
 CCommandPaletteSize = Literal["sm", "md", "lg"]
@@ -418,7 +419,8 @@ class _VisualParser(LongReferenceSafeParser):
         self.invalid = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        values = dict(attrs)
+        # Read each repeated attribute at its first occurrence, as the browser does.
+        values = dict(first_attribute_occurrences(attrs))
         if self.host_depth is None and "data-citry-command-palette-host" in values:
             self.host_depth = self.html_depth
         elif self.host_depth is not None and self.html_depth == self.host_depth + 1:

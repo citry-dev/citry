@@ -17,6 +17,7 @@ from citry_ui.components._attrs import (
     merge_root_attrs,
 )
 from citry_ui.components._url import check_image_url
+from citry_ui.components._validation import first_attribute_occurrences
 
 CImageFit = Literal["contain", "cover", "fill", "none", "scale-down"]
 CImageLoading = Literal["eager", "lazy"]
@@ -151,7 +152,8 @@ class _CImageVisualParser(LongReferenceSafeParser):
         self.invalid = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        values = dict(attrs)
+        # Read each repeated attribute at its first occurrence, as the browser does.
+        values = dict(first_attribute_occurrences(attrs))
         if self.visual_depth == 0:
             if values.get("data-citry-ui-part") in {"placeholder", "fallback"}:
                 self.visual_depth = 1

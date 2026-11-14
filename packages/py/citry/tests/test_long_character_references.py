@@ -217,6 +217,27 @@ def test_the_parser_reads_a_long_reference_split_across_chunks(
         assert events[0][2] == (("title", title),)
 
 
+def test_the_parser_reads_long_references_wherever_the_input_is_split() -> None:
+    # One long reference in an attribute and one in text. Splitting at every
+    # position covers a chunk that ends right after "&", after "&#", and
+    # inside the digits, where the next chunk alone would not show a
+    # reference to rewrite.
+    source = f'<b title="a{LONG_J}b">x{LONG_J}y</b>'
+    expected = _parse(_Recorder(convert_charrefs=True), source)
+    assert expected[0][2] == (("title", "ajb"),)
+    # Every split inside a run of zeros reads the same, so try only a few
+    # of those and every other position.
+    splits = [
+        i for i in range(1, len(source)) if "0" not in source[i - 1 : i + 1] or source[i - 1] in "&#" or i % 1000 == 0
+    ]
+    assert source.index("&#") + 2 in splits
+    for split in splits:
+        events = _parse(_Recorder(convert_charrefs=True), source[:split], source[split:])
+        start = next(event for event in events if event[0] == "start")
+        assert start[2] == (("title", "ajb"),), split
+        assert "".join(str(event[1]) for event in events if event[0] == "data") == "xjy", split
+
+
 def test_the_rewrite_keeps_every_position_and_leaves_short_references_alone() -> None:
     source = f"a {LONG_J} &#065; b"
     rewritten = bound_long_decimal_references(source)

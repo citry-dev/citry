@@ -233,9 +233,12 @@ _PAST_UNICODE_REFERENCE = "&#1114112;"
 # limit, one per limit, because a program can change the limit with
 # ``sys.set_int_max_str_digits``.
 _LONG_DECIMAL_REFERENCE_PATTERNS: dict[int, re.Pattern[str]] = {}
-# A reference that may still be unfinished at the end of a chunk: ``&#`` and
-# any digits after it, with no ``;`` yet.
-_UNFINISHED_DECIMAL_REFERENCE = re.compile(r"&#[0-9]*\Z")
+# A reference that may still be unfinished at the end of a chunk: ``&``, or
+# ``&#`` and any digits after it, with no ``;`` yet. A lone ``&`` counts,
+# because the ``#`` and digits that make it a long reference may arrive in
+# the next chunk, where ``bound_long_decimal_references``, which reads one
+# chunk at a time, would not see the ``&``.
+_UNFINISHED_DECIMAL_REFERENCE = re.compile(r"&(?:#[0-9]*)?\Z")
 # The patterns ``HTMLParser`` splits a start tag with. ``html.parser``
 # defines them but its type stubs leave them out, so they are read with
 # ``getattr``; should a later Python drop them, a tag keeps the attribute
@@ -296,12 +299,36 @@ def _with_browser_attributes(handler: _TagHandler) -> _TagHandler:
 
     @functools.wraps(handler)
     def handle(self: LongReferenceSafeParser, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        handler(self, tag, self._browser_attributes(attrs))
+        handler(self, tag, _first_attribute_occurrences(self._browser_attributes(attrs)))
 
     # The marker is the wrapper itself, so a copy of it that ``functools.wraps``
     # makes on another function does not make that function look wrapped.
     handle._citry_browser_attributes = handle  # type: ignore[attr-defined]
     return handle  # type: ignore[return-value]
+
+
+def _first_attribute_occurrences(attrs: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
+    """
+    Return ``attrs`` with each repeated attribute name kept only at its first occurrence.
+
+    A browser keeps the first of two attributes with the same name on one
+    tag and ignores the rest, so ``<div popover="auto" popover="manual">``
+    has ``popover="auto"``. A check that reads ``dict(attrs)`` instead sees
+    the last value. ``attrs`` is the list ``HTMLParser`` hands a start tag
+    handler, whose names are already lowercase.
+    """
+    # ``HTMLParser`` lowercases names with ``str.lower()``, which also turns
+    # U+212A KELVIN SIGN into "k", while a browser lowercases only ASCII. No
+    # check reads a name with a "k" in it, so that difference cannot hide an
+    # attribute here; a check that starts reading one must account for it.
+    seen: set[str] = set()
+    kept: list[tuple[str, str | None]] = []
+    for name, value in attrs:
+        if name not in seen:
+            seen.add(name)
+            kept.append((name, value))
+    # Most tags repeat nothing, so hand back the same list rather than a copy.
+    return attrs if len(kept) == len(attrs) else kept
 
 
 def _is_wrapped(handler: object) -> bool:
@@ -326,28 +353,32 @@ class LongReferenceSafeParser(HTMLParser):
     such as ``<script>`` content, comments and ``get_starttag_text()``,
     shows the rewritten form of such a reference, and with
     ``convert_charrefs=False`` ``handle_charref`` receives its pieces. Apart
-    from the attribute values described next, input without a long
+    from the attributes described next, input without a long
     reference parses exactly as with ``HTMLParser``.
 
     A subclass's ``handle_starttag`` and ``handle_startendtag`` receive the
-    attribute values a browser reads, decoded from the original input with
-    ``decode_attribute_entities``. ``html.unescape`` drops some code points
-    that a browser keeps (such as U+0001 and U+FDD0), so the values
+    attributes a browser reads. A repeated name comes once, with the value
+    of its first occurrence, as the browser keeps it (``<div a="1" a="2">``
+    gives ``a="1"``). Each value is decoded from the original input with
+    ``decode_attribute_entities``, because ``html.unescape`` drops some code
+    points that a browser keeps (such as U+0001 and U+FDD0), so the values
     ``HTMLParser`` gives would differ from the page the browser builds. Only
-    a handler that a subclass defines in its class body gets these values; a
-    handler added later, set on an instance, or defined by a mixin that
-    comes before this class gets the values ``HTMLParser`` gives, as does a
-    handler for a tag that cannot be lined up with its original text (for
-    example when ``sys.set_int_max_str_digits`` changes while a tag is
-    split across feeds). With ``convert_charrefs=True``, text is still
+    a handler that a subclass defines in its class body gets these
+    attributes; a handler added later, set on an instance, or defined by a
+    mixin that comes before this class gets the attributes ``HTMLParser``
+    gives. A handler for a tag that cannot be lined up with its original
+    text (for example when ``sys.set_int_max_str_digits`` changes while a
+    tag is split across feeds) gets the values ``HTMLParser`` decoded,
+    still with each name once. With ``convert_charrefs=True``, text is still
     decoded with ``html.unescape``, so a reference such as ``&#1;`` in text
     reads as nothing.
     """
 
     # A subclass whose handlers never look at attribute values sets this to
     # False, which skips decoding each tag's values a second time from the
-    # original text. The setting applies only to the class that sets it, so
-    # a subclass that reads values still gets the values a browser reads.
+    # original text and keeping only the first of each repeated name. The
+    # setting applies only to the class that sets it, so a subclass that
+    # reads values still gets the attributes a browser reads.
     _reads_attribute_values: ClassVar[bool] = True
     # Whether any class in this class's ancestry has a wrapped start tag
     # handler, which reads the original text, so the parser must keep it. A

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- With Citry 0.9.0 or later, a component that checks its rendered
+  fills, such as `CDisclosure`'s panel, reads a numeric character
+  reference in an attribute value as the browser does. For example,
+  `popover="man&#1;ual"` is now refused, because the browser reads it as
+  `man`, the character U+0001, and `ual`, which is not `manual`.
+
+### Fixed
+
+- When an element in a checked fill repeats an attribute, such as
+  `<span tabindex="0" tabindex="-1">`, the check now reads the first
+  value, as the browser does. It used to read the last one, so it could
+  accept an element that the browser makes focusable, or refuse one that
+  is fine.
+
 ## [0.4.0] - 2026-11-02
 
 ### Added

@@ -20,7 +20,12 @@ from citry_ui.components._attrs import (
 )
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._heading import CHeadingLevel, resolve_heading_level
-from citry_ui.components._validation import reject_owned_attrs, validate_boolean
+from citry_ui.components._validation import (
+    first_attribute_occurrences,
+    reject_owned_attrs,
+    validate_boolean,
+    visible_markup_text,
+)
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
 
 CDisclosureVariant = Literal["outline", "soft", "plain"]
@@ -349,6 +354,9 @@ def _validate_attrs(input_name: str, attrs: dict[str, object], owned: frozenset[
 
 
 def _title_attribute_problem(tag: str, attrs: list[tuple[str, str | None]]) -> str | None:
+    # The browser keeps the first of two attributes with the same name, so
+    # decide on that one and ignore the later copies it drops.
+    attrs = first_attribute_occurrences(attrs)
     values = dict(attrs)
     if tag == "img" and ("alt" not in values or values["alt"] not in {None, ""}):
         return '<img> requires alt=""'
@@ -389,7 +397,7 @@ class _TitleOutputParser(LongReferenceSafeParser):
         parent_svg = self.stack[-1][1] if self.stack else False
         allowed = _TITLE_SVG_ELEMENTS if parent_svg else _TITLE_HTML_ELEMENTS
         if self.problem is None and tag not in allowed:
-            self.problem = f"unsupported <{tag}> element"
+            self.problem = f"unsupported <{visible_markup_text(tag)}> element"
         if self.problem is None:
             self.problem = _title_attribute_problem(tag, attrs)
         in_svg = parent_svg or tag == "svg"
@@ -419,12 +427,13 @@ class _ContentOutputParser(LongReferenceSafeParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self.problem is not None:
             return
-        values = dict(attrs)
+        # Read each repeated attribute at its first occurrence, as the browser does.
+        values = dict(first_attribute_occurrences(attrs))
         if tag == "dialog":
             self.problem = "native dialog descendants are not accepted"
             return
         if "-" in tag:
-            self.problem = f"unresolved custom element <{tag}> is not accepted"
+            self.problem = f"unresolved custom element <{visible_markup_text(tag)}> is not accepted"
             return
         if "is" in values:
             self.problem = "customized built-ins using 'is' are not accepted"
