@@ -1,5 +1,16 @@
 # Release notes
 
+## Unreleased
+
+### Changed
+
+- **Breaking:** `template_parser.parse_template()` raises `SyntaxError`
+  when a `v-for` alias or the `v-slot` on a Vue component uses a name that
+  starts with `$`, `_`, or `citry`, as in `v-for="(_, index) in items"`.
+  Citry keeps those prefixes for the values it gives the template, such
+  as `$i18n`, and such a name could hide one. The message suggests a name
+  without those prefixes. Such a template used to parse.
+
 ## v1.9.1
 
 ### Fixed
