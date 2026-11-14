@@ -211,7 +211,7 @@ test("a manifest script entry accepts a finishKey on a component script the serv
   // shows the entry's shape was accepted.
   await assert.rejects(
     startWith([componentScript()]),
-    /Citry Vue component script did not run to its end \(it may have failed to parse\): Root/,
+    /Citry Vue component script did not run to its end: Root/,
   );
 });
 

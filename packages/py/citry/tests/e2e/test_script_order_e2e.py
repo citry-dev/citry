@@ -198,7 +198,7 @@ def _widget_with_a_syntax_error(engine: Citry) -> type[Component]:
             # Each browser words a syntax error its own way, so only its type is checked.
             "SyntaxError",
             None,
-            "Citry Vue component script did not run to its end (it may have failed to parse): Widget_",
+            "Citry Vue component script did not run to its end: Widget_",
             None,
         ),
     ],

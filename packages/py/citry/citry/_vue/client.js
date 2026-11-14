@@ -2582,7 +2582,9 @@
       record.mountIndex = record.app.nextMountIndex++;
       if (userMounted) userMounted.call(this);
       const transaction = record.app.transaction;
-      if (transaction) {
+      // A component that an `onServerRender` callback shows while a server render runs its callbacks
+      // mounts after that render's checks, so it is handled like a mount outside a render.
+      if (transaction && !transaction.runningCallbacks) {
         const generations = transaction.newMounts.get(record.occurrenceId) || [];
         generations.push(record.generation);
         transaction.newMounts.set(record.occurrenceId, generations);
@@ -2691,8 +2693,8 @@
       ? new Error("Citry Vue component script threw while it ran: " + name +
         ". Fix the script, or catch the error inside it. The script's error is attached as the cause.",
         {cause: result.error})
-      : new Error("Citry Vue component script did not run to its end (it may have failed to parse): " + name +
-        ". Look for a SyntaxError earlier in the console.");
+      : new Error("Citry Vue component script did not run to its end: " + name +
+        ". It may have failed to load or to parse; look for an earlier error in the console.");
   }
 
   const loadedDefinitionUrls = new Map();
@@ -3294,7 +3296,7 @@
       for (const asset of normalizedScripts) {
         // The manifest lists a shared file once per component type that owns it. One that was
         // skipped already is not requested again in the same startup.
-        if (skippedScripts.has(scriptRecordKey(manifest.appId, asset))) continue;
+        if (skippedScripts.has(scriptRecordKey(manifest.appId, asset)) && isThirdPartyScript(asset)) continue;
         const loaded = await waitForStartup(loadTypeScript(manifest.appId, asset, configuration.nonce, true), lifecycle);
         // A skipped third-party script keeps no record, so a later server render or fragment tries it again.
         if (loaded === false) skippedScripts.add(scriptRecordKey(manifest.appId, asset));
@@ -4085,7 +4087,7 @@
           const skippedScripts = new Set();
           for (const asset of normalizedAssets.scripts) {
             const key = scriptRecordKey(appId, asset);
-            if (skippedScripts.has(key)) continue;
+            if (skippedScripts.has(key) && isThirdPartyScript(asset)) continue;
             if (await wait(loadTypeScript(appId, asset, configuration.nonce)) === false) skippedScripts.add(key);
           }
           await wait(Promise.all(normalizedAssets.styles.map(asset =>
@@ -4771,8 +4773,6 @@
       apps.delete(appId);
       throw error;
     }
-    // From here on, no startup code waits on this app's callbacks (see queueMountCallback).
-    definitionRegistry(appId).started = true;
     pageDocument.dispatchEvent(new CustomEvent("citry:ready", {detail: {appId, revision: definitionRegistry(appId).revision}}));
     const nativeUnmount = vueApp.unmount.bind(vueApp);
     let disposed = false;
@@ -5071,6 +5071,9 @@
     }
     if (app.terminal) throw app.initialError || new Error("Citry Vue app failed during initialization");
     validateMountedParents(app);
+    // Set in the same step as the check above, so a callback flush that fails from here on reports
+    // the failure and stops the app itself (see queueMountCallback): startup no longer looks.
+    app.started = true;
     return app;
   }
 
@@ -5667,12 +5670,22 @@
         });
         await app.preparedHost.beforeServerCallbacks({revision: app.revision, mounted});
       }
-      // Callbacks after a server render run in the order of the first mount: children before their
-      // parent, siblings in the order they mounted. A callback that throws ends the loop and stops the app.
-      for (const {component, record} of callbackOrder([...callbackIds].map(id => app.mounted.get(id)))) {
-        // Skip a component that an earlier callback of this render caused Vue to unmount.
-        if (instanceRecords.get(component) !== record) continue;
-        await runCallback(component, record, component.$options.__citryCallback, app.revision);
+      // A component that one of these callbacks shows mounts during the loop. Its callback is
+      // queued as a mount outside a render, and the queue waits until this loop has finished.
+      app.transaction.runningCallbacks = true;
+      let callbacksDone;
+      const loopFinished = new Promise(resolve => { callbacksDone = resolve; });
+      app.mountCallbackFlush = app.mountCallbackFlush.then(() => loopFinished);
+      try {
+        // Callbacks after a server render run in the order of the first mount: children before their
+        // parent, siblings in the order they mounted. A callback that throws ends the loop and stops the app.
+        for (const {component, record} of callbackOrder([...callbackIds].map(id => app.mounted.get(id)))) {
+          // Skip a component that an earlier callback of this render caused Vue to unmount.
+          if (instanceRecords.get(component) !== record) continue;
+          await runCallback(component, record, component.$options.__citryCallback, app.revision);
+        }
+      } finally {
+        callbacksDone();
       }
       await V.nextTick();
       if (app.terminal) throw new Error("render failed during onServerRender flush");

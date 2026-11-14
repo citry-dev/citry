@@ -1692,16 +1692,6 @@ def _validate_script_assets(scripts: list[dict[str, object]]) -> None:
         }:
             raise ValueError("prepared script asset has an invalid shape")
         owner, source = script["owner"], script["source"]
-        # Only a component's own `js`, which the server published and wrapped, reports its finish.
-        if "finishKey" in script and (
-            type(script["finishKey"]) is not str
-            or re.fullmatch(r"[0-9a-f]{64}", cast("str", script["finishKey"])) is None
-            or type(owner) is not dict
-            or owner.get("kind") != "component"
-            or type(source) is not dict
-            or source.get("kind") != "owned"
-        ):
-            raise ValueError("prepared script asset has an invalid finishKey")
         if type(owner) is not dict or type(source) is not dict or type(script["lazyAllowed"]) is not bool:
             raise ValueError("prepared script asset metadata is invalid")
         component = owner.get("kind") == "component"
@@ -1734,4 +1724,15 @@ def _validate_script_assets(scripts: list[dict[str, object]]) -> None:
             or (source["url"] in urls and urls[source["url"]] != source)
         ):
             raise ValueError("prepared script asset metadata is invalid")
+        # Only a component's own `js`, which the server published and wrapped, reports its finish.
+        # This runs after the source checks, as in the browser, so a bad source keeps its own error.
+        if "finishKey" in script and (
+            type(script["finishKey"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", cast("str", script["finishKey"])) is None
+            or type(owner) is not dict
+            or owner.get("kind") != "component"
+            or type(source) is not dict
+            or source.get("kind") != "owned"
+        ):
+            raise ValueError("prepared script asset has an invalid finishKey")
         urls[cast("str", source["url"])] = source

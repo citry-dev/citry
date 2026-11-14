@@ -495,8 +495,9 @@ def test_server_render_skips_a_component_that_an_earlier_callback_removed(
 
     send_event(lambda: page.locator("#refresh").click())
 
-    # The server render updated Spinner too, but Alpha's callback ran first and removed it. Vue
-    # called the cleanup of the timer at the removal, and Spinner's callback did not start another.
+    # The server render updated Spinner too, but Alpha's callback ran first and removed it. Citry
+    # ran the timer's cleanup when the server render began, and Spinner's callback did not start
+    # another timer.
     assert page.locator("s").count() == 0
     stats = page.evaluate("window.__spinner")
     assert (stats["started"], stats["cleaned"]) == (1, 1)

@@ -127,8 +127,10 @@ a callback throws, no later callback of that mount or render runs, and
 the page's Vue app stops. A rejected `async` callback only logs.
 
 Each callback sees the page as the earlier callbacks left it, after Vue
-applied any change they made. A component that such a change removed
-before its turn gets no callback.
+applied any change they made. If a callback changes state so that Vue
+removes a component whose callback has not run yet, that component gets
+no callback. A component that a callback adds gets its own first
+callback after the others have run.
 
 **Cleanup.** The callback returns a cleanup function or `undefined`; any
 other value is an error. Citry calls the cleanup before the next run and

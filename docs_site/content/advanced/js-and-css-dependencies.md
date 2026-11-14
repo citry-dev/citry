@@ -351,12 +351,13 @@ These cases can surprise you:
   component lower on the page runs before the `js` of a component higher
   up.
 - Two components that list the same file share one copy, which runs at
-  the first component's position. That can change the order in which a
-  later component listed its files.
+  the first component's position. So a later component's files may not
+  run in the order that component listed them.
 - An extension's [`on_dependencies()`](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page)
   hook can reorder the list or add to it.
-- Some scripts that an extension adds for the Vue app run after every
-  component script, once for the page and once for each fragment.
+- A script an extension supplies through `prepare_browser_render()` runs
+  after every component script, once for the page and once for each
+  fragment.
 
 Citry promises no other order, such as the order the components appear
 in the page's HTML. The clearest place for setup that several
@@ -409,8 +410,10 @@ sanitizer, the page runs without it, so serve such a file from your own
 origin.
 
 On a page written without a web framework integration, every script is
-a tag in the page. The browser runs each tag on its own and skips one
-that fails to load, and Citry adds no warning.
+a tag in the page, and the browser runs each tag on its own. A
+dependency file or extension script that fails to load is skipped, and
+Citry adds no warning. A component's `js` that fails to load keeps the
+Vue app from starting, as a script that throws does.
 
 A script that never finishes loading leaves the app waiting; Citry sets
 no time limit.
