@@ -31,16 +31,10 @@ _GUARDED_SKIP_EXISTING = "skip-existing: ${{ steps.public-state.outputs.skip_exi
 _DOCS_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--docs-release.yml"
 _RELEASE_CANDIDATE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--release-candidate.yml"
 _RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--release.yml"
-_DOCS_RUST_WORKFLOWS = tuple(
-    REPO_ROOT / ".github" / "workflows" / name
-    for name in (
-        "repo--docs-check.yml",
-        "repo--docs-deploy.yml",
-        "repo--docs-external-links.yml",
-        "repo--docs-lighthouse.yml",
-        "repo--docs-release.yml",
-    )
-)
+# The docs workflows that compile citry-core themselves with the workspace
+# minimum Rust version. The other docs workflows install the shared wheel from
+# .github/actions/citry-core-wheel, which builds with rust-toolchain.toml.
+_DOCS_RUST_WORKFLOWS = (_DOCS_RELEASE_WORKFLOW,)
 _CORE_CRATES = (
     "citry_core_py",
     "citry_html_transform",

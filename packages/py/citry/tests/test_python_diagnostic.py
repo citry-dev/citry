@@ -69,6 +69,9 @@ def test_native_source_digest_tracks_build_inputs_but_ignores_tracked_nonbuild_p
     git = shutil.which("git")
     assert git is not None
     subprocess.run([git, "init", "-q"], cwd=tmp_path, check=True)
+    # The digest also reads the root pyproject.toml's build constraints, so the
+    # throwaway repo needs one even though it is not tracked.
+    (tmp_path / "pyproject.toml").write_text("[tool.uv]\nbuild-constraint-dependencies = []\n", encoding="utf-8")
     cargo = tmp_path / "Cargo.toml"
     cargo.write_text("[workspace]\n", encoding="utf-8")
     subprocess.run([git, "add", "Cargo.toml"], cwd=tmp_path, check=True)

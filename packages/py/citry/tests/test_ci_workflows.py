@@ -240,9 +240,31 @@ _RUNS_UNLESS_NOTHING_CHANGED = (
     "${{ !cancelled() && github.event.action != 'closed' && needs.changes.outputs.python != 'false' }}"
 )
 
-# The condition on a job below the wheel build. GitHub's default condition
-# would skip it on every push, because `changes` is skipped there.
-_RUNS_AFTER_THE_WHEEL_BUILD = "${{ !cancelled() && needs.citry-ui-wheel-build.result == 'success' }}"
+
+def _runs_after(*parents: str) -> str:
+    """
+    Return the condition on a job below other gated jobs.
+
+    GitHub's default condition would skip such a job on every push, because
+    `changes` is skipped there, so the job checks each parent's result itself.
+    """
+    results = " && ".join(f"needs.{parent}.result == 'success'" for parent in parents)
+    return f"${{{{ !cancelled() && {results} }}}}"
+
+
+def _runs_unless_skipped(*parents: str) -> str:
+    """
+    Return the condition on a job that installs the shared citry-core wheel.
+
+    The job runs after a failed wheel build too, so its own download fails and
+    a required check such as `citry-ui-wheel-build` cannot pass as skipped.
+    """
+    results = " && ".join(f"needs.{parent}.result != 'skipped'" for parent in parents)
+    return f"${{{{ !cancelled() && {results} }}}}"
+
+
+# The jobs that build the shared citry-core wheel once per OS.
+_CORE_WHEEL_JOBS = ("citry-core-wheel-linux", "citry-core-wheel-windows-macos")
 
 
 def test_python_tests_start_on_every_pull_request_and_skip_without_python_changes() -> None:
@@ -270,21 +292,36 @@ def test_python_tests_start_on_every_pull_request_and_skip_without_python_change
         assert not any(char in body for char in "*?[]!+{}"), pattern
 
     jobs = workflow["jobs"]
+    parents_of: dict[str, list[str]] = {}
     for name, job in jobs.items():
         if name == "changes":
             continue
         needs = job.get("needs")
         needs = needs if isinstance(needs, list) else [needs]
         assert needs != [None], f"{name} must need `changes` or a job that does"
+        parents_of[name] = needs
         if "changes" in needs:
+            assert needs == ["changes"], name
             assert job["if"] == _RUNS_UNLESS_NOTHING_CHANGED, name
         else:
-            # A job below a gated one must check its parent's result itself.
+            # A job below a gated one must check every parent's result itself.
             # GitHub's default check skips it whenever any job further up was
             # skipped, and `changes` is skipped on every push.
-            assert needs == ["citry-ui-wheel-build"], name
-            assert job["if"] == _RUNS_AFTER_THE_WHEEL_BUILD, name
-    assert "citry-ui-wheel-build" in jobs
+            condition = " ".join(job["if"].split())
+            if all(parent in _CORE_WHEEL_JOBS for parent in needs):
+                assert condition == _runs_unless_skipped(*needs), name
+            else:
+                assert condition == _runs_after(*needs), name
+
+    # Every job must reach `changes` through its parents, so none runs on a
+    # pull request that changes no Python input.
+    def reaches_changes(name: str) -> bool:
+        return name == "changes" or all(reaches_changes(parent) for parent in parents_of[name])
+
+    assert all(reaches_changes(name) for name in parents_of)
+    # The required check builds on the Linux wheel, so a failed wheel build
+    # must fail it rather than skip it.
+    assert parents_of["citry-ui-wheel-build"] == ["citry-core-wheel-linux"]
 
 
 # The files the wheel build job produces that have a size cap, as the

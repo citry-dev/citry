@@ -37,14 +37,21 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install Rust toolchain
-        uses: ./.github/actions/install-rust
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      # Reuses the citry-core wheel built from these exact Rust sources by any
+      # earlier run, and builds it only when no cached wheel matches.
+      - name: Restore or build the citry-core wheel
+        id: core
+        uses: ./.github/actions/citry-core-wheel
 
       - name: Install the workspace with the e2e group
-        run: uv sync --locked --all-packages --group e2e
+        env:
+          CORE_WHEEL_DIR: ${{ steps.core.outputs.wheel-dir }}
+          CORE_WHEEL_CACHE_KEY: ${{ steps.core.outputs.cache-key }}
+        run: >-
+          python scripts/citry_core_wheel.py install
+          --wheel-dir "$CORE_WHEEL_DIR"
+          --cache-key "$CORE_WHEEL_CACHE_KEY"
+          -- --all-packages --group e2e
 
       - name: Install the ${{ matrix.browser }} browser
         run: uv run --no-sync playwright install --with-deps ${{ matrix.browser }}
