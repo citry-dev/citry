@@ -1971,9 +1971,25 @@ Error modes:
   the same name, a valid chain with one child per level fits up to about
   15 levels, and a tree whose nodes each hold two children about 8; more
   children or more data in each node fit fewer levels. The figures
-  depend on the classes: members with different field names nest much
-  deeper before the budget runs out, and Citry's own check of a plain
-  class or dataclass reaches the budget at different depths.
+  depend on the classes: members with different field names nest
+  deeper before the budget runs out, until the nesting limit below
+  stops them, and Citry's own check of a plain class or dataclass
+  reaches the budget at different depths.
+- Over the nesting limit: a 422 that says the data is nested too deeply
+  to check, and a warning naming the class, once per class, for `data`
+  and for State writes. Citry's wrapper around each object and each
+  union whose members can read a value counts how many of them are
+  checking inside each other, and refuses the data past
+  `MAX_CHECK_DEPTH` (40). Each level takes room on the C stack of the
+  thread that checks, so the limit is sized for a check to fit in
+  512 KiB, half of the 1 MiB stack a thread gets on Windows and with
+  musl. A test checks data at the limit, in the shapes that take the
+  most stack per level, on a 512 KiB thread in its own process. A model
+  with one nested model per level fits about 38 levels, a
+  discriminated tree about 38, and a union without a discriminator, or
+  a wrap validator on each level, about 18. Restoring State does not run
+  under the count, because it reads only values the server wrote or
+  already checked.
 - Data nested so deeply that Python runs out of stack frames while Citry
   checks it: a 422 that says the data is nested too deeply to check.
 - A copy that cannot be built: Citry logs the error once, with the class

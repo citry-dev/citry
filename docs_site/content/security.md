@@ -507,6 +507,29 @@ A form that shows only the message next to each field shows nothing when
 Citry sends `fieldErrors._args` or `fieldErrors._state`, so show those
 messages too ([how](/events/forms/#eventerror-field-errors)).
 
+Citry refuses data that nests more than 40 objects and unions inside each
+other, when a Pydantic v2 class checks it. Each model, dataclass, or
+TypedDict that a value passes through counts one level. So does each union
+with two or more classes that could read the value, so a tree of nodes
+counts about two levels per node, or one when its union has a
+discriminator ([trees](#trees-in-event-data)). Deeper data fails with a
+422 under `fieldErrors._args` (`fieldErrors._state` for a State write)
+that says the data is nested too deeply, and Citry logs a warning naming
+the class. The limit applies to event data and to browser writes to
+State. You cannot change it.
+
+Citry sets that limit so a check uses at most about half of a 1 MiB
+thread stack, the size a thread gets on Windows and on Linux with musl
+(such as Alpine images). On a server whose request threads have less
+than 1 MiB of stack, raise their stack size before the server starts
+them:
+
+```python
+import threading
+
+threading.stack_size(1024 * 1024)
+```
+
 Citry stops checking a request's data once its checks have used about 1
 second of CPU time. The call then fails with a 422 that says the data
 took too long to check, and Citry logs a warning naming the class. A slow
@@ -560,12 +583,14 @@ How deep depends on your classes. When `And` and `Or` hold their
 children in fields of the same name, a Pydantic model fits about 15
 levels with one child per node, and about 8 with two children per node.
 More children, or more data in each node, lower those numbers. With
-different field names, such as `items` and `any`, data can nest much
-deeper.
+different field names, such as `items` and `any`, data can nest deeper,
+up to about 18 levels, where the
+[nesting limit](#check-event-data) stops it.
 
 To check deeper trees, declare the discriminator where you define the
 recursive type (a type that contains itself, here `Node`), and give each
-class a `Literal` tag field:
+class a `Literal` tag field. Then each node counts one level toward the
+nesting limit, so a tree can nest about 38 levels:
 
 ```python
 from typing import Annotated, Literal

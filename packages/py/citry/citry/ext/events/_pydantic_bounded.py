@@ -129,6 +129,15 @@ WORK_SECONDS = 1.0
 # can be off by up to one step. It is a module-level name so that a test can
 # replace it with a clock it moves by hand.
 cpu_clock = time.thread_time
+# How many objects and unions Citry's copy of a validator may be checking
+# inside each other: each Pydantic model, dataclass or TypedDict a value
+# passes through counts one, and so does each union whose members can read
+# it. Data that nests deeper is refused with TOO_DEEP_MESSAGE. Each level
+# takes room on the thread's stack, and on Python before 3.14 a full stack
+# ends the process instead of raising an error. At this limit a check fits
+# in 512 KiB, half the 1 MiB stack of a thread on Windows or musl Linux, on
+# every supported system (the test with a 512 KiB thread checks this).
+MAX_CHECK_DEPTH = 40
 # What one more check of a list or object costs besides the values inside it,
 # in steps: the Python wrappers around it run on every check.
 ENTRY_STEPS = 32
@@ -203,7 +212,8 @@ class ValidationTooCostly(Exception):
     Attributes:
         reason: ``"errors"`` when the validation kept too many errors,
             ``"work"`` when the request spent its work budget, ``"time"``
-            when the request's checks used up their CPU time, ``"depth"``
+            when the request's checks used up their CPU time, ``"nesting"``
+            when the data nests deeper than ``MAX_CHECK_DEPTH``, ``"depth"``
             when the data nests deeper than Python can follow.
 
     """
@@ -585,6 +595,7 @@ class _Tally:
         "_limit",
         "active",
         "budget",
+        "depth",
         "errors",
         "longest_message",
         "member_floor",
@@ -596,6 +607,8 @@ class _Tally:
 
     def __init__(self, payload: Any) -> None:
         self.errors = 0
+        # How many `_counted` checks are running inside each other now.
+        self.depth = 0
         # How many values a Pydantic v1 check has read, so it reads the
         # clock once for every few hundred (see `guarding_pydantic_v1`).
         self.values_read = 0
@@ -837,9 +850,14 @@ def _counted(value: Any, handler: Any) -> Any:
             return handler(value)
         except pydantic_core.SchemaError as err:
             raise _signal(err) from None
+    # Every object and every union that can reach a value runs this, so
+    # counting here bounds how deep the check goes on the thread's stack.
+    if tally.depth >= MAX_CHECK_DEPTH:
+        raise ValidationTooCostly("nesting")
     if tally.repeating and tally.budget is not None:
         tally.budget.spend(PYTHON_CALL_STEPS)
     before = tally.errors
+    tally.depth += 1
     try:
         result = handler(value)
     except pydantic_core.ValidationError as err:
@@ -852,6 +870,8 @@ def _counted(value: Any, handler: Any) -> Any:
         # The node chose to drop the value or use its default: nothing is kept.
         tally.errors = before
         raise _signal(err) from None
+    finally:
+        tally.depth -= 1
     # A success throws away any errors made below it, for example by a union.
     tally.errors = before
     return result
@@ -2768,7 +2788,7 @@ _WARNED_WORK: WeakKeyDictionary[type, frozenset[str]] = WeakKeyDictionary()
 
 def warn_if_stopped(cls: type, stop: ValidationTooCostly) -> None:
     """
-    Warn once per class when a check stopped for work, CPU time or call depth.
+    Warn once per class when a check stopped for work, CPU time, nesting or call depth.
 
     Stay quiet when it stopped for too many errors, because the client sent
     bad data. Every place that catches a stop calls this one function, so
@@ -2780,7 +2800,7 @@ def warn_if_stopped(cls: type, stop: ValidationTooCostly) -> None:
 
 def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True) -> None:
     """
-    Warn once per class and kind that a call ran out of work, CPU time or call depth (``reason``), naming the fix.
+    Warn once per class and kind that a check stopped for work, time, nesting or depth (``reason``), naming the fix.
 
     Pass ``refused=False`` for a browser write to a Pydantic v1 State whose
     check finished before Citry could stop it. Citry reads the clock once
@@ -2800,6 +2820,13 @@ def warn_work_spent(cls: type, reason: str = "work", *, refused: bool = True) ->
         if key in warned:
             return
         _WARNED_WORK[cls] = warned | {key}
+    if reason == "nesting":
+        logger.warning(
+            f"Data for {cls.__qualname__} was refused because it nests more than {MAX_CHECK_DEPTH} objects and"
+            " unions inside each other, which is as deep as Citry checks event data and State. Send data with"
+            " fewer levels of nesting."
+        )
+        return
     if reason == "depth":
         # No traceback: it would list every frame, and any client can send
         # such data again.

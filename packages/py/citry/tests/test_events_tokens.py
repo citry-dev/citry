@@ -1796,11 +1796,12 @@ class TestPydanticStateItemErrors:
                 assert caught.value.message.endswith(" 11 more field errors are not shown.")
             return best
 
-        # Citry reads each error once, so 8 times the depth takes about 5
-        # times as long, and the bound leaves room for a slow machine. The
-        # deepest value here, 80 lists, is within the nesting Pydantic reads
-        # back from a State's JSON.
-        assert best_time(80) < 14 * best_time(10)
+        # Citry reads each error once, so 9 times the depth takes about 2
+        # times as long, and the bound leaves room for a slow machine.
+        # Writing the text of each list for each error took about 14 times
+        # as long. The deeper value stays within the nesting Citry checks
+        # (MAX_CHECK_DEPTH).
+        assert best_time(36) < 7 * best_time(4)
 
     def test_an_ordinary_large_write_to_a_strict_state_reaches_pydantic(self):
         pydantic = pytest.importorskip("pydantic")

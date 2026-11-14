@@ -1727,11 +1727,10 @@ class TestPydanticItemErrorLimit:
 
         # Writing the text of each list for each error would make the time
         # grow with the square of the depth: nine times the depth would take
-        # about 33 times as long. Reading each error once takes about 6 times as long,
-        # and the bound leaves room for a slow machine. The deeper value
-        # stays under pydantic-core's own recursion limit, which is lowest
-        # on Windows, where a value nested past 99 levels is refused.
-        assert best_time(90) < 18 * best_time(10)
+        # about 17 times as long. Reading each error once takes about 4 times
+        # as long, and the bound leaves room for a slow machine. The deeper
+        # value stays within the nesting Citry checks (MAX_CHECK_DEPTH).
+        assert best_time(36) < 9 * best_time(4)
 
     @pytest.mark.parametrize("data_class", ["top", "nested"])
     def test_a_list_field_with_an_empty_alias_lists_its_first_bad_item(self, data_class):

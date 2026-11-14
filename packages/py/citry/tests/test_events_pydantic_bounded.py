@@ -75,6 +75,15 @@ class _HandClock:
 
 
 @pytest.fixture
+def deep_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A test of the work budget needs data deep enough for the budget to run
+    # out, which is past the nesting limit. The limit is sized for a 512 KiB
+    # thread, and pytest runs tests on the main thread, which has at least
+    # 2 MB of stack on every OS, so a limit of 100 still fits.
+    monkeypatch.setattr(bounded, "MAX_CHECK_DEPTH", 100)
+
+
+@pytest.fixture
 def hand_clock(monkeypatch: pytest.MonkeyPatch) -> _HandClock:
     # A real CPU clock moves in steps of about 15.6 ms on Windows, so a test
     # that spins for a few milliseconds can read no time, or a whole step.
@@ -276,11 +285,13 @@ def test_a_few_undeclared_keys_still_get_a_message_each() -> None:
     assert result.fields == {"x": "Extra inputs are not permitted", "y": "Extra inputs are not permitted"}
 
 
-def test_a_chain_of_nested_models_deeper_than_the_recursion_limit_is_checked(
+def test_a_chain_of_nested_models_deeper_than_the_nesting_limit_is_refused(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     # Building the copy walks the schema with its own stack, so a chain of
-    # 300 different models still gets a copy, and Pydantic's own answer.
+    # 300 different models still gets a copy. Valid data 300 levels deep is
+    # past the nesting limit and gets the 422 for deep data, while a missing
+    # field near the top is reported before the check goes deeper.
     model: Any = pydantic.create_model("Level0", v=(int, ...))
     for index in range(1, 300):
         model = pydantic.create_model(f"Level{index}", c=(model, ...))
@@ -289,11 +300,13 @@ def test_a_chain_of_nested_models_deeper_than_the_recursion_limit_is_checked(
         payload = {"c": payload}
 
     with caplog.at_level(logging.ERROR, logger="citry"):
-        valid = validate_args(model, payload)
+        deep = validate_args(model, payload)
         missing = validate_args(model, {"c": {}})
 
-    assert valid.ok
+    assert deep.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
     assert missing.fields == {"c.c": "Field required"}
+    # Deep data is the sender's problem, not a fault in the app, so nothing
+    # is logged as an error.
     assert caplog.text == ""
 
 
@@ -340,6 +353,210 @@ def test_the_copy_of_a_chain_of_nested_models_is_built_on_a_thread_with_a_small_
 
     assert done.returncode == 0, done.stderr[-2000:]
     assert json.loads(done.stdout) == [True]
+
+
+_CHECKED_AT_THE_LIMIT_ON_A_SMALL_STACK = r"""
+from __future__ import annotations
+
+import dataclasses
+import json
+import sys
+import threading
+from typing import Annotated, Literal, Optional, Union
+
+import pydantic
+import pydantic.dataclasses
+
+from citry.ext.events import _pydantic_bounded as bounded
+from citry.ext.events.schemas import validate_args
+
+# Only the nesting limit may stop these checks, so data reaches it in every
+# shape, including unions the work budget would stop sooner (see `check`).
+bounded.WORK_SECONDS = 600.0
+
+
+class WNode(pydantic.BaseModel):
+    c: Annotated[Optional[WNode], pydantic.WrapValidator(lambda v, h: h(v))] = None
+    v: int = 0
+
+
+class UAnd(pydantic.BaseModel):
+    type: Literal["and"]
+    items: list[Union[UAnd, UOr, ULeaf]]
+
+
+class UOr(pydantic.BaseModel):
+    type: Literal["or"]
+    any: list[Union[UAnd, UOr, ULeaf]]
+
+
+class ULeaf(pydantic.BaseModel):
+    type: Literal["leaf"]
+    v: int
+
+
+@pydantic.dataclasses.dataclass
+class DAnd:
+    type: Literal["and"]
+    items: list[Union[DAnd, DOr, DLeaf]]
+
+
+@pydantic.dataclasses.dataclass
+class DOr:
+    type: Literal["or"]
+    any: list[Union[DAnd, DOr, DLeaf]]
+
+
+@pydantic.dataclasses.dataclass
+class DLeaf:
+    type: Literal["leaf"]
+    v: int
+
+
+@dataclasses.dataclass
+class PNode:
+    c: Optional[Union[PNode, int]] = None
+
+
+class LTree(pydantic.BaseModel):
+    c: list[LTree] = []
+    v: int = 0
+
+
+class TAnd(pydantic.BaseModel):
+    type: Literal["and"]
+    items: list[Annotated[Union[TAnd, TLeaf], pydantic.Field(discriminator="type")]]
+
+
+class TLeaf(pydantic.BaseModel):
+    type: Literal["leaf"]
+    v: int
+
+
+for model in (WNode, UAnd, UOr, LTree, TAnd):
+    model.model_rebuild()
+for data_class in (DAnd, DOr):
+    pydantic.dataclasses.rebuild_dataclass(
+        data_class, _types_namespace={"DAnd": DAnd, "DOr": DOr, "DLeaf": DLeaf}
+    )
+
+
+def holder(annotation):
+    return pydantic.create_model("Holder", x=(annotation, ...))
+
+
+# The "or" nodes hold their children under another name, so a member that
+# does not match a node fails at once. With one name the check would try
+# every member at every level and take seconds, while each level takes the
+# same stack either way.
+FIELDS = {"and": "items", "or": "any"}
+
+
+def tagged(depth, leaf, tags):
+    value = {"type": "leaf", "v": leaf}
+    for level in range(depth):
+        tag = tags[level % len(tags)]
+        value = {"type": tag, FIELDS[tag]: [value]}
+    return value
+
+
+def chained(depth, leaf, wrap):
+    value = leaf
+    for _ in range(depth):
+        value = wrap(value)
+    return value
+
+
+SHAPES = {
+    "wrap validator": (holder(WNode), lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": c})),
+    "union of models": (holder(Union[UAnd, UOr, ULeaf]), lambda n, leaf: tagged(n, leaf, ("and", "or"))),
+    "union of Pydantic dataclasses": (
+        holder(Union[DAnd, DOr, DLeaf]),
+        lambda n, leaf: tagged(n, leaf, ("and", "or")),
+    ),
+    "plain dataclass union": (holder(PNode), lambda n, leaf: chained(n, {"c": leaf}, lambda c: {"c": c})),
+    "list of models": (holder(LTree), lambda n, leaf: chained(n, {"v": leaf}, lambda c: {"c": [c]})),
+    "discriminated union": (holder(TAnd), lambda n, leaf: tagged(n, leaf, ("and",))),
+}
+
+
+def check(cls, payload):
+    with bounded.request_work() as budget:
+        budget.left = 10**12
+        return validate_args(cls, payload)
+
+
+def answer(cls, payload):
+    return json.dumps(check(cls, payload).fields, sort_keys=True)
+
+
+too_deep = json.dumps({"_args": bounded.TOO_DEEP_MESSAGE})
+cases = []
+for name, (cls, build) in SHAPES.items():
+    # On the main thread's large stack, find the deepest data the limit
+    # accepts. The next level must be refused by the limit itself.
+    depth = 1
+    while check(cls, {"x": build(depth + 1, 1)}).ok:
+        depth += 1
+    assert answer(cls, {"x": build(depth + 1, 1)}) == too_deep, name
+    for payload in ({"x": build(depth, 1)}, {"x": build(depth, "bad")}, {"x": build(depth + 1, 1)}):
+        cases.append((name, depth, cls, payload, answer(cls, payload)))
+
+results = []
+
+
+def check_all():
+    for name, depth, cls, payload, expected in cases:
+        # A full stack ends the process on Python before 3.14, so name the
+        # case first: the test prints the last name it saw.
+        print(f"checking {name} at {depth} levels", file=sys.stderr, flush=True)
+        results.append([name, depth, answer(cls, payload) == expected])
+
+
+threading.stack_size(512 * 1024)
+thread = threading.Thread(target=check_all)
+thread.start()
+thread.join()
+print(json.dumps(results))
+"""
+
+
+def test_data_at_the_nesting_limit_gets_the_same_answer_on_a_thread_with_half_a_windows_stack() -> None:
+    # A server thread has 1 MiB of stack on Windows and on musl Linux. The
+    # nesting limit must leave half of that free, so data at the limit, in
+    # the shapes that take the most stack per level, must get the same
+    # answer on a 512 KiB thread as on the main thread. Valid data, data
+    # with a bad leaf, and data one level too deep are each checked. A full
+    # stack can end the process, so the check runs in a process of its own.
+    done = subprocess.run(
+        [sys.executable, "-c", _CHECKED_AT_THE_LIMIT_ON_A_SMALL_STACK],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    results = json.loads(done.stdout)
+    assert len(results) == 18
+    assert [result for result in results if not result[2]] == []
+
+
+def test_data_past_the_nesting_limit_is_refused_and_logged_once(caplog: pytest.LogCaptureFixture) -> None:
+    class Node(pydantic.BaseModel):
+        c: Node | None = None
+
+    payload: dict[str, Any] = {}
+    for _ in range(bounded.MAX_CHECK_DEPTH):
+        payload = {"c": payload}
+
+    with caplog.at_level(logging.WARNING, logger="citry"):
+        first = validate_args(Node, payload)
+        second = validate_args(Node, payload)
+
+    assert first.fields == second.fields == {"_args": bounded.TOO_DEEP_MESSAGE}
+    # Any client can send deep data again, so the warning comes once per class.
+    assert caplog.text.count(f"nests more than {bounded.MAX_CHECK_DEPTH} objects") == 1
 
 
 def test_a_copy_is_built_on_the_calling_thread_where_the_stack_size_cannot_be_set(
@@ -393,6 +610,7 @@ def test_a_valid_filter_chain_fifteen_levels_deep_is_accepted() -> None:
     assert result.value == Query.model_validate({"q": _chain(15, 1)})
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_valid_filter_chain_too_deep_to_check_is_refused_and_logged(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING, logger="citry"):
         result = validate_args(Query, {"q": _chain(20, 1)})
@@ -402,6 +620,7 @@ def test_a_valid_filter_chain_too_deep_to_check_is_refused_and_logged(caplog: py
     assert "discriminator" in caplog.text
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_bad_deep_filter_chain_stops_without_walking_every_member() -> None:
     def elapsed(depth: int) -> float:
         start = time.perf_counter()
@@ -410,12 +629,12 @@ def test_a_bad_deep_filter_chain_stops_without_walking_every_member() -> None:
         return time.perf_counter() - start
 
     elapsed(20)
-    # The request's work budget stops a bad chain, so 40 more levels cost
-    # about the same.
-    assert elapsed(60) < 3 * elapsed(20) + 0.05
+    # The request's work budget stops a bad chain, so 25 more levels cost
+    # about the same. Past 45 levels the nesting limit refuses it first.
+    assert elapsed(45) < 3 * elapsed(20) + 0.05
 
 
-def test_a_discriminated_recursive_union_has_no_depth_limit() -> None:
+def test_a_discriminated_recursive_union_is_limited_only_by_the_nesting_limit() -> None:
     class TAnd(pydantic.BaseModel):
         type: Literal["and"]
         items: list[Annotated[TAnd | TLeaf, pydantic.Field(discriminator="type")]]
@@ -429,15 +648,18 @@ def test_a_discriminated_recursive_union_has_no_depth_limit() -> None:
     class TQuery(pydantic.BaseModel):
         q: TAnd
 
-    # Eighty levels, about four times the depth at which the work budget stops a
-    # union without a discriminator (see the filter chain tests above). It
-    # stays under pydantic-core's own recursion limit, which is lowest on
-    # Windows, where a value nested past 99 levels is refused.
-    value: dict[str, Any] = {"type": "leaf", "v": 1}
-    for _ in range(80):
-        value = {"type": "and", "items": [value]}
+    def chain(depth: int) -> dict[str, Any]:
+        value: dict[str, Any] = {"type": "leaf", "v": 1}
+        for _ in range(depth):
+            value = {"type": "and", "items": [value]}
+        return {"q": value}
 
-    assert validate_args(TQuery, {"q": value}).ok
+    # Each level of a discriminated union counts once toward the nesting
+    # limit, so 35 levels pass, more than twice the depth at which the work
+    # budget stops a union without a discriminator (see the filter chain
+    # tests above). A chain past the limit gets the 422 for deep data.
+    assert validate_args(TQuery, chain(35)).ok
+    assert validate_args(TQuery, chain(bounded.MAX_CHECK_DEPTH)).fields == {"_args": bounded.TOO_DEEP_MESSAGE}
 
 
 Tree = TypeAliasType("Tree", "dict[str, Tree] | list[Tree] | int")
@@ -1443,6 +1665,7 @@ def _twice_chain(depth: int) -> dict[str, Any]:
     return value
 
 
+@pytest.mark.usefixtures("deep_checks")
 def test_a_state_write_too_deep_to_check_is_logged(caplog: pytest.LogCaptureFixture) -> None:
     # Below a wrap validator Citry's wrappers run in the JSON read too, so
     # such a State registers and its writes run on the work budget.
