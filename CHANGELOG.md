@@ -100,6 +100,13 @@ does. The upgrade notes below list what can change.
   templates. Longer names that contain one of these words, such as
   `LazyCard`, still work
   ([reserved names](https://citry.dev/reference/builtins/#reserved-names)).
+- **Event data checked as a plain class or dataclass now has the 64-level
+  nesting limit:** when an event's `data` class is a plain class, a
+  dataclass or a Pydantic dataclass, data that nests more than 64 of its
+  objects inside each other now gets a 422 that says the data is nested
+  too deeply, as a Pydantic model's data already did. Before, Citry's
+  own check of such a class did not count levels. If valid data nests
+  this deeply, flatten the data.
 
 ### Added
 
@@ -154,11 +161,14 @@ does. The upgrade notes below list what can change.
   about 60 levels.
 
   Your handler still gets the checked data on your server's own thread,
-  so give request threads at least 512 KiB of stack with
-  `threading.stack_size()`. On macOS with Python 3.14, a handler that
-  calls `model_dump()` on a chain of models fits about 100 levels in
-  512 KiB, so data at the limit fits with room to spare, but only about
-  22 levels in 128 KiB, the default on musl Linux such as Alpine.
+  so give request threads at least 2 MiB of stack with
+  `threading.stack_size()`. Lists and dicts do not count toward the
+  64-level limit, and on Python 3.11, 196 nested lists in a `JsonValue`
+  field ended the process with 1 MiB of stack and passed with 2 MiB.
+  The official `python:3.12-alpine` image gives a Python thread about
+  1 MiB (measured on arm64), so set a larger size there. macOS gives a
+  thread that Python does not start only 512 KiB, against 16 MiB for
+  one that it starts.
 
   Where Python cannot start threads, as in Pyodide (Python in the
   browser), the limit stays at 32
@@ -185,6 +195,11 @@ does. The upgrade notes below list what can change.
   runs the check where the platform has it, then the CPU time of the
   process, then the wall clock. Linux, macOS and Windows keep using the
   thread's CPU time.
+- **Writing State back for the page now runs on Citry's own threads:**
+  a State with `validate_assignment=True` checks each value again when
+  Citry writes it back, so a State value nested about 196 levels deep no
+  longer ends the process on a server whose threads have 1 MiB of stack
+  or less.
 - A `c-bind` key that is a `str` subclass with its own `startswith` or
   `__eq__` can no longer slip past the checks on `<c-slot>`, `<c-fill>`,
   and component tags.

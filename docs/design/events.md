@@ -1995,6 +1995,13 @@ Error modes:
       `MAX_CHECK_DEPTH` (64) on a check thread (below), or past
       `SMALL_STACK_CHECK_DEPTH` (32) where no check thread can start.
       Lists and dicts do not count.
+    - Citry's own check of a plain class or dataclass `data` class, and
+      of a Pydantic dataclass one, builds each object after the objects
+      in its fields, so the Pydantic check of a Pydantic dataclass sees
+      its children built already and adds only its own level. While
+      Citry's check builds an object's fields, it counts one extra level
+      (`counted_level`), so each object counts once, as a model does, and
+      a chain of such objects is refused past the limit.
     - `Iterable[...]` and `Generator[...]` fields: Pydantic checks their
       items only when the handler reads them, after the check has
       returned. The copy puts a function after each such node that reads
@@ -2035,8 +2042,13 @@ Error modes:
           State the check accepted nests as deeply as the limit allows:
           writing it out (`state_wire_values`, for the fingerprint, the
           token and the public values), the round trip and comparison
-          in `check_changed_state`, and building and type-checking State
-          for a render (`_built_and_checked_state`). The app's own
+          in `check_changed_state`, building and type-checking State
+          for a render (`_built_and_checked_state`), and writing each
+          field back without its constant marker before the token is
+          made (`_write_plain_values` in `emission.py`), which a State
+          with `validate_assignment` checks again. Lists and dicts do not
+          count toward the limit, so these steps can meet data as deep as
+          the 200-level request limit allows. The app's own
           `state_data()` and handlers run on the request's thread.
         - The call sees a copy of the caller's context variables, and an
           exception reaches the caller with its traceback. Context
@@ -2075,19 +2087,33 @@ Error modes:
           once.
     - How the limit is sized: each level takes room on the C stack of
       the check thread, so data at the limit must be checked in half of
-      its stack. A test, run in a process of its own, checks data at
-      the limit on check threads started with 8 MiB, in shapes that take
-      a lot of stack per level. The same test runs on Linux, Windows and
-      macOS on CI, from a calling thread with musl's 128 KiB default
-      stack. The heaviest measured, a wrap validator on the model and
-      another on its field, takes about 14 KB per level on macOS with
-      Python 3.11 (12 KB on 3.14), so data at the limit needs about
-      0.9 MiB, far inside half the check thread's stack. The stack would
-      fit about 590 levels; the limit is set lower for the handler,
-      which gets the checked data on the server's own thread: a handler
-      that calls `model_dump()` on a chain of models fits about 100
-      levels in 512 KiB and about 22 in 128 KiB (macOS, Python 3.14), so
-      data at the limit fits with room to spare on a 512 KiB thread.
+      its stack. A test, run in a process of its own, checks data at the
+      limit on check threads started with 8 MiB, in shapes that take a
+      lot of stack per level. The same test runs on Linux, Windows and
+      macOS on CI, from a calling thread with 128 KiB of stack, the size
+      musl gives a thread that nobody sized. The heaviest measured, a
+      wrap validator on the model and another on its field, takes about
+      14 KB per level on macOS with Python 3.11 (12 KB on 3.14), so data
+      at the limit needs about 0.9 MiB, far inside half the check
+      thread's stack. The stack would fit about 590 levels; the limit is
+      set lower for the handler, which gets the checked data on the
+      server's own thread: a handler that calls `model_dump()` on a
+      chain of models fits about 100 levels in 512 KiB and about 22 in
+      128 KiB (macOS, Python 3.14), so data at the limit fits with room
+      to spare on a 512 KiB thread.
+    - Lists and dicts do not count, so a `JsonValue` field can hold 196
+      nested lists. Walking such a value, with `model_dump()` on the
+      handler's thread or when a render builds a Pydantic `Kwargs` class
+      from it, needs more stack than data at the limit does: on Python
+      3.11 it ended the process with 1 MiB and passed with 2 MiB, which
+      is the size the docs tell servers to give request threads.
+    - Default thread stacks that Python code meets: the official
+      `python:3.12-alpine` image gives a Python thread about 1 MiB,
+      because it builds Python with a 1 MiB thread stack (measured on
+      arm64, as were the 3.11, 3.13 and 3.14 images; a thread that
+      nothing sized has musl's 128 KiB in the 3.11 to 3.13 images, and
+      1 MiB in the 3.14 image). macOS gives a thread that Python starts
+      16 MiB and a thread started outside Python 512 KiB.
     - A State write read as JSON text whose text nests deeper than
       Pydantic's JSON reader accepts gets the "nested too deeply"
       answer, as data past the nesting limit does.

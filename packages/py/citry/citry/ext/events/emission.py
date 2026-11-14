@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from citry._protocol.events import (
     build_component_instance,
@@ -12,6 +12,7 @@ from citry._protocol.events import (
     build_manifest,
 )
 from citry.constness import const_value
+from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events.handlers import event_options
 from citry.ext.events.state import public_state_values, state_field_names
 from citry.ext.events.tokens import mint_state_token
@@ -42,8 +43,12 @@ def capture_instance(extension: EventsExtension, ctx: OnComponentDataContext) ->
         return
     if info.state_cls is not None and info.state_meta is not None:
         state = extension.build_state(ctx.component)
-        for name in state_field_names(type(state)):
-            setattr(state, name, const_value(getattr(state, name)))
+        # A State with `validate_assignment` checks each value again here.
+        # A handler that renders with State the browser wrote can pass lists
+        # nested as deeply as the request allows, and the nesting limit does
+        # not count lists. So the write runs on a check thread, whose large
+        # stack fits that data whatever stack the render's thread has.
+        bounded.run_on_check_thread(_write_plain_values, state)
         meta = info.state_meta
         token = mint_state_token(
             state,
@@ -71,6 +76,12 @@ def capture_instance(extension: EventsExtension, ctx: OnComponentDataContext) ->
 
     if not direct_prepared_render_active():
         ctx.context._add_root_markers([f'data-cid="{ctx.component.id}"'])
+
+
+def _write_plain_values(state: Any) -> None:
+    """Write each State field back without its constant marker, so the token and the page get the plain value."""
+    for name in state_field_names(type(state)):
+        setattr(state, name, const_value(getattr(state, name)))
 
 
 def merge_instance_entries(parent_context: CitryContext, child_context: CitryContext) -> None:

@@ -1105,15 +1105,119 @@ _UNWRITABLE_MESSAGE = "This field cannot be written from the client (it is not i
 _LONE_SURROGATE_MESSAGE = "This text holds an unpaired surrogate character, which cannot be stored in the State."
 
 
+# How many items the quick lone-surrogate scan reads before it hands the
+# value to the scan that reads each list, dict or tuple once. Every JSON
+# item takes at least two bytes of the body, so a write from a body of the
+# default 1 MiB limit holds fewer; only a value that holds itself, or one
+# from a body limit raised far above the default, goes past it.
+_QUICK_SCAN_ITEMS = 1 << 20
+
+
 def _holds_lone_surrogate(value: Any) -> bool:
     """Whether ``value`` holds text, as a string or a key, with a lone surrogate, which UTF-8 cannot encode."""
+    # This runs on the server's own thread, before any check limits how
+    # deeply the write nests, so both scans keep their own list of what is
+    # left to read. A recursive walk, `json.dumps` among them, takes stack
+    # for each level, and on Python 3.13 a thread with a small stack can
+    # end the process before Python's recursion limit stops it.
+    found = _quick_lone_surrogate_scan(value)
+    if found is None:
+        found = _lone_surrogate_scan_once_each(value)
+    return found
+
+
+def _quick_lone_surrogate_scan(value: Any) -> bool | None:
+    """Scan ``value`` as ``_holds_lone_surrogate`` describes, or return ``None`` past ``_QUICK_SCAN_ITEMS`` items."""
+    # Decoded JSON holds only exact str, list, dict, int, float, bool and
+    # None, so exact type checks come first: they are the cheap path every
+    # browser write takes. Anything else, such as a str or list subclass
+    # from a direct caller, goes through the `isinstance` checks at the end,
+    # which treat it as `json.dumps` would.
+    pending = [value]
+    pop = pending.pop
+    extend = pending.extend
+    # Counted as items are queued, so a value that holds itself, which
+    # would otherwise queue items forever, stops at the limit.
+    queued = 0
+    while pending:
+        item = pop()
+        kind = type(item)
+        if kind is str:
+            # ASCII text holds no surrogate, and most text is ASCII.
+            if not item.isascii() and _is_lone_surrogate_text(item):
+                return True
+        elif kind is list or kind is tuple:
+            # An empty list adds nothing to read, so it skips the bookkeeping.
+            if item:
+                queued += len(item)
+                if queued > _QUICK_SCAN_ITEMS:
+                    return None
+                extend(item)
+        elif kind is dict:
+            for key in item:
+                # Only an exact str is trusted to say it is ASCII; a key of
+                # a str subclass is always encoded.
+                if (
+                    isinstance(key, str)
+                    and (type(key) is not str or not key.isascii())
+                    and _is_lone_surrogate_text(key)
+                ):
+                    return True
+            queued += len(item)
+            if queued > _QUICK_SCAN_ITEMS:
+                return None
+            extend(item.values())
+        elif kind is int or kind is float or kind is bool or item is None:
+            # Numbers, booleans and None hold no text.
+            continue
+        elif isinstance(item, str):
+            if _is_lone_surrogate_text(item):
+                return True
+        elif isinstance(item, (dict, list, tuple)):
+            if isinstance(item, dict):
+                if any(isinstance(key, str) and _is_lone_surrogate_text(key) for key in item):
+                    return True
+                items: Iterable[Any] = item.values()
+            else:
+                items = item
+            queued += len(item)
+            if queued > _QUICK_SCAN_ITEMS:
+                return None
+            extend(items)
+        # Any other value is not JSON; the field's own check reports it.
+    return False
+
+
+def _lone_surrogate_scan_once_each(value: Any) -> bool:
+    """Scan ``value`` as ``_holds_lone_surrogate`` describes, reading each list, dict or tuple once."""
+    # Slower than the quick scan, because it remembers every container, but
+    # it ends on a value that holds itself.
+    pending = [value]
+    seen: set[int] = set()
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            if _is_lone_surrogate_text(item):
+                return True
+        elif isinstance(item, (dict, list, tuple)):
+            if id(item) in seen:
+                continue
+            seen.add(id(item))
+            if isinstance(item, dict):
+                if any(isinstance(key, str) and _is_lone_surrogate_text(key) for key in item):
+                    return True
+                pending.extend(item.values())
+            else:
+                pending.extend(item)
+    return False
+
+
+def _is_lone_surrogate_text(text: str) -> bool:
+    """Whether ``text`` holds a lone surrogate, which UTF-8 cannot encode."""
     try:
-        json.dumps(value, ensure_ascii=False).encode("utf-8")
+        text.encode("utf-8")
     except UnicodeEncodeError:
         return True
-    except (TypeError, ValueError, RecursionError):
-        # Not JSON, or nested too deep to write; the field's own check reports it.
-        return False
     return False
 
 
@@ -1301,6 +1405,15 @@ def _model_state_check(
                 # deeply, and log it once per class without a traceback.
                 stopped = True
                 raise bounded.ValidationTooCostly("depth") from None
+            except ValueError as error:
+                # The restore turns running out of Python frames into a
+                # ValueError (see `state._restore_state`); the write gets
+                # the same answer and log as a check stopped for depth.
+                cause = error.__cause__
+                if isinstance(cause, bounded.ValidationTooCostly) and cause.reason == "depth":
+                    stopped = True
+                    raise cause from None
+                raise
             finally:
                 # The check ends with the time gone, without being stopped,
                 # when the time ran out inside one validator function, where
