@@ -731,3 +731,39 @@ def test_generated_files_workflow_runs_on_every_change() -> None:
     for event in ("push", "pull_request"):
         assert "paths" not in (events[event] or {})
         assert "paths-ignore" not in (events[event] or {})
+
+
+# A step condition that singles out one matrix cell, such as
+# `matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'`.
+_CELL_CONDITION = re.compile(r"matrix\.os == '(?P<os>[^']+)' && matrix\.python-version == '(?P<python>[^']+)'")
+
+
+def test_every_cell_a_test_step_singles_out_exists_on_every_event() -> None:
+    # A condition naming a cell that no matrix runs is silently false, so the
+    # option or variable it sets never reaches any run.
+    cells = _python_test_cells()
+    steps = _load_workflow("py--tests.yml")["jobs"]["test-linux"]["steps"]
+    named = [
+        (match["os"], match["python"])
+        for step in steps
+        for text in (step.get("run", ""), *map(str, (step.get("env") or {}).values()))
+        for match in _CELL_CONDITION.finditer(text)
+    ]
+    assert named
+    for cell in named:
+        assert cell in cells["pr"], cell
+        assert cell in cells["full"], cell
+
+
+def test_the_small_thread_depth_probes_run_in_one_native_path_cell() -> None:
+    # The probes skip on CI unless this variable is "1", so it must select a
+    # real cell, and not the one that renders with the Python render path.
+    steps = {step.get("name"): step for step in _load_workflow("py--tests.yml")["jobs"]["test-linux"]["steps"]}
+    run_step = steps["Run Python tests"]
+    probes = _CELL_CONDITION.search(run_step["env"]["CITRY_NATIVE_DEPTH_PROBES"])
+    python_path = _CELL_CONDITION.search(run_step["run"])
+    assert probes is not None
+    assert python_path is not None
+    probe_cell = (probes["os"], probes["python"])
+    assert probe_cell in _python_test_cells()["pr"]
+    assert probe_cell != (python_path["os"], python_path["python"])

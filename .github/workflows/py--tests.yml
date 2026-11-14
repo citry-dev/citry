@@ -377,7 +377,7 @@ jobs:
       # always does (packages/py/citry/tests/test_native_render_depth.py).
       - name: Run Python tests
         env:
-          CITRY_NATIVE_DEPTH_PROBES: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14') && '1' || '' }}
+          CITRY_NATIVE_DEPTH_PROBES: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13') && '1' || '' }}
         run: >-
           uv run --no-sync pytest
           -m "not e2e"
