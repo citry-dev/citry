@@ -102,6 +102,9 @@ _PRELOAD_HEAD_CHUNK_SIZE = 1_024
 class _PreloadHeadLocator(LongReferenceSafeParser):
     """Locate one physical head without matching tag-like text inside scripts."""
 
+    # Only tag names and positions matter here, never an attribute value.
+    _reads_attribute_values = False
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=False)
         self.head_starts: list[int] = []

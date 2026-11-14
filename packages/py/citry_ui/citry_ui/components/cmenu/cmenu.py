@@ -497,6 +497,9 @@ _VOID_ELEMENTS = frozenset(
 
 
 class _DirectMenuParser(LongReferenceSafeParser):
+    # Only tag names and nesting matter here, never an attribute value.
+    _reads_attribute_values = False
+
     def __init__(self, expected: Mapping[str, str]) -> None:
         super().__init__(convert_charrefs=True)
         self.expected = expected

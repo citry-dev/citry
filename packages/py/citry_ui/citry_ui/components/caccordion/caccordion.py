@@ -357,6 +357,9 @@ _VOID_ELEMENTS = frozenset(
 
 
 class _DirectItemParser(LongReferenceSafeParser):
+    # Only tag names and nesting matter here, never an attribute value.
+    _reads_attribute_values = False
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.depth = 0

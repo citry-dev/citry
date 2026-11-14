@@ -31,14 +31,17 @@ same ``Markup`` class directly.
 
 from __future__ import annotations
 
+import functools
+import html.parser
 import json
 import re
 import sys
+from collections import deque
 from html import unescape
 from html.entities import html5
 from html.parser import HTMLParser
 from types import BuiltinFunctionType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 from markupsafe import Markup
 from markupsafe import escape as _markupsafe_escape
@@ -47,6 +50,9 @@ from citry.util import deep_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+# A parser method that receives a start tag's name and attributes.
+_TagHandler = TypeVar("_TagHandler", bound="Callable[[Any, str, list[tuple[str, str | None]]], None]")
 
 # markupsafe's escaper that returns a plain ``str`` (the same function that
 # ``markupsafe.escape`` runs internally before wrapping the result in a
@@ -230,6 +236,12 @@ _LONG_DECIMAL_REFERENCE_PATTERNS: dict[int, re.Pattern[str]] = {}
 # A reference that may still be unfinished at the end of a chunk: ``&#`` and
 # any digits after it, with no ``;`` yet.
 _UNFINISHED_DECIMAL_REFERENCE = re.compile(r"&#[0-9]*\Z")
+# The patterns ``HTMLParser`` splits a start tag with. ``html.parser``
+# defines them but its type stubs leave them out, so they are read with
+# ``getattr``; should a later Python drop them, a tag keeps the attribute
+# values ``HTMLParser`` gives.
+_START_TAG_NAME: re.Pattern[str] | None = getattr(html.parser, "tagfind_tolerant", None)
+_ATTRIBUTE: re.Pattern[str] | None = getattr(html.parser, "attrfind_tolerant", None)
 
 
 def _int_digit_limit() -> int:
@@ -279,21 +291,85 @@ def bound_long_decimal_references(html: str) -> str:
     return _long_decimal_reference_pattern(limit).sub(_same_length_reference, html)
 
 
+def _with_browser_attributes(handler: _TagHandler) -> _TagHandler:
+    """Wrap a start tag handler so it receives the attribute values a browser reads."""
+
+    @functools.wraps(handler)
+    def handle(self: LongReferenceSafeParser, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        handler(self, tag, self._browser_attributes(attrs))
+
+    # The marker is the wrapper itself, so a copy of it that ``functools.wraps``
+    # makes on another function does not make that function look wrapped.
+    handle._citry_browser_attributes = handle  # type: ignore[attr-defined]
+    return handle  # type: ignore[return-value]
+
+
+def _is_wrapped(handler: object) -> bool:
+    """Return whether ``handler`` is the wrapper ``_with_browser_attributes`` made."""
+    return handler is not None and getattr(handler, "_citry_browser_attributes", None) is handler
+
+
+# The start tag handlers that receive the attribute values a browser reads.
+_START_TAG_HANDLERS = ("handle_starttag", "handle_startendtag")
+
+
 class LongReferenceSafeParser(HTMLParser):
     """
-    An ``HTMLParser`` that reads decimal references of any length.
+    An ``HTMLParser`` that reads long decimal references and decodes attribute values as a browser does.
 
     ``HTMLParser`` decodes attribute values (and text, with
     ``convert_charrefs=True``) with ``html.unescape``, which raises
     ``ValueError`` for a decimal reference with more than 4,300 digits.
     This parser rewrites such a reference before parsing, as
-    ``bound_long_decimal_references`` describes, so the decoded attribute
-    values and text are what an unlimited ``html.unescape`` gives. Text the
-    parser does not decode, such as ``<script>`` content, comments and
-    ``get_starttag_text()``, shows the rewritten form of such a reference,
-    and with ``convert_charrefs=False`` ``handle_charref`` receives its
-    pieces. Input without one parses exactly as with ``HTMLParser``.
+    ``bound_long_decimal_references`` describes, so the decoded text is what
+    an unlimited ``html.unescape`` gives. Text the parser does not decode,
+    such as ``<script>`` content, comments and ``get_starttag_text()``,
+    shows the rewritten form of such a reference, and with
+    ``convert_charrefs=False`` ``handle_charref`` receives its pieces. Apart
+    from the attribute values described next, input without a long
+    reference parses exactly as with ``HTMLParser``.
+
+    A subclass's ``handle_starttag`` and ``handle_startendtag`` receive the
+    attribute values a browser reads, decoded from the original input with
+    ``decode_attribute_entities``. ``html.unescape`` drops some code points
+    that a browser keeps (such as U+0001 and U+FDD0), so the values
+    ``HTMLParser`` gives would differ from the page the browser builds. Only
+    a handler that a subclass defines in its class body gets these values; a
+    handler added later, set on an instance, or defined by a mixin that
+    comes before this class gets the values ``HTMLParser`` gives, as does a
+    handler for a tag that cannot be lined up with its original text (for
+    example when ``sys.set_int_max_str_digits`` changes while a tag is
+    split across feeds). With ``convert_charrefs=True``, text is still
+    decoded with ``html.unescape``, so a reference such as ``&#1;`` in text
+    reads as nothing.
     """
+
+    # A subclass whose handlers never look at attribute values sets this to
+    # False, which skips decoding each tag's values a second time from the
+    # original text. The setting applies only to the class that sets it, so
+    # a subclass that reads values still gets the values a browser reads.
+    _reads_attribute_values: ClassVar[bool] = True
+    # Whether any class in this class's ancestry has a wrapped start tag
+    # handler, which reads the original text, so the parser must keep it. A
+    # class that opted out can still reach a wrapped handler of a parent
+    # through ``super()``. Set for each subclass.
+    _keeps_source: ClassVar[bool] = False
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if cls.__dict__.get("_reads_attribute_values", True):
+            # Wrap only the handlers this class defines; an inherited handler
+            # keeps what its own class gave it: wrapped, or left alone when
+            # that class opted out.
+            for name in _START_TAG_HANDLERS:
+                handler = cls.__dict__.get(name)
+                if handler is not None and not _is_wrapped(handler):
+                    setattr(cls, name, _with_browser_attributes(handler))
+        # A parser with no wrapped handler anywhere in its ancestry never
+        # reads the original text, so it must not hold on to the input.
+        cls._keeps_source = any(
+            _is_wrapped(vars(base).get(name)) for base in cls.__mro__ for name in _START_TAG_HANDLERS
+        )
 
     def __init__(self, *, convert_charrefs: bool = True) -> None:
         super().__init__(convert_charrefs=convert_charrefs)
@@ -304,6 +380,101 @@ class LongReferenceSafeParser(HTMLParser):
     def reset(self) -> None:
         super().reset()
         self._held_reference = ""
+        # The input as given, before long references are rewritten, kept in
+        # the chunks it arrived in, for a parser whose handlers read
+        # attribute values. The first chunk starts at ``_source_start``
+        # characters into the whole input, and ``_fed`` counts the
+        # characters handed to ``HTMLParser`` so far.
+        self._source: deque[str] = deque()
+        self._source_start = 0
+        self._fed = 0
+        # Where the start tag being parsed begins in the whole input, and
+        # whether its handler has yet to receive the browser's values.
+        self._tag_start = 0
+        self._tag_needs_values = False
+
+    def parse_starttag(self, i: int) -> int:
+        # ``HTMLParser`` joins any input it buffered into ``rawdata`` before
+        # parsing, so ``rawdata`` ends where the input fed so far ends. That
+        # turns ``i`` into a position in the whole input. The rewrite keeps
+        # the text the same length, so it is also the tag's position in the
+        # original text.
+        self._tag_start = self._fed - len(self.rawdata) + i
+        # Chunks that end before this tag are never read again, so drop them.
+        while self._source and self._source_start + len(self._source[0]) <= self._tag_start:
+            self._source_start += len(self._source.popleft())
+        # Only the handler call this method makes gets the browser's values;
+        # a handler that calls another handler passes its own values on.
+        self._tag_needs_values = True
+        try:
+            return super().parse_starttag(i)
+        finally:
+            self._tag_needs_values = False
+
+    def _parse(self, text: str) -> None:
+        """Feed ``text`` to ``HTMLParser`` with long references rewritten, keeping the original text."""
+        if self._keeps_source:
+            self._source.append(text)
+        self._fed += len(text)
+        super().feed(bound_long_decimal_references(text))
+
+    def _browser_attributes(self, attrs: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
+        """Return the current start tag's attributes with the values a browser reads."""
+        if not self._tag_needs_values:
+            return attrs
+        self._tag_needs_values = False
+        tag_text = self.get_starttag_text()
+        # A tag with no ``&`` has no reference, so ``HTMLParser`` and
+        # ``decode_attribute_entities`` give the same values; skip decoding
+        # it again.
+        if tag_text is None or "&" not in tag_text or _START_TAG_NAME is None or _ATTRIBUTE is None:
+            return attrs
+        offset = self._tag_start - self._source_start
+        if len(self._source) > 1:
+            # The tag starts in the first chunk and ends in a later one. Join
+            # only the text from this tag on, so input fed in many chunks is
+            # not copied again for every tag.
+            self._source[0] = self._source[0][offset:]
+            self._source_start = self._tag_start
+            offset = 0
+            joined = "".join(self._source)
+            self._source.clear()
+            self._source.append(joined)
+        source = self._source[0][offset : offset + len(tag_text)] if self._source else ""
+        # The rewrite keeps the text the same length, so ``source``, the same
+        # tag in the original text, lines up character for character with
+        # ``tag_text``. If it does not rewrite to ``tag_text``, it is not the
+        # same text (for example, a different digit limit rewrote it), and
+        # pairing its values with these names would be wrong.
+        if bound_long_decimal_references(source) != tag_text:
+            return attrs
+        # Split ``tag_text`` as ``HTMLParser`` did, so the names are exactly
+        # the ones it found, and read each value from the same span of
+        # ``source``, where a long reference is still written out in full.
+        match = _START_TAG_NAME.match(tag_text, 1)
+        if match is None:
+            return attrs
+        decoded: list[tuple[str, str | None]] = []
+        position = match.end()
+        while position < len(tag_text):
+            found = _ATTRIBUTE.match(tag_text, position)
+            if found is None:
+                break
+            name, rest = found.group(1, 2)
+            value: str | None = None
+            if rest:
+                value = source[found.start(3) : found.end(3)]
+                if value[:1] == "'" == value[-1:] or value[:1] == '"' == value[-1:]:
+                    value = value[1:-1]
+                if value:
+                    value = decode_attribute_entities(value)
+            decoded.append((name.lower(), value))
+            position = found.end()
+        # Should a later Python split the tag differently, keep its reading
+        # rather than pair values with the wrong names.
+        if [name for name, _ in decoded] != [name for name, _ in attrs]:
+            return attrs
+        return decoded
 
     def feed(self, data: str) -> None:
         # Hold back a possibly unfinished reference, so the rewrite always
@@ -316,13 +487,13 @@ class LongReferenceSafeParser(HTMLParser):
             self._held_reference = text[held.start() :]
             text = text[: held.start()]
         if text:
-            super().feed(bound_long_decimal_references(text))
+            self._parse(text)
 
     def close(self) -> None:
         # At the end of the input, a held reference without ";" is complete.
         held, self._held_reference = self._held_reference, ""
         if held:
-            super().feed(bound_long_decimal_references(held))
+            self._parse(held)
         super().close()
 
 
@@ -333,7 +504,9 @@ def decode_attribute_entities(html: str) -> str:
     This follows the HTML parser's rule for a legacy reference in an
     attribute value: a named reference written without ``;`` stays as typed
     when ``=`` or a letter or digit follows it, so ``?a=1&copy=2`` stays a
-    URL.
+    URL. A numeric reference decodes as the browser decodes it, the same as
+    in ``decode_character_references``, so ``a&#1;b`` keeps its U+0001
+    between the two letters.
     """
     if "&" not in html:
         return html
