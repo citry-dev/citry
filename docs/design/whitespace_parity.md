@@ -1,9 +1,10 @@
 # Whitespace parity between Python and Vue rendering
 
-Status: proposal for review (issue
+Status: design with the maintainer's decisions recorded (issue
 [#152](https://github.com/citry-dev/citry/issues/152)). Nothing here is
-built yet. The recommendation targets 0.9.0, which the maintainer plans
-as the last release with breaking changes before 1.0.
+built yet. It targets 0.9.0, which the maintainer plans as the last
+release with breaking changes before 1.0.0. "Decisions" at the end lists
+each choice and the part of the design it shaped.
 
 ## What this decides
 
@@ -15,7 +16,7 @@ removes or shortens some whitespace first. Vue calls this condensing. The
 same template can therefore show different text depending on how the
 page was sent.
 
-This document decides which whitespace rule Citry uses for 1.0, and where
+This document decides which whitespace rule Citry uses for 1.0.0, and where
 that rule is applied so that every way of sending a page shows the same
 text.
 
@@ -289,14 +290,14 @@ Option 1's problems, plus a setting that can only be turned off on pages
 that never hydrate, because vize would still condense the hydrated page.
 Rejected.
 
-### Option 3: keep authored whitespace on every path (recommended)
+### Option 3: keep authored whitespace on every path (chosen)
 
 Python stays as it is. vize compiles in `Preserve` mode, so the hydrated
 page keeps the same whitespace the static page shows. Only one party (the
 template author) decides the text, and both paths render it.
 
-- Static pages: unchanged, apart from the root rule in the
-  recommendation.
+- Static pages: unchanged, apart from the root rule in item 2 of the
+  design.
 - Pages that use Vue: spaces appear where vize removed them, as plain
   HTML, Jinja2 and Django would show them. In the example, `onetwo`
   becomes `one two`. Every template on such a page is compiled by Vue,
@@ -309,8 +310,8 @@ template author) decides the text, and both paths render it.
 - Cost: whitespace at the root of a Vue template turns a one-root
   template into several roots, and whitespace directly in the page's
   mount element makes the server give up hydrating the page. Item 2 of
-  the recommendation handles both, and it needs a prototype before the
-  design is accepted.
+  the design handles both. Its edge cases are built and tested first,
+  against the checks in "What would show this wrong".
 
 ### Option 4: a setting that only affects pages without Vue
 
@@ -318,14 +319,15 @@ Condense in Python behind a setting, leave vize alone, and document that
 the setting does not affect hydrated pages. Rejected: it keeps the text
 shift on declined pages, which is the bug.
 
-## Recommendation for 0.9.0
+## Design for 0.9.0
 
-Choose **Option 3**, with these parts:
+The maintainer chose **Option 3**, with these parts:
 
 1. **vize keeps authored whitespace.** Every place that runs vize must get
    `WhitespaceStrategy::Preserve`:
-   - the option wiring in `vize_atelier_dom` (a crates.io crate, so either
-     a new patched copy in `third_party/rust/` or an upstream change);
+   - the option wiring in `vize_atelier_dom`, in a new patched copy of
+     that crate under `third_party/rust/vize_atelier_dom/` (see "The
+     patched copy of `vize_atelier_dom`" below);
    - the condense pass in `vize_s1_to_s2`, and the `try_emit_s2` call in
      `vize_atelier_dom` that runs it;
    - Citry's own calls in `crates/citry_vue_compiler/src/lib.rs`:
@@ -333,7 +335,50 @@ Choose **Option 3**, with these parts:
      the hydration plan, which today skip text and so may line up by
      accident), the `v-pre` check `s2_lane_compiles_v_pre` (`:799-823`)
      and the direct `vize_s1_to_s2::lower` call behind the authored text
-     plan (`:829-830`).
+     plan (`:829-830`; `lower` takes no options today, so it needs the
+     same patch as the condense pass).
+
+   **The patched copy of `vize_atelier_dom`.** Citry adds the copy for
+   0.9.0 because asking upstream and waiting for a release would hold up
+   0.9.0. It follows the repository's convention for patched crates (see
+   `third_party/README.md` and "Patched Vize compiler crates" there):
+   - The source is the crates.io archive `vize_atelier_dom-0.420.0.crate`.
+     The copy keeps the archive's normalized `Cargo.toml` and the
+     registry's original manifest as `Cargo.upstream.toml`, and adds the
+     upstream `LICENSE` text from the upstream commit. Its
+     `README.citry.md` records the archive's SHA-256, the upstream commit
+     and the exact patch.
+   - The two existing patched crates share one version suffix (`+citry.7`
+     today), and it moves when either changes. The new copy joins them,
+     so 0.9.0 raises the suffix on all three. The places that carry it
+     are `crates/citry_vue_compiler/src/lib.rs:764`,
+     `packages/py/citry/citry/_vue/compiler.py:392`,
+     `packages/py/citry/tests/test_vue_prepared.py:348`,
+     `scripts/verify_citry_core_distribution.py` (`PATCHED_CRATES`),
+     `Cargo.lock`, `third_party/README.md`, and the `Cargo.toml` and
+     `README.citry.md` of each patched crate.
+     `docs/design/vue_migration.md` asks that request caches do not
+     survive an incompatible compiler replacement, so a test checks that
+     the new identity keeps old compile caches from being reused.
+   - In the root `Cargo.toml`, the `vize_atelier_dom = "=0.420.0"` entry
+     under `[workspace.dependencies]` (`:175`) becomes a `path` entry like
+     the other two, and `[patch.crates-io]` gets a line (`:215-217` hold
+     the other two). `crates/citry_vue_compiler/Cargo.toml:31` asks for
+     the `davinci-differential` test feature, so the copy keeps it.
+   - The build and distribution checks list the patched crates: the build
+     cache inputs in `packages/py/citry_core/pyproject.toml` (`:81-84`
+     for the other two) and the checks in
+     `packages/py/citry_core/tests/test_distribution_artifacts.py`
+     (`:182-194`, `:233-236`). `.gitattributes:60` has a line for the
+     snapshot files of `vize_atelier_core` only; the new copy gets one if
+     it has snapshot files. The `third_party/README.md` entry and the
+     "two" in its text change to match.
+   - Later, and not as part of 0.9.0, Citry offers the option to upstream
+     vize (a way to pass the whitespace strategy through
+     `vize_atelier_dom`), so the patched copy can be dropped once a
+     released vize has it and Citry's regression tests pass.
+     `third_party/README.md` states the same rule for the other two
+     copies.
 2. **Drop whitespace at the root of each Vue template, on both paths.**
    A Vue template with one root element must stay one root: otherwise
    `root_shape` becomes `"fragment"`
@@ -348,20 +393,36 @@ Choose **Option 3**, with these parts:
    So the rule is defined on the rendered nodes of each component
    occurrence that becomes a Vue component: drop whitespace-only text
    nodes before its first and after its last element, looking through
-   control flow, components written in place and comments. Citry's Vue
-   template builder (`compiler.py:1431-1460`) and its static writer
-   must call one shared function for this, so both drop the same nodes.
+   control flow, components written in place and comments. Every place
+   that writes a component's Vue template calls one shared function for
+   this, and so does the Python static writer, so all of them drop the
+   same nodes. The writers are `definition_compile_input`
+   (`compiler.py:1431-1571`), `_DefinitionFragment` in
+   `direct_capture.py`, the leaf program compiler (`leaf_program.py`,
+   which writes the reusable Vue template) and `static_vue_template`
+   (`static_template.py`, which `citry check` uses). A change to what
+   the leaf program writes also changes `LEAF_TEMPLATE_CONTRACT_DESCRIPTOR`
+   (`leaf_program.py:134`), which stamps cached renders and has a
+   locking test, so entries cached before the change miss and render
+   again.
    Transparent and `simple` components copied into their caller's
    template are not roots and keep their whitespace, so
    `Hello<c-t/>!` with a template of `"\n  {{ name }}\n"` still shows
    `Hello Bob !`.
-   - The same applies to the page's mount element. The Rust server
-     writer gives up hydrating a page when text sits directly in the
-     mount element (`server_render.rs:3204-3209`, reason `host-root`),
-     so a page template such as `<c-nav/>\n<main>...</main>` would stop
-     hydrating. Either the server writer accepts whitespace-only text
-     there, or the shared function also drops whitespace-only text
-     between the page root's top-level nodes.
+   - The same function covers the page's mount element, on a page that
+     becomes a Vue app: one that hydrates, declines to hydrate, or mounts
+     without server HTML. The Rust server writer gives up hydrating a
+     page when any text sits directly in the mount element
+     (`server_render.rs:3204-3209`, reason `host-root`), so a page
+     template such as `<c-nav/>\n<main>...</main>` would stop hydrating.
+     The shared function drops every whitespace-only text node that
+     would sit directly in the mount element, before, between and after
+     the page's top-level nodes, whichever template wrote it: the page
+     template, a component with several roots, or a slot fill that lands
+     at the top level. None of that whitespace reaches the server writer.
+     The `host-root` rule stays as it is and still stops hydration for
+     text that is not whitespace. A page with no Vue has no mount
+     element and keeps its whitespace between top-level nodes.
    - Citry drops whole nodes and never changes the text of a node it
      keeps, so the render cache's replay check keeps working. Spans are
      recorded only for nodes that are written (`capture.py:908-910`).
@@ -370,9 +431,12 @@ Choose **Option 3**, with these parts:
    after these start tags. Upstream Vue does the same for `<pre>` and
    `<textarea>` when it compiles; doing it for `<listing>` follows HTML,
    not Vue.
-   - The Vue template drops one authored line break straight after the
-     start tag. Do this in vize to match upstream, or in Citry's Vue
-     template builder, but not in Citry's text nodes.
+   - Every place that writes a component's Vue template (the writers
+     listed in item 2) drops one authored line break straight after the
+     start tag, before vize sees the text, through one shared rule. It is
+     not done in vize, which keeps that line break (see "Two places where
+     vize differs from upstream Vue"), and not in Citry's text nodes,
+     which keep the authored bytes.
    - The Rust server writer adds one line break after the start tag when
      Vue's text for the element starts with a line break, as HTML
      serializers do.
@@ -393,9 +457,11 @@ Choose **Option 3**, with these parts:
 5. **No setting in 0.9.0.** Condensing can come later as an opt-in,
    because adding it does not break anyone. It needs Option 1's three
    problems solved first; this document records them.
-6. **The authored text plan** is empty under `Preserve`. Remove its
-   producer, its validation and its part in the content id, or keep it
-   for a later condense opt-in. A maintainer decision below.
+6. **The authored text plan stays.** Under `Preserve` it holds only the
+   comment and branch-gap drops, which do not depend on the whitespace
+   rule. Citry keeps its producer, its validation and its part in the
+   content id as they are, so the later condense opt-in of item 5 can
+   use it.
 7. **A separate small fix:** treat a no-break space as text, not
    whitespace, in every place Citry drops whitespace-only text. The sites
    are the parser's `validate_tag_grouping`
@@ -425,14 +491,17 @@ Why authored whitespace rather than Vue's rule:
 
 ### What the change touches
 
-- vize and the Citry call sites in item 1, and the line break in item 3
-  if it is done there. A `citry_core` release must ship before `citry`
-  0.9.0.
-- The shared root function in item 2, called from Citry's Vue template
-  builder and its static writer, and the `host-root` rule in
-  `server_render.rs`. The `<c-*>` template compiler, the five
-  `src/lang/*.rs` implementations, the PyO3 glue and the `_rust.pyi`
-  stub need no change.
+- vize and the Citry call sites in item 1, including the new patched
+  copy and the files that list the patched crates. A `citry_core`
+  release must ship before `citry` 0.9.0.
+- The shared root function in item 2, called from each writer of a
+  component's Vue template and from the Python static writer. The
+  `host-root` rule in
+  `server_render.rs` stays as it is. The `<c-*>` template compiler, the
+  five `src/lang/*.rs` implementations, the PyO3 glue and the
+  `_rust.pyi` stub need no change.
+- Each writer of a component's Vue template, for the line break in
+  item 3.
 - `crates/citry_vue_compiler/src/server_render.rs` and
   `packages/py/citry/citry/serialize.py`: the line break after `<pre>`,
   `<textarea>` and `<listing>`, and removal of the whitespace-only `<pre>`
@@ -480,19 +549,23 @@ reach the page (Mechanism 7 in `CLAUDE.md`, "Text and markup").
   two words with no spaces around it then touches them, as it already
   does on hydrated pages today. Transparent and `simple` components keep
   it.
+- **Whitespace between a Vue page's top-level components.** Dropped on
+  both paths (item 2), so two inline components written next to each
+  other touch. A page with no Vue keeps it.
 - **A template that is not HTML** (Markdown, plain text). Unchanged, as
   long as it does not become a Vue component; item 2 applies only to
-  Vue component roots.
+  Vue component roots and the mount element of a Vue page.
 - **Cached renders from 0.8.0.** The render cache keys entries by the
   template source, so entries stored before the upgrade may fail the
   replay check once and be rendered again (reported as a corrupt entry).
-  This happens once per entry.
+  Entries stamped with the old leaf template descriptor miss and render
+  again. This happens once per entry.
 - **An HTML minifier run on a hydrated page.** It removes text nodes Vue
   expects, and hydration then reports mismatches. This is true today and
   stays true; the docs should say to minify only pages without Vue.
-- **vize cannot be told to keep whitespace** (item 1 proves harder than
-  expected). Then the recommendation cannot ship as designed; see "What
-  would show this wrong".
+- **vize cannot be told to keep whitespace** (the patch in item 1
+  proves harder than expected). Then the design cannot ship as written;
+  see "What would show this wrong".
 
 ## Migration notes
 
@@ -504,6 +577,10 @@ For the 0.9.0 upgrade guide:
   too. Inline-block items written on separate lines get a small gap. To
   keep elements touching, write them without whitespace between them, or
   lay them out with flex or grid.
+- **Whitespace between the top-level components of a page that uses
+  Vue is dropped.** If two inline components at the top of a page relied
+  on a line break for spacing, wrap them in an element that holds the
+  space.
 - **`<textarea>` content keeps its whitespace on Vue pages.** If the
   template indents the content, remove that whitespace from the template.
 - **Whitespace around a component's single root element is dropped on
@@ -518,10 +595,15 @@ For the 0.9.0 upgrade guide:
   size with and without condensing. If keeping whitespace makes hydration
   more than 5% slower or the compressed HTML more than 3% larger, prefer
   Vue's rule and solve Option 1's three problems before 0.9.0 instead.
-  The thresholds are a starting proposal for the maintainer to set.
-  Check first that the benchmark page still hydrates in both runs; a
-  page that falls back to mounting without hydration would make the
-  numbers meaningless.
+  The maintainer accepted these thresholds. Check first that the
+  benchmark page still hydrates in both runs; a page that falls back to
+  mounting without hydration would make the numbers meaningless.
+- **The page root rule on text pages.** Under item 2, a Markdown or
+  plain-text page template that also becomes a Vue app loses the blank
+  lines between its top-level nodes, and the Python static writer must
+  know, after the render, that the page needs Vue. Test a plain-text
+  page that mounts Vue. If the writer cannot know, or such pages are
+  common, the page-root part of item 2 needs another rule.
 - **The root rule needs too many exceptions.** If a prototype of item 2
   finds Vue templates whose root it cannot reduce to one element without
   dropping text a user can see, keeping authored whitespace costs more
@@ -531,24 +613,32 @@ For the 0.9.0 upgrade guide:
   and without condensing, and compare screenshots. If many components
   gain visible gaps that their authors would have to fix, the migration
   cost is higher than this document assumes.
-- **vize's option cannot be wired** without a deep patch to a crate Citry
-  does not control. Then the choice is between carrying that patch and
-  Option 1.
+- **The patch to `vize_atelier_dom` needs more than passing the
+  strategy through** (for example, because the code that emits the
+  render function ignores it). Then the choice is between carrying the
+  larger patch and Option 1.
 - **Vue tooling assumptions.** If Vue devtools or a Vue library Citry
   supports depends on condensed whitespace, keeping it breaks that tool.
   No such case is known.
 
-## Decisions for the maintainer
+## Decisions
 
-1. Keep authored whitespace on every path (Option 3): yes, or prefer
-   Vue's rule and fund Option 1's three problems.
-2. Drop whitespace at the root of each Vue component and in the page's
-   mount element, on both paths (item 2): yes, after a prototype, or no.
-   For the mount element: relax the server's `host-root` rule, or drop
-   the whitespace.
-3. Where to drop the line break after `<pre>`: in vize (matches upstream
-   Vue) or in Citry's Vue template builder.
-4. Patch `vize_atelier_dom` in `third_party/rust/` or ask upstream for the
-   option.
-5. Remove the authored text plan, or keep it for a later condense opt-in.
-6. The measurement thresholds in "What would show this wrong".
+The maintainer decided these. The part of the design each one shaped is
+in brackets.
+
+1. Keep the author's whitespace on every path, which is Option 3.
+   Condensing is not built for 0.9.0 (Options 1 and 2). [Option 3, items
+   4 and 5]
+2. Drop the whitespace around each Vue component's root, and in the
+   page's mount element, with one shared function that runs on both
+   paths. This also clears the `host-root` hydration failure, so the
+   server writer's rule stays as it is. [Item 2]
+3. Drop the line break after `<pre>` in Citry's own code that writes the
+   Vue template, not in vize. [Item 3]
+4. Add a patched copy of `vize_atelier_dom` under `third_party/rust/` for
+   0.9.0, because asking upstream is too slow. The option should still be
+   offered upstream later, so the patched copy can be dropped. [Item 1]
+5. Keep the authored text plan for a possible condense opt-in later.
+   [Item 6]
+6. Accept the benchmark thresholds in "What would show this wrong": 5%
+   slower hydration and 3% larger compressed HTML.

@@ -1,9 +1,10 @@
 # Component script order
 
-Status: proposal for review (issue
+Status: design with the maintainer's decisions recorded (issue
 [#145](https://github.com/citry-dev/citry/issues/145)). Nothing here is
-built yet. The recommendation targets 0.9.0, which the maintainer plans
-as the last release with breaking changes before 1.0.
+built yet. It targets 0.9.0, which the maintainer plans as the last
+release with breaking changes before 1.0.0. "Decisions" at the end lists
+each choice and the part of the design it shaped.
 
 ## What this decides
 
@@ -11,11 +12,11 @@ A Citry component can ship JavaScript: its own `js`, the files listed in
 its nested `Dependencies` class, and the `onServerRender` callback it
 registers through `$component({...})`. When a page holds several such
 components, the browser has to run their code in some order. This document
-decides which parts of that order Citry promises for 1.0, which parts it
+decides which parts of that order Citry promises for 1.0.0, which parts it
 leaves open, and what happens when one script fails.
 
 The question matters now because the two directions are not symmetric.
-Dropping an ordering promise after 1.0 breaks pages that rely on it,
+Dropping an ordering promise after 1.0.0 breaks pages that rely on it,
 whether the docs stated the promise or not. Adding a way to run some
 scripts out of order is gentler, but not free either (see Option 2).
 
@@ -123,7 +124,7 @@ browser variables from `js_data()`). Inside each group, components appear in the
 | A component's script runs at most once per page. An extension's script runs once per Vue app, so a page plus a fragment runs it twice. A script whose component failed to register can run again when the app restarts. | `scriptRecordKey` (`client.js:2891-2893`), key removed at `client.js:3072`; tests `e2e/test_fragment_e2e.py::test_fragment_reuses_a_component_script_the_page_already_loaded`, `test_external_prepared_asset_integrity_is_optional_and_identity_is_app_scoped` | Once per page is promised (`vue/component-options.md:246`, `advanced/js-and-css-dependencies.md:11`). Tested |
 | All component scripts of the first render run before Vue creates the app. | `client.js:3256-3265` | Promised (`reference/browser-apis.md:634-637`) |
 | On the Vue path, page scripts must be plain scripts that run in order. `async`, `defer`, `nomodule` and `type="module"` are rejected. | `_serialization_security.py:567-580`, `normalizeAssetSource` (`client.js:2828-2844`); test `test_browser_render.py::test_prepared_browser_scripts_require_synchronous_classic_execution` | Promised (`advanced/extensions.md:291-297`). Tested |
-| Browser plugin registration scripts run before component scripts on a mounted page, but after them on a standalone page. | `_vue/serialization.py:1324` appends them after the manifest scripts | Built, untested |
+| Browser plugin registration scripts run before component scripts on a mounted page, but after them on a standalone page. | `_vue/serialization.py:1324` appends them after the manifest scripts | Built, untested. Item 1 of the design changes the standalone order |
 | On a page without the Vue runtime (`deps_strategy="simple"`), Citry writes plain `<script>` tags in the same order, and the browser's own rules apply, including any `async` or `defer` the user adds. | `emission.py:294-317` | Tested for the written order |
 
 The order is "the order Citry first meets each component while
@@ -148,7 +149,7 @@ exceptions:
 |---|---|---|
 | Vue hooks follow Vue: `setup` and `created` run parent first, `mounted` runs child first. Citry wraps these hooks but does not reorder them. | `typeOptions` (`client.js:2287-2591`) | Open (Vue's behavior, no Citry test) |
 | The first `onServerRender` runs after `mounted`, in the order the `mounted` hooks ran: children before their parent, and siblings in Vue's order. Every `mounted` hook of that render pass runs before the first callback, because each callback is queued as a Promise task and the built-in `onOccurrenceMounted` is synchronous. | `options.mounted` (`client.js:2534-2556`), `onOccurrenceMounted` (`client.js:4335-4342`) | "Children before their parent" is promised (`guides/upgrading-to-0-6-0.md:241-243`). One test checks it for one parent and one child on a hydrated page (`e2e/test_vue_events_default_e2e.py::test_static_physical_document_shell_hydrates_with_csr_parity` asserts `["leaf", "page"]`). Sibling order is not promised or tested |
-| After a server render, callbacks run in this order: (1) every component the response lists as updated, which includes new ones, in response order; (2) remounted components; (3) kept components that mount for the first time, for example when a `v-if` turns on, parent first; (4) components that a browser plugin's update names. Citry awaits each callback's synchronous part before the next. | `applyEnvelope` (`client.js:5441-5465`); new components must be in `updatedIds` (`client.js:5032-5034`); first mounts (`client.js:5414-5415`) | Open. Not documented, not tested, and not the first-mount rule |
+| After a server render, callbacks run in this order: (1) every component the response lists as updated, which includes new ones, in response order; (2) remounted components; (3) kept components that mount for the first time, for example when a `v-if` turns on, parent first; (4) components that a browser plugin's update names. Citry awaits each callback's synchronous part before the next. | `applyEnvelope` (`client.js:5441-5465`); new components must be in `updatedIds` (`client.js:5032-5034`); first mounts (`client.js:5414-5415`) | Open today. Not documented, not tested, and not the first-mount rule. Item 3 of the design sets one order |
 | A callback that returns a Promise is not awaited. A rejection is logged and the page keeps going. | `runCallback` (`client.js:4826-4840`); test `e2e/test_vue_component_context_e2e.py::test_async_initializer_runs_beside_the_page_and_its_cleanup_still_runs` | Promised (`reference/browser-apis.md:128-133`). Tested |
 
 ### Fragments and server renders
@@ -171,11 +172,11 @@ exceptions:
 
 | Behavior | Evidence | Status |
 |---|---|---|
-| A script that fails to load stops startup (or the server render) before later scripts are added, on a mounted page. This includes a third-party or extension script, such as an analytics file an ad blocker refuses. | `loadTypeScript` `onerror` (`client.js:3076-3079`); test `e2e/test_vue_dynamic_element_e2e.py::test_extension_script_loader_retries_and_restarts_same_app_id` | Tested |
+| A script that fails to load stops startup (or the server render) before later scripts are added, on a mounted page. This includes a third-party or extension script, such as an analytics file an ad blocker refuses. | `loadTypeScript` `onerror` (`client.js:3076-3079`); test `e2e/test_vue_dynamic_element_e2e.py::test_extension_script_loader_retries_and_restarts_same_app_id` | Tested. Item 5 of the design changes this for third-party scripts |
 | A script that never finishes loading leaves the app waiting. There is no timeout. | `loadTypeScript` | Built, untested |
 | A component script that loads but never calls `$component({...})`: on a mounted page, startup stops and later scripts are not added. On a standalone page, every tag has already run, and startup then stops with "initial Citry Vue type Options were not emitted before bootstrap". | `client.js:3071-3074`, `3153-3155`; test `e2e/test_vue_dynamic_element_e2e.py::test_initial_preloaded_later_script_does_not_execute_after_first_registration_failure` | Tested (mounted path) |
-| A script that throws while it runs still fires `onload`. If it threw after registering its options, or it registers nothing (a `Dependencies` file), the next script runs as if nothing happened. On a standalone page, each tag runs on its own, so the same holds. | `client.js:3071-3075`: the `onload` handler checks only the registration | Built, untested |
-| A synchronous `onServerRender` that throws stops the app. On the first mount, the other queued callbacks still run, because each is its own task. After a server render, the loop stops at the throw. | `client.js:2547-2550`, `5462-5474` | Built, untested |
+| A script that throws while it runs still fires `onload`. If it threw after registering its options, or it registers nothing (a `Dependencies` file), the next script runs as if nothing happened. On a standalone page, each tag runs on its own, so the same holds. | `client.js:3071-3075`: the `onload` handler checks only the registration | Built, untested. Item 4 of the design changes this for component scripts |
+| A synchronous `onServerRender` that throws stops the app. On the first mount, the other queued callbacks still run, because each is its own task. After a server render, the loop stops at the throw. | `client.js:2547-2550`, `5462-5474` | Built, untested. Item 3 of the design sets one failure rule |
 
 ### Ways one script can depend on another today
 
@@ -232,17 +233,18 @@ signal for the parent-child case (Astro, web components).
 
 ## Options
 
-### Option 1: document today's order
+### Option 1: document today's order (chosen)
 
 Keep today's behavior. Publish the order rules from "What Citry does
-today" as the 1.0 contract, decide the rows marked open, and add the
+today" as the 1.0.0 contract, settle the rows marked Open as items 3
+and 6 do, and add the
 missing tests.
 
 - Breaking impact: none for pages that work today.
 - Cost: scripts keep running one at a time. What that costs is not
   measured (see "What would show this wrong").
 
-### Option 2: add an opt-in for unordered scripts
+### Option 2: add an opt-in for unordered scripts (not in 0.9.0)
 
 Option 1, plus a way to mark a script as independent so it runs as soon
 as it arrives. One shape: component `js` and `Dependencies` entries accept
@@ -255,7 +257,8 @@ script, ordered or not, has run.
   therefore be documented as safe only for scripts nothing else reads.
 - Cost: a new public flag, its docs, and its error cases. The gain is
   unknown until measured.
-- Does not need to ship in 0.9.0. It can arrive in a 1.x release.
+- Not in 0.9.0. The maintainer decided to measure first (item 7) and to
+  consider it for a 1.x release only if the measurement supports it.
 
 ### Option 3: make unordered the default
 
@@ -271,7 +274,7 @@ rejects cycles at startup.
 - Cost: a dependency-declaration API, cycle and missing-dependency checks,
   and a migration for every existing page. It also needs the ES-module
   design, which is parked.
-- Must ship before 1.0 or wait for 2.0.
+- Must ship before 1.0.0 or wait for 2.0.0.
 
 ### Option 4: promise less than today
 
@@ -284,9 +287,10 @@ to choose Option 3 later.
   `extensions.md` and `dependency-files.md` rows above), so this option
   would also mean taking back published text.
 
-## Recommendation for 0.9.0
+## Design for 0.9.0
 
-Choose **Option 1** now and keep Option 2 open for 1.x. Concretely:
+The maintainer chose **Option 1** now and keeps Option 2 for 1.x, after
+measurement. Concretely:
 
 1. **Promise the evaluation order, with its exceptions.** Publish:
 
@@ -298,12 +302,14 @@ Choose **Option 1** now and keep Option 2 open for 1.x. Concretely:
 
    Then state the exceptions listed above: the groups follow each
    script's `kind`; `on_dependencies` hooks can reorder the list; a file
-   several components list runs at its first position; extension scripts
-   run once per Vue app; and on a standalone page browser plugin scripts
-   run after component scripts. Do not promise HTML order. Before
-   publishing, make the plugin-script position the same on both page
-   kinds (run them before component scripts), so the promise needs one
-   fewer exception.
+   several components list runs at its first position; and extension
+   scripts run once per Vue app. Do not promise HTML order.
+   Browser plugin scripts run before component scripts on both page
+   kinds. On a standalone page they run after them today
+   (`_vue/serialization.py:1324`), so 0.9.0 writes them after Citry's
+   runtime and the definition bundles and before the manifest's scripts,
+   which is where they fall on a mounted page, and adds a test for each
+   page kind. The promise then needs no exception for them.
 2. **Promise that a render's scripts finish before its components
    start.** All component scripts of the first render run before Vue
    creates the app. All new component scripts of a server render run
@@ -317,12 +323,27 @@ Choose **Option 1** now and keep Option 2 open for 1.x. Concretely:
    - The parent of each component is known: the client already follows
      `$parent` links to check that each occurrence's parent matches its
      Vue parent (`validateMountedParents`, `client.js:4869-4878`).
-   - Sibling order is not. Vue 3 has no public list of a component's
-     children, so the walk needs either Vue's internal vnode tree
-     (`instance.subTree`, including Teleport, Suspense and KeepAlive
-     children) or a mount-order index Citry records itself in `mounted`.
-     The implementation must pick one; depending on Vue internals is a
-     maintenance cost.
+   - Sibling order is not known. Vue 3 has no public list of a
+     component's children, so Citry records the order itself. The
+     wrapper it already puts around `mounted` gives each instance the
+     next index when its `mounted` hook runs, which is children before
+     their parent and siblings in Vue's order. The counter belongs to one
+     app and never repeats a value, so no two instances share an index.
+     Citry does not read
+     Vue's internal vnode tree (`instance.subTree`), so the order
+     depends only on Vue's public hooks and the `$parent` links.
+   - After a server render, Citry walks the `$parent` tree of the
+     components that have a callback to run: each component after all
+     of its descendants, and each component's children in ascending
+     index. It runs the callbacks in that order. A component whose
+     direct parent has no callback in that pass is placed by its nearest
+     ancestor that has one, and a component with no such ancestor is a
+     root of the walk, ordered by index. Instances that mount during
+     that pass get their indexes the same way.
+   - "Siblings in order" means in the order they first mounted. That
+     equals the first-mount order for siblings that mount in the same
+     pass. A sibling that mounts in a later pass, or that Vue moves,
+     keeps its mount-time position.
    - Use one failure rule as well: when a synchronous callback throws,
      Citry runs no further callbacks of that pass and stops the app. On
      the first mount this means one ordered loop over the mounted
@@ -331,12 +352,12 @@ Choose **Option 1** now and keep Option 2 open for 1.x. Concretely:
    - Promise sibling order in the docs for the first time, and add
      browser tests for siblings, slot fills and repeated components, on
      hydrated pages and on pages Vue mounts without hydrating.
-4. **Make a component script that does not finish stop the app; leave
-   the others as they are.** On the Vue path, every component `js` is
-   inline code that Citry wraps in a function it writes
-   (`ext/dependencies/types.py:212`, `:255-259`) and publishes as a
-   bundle (`_vue/events.py:1092-1104`), loaded by URL on a mounted page
-   and written inline on a standalone page. In 0.9.0:
+4. **A component script that throws or fails to parse stops the app;
+   other scripts that throw stay as they are.** On the Vue path, every
+   component `js` is inline code that Citry wraps in a function it
+   writes (`ext/dependencies/types.py:212`, `:255-259`) and publishes as
+   a bundle (`_vue/events.py:1092-1104`), loaded by URL on a mounted
+   page and written inline on a standalone page. In 0.9.0:
    - For `kind="component"` scripts only, the wrapper calls the
      original function inside a `try` (nesting it, so a leading
      `"use strict"` and function hoisting keep working), records any
@@ -357,10 +378,51 @@ Choose **Option 1** now and keep Option 2 open for 1.x. Concretely:
      script runs. See "Alternatives for item 4" for why.
    - Pages without the Vue runtime (`deps_strategy="simple"`) are
      unchanged: the browser runs those scripts on its own.
-5. **Leave fragments unordered** relative to each other, to the page's
+5. **A third-party script that fails to load does not stop the app.**
+   On a mounted page, a script that fails to load is logged and skipped
+   when it is a third-party script. Citry's browser code logs a console
+   warning that names the URL and adds the next script. A third-party
+   script is one the server lists by URL (the `external` kind of script
+   source: a `Dependencies` file or an extension script given as a URL),
+   that is not declared to register component options
+   (`registersOptions` is false), and whose URL has a different origin
+   (scheme, host and port) from the page's. Citry resolves the URL
+   against the page's own address, not the document's base URL, so an
+   injected `<base>` element cannot make a file look third-party.
+   Component `js` that Citry publishes itself (the `owned` kind) is never
+   third-party, and a script that a hook swaps in as a URL follows the
+   same rule as any other URL.
+   - Citry cannot tell your own CDN from a third party, so a file from
+     another origin is skipped whichever you meant.
+   - The browser reports a blocked file (an ad blocker or a content
+     security policy), a failed integrity check and a network error as
+     the same `error` event, so Citry cannot skip only the blocked ones.
+     It skips all of them, including a file that fails its integrity
+     check.
+   - A component's `js`, a script declared to register options, and
+     every script that is `owned` or on the page's own origin still stops
+     startup, or the server render, when it fails to load, with `Citry
+     Vue type script failed to load: <url>`. They come from the app, so
+     a failure there means a broken deploy. A page the browser gives the
+     origin `null` (for example one opened from disk), or a URL that does
+     not resolve, counts as same-origin and stops startup.
+   - A skipped script keeps no load record, so a later server render or
+     fragment tries it again and logs again.
+   - Nothing runs in place of the skipped script. A component script
+     that needs it while it loads throws, and item 4 then stops the app
+     with an error that names that component. A script that needs it
+     later, inside a callback, fails when the callback runs. Skipping a
+     script also removes whatever protection it set up, so serve a file
+     that a safeguard depends on (a consent, sanitizer or CSRF script)
+     from the page's own origin.
+   - The code is the `onerror` handler in `loadTypeScript`
+     (`client.js:3076-3079`). On a standalone page nothing changes: the
+     browser runs each tag on its own, and Citry does not stop for a
+     script that registers no options.
+6. **Leave fragments unordered** relative to each other, to the page's
    startup and to its server renders, and say so. Inside one fragment,
    the rules above apply.
-6. **Measure before Option 2.** See "What would show this wrong".
+7. **Measure before Option 2.** See "What would show this wrong".
 
 ### Alternatives for item 4
 
@@ -375,12 +437,13 @@ Choose **Option 1** now and keep Option 2 open for 1.x. Concretely:
 - **Stop only in development mode.** This keeps production pages limping
   along, which is friendlier to visitors, but it makes development and
   production behave differently, and a broken component then fails later
-  and less clearly. Worth considering if the maintainer prefers it.
+  and less clearly. The maintainer decided against it: a component
+  script that throws or fails to parse stops startup in every mode.
 - **Fail only the component whose script threw** and start the rest of
   the app. Citry has no way to start an app with a component type
   missing today; this needs a design of its own.
 
-The recommended form works because the wrapper is part of the script's
+The chosen form works because the wrapper is part of the script's
 own bytes, so it needs no page-wide `error` listener and blames the
 right component. A script that fails to parse never runs the wrapper,
 and the missing "finished" record catches that case too.
@@ -404,8 +467,9 @@ work, not a measurement.
 
 ## Security
 
-Item 4 changes the code Citry writes around component scripts, so it
-touches the page's scripts (Mechanism 7 in `CLAUDE.md`).
+Item 4 changes the code Citry writes around component scripts, and
+item 5 changes what the browser code does when a script fails to load,
+so both touch the page's scripts (Mechanism 7 in `CLAUDE.md`).
 
 - **Who supplies the value.** The component author writes the script.
   The error text comes from the browser running it.
@@ -422,6 +486,19 @@ touches the page's scripts (Mechanism 7 in `CLAUDE.md`).
   failure; it gains nothing it could not do by catching the error
   itself. The records must be kept per app and keyed by component, so
   a name such as `__proto__` reaches only its own entry.
+- **A skipped third-party script** (item 5). The browser refused to
+  run it (blocked, a content security policy, a failed integrity check
+  or the network), so continuing runs no code that was not already
+  allowed. It does remove whatever protection the skipped script set
+  up, and a network attacker who can block or alter a cross-origin file
+  can now degrade the page instead of stopping it. The console message
+  carries the URL as text. The origin test resolves the script's URL
+  against the page's own address, so an injected `<base>` element
+  cannot turn a same-origin file into a skippable one. Citry never skips
+  a component's `js`, so a refused component script still stops the app.
+- **The script URL** is written by the app author, in a `Dependencies`
+  list, an extension or an `on_dependencies` hook. Do not build it from
+  request data.
 - **The CSP nonce** is unchanged: Citry keeps applying it to every
   script it adds (`client.js:2875-2887`) and keeps refusing a nonce from
   the manifest (`client.js:2829`).
@@ -429,24 +506,28 @@ touches the page's scripts (Mechanism 7 in `CLAUDE.md`).
 ## Error modes
 
 - **A script fails to load** (network error, blocked by CSP or an ad
-  blocker, integrity mismatch). Unchanged: on a mounted page, startup or
-  the server render stops before later scripts run, with `Citry Vue type
-  script failed to load: <url>`. Whether a third-party file such as
-  analytics should be allowed to fail without stopping the app is a
-  separate question; it is listed under the decisions below.
+  blocker, integrity mismatch). On a mounted page, a third-party script
+  (item 5) is logged with its URL and skipped, and startup goes on. A
+  component's `js`, a script declared to register options, an `owned`
+  script, or a script on the page's own origin stops startup
+  or the server render before later scripts run, with `Citry Vue type
+  script failed to load: <url>`, as today.
 - **A script never finishes loading.** Unchanged: the app waits. A
   timeout is out of scope here.
 - **A component script never calls `$component({...})`.** Unchanged: it
   stops startup.
 - **A component script throws while it runs, or fails to parse.**
-  Proposed: startup (or the server render) stops with an error naming
-  the component, on both page kinds. On a standalone page, later tags
-  have already run by then.
+  Startup (or the server render) stops with an error naming the
+  component, on both page kinds. On a standalone page, later tags have
+  already run by then.
 - **A `Dependencies`, extension or third-party script throws.**
   Unchanged: the browser reports it, and the next script runs.
-- **A synchronous `onServerRender` throws.** Proposed: no further
-  callbacks of that pass run, and the app stops, on first mount and after
-  a server render alike.
+- **A callback for an instance with no recorded mount index** (its
+  `mounted` hook never ran). Citry cannot place it, so it stops the app
+  with an error that names the component, as for a throwing callback.
+- **A synchronous `onServerRender` throws.** No further callbacks of
+  that pass run, and the app stops, on first mount and after a server
+  render alike.
 - **An async `onServerRender` rejects.** Unchanged: logged, the page
   keeps going.
 - **A fragment's host is removed while its scripts load.** Unchanged: a
@@ -466,8 +547,22 @@ guide.
   start, and the error names the component. Fix the script, or catch the
   error inside it when the failure is expected (for example, a missing
   optional browser API).
+- **A blocked third-party script no longer stops a mounted page.** A
+  `Dependencies` file or extension script from another origin that an ad
+  blocker or an outage stops now logs a warning, and the app starts. A
+  component script that needs the file while it loads fails with an
+  error that names the component (item 4); one that needs it later
+  fails when it runs. Citry cannot tell your own CDN from a third party,
+  so this holds for any file from another origin. If you want a missing
+  file to stop the page right away, serve it from your own origin.
+- **Browser plugin scripts run before component scripts on standalone
+  pages too,** as they already do on mounted pages. A plugin that read a
+  global that a component script sets must read it later, for example
+  inside a callback.
+- **A synchronous `onServerRender` that throws stops the remaining
+  first-mount callbacks,** as it already does after a server render.
 - **Callbacks after a server render run in a new order:** children before
-  parents, siblings in order, the same as on the first mount. Code that
+  parents, siblings in the order they first mounted. Code that
   relied on one component's callback running before another's should
   share the value through `provide` / `inject`, or read it inside the
   callback that needs it.
@@ -484,30 +579,43 @@ guide.
   hint. If unordered execution saves more than about 10 ms, or more than
   10% of the time from first byte to `citry:ready`, Option 2 is worth
   building soon. If it saves more than half of that time, reconsider
-  Option 3 before 1.0. The thresholds are a starting proposal for the
-  maintainer to set.
-- **The callback order.** If finding sibling order needs Vue internals
-  that change between Vue minor releases, or walking the tree on every
-  server render measurably slows large updates, keep today's order and
-  document it instead.
+  Option 3 before 1.0.0. The maintainer accepted these thresholds.
+- **The callback order.** If sorting the callbacks on every server render
+  measurably slows large updates, or a browser test with Teleport,
+  Suspense, KeepAlive or reordered keyed rows shows that the recorded
+  indexes and the `$parent` links give an order different from the one
+  item 3 states, the recorded-order mechanism of item 3 needs another
+  design.
 - **The throw rule.** If the example apps or the docs site ship a
   component script that throws on some browsers but still works (for
   example, feature detection that throws), stopping startup is too harsh.
   A search of those scripts before the change would show this.
+- **The third-party rule.** If an app serves its own `Dependencies`
+  files from another origin (for example a CDN), a failed load there no
+  longer stops the page and surfaces later as a named component error.
+  If that proves confusing in practice, the origin test of item 5 needs a
+  better way to tell the app's own files from third-party ones.
 - **The first-render order.** If a browser test shows a slot-fill
   component's script running before its receiver's, or a cached render
   changing the order, item 1's wording is wrong and must change before
   it ships.
 
-## Decisions for the maintainer
+## Decisions
 
-1. Option 1 now, Option 2 possibly later: yes or no.
-2. One `onServerRender` order and failure rule for first mount and
-   server render (item 3): yes, or keep today's order and document it.
-3. A throwing component script stops startup (item 4): yes, or
-   development mode only, or no.
+The maintainer decided these. The part of the design each one shaped is
+in brackets.
+
+1. Keep ordered execution (Option 1). Measure before considering an
+   unordered opt-in (Option 2) in a 1.x release. [Options, items 1 and 7]
+2. Use one callback order, children before their parent as on first
+   mount, with one failure rule. Citry records the mount order itself
+   instead of reading Vue's internals. [Item 3]
+3. A component script that throws or fails to parse stops startup.
+   [Item 4]
 4. Run browser plugin scripts before component scripts on standalone
-   pages too (item 1): yes or no.
-5. Separate follow-up: should a failed third-party or extension script
-   (for example, blocked analytics) stop the app, as it does today?
-6. The measurement thresholds in "What would show this wrong".
+   pages too. [Item 1]
+5. A blocked third-party script (for example analytics stopped by an ad
+   blocker) does not stop the app. [Item 5]
+6. Accept the measurement thresholds in "What would show this wrong":
+   about 10 ms or 10% of the time to `citry:ready` for building Option 2,
+   and half of the time to `citry:ready` for reconsidering Option 3.
