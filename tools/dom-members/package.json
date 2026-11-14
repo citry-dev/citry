@@ -19,7 +19,7 @@
     "@webref/idl": "3.86.0",
     "bcd-2023": "npm:@mdn/browser-compat-data@5.3.28",
     "bcd-2025": "npm:@mdn/browser-compat-data@7.1.18",
-    "playwright": "1.64.1",
+    "playwright": "1.65.0",
     "webidl2": "24.5.0"
   }
 }

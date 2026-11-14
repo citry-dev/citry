@@ -129,7 +129,7 @@ export const PRESENCE_ONLY_BOOLEANS = new Set([
  * Unknown everywhere, so the server leaves an element that uses one to the
  * browser, and the browser test does not check them.
  *
- * - `cue` and `cuebackground`: the WebKit build Playwright 1.64.1 installs
+ * - `cue` and `cuebackground`: the WebKit build Playwright 1.65.0 installs
  *   (WebKit 27.2) has them as boolean properties on every element. Their
  *   names suggest WebKit's work on WebVTT cues; whether a shipping Safari
  *   has them is not recorded anywhere the generator reads.

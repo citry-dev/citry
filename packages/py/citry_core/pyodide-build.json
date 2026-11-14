@@ -6,7 +6,7 @@
   "pyodide_build": "0.37.0",
   "emscripten": "5.0.3",
   "rust": "1.97.0",
-  "maturin": "1.15.0",
+  "maturin": "1.16.0",
   "wheel": "0.46.2",
   "uv": "0.13.5",
   "node": "24",

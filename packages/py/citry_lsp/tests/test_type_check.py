@@ -1171,7 +1171,7 @@ def test_check_project_python_types_reports_findings_without_template_data(tmp_p
     found = check_project_python_types(project, tmp_path)
 
     assert [(item.path.name, item.diagnostic.code, item.diagnostic.message) for item in found] == [
-        ("app.py", "citry.python.unresolved-attribute", "Object of type `Owner` has no attribute `nmae`"),
+        ("app.py", "citry.python.missing-attribute", "Object of type `Owner` has no attribute `nmae`"),
     ]
 
 
@@ -1226,7 +1226,7 @@ def test_check_project_python_types_reports_findings_from_a_base_in_the_virtual_
     found = check_project_python_types(project, tmp_path)
 
     assert [(item.path.name, item.diagnostic.code, item.diagnostic.message) for item in found] == [
-        ("greeting.html", "citry.python.unresolved-attribute", "Object of type `Owner` has no attribute `nmae`"),
+        ("greeting.html", "citry.python.missing-attribute", "Object of type `Owner` has no attribute `nmae`"),
     ]
 
 

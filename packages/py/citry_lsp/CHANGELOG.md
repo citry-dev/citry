@@ -6,6 +6,14 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
+- The editor and `citry check --types` now report a misspelled attribute,
+  such as `card.titel`, as `citry.python.missing-attribute`, where they
+  reported `citry.python.unresolved-attribute`. An attribute that only
+  some members of a union lack, such as `.lower()` on a `str | None`
+  value, is now `citry.python.missing-union-attribute`. citry-lsp now
+  pins ty 0.0.101, the Python type checker it runs, which split the old
+  rule in two. The part of a `citry.python.` code after the dot is ty's
+  rule name. Update a script that matches the old code.
 - Upgrade citry-lsp together with citry: this release reads only the
   editor data that the matching citry release writes. With a citry whose
   data it cannot read, the editor checks template syntax only, for every

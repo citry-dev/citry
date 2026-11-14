@@ -59,6 +59,14 @@ version. A `ty` update must change these together:
 `pyproject.toml` pins, so its `ty` pull requests need the other updates by
 hand.
 
+The part of a `citry.python.` code after the dot is ty's own rule name, so a
+ty release that renames a rule changes the code users see. After raising the
+pin, run the whole `citry_lsp` test suite and search the tests and the docs
+for each rule name the ty release notes rename or split (for example
+`git grep -n -E 'unresolved-|citry\.python\.'`), then record the rename in
+`CHANGELOG.md`. Result files that record an earlier benchmark run keep the
+names they recorded.
+
 ## Raising the required Citry version
 
 The editor refuses to analyze a project whose installed Citry is older than
