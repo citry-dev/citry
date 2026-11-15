@@ -6,13 +6,16 @@ the candidate in another, then runs this file once in each. It imports only
 what an application imports from citry, because the same file has to run on
 both releases, just as one application's code runs on both sides of a deploy.
 
-Two commands:
+Three commands:
 
 - `render`: renders pages and a cached component into the shared store, and
   writes the HTML to a JSON file.
 - `serve` (the other release): answers the requests in a JSON file through
   Citry's WSGI app, renders the cached component again, and writes what it
   got.
+- `answer` (the same release as `serve`): only answers requests. `check.py`
+  uses it for the second event call, which needs the State the first answer
+  returned.
 
 `check.py` runs the two commands in both directions: old release renders and
 new release serves, then the other way round. Both processes use one
@@ -49,6 +52,17 @@ CACHED_CARD_RENDERS: list[str] = []
 CACHE_SETTINGS = {"namespace": "rolling-deploy", "generation": "same-on-both-releases", "ttl": 600}
 
 
+def count_label(count: int) -> str:
+    """
+    The text a counter shows, which `check.py` looks for in an answer's render.
+
+    The whole text is one value, so it reaches the render as one string
+    whatever form the release uses (HTML, or the data of a Vue render), and
+    no part of it is left in the template.
+    """
+    return f"rolling-count-{count}"
+
+
 def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citry, dict[str, Any]]:
     """Build the application: one engine and the components the check uses."""
     cache_settings = dict(CACHE_SETTINGS)
@@ -81,7 +95,7 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
             count: int = 0
 
         def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002 - citry passes both
-            return {"count": kwargs.count}
+            return {"label": count_label(kwargs.count)}
 
         class Events:
             def bump(self, state: SignedState) -> Any:
@@ -89,7 +103,7 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
                 return state.render()
 
         template = """
-            <button id="signed" @c-click="bump">{{ count }}</button>
+            <button id="signed" @c-click="bump">{{ label }}</button>
         """
 
     class StoredState:
@@ -109,7 +123,7 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
             count: int = 0
 
         def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002 - citry passes both
-            return {"count": kwargs.count}
+            return {"label": count_label(kwargs.count)}
 
         class Events:
             def bump(self, state: StoredState) -> Any:
@@ -117,7 +131,7 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
                 return state.render()
 
         template = """
-            <button id="stored" @c-click="bump">{{ count }}</button>
+            <button id="stored" @c-click="bump">{{ label }}</button>
         """
 
     class CachedCard(Component):
@@ -200,12 +214,17 @@ def _call_wsgi(app: Any, request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _answer_all(engine: Citry, requests_file: Path) -> dict[str, dict[str, Any]]:
+    """Answer every request in the file, in order, through one WSGI app."""
+    app = wsgi_app(engine)
+    requests = json.loads(requests_file.read_text(encoding="utf-8"))
+    return {name: _call_wsgi(app, request) for name, request in requests.items()}
+
+
 def serve(store: Path, requests_file: Path, out: Path) -> None:
     """Answer the other release's page requests, and render the cached component again."""
     engine, components = build_app(store)
-    app = wsgi_app(engine)
-    requests = json.loads(requests_file.read_text(encoding="utf-8"))
-    answers = {name: _call_wsgi(app, request) for name, request in requests.items()}
+    answers = _answer_all(engine, requests_file)
     # The cached component, once through the shared entry the old release may
     # have written and once from an engine that cannot see that entry.
     shared = components["CachedCard"](name="Travel mug").render().serialize()
@@ -218,6 +237,12 @@ def serve(store: Path, requests_file: Path, out: Path) -> None:
     )
 
 
+def answer(store: Path, requests_file: Path, out: Path) -> None:
+    """Answer requests through Citry's WSGI app, without rendering anything else."""
+    engine, _components = build_app(store)
+    out.write_text(json.dumps({"answers": _answer_all(engine, requests_file)}), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 2)[1])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -228,11 +253,17 @@ def main() -> None:
     serve_parser.add_argument("--store", type=Path, required=True)
     serve_parser.add_argument("--requests", type=Path, required=True)
     serve_parser.add_argument("--out", type=Path, required=True)
+    answer_parser = commands.add_parser("answer")
+    answer_parser.add_argument("--store", type=Path, required=True)
+    answer_parser.add_argument("--requests", type=Path, required=True)
+    answer_parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "render":
         render(args.store, args.out)
-    else:
+    elif args.command == "serve":
         serve(args.store, args.requests, args.out)
+    else:
+        answer(args.store, args.requests, args.out)
 
 
 if __name__ == "__main__":

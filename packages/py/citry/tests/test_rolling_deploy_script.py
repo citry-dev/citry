@@ -4,7 +4,8 @@ Tests for how the rolling-deploy release check judges what it sees.
 The check itself installs two citry releases and runs only in release
 qualification. These tests feed its decisions synthetic pages, answers and
 PyPI data, so the rules (which deploys are promised, which answers count as
-the documented reload) are proved without a network or a second release.
+the documented out-of-date answer, and what a success must show) are proved
+without a network or a second release.
 """
 
 from __future__ import annotations
@@ -38,15 +39,39 @@ def _answer(result: dict[str, Any], *, status: int = 200, request_id: str = "req
     return {"status": status, "body": json.dumps(body)}
 
 
-def _render(contract: str) -> dict[str, Any]:
-    prepared = {"definitions": [{"id": "d", "helperContract": contract}]}
+def _render(contract: str, *, shown: str = "rolling-count-1", token: str = "cev1.next") -> dict[str, Any]:  # noqa: S107 - an opaque test value
+    # The shape of a Vue render: the shown text sits in the render data under
+    # a name the release's compiler chose, beside the protocol's Events record.
+    occurrence = {
+        "id": "occurrence",
+        "preparedData": {"citryText0": shown},
+        "eventContext": {"serverRenderId": "r2", "stateToken": token, "componentClassId": "Counter_abc"},
+    }
+    prepared = {
+        "appId": "app",
+        "revision": 1,
+        "definitions": [{"id": "d", "helperContract": contract}],
+        "occurrences": [occurrence],
+    }
     return {"action": "render", "renderer": "vue-prepared/1", "prepared": prepared}
 
 
-def _judge(answer: dict[str, Any], *, page_reports_out_of_date: bool = True) -> check.Outcome:
+def _judge(
+    answer: dict[str, Any], *, page_reports_out_of_date: bool = True, expected_count: int = 1, send_sequence: int = 1
+) -> check.Outcome:
     report = check.Report(previous="1.0.0", candidate="1.1.0", promised=True)
-    check.judge_event_answer(report, "call", _page(), "req", answer, page_reports_out_of_date=page_reports_out_of_date)
+    status = check.judge_event_answer(
+        report,
+        "call",
+        _page(),
+        "req",
+        answer,
+        page_reports_out_of_date=page_reports_out_of_date,
+        expected_count=expected_count,
+        send_sequence=send_sequence,
+    )
     [outcome] = report.outcomes
+    assert status == outcome.status
     return outcome
 
 
@@ -89,7 +114,7 @@ def test_a_success_whose_render_the_old_page_can_apply_is_ok() -> None:
     assert outcome.status == "ok"
 
 
-def test_stale_state_is_the_documented_reload_whatever_the_http_status() -> None:
+def test_stale_state_is_the_documented_out_of_date_answer_whatever_the_http_status() -> None:
     error = {"status": 409, "code": "stale_state", "message": "stale"}
     # The call route answers 200 with a per-call error; a single-call route answers 409.
     for status in (200, 409):
@@ -107,15 +132,79 @@ def test_any_other_error_fails() -> None:
     "answer",
     [
         {"status": 500, "body": "Internal Server Error"},
-        _answer({"ok": True, "sendSequence": 1, "actions": []}, request_id="another"),
-        _answer({"ok": True, "sendSequence": 2, "actions": []}),
+        _answer({"ok": True, "sendSequence": 1, "actions": [_render(CONTRACT)]}, request_id="another"),
+        _answer({"ok": True, "sendSequence": 2, "actions": [_render(CONTRACT)]}),
     ],
 )
 def test_an_answer_that_is_not_a_result_for_this_call_fails(answer: dict[str, Any]) -> None:
     assert _judge(answer).status == "fail"
 
 
-def test_a_render_with_other_helpers_counts_as_a_reload_only_where_the_old_page_offers_one() -> None:
+@pytest.mark.parametrize(
+    ("shown", "detail"),
+    [
+        # The handler did not run, or ran on State that was not the page's.
+        ("rolling-count-0", "shows 0, not 1"),
+        ("rolling-count-2", "shows 2, not 1"),
+        ("nothing to see", "shows no count, not 1"),
+    ],
+)
+def test_a_success_whose_render_shows_the_wrong_count_fails(shown: str, detail: str) -> None:
+    outcome = _judge(_answer({"ok": True, "sendSequence": 1, "actions": [_render(CONTRACT, shown=shown)]}))
+    assert outcome.status == "fail"
+    assert detail in outcome.detail
+
+
+def test_a_render_that_shows_two_counts_fails() -> None:
+    actions = [_render(CONTRACT), _render(CONTRACT, shown="rolling-count-3")]
+    assert _judge(_answer({"ok": True, "sendSequence": 1, "actions": actions})).status == "fail"
+
+
+def test_the_count_is_found_in_an_html_render_too() -> None:
+    html_render = {"action": "render", "renderer": "html-fragment/1", "html": "<button>rolling-count-1</button>"}
+    outcome = _judge(_answer({"ok": True, "sendSequence": 1, "actions": [html_render]}))
+    assert outcome.status == "ok"
+
+
+def test_a_second_call_must_show_the_count_after_both_calls() -> None:
+    # A store that kept the old count would make the second call show 1 again.
+    stale_store = _answer({"ok": True, "sendSequence": 2, "actions": [_render(CONTRACT)]})
+    assert _judge(stale_store, expected_count=2, send_sequence=2).status == "fail"
+    updated = _answer({"ok": True, "sendSequence": 2, "actions": [_render(CONTRACT, shown="rolling-count-2")]})
+    assert _judge(updated, expected_count=2, send_sequence=2).status == "ok"
+
+
+def test_the_next_click_carries_the_state_and_render_id_the_answer_returned() -> None:
+    next_page = check.follow_up_page(_page(), [_render(CONTRACT, token="ces1.new-pointer")])  # noqa: S106
+    assert next_page is not None
+    assert (next_page.state_token, next_page.render_id, next_page.revision) == ("ces1.new-pointer", "r2", 1)
+    # An answer with no Events record for this component class gives the page nothing to send.
+    other_class = _render(CONTRACT)
+    other_class["prepared"]["occurrences"][0]["eventContext"]["componentClassId"] = "Other_def"
+    assert check.follow_up_page(_page(), [other_class]) is None
+
+
+def test_a_second_call_is_skipped_after_stale_state_or_a_failure() -> None:
+    report = check.Report(previous="1.0.0", candidate="1.1.0", promised=True)
+    pages = {"signed": _page(), "stored": _page(), "other": _page()}
+    answers = {
+        "event:signed": _answer({"ok": True, "sendSequence": 1, "actions": [_render(CONTRACT)]}),
+        "event:stored": {"status": 409, "body": "{}"},
+        "event:other": {"status": 500, "body": "boom"},
+    }
+    next_pages, requests = check.plan_second_calls(
+        report, "dir", pages, answers, {"signed": "ok", "stored": "stale", "other": "fail"}
+    )
+    assert list(next_pages) == ["signed"]
+    call = json.loads(requests["event:signed"]["body"])["calls"][0]
+    assert (call["stateToken"], call["callerRenderId"], call["sendSequence"]) == ("cev1.next", "r2", 2)
+    assert requests["event:signed"]["headers"]["X-Citry-Vue-Revision"] == "1"
+    statuses = {outcome.name: outcome.status for outcome in report.outcomes}
+    assert statuses == {"dir: second event call, stored State": "skip", "dir: second event call, other State": "skip"}
+    assert not report.failed
+
+
+def test_a_render_with_other_helpers_is_stale_only_where_the_old_page_reports_it() -> None:
     answer = _answer({"ok": True, "sendSequence": 1, "actions": [_render(OTHER_CONTRACT)]})
     assert _judge(answer, page_reports_out_of_date=True).status == "stale"
     assert _judge(answer, page_reports_out_of_date=False).status == "fail"
