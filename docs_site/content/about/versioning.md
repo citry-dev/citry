@@ -35,7 +35,8 @@ What each kind of release does:
       [Deprecations](#deprecations));
     - change an [experimental feature](#experimental);
     - add a [check rule](#new-check-rules);
-    - drop an end-of-life Python version or move to a newer Vue minor
+    - drop an end-of-life Python version, raise the oldest supported
+      Django, FastAPI or Flask version, or move to a newer Vue minor
       version (see [Python and browsers](#platforms));
     - change the State token format, so an open page reloads once (see
       [Rolling deploys](#rolling-deploys)).
@@ -81,6 +82,9 @@ versions, operating systems and wheels. How that list changes:
   release notes say so).
 - **PyPy and free-threaded CPython:** best effort. Tested weekly, not on
   every change. The Compatibility page lists the known differences.
+- **Django, FastAPI and Flask:** a minor release may raise the oldest
+  supported version, for example after Django ends support for it. A
+  patch release never does, and the release notes name every change.
 - **Browsers:** the latest two versions of Chrome, Edge, Firefox and
   Safari, tested in Chromium, Firefox and WebKit.
 - **Vue:** Citry ships one exact Vue version. A minor release may move to
