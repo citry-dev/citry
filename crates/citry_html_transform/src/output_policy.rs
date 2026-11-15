@@ -13,10 +13,10 @@
 //!
 //! The rules copy the Python checks they replace exactly, including how
 //! they decode character references in attribute values (the browser's
-//! attribute-value rule) and how
-//! they compare letters in `javascript:` (Python's case-insensitive
-//! regular expression). `packages/py/citry/tests/_output_policy_reference.py`
-//! keeps the Python version, and a test compares the two on generated pages.
+//! attribute-value rule). URL schemes are read by
+//! [`crate::url_scheme`], the one scheme reader every server-side check
+//! shares. `packages/py/citry/tests/_output_policy_reference.py` keeps the
+//! Python version, and a test compares the two on generated pages.
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
@@ -31,6 +31,7 @@ use crate::output_scanner::{
     browser_rules_for, scan_output_html_under, scan_output_html_with, BrowserRules, EndTagRule,
     Mode, OutputAttribute, OutputTag, Placement, ScanResult, TagContext,
 };
+use crate::url_scheme::url_scheme_is;
 
 /// Which of the two checks of one page runs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1089,29 +1090,13 @@ pub fn is_activation_attribute(name: &str) -> bool {
 }
 
 /// Whether a URL value, with its character references already decoded,
-/// starts with `javascript:`.
+/// has the `javascript:` scheme as the browser reads it.
 ///
-/// Leading U+0000 to U+0020 are skipped and a tab, line feed, or carriage
-/// return may sit between any two letters, as browsers allow. Letters
-/// compare the way Python's case-insensitive regular expression compares
-/// them, so `ſ` (U+017F) counts as `s`, and `ı` (U+0131) and `İ` (U+0130)
-/// count as `i`.
+/// [`url_scheme_is`] does the reading, so leading U+0000 to U+0020 are
+/// skipped, a tab, line feed, or carriage return may sit anywhere in the
+/// scheme, and only ASCII letters match in any case, as in the browser.
 pub fn is_javascript_url(value: &str) -> bool {
-    let mut chars = value
-        .trim_start_matches(|c: char| c <= '\u{20}')
-        .chars()
-        .peekable();
-    for (index, letter) in "javascript".chars().enumerate() {
-        if index > 0 {
-            while chars.next_if(|c| matches!(c, '\t' | '\n' | '\r')).is_some() {}
-        }
-        match chars.next() {
-            Some(c) if letter_matches(letter, c) => {}
-            _ => return false,
-        }
-    }
-    while chars.next_if(|c| matches!(c, '\t' | '\n' | '\r')).is_some() {}
-    chars.next() == Some(':')
+    url_scheme_is(value, "javascript")
 }
 
 /// What a strict Content Security Policy would block in one attribute.
@@ -1163,15 +1148,6 @@ pub fn csp_attribute_problem(
         return Some(CspAttributeProblem::JavascriptUrl);
     }
     None
-}
-
-fn letter_matches(letter: char, c: char) -> bool {
-    c.to_ascii_lowercase() == letter && c.is_ascii()
-        || match letter {
-            's' => c == '\u{17f}',
-            'i' => matches!(c, '\u{130}' | '\u{131}'),
-            _ => false,
-        }
 }
 
 /// The MIME types that make a `<script>` a classic script the browser runs.
@@ -1420,9 +1396,7 @@ fn refresh_data_url(content: &str) -> Option<String> {
         // The URL parser drops leading control characters and spaces, and
         // Chromium also drops the Unicode spaces it trims elsewhere.
         let url = candidate.trim_start_matches(may_be_skipped_by_browser);
-        url.get(..5)
-            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:"))
-            .then(|| url.to_owned())
+        url_scheme_is(url, "data").then(|| url.to_owned())
     })
 }
 
@@ -1719,9 +1693,15 @@ fn decode_data_url_document(value: &str) -> Option<DataUrlDocument> {
     } else {
         Cow::Borrowed(value)
     };
+    // The value has its leading controls and spaces trimmed and no tab or
+    // line break left, so this holds exactly when it starts with `data:` in
+    // any ASCII case, which also makes the slice below safe.
+    if !url_scheme_is(&value, "data") {
+        return None;
+    }
     let (header, payload) = value.split_once(',')?;
     let folded = ascii_lower(header);
-    let header = folded.strip_prefix("data:")?;
+    let header = &folded["data:".len()..];
     let media_type = header
         .split(';')
         .next()
@@ -2132,14 +2112,17 @@ mod tests {
     }
 
     #[test]
-    fn javascript_urls_match_python_case_insensitive_letters() {
+    fn javascript_urls_read_letters_as_the_browser_does() {
         let cases = [
             ("javascript:x", true),
             (" \u{0}JaVaScRiPt:x", true),
             ("java\u{9}script:x", true),
-            ("java\u{17f}cript:x", true),
-            ("javascr\u{131}pt:x", true),
-            ("javascr\u{130}pt:x", true),
+            // Unicode case folding turns these into ASCII letters, but the
+            // browser's URL parser compares ASCII only, so it reads each as
+            // a relative URL that runs nothing.
+            ("java\u{17f}cript:x", false),
+            ("javascr\u{131}pt:x", false),
+            ("javascr\u{130}pt:x", false),
             ("javascript\u{9}:x", true),
             ("\u{a0}javascript:x", false),
             ("javascript", false),
@@ -3715,5 +3698,58 @@ mod tests {
                 .replace('<', "&lt;")
                 .replace('>', "&gt;")
         )));
+    }
+
+    fn describe(document: Option<DataUrlDocument>) -> String {
+        match document {
+            None => "none".to_owned(),
+            Some(DataUrlDocument::Unread) => "unread".to_owned(),
+            Some(DataUrlDocument::Html(body)) => format!("html {body:?}"),
+        }
+    }
+
+    #[test]
+    fn the_data_url_readers_read_the_scheme_through_the_shared_reader() {
+        // Both readers keep their own trimming and slicing and ask only
+        // "is it `data`" of `url_scheme_is`; these answers pin their own
+        // trimming and slicing, so a change to either shows up here.
+        let documents = [
+            ("DATA:TEXT/HTML,x", "html \"x\""),
+            (" data:text/html,x", "html \"x\""),
+            ("da\tta:text/html,x", "html \"x\""),
+            // A trailing control character or space stays in the payload.
+            ("data:text/html,<script>alert(1)</script>\u{e}", "unread"),
+            ("data:text/html;base64,PHNjcmlwdD4= ", "unread"),
+            ("data,x", "none"),
+            ("datax:text/html,x", "none"),
+            ("data:", "none"),
+            ("data :text/html,x", "none"),
+            ("\u{a0}data:text/html,x", "none"),
+            ("\u{7f}data:text/html,x", "none"),
+        ];
+        for (value, expected) in documents {
+            assert_eq!(
+                describe(decode_data_url_document(value)),
+                expected,
+                "{value:?}"
+            );
+        }
+        let refreshes = [
+            ("0;url=DATA:text/html,x", Some("DATA:text/html,x")),
+            ("0;url= da\tta:text/html,x", Some("data:text/html,x")),
+            ("0;url=datax:x", None),
+            ("0;url=data", None),
+            // The refresh syntax skips more than the URL parser does, so the
+            // check reads past characters a browser may skip.
+            ("0;url='\u{a0}data:x'", Some("data:x'")),
+            ("0;url=\u{17f}data:x", Some("data:x")),
+        ];
+        for (content, expected) in refreshes {
+            assert_eq!(
+                refresh_data_url(content).as_deref(),
+                expected,
+                "{content:?}"
+            );
+        }
     }
 }

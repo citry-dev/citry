@@ -229,6 +229,47 @@ test("a redirect is followed or refused exactly as the released scheme rule deci
   assert.ok(unresolvable >= 1, `unresolvable ${unresolvable}`);
 });
 
+// The table of URLs every server-side scheme reader in Citry is tested against. The browser keeps
+// its own copy of the rule, so it is held to the same rows. A lone surrogate cannot cross into the
+// browser as the same string, so the rows marked `python_only` are skipped.
+const table = JSON.parse(
+  readFileSync(
+    new URL("../../../../crates/citry_html_transform/tests/fixtures/url_schemes.json", import.meta.url),
+    "utf8",
+  ),
+);
+
+test("a redirect is followed or refused as the shared URL table reads its scheme", async () => {
+  // The protocol validator refuses an empty URL before the redirect rule runs.
+  const rows = table.rows.filter((row) => !row.python_only && row.url !== "");
+  assert.ok(rows.length > 50, `only ${rows.length} rows`);
+  for (const row of rows) {
+    const label = JSON.stringify(row.url);
+    await redirect(row.url);
+    if (row.scheme !== null && row.scheme !== "http" && row.scheme !== "https") {
+      assert.deepEqual(assigned, [], label);
+      assert.equal(errors.length, 1, label);
+      assert.ok(errors[0].includes(`the ${JSON.stringify(row.scheme)} scheme`), `${label}: ${errors[0]}`);
+      continue;
+    }
+    // A row with no scheme, or with an http or https scheme, passes the scheme rule. The page then
+    // goes to the URL resolved against its own address, and refuses only a URL that cannot be
+    // resolved there.
+    let landing = null;
+    try {
+      landing = new URL(row.url, context.location.href).href;
+    } catch {}
+    if (landing === null) {
+      assert.deepEqual(assigned, [], label);
+      assert.equal(errors.length, 1, label);
+      assert.ok(!errors[0].includes("scheme"), `${label}: ${errors[0]}`);
+    } else {
+      assert.deepEqual(assigned, [landing], label);
+      assert.deepEqual(errors, [], label);
+    }
+  }
+});
+
 test("a redirect URL with a long run of spaces inside is checked quickly", async () => {
   // The released rule took about 3 s on this URL; walking in from the ends takes well under 1 ms.
   for (const url of [`/a${" ".repeat(100_000)}b`, `javascript:${" ".repeat(100_000)}x`]) {

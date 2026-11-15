@@ -17,3 +17,7 @@ html5gum = { workspace = true }
 html5ever = { workspace = true }
 markup5ever_rcdom = "=0.5.0-unofficial"
 stacker = { workspace = true }
+
+[dev-dependencies]
+# Reads the shared URL table in tests/fixtures/url_schemes.json.
+serde_json = { workspace = true }

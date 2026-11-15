@@ -1,16 +1,14 @@
 """
-Five regexes that read input finish in one pass over long input.
+Four regexes that read input finish in one pass over long input.
 
 They read a route's HTTP methods, an event handler's ``methods`` option,
-the time in an Events modifier such as ``.debounce.300ms``, whether an
-expression a v-for error message suggests is a plain dotted name, and the
-scheme of a ``Redirect`` URL. The app's code or the template author
-supplies the first four; a ``Redirect`` URL can hold text the app took
-from a request. No two parts of a pattern can claim the same character,
-so a long value that almost matches fails after one scan. These tests
-keep it that way: a change that lets a pattern try many ways to split its
-input fails its test, or makes the test hang when the pattern becomes
-exponential.
+the time in an Events modifier such as ``.debounce.300ms``, and whether an
+expression a v-for error message suggests is a plain dotted name. The
+app's code or the template author supplies each of them. No two parts of
+a pattern can claim the same character, so a long value that almost
+matches fails after one scan. These tests keep it that way: a change that
+lets a pattern try many ways to split its input fails its test, or makes
+the test hang when the pattern becomes exponential.
 """
 
 from __future__ import annotations
@@ -23,7 +21,6 @@ import pytest
 from citry._vue_loop_errors import _PLAIN_PATH
 from citry.ext.events.bindings import _TIME_RE
 from citry.ext.events.handlers import _HTTP_METHOD_RE
-from citry.ext.events.routes import _URL_SCHEME
 from citry.util.routing import _ROUTE_METHOD_RE
 
 if TYPE_CHECKING:
@@ -50,9 +47,8 @@ _BOUND_SECONDS = 0.5
         # across the dots or inside a single name.
         (_PLAIN_PATH, "a." * _LENGTH + "!"),
         (_PLAIN_PATH, "a" * _LENGTH + "!"),
-        (_URL_SCHEME, "a" * _LENGTH + "!"),
     ],
-    ids=["route-method", "http-method", "time", "loop-path-dots", "loop-path-name", "redirect-scheme"],
+    ids=["route-method", "http-method", "time", "loop-path-dots", "loop-path-name"],
 )
 def test_validation_patterns_reject_long_input_quickly(pattern: re.Pattern[str], text: str) -> None:
     start = time.perf_counter()

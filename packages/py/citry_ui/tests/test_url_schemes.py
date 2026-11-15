@@ -7,14 +7,24 @@ import re
 import shutil
 import subprocess
 from html import unescape
+from pathlib import Path
+from typing import Any
 
 import pytest
 from markupsafe import Markup
 
 import citry_ui
 from citry import Citry, Component
+from citry._urls import url_scheme
 from citry_ui import CAvatar, CBreadcrumbItem, CImage
-from citry_ui.components._url import _read_scheme, attribute_text, check_link_url, is_image_url_allowed
+from citry_ui.components._url import (
+    _ASCII_WHITESPACE,
+    IMAGE_SCHEMES,
+    LINK_SCHEMES,
+    attribute_text,
+    check_link_url,
+    is_image_url_allowed,
+)
 from citry_ui.components.cimage.cimage import _srcset_urls
 
 # Each case spells a refused scheme the way a browser would still read it:
@@ -170,7 +180,7 @@ _URL_ATTRIBUTE = re.compile(r'\s(?:href|action|formaction|src|srcset)="([^"]*)"'
 
 def _written_schemes(page: str) -> set[str | None]:
     # Read each URL attribute the way the browser does: decode it, then take its scheme.
-    return {_read_scheme(unescape(value))[0] for value in _URL_ATTRIBUTE.findall(page)}
+    return {url_scheme(unescape(value)) for value in _URL_ATTRIBUTE.findall(page)}
 
 
 @pytest.mark.parametrize("url", _ENCODED_LINKS)
@@ -269,22 +279,39 @@ def test_cimage_srcset_reads_candidates_like_the_browser(srcset: str) -> None:
         _render('<c-CImage src="/a.png" c-srcset="url" alt="Ada" c-width="1" c-height="1" />', {"url": srcset})
 
 
-@pytest.mark.parametrize(
-    ("url", "scheme"),
-    [
-        ("java\tscript:x", "javascript"),
-        ("\x00\x1f JavaScript:x", "javascript"),
-        ("ja+va.s-1:x", "ja+va.s-1"),
-        ("1javascript:x", None),
-        ("/javascript:x", None),
-        ("orders/a:b", None),
-        ("java script:x", None),
-        (":x", None),
-        ("", None),
-    ],
-)
-def test_scheme_reader_matches_the_whatwg_url_parser(url: str, scheme: str | None) -> None:
-    assert _read_scheme(url)[0] == scheme
+# The table of URLs every server-side scheme reader in Citry is tested
+# against, read by repository path. A missing file fails the test.
+_TABLE = Path(__file__).resolve().parents[4] / "crates/citry_html_transform/tests/fixtures/url_schemes.json"
+_ROWS: list[dict[str, Any]] = json.loads(_TABLE.read_text(encoding="utf-8"))["rows"]
+# A lone surrogate cannot cross into node as the same string.
+_BROWSER_ROWS = [row["url"] for row in _ROWS if not row.get("python_only")]
+
+
+def _image_allowed_by_table(row: dict[str, Any]) -> bool:
+    if row["scheme"] is None:
+        return True
+    if row["scheme"] == "data":
+        return row["rest"].lstrip(_ASCII_WHITESPACE)[:6].lower() == "image/"
+    return row["scheme"] in IMAGE_SCHEMES
+
+
+@pytest.mark.parametrize("row", _ROWS, ids=lambda row: ascii(row["url"]))
+def test_url_checks_follow_the_shared_table(row: dict[str, Any]) -> None:
+    url = row["url"]
+    if row["scheme"] is None or row["scheme"] in LINK_SCHEMES:
+        assert check_link_url("X href", url) == url
+    else:
+        with pytest.raises(ValueError, match=_LINK_ERROR):
+            check_link_url("X href", url)
+    assert is_image_url_allowed(url) == _image_allowed_by_table(row)
+
+
+def test_link_check_reads_markup_as_citry_writes_it() -> None:
+    # The scheme reader decodes nothing, so this depends on the check
+    # decoding the Markup first.
+    with pytest.raises(ValueError, match=_LINK_ERROR):
+        check_link_url("X href", Markup("java&#115;cript:x"))
+    assert check_link_url("X href", "java&#115;cript:x") == "java&#115;cript:x"
 
 
 def test_link_check_returns_the_url_unchanged() -> None:
@@ -317,7 +344,16 @@ def _run_node(script: str) -> object:
 
 @pytest.mark.parametrize("component", [CAvatar, CImage], ids=lambda component: component.__name__)
 def test_browser_image_rule_matches_the_python_rule(component: type) -> None:
-    cases = [*_REFUSED_IMAGES, *_ACCEPTED_IMAGES, "data: image/png,x", "\x00 https://x", "ja+va:x", "#a", "?a"]
+    cases = [
+        *_REFUSED_IMAGES,
+        *_ACCEPTED_IMAGES,
+        "data: image/png,x",
+        "\x00 https://x",
+        "ja+va:x",
+        "#a",
+        "?a",
+        *_BROWSER_ROWS,
+    ]
     script = (
         _browser_function(component.js, "isImageUrlAllowed")
         + f"\nprocess.stdout.write(JSON.stringify({json.dumps(cases)}.map(isImageUrlAllowed)));"

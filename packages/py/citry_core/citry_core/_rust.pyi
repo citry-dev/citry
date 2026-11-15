@@ -344,7 +344,18 @@ class html_transform:
         """
     @staticmethod
     def _is_javascript_url(value: str) -> bool:
-        """Whether a URL starts with `javascript:`, read without entity decoding. Private to `citry`."""
+        """Whether a URL has the `javascript:` scheme as the browser reads it, without decoding. Private to `citry`."""
+    @staticmethod
+    def _read_url_scheme(url: str) -> tuple[str, str] | None:
+        """
+        The lowercase scheme of a URL and the text after its colon, or `None` for a relative URL.
+
+        Reads the URL as the browser's URL parser does: leading and trailing
+        C0 controls and spaces (U+0000 to U+0020) are trimmed, tab, LF and CR are removed
+        anywhere, and only ASCII letters count. Decodes no character
+        references. A lone surrogate reads as U+FFFD replacement characters.
+        Private to `citry`.
+        """
     _JAVASCRIPT_MIME_TYPES: frozenset[str]
     @staticmethod
     def mark_html(

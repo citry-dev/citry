@@ -55,6 +55,7 @@ from citry._protocol.events import (
     build_rejected_call_envelope,
     validate_result_envelope,
 )
+from citry._urls import url_scheme
 from citry.ext.dependencies.routes import SHARED_RUNTIME
 from citry.ext.events.codecs import decode_request
 from citry.ext.events.csrf import build_csrf_check
@@ -649,12 +650,6 @@ def _compat_response(envelope: Mapping[str, Any], request: RouteRequest) -> Rout
 _URL_LEADING_STRIP = "".join(chr(code) for code in range(0x21))
 
 
-# A URL scheme as browsers read it: a letter, then letters, digits, "+",
-# "-", or ".", then ":". A regex rather than urlsplit, which raises on
-# some non-ASCII hosts and would turn the redirect into a 500.
-_URL_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
-
-
 # The (handler path, URL) pairs already warned about, for the life of the
 # process. The cap keeps a client that varies the path from growing it
 # without limit; once it is full, a pair not yet recorded warns on every
@@ -687,7 +682,9 @@ def _resolve_redirect_url(url: str, request: RouteRequest) -> str:
     page at the site root.
     """
     stripped = url.lstrip(_URL_LEADING_STRIP).translate({9: None, 10: None, 13: None})
-    if _URL_SCHEME.match(stripped) or stripped.startswith(("/", "\\")):
+    # The shared reader rather than urlsplit, which raises on some non-ASCII
+    # hosts and would turn the redirect into a 500.
+    if url_scheme(stripped) is not None or stripped.startswith(("/", "\\")):
         return url
 
     referer = request.headers.get("referer") or ""

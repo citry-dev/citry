@@ -41,6 +41,7 @@ from unicodedata import category, normalize
 from urllib.parse import quote
 
 from citry._protocol.events import SWAPS, is_finite_json_number
+from citry._urls import url_scheme
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender
 from citry.util.id import validate_render_id
@@ -310,10 +311,6 @@ class Dispatch(Action):
 # URLs with no scheme. The browser runtime repeats this check (`_vue/client.js`,
 # `redirectScheme`) for actions that reach it by another route.
 REDIRECT_SCHEMES = frozenset({"http", "https"})
-_C0_CONTROL_OR_SPACE = "".join(chr(code) for code in range(0x21))
-_ASCII_TAB_OR_NEWLINE = str.maketrans("", "", "\t\n\r")
-_SCHEME_START_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-_SCHEME_CHARS = _SCHEME_START_CHARS | frozenset("0123456789+-.")
 
 
 def redirect_url_scheme(url: str) -> str | None:
@@ -329,14 +326,9 @@ def redirect_url_scheme(url: str) -> str | None:
     letters, digits, ``+``, ``-``, or ``.`` up to the first ``:``; anything
     else means the URL has no scheme.
     """
-    text = url.strip(_C0_CONTROL_OR_SPACE).translate(_ASCII_TAB_OR_NEWLINE)
-    colon = text.find(":")
-    if colon < 1 or text[0] not in _SCHEME_START_CHARS:
-        return None
-    scheme = text[:colon]
-    if not all(char in _SCHEME_CHARS for char in scheme):
-        return None
-    return scheme.lower()
+    # The output checks and Citry UI read schemes through the same reader,
+    # so a URL a redirect accepts reads the same everywhere on the server.
+    return url_scheme(url)
 
 
 @dataclass(frozen=True)

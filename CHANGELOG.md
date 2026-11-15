@@ -82,6 +82,11 @@
   or newer installed, Events now accepts Pydantic State and event data
   classes on PyPy. Before, it refused every one of them with "Events
   needs Pydantic 2.13.0 or newer".
+- **Lookalike `javascript:` letters are no longer reported:**
+  `security_csp`, `security_javascript` and `citry check` no longer
+  report a link that spells `javascript:` with `ſ`, `ı` or `İ`, such as
+  `href="java&#383;cript:x"`. Browsers read such a link as a relative URL
+  and run nothing.
 
 ### Added
 

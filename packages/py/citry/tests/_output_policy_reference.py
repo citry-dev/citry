@@ -58,7 +58,8 @@ _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrst
 _ENTITY_RE = re.compile(r"&(?:#[xX][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]+);?")
 _JAVASCRIPT_URL_RE = re.compile(
     r"j[\t\n\r]*a[\t\n\r]*v[\t\n\r]*a[\t\n\r]*s[\t\n\r]*c[\t\n\r]*r[\t\n\r]*i[\t\n\r]*p[\t\n\r]*t[\t\n\r]*:",
-    re.IGNORECASE,
+    # ASCII only, as the browser's URL parser compares scheme letters.
+    re.IGNORECASE | re.ASCII,
 )
 _URL_ATTRIBUTES = frozenset({"action", "formaction", "href", "src", "xlink:href"})
 _ANIMATION_VALUE_ATTRIBUTES = frozenset({"to", "from", "by", "values"})

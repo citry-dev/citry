@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import string
+import time
 
 import pytest
 
@@ -72,7 +73,29 @@ def _reference_scheme(url: str) -> str | None:
     return scheme.lower()
 
 
-_URL_CHARS = [*"abcjsvJS:/.+-0", "\t", "\n", "\r", " ", "\x00", "\x1f", "?", "#"]
+# Non-ASCII letters that Unicode case folding turns into ASCII (U+017F,
+# U+0131, U+0130, the Kelvin sign) and characters the parser keeps (U+000B
+# is stripped only at the ends, U+007F and the no-break space U+00A0 are
+# never stripped), so a reader that folds case or strips too much
+# disagrees with the reference.
+_URL_CHARS = [
+    *"abcjsvJS:/.+-0",
+    "\t",
+    "\n",
+    "\r",
+    " ",
+    "\x00",
+    "\x1f",
+    "?",
+    "#",
+    "\u017f",
+    "\u0131",
+    "\u0130",
+    "\u212a",
+    "\u00a0",
+    "\x0b",
+    "\x7f",
+]
 
 
 def test_redirect_scheme_reading_matches_the_reference() -> None:
@@ -81,3 +104,13 @@ def test_redirect_scheme_reading_matches_the_reference() -> None:
     for _ in range(20_000):
         url = "".join(rng.choice(_URL_CHARS) for _ in range(rng.randrange(17)))
         assert actions.redirect_url_scheme(url) == _reference_scheme(url), repr(url)
+
+
+def test_a_long_redirect_url_is_read_quickly() -> None:
+    # A Redirect URL can hold text the app took from a request, so reading
+    # it must stay linear: a long scheme, a long run of spaces, and a long
+    # run of tabs inside the scheme each take milliseconds.
+    for url in ["a" * 1_000_000 + "!", " " * 1_000_000 + "javascript:x", "java" + "\t" * 1_000_000 + "script:x"]:
+        start = time.perf_counter()
+        actions.redirect_url_scheme(url)
+        assert time.perf_counter() - start < 0.5, repr(url[:20])
