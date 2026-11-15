@@ -25,9 +25,11 @@ component's [State](/events/state/) to the page) expire after 24 hours.
    every `_max_age` at one second or more.
 5. [Add a listener for out-of-date pages](#out-of-date-listener), so
    visitors see a message when a call fails with `stale_state`.
-6. Run your tests on 1.0.0.
-7. [Deploy](#deploy-the-upgrade) with fresh whole-page caches.
-8. Check whether your code uses an
+6. [Rename attributes](#reserved-attribute-names) that use a name
+   Citry reserves.
+7. Run your tests on 1.0.0.
+8. [Deploy](#deploy-the-upgrade) with fresh whole-page caches.
+9. Check whether your code uses an
    [experimental feature](#check-experimental), and read the
    [other changes](#other-changes).
 
@@ -155,6 +157,24 @@ app that uses server events, add a listener that tells visitors the
 page is out of date, as
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows.
+
+## Rename reserved attributes { #reserved-attribute-names }
+
+Citry and Citry UI find their own elements in the page by a few
+attribute names. In 1.0.0, those names raise `ValueError`, in any letter
+case, where you pass attributes as a dict:
+
+- **`c-bind` keys:** on an HTML element, a key such as `c-render-id`,
+  `data-cid-x`, `data-ccss-x` or `data-citry-key` raises `ValueError`.
+  `<c-element>` with `c-is` or `c-bind` refuses them even when you
+  write them in the template. Fix: rename the attribute to a `data-`
+  name of your own. The full list is under
+  [Names Citry reserves](/advanced/html-attributes/#names-citry-reserves).
+- **Citry UI `attrs=` and `*_attrs=` maps (citry-ui 0.6.0):** a key
+  that starts with `data-citry-`, `data-cui-`, `data-cev` or `data-cid`
+  raises `ValueError`. Attrs a component gives you in slot data, such as
+  `activator_attrs`, still work. Fix: rename the key to a `data-` name
+  of your own.
 
 ## Deploy the upgrade { #deploy-the-upgrade }
 
