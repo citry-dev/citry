@@ -946,6 +946,13 @@ once passed locally:
     template-only examples. Use `html` only for plain HTML without Citry or
     Vue syntax. The ordinary HTML lexer marks valid attributes such as
     `@click` as errors.
+- **Don't announce the text; write it.** In every kind of text, cut
+  words that only say what is coming or that something is being written
+  down. A heading names its subject: "Maintainer decisions", not
+  "Maintainer decisions recorded here". A section starts with its first
+  fact, not with a sentence such as "This section describes how the
+  cache works" or "Below is a summary of the changes"; the heading and
+  the text that follows already tell the reader what they are reading.
 - **No em dashes** (the U+2014 character) in agent docs, code comments, or
   docstrings. Use a hyphen, a comma, parentheses, or two sentences. A
   PostToolUse hook ([`.claude/hooks/check-em-dashes.py`](.claude/hooks/check-em-dashes.py))
