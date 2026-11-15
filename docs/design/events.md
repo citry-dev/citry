@@ -11,9 +11,11 @@ Migration qualification is recorded in [`vue.md`](vue.md).
 **Status (2026-11-15): Events v1 is frozen.** `citry-events/1` stays fixed
 for all of Citry 1.x, together with the custom transport API
 (`EventsDispatcher`, `TransportContext` and `Citry.events.registerTransport`).
-Any incompatible change becomes `citry-events/2`; the spec's
+Any change to the wire format, an addition included, needs `citry-events/2`;
+the spec's
 [Versioning](../../packages/protocol/events/v1/spec.md#versioning) section
-says how servers keep accepting `/1` during a rolling deploy. The exact wire contract is
+says how servers keep accepting `citry-events/1` calls during a rolling
+deploy. The exact wire contract is
 [`packages/protocol/events/v1/spec.md`](../../packages/protocol/events/v1/spec.md);
 this document owns the product and implementation design behind it. The current
 frontend-boundary source of truth is [`vue.md`](vue.md), and the shipped Vue v1
@@ -2514,11 +2516,10 @@ the shipped pattern with no core change; see section 14.)
 
 The major lives in the protocol string. Every fixed v1 structure is strict:
 missing and extra fields, unknown action kinds, swaps, capabilities, and error
-codes are errors. Only documented application-data bags remain open. Until
-the owning Citry package reaches `1.0.0`, incompatible corrections change v1
-in place as long as the spec, schemas, examples, server, browser, tests, and
-current docs move together. After `1.0.0`, an incompatible wire shape starts
-v2.
+codes are errors. Only documented application-data bags remain open. Because
+of that, v1 is frozen and any change to the wire format starts v2. The
+[Versioning](../../packages/protocol/events/v1/spec.md#versioning) section of
+the spec owns the exact rule.
 
 ---
 

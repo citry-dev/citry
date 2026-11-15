@@ -8,8 +8,9 @@ dispatch a DOM event, or resolve the caller with data.
 This directory is the language-neutral contract for protocol major 1. It
 defines the JSON sent in both directions and the inert manifest that teaches
 the browser which handlers and State belong to each rendered component.
-Protocol major 1 is frozen for all of Citry 1.x; the
-[Versioning](spec.md#versioning) section of the spec says what that means.
+No Citry 1.x release changes the `citry-events/1` format. The
+[Versioning](spec.md#versioning) section of the spec lists what that
+covers and how a later `citry-events/2` would arrive.
 
 Start with [`spec.md`](spec.md). It walks through a complete exchange before
 defining the exact fields and checks.
@@ -132,12 +133,15 @@ Only intentional application-data containers are open:
 - the JSON value of a `data` action and the optional `detail` of an `event`
   action.
 
-This is deliberate. There is no installed-base compatibility need yet, and a
-future extension point should be designed when a real use case appears.
+This is deliberate. Because v1 is frozen, new wire data needs
+`citry-events/2`, designed together with its conformance examples.
 
 ## Changing the protocol
 
-A wire change is not done until all of these move together:
+Version 1 is frozen (see [Versioning](spec.md#versioning)), so a change to
+its fields, values or checks is either a security fix or the start of
+`citry-events/2`. Either way, the change is not done until all of these
+move together:
 
 1. Explain the rule in [`spec.md`](spec.md).
 2. Update every affected schema.

@@ -556,16 +556,26 @@ envelope only for other methods:
 Send `request.headers` to the server with the envelope. When a handler
 returns a render, the server reads the `X-Citry-Vue-App`,
 `X-Citry-Vue-Occurrence`, and `X-Citry-Vue-Revision` headers to find the
-component the browser shows. Without them the call fails with "Vue Events
-requires current app, occurrence, and revision headers." A server bridge
-that calls `EventsDispatcher.dispatch` itself passes these headers in
-`TransportContext.headers`.
+component the browser shows. Without them the call fails with
+`handler_error`, and the server log names the missing headers. So the
+simplest transport forwards the call to Citry's own event route.
 
-A custom transport keeps working on every Citry 1.x release. The
-`send(envelope, request)` call, the `request` fields and headers above,
-`EventsDispatcher` and `TransportContext` all stay the same in 1.x.
-So do the envelopes, which follow the
-[`citry-events/1` protocol](https://github.com/citry-dev/citry/blob/main/packages/protocol/events/v1/spec.md){: target="_blank" rel="noopener"}.
+Server code can also run a call itself with
+[`EventsDispatcher`][citry.ext.events.EventsDispatcher], passing the
+headers in [`TransportContext`][citry.ext.events.TransportContext]. But
+`EventsDispatcher()` answers a render only as plain HTML, which Citry's
+browser code does not apply, so a handler that returns a render fails
+when one of Citry's pages calls it this way.
+
+From Citry 1.0.0 on, a custom transport keeps working on every 1.x
+release. These stay the same:
+
+- in the browser: the `send(envelope, request)` call, the `url`,
+  `method`, `headers` and `signal` fields of `request`, and the
+  `X-Citry-Vue-*` headers;
+- on the server: `EventsDispatcher` and `TransportContext`;
+- the envelopes, which follow the
+  [`citry-events/1` protocol](https://github.com/citry-dev/citry/blob/main/packages/protocol/events/v1/spec.md#versioning){: target="_blank" rel="noopener"}.
 
 ### `citry:events:*` events { #events-fired-around-each-call }
 

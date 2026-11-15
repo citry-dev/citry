@@ -24,9 +24,10 @@ except features marked experimental:
 Names that start with `_`, `citry_core._rust`, generated template code,
 the messages Citry's own server and browser code send each other, error
 message text and the whitespace of rendered HTML are not covered. The
-one exception among those messages is the Events call and result format,
-`citry-events/1`, which custom transports use and which is frozen for all
-of 1.x.
+one exception among those messages is the Events protocol,
+`citry-events/1` (calls, results and the browser manifest, as
+`packages/protocol/events/v1/spec.md` describes them), which custom
+transports use and which is frozen for all of 1.x.
 
 This audit lists the Python API, settings, CLI options, diagnostic codes
 and extension hooks. The Events v1 freeze task added the browser
@@ -544,7 +545,7 @@ Sources are paths under `packages/`. `client.js` is
 |---|---|---|---|
 | `window.Citry` | `client.js:98-116` | BA, throughout | covered |
 | `Citry.configure({csrf})` | `client.js:385-410` | BA "Page-wide settings" | covered |
-| `Citry.events.send(target, name, args?, opts?)` | `client.js:289-291`, `3546-3558` | BA `#citry-events-send` | covered. The `render:<id>` form of `target` (`client.js:3548`) is undocumented and not covered |
+| `Citry.events.send(target, name, args?, opts?)` | `client.js:289-291`, `3546-3558` | BA `#citry-events-send` | covered for the documented targets, a render ID or an element. The `render:<id>` form of `target` (`client.js:3548`) is undocumented and not covered |
 | `Citry.events.on(name, fn)` | `client.js:292-298` | BA `#citry-events-on` | covered for events that server handlers dispatch. It listens on `document`, so it also hears any other DOM event with that name; that is not promised |
 | `Citry.events.configure({csrf, timeout, transport, url})` | `client.js:299-313` | BA `#citry-events-configure` | covered |
 | `Citry.events.registerTransport(name, {send})` | `client.js:314-319`; `send` called at `events-vue.ts:876-886` | BA `#citry-events-register-transport`, "Custom event transports" | covered, with `send(envelope, request)`, the `request` fields `url`, `method`, `headers`, `signal`, and the headers listed in the spec's "HTTP adapters" section. Registering under the name `"fetch"` replaces the built-in transport (`client.js:4298-4303`); undocumented, not covered |
@@ -568,14 +569,15 @@ Sources are paths under `packages/`. `client.js` is
 | `$i18n` and its ten members | `citry-i18n-vue.ts:820-835` | BA `#i18n` | covered |
 | `js_data()` keys as instance members | `client.js:1511`, `2389` | BA `#js-data-members` | covered |
 | `$c-tr:` bindings | `py/citry/citry/_i18n_directives.py` | `docs_site/content/i18n/browser.md` | covered (template syntax) |
-| `$citryPrepared`, `$citryEvents`, `$citryI18nBinding`, prop `citryId` | `client.js:2349`, `2427`, `2453-2470`; `citry-i18n-vue.ts:831-834` | `docs_site/content/vue/component-options.md` names them reserved | not covered; the names stay reserved |
+| `$citryPrepared`, `$citryEvents`, prop `citryId` | `client.js:2349`, `2427`, `2453-2470` | `docs_site/content/vue/component-options.md` names them reserved | not covered; the names stay reserved |
+| `$citryI18nBinding` | `js/citry-client/src/citry-i18n-vue.ts:831-834` | `component-options.md` reserves "names that a Citry extension adds", not this name | not covered |
 | Directives `v-citry-control`, `v-citry-vue-owned`, `v-citry-runtime-events`, `v-citry-on`, `v-citry-event-timing`; component `citry-opaque-html` | `client.js:4511-4652` | none | not covered. `@c-*` attributes compile to them |
 
 #### DOM events
 
 | Event | Source | Documented | Status |
 |---|---|---|---|
-| `citry:events:before` (cancelable), `after` `{ok}`, `error` `{error}`, `swapped` `{els}`, `stale` `{reason}`, with `{instance, class, event}` | `client.js:4891-4905`; `events-vue.ts` | BA `#events-fired-around-each-call` | covered. The `error` detail is a `citry-events/1` error, or one with code `timeout` or `transport` for a failure in the browser (`events-vue.ts:242-256`); BA does not describe that shape yet |
+| `citry:events:before` (cancelable), `after` `{ok}`, `error` `{error}`, `swapped` `{els}`, `stale` `{reason}` (cancelable for reason `version`), with `{instance, class, event}` | `client.js:4891-4905`; `events-vue.ts` | BA `#events-fired-around-each-call` | covered. The `error` detail is a `citry-events/1` error, or one with code `timeout` or `transport` for a failure in the browser (`events-vue.ts:242-256`); BA does not describe that shape yet |
 | A server `Dispatch` event, under the app's own name | `client.js:4217-4230` | BA (`$onEvent`, `Citry.events.on`) | covered |
 | `citry:ready` `{appId, revision}` | `client.js:4776` | `docs_site/content/vue/server-rendering.md` | covered as documented there; the detail fields are not described |
 | `citry:rendered` `{appId, revision}` | `client.js:4327` | none | not covered |
@@ -585,12 +587,12 @@ Sources are paths under `packages/`. `client.js` is
 | Marker | Source | Documented | Status |
 |---|---|---|---|
 | `data-cid-<render_id>` | `py/citry/citry/serialize.py:923` | `docs_site/content/guides/migrate-from-django-components.md` | covered as that guide describes it: only on output with no browser behavior |
-| `data-citry-vue-document`, `data-citry-vue-fragment`, `data-citry-processed`, `data-citry-css-url`, `data-citry-css-class`, `data-citry-vue-style-app`, `data-citry-i18n`, `data-citry-i18n-binding`, `data-citry-key`, `data-citry-morph`, `data-citry-opaque-*`, `data-citry-security-*`, `data-citry-omit-handler-*` | `client.js:5745`; `py/citry/citry/ext/dependencies/emission.py:273`, `582-589`, `887`; `py/citry/citry/ext/i18n/`; `py/citry/citry/nodes/__init__.py:1542-1567` | none | not covered |
+| `data-citry-vue-document`, `data-citry-vue-fragment`, `data-citry-processed`, `data-citry-css-url`, `data-citry-css-class`, `data-citry-vue-style-app`, `data-citry-i18n`, `data-citry-i18n-binding`, `data-citry-key`, `data-citry-morph`, `data-citry-opaque-*`, `data-citry-security-*`, `data-citry-omit-handler-*` | `client.js:5745`; `js/citry-client/src/citry-fragments.ts:116`; `py/citry/citry/ext/dependencies/emission.py:273`, `582-589`, `887`; `py/citry/citry/ext/i18n/`; `py/citry/citry/nodes/__init__.py:1542-1567` | none | not covered |
 | `data-citry-runtime-control`, `data-citry-runtime-events`, `data-cev-*` | `py/citry/citry/nodes/__init__.py:150-165` | none | not covered; a template that writes one is rejected, so the names stay reserved |
 
 ### 4.11 HTTP routes
 
-The defaults mount every route under the prefix `/citry`
+The examples mount every route under the prefix `/citry`
 (`py/citry/citry/contrib/asgi.py:9`). The protocol package
 (`packages/protocol/events/v1/spec.md`, "HTTP adapters") is the exact
 contract for the Events routes. A route is **covered** when a host may
@@ -601,31 +603,44 @@ the digests it holds.
 | Route | Source | Documented | Status |
 |---|---|---|---|
 | `POST <prefix>/ext/events/call` | `py/citry/citry/ext/events/routes.py:93`, `242-249` | spec "HTTP adapters" | covered (`citry-events/1`) |
-| `<method> <prefix>/ext/events/e/{class_id}/{handler}`, with the handler's declared methods from `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` | `routes.py:97`, `263-270`; `py/citry/citry/ext/events/handlers.py:81` | spec "HTTP adapters"; `docs_site/content/events/routes.md` | covered. This change corrects the spec, which listed only `GET` and `POST` |
+| `<method> <prefix>/ext/events/e/{class_id}/{handler}`, with the handler's declared methods from `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` | `py/citry/citry/ext/events/routes.py:97`, `263-270`; `py/citry/citry/ext/events/handlers.py:81` | spec "HTTP adapters"; `docs_site/content/events/routes.md` | covered |
 | `<prefix>/ext/events/e/{class_id}` (`ViewEvents` verbs `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`) | `py/citry/citry/ext/events/view_events.py:50-57`, `192-202` | `docs_site/content/guides/migrate-from-component-view.md` ("Build the verb URL", built with `citry.build_url`) | covered |
 | `GET <prefix>/citry.{digest}.js` | `py/citry/citry/ext/dependencies/routes.py:209-214`; `py/citry/citry/_hashed_runtime.py` | spec "HTTP adapters"; `docs_site/content/advanced/web-frameworks.md` | covered |
-| `GET <prefix>/citry.js`, `GET <prefix>/ext/events/runtime.js` | `ext/dependencies/routes.py:206`; `ext/events/routes.py:96`, `179-183` | spec "HTTP adapters"; `web-frameworks.md` | covered (stable addresses for hand-written links) |
+| `GET <prefix>/citry.js`, `GET <prefix>/ext/events/runtime.js` | `py/citry/citry/ext/dependencies/routes.py:206`; `py/citry/citry/ext/events/routes.py:96`, `179-183` | spec "HTTP adapters"; `web-frameworks.md` | covered (stable addresses for hand-written links) |
 | `GET <prefix>/ext/i18n/runtime.js`, `GET <prefix>/ext/i18n/runtime.{digest}.js` | `py/citry/citry/ext/i18n/routes.py:57-64` | `web-frameworks.md` | covered; mounted only when i18n is configured |
-| `GET <prefix>/cache/{class_id}.{hash}.{type}`, `GET <prefix>/cache/{class_id}.{type}`, `GET <prefix>/asset/{file_name}` | `ext/dependencies/routes.py:160-203` | `web-frameworks.md` | covered as routes a host must forward; pages Citry renders build the exact addresses |
-| `GET <prefix>/ext/events/definitions/{digest}.js`, `GET <prefix>/ext/events/assets/{digest}.css` | `ext/events/routes.py:94-95`, `185-215` | `web-frameworks.md`; `docs/design/events.md` 3.8 | covered as routes a host must forward; the request and response are between Citry's own server and browser code |
+| `GET <prefix>/cache/{class_id}.{hash}.{type}`, `GET <prefix>/cache/{class_id}.{type}`, `GET <prefix>/asset/{file_name}` | `py/citry/citry/ext/dependencies/routes.py:160-203` | `web-frameworks.md` | covered as routes a host must forward; pages Citry renders build the exact addresses |
+| `GET <prefix>/ext/events/definitions/{digest}.js`, `GET <prefix>/ext/events/assets/{digest}.css` | `py/citry/citry/ext/events/routes.py:94-95`, `185-215` | `web-frameworks.md`; `docs/design/events.md` 3.8 | covered as routes a host must forward; the request and response are between Citry's own server and browser code |
 | `POST <prefix>/ext/i18n/messages` | `py/citry/citry/ext/i18n/routes.py:31-55`, `66-72` | `docs_site/content/i18n/browser.md` (by name only) | covered as a route a host must forward; the JSON it carries is between Citry's own server and browser code |
 | `/citry/ext/preview/catalog`, `render/{id}`, `gallery` | `py/citry/citry/ext/preview/routes.py:20`, `77-79` | `docs_site/content/advanced/previews.md` | not covered: served only by the preview command's own server, and preview is experimental (row 3) |
 
 Open items found while making this inventory, left for the maintainer:
 
-- **`EventsDispatcher` constructor.** Its keywords `render_encoders` and
-  `preferred_renderer` take a `RenderEncoder`, which no public module
-  exports, so only `EventsDispatcher()` with no arguments is usable from
-  outside. Either say so in the docstring or make the two keywords
-  private.
-- **The Vue headers of a custom transport.** A render needs
-  `X-Citry-Vue-App`, `X-Citry-Vue-Occurrence` and
-  `X-Citry-Vue-Revision` (`py/citry/citry/_vue/events.py:480-482`). The
-  spec now lists them, so they are frozen with `citry-events/1`.
-- **Rolling deploys and digest routes.** A page rendered by the old
-  release links digests that a server running the new release may not
-  hold. The rolling-deploy test (decision 10) should cover a page that
-  loads after half the servers have moved.
+- **A server bridge cannot answer Citry's own pages with a render.**
+  `EventsDispatcher()` registers only the `html-fragment/1` renderer
+  (`py/citry/citry/ext/events/dispatcher.py`, `__init__`), while Citry's
+  browser code asks only for `vue-prepared/1`
+  (`js/citry-client/src/citry-events-vue.ts:810-814`), so every render
+  fails with `handler_error`. The Vue-capable dispatcher comes from
+  `citry.ext.events.renderers.dispatcher_for`, which is not exported; the
+  docs playground and the benchmark app import it. The constructor
+  keywords `render_encoders` and `preferred_renderer` take a
+  `RenderEncoder`, and `dispatch(csrf_check=...)` takes an
+  `EventHandler`; no public module exports either. The docs now say that
+  a bridge for Citry's own pages forwards to the HTTP routes. A public
+  way to get the Vue-capable dispatcher would be an addition in 1.x.
+- **Prepared renders during an upgrade.** The `prepared` object of a
+  `vue-prepared/1` render carries a helper contract hash
+  (`py/citry/citry/_vue/compiler.py:526-540`) that the browser checks
+  against its own (`client.js:1462`). A page rendered by the old release
+  cannot apply a render from a newer server whose helpers changed. The
+  spec now says so. The rolling-deploy test (decision 10) should cover
+  it. Runtime digests during an upgrade are already covered by
+  `docs_site/content/advanced/web-frameworks.md` ("Deploy a Citry
+  upgrade").
+- **Security fixes.** The spec's freeze allows a 1.x release to change a
+  check only to close a security hole. The maintainer should confirm
+  that exception, and the Versioning page should state it for every
+  covered part.
 
 ## 5. Covered parts this audit does not list
 
