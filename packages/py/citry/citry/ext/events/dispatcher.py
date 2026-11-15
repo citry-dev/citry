@@ -156,6 +156,10 @@ class TransportContext:
     ``citry.ext.events.routes``; a custom transport builds its own) and
     passed to [`EventsDispatcher.dispatch`][citry.ext.events.EventsDispatcher.dispatch].
 
+    This class stays stable for all of Citry 1.x, like the
+    ``citry-events/1`` format the dispatcher reads and writes, so a custom
+    transport written against it keeps working on every 1.x release.
+
     Attributes:
         transport: The transport's name, such as ``"http"``; handlers see it
             as ``event.transport``.
@@ -461,6 +465,11 @@ class EventsDispatcher:
     browser code sends (the ``citry-events/1`` call envelope)
     and calls [`dispatch`][citry.ext.events.EventsDispatcher.dispatch]
     (or its async twin) directly.
+
+    This class and the ``citry-events/1`` call and result envelopes it
+    reads and writes stay stable for all of Citry 1.x. A later incompatible
+    format becomes ``citry-events/2``, and servers keep accepting
+    ``citry-events/1`` calls for at least one minor release after that.
     """
 
     def __init__(

@@ -8,6 +8,8 @@ dispatch a DOM event, or resolve the caller with data.
 This directory is the language-neutral contract for protocol major 1. It
 defines the JSON sent in both directions and the inert manifest that teaches
 the browser which handlers and State belong to each rendered component.
+Protocol major 1 is frozen for all of Citry 1.x; the
+[Versioning](spec.md#versioning) section of the spec says what that means.
 
 Start with [`spec.md`](spec.md). It walks through a complete exchange before
 defining the exact fields and checks.

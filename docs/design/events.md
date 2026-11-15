@@ -8,8 +8,12 @@ browser contract; where they conflict with the current Vue v1 contract below,
 the current contract and [`vue.md`](vue.md) win.
 Migration qualification is recorded in [`vue.md`](vue.md).
 
-**Status (2026-07-26): Events v1 is implemented but not yet frozen or
-released as the v1 beta.** The exact current wire contract is
+**Status (2026-11-15): Events v1 is frozen.** `citry-events/1` stays fixed
+for all of Citry 1.x, together with the custom transport API
+(`EventsDispatcher`, `TransportContext` and `Citry.events.registerTransport`).
+Any incompatible change becomes `citry-events/2`; the spec's
+[Versioning](../../packages/protocol/events/v1/spec.md#versioning) section
+says how servers keep accepting `/1` during a rolling deploy. The exact wire contract is
 [`packages/protocol/events/v1/spec.md`](../../packages/protocol/events/v1/spec.md);
 this document owns the product and implementation design behind it. The current
 frontend-boundary source of truth is [`vue.md`](vue.md), and the shipped Vue v1

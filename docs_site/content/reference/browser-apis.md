@@ -561,6 +561,12 @@ requires current app, occurrence, and revision headers." A server bridge
 that calls `EventsDispatcher.dispatch` itself passes these headers in
 `TransportContext.headers`.
 
+A custom transport keeps working on every Citry 1.x release. The
+`send(envelope, request)` call, the `request` fields and headers above,
+`EventsDispatcher` and `TransportContext` all stay the same in 1.x.
+So do the envelopes, which follow the
+[`citry-events/1` protocol](https://github.com/citry-dev/citry/blob/main/packages/protocol/events/v1/spec.md){: target="_blank" rel="noopener"}.
+
 ### `citry:events:*` events { #events-fired-around-each-call }
 
 Citry fires DOM events around each event call, so other code can show a

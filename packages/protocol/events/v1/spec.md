@@ -1127,8 +1127,11 @@ The protocol is transport-neutral. The built-in HTTP transport mounts:
 POST      <prefix>/ext/events/call
 GET       <prefix>/citry.<sha256>.js
 GET       <prefix>/ext/events/runtime.js
-GET|POST  <prefix>/ext/events/e/{componentClassId}/{handlerName}
+<method>  <prefix>/ext/events/e/{componentClassId}/{handlerName}
 ```
+
+`<method>` is one of the methods the handler declares, from `GET`, `HEAD`,
+`POST`, `PUT`, `PATCH`, `DELETE`, and `OPTIONS`.
 
 An Events page loads the browser runtime from `<prefix>/citry.<sha256>.js`,
 where `<sha256>` is the SHA-256 of the runtime file as 64 lowercase hex
@@ -1170,6 +1173,17 @@ only text, so their values bind as described in
 `componentClassId` and `handlerName`; an explicit protocol body must agree
 with it.
 
+The built-in HTTP transport reads these request headers:
+
+| Header | Meaning |
+|---|---|
+| `X-Citry-Events: 1` | Required on every request with a JSON body. A plain HTML form cannot set it, which is part of the CSRF defense. |
+| `X-Citry-Vue-App`, `X-Citry-Vue-Occurrence`, `X-Citry-Vue-Revision` | The Vue app, the component occurrence, and the revision the browser shows. A call whose handler returns a render needs all three; without them it fails with `handler_error`. |
+
+Citry's browser code sends all four on every call, together with the CSRF
+token header on calls that are not `GET`. A custom browser transport sends
+the headers it is given; a server bridge passes them on to the dispatcher.
+
 For GET, handler arguments keep their query names and protocol metadata uses:
 
 | Query field | Protocol field |
@@ -1188,17 +1202,34 @@ token, or send sequence.
 
 ## Versioning
 
-The protocol major is part of the exact `protocol` string. This directory is
-the working pre-release v1 contract. Until the owning Citry package reaches
-`1.0.0`, clearer field names and other incompatible corrections change v1 in
-place, but schemas, examples, server, browser, tests, and current docs must
-move together.
+The protocol major is part of the exact `protocol` string. `citry-events/1`
+is frozen for all of Citry 1.x: no field, value, check, or HTTP route
+described here changes or disappears in a 1.x release.
 
-Unknown fields and values are not a minor-version extension mechanism. A v1
-reader rejects them. If a future extension or third-party integration needs
-more wire data, design that point deliberately and add conformance examples.
-After Citry reaches `1.0.0`, an incompatible shape starts `v2/` and uses
-`citry-events/2`.
+A 1.x server accepts every valid `citry-events/1` call and answers it with a
+valid `citry-events/1` result. So a page rendered by any 1.x release can call
+a server running any later 1.x release, and a custom transport or a
+third-party client written against this document keeps working.
+
+A v1 reader rejects unknown fields and values (see
+[The contract is strict](#the-contract-is-strict)), so v1 has no room for
+additions. A new field, a new action kind, swap, or renderer, a new error
+code, or any incompatible change starts `v2/` and uses `citry-events/2`.
+When a release adds `citry-events/2`, its servers keep accepting
+`citry-events/1` calls for at least one more minor release. A rolling deploy
+needs this: pages rendered by the old release still send `/1` calls, and
+they may reach a server that already runs the new release.
+
+The window covers that direction only. A page rendered by the new release
+that reaches a server still running the old release sends a protocol the old
+server does not know, and the old server answers `protocol_mismatch` (see
+[Failures before a request ID can be read](#failures-before-a-request-id-can-be-read)).
+The design of `citry-events/2` decides how a client recovers from that
+answer.
+
+If a future extension or third-party integration needs more wire data,
+design that point deliberately in `citry-events/2` and add conformance
+examples.
 
 ## The conformance component
 
