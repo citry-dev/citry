@@ -714,7 +714,7 @@ def verify_state_token(
         raise InvalidStateError(_MALFORMED_MSG)
     # A token whose prefix names another token version is refused before
     # anything after the prefix is decoded. It only picks stale over
-    # malformed, so a page from another release is offered a reload.
+    # malformed, so a page from another release is reported as out of date.
     _refuse_unknown_version_prefix(token)
     # The component's storage picks the check, so a server-storage component
     # only ever loads State from the cache, which the client cannot write.
@@ -759,10 +759,10 @@ def _refuse_unknown_payload_version(payload: object) -> None:
 
 
 def _refuse_other_form(token: str, *, other: str) -> None:
-    """Answer stale for a token of the other storage form, so the browser offers a reload."""
+    """Answer stale for a token of the other storage form, so the browser treats the page as out of date."""
     # A page rendered before the component's _storage changed in a deploy
     # still holds the other form. Nothing from the token is read; stale
-    # (409) is the answer the browser turns into a reload prompt.
+    # (409) is the answer the browser reports as an out-of-date page.
     if token.startswith(other + "."):
         msg = (
             "The state token is of the other storage form than this component declares (its"

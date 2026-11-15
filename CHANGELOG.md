@@ -10,11 +10,11 @@
   `_max_age` used to work until you changed the signing secret. Now it
   stops working 24 hours after Citry issues it, as server-stored State
   already did. Citry issues a new token when it renders the component
-  and after a call that changes State, so the pages affected are those whose State has not
-  changed for more than 24 hours. A call with an expired token does not
-  run its handler: it gets a `stale_state` error, and Citry's browser
-  code asks once per page whether to reload. Tokens issued before the
-  upgrade also expire 24 hours after Citry issued them. No setting turns
+  and after a call that changes State, so the pages affected are those
+  whose State has not changed for more than 24 hours. A call with an
+  expired token does not run its handler: it gets a `stale_state` error
+  (see the next entry). Tokens issued before
+  the upgrade also expire 24 hours after Citry issued them. No setting turns
   expiry off; to keep a token working for longer, set a longer
   `_max_age`:
 
@@ -23,6 +23,29 @@
 
     class State:
         _max_age = timedelta(days=7)
+    ```
+
+- **Citry no longer asks visitors to reload an out-of-date page in
+  production:** when a call fails with `stale_state`, most often because
+  the page's State token expired, a visitor whose call failed got a
+  confirm dialog asking whether to reload, once per page. Now only a page that
+  `Citry(mode="development")` rendered asks. In production Citry asks
+  nothing, never reloads by itself, and writes one console warning per
+  page, so calls from that component keep failing until the visitor
+  reloads the page. Show your own message from a listener, as
+  [Handle out-of-date pages](https://citry.dev/reference/browser-apis/#out-of-date-pages)
+  shows:
+
+    ```js
+    document.addEventListener("citry:events:stale", (event) => {
+      if (event.detail.reason !== "version") return;
+      event.preventDefault();
+      showReloadBanner();
+    });
+    document.addEventListener("citry:fragments:stale", (event) => {
+      event.preventDefault();
+      showReloadBanner();
+    });
     ```
 
 - **`State._max_age` must be at least one second:** a shorter value,
@@ -57,12 +80,23 @@
   classes on PyPy. Before, it refused every one of them with "Events
   needs Pydantic 2.13.0 or newer".
 
+### Added
+
+- You can now find out when the page gets a Vue fragment from another
+  Citry release: the page fires the new `citry:fragments:stale` event and
+  does not start the fragment. Before, the fragment failed with only a
+  console error.
+
 ### Changed
 
 - If a later Citry release changes the State token format, a page from
-  the other release gets `stale_state` (409) during a deploy, and Citry's
-  browser code offers a reload. Before, it got `invalid_state` (403) and
-  an error.
+  the other release gets `stale_state` (409) during a deploy, and Citry
+  fires `citry:events:stale`. Before, it got `invalid_state`
+  (403) and an error.
+- During a later deploy, a page that Citry 1.0.0 rendered now fails an
+  event call with `stale_state`, as an expired State token does, when
+  the response comes from another release and the page's browser code
+  cannot read it. Before, the call failed with a plain error.
 
 ## v0.9.0
 

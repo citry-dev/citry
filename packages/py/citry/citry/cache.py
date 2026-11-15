@@ -135,9 +135,10 @@ class InMemoryCache:
     default), and does not count toward ``max_entries``. When the budget is
     full, the State entry read or written longest ago is dropped, so many
     State writes cannot push out page assets. A dropped entry makes that
-    visitor's next call answer ``stale_state``, and the page offers a
-    reload. An entry larger than the whole budget is not stored, and Citry
-    logs a warning. ``state_max_bytes=None`` removes the budget.
+    visitor's next call answer ``stale_state``, and Citry fires
+    ``citry:events:stale`` in the page. An entry larger than the whole
+    budget is not stored, and Citry logs a warning.
+    ``state_max_bytes=None`` removes the budget.
 
     Single-process only: each instance is its own store. With several worker
     processes, a page rendered by one worker can link a generated Vue bundle

@@ -26,7 +26,8 @@ What each kind of release does:
 - **Patch** (1.0.0 to 1.0.1): bug fixes. Code that uses
   [covered parts](#what-is-covered) needs no changes, except for a
   [security fix](#security-exception) that refuses input your code
-  relied on. An open page may reload once (see
+  relied on. An open page's next event call may fail with the error
+  code `stale_state`, which means the page is out of date (see
   [Rolling deploys](#rolling-deploys)).
 - **Minor** (1.0.0 to 1.1.0): new features. Code that uses
   [covered parts](#what-is-covered) keeps working. A minor release may
@@ -38,8 +39,8 @@ What each kind of release does:
     - drop an end-of-life Python version, raise the oldest supported
       Django, FastAPI or Flask version, or move to a newer Vue minor
       version (see [Python and browsers](#platforms));
-    - change the State token format, so an open page reloads once (see
-      [Rolling deploys](#rolling-deploys)).
+    - change the State token format, so an open page's next event call
+      fails with `stale_state` (see [Rolling deploys](#rolling-deploys)).
 - **Major** (1.x to 2.0.0): may remove deprecated features and make other
   breaking changes. The release notes say what to change.
 
@@ -149,9 +150,12 @@ happen:
     - new page to old server: accepted, unless the new release added
       `citry-events/2`; then the old server answers `protocol_mismatch`.
 - **Data an old page cannot read:** a State token (the signed copy of a
-  component's State in the page), a render or a fragment written by a
-  newer release. The page reloads once and then works with the new
-  release.
+  component's State in the page), a render or a fragment written by
+  another release. The page's next event call fails with the error code
+  `stale_state`, or the fragment does not start. Citry fires events your
+  app can use to tell the visitor (see
+  [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)).
+  After a reload the page works with the new release.
 - **[Render cache](/performance/caching/):** every upgrade, patch
   releases too, ignores entries that another Citry version wrote. While
   old and new servers share one cache, expect slower renders until the
@@ -181,8 +185,10 @@ sends each component's State to the page as a signed State token.
 
 - Signed tokens and State kept on the server both expire 24 hours after
   Citry issues them, unless you set `State._max_age`.
-- An expired token fails the call with `stale_state`, and Citry's browser
-  code offers to reload the page.
+- An expired token fails the call with `stale_state`. Show visitors a
+  message for it, as
+  [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
+  shows.
 - For a longer lifetime, set `State._max_age` to a longer `timedelta`.
   [Treat State as input](/security/#treat-state-as-client-input) explains
   why tokens expire.
@@ -229,7 +235,7 @@ release. Covered, unless marked [experimental](#experimental):
     - `$component(...)` in component JavaScript;
     - the `onServerRender` callback;
     - the Events helpers such as `$state` and `$sendEvent`, and `$i18n`;
-    - the `citry:events:*` DOM events.
+    - the `citry:events:*` DOM events and `citry:fragments:stale`.
 - **HTTP routes** under Citry's prefix, such as the event routes and the
   runtime script addresses: paths, methods and meaning, so your
   forwarding or proxy rules keep working. Preview server routes are

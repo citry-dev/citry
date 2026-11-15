@@ -610,7 +610,7 @@ test("applyEnvelope keeps a private copy of a caller's envelope and a stale one 
 test("a lifecycle notification for an unmounted component still reaches document listeners", () => {
   const fixture = runtime();
   const dispatch = fixture.stable._dispatchLifecycleEvent;
-  // A cancelled version notification must report false so the bridge skips its reload prompt.
+  // A cancelled version notification must report false so the bridge skips Citry's own report.
   fixture.document.dispatchEvent = function (event) {
     this.dispatched.push(event);
     return false;
@@ -664,4 +664,22 @@ test("the fallback action check uses the protocol's target and swap rules", asyn
     await assert.rejects(fixture.publicEvents.applyActions(fixture.realm([action])), /stale or retired/);
   }
   assert.equal(fixture.document.dispatched.length, 0);
+});
+
+test("a render definition compiled against other helpers fails as an out-of-date page", () => {
+  // A newer release during a deploy compiles its definitions against its own helpers. The page
+  // must read that as `stale_state`, an out-of-date page, not as a broken definition.
+  const fixture = runtime();
+  const definition = fixture.definition();
+  definition.helperContract = "0".repeat(64);
+  assert.throws(
+    () => fixture.stable.registerDefinition("app", "def", definition),
+    (error) => error.code === "stale_state" && error.status === 0 && /different Citry release/.test(error.message),
+  );
+  // A definition with no helper contract is malformed, not from another release.
+  delete definition.helperContract;
+  assert.throws(
+    () => fixture.stable.registerDefinition("app", "def", definition),
+    (error) => error.code === undefined && /invalid render definition/.test(error.message),
+  );
 });

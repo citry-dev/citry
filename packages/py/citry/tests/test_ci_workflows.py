@@ -722,7 +722,8 @@ def test_workspace_core_wheel_consumers_reject_ambiguous_cached_outputs() -> Non
         for step in job.get("steps", [])
         if "--core-wheel" in step.get("run", "")
     ]
-    assert len(core_consumers) == 2
+    # The two distribution smoke steps and the rolling-deploy check.
+    assert len(core_consumers) == 3
     for step in core_consumers:
         assert step["shell"] == "bash"
         assert "${#core_wheels[@]} -ne 1" in step["run"]

@@ -684,7 +684,7 @@ class CitrySettings:
             catalog package must ship a valid compiled manifest, written by
             ``citry ext run i18n compile``; creating the ``Citry`` instance
             raises ``ValueError`` when it is missing or does not match.
-            ``"development"`` turns on three things. Citry reads the Fluent
+            ``"development"`` turns on four things. Citry reads the Fluent
             sources directly; if the package also contains a compiled
             manifest, it must still match the sources, so delete or
             recompile it after editing translations. Turning a page into
@@ -693,8 +693,11 @@ class CitrySettings:
             logs a browser console warning when Vue's first render of a
             part Vue builds in the browser differs from the HTML the
             server sent. A production page does not load this browser
-            check. An unrecognized value raises ``ValueError`` at
-            construction. See [Development mode](/guides/development-mode/).
+            check. And when an event call or a Vue fragment fails because
+            the page is out of date, the browser asks whether to reload,
+            unless a listener cancels the event; a production page only
+            writes a console warning. An unrecognized value raises
+            ``ValueError`` at construction. See [Development mode](/guides/development-mode/).
         template_globals: Variables exposed to every component's template
             without being returned from each ``template_data()``. They are
             merged into every component's template variables on render, so a

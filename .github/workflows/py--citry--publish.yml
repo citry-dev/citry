@@ -169,9 +169,65 @@ jobs:
             --dist-dir dist \
             --core-wheel "${core_wheels[0]}"
 
+  # A page the previous release rendered sends its requests to the candidate,
+  # and the other way round, as during a rolling deploy. Runs beside
+  # smoke-python, so it adds to the release only the time it takes beyond
+  # those jobs. Only deploys within one major version, 1 or later, are
+  # promised; for any other pair the script reports its results without
+  # failing, unless it cannot find the previous release on PyPI
+  # (scripts/rolling_deploy/check.py).
+  rolling-deploy:
+    if: ${{ inputs.operation == 'qualify' }}
+    needs: [verify-version, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: raw-citry-distributions
+          path: dist
+      - uses: actions/download-artifact@v8
+        if: contains(inputs.workspace_dependencies, 'citry-core')
+        with:
+          name: candidate-citry-core-wheel
+          path: core-dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          prune-cache: true
+          enable-cache: false
+          version: ${{ env.UV_VERSION }}
+      - name: Serve pages from the previous release with the candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheels=(dist/citry-*.whl)
+          if [[ ${#wheels[@]} -ne 1 || ! -f ${wheels[0]} ]]; then
+            printf 'Expected exactly one candidate citry wheel, found: %s\n' "${wheels[*]}" >&2
+            exit 1
+          fi
+          core=()
+          if [[ -d core-dist ]]; then
+            core_wheels=(core-dist/*.whl)
+            if [[ ${#core_wheels[@]} -ne 1 || ! -f ${core_wheels[0]} ]]; then
+              printf 'Expected exactly one candidate Core wheel, found: %s\n' "${core_wheels[*]}" >&2
+              exit 1
+            fi
+            core=(--core-wheel "${core_wheels[0]}")
+          fi
+          python scripts/rolling_deploy/check.py --candidate "${wheels[0]}" "${core[@]}"
+
   verify-distributions:
     if: ${{ inputs.operation == 'qualify' }}
-    needs: [verify-version, build, smoke-python]
+    needs: [verify-version, build, smoke-python, rolling-deploy]
     runs-on: ubuntu-24.04
     permissions:
       attestations: write

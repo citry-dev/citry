@@ -23,7 +23,36 @@ from citry.ext.events.renderers import dispatcher_for
 
 pytest.importorskip("playwright.sync_api")
 
-_RELOAD_PROMPT = "This page and the server are running different versions of the app. Reload to get back in sync?"
+_RELOAD_PROMPT = "This page is out of date. Reload to continue?"
+
+
+def _collect_out_of_date_warnings(page: Any) -> list[str]:
+    # Citry's own report on a production page: one console warning, no question.
+    warnings: list[str] = []
+    page.on(
+        "console",
+        lambda message: (
+            warnings.append(message.text)
+            if message.type == "warning" and "This page is out of date" in message.text
+            else None
+        ),
+    )
+    return warnings
+
+
+# The built-in question is for developers; production pages only warn.
+_MODES = pytest.mark.parametrize("mode", ["development", "production"])
+
+
+def _expected_report(mode: str, dialogs: list[str], warnings: list[str]) -> None:
+    if mode == "development":
+        assert dialogs == [_RELOAD_PROMPT]
+        assert warnings == []
+    else:
+        assert dialogs == []
+        assert len(warnings) == 1, warnings
+        assert "citry:events:stale" in warnings[0]
+        assert "#out-of-date-pages" in warnings[0]
 
 
 def _collect_page_errors(page: Any) -> list[str]:
@@ -250,8 +279,11 @@ def _sign_tokens_with_an_unknown_secret(page: Any) -> None:
 
 
 @pytest.mark.e2e
-def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, open_citry_page: Any, serve_live: Any) -> None:
-    engine = Citry(secret="vue-version-skew-secret", autodiscover=False)  # noqa: S106
+@_MODES
+def test_stale_state_after_a_deploy_is_reported_once(
+    page: Any, open_citry_page: Any, serve_live: Any, mode: str
+) -> None:
+    engine = Citry(secret="vue-version-skew-secret", autodiscover=False, mode=mode)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     skew = _stale_token_page(engine)
     dispatcher_for(engine)
@@ -263,6 +295,7 @@ def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, open_citry_pa
         dialog.dismiss()
 
     page.on("dialog", decline)
+    warnings = _collect_out_of_date_warnings(page)
     page.add_init_script(
         """
         window.__skewEvents = [];
@@ -284,10 +317,77 @@ def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, open_citry_pa
     stale = {"name": "stale", "reason": "version", "code": None, "cancelable": True}
     error = {"name": "error", "reason": None, "code": "stale_state", "cancelable": False}
     assert page.evaluate("window.__skewEvents") == [stale, error, stale, error]
-    # The user declined the first prompt; the second failure must not ask again.
-    assert dialogs == [_RELOAD_PROMPT]
+    # Citry reported the first failure (the visitor declined the question in
+    # development); the second failure must not report again.
+    _expected_report(mode, dialogs, warnings)
     assert page.locator("#skew").text_content() == "0"
     # A declarative call reports its failure; nothing escapes as a page error.
+    assert errors == []
+
+
+def _answer_as_a_release_with_other_render_helpers(page: Any) -> list[int]:
+    # A newer release compiles its Vue definitions against its own render
+    # helpers, and the definitions it sends name that helper contract. Giving
+    # the real server's answer another contract value is what an open page
+    # sees when its call reaches a server already running that release.
+    rewritten: list[int] = []
+
+    def rewrite(value: Any) -> Any:
+        if isinstance(value, dict):
+            if isinstance(value.get("helperContract"), str):
+                rewritten.append(1)
+                value = {**value, "helperContract": "0" * 64}
+            return {key: rewrite(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        return value
+
+    def reroute(route: Any) -> None:
+        response = route.fetch()
+        route.fulfill(response=response, json=rewrite(response.json()))
+
+    page.route("**/ext/events/call", reroute)
+    return rewritten
+
+
+@pytest.mark.e2e
+@_MODES
+def test_a_render_from_a_release_with_other_render_helpers_is_reported_once(
+    page: Any, open_citry_page: Any, serve_live: Any, mode: str
+) -> None:
+    engine = Citry(secret="vue-helper-skew-secret", autodiscover=False, mode=mode)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+    skew = _stale_token_page(engine)
+    dispatcher_for(engine)
+    errors = _collect_page_errors(page)
+    dialogs: list[str] = []
+    page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
+    warnings = _collect_out_of_date_warnings(page)
+    page.add_init_script(
+        """
+        window.__skewEvents = [];
+        for (const name of ['stale', 'error'])
+          document.addEventListener(`citry:events:${name}`, event => window.__skewEvents.push({
+            name, reason: event.detail.reason ?? null, code: event.detail.error?.code ?? null}));
+        """
+    )
+    open_citry_page(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
+    rewritten = _answer_as_a_release_with_other_render_helpers(page)
+
+    page.locator("#skew").click()
+    page.wait_for_function("window.__skewEvents.length === 2")
+    page.locator("#skew").click()
+    page.wait_for_function("window.__skewEvents.length === 4")
+
+    # The answer did carry a definition, so the page refused it for its helpers.
+    assert rewritten
+    stale = {"name": "stale", "reason": "version", "code": None}
+    error = {"name": "error", "reason": None, "code": "stale_state"}
+    assert page.evaluate("window.__skewEvents") == [stale, error, stale, error]
+    # The page reports it as it reports a State token the server no longer
+    # accepts, once per page, and keeps what it showed.
+    _expected_report(mode, dialogs, warnings)
+    assert page.locator("#skew").text_content() == "0"
     assert errors == []
 
 
@@ -295,7 +395,8 @@ def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, open_citry_pa
 def test_cancelling_the_version_notification_suppresses_the_reload_prompt(
     page: Any, open_citry_page: Any, serve_live: Any
 ) -> None:
-    engine = Citry(secret="vue-version-skew-cancel-secret", autodiscover=False)  # noqa: S106
+    # Development mode, where Citry would ask its question, so its absence means something.
+    engine = Citry(secret="vue-version-skew-cancel-secret", autodiscover=False, mode="development")  # noqa: S106
     engine.set_mounted_prefix("/citry")
     skew = _stale_token_page(engine)
     dispatcher_for(engine)
@@ -328,7 +429,8 @@ def test_cancelling_the_version_notification_suppresses_the_reload_prompt(
 def test_a_call_whose_component_is_gone_still_notifies_document_listeners(
     page: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
 ) -> None:
-    engine = Citry(secret="vue-version-skew-gone-secret", autodiscover=False)  # noqa: S106
+    # Development mode, where Citry would ask its question, so its absence means something.
+    engine = Citry(secret="vue-version-skew-gone-secret", autodiscover=False, mode="development")  # noqa: S106
     engine.set_mounted_prefix("/citry")
     skew = _stale_token_page(engine)
     dispatcher_for(engine)
@@ -517,7 +619,8 @@ def _release_with_an_unknown_signature(route: Any) -> None:
 def test_a_stale_state_answer_for_a_component_without_elements_prompts_from_document(
     page: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
 ) -> None:
-    engine = Citry(secret="vue-version-skew-hidden-secret", autodiscover=False)  # noqa: S106
+    # Development mode, so Citry asks its built-in question.
+    engine = Citry(secret="vue-version-skew-hidden-secret", autodiscover=False, mode="development")  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
     class HiddenState:
@@ -590,7 +693,8 @@ def test_a_stale_state_answer_for_a_component_without_elements_prompts_from_docu
 def test_an_unmounted_component_keeps_its_id_and_its_dropped_call_does_not_prompt(
     page: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
 ) -> None:
-    engine = Citry(secret="vue-version-skew-unmounted-secret", autodiscover=False)  # noqa: S106
+    # Development mode, where Citry would ask its question, so its absence means something.
+    engine = Citry(secret="vue-version-skew-unmounted-secret", autodiscover=False, mode="development")  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
     class ChildState:
