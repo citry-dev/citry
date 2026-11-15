@@ -1032,8 +1032,9 @@ class Extension:
             ValueError: Citry raises it when the hook adds an attribute the
                 browser reads as code or markup: a name starting with
                 ``on``, or ``innerHTML``, ``outerHTML``, or ``srcdoc``, in
-                any letter case. Changing the value of one the template
-                wrote is allowed, so never put request data into it.
+                any letter case. Changing the value of such an attribute
+                that the template wrote is allowed, so never put request
+                data into it.
 
         """
 

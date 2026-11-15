@@ -959,7 +959,8 @@ class I18nService:
         Resolve one message to plain text with the bound context.
 
         The text is not escaped. A template escapes it like any other value;
-        escape it yourself before you put it into HTML you build in Python.
+        to put it into HTML you build in Python, use ``Markup.format()``,
+        which escapes each value it inserts.
         """
         return self._extension.tr(message_id, attr=attr, context=self._context, **values)
 
@@ -2089,7 +2090,8 @@ class I18nExtension(Extension):
         context and is mainly useful for tooling and simple startup checks.
 
         The text is not escaped. A template escapes it like any other value;
-        escape it yourself before you put it into HTML you build in Python.
+        to put it into HTML you build in Python, use ``Markup.format()``,
+        which escapes each value it inserts.
         """
         return self._resolve_parts(message_id, attr=attr, context=context, values=values)[0]
 

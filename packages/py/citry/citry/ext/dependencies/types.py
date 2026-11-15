@@ -220,10 +220,12 @@ class Script(Dependency):
     With ``url`` set, renders ``<script src="...">``; otherwise renders the
     ``content`` inline as ``<script>...</script>``.
 
-    The browser runs what ``url`` and ``content`` give it, and an ``on*``
-    key in ``attrs`` becomes an inline handler. Citry escapes attribute
-    values but does not check a URL's scheme or the code, so write these
-    values in your own code, never from request data.
+    The browser runs the script that ``url`` names or that ``content``
+    holds, and a key such as ``onclick`` in ``attrs`` becomes an inline
+    handler (an attribute such as ``onclick="..."``). Citry escapes
+    attribute values but does not check a URL's scheme, the script text,
+    or the attribute names, so write these values in your own code, never
+    from request data.
 
     Example::
 
@@ -291,9 +293,10 @@ class Style(Dependency):
     With ``url`` set, renders ``<link rel="stylesheet" href="..."/>``;
     otherwise renders the ``content`` inline as ``<style>...</style>``.
 
-    The browser loads and applies what ``url`` and ``content`` give it,
-    and an ``on*`` key in ``attrs`` becomes an inline handler. Write these
-    values in your own code, never from request data.
+    The browser applies the stylesheet that ``url`` names or that
+    ``content`` holds, and a key such as ``onclick`` in ``attrs`` becomes
+    an inline handler (an attribute such as ``onclick="..."``). Write
+    these values in your own code, never from request data.
 
     Example::
 

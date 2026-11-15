@@ -51,11 +51,12 @@ On an interactive page (see [Use plain scripts](#use-plain-scripts)),
 Citry's browser code adds the script tags itself, and it refuses a `data:`
 script URL. A relative URL such as `/static/chart.js` works. A `data:`
 script URL stops the page's Vue app, or the fragment, from starting, and
-the browser console shows an error. On a page without Vue, Citry writes
-the URL into the `<script>` tag without checking its scheme.
+the browser console shows an error.
 
-The browser runs whatever file the URL names, so write library URLs in
-your own code. Never build one from request data.
+A page that is not interactive gets the URL written into the `<script>`
+tag as given, with no scheme check. The browser runs whatever file the
+URL names, so write library URLs in your own code. Never build one from
+request data (a query parameter, form field, or header).
 
 ## Add a project file
 
@@ -153,10 +154,12 @@ class Editor(Component):
 Give each object either `url` or `content`, not both. `attrs` adds HTML
 attributes to the tag.
 
-The browser runs what `url` and `content` give it, and an `on*` key in
-`attrs` becomes an inline handler. Citry escapes attribute values but does
-not check a URL's scheme or what the code does, so write these values in
-your own code and never build them from request data.
+The browser runs the script that `url` names or that `content` holds,
+and a key such as `onclick` in `attrs` becomes an inline handler (an
+attribute such as `onclick="..."`). Citry escapes attribute values but
+does not check a URL's scheme, the script text, or the attribute names,
+so write these values in your own code and never build them from
+request data.
 
 Citry runs inline JavaScript inside its own function, so its top-level
 variables do not leak to other scripts. Set `wrap=False` when a script must

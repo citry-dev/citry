@@ -145,8 +145,8 @@ class RouteResponse:
             name, because Django's response object holds one value per header
             name. Citry does not check header names or values for line breaks
             or other control characters, and not every server refuses them,
-            so check any value that comes from request data before you put
-            it in a header or in `content_type`.
+            so check any value that comes from request data before you use
+            it in a header or as the `content_type`.
 
     """
 

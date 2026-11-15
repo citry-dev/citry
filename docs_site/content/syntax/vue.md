@@ -91,27 +91,26 @@ for every directive and modifier.
     and `v-If` as a custom directive named `If`. Names that start with `v-c-`
     or `v-citry-` fail too, because Citry keeps them for its own use.
 
-!!! warning "Some bindings run what they are given"
+!!! warning "Do not bind request data to these"
 
-    Vue applies a bound value in the browser without checking it, and
-    Citry passes the binding to Vue unchanged. These bindings make the
-    browser run or load the value:
+    Vue does not check a bound value, and Citry does not change the
+    binding. With the attributes below, the browser runs or loads
+    whatever the value holds:
 
-    - `v-html`, `:innerHTML`, `:outerHTML`, and the `.prop` modifier on
-      those names insert the value as HTML;
+    - `v-html`, `:innerHTML`, and `:outerHTML` insert the value as HTML;
     - `:srcdoc` loads the value as a page with its own scripts;
     - `:href`, `:src`, `:action`, and `:formaction` can run a
       `javascript:` URL or open a `data:` document;
     - `:style` applies the value as CSS, so a `url()` in it loads a
       resource;
-    - `<component :is>` creates an element of that name, such as
-      `script`, when the name is not a registered component;
-    - a lowercase `:onclick` turns a string into an inline handler. Use
-      `@click` to listen to an event.
+    - `<component :is>` with a string that Vue cannot resolve as a
+      component creates an HTML element of that name, such as `script`;
+    - a string bound to a lowercase `on` name, such as `:onclick`,
+      becomes an inline handler. Use `@click` to listen to an event.
 
-    Do not bind request data, or text a site visitor saved, with these.
-    Check a URL on the server first, and allow only `https:` or `http:`
-    URLs and paths on your own site. See
+    Do not bind request data (a query parameter, form field, or header),
+    or text a site visitor saved, to these. Show such text with
+    `{{ }}`, and check a URL on the server against the schemes listed in
     [Check URL attributes](/security/#check-url-attributes).
 
 ### Pick loop and slot names { #reserved-browser-names }

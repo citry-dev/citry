@@ -81,12 +81,14 @@ The hardening work begins by classifying actors and trust levels:
 - browser runtime, including CSP and third-party scripts.
 
 For each boundary, record which inputs are trusted code, trusted configuration,
-untrusted data, signed data, or opaque external content.
-[`trust_boundaries.md`](trust_boundaries.md) does this for the template,
-component data, Events, extension, route, and Citry UI APIs: for each input
-that reaches the page it says who may supply it and which function checks it. Security diagnostics
+untrusted data, signed data, or opaque external content. Security diagnostics
 must not imply that an extension or component source is sandboxed when it is
 intentionally trusted Python code.
+
+[`trust_boundaries.md`](trust_boundaries.md) records this for the template,
+component data, Events, extension, route, and Citry UI APIs: for each input
+that reaches the page, it says who may supply it and which function checks
+it.
 
 ---
 

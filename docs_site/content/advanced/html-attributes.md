@@ -187,10 +187,10 @@ It follows the same rules as attributes in a template:
 - names and values are HTML-escaped, including a
   [`Markup`][citry.Markup] value.
 
-`format_attrs()` checks that each name is well formed, but it does not
-refuse `onclick` and the other names that `c-bind` refuses (see
-[Write handlers in the template](#write-handlers-in-the-template)).
-Choose the names in your own code. Never use keys from request data.
+One rule differs from `c-bind`: `format_attrs()` accepts names such as
+`onclick`, `innerHTML`, and `srcdoc`, whose values the browser runs or
+reads as markup. Choose the names in your own code, never from request
+data (a query parameter, form field, or header).
 
 When Vue renders an interactive component, a `True` value on an attribute
 that is not a boolean HTML attribute renders as `data-open="true"` rather
@@ -247,11 +247,11 @@ name you wrote from one passed in as data, so it refuses both. See
 
     Citry escapes every attribute value, but it does not check what the
     value means. Some attributes hold code or a page the browser loads,
-    such as `href`, `src`, `srcdoc`, and inline handlers. `style` is one
-    too: Citry does not check its value as CSS, so it can load an image
-    from another site. When such a value comes from request data, such as
-    a query parameter or a form field, choose it in your own code or check
-    it before you use it.
+    such as `href`, `src`, `srcdoc`, and inline handlers. `style` can
+    also load a resource: Citry does not check its value as CSS, so a
+    `url(...)` in it can load an image from another site. When such a
+    value comes from request data, such as a query parameter or a form
+    field, choose it in your own code or check it before you use it.
 
 ## Less common cases
 

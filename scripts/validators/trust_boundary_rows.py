@@ -6,7 +6,7 @@ who may supply it and which function checks it. A new extension hook or
 Events action is the most likely way for a new input to reach the page, and
 also the easiest to add without updating that doc. So this check reads the
 places those names are declared and fails when one of them is not written
-in the doc as code (in backticks). It proves the doc mentions each name,
+in the doc at the start of a code span (in backticks). It proves the doc mentions each name,
 not that the row is right; the security pass checks the row.
 
 The names come from the source, read as Python syntax rather than imported,

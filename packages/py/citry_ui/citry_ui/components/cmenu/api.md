@@ -211,7 +211,7 @@ suppresses outside anchored layers and gives the Dialog Escape/focus ownership.
 ## Trust boundary
 
 Text is escaped. Values are plain, nonempty canonical strings; generated IDs
-do not expose raw values. `href` must be a relative URL or an `http:`,
+do not expose raw values. `CMenuItem` `href` must be a relative URL or an `http:`,
 `https:`, `mailto:`, `sms:`, or `tel:` URL; any other scheme raises
 `ValueError`.
 Attribute maps reject owned semantics, focus, visibility, anchoring, Vue

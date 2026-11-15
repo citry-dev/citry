@@ -67,6 +67,15 @@ Citry renders the fill once for each place it appears. If the two places
 need different content or behavior, declare two `Slot` variables
 instead.
 
+## Check a URL from a message
+
+Translators write messages. When you put a `tr()` result into a URL
+attribute yourself, such as `c-href="tr('help-url')"`, Citry escapes it
+but does not check the URL's scheme, so check it as you would a URL from
+request data; see
+[Check URL attributes](/security/#check-url-attributes). Better, keep
+the URL fixed in the template and translate only the link text.
+
 ## Text stays escaped
 
 Citry escapes all text that comes from the message:
@@ -80,11 +89,6 @@ my-app-safe-message = <unsafe> { $link } & text
 in `c-values`. Only the content of the fill is rendered as HTML. A
 translation therefore cannot add an event handler, an unsafe URL, an
 attribute, or a component.
-
-When you put a `tr()` result into an attribute yourself, such as
-`c-href="tr('help-url')"`, Citry escapes it but does not check the
-URL's scheme. Treat that message like any other URL you write; see
-[Check URL attributes](/security/#check-url-attributes).
 
 This holds only while the translation stays text. Do not wrap the
 string that `tr()` returns in [`Markup`][citry.Markup], and do not

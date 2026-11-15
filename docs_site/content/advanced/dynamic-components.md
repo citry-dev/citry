@@ -154,9 +154,10 @@ The value must be a registered component name, such as `"card"`, or a
   `Card(title="Hi")`, raises `TypeError`. Insert it with `{{ ... }}`
   instead, or pass its class.
 
-`c-is` can pick any registered component. When the choice comes from
-request data, such as a query parameter, look the value up in a list of
-components you allow, and pass the result:
+A request that picks the name can render any registered component,
+including ones you did not mean to expose. When the choice comes from
+request data, such as a query parameter, look the value up in a
+dictionary of components you allow, and pass the result to `c-is`:
 
 ```python
 ALLOWED = {"card": Card, "list": ListView}
