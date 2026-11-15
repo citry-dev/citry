@@ -25,6 +25,23 @@ you want these components.
 
 <c-ui-library-list />
 
+## Pass request data safely { #pass-request-data-safely }
+
+Text you pass to a component, such as a label or a cell value, shows as
+text. URL inputs such as `href`, `action`, and `src` accept only a
+relative URL or a scheme the component allows, and raise `ValueError`
+for any other.
+
+Attribute maps (`attrs=` and the other `*_attrs=` arguments) and `style`
+need more care:
+
+- Build attribute maps in your own code. Citry refuses names that run
+  code, such as `onclick`, and names the component sets itself, but it
+  does not check what the other names mean.
+- Citry does not check a `style` value as CSS, so a value from request
+  data can add declarations of its own, such as a background image from
+  another site.
+
 ## Upgrade with care { #upgrade-with-care }
 
 Citry UI is in alpha, so a new release can change how a component looks

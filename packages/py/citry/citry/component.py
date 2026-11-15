@@ -737,6 +737,8 @@ class Component(metaclass=ComponentMeta):
     absolute paths are used as-is. A subclass that inherits this declaration
     therefore keeps the declaring class's file location. A plain mixin can
     declare the path while the component still supplies the owning engine.
+    Only the component's author chooses the path; never build it from
+    request data, because the file it names is compiled as a template.
     """
 
     messages: ClassVar[str | None] = None

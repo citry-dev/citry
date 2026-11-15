@@ -215,6 +215,11 @@ A value containing a null or surrogate character, `<!--`, or the start
 of a `</style>` end tag in any letter case always raises. `rgb(...)`, `calc(...)`, and `url(...)` values work,
 including SVG data URLs.
 
+Citry keeps a value inside its declaration, but it does not check where a
+`url(...)` points. When your CSS uses the property in a place such as
+`background`, the browser fetches that address. If the value comes from
+request data, check the URL in your own code first.
+
 To use data in a stylesheet, pass it through `css_data()`, not through
 `{{ }}` inside a `<style>` element you write in the template. The same
 holds for scripts: send data with `js_data()`, not `{{ }}` inside a

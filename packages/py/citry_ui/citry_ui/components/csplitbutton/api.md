@@ -192,8 +192,9 @@ syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Put listeners on
 the `<c-CSplitButton>` tag instead: a click on either button bubbles to the
 root, so check `event.target.closest('[data-citry-ui-part="split-button-primary"]')`
 when only the primary action matters. The primary also accepts the documented
-native Form attributes, but URL-like action destinations remain consumer-owned
-and are not sanitized or trusted by Citry. Component-owned identity, semantics,
+native Form attributes. A `formaction` follows the `CForm` `action` rule: a
+relative URL or an `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL; any
+other scheme raises `ValueError`. Component-owned identity, semantics,
 state, focus order, popover targeting, and Citry runtime fields are rejected.
 
 Primary content accepts text and decorative noninteractive content. The final

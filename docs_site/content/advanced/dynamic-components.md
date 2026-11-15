@@ -154,6 +154,15 @@ The value must be a registered component name, such as `"card"`, or a
   `Card(title="Hi")`, raises `TypeError`. Insert it with `{{ ... }}`
   instead, or pass its class.
 
+`c-is` can pick any registered component. When the choice comes from
+request data, such as a query parameter, look the value up in a list of
+components you allow, and pass the result:
+
+```python
+ALLOWED = {"card": Card, "list": ListView}
+chosen_component = ALLOWED.get(request_value, Card)
+```
+
 ### Vue bindings stay Vue
 
 Vue bindings on `<c-component>` follow the usual rules for a component

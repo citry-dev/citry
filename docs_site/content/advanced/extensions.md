@@ -148,17 +148,22 @@ page's HTML, and Citry uses that as it is.
 
 ### Keep hook output safe
 
-Some hooks, such as `on_template_loaded`, `on_js_loaded`,
-`on_css_loaded`, and `on_serialize`, return a template, script,
-stylesheet, or the page's HTML. Citry compiles or inserts that text
-without checking it, so build it from your extension's own text, never
-from request data.
+Some hooks return a template, compiled template parts, a script, a
+stylesheet, translated messages, or the page's HTML: `on_template_loaded`,
+`on_template_compiled`, `on_template_foreign_compiled`,
+`on_template_foreign_spans`, `on_js_loaded`, `on_css_loaded`,
+`on_messages_loaded`, and `on_serialize`. Citry compiles or inserts that
+text without checking it, so build it from your extension's own text,
+never from request data.
 
 An `on_attrs_resolved` hook may change attribute values, but it may not
 add an inline event handler such as `onclick`, or `innerHTML`,
 `outerHTML`, or `srcdoc`; Citry raises `ValueError` if it does. A hook
 may change the value of a handler the template already has, so never put
-request data into that handler's value.
+request data into that handler's value. Citry escapes the values a hook
+sets but does not check a URL's scheme, so check a URL from request data
+before you put it in `href` or `src`; see
+[Check URL attributes](/security/#check-url-attributes).
 
 ### Handle a failed render
 
@@ -285,6 +290,10 @@ class Analytics(Extension):
 
 Citry adds its own browser runtime after the hook returns, so the hook
 cannot move or remove it. The runtime loads before these scripts.
+
+The browser runs every script and stylesheet in these lists. Citry does
+not check a script's URL or code, so take them from your extension's own
+settings, never from request data.
 
 On a static page, the `early_scripts` entries become `<script>` tags before
 the other scripts.

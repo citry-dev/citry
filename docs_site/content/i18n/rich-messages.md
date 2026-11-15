@@ -81,6 +81,11 @@ in `c-values`. Only the content of the fill is rendered as HTML. A
 translation therefore cannot add an event handler, an unsafe URL, an
 attribute, or a component.
 
+When you put a `tr()` result into an attribute yourself, such as
+`c-href="tr('help-url')"`, Citry escapes it but does not check the
+URL's scheme. Treat that message like any other URL you write; see
+[Check URL attributes](/security/#check-url-attributes).
+
 This holds only while the translation stays text. Do not wrap the
 string that `tr()` returns in [`Markup`][citry.Markup], and do not
 show a translation with `v-html`, such as `v-html="$i18n.tr(...)"`.

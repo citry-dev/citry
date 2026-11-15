@@ -521,6 +521,10 @@ Promise. The Promise rejects when:
 - a `state` action has no `publicState`, the component's public State
   values (this rejects with a `TypeError`).
 
+Pass only actions that your own server returned. A `render` action can
+make Citry load scripts with the page's CSP nonce, so never pass actions
+that came from another site, from `postMessage`, or from storage.
+
 ### Custom event transports
 
 A custom transport replaces `fetch` for event calls. Citry calls
