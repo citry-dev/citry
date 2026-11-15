@@ -874,9 +874,12 @@ class Component(metaclass=ComponentMeta):
     it may change. ``_storage`` is ``"signed"`` by default and may be set to
     ``"server"``. ``_max_bytes`` defaults to 8192 bytes, or 65536 with
     server storage, where it caps how large browser writes may make the
-    stored State and ``None`` turns that check off. ``_max_age`` accepts a
-    ``datetime.timedelta`` or ``None``; with ``None``, signed State never
-    expires and server-stored State expires after 24 hours.
+    stored State and ``None`` turns that check off. ``_max_age`` is a
+    ``datetime.timedelta`` of at least one second that sets how long the
+    State token (the string Citry sends to the page for the next call)
+    works after Citry issues it. With ``None``, the token expires after 24
+    hours in either storage; a call with an expired token fails with
+    ``stale_state``, and Citry's browser code offers a reload.
 
     Citry starts State from same-named keyword arguments and field defaults.
     Define ``state_data(self, kwargs, slots)`` when the values need to be

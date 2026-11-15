@@ -64,9 +64,25 @@ State holds, as in the example above. With server storage
 (`State._storage = "server"`, below), an older token works until its
 cache entry expires or the cache drops it.
 
-A token expires `State._max_age` (a `timedelta`) after Citry issues it.
-With the default storage and no `_max_age`, it never expires. Setting
-`_max_age` later does not shorten the tokens Citry has already issued.
+A token expires 24 hours after Citry issues it, with either storage.
+Citry issues a new token each time it renders the component and after
+each call that changes State. The expiry limits how long a copied token
+stays useful. A call with an expired token does not run its handler: it
+gets a `stale_state` error, and Citry's browser code offers to reload
+the page, which brings a fresh token.
+
+To change the lifetime, set `State._max_age` to a `timedelta` of at least
+one second. Token times are whole seconds, so a token can stop working up
+to one second early. No setting turns expiry off. Changing `_max_age` later does not change the tokens
+Citry has already issued.
+
+```python
+from datetime import timedelta
+
+class State:
+    project_id: int
+    _max_age = timedelta(days=7)
+```
 
 To stop accepting every signed token issued so far, give
 `Citry(secret=...)` a new secret and drop the one that signed them. A page

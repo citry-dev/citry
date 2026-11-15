@@ -1,5 +1,41 @@
 # Release notes
 
+## Unreleased
+
+### Upgrading from 0.9.x
+
+- **State sent to the page now expires after 24 hours by default:**
+  Citry sends each component's State to the page as a signed string, the
+  State token. The token of a component whose `State` sets no
+  `_max_age` used to work until you changed the signing secret. Now it
+  stops working 24 hours after Citry issues it, as server-stored State
+  already did. Citry issues a new token when it renders the component
+  and after a call that changes State, so the pages affected are those whose State has not
+  changed for more than 24 hours. A call with an expired token does not
+  run its handler: it gets a `stale_state` error, and Citry's browser
+  code asks once per page whether to reload. Tokens issued before the
+  upgrade also expire 24 hours after Citry issued them. No setting turns
+  expiry off; to keep a token working for longer, set a longer
+  `_max_age`:
+
+    ```python
+    from datetime import timedelta
+
+    class State:
+        _max_age = timedelta(days=7)
+    ```
+
+- **`State._max_age` must be at least one second:** a shorter value,
+  including `timedelta(0)`, made every token expire as soon as Citry
+  issued it, and now raises `ValueError` when the class is defined.
+
+### Changed
+
+- If a later Citry release changes the State token format, a page from
+  the other release gets `stale_state` (409) during a deploy, and Citry's
+  browser code offers a reload. Before, it got `invalid_state` (403) and
+  an error.
+
 ## v0.9.0
 
 Citry 0.9.0 states the order in which a page's scripts and

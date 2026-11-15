@@ -154,7 +154,7 @@ a breaking change. Making a lenient default stricter later is.
 | Render cache | `ttl=300` s, `max_entry_bytes=1_000_000` (`ext/cache/config.py:19-20`), `enabled=False` per component | Keep |
 | Page-file store | `vue_asset_max_bytes` 64 MiB (`settings.py:36`) | Keep |
 | Server-stored State lifetime | 24 h when `_max_age` is unset (`ext/events/tokens.py:160`) | Keep |
-| Signed State token lifetime (not on the #624 list) | Never expires when `_max_age` is unset (`ext/events/tokens.py:537`; documented in `security.md:67-69`) | The one default that looks loose for a stable release: a captured token stays valid until the secret rotates. Decide with the security review whether to give it a default. Decision 7 already accepts that an old page may reload once |
+| Signed State token lifetime (not on the #624 list) | Never expires when `_max_age` is unset (`ext/events/tokens.py:537`; documented in `security.md:67-69`) | Decided 2026-11-15: 24 hours when `_max_age` is unset, the same as server-stored State, as the one recorded breaking change in 1.0.0 |
 
 ### 1.4 Questions that are not renames
 

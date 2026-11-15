@@ -114,8 +114,9 @@ class StateMeta:
             runs (signed storage only when the call gets a new token), and
             signed storage also checks it each time it makes a token. With
             server storage, ``None`` turns the check off.
-        max_age: Optional token expiry. With ``None``, signed tokens never
-            expire and server-stored entries expire after 24 hours.
+        max_age: How long a State token stays valid after Citry issues it,
+            at least one second. ``None`` means the default: signed tokens
+            and server-stored entries both expire after 24 hours.
 
     """
 
@@ -954,13 +955,9 @@ def check_replaced_state(component_class: type, nearest: NestedClassDeclaration,
     consequences = {
         "_public": "browser code can now read every field",
         "_model": "browser code can now change every field it can read",
-        # A server-stored State without `_max_age` still expires, on the
-        # 24-hour default, so the warning must not say it never does.
-        "_max_age": (
-            "its values expire after the 24-hour default"
-            if state_setting(declared, "_storage", "signed") == "server"
-            else "its values never expire"
-        ),
+        # A State without `_max_age` expires on the 24-hour default in
+        # either storage, so the warning names that lifetime.
+        "_max_age": "its values expire after the 24-hour default",
     }
     for setting, consequence in consequences.items():
         if state_setting(parent_schema, setting) is not None and not has_state_setting(declared, setting):
@@ -1046,8 +1043,13 @@ def resolve_state_meta(comp_name: str, user_cls: type, state_cls: type) -> State
     if max_age is not None and not isinstance(max_age, timedelta):
         msg = f"Component {comp_name}: State._max_age must be a datetime.timedelta or None; got {max_age!r}."
         raise ValueError(msg)
-    if max_age is not None and max_age.total_seconds() < 0:
-        msg = f"Component {comp_name}: State._max_age must be non-negative; got {max_age!r}."
+    # Token times are whole seconds, so a lifetime under one second would make
+    # every token stale as soon as it is issued.
+    if max_age is not None and max_age < timedelta(seconds=1):
+        msg = (
+            f"Component {comp_name}: State._max_age must be at least one second; got {max_age!r}."
+            " State tokens always expire; for a longer lifetime, set a longer timedelta."
+        )
         raise ValueError(msg)
 
     return StateMeta(public=public, model=model, storage=storage, max_bytes=max_bytes, max_age=max_age)
