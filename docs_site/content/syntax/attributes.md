@@ -213,6 +213,14 @@ too:
 <!-- Result: <div></div> -->
 ```
 
+Citry escapes the style text so it stays inside the attribute, but it
+does not check that the text is safe CSS. A value from request data (a
+query parameter, form field, or header) can add CSS of its own, such as
+a `background` that loads an image from another site. Choose style
+values in your own code, or send the data to your component's CSS with
+[`css_data()`](/advanced/js-and-css-dependencies/#send-values-to-css),
+which puts each value in a CSS variable that cannot add other rules.
+
 !!! note "Components receive `class` and `style` as ordinary inputs"
 
     The joining above happens only on HTML elements, including

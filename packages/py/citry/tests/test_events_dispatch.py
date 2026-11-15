@@ -18,7 +18,6 @@ import importlib.util
 import json
 import logging
 import re
-import tracemalloc
 from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +41,8 @@ from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
 from citry.util.routing import RouteResponse
+
+from ._memory import tracemalloc
 
 SIGNING_KEY = "test-secret-key"
 FIXED_NOW = 1_700_000_000.0
@@ -961,7 +962,11 @@ class TestServerStoredState:
         }
         [state_action, _data] = _dispatch(c, grow)["results"][0]["actions"]
         big_token = state_action["stateToken"]
-        tracemalloc.start()
+        # PyPy has no `_tracemalloc`, so `tracemalloc` is None there; the
+        # test still checks the store's own byte count and skips only the
+        # process-memory bound.
+        if tracemalloc is not None:
+            tracemalloc.start()
         for batch in range(20):
             calls = [
                 {
@@ -977,13 +982,15 @@ class TestServerStoredState:
             assert all(item["ok"] or item["error"]["code"] == "stale_state" for item in results)
         # The responses carry the public State too; only the store is measured.
         del results, calls
-        held, _peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
+        if tracemalloc is not None:
+            held, _peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
         # 320 calls would have stored about 19 MB; the store is full but
         # holds no more than its budget.
         assert len(c.cache._state) >= 5
         assert c.cache._state_bytes <= budget
-        assert held < 2 * budget
+        if tracemalloc is not None:
+            assert held < 2 * budget
         assert c.cache.get("citry:asset:page.js") == "js"
 
     def test_ordinary_calls_keep_working_under_the_state_budget(self):
@@ -1153,6 +1160,34 @@ class TestErrors:
             "code": "stale_state",
             "message": "The state token is stale (expired or rotated out); reload the page to get a fresh one.",
         }
+
+    def test_a_token_without_max_age_is_stale_after_24_hours(self, monkeypatch):
+        # The conformance Counter sets no _max_age, so its token gets the
+        # 24-hour default and then answers like any expired token.
+        c = _citry()
+        counter = _counter(c)
+        token = _token(counter)
+        call = {
+            "componentClassId": counter.class_id,
+            "handlerName": "increment",
+            "callerRenderId": "c9zk1q00",
+            "stateToken": token,
+        }
+        monkeypatch.setattr("citry.ext.events.tokens._now", lambda: FIXED_NOW + 24 * 60 * 60 - 1)
+        assert _dispatch(c, call)["results"][0]["ok"] is True
+        monkeypatch.setattr("citry.ext.events.tokens._now", lambda: FIXED_NOW + 24 * 60 * 60)
+        error = _dispatch(c, call)["results"][0]["error"]
+        assert (error["status"], error["code"]) == (409, "stale_state")
+
+    def test_a_token_from_an_unknown_token_version_is_stale(self):
+        # What a page rendered by a release with a newer token version sends.
+        c = _citry()
+        counter = _counter(c)
+        result = _dispatch(
+            c, {"componentClassId": counter.class_id, "handlerName": "increment", "stateToken": "cev2.payload.sig"}
+        )
+        error = result["results"][0]["error"]
+        assert (error["status"], error["code"]) == (409, "stale_state")
 
     def test_missing_token_for_a_state_declaring_handler(self):
         c = _citry()

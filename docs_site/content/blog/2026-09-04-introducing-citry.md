@@ -7,6 +7,10 @@ author_url: /community/people/
 tags: Project updates
 ---
 
+*Editor's note, November 15, 2026: this post calls Citry a public beta.
+Citry has since reached 1.0.0, its first stable release; see
+[Citry 1.0.0 is stable](/blog/citry-1-0-0/).*
+
 *Editor's note, September 28, 2026: this post describes Citry as it was when
 it was published. Starting with Citry 0.6.0, components use Vue for browser
 behavior instead of Alpine.js, so the Alpine.js parts of the examples below,

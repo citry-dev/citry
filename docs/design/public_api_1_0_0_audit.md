@@ -118,20 +118,21 @@ Already done:
 
 These only add names, so none needs an upgrade note. All four were
 approved and are done in 0.9.0, except naming `citry.reload` on the
-Versioning page, which waits for that page (#624). Running the test
-suite with `CitryDeprecationWarning` turned into an error is also left
-to its own #624 task; one test checks the filter string the docstring
-teaches. `CitryDeprecationWarning` is a
-`DeprecationWarning` subclass. `citry.reload.__all__` is `watch`,
-`WatchHandle`, `FileWatcher`, `WatchfilesWatcher`, `WatchdogWatcher` and
-`PollingWatcher`; `default_watcher` stays internal. The docs site counts
+Versioning page, which waits for that page (#624). The test suite fails
+on every deprecation warning, `CitryDeprecationWarning` included,
+through the `filterwarnings` setting in the root `pyproject.toml`; one
+test checks the filter string the docstring teaches.
+`CitryDeprecationWarning` is a `DeprecationWarning` subclass.
+`citry.reload.__all__` is `watch`, `WatchHandle`, `FileWatcher`,
+`WatchfilesWatcher`, `WatchdogWatcher` and `PollingWatcher`;
+`default_watcher` stays internal. The docs site counts
 `citry.reload` as a public entrypoint, so the reference test checks that
 every name in its `__all__` has a reference page.
 
 | What | Change | Risk | Must or fine |
 |---|---|---|---|
 | `safe_eval` and `unsafe` (decision 8) | Re-export from `citry`; change the two imports in `docs_site/content/security.md:936` and `:1007`. Their docstrings are thin, so use a `description_overrides` entry in `reference.yml` rather than a new citry-core release | Low | Must |
-| `CitryDeprecationWarning` (decision 4) | Add the public class. The helper that warns at the caller's line already exists, privately, as `warn_at_caller` (`citry/_caller_warnings.py:51`). No pytest `filterwarnings` setting exists yet. Choose the base class: a `DeprecationWarning` subclass (as Django does) is hidden by default outside `__main__` and test runners, while `FutureWarning` is always shown | Low | Must |
+| `CitryDeprecationWarning` (decision 4) | Add the public class. The helper that warns at the caller's line already exists, privately, as `warn_at_caller` (`citry/_caller_warnings.py:51`). The root pytest `filterwarnings` setting turns every `DeprecationWarning` into an error. Choose the base class: a `DeprecationWarning` subclass (as Django does) is hidden by default outside `__main__` and test runners, while `FutureWarning` is always shown | Low | Must |
 | `citry.reload` | `guides/hot-reload.md:116` teaches `from citry.reload import watch`, and `reload_lifespan()` takes a `FileWatcher`, but `citry.reload` has no `__all__` and no reference page. Give `citry.reload` an `__all__` (`watch`, `WatchHandle`, `FileWatcher` and the watcher classes the guide names), add a reference category, and name the module on the Versioning page. That covers what the guide teaches without growing `citry.__all__` | Low | Must |
 | `I18nExtension` | The i18n guides call `get_extension("i18n").for_context(...)`, and `reference.yml:287` renders it, but it is not in `citry.ext.i18n.__all__`. Add it | Low | Must |
 
@@ -154,7 +155,7 @@ a breaking change. Making a lenient default stricter later is.
 | Render cache | `ttl=300` s, `max_entry_bytes=1_000_000` (`ext/cache/config.py:19-20`), `enabled=False` per component | Keep |
 | Page-file store | `vue_asset_max_bytes` 64 MiB (`settings.py:36`) | Keep |
 | Server-stored State lifetime | 24 h when `_max_age` is unset (`ext/events/tokens.py:160`) | Keep |
-| Signed State token lifetime (not on the #624 list) | Never expires when `_max_age` is unset (`ext/events/tokens.py:537`; documented in `security.md:67-69`) | The one default that looks loose for a stable release: a captured token stays valid until the secret rotates. Decide with the security review whether to give it a default. Decision 7 already accepts that an old page may reload once |
+| Signed State token lifetime (not on the #624 list) | Never expires when `_max_age` is unset (`ext/events/tokens.py:537`; documented in `security.md:67-69`) | Decided 2026-11-15: 24 hours when `_max_age` is unset, the same as server-stored State, as the one recorded breaking change in 1.0.0 |
 
 ### 1.4 Questions that are not renames
 

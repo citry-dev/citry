@@ -137,7 +137,9 @@ return actions.Dispatch("TaskRow:saved", {"title": title})
 
 Start the name with your component's name, as in `TaskRow:saved`. Names that
 start with `citry:` are reserved for Citry, so `actions.Dispatch` raises
-`ValueError` for them.
+`ValueError` for them. A name such as `click` or `submit` also runs the
+page's own listeners for that event, so never build the name from
+request data (a query parameter, form field, or header).
 
 The event starts at the first element of the component whose handler ran and
 bubbles up to `document`. It fires once, even when the component has several

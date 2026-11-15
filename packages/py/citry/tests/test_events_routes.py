@@ -13,7 +13,6 @@ import asyncio
 import json
 import re
 import time
-import tracemalloc
 from decimal import Decimal
 from urllib.parse import quote, urlsplit
 
@@ -42,6 +41,8 @@ from citry.ext.events.routes import _encode_location, _join_like_a_browser, get_
 from citry.ext.events.schemas import PATHS_TOO_LONG_MESSAGE, StringArgs
 from citry.ext.events.tokens import mint_state_token
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
+
+from ._memory import requires_tracemalloc, tracemalloc
 
 SIGNING_KEY = "test-secret-key"
 FIXED_NOW = 1_700_000_000.0
@@ -1202,6 +1203,7 @@ class TestPerEventRoute:
             return {"args": {"scores": value}, "stateToken": _token(board)}
         return {"args": {"scores": {}}, "stateToken": _token(board), "stateUpdates": {"scores": value}}
 
+    @requires_tracemalloc
     @pytest.mark.parametrize("adapter", ["asgi", "wsgi"])
     @BOARD_CASES
     def test_a_long_key_over_many_bad_items_costs_little(self, adapter, field, schema):

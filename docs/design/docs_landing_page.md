@@ -11,7 +11,7 @@ validation work, not gates for iterating on the working page.
 
 Related decisions live in [`docs_site.md`](docs_site.md),
 [`docs_content.md`](docs_content.md), [`docs_blog.md`](docs_blog.md), the
-provisional [v1 beta product charter](v1_beta_research/product_beta_charter.md),
+closed [v1 beta product charter](v1_beta_research/product_beta_charter.md),
 and the proposed [IDE integration](ide_integration.md). The current page is
 [`docs_site/content/index.md`](../../docs_site/content/index.md).
 

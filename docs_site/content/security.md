@@ -64,9 +64,25 @@ State holds, as in the example above. With server storage
 (`State._storage = "server"`, below), an older token works until its
 cache entry expires or the cache drops it.
 
-A token expires `State._max_age` (a `timedelta`) after Citry issues it.
-With the default storage and no `_max_age`, it never expires. Setting
-`_max_age` later does not shorten the tokens Citry has already issued.
+A token expires 24 hours after Citry issues it, with either storage.
+Citry issues a new token each time it renders the component and after
+each call that changes State. The expiry limits how long a copied token
+stays useful. A call with an expired token does not run its handler: it
+gets a `stale_state` error, and Citry's browser code offers to reload
+the page, which brings a fresh token.
+
+To change the lifetime, set `State._max_age` to a `timedelta` of at least
+one second. Token times are whole seconds, so a token can stop working up
+to one second early. No setting turns expiry off. Changing `_max_age` later does not change the tokens
+Citry has already issued.
+
+```python
+from datetime import timedelta
+
+class State:
+    project_id: int
+    _max_age = timedelta(days=7)
+```
 
 To stop accepting every signed token issued so far, give
 `Citry(secret=...)` a new secret and drop the one that signed them. A page
@@ -207,12 +223,23 @@ your own check. Citry plans a built-in check
 
 A URL is something the browser acts on, so a value that request data puts in
 an `href`, `src` or `action` can run script when the visitor clicks: a
-`javascript:` URL does. Citry escapes a value for the place it lands, but it
-does not check the scheme of a URL you give to a plain HTML attribute, and
-plain Vue, Jinja and Django behave the same way. Check the scheme before you
-pass a URL from the request to an attribute, and allow only `http:`,
-`https:`, `mailto:`, `tel:` and relative URLs. The Citry UI components that
-take a link or an image URL refuse other schemes themselves.
+`javascript:` URL does.
+
+Citry escapes a value for the place it lands, but it does not check the
+scheme of a URL you give to a plain HTML attribute. Check the scheme before
+you pass a URL from the request to an attribute, and allow only `http:`,
+`https:`, `mailto:`, `sms:`, `tel:` and relative URLs.
+The same holds for the `content` of a `<meta http-equiv="refresh">` tag,
+and for the `to`, `from`, `by`, and `values` of an SVG `<set>` or
+`<animate>` element whose `attributeName` is a link attribute such as
+`href`.
+
+The Citry UI components that take a link or form action accept the same
+list. The ones that take an image URL accept `http:`, `https:`, `blob:`,
+`data:image/` and relative URLs. Given any other URL, these components
+raise `ValueError` when they render on the server. In the browser,
+`CAvatar` and `CImage` ignore a new value with another scheme and keep
+the image the server rendered.
 
 ## Check form field names { #check-form-field-names }
 
@@ -1083,6 +1110,12 @@ shows as `***`.
 Citry detects only the values you wrap. A secret kept in a plain string
 is sent like any other text. See [Secrets](/advanced/secrets/) for a
 full example.
+
+## Protect the render cache { #protect-the-render-cache }
+
+Citry replays HTML from the [render cache](/performance/caching/) as it
+was stored. Anyone who can write to the cache store can put HTML into
+your pages, so protect it like your database.
 
 ## Keep debug logs off { #keep-debug-logs-off-in-production }
 

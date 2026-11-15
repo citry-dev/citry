@@ -91,6 +91,28 @@ for every directive and modifier.
     and `v-If` as a custom directive named `If`. Names that start with `v-c-`
     or `v-citry-` fail too, because Citry keeps them for its own use.
 
+!!! warning "Do not bind request data to these"
+
+    Vue does not check a bound value, and Citry does not change the
+    binding. With the attributes below, the browser runs or loads
+    whatever the value holds:
+
+    - `v-html`, `:innerHTML`, and `:outerHTML` insert the value as HTML;
+    - `:srcdoc` loads the value as a page with its own scripts;
+    - `:href`, `:src`, `:action`, and `:formaction` can run a
+      `javascript:` URL or open a `data:` document;
+    - `:style` applies the value as CSS, so a `url()` in it loads a
+      resource;
+    - `<component :is>` with a string that Vue cannot resolve as a
+      component creates an HTML element of that name, such as `script`;
+    - a string bound to a lowercase `on` name, such as `:onclick`,
+      becomes an inline handler. Use `@click` to listen to an event.
+
+    Do not bind request data (a query parameter, form field, or header),
+    or text a site visitor saved, to these. Show such text with
+    `{{ }}`, and check a URL on the server against the schemes listed in
+    [Check URL attributes](/security/#check-url-attributes).
+
 ### Pick loop and slot names { #reserved-browser-names }
 
 A name you create in a `v-for` or a `v-slot` cannot start with `$`, `_`,

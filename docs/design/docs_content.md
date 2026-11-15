@@ -162,10 +162,11 @@ dimensions that are often mixed together:
   operating, or looking up a contract;
 - **job:** the concrete outcome the reader needs now.
 
-The [provisional beta charter](v1_beta_research/product_beta_charter.md)
-provides useful audience and job evidence, but its decisions are still open.
-The content research must validate them rather than silently turning them into
-approved product policy.
+The [beta charter](v1_beta_research/product_beta_charter.md) is closed, and
+issue [#624](https://github.com/citry-dev/citry/issues/624)
+holds the stable-release decisions. The charter still provides useful audience
+and job evidence, but the content research must validate that evidence rather
+than silently turning it into approved product policy.
 
 ### Provisional primary readers
 

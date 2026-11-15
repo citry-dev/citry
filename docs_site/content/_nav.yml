@@ -135,6 +135,7 @@ areas:
         collapsible: true
         section_style: true
         items:
+          - { title: Upgrade to 1.0.0, path: /guides/upgrading-to-1-0-0/, needs_review: true }
           - { title: Upgrade to 0.6.0, path: /guides/upgrading-to-0-6-0/, needs_review: true }
           - { title: Use Citry with HTMX, path: /guides/htmx/, needs_review: true }
           - { title: Troubleshooting, path: /guides/troubleshooting/, needs_review: true }
@@ -151,6 +152,7 @@ areas:
         collapsible: true
         section_style: true
         items:
+          - { title: Versioning and support, path: /about/versioning/, needs_review: true }
           - { title: Compatibility, path: /about/compatibility/ }
           - { title: Benchmarks, path: /about/benchmarks/ }
           - { title: Security, path: /security/, needs_review: true }

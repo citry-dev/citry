@@ -87,7 +87,6 @@ import _thread
 import contextlib
 import contextvars
 import functools
-import inspect
 import os
 import re
 import sys
@@ -2515,13 +2514,17 @@ def _holds_citry_wrapper(start: Any, *, references: bool = False) -> bool:
 
 
 def _rebuild_supported() -> bool:
+    """Return whether pydantic-core accepts `_use_prebuilt`, which rebuilds nested models inside Citry's copy."""
     if pydantic_core is None:
         return False
+    # Build a tiny validator with the keyword rather than read the class's
+    # signature: PyPy cannot read the signature of a compiled class
+    # (`inspect.signature` raises there), although the keyword works (#585).
     try:
-        parameters = inspect.signature(pydantic_core.SchemaValidator).parameters
-    except (TypeError, ValueError):
+        pydantic_core.SchemaValidator(_core_schema.any_schema(), None, _use_prebuilt=False)
+    except TypeError:
         return False
-    return "_use_prebuilt" in parameters
+    return True
 
 
 # Without `_use_prebuilt` a nested model keeps its own validator, which reads

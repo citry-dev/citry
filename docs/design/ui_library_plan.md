@@ -1,17 +1,15 @@
 # Plan: the Citry UI component library
 
-**Status (2026-08-22): `citry-ui` 0.1.0 remains publicly available, while the
-source-development line targets the 0.2.0 early-access release. The current
-catalog contains 77 documented component families and 156 registered
-definitions, including compound-family declarations and private renderers;
-its contracts remain alpha rather than stable.**
+**Status (2026-11-15): `citry-ui` 0.5.0 is the latest release, and it needs
+`citry` 0.9.0 or newer. The package source holds 77 component-family
+directories. Its contracts remain alpha rather than stable: `citry-ui` stays
+at 0.x when `citry` reaches 1.0.0, as decision 8 of the
+[1.0.0 plan](https://github.com/citry-dev/citry/issues/624) says.**
 
 Phases 0 through 6 are complete. Citry's generic publishing contracts, slot
 contracts, client ambient context, and docs live-component host are
 implemented. Phase 7 began on the released `citry 0.3.1` and `citry_core
-1.4.0` floor. The released 0.1.0 line uses the published `citry 0.4.0` and
-`citry_core 1.5.0` floor. The 0.2.0 source line requires `citry 0.4.2` for
-component-owned source messages and checked browser translation bindings.
+1.4.0` floor. The status line above gives the floor of the latest release.
 The
 [active component inventory](ui_component_inventory.md) owns current family
 status. Counts and family lists inside the chronological phase records below

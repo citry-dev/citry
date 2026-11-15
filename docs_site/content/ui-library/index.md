@@ -25,6 +25,32 @@ you want these components.
 
 <c-ui-library-list />
 
+## Pass request data safely { #pass-request-data-safely }
+
+Request data is any value a visitor controls, such as a query
+parameter, form field, or header. A plain string you pass to a
+component, such as a label or a cell value, shows as text.
+
+URL inputs check the scheme and raise `ValueError` for any other:
+
+- link inputs such as `href` and `action` accept a relative URL or an
+  `http:`, `https:`, `mailto:`, `sms:`, or `tel:` URL;
+- image inputs such as `src` accept a relative URL or an `http:`,
+  `https:`, `blob:`, or `data:image/` URL.
+
+See [Check URL attributes](/security/#check-url-attributes) for the
+other URLs on your page.
+
+Two inputs need checks of your own:
+
+- Build attribute maps (`attrs=` and the other `*_attrs=` arguments) in
+  your own code. Citry UI refuses a key such as `onclick`, or one the
+  component sets itself, with a `ValueError`, but it does not check what
+  the other names mean.
+- Choose `style` values in your own code. Citry does not check them as
+  CSS, so a value from request data can add declarations of its own,
+  such as a background image from another site.
+
 ## Upgrade with care { #upgrade-with-care }
 
 Citry UI is in alpha, so a new release can change how a component looks

@@ -27,7 +27,10 @@ if TYPE_CHECKING:
 # received it, or None outside a request. A context variable, so threads
 # and tasks that serve different requests each see their own value, and a
 # worker thread that Starlette starts for a sync view inherits it. A thread
-# started with `loop.run_in_executor()` or `threading.Thread` does not.
+# started with `loop.run_in_executor()` or `threading.Thread` does not, except
+# on free-threaded Python 3.14 and later: there a new thread copies the context
+# variables of the thread that starts it, so a pool thread keeps the value
+# of the call that started it.
 _REQUEST_SUB_PATH: ContextVar[str | None] = ContextVar("citry_request_sub_path", default=None)
 
 

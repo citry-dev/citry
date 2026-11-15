@@ -314,6 +314,7 @@ django-components, Next.js and Nuxt.
 - [Examples](https://citry.dev/examples/)
 - [API reference](https://citry.dev/reference/)
 - [Release notes](https://citry.dev/releases/)
+- [Versioning and support](https://citry.dev/about/versioning/)
 - [Discord](https://discord.gg/NaQ8QPyHtD)
 - [GitHub Discussions](https://github.com/citry-dev/citry/discussions)
 - [Issue tracker](https://github.com/citry-dev/citry/issues)

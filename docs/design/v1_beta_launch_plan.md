@@ -1,8 +1,11 @@
 # Plan: Citry v1 beta launch-readiness research
 
-**Status (2026-07-23): approved research charter; Stages 0 and 1 complete;
-Stage 2 bounded pilot complete and circuit breaker awaiting maintainer scope
-decision; Stage 1 product decisions deferred to Stage 10.**
+**Status (2026-11-15): closed. Citry goes from 0.9.0 to 1.0.0 with no beta
+release, and issue
+[#624](https://github.com/citry-dev/citry/issues/624)
+holds that plan. This document and its research are kept as history. They
+hold no plan to follow, and some of their facts are out of date, for
+example the supported Python versions.**
 
 This document plans the investigation that will produce Citry's actual v1 beta
 launch plan. It does not declare the repository release-ready, choose the final

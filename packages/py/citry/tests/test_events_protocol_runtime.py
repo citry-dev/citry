@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import tracemalloc
 from collections import UserDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,6 +15,8 @@ from citry import Citry
 from citry._protocol import events
 from citry.ext.events import routes as event_routes
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
+
+from ._memory import requires_tracemalloc, tracemalloc
 
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
@@ -485,6 +486,7 @@ def test_rejected_call_envelope_without_a_request_id_refuses_a_non_edge_code(raw
         events.build_rejected_call_envelope(raw, status=404, code="not_found", message="Missing.")
 
 
+@requires_tracemalloc
 def test_a_strict_json_problem_names_its_pointer_without_copying_keys() -> None:
     # A value that is not JSON sits beside a long key over many items. The
     # walk writes the pointer once, for the problem, so this takes no memory

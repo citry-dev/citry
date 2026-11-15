@@ -1,5 +1,6 @@
 """Tests for the cache backend (``citry/cache.py``) and its wiring on ``Citry``."""
 
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
@@ -195,12 +196,29 @@ class TestInMemoryCache:
         assert cache.get("citry:state:other") == "kept"
         assert any("larger than its whole state_max_bytes" in record.message for record in caplog.records)
 
+    # The bound below follows CPython's string layout; PyPy keeps strings
+    # as UTF-8, which the next test covers on every interpreter (#585).
+    @pytest.mark.skipif(sys.implementation.name != "cpython", reason="checks CPython's string layout; see #585")
     def test_non_ascii_state_counts_the_memory_it_really_takes(self):
         # One character above U+FFFF makes CPython store the whole string at
         # four bytes per character, so counting characters would undercount.
         ascii_size = InMemoryCache._entry_bytes("citry:state:k", "x" * 10_000)
         wide_size = InMemoryCache._entry_bytes("citry:state:k", "x" * 9_999 + "\U0001f600")
         assert wide_size > 3 * ascii_size - 1_000
+
+    def test_state_is_counted_as_utf8_where_getsizeof_gives_no_size(self, monkeypatch):
+        # PyPy's `getsizeof` always returns the default it is given, as this
+        # stand-in does, so State entries must still be stored and counted.
+        monkeypatch.setattr(sys, "getsizeof", lambda _obj, default: default)
+        overhead = InMemoryCache._entry_bytes("", "")
+        assert InMemoryCache._entry_bytes("citry:state:k", "x" * 10) == overhead + 13 + 10
+        # An emoji is four UTF-8 bytes, and a lone surrogate is counted, not refused.
+        assert InMemoryCache._entry_bytes("citry:state:k", "\U0001f600") == overhead + 13 + 4
+        assert InMemoryCache._entry_bytes("citry:state:k", "\ud800") == overhead + 13 + 3
+        cache = InMemoryCache()
+        cache.set("citry:state:a", "x" * 50)
+        assert cache.get("citry:state:a") == "x" * 50
+        assert cache._state_bytes == InMemoryCache._entry_bytes("citry:state:a", "x" * 50)
 
     def test_the_state_byte_count_follows_rewrites_deletes_and_expiry(self, monkeypatch):
         now = [100.0]

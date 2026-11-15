@@ -753,6 +753,13 @@ project's environment. Catalog loading rejects a missing or malformed `check`
 command, and clean-copy validation rejects a missing project workflow. Archive
 tests verify that the workflow travels with the copied project.
 
+The projects' own tests also fail on a Citry deprecation. The examples
+workflow sets `PYTEST_ADDOPTS=-W error::citry.CitryDeprecationWarning` for
+the qualification step, because the projects' `pyproject.toml` files ship in
+the starter archives and the root pytest settings do not reach a clean copy.
+The flag names Citry's class and not every `DeprecationWarning`, since each
+project locks its own pytest, anyio and web framework.
+
 
 Example qualification should have a dedicated Python workflow or dedicated
 jobs with path filters that include:
