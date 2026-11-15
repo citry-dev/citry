@@ -425,8 +425,9 @@ jobs:
   # use a web framework. It runs on pushes that start this workflow and on
   # manual runs. By the maintainer's decision it skips pull requests, so a
   # change that needs a newer framework shows up in the push run after the
-  # merge; to check a branch first, start Run workflow on it. Release step 5 in docs/codebase.md asks the
-  # maintainer to confirm this workflow passed on the release commit.
+  # merge. To check a branch first, start Run workflow on it. Release step 5
+  # in docs/codebase.md asks the maintainer to confirm this workflow passed
+  # on the release commit.
   framework-floors:
     # Installs the Linux citry-core wheel, under the condition explained on
     # `i18n-release-qualification`, and skips on pull requests.

@@ -3037,7 +3037,7 @@ The paths are:
   replaces Django, FastAPI, Starlette, Flask and Werkzeug with the versions
   pinned in the job's `FRAMEWORK_FLOORS` (plus httpx, which old Starlette
   needs), and runs every test file that imports one of them. It runs beside
-  the `test` jobs and takes a few minutes, so it adds no time to the run.
+  the `test` jobs and takes about a minute, so it adds no time to the run.
 - By the maintainer's decision, `framework-floors` runs on pushes that
   start this workflow and on manual runs, not on pull requests. A change
   that needs a newer framework shows up in the push run after the merge.

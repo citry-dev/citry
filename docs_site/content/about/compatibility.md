@@ -27,10 +27,11 @@ for which versions are still maintained upstream.
 
 ### PyPy and free-threaded { #pypy-and-free-threaded }
 
-Citry also runs on PyPy and on free-threaded CPython (a build with the
-GIL turned off), on a best-effort basis: its tests run on PyPy 3.11 and
-free-threaded CPython 3.14 once a week, not on every change. So a problem
-there can reach a release and be fixed in a later one. See
+Citry also runs on PyPy and on free-threaded CPython (a build that lets
+Python threads run in parallel), on a best-effort basis: its tests run on
+PyPy 3.11 and free-threaded CPython 3.14 once a week, not on every
+change. So a problem there can reach a release and be fixed in a later
+one. See
 [Differences on PyPy](#differences-on-pypy) and
 [Prebuilt wheels](#architectures-and-prebuilt-wheels) for the known
 differences.
@@ -38,16 +39,16 @@ differences.
 ## Web frameworks { #web-frameworks }
 
 The code that [mounts Citry on a web framework](/advanced/web-frameworks/)
-works with these versions and later releases of the same major
-version. Citry's tests run on the oldest version of each framework below
-and on a recent release.
+works with the versions below. Citry's tests run on the oldest supported
+version of each framework and on a recent release of its newest major
+version.
 
-| Framework | Oldest supported version |
-|---|---|
-| Django | 5.2.0 |
-| FastAPI | 0.141.0 |
-| Starlette, used directly | 0.46.0 |
-| Flask | 3.1.0 |
+| Framework | Oldest supported | Newest major |
+|---|---|---|
+| Django | 5.2.0 | 6 |
+| FastAPI | 0.141.0 | 0.x |
+| Starlette, used directly | 0.46.0 | 1 |
+| Flask | 3.1.0 | 3 |
 
 The mounts for a bare ASGI or WSGI app (`citry.contrib.asgi` and
 `citry.contrib.wsgi`) need no framework. Citry does not install a
