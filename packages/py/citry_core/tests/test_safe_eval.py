@@ -1,6 +1,7 @@
 # ruff: noqa: E731
 import re
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
@@ -2347,7 +2348,14 @@ LITERALS_PYTHON_READS = [
 @pytest.mark.parametrize("source", LITERALS_PYTHON_READS)
 def test_sandbox_reads_literals_as_python_does(source: str) -> None:
     context = {"x": 5, "w": 4}
-    assert safe_eval(source)(dict(context)) == eval(source, {}, dict(context))  # noqa: S307
+    # Some of these sources hold an escape sequence Python does not define
+    # (such as `\{`), which is the point of the case. Python 3.11 warns about
+    # it with a DeprecationWarning that the repository's pytest settings make
+    # an error; newer versions warn with a SyntaxWarning.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid escape sequence", category=DeprecationWarning)
+        expected = eval(source, {}, dict(context))  # noqa: S307
+    assert safe_eval(source)(dict(context)) == expected
 
 
 # A comment inside an f-string's replacement field; Python's own parser
