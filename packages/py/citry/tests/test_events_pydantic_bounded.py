@@ -294,6 +294,9 @@ def test_a_few_undeclared_keys_still_get_a_message_each() -> None:
     assert result.fields == {"x": "Extra inputs are not permitted", "y": "Extra inputs are not permitted"}
 
 
+# On PyPy, building the copy of this 300-model chain uses all the runner's
+# memory and crashes the test worker (#708).
+@pytest.mark.skipif(sys.implementation.name == "pypy", reason="uses all memory on PyPy; see #708")
 def test_a_chain_of_nested_models_deeper_than_the_nesting_limit_is_refused(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -1246,6 +1249,24 @@ def test_a_strict_pydantic_dataclass_as_event_data_accepts_valid_data() -> None:
 
 
 # --- registration -----------------------------------------------------------------
+
+
+def test_the_pydantic_check_works_without_reading_the_validator_signature(monkeypatch: pytest.MonkeyPatch) -> None:
+    # PyPy cannot read the signature of pydantic-core's compiled classes, so
+    # the check must not depend on it (#585).
+    def no_signature(_obj: object) -> None:
+        raise ValueError
+
+    monkeypatch.setattr("inspect.signature", no_signature)
+    assert bounded._rebuild_supported()
+
+    class OldValidator:
+        # A pydantic-core older than the keyword refuses it.
+        def __init__(self, schema: object, config: object = None) -> None:
+            pass
+
+    monkeypatch.setattr(pydantic_core, "SchemaValidator", OldValidator)
+    assert not bounded._rebuild_supported()
 
 
 def test_an_old_pydantic_is_refused_when_a_component_registers(monkeypatch: pytest.MonkeyPatch) -> None:

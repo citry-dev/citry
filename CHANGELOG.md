@@ -8,6 +8,10 @@
   `_storage = "server"` no longer fails to render on PyPy when the cache
   is an `InMemoryCache`, including the default cache. The error was a
   `TypeError` from `sys.getsizeof`. CPython is unchanged.
+- **Pydantic classes work with Events on PyPy:** with Pydantic 2.13.0
+  or newer installed, Events now accepts Pydantic State and event data
+  classes on PyPy. Before, it refused every one of them with "Events
+  needs Pydantic 2.13.0 or newer".
 
 ## v0.9.0
 
