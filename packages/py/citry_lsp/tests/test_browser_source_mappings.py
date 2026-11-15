@@ -6,7 +6,7 @@ import ast
 
 from lsprotocol import types
 
-from citry import PythonTemplateSourceMap
+from citry._lsp_support import PythonTemplateSourceMap
 from citry_lsp.engine import _browser_source_mappings
 from citry_lsp.regions import StandaloneTemplateSourceMap
 

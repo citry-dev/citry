@@ -175,9 +175,50 @@ jobs:
           --dist-dir dist
           --dependency-wheel-dir candidate-dependencies
 
+  # The candidate runs this checkout's tests against the oldest published
+  # citry of its major version (1.0.0 for 1.x), because every citry-lsp 1.x
+  # must work with every citry 1.x. It runs in parallel with smoke-python, so
+  # the release waits only for the time it takes beyond that job. Before a citry 1.x
+  # is on PyPI the script skips the pair with a message
+  # (scripts/lsp_citry_pairs.py).
+  lsp-pairs:
+    if: ${{ inputs.operation == 'qualify' }}
+    needs: [verify-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: raw-citry-lsp-distributions
+          path: dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          prune-cache: true
+          enable-cache: false
+          version: ${{ env.UV_VERSION }}
+      - name: Run the candidate with the oldest citry of this major version
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheels=(dist/citry_lsp-*.whl)
+          if [[ ${#wheels[@]} -ne 1 || ! -f ${wheels[0]} ]]; then
+            printf 'Expected exactly one candidate citry-lsp wheel, found: %s\n' "${wheels[*]}" >&2
+            exit 1
+          fi
+          python scripts/lsp_citry_pairs.py old-citry --lsp-wheel "${wheels[0]}"
+
   verify-distributions:
     if: ${{ inputs.operation == 'qualify' }}
-    needs: [verify-version, build, smoke-python]
+    needs: [verify-version, build, smoke-python, lsp-pairs]
     runs-on: ubuntu-latest
     permissions:
       attestations: write

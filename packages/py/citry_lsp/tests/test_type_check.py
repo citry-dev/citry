@@ -18,9 +18,7 @@ from pygls.exceptions import JsonRpcInvalidParams
 from pytest_lsp import ClientServerConfig, LanguageClient
 
 import citry
-from citry._checker import CheckFinding, CheckReport
-from citry._json_wire import SECRET_NOT_SENT_REASON
-from citry.commands.check import _with_type_findings
+from citry._lsp_support import SECRET_NOT_SENT_REASON, CheckFinding, CheckReport, _with_type_findings
 from citry_lsp import engine as engine_module
 from citry_lsp import project as project_module
 from citry_lsp.engine import (

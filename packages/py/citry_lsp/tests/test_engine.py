@@ -13,8 +13,8 @@ import pytest
 from lsprotocol import types
 
 import citry_lsp.engine as engine_module
-from citry import Citry, Component, ComponentLibrary, LibraryComponent, SlotInput, TemplateAnalysis
-from citry._diagnostic_catalog import TEMPLATE_MARKER_NAME_INVALID
+from citry import Citry, Component, ComponentLibrary, LibraryComponent, SlotInput
+from citry._lsp_support import TEMPLATE_MARKER_NAME_INVALID, TemplateAnalysis
 from citry_core.template_parser import CITRY_DIRECTIVE_NAMES, RESERVED_TAG_NAMES, STRUCTURAL_TAG_ATTRIBUTE_NAMES
 from citry_lsp.catalog import CatalogIndex, FieldRecord
 from citry_lsp.engine import (
@@ -3105,7 +3105,7 @@ def test_js_data_public_name_diagnostics_cover_reserved_prefixes_and_dedupe_shar
     tmp_path,
     monkeypatch,
 ):
-    from citry._diagnostic_catalog import JS_DATA_PUBLIC_NAME_COLLISION
+    from citry._lsp_support import JS_DATA_PUBLIC_NAME_COLLISION
 
     app_source = (
         "first = {'$private': 1, '_hidden': 1, '$citryPrepared': 1, 'save': 1}\n"

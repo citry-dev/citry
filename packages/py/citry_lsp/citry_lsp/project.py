@@ -14,8 +14,7 @@ from typing import TYPE_CHECKING, Literal, cast
 
 from packaging.version import InvalidVersion, Version
 
-from citry import TemplateAnalysis
-from citry._wire_classes import KwargsWireClasses, SlotDataWireClass
+from citry._lsp_support import KwargsWireClasses, SlotDataWireClass, TemplateAnalysis
 from citry_lsp.catalog import CatalogIndex
 from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
@@ -28,7 +27,7 @@ from citry_lsp.protocol import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from citry.analysis import JsonWireType
+    from citry._lsp_support import JsonWireType
     from citry_lsp.catalog import ComponentRecord
 
 WORKER_TIMEOUT_SECONDS = 15.0

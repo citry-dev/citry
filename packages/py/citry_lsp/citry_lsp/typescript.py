@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Literal
 
 from lsprotocol import types
 
-from citry._diagnostic_catalog import (
+from citry._lsp_support import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_MISSING_COMPONENT_PROP,
     BROWSER_PROP_ASSIGNMENT,

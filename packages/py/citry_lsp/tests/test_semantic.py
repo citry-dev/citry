@@ -10,14 +10,15 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from lsprotocol import types
 
-from citry._symbol_table import symtable
-from citry._template_python import _method_bound_names, _renamable_method_locals
-from citry.analysis import (
+from citry._lsp_support import (
     TemplatePythonQuery,
     TemplatePythonRoot,
     TemplatePythonValueType,
+    _method_bound_names,
+    _renamable_method_locals,
     build_inferred_template_shadow,
     build_schema_template_shadow,
+    symtable,
 )
 from citry_lsp.engine import (
     DocumentState,

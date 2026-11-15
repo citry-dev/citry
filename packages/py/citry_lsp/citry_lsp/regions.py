@@ -8,10 +8,9 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from citry import (
+from citry import LspPosition, LspRange
+from citry._lsp_support import (
     ComponentSourceLint,
-    LspPosition,
-    LspRange,
     PythonComponentAssetKind,
     PythonTemplateSourceMap,
     discover_python_component_assets,

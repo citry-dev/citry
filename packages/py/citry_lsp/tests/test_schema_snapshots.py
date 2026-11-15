@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from citry import Citry, Component
-from citry.analysis import python_class_resolution_signature
+from citry._lsp_support import python_class_resolution_signature
 from citry_lsp import app_worker
 from citry_lsp.project import load_project
 

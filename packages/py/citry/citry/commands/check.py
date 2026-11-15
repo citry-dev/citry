@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
+import re
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -202,7 +204,12 @@ _TYPE_CHECK_APP_LOAD_TIMEOUT_SECONDS = 300.0
 def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckReport:
     """Add TypeScript's and ty's findings for the components in `cwd` to `report`."""
     # citry-lsp is an optional companion package that itself imports citry, so
-    # it can only be imported here, once the command needs it.
+    # it can only be imported here, once the command needs it. These are
+    # citry-lsp's own private names, and the installed citry-lsp may be older
+    # or newer than this citry, so citry-lsp must keep them working for every
+    # citry 1.x; #726 tracks moving them into one module in citry-lsp whose
+    # names a test keeps unchanged. Every name is imported in this one block,
+    # so a missing one reaches the same message.
     try:
         from lsprotocol.types import DiagnosticSeverity  # noqa: PLC0415
 
@@ -214,11 +221,8 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
             check_project_types,
             find_typescript_compiler,
         )
-    except ImportError:
-        _type_check_error(
-            "it needs a citry-lsp release with TypeScript checks; "
-            "install or upgrade it with 'python -m pip install --upgrade citry-lsp'"
-        )
+    except (ImportError, AttributeError) as exc:
+        _type_check_error(_citry_lsp_import_message(exc), checker="the type checks")
     try:
         command = find_typescript_compiler(cwd)
     except TypeScriptUnavailableError as exc:
@@ -295,6 +299,37 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
         findings=(*report.findings, *kept),
         skipped_library_findings=tuple(sorted(counts.items())),
     )
+
+
+def _citry_lsp_import_message(error: ImportError | AttributeError) -> str:
+    """Explain which citry-lsp to install when `--types` cannot import citry-lsp or a name it needs."""
+    try:
+        citry_version = importlib.metadata.version("citry")
+    except importlib.metadata.PackageNotFoundError:
+        # Run from a source tree without installed metadata.
+        citry_version = None
+    major = re.match(r"(\d+)\.", citry_version or "")
+    # From 1.0.0 on, citry-lsp shares citry's major version and each
+    # citry-lsp 1.x works with each citry 1.x, so the range is known. A 0.x
+    # citry-lsp is numbered on its own, so only an upgrade can be suggested.
+    if major is not None and int(major[1]) >= 1:
+        number = int(major[1])
+        install = f"install it with 'python -m pip install \"citry-lsp>={number}.0.0,<{number + 1}\"'"
+    else:
+        install = "install a matching release with 'python -m pip install --upgrade citry-lsp'"
+    try:
+        lsp_version = importlib.metadata.version("citry-lsp")
+    except importlib.metadata.PackageNotFoundError:
+        return f"they need the citry-lsp package; {install}"
+    # A module citry-lsp depends on, such as lsprotocol, is missing: the
+    # versions may match, and the install itself is broken.
+    missing = getattr(error, "name", None) if isinstance(error, ModuleNotFoundError) else None
+    if missing and missing.split(".", 1)[0] != "citry_lsp":
+        return (
+            f"citry-lsp {lsp_version} cannot import {missing!r}, which it needs; reinstall it with "
+            "'python -m pip install --force-reinstall citry-lsp'"
+        )
+    return f"citry-lsp {lsp_version} does not match citry {citry_version or '(unknown version)'}; {install}"
 
 
 def _type_check_error(message: str, *, checker: str = "TypeScript") -> NoReturn:
