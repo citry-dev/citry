@@ -1043,8 +1043,13 @@ def resolve_state_meta(comp_name: str, user_cls: type, state_cls: type) -> State
     if max_age is not None and not isinstance(max_age, timedelta):
         msg = f"Component {comp_name}: State._max_age must be a datetime.timedelta or None; got {max_age!r}."
         raise ValueError(msg)
-    if max_age is not None and max_age.total_seconds() < 0:
-        msg = f"Component {comp_name}: State._max_age must be non-negative; got {max_age!r}."
+    # Token times are whole seconds, so a lifetime under one second would make
+    # every token stale as soon as it is issued.
+    if max_age is not None and max_age < timedelta(seconds=1):
+        msg = (
+            f"Component {comp_name}: State._max_age must be at least one second; got {max_age!r}."
+            " State tokens always expire; for a longer lifetime, set a longer timedelta."
+        )
         raise ValueError(msg)
 
     return StateMeta(public=public, model=model, storage=storage, max_bytes=max_bytes, max_age=max_age)

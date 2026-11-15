@@ -173,7 +173,7 @@ any other user input. See [Security](/security/#treat-state-as-client-input).
 
 | Data | Put it in | How long it lives |
 |---|---|---|
-| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls. The copy in the page expires after 24 hours unless `_max_age` sets another lifetime ([details](/security/#treat-state-as-client-input)). |
+| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls until its token expires: 24 hours after Citry last issued one, unless `_max_age` sets another lifetime. After that, the next call asks the user to reload ([why tokens expire](/security/#treat-state-as-client-input)). |
 | Larger or computed values the browser code reads | `js_data()` | Recomputed on each render. |
 | Browser-only UI state, such as whether a panel is open | Vue `data()` | Kept by the Vue component in the browser. |
 
@@ -475,11 +475,11 @@ browser code should read it.
 
 A plain `class State:` in the subclass replaces the parent's fields and
 settings. It starts from the defaults: browser code can read and change
-every field, the values are stored, signed, in the page, and the size
-limit (`_max_bytes`) is the default. Citry warns when the class is
-defined if the new State drops a parent field, or does not set a
-`_public`, `_model`, or `_max_age` that the parent sets. `_max_age` is
-how long the values stay valid.
+every field, the values are stored, signed, in the page, they expire
+after 24 hours, and the size limit (`_max_bytes`) is the default. Citry
+warns when the class is defined if the new State drops a parent field,
+or does not set a `_public`, `_model`, or `_max_age` that the parent
+sets. `_max_age` is how long the values stay valid.
 
 If the parent's State keeps its values on the server with
 `_storage = "server"` (see

@@ -970,9 +970,9 @@ a fresh token. It treats `invalid_state` (403) like any other error.
 The server checks the token of a call that needs State in this order, and
 answers the first problem it finds:
 
-1. The token comes from a token version the server does not know, as
-   when another release of the server wrote it during a deploy:
-   `stale_state`. The server reads nothing else from such a token.
+1. The token names a token version the server does not know:
+   `stale_state`. The server uses no other value from such a token. A
+   token whose version the server cannot read at all belongs to step 2.
 2. The call sends no token, or the server cannot read it as one of its own
    tokens, for example because the encoding, the JSON, or a field is
    wrong: `invalid_state`.
@@ -988,10 +988,11 @@ On a component that declares State, a call needs State when its handler
 reads State, when it sends `stateUpdates`, or when it sends a token at
 all. A component without State ignores a token.
 
-Step 1 lets a server release move its tokens to a new internal format.
-During a deploy, a page that the new release rendered can send its token to
-a process still running the old release, and the visitor is offered a
-reload instead of an error.
+Step 1 exists because a later release can change the token format.
+During a deploy, a page that the new release rendered can send its token
+to a process still running the old release. That process answers
+`stale_state`, so the browser asks the visitor to reload instead of
+showing a plain error.
 
 A server cannot tell a token with a changed signature from an honest token
 signed with a secret it has since removed, because both are readable
@@ -1241,7 +1242,7 @@ A 1.x server accepts every valid `citry-events/1` call and answers it with
 a valid `citry-events/1` result. So a custom transport or a third-party
 client written against this document keeps working on every 1.x release.
 
-The `prepared` object of a `vue-prepared/1` render is the one part this
+The `prepared` object of a `vue-prepared/1` render is one part this
 document does not define. Its contents belong to the browser runtime of the
 release that wrote it, and Citry's browser code refuses one whose helper
 contract differs from its own. So during an upgrade, a page rendered by the

@@ -231,11 +231,16 @@ Because the child keeps `_public`, browser code cannot read `sort` until
 the child lists it: `_public = ("project_id", "sort")`.
 
 A plain `class State:` starts from the default settings, not the
-parent's: values are stored, signed, in the page, browser code can read
-and change every field, the values expire after the 24-hour default, and
-the size limit (`_max_bytes`) is the default. Citry warns when the parent set `_public`,
-`_model`, or `_max_age` and the new `State` does not. It does not warn
-about `_max_bytes`.
+parent's:
+
+- values are stored, signed, in the page;
+- browser code can read and change every field;
+- the values expire 24 hours after Citry issues them (`_max_age` sets
+  another lifetime);
+- the size limit (`_max_bytes`) is the default.
+
+Citry warns when the parent set `_public`, `_model`, or `_max_age` and
+the new `State` does not. It does not warn about `_max_bytes`.
 
 If the parent keeps its values on the server with `_storage = "server"`,
 a plain `class State:` that does not set `_storage` raises `ValueError`

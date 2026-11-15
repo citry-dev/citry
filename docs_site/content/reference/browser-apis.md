@@ -608,7 +608,7 @@ name the component as Citry last saw it.
 | `retired` | The component was removed or replaced before the call finished. |
 | `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. This also happens when the call's own Render replaced the component and the page then accepted a newer result for the new component. A delayed redirect is never dropped for this reason. A result from a handler declared with `@event(detached=True)` never counts as newer, and its own actions without a delay are never dropped for this reason. |
 | `disposed` | The page's Vue app was shut down. |
-| `version` | The server no longer accepts the State this page holds, usually because the app was deployed, its signing secret changed, or the State expired (after 24 hours by default) since the page loaded. |
+| `version` | The server no longer accepts the State this page holds, usually because the app was deployed, its signing secret changed, or the page's State token expired (24 hours after Citry issued it, by default). |
 
 For `version`, the call also rejects with a `stale_state` error, and Citry
 asks the user once per page whether to reload. To show your own message

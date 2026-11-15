@@ -2238,11 +2238,13 @@ it as public and ask the maintainer in the pull request.
   server answers `stale_state` (409) for a token whose prefix has the same
   shape (`ce`, a letter, a number) but another value, such as `cev2.`, and
   for a token or server-stored entry whose payload names a version other
-  than 1. Citry's browser client offers a reload for that code. A new
-  token version must keep that prefix shape, or 1.0.0 answers
-  `invalid_state` for it. The visitor accepts the prompt and the page then has a
-  fresh token. Until then the call fails with `stale_state`. So a
-  release may raise the token version.
+  than 1. Citry's browser client offers a reload for that code. The
+  visitor accepts the prompt and the page then has a fresh token. Until
+  then the call fails with `stale_state`. So a release may raise the
+  token version. A new token version changes the prefix and keeps its
+  shape, because 1.0.0 answers `invalid_state` for any other prefix; the
+  payload check only helps while the payload stays JSON in the `cev1`
+  layout.
 - The `prepared` object of a `vue-prepared/1` render (the data that
   Citry's browser code applies to the page, which refuses one written
   for a different helper contract) and the Vue fragment messages

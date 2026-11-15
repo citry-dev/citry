@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
 import pytest
 import typing_extensions
 
+from citry import Citry, Component
 from citry.cache import InMemoryCache
 from citry.ext.events import _pydantic_bounded as bounded
 from citry.ext.events import tokens
@@ -68,8 +69,8 @@ TESTS_DIR = Path(__file__).resolve().parents[4] / "packages" / "protocol" / "eve
 # class_id=CLASS_ID, secret=SIGNING_KEY, _now=FIXED_NOW). With
 # ``max_age=None`` the token carries the 24-hour default expiry.
 GOLDEN_DEFAULT_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOjE3MDAwODY0MDB9.9dv5eLfN8SrUQfLekOLUHip8hINDy2KzWRMiEfzLtI8"  # noqa: E501
-# The same State with ``"x": null``. Citry no longer mints this, but verify
-# still accepts it, so tests that must verify at any clock reading use it.
+# The same State with ``"x": null``, as releases before 1.0.0 minted it.
+# Verify reads it as the default lifetime counted from ``t``.
 GOLDEN_NO_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOm51bGx9.7jlis78Jj3-eReJNBQ-ZAE6g8875aNn3QdSbDutdndk"  # noqa: E501
 GOLDEN_WITH_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOjE3MDAwMDM2MDB9.Ss0KHdwx1rZqbHsgHrpxHmR8waawjODipotVIeAFzdo"  # noqa: E501
 
@@ -554,9 +555,10 @@ class TestSigningKeyLabel:
         with pytest.raises(StaleStateError):
             verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
 
-    def test_a_payload_signed_with_the_labelled_key_verifies(self):
+    def test_a_payload_signed_with_the_labelled_key_verifies(self, monkeypatch):
         # The control for the test above: the same payload, signed with the
         # key derived from the label, is accepted.
+        _pin_now(monkeypatch)
         key = hmac.new(b"citry.events.state-token", SIGNING_KEY.encode("utf-8"), hashlib.sha256).digest()
         verified = verify_state_token(self._signed_with(key), cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert verified.state_kwargs == {"count": 3, "label": "hi"}
@@ -906,6 +908,56 @@ class TestDefaultLifetime:
         )
         assert list(cache.ttls.values()) == [self.DAY]
 
+    def test_a_render_cache_entry_renders_again_once_its_token_expires(self, monkeypatch):
+        # A cached render holds the State token. Replaying it after the
+        # token expired would hand the page a token every call refuses, so
+        # Citry renders the component again instead.
+        _pin_now(monkeypatch, FIXED_NOW)
+        app = Citry(cache=InMemoryCache(), secret=SIGNING_KEY)
+        app.set_mounted_prefix("/citry")
+        renders = 0
+
+        class Cached(Component):
+            citry = app
+
+            class Cache:
+                enabled = True
+                ttl = None
+
+            class State:
+                count: int = 0
+
+            class Events:
+                def inc(self, state):
+                    state.count += 1
+
+            def template_data(self, kwargs, slots):
+                nonlocal renders
+                renders += 1
+                return {}
+
+            template = """
+            <button @click="inc">+</button>
+            """
+
+        str(Cached())
+        str(Cached())
+        assert renders == 1
+        _pin_now(monkeypatch, FIXED_NOW + self.DAY)
+        str(Cached())
+        assert renders == 2
+
+    def test_a_token_without_an_expiry_gets_the_default_from_its_mint_time(self, monkeypatch):
+        # Releases before 1.0.0 wrote "x": null when _max_age was unset. A
+        # token copied then must not stay valid until the secret changes.
+        _pin_now(monkeypatch, FIXED_NOW + self.DAY - 1)
+        verified = verify_state_token(GOLDEN_NO_EXPIRY, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
+        assert verified.state_kwargs == {"count": 3, "label": "hi"}
+        _pin_now(monkeypatch, FIXED_NOW + self.DAY)
+        with pytest.raises(StaleStateError) as exc_info:
+            verify_state_token(GOLDEN_NO_EXPIRY, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
+        assert exc_info.value.status == 409
+
 
 class TestUnknownTokenVersion:
     """
@@ -928,6 +980,12 @@ class TestUnknownTokenVersion:
         assert exc_info.value.status == 409
         assert exc_info.value.code == "stale_state"
 
+    def test_an_unknown_storage_wins_over_an_unknown_prefix(self):
+        # An unknown storage value is a caller bug and answers 403 whatever
+        # the token holds.
+        with pytest.raises(InvalidStateError):
+            verify_state_token("cev2.anything.at-all", cls=FakeCounter, storage="bogus", secrets=[SIGNING_KEY])
+
     def test_a_signed_payload_with_an_unknown_version_is_stale(self):
         # The signature verifies (a newer release signed it with the same
         # secret), but the payload names version 2.
@@ -948,9 +1006,9 @@ class TestUnknownTokenVersion:
             verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
 
     def test_an_unsigned_unknown_version_reaches_no_state(self, monkeypatch):
-        # A forged token naming an unknown version is refused before the
-        # signature result could matter: it is never decoded into State, and
-        # the class check never runs.
+        # The signature does not match, and the payload is read only to pick
+        # the error code: the shape check, the State and the class check are
+        # never reached.
         restored: list[object] = []
         monkeypatch.setattr(tokens, "_valid_payload_shape", lambda payload: restored.append(payload) or True)
         payload = tokens._canonical_json({"v": 7, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None})

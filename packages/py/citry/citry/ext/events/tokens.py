@@ -134,8 +134,9 @@ _SERVER_PREFIX = "ces1"
 # one: ``ce``, a letter for the storage form, then a version number. A token
 # with this shape but neither prefix above was written by a release that uses
 # another token version, so verification answers stale (the browser offers a
-# reload) instead of malformed. Later releases must keep this shape, so that
-# 1.0.0 recognises their tokens as a version it does not know.
+# reload) instead of malformed. A new token version changes the prefix and
+# keeps this shape, so that 1.0.0 recognizes its tokens as a version it does
+# not know.
 _TOKEN_PREFIX_SHAPE = re.compile(r"ce[a-z][0-9]+\.")
 # Server-storage State lives in ``Citry.cache`` under this namespace, beside
 # Citry's other ``citry:``-prefixed keys. Prefixing the key read back from a
@@ -562,8 +563,8 @@ def _effective_max_age(max_age: timedelta | None) -> timedelta:
 def _build_payload(class_id: str, state_dict: dict[str, Any], max_age: timedelta | None) -> dict[str, Any]:
     """The canonical payload dict shared by both storage modes."""
     minted_at = int(_now())
-    # Every token Citry mints carries an expiry. Verification still accepts
-    # ``"x": null``, so the shape check stays the same for every 1.x release.
+    # Every token Citry mints carries an expiry. Verification reads an
+    # ``"x": null`` from an older release as the default lifetime from ``t``.
     expiry = minted_at + int(_effective_max_age(max_age).total_seconds())
     return {"v": _PROTOCOL_VERSION, "c": class_id, "s": state_dict, "t": minted_at, "x": expiry}
 
@@ -705,8 +706,12 @@ def verify_state_token(
         # with no state field) is malformed, not a crash: map it like any other
         # unreadable token instead of letting an AttributeError reach the caller.
         raise InvalidStateError(_MALFORMED_MSG)
-    # A token from another token version is refused before anything else is
-    # read from it. Nothing of such a token is used: it only picks stale over
+    if storage not in ("signed", "server"):
+        # A storage value Citry does not know is a caller bug; refusing the
+        # token keeps it from picking either check by accident.
+        raise InvalidStateError(_MALFORMED_MSG)
+    # A token whose prefix names another token version is refused before
+    # anything after the prefix is decoded. It only picks stale over
     # malformed, so a page from another release is offered a reload.
     _refuse_unknown_version_prefix(token)
     # The component's storage picks the check, so a server-storage component
@@ -721,10 +726,6 @@ def verify_state_token(
         if not token.startswith(_SIGNED_PREFIX + "."):
             raise InvalidStateError(_MALFORMED_MSG)
         payload = _verify_signed(token, secrets)
-    else:
-        # A storage value Citry does not know is a caller bug; refusing the
-        # token keeps it from picking either check by accident.
-        raise InvalidStateError(_MALFORMED_MSG)
 
     expected = cls.class_id
     if payload.get("c") != expected:
@@ -885,7 +886,11 @@ def _check_expiry(payload: dict[str, Any]) -> None:
     """Reject a signed token past its expiry field as stale."""
     expiry = payload.get("x")
     if expiry is None:
-        return
+        # Releases before 1.0.0 wrote no expiry when `_max_age` was unset.
+        # Such a token gets the default lifetime counted from its signed mint
+        # time, so a token copied before an upgrade does not stay valid
+        # until the secret changes.
+        expiry = payload["t"] + int(_STATE_DEFAULT_MAX_AGE.total_seconds())
     if isinstance(expiry, bool) or not isinstance(expiry, (int, float)):
         raise InvalidStateError(_MALFORMED_MSG)
     if _now() >= expiry:

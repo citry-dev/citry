@@ -979,7 +979,7 @@ declarations and no State on the subclass fail at definition, the same as
   | `_model` | tuple of field names | same as `_public` | Which public fields the client may write, through two-way bindings or `$state`; declare it only to clamp down. Must be a subset of `_public` (7.2). |
   | `_storage` | `"signed"` \| `"server"` | `"signed"` | Where the round-trip State lives: signed into the client token (7.1), or, opt-in, a server-side store keyed by an opaque token (the livecomponents migration's step one, 10). |
   | `_max_bytes` | `int`, or `None` with server storage | `8192`; `65536` with server storage | Signed storage: mint-time cap on the serialized State, a design-smell canary, not a technical limit (7.1); a browser write that would make the State larger answers 422 `invalid_args` before the handler runs, when the call would return a new token (a caller instance that accepts the `state` action). Server storage: browser writes may not grow the stored State past it; the call answers 422 `invalid_args` before the handler runs. `None` turns that check off, and is a definition error for signed storage. |
-  | `_max_age` | `timedelta` | 24 hours | Token expiry in both storage modes; expired tokens answer `stale_state` and degrade per component, not per page (7.1). Server storage uses it as the cache entry's lifetime. A page that stays open longer sets a longer `timedelta`; there is no "never expires" value. |
+  | `_max_age` | `timedelta` | 24 hours | Token expiry in both storage modes; expired tokens answer `stale_state` and degrade per component, not per page (7.1). Server storage uses it as the cache entry's lifetime. A page that stays open longer sets a longer `timedelta`; there is no "never expires" value, and a value under one second raises `ValueError`. |
 
   Details and the security doctrine in 7.2.
 - State may carry methods; they survive the dataclass conversion. The
@@ -4906,21 +4906,27 @@ payload_json = {"v": 1, "c": "<class_id>", "s": {<state>}, "t": <mint epoch>, "x
 ```
 
 Citry always writes `x`: `_max_age` after the mint time, or 24 hours when
-`_max_age` is unset. Verification still accepts `null`, so the payload
-shape stays the same for every 1.x release.
+`_max_age` is unset. A token from a release before 1.0.0 may hold
+`"x": null`; verification reads it as 24 hours after its signed mint time
+`t`, so a token copied before an upgrade does not stay valid until the
+secret changes. `_max_age` must be at least one second, because the times
+are whole seconds and a shorter lifetime would expire every token at once.
 
 A later 1.x release may move State tokens to a new version, because only
 Citry reads them. That works because a server answers `stale_state` (409)
 for a token whose version it does not know, and the browser then offers a
-reload. The server checks the version first and reads nothing else from
-such a token:
+reload. The server checks the version before it uses anything else from
+the token:
 
 - the prefix: any `ce`, letter, number prefix other than `cev1` and
-  `ces1`, such as `cev2.`, before anything after it is decoded. Later
-  releases keep that prefix shape so 1.0.0 recognises their tokens;
+  `ces1`, such as `cev2.`, before anything after it is decoded. This is
+  the check a new token version relies on, so a new version changes the
+  prefix and keeps that shape, and 1.0.0 recognizes its tokens;
 - the payload: an integer `v` other than 1, before the shape check (a
   later version may use other fields), whether or not the signature
-  matched. A server-stored entry gets the same check.
+  matched. A server-stored entry gets the same check. This is only a
+  backstop: it works when the payload still decodes as JSON in the
+  `cev1` layout.
 
 A version that is not an integer, and every other unreadable token, stays
 `invalid_state` (403).

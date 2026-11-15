@@ -715,17 +715,32 @@ class TestStateMeta:
         assert meta.max_bytes == 1024
         assert meta.max_age == timedelta(minutes=5)
 
-    def test_negative_max_age_rejected(self):
+    @pytest.mark.parametrize("max_age", [timedelta(seconds=-1), timedelta(0), timedelta(milliseconds=500)])
+    def test_max_age_under_one_second_rejected(self, max_age):
+        # Token times are whole seconds, so such a token would be stale as
+        # soon as it is issued. Zero does not mean "never expires" either.
         app = _Citry()
 
-        with pytest.raises(ValueError, match="_max_age"):
+        with pytest.raises(ValueError, match="_max_age must be at least one second"):
 
             class Comp(Component):
                 citry = app
 
                 class State:
                     value: int = 0
-                    _max_age = timedelta(seconds=-1)
+                    _max_age = max_age
+
+    def test_max_age_of_one_second_is_accepted(self):
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+
+            class State:
+                value: int = 0
+                _max_age = timedelta(seconds=1)
+
+        assert _events_ext(app).resolve(Comp).state_meta.max_age == timedelta(seconds=1)
 
     def test_unknown_storage_rejected(self):
         app = _Citry()
