@@ -419,6 +419,116 @@ jobs:
           || '[{"python-version":"3.11","os":"macos-latest"},{"python-version":"3.15","os":"macos-latest"}]') }}
     steps: *python-test-steps
 
+  # The Compatibility page promises that Citry works with these framework
+  # versions, but every other job installs the newest ones from uv.lock. This
+  # job installs the oldest supported versions and runs only the tests that
+  # use a web framework. It runs on pushes to main and dev and on manual runs,
+  # not on pull requests: a framework's old release rarely breaks from one
+  # change, and the release steps in docs/codebase.md require this workflow
+  # to pass on the release commit, so a break still stops a release.
+  framework-floors:
+    # Installs the Linux citry-core wheel, under the condition explained on
+    # `i18n-release-qualification`, and skips on pull requests.
+    needs: citry-core-wheel-linux
+    if: ${{ !cancelled() && needs.citry-core-wheel-linux.result != 'skipped' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # The oldest version of each framework the Compatibility page
+      # (docs_site/content/about/compatibility.md) lists, and the floors the
+      # starter projects in examples/starters declare. Starlette and Werkzeug
+      # are the oldest versions FastAPI 0.141.0 and Flask 3.1.0 accept.
+      # Starlette before 1.0 sends TestClient requests through httpx, which
+      # uv.lock does not install. test_ci_workflows.py checks these pins
+      # against the starters.
+      FRAMEWORK_FLOORS: >-
+        django==5.2.0
+        fastapi==0.141.0
+        starlette==0.46.0
+        flask==3.1.0
+        werkzeug==3.1.0
+        httpx==0.28.1
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          prune-cache: true
+          version: "0.13.5"
+
+      # The oldest supported Python, which every floor above supports. The
+      # locked dev group installs Django only on 3.12 and newer, so this is
+      # the one job that tests Django on 3.11.
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Download the citry-core wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: citry-core-wheel-${{ runner.os }}
+          path: ${{ runner.temp }}/citry-core-wheel
+
+      # The same install as the `test` jobs, so every other dependency stays
+      # on its locked version and only the frameworks move.
+      - name: Install the workspace
+        shell: bash
+        run: python scripts/citry_core_wheel.py install --wheel-dir "$RUNNER_TEMP/citry-core-wheel" -- --all-packages
+
+      # `==` makes uv install exactly these versions or fail, and it replaces
+      # the newer locked ones the sync just installed.
+      - name: Install the oldest supported framework versions
+        shell: bash
+        run: |
+          read -ra floors <<< "$FRAMEWORK_FLOORS"
+          uv pip install --python .venv "${floors[@]}"
+
+      # Prints what the tests below really import, and fails if any
+      # framework is not on its pinned version.
+      - name: Check the installed framework versions
+        shell: bash
+        run: |
+          uv run --no-sync python - <<'EOF'
+          import os
+          from importlib.metadata import version
+          from packaging.version import Version
+
+          for pin in os.environ["FRAMEWORK_FLOORS"].split():
+              name, expected = pin.split("==")
+              installed = version(name)
+              print(f"{name} {installed}")
+              if Version(installed) != Version(expected):
+                  raise SystemExit(f"{name} is {installed}, expected {expected}")
+          EOF
+
+      # Picks every test file that imports a framework, so a new framework
+      # test runs here without editing this list. The benchmark files
+      # compare against an exact Django release, the browser tests need
+      # Playwright, and the real-server reload tests run in the next step.
+      - name: Run the framework tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern='^\s*(from|import) (django|fastapi|starlette|flask|werkzeug)\b|importorskip\("(django|fastapi|starlette|flask|werkzeug)'
+          mapfile -t tests < <(
+            grep -rlE --include='test_*.py' "$pattern" packages/py \
+              | grep -v -e '/e2e/' -e '/test_benchmark_' -e '/test_server_reload\.py$' \
+              | sort
+          )
+          if [[ ${#tests[@]} -eq 0 ]]; then
+            echo "No test file imports a web framework; the search pattern is out of date." >&2
+            exit 1
+          fi
+          printf '%s\n' "${tests[@]}"
+          uv run --no-sync pytest -m "not e2e" -n 4 --dist loadfile "${tests[@]}"
+
+      # The real-server reload tests start development servers, so they run
+      # in one process, as in check.py's "pytest reload servers" phase.
+      - name: Run the real-server reload tests
+        run: uv run --no-sync pytest packages/py/citry/tests/test_server_reload.py
+
   # Browser end-to-end tests, including Citry UI's co-located component tests,
   # run in Chromium for PR-time speed. The weekly cross-browser workflow runs
   # the same paths on all three engines. The `test` job above excludes `e2e`

@@ -1,13 +1,15 @@
 ---
 title: Compatibility
-description: The Python versions, operating systems, CPU architectures, and browsers Citry runs on, and when installing it needs Rust.
+description: The Python versions, web frameworks, operating systems, CPU architectures, and browsers Citry runs on, and when installing it needs Rust.
 ---
 
 # Compatibility
 
 Check this page before you install Citry on a new server, CI image, or
-platform. It lists the Python versions, systems, and browsers Citry
-supports, and the one case where installing it needs a compiler.
+platform. It lists the Python versions, web frameworks, systems, and
+browsers Citry supports, and the one case where installing it needs a
+compiler. [Versioning and support](/about/versioning/#platforms) explains
+how these lists change between releases.
 
 ## Python versions { #supported-python-versions }
 
@@ -22,6 +24,30 @@ Citry supports Python 3.11 through 3.15:
 See the
 [Python release status](https://devguide.python.org/versions/){: target="_blank" rel="noopener"}
 for which versions are still maintained upstream.
+
+### PyPy and free-threading { #pypy-and-free-threaded }
+
+PyPy and free-threaded CPython are supported on a best-effort basis.
+Citry's tests run on them once a week, not on every change, so a problem
+there can reach a release and be fixed in a later one. The known
+differences are listed under [Differences on PyPy](#differences-on-pypy)
+and [Prebuilt wheels](#architectures-and-prebuilt-wheels).
+
+## Web frameworks { #web-frameworks }
+
+Citry's [adapters](/advanced/web-frameworks/) work with these versions
+and newer:
+
+| Framework | Oldest version |
+|---|---|
+| Django | 5.2.0 |
+| FastAPI | 0.141.0 |
+| Starlette | 0.46.0 |
+| Flask | 3.1.0 |
+
+Citry does not install a framework for you. Install the one your app
+uses, and keep it on its newest patch release, which has the latest
+security fixes.
 
 ## Operating systems
 
@@ -58,7 +84,7 @@ difference with the sandbox off described below. On standard CPython it
 renders [`simple = "vue"` components faster](/performance/#faster-simple-vue-rows-on-cpython)
 than on PyPy, Pyodide, or free-threaded builds.
 
-### Differences on PyPy
+### Differences on PyPy { #differences-on-pypy }
 
 On PyPy, `citry check` and the editor check less. PyPy has no `_symtable`
 module, which two of their analyses use. So the editor and `citry check
@@ -90,7 +116,9 @@ then run the install again. Nothing else in Citry needs a build step.
 
 ## Browsers { #browser-runtime }
 
-Citry's browser code is tested in Chromium, Firefox, and WebKit.
+Citry supports the latest two versions of Chrome, Edge, Firefox, and
+Safari. Its browser code is tested in Playwright's builds of Chromium,
+Firefox, and WebKit, the engines those four browsers use.
 
 Citry loads its own pinned copy of Vue for interactive components. Do not
 mount another Vue application over HTML that Citry rendered. To use Vue

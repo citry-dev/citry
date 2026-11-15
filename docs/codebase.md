@@ -3030,6 +3030,18 @@ The paths are:
   four file-level workers share one GitHub runner
 - Runs this checkout's `citry` and `citry-ui` in Pyodide (the `pyodide-smoke`
   job, described under "The Pyodide check" below)
+- On pushes and manual runs only, tests the oldest framework versions that
+  the [Compatibility](../docs_site/content/about/compatibility.md) page
+  lists (the `framework-floors` job). It installs the workspace on Python
+  3.11, replaces Django, FastAPI, Starlette, Flask and Werkzeug with the
+  pinned versions in the job's `FRAMEWORK_FLOORS`, and runs every test file
+  that imports one of them. It takes about three minutes and runs beside
+  the `test` jobs, so it adds no time to the run. Pull requests skip it,
+  because one change rarely breaks only an old framework release; a break
+  shows up in the push run after the merge, and the release steps require
+  this workflow to pass on the release commit. When you raise a framework
+  floor, change the starter in `examples/starters`, the job's pins and the
+  Compatibility page together; `test_ci_workflows.py` checks the first two
 
 **Configuration**:
 
