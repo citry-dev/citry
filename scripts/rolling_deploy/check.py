@@ -12,8 +12,9 @@ the other. This script stages exactly that:
 3. The other release answers the pages' event calls and serves their runtime
    and definition files, and renders the cached component again
    (`scenario.py serve`).
-4. Each answer must be a success or the documented reload, a `stale_state`
-   error that makes the page ask the visitor to reload. Any other error fails
+4. Each answer must be a success or the documented `stale_state` error,
+   which the page reports as out of date so the app can offer a reload.
+   Any other error fails
    the check.
 
 Steps 2 to 4 run twice: an old page sent to the new release, then a new page
@@ -314,7 +315,7 @@ def judge_event_answer(
     if result.get("ok") is not True:
         code = (result.get("error") or {}).get("code")
         if code == "stale_state":
-            report.add(name, "reload", f"HTTP {answer['status']} stale_state: the page asks the visitor to reload")
+            report.add(name, "reload", f"HTTP {answer['status']} stale_state: the page reports that it is out of date")
         else:
             report.add(name, "fail", f"HTTP {answer['status']} error {code!r}: {answer['body'][:300]}")
         return
@@ -324,7 +325,7 @@ def judge_event_answer(
         )
         return
     # A Vue render carries the helper contract it was compiled for. The page
-    # refuses another contract, and asks the visitor to reload only when the
+    # refuses another contract, and reports it as out of date only when the
     # release that rendered it has that behaviour. Other changes to the render
     # format are not checked here.
     new_contracts = {
@@ -335,9 +336,9 @@ def judge_event_answer(
     if not new_contracts - page.helper_contracts:
         report.add(name, "ok", "the call succeeded, and its render uses the page's render helpers")
     elif page_offers_reload:
-        report.add(name, "reload", "the render uses other render helpers: the page asks the visitor to reload")
+        report.add(name, "reload", "the render uses other render helpers: the page reports that it is out of date")
     else:
-        report.add(name, "fail", "the render uses other render helpers, and the page offers no reload for that")
+        report.add(name, "fail", "the render uses other render helpers, and the page reports nothing for that")
 
 
 def judge_file(report: Report, name: str, answer: dict[str, Any], expected_sha256: str) -> None:
@@ -429,8 +430,8 @@ def check(previous: str, candidate: Path, core_wheel: Path | None, work: Path, r
     if core_wheel is not None:
         new_requirements.append(str(core_wheel))
     new_python = make_environment(work / "new-env", new_requirements)
-    # The reload for a render the page cannot read ships in 1.0.0, so a page
-    # from 0.x shows none. A run that starts from 0.x is never promised, so
+    # Reporting a render the page cannot read as an out-of-date page ships in
+    # 1.0.0, so a page from 0.x reports nothing. A run that starts from 0.x is never promised, so
     # this only changes what such a run reports.
     old_offers_reload = (version_tuple(previous) or (0,)) >= (1, 0, 0)
     check_direction(

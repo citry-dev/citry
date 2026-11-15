@@ -212,14 +212,22 @@
         pageVuePlugins.push(Object.freeze({plugin, options}));
       }});
   }
-  // Ask at most once per page: a deploy tends to make every following call stale at once, and asking again
-  // after the user declined would nag. One page may run several apps, so the flag lives outside them.
-  let reloadPrompted = false;
-  function promptReload() {
-    if (reloadPrompted) return;
-    reloadPrompted = true;
-    if (global.confirm("This page is out of date. Reload to continue?"))
-      global.location.reload();
+  // Report an out-of-date page at most once: a deploy tends to make every following call stale at once,
+  // and repeating it would nag. One page may run several apps, so the flag lives outside them.
+  let outOfDateReported = false;
+  function reportOutOfDate(development) {
+    if (outOfDateReported) return;
+    outOfDateReported = true;
+    // Only a page Citry(mode="development") rendered asks the built-in question, so a developer notices
+    // the case. In production the app decides how to tell its visitors, and Citry never reloads by itself.
+    if (development) {
+      if (global.confirm("This page is out of date. Reload to continue?")) global.location.reload();
+      return;
+    }
+    console.warn("[Citry] This page is out of date: the server no longer accepts its State, or it sent a " +
+      "render from another Citry release. Citry does not reload the page by itself. To tell the visitor, " +
+      "listen for citry:events:stale (reason \"version\") and citry:fragments:stale; see " +
+      "https://citry.dev/reference/browser-apis/#events-fired-around-each-call");
   }
   // A render or fragment written by another release of the app (a newer server during a deploy) can
   // use a format this runtime cannot read. It fails with the code the server gives a State token it
@@ -4280,7 +4288,7 @@
         return dispatchLifecycleEvent(
           kind, identity, live ? liveRootElements(mounted.component) : [], event, extra);
       },
-      promptReload,
+      reportOutOfDate() { reportOutOfDate(configuration.development === true); },
       redirect(url) { navigateToRedirect(url); },
       updateUrl(url, mode) { updateHistory(mode, {}, url); },
       takePendingState(source, handlerName) {
@@ -4925,7 +4933,7 @@
     return (roots[0] || pageDocument).dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
       detail,
       bubbles: true,
-      // A page cancels `before` to stop a call, and a version-skew `stale` to replace the reload prompt.
+      // A page cancels `before` to stop a call, and a version-skew `stale` to replace Citry's own report.
       cancelable: kind === "before" || (kind === "stale" && extra.reason === "version"),
     }));
   }
@@ -5796,6 +5804,6 @@
     startPrepared,
     documentNonce,
     carriesPageNonce,
-    promptReload,
+    reportOutOfDate,
   );
 })(window);

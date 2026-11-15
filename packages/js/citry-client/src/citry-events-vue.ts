@@ -88,11 +88,12 @@ export interface VueEventsHost {
     detail?: JsonObject,
   ): boolean | undefined;
   /**
-   * Offers the user a reload after a call failed because the page is out of date: the server no
-   * longer accepts its State, or it sent a render this runtime cannot read. The bridge calls it only
-   * when no `stale` listener cancelled the version notification.
+   * Reports, once per page, that a call failed because the page is out of date: the server no
+   * longer accepts its State, or it sent a render this runtime cannot read. The host asks the
+   * built-in reload question in development and writes a console warning otherwise. The bridge
+   * calls it only when no `stale` listener cancelled the version notification.
    */
-  promptReload?(): void;
+  reportOutOfDate?(): void;
   takePendingState?(source: VueEventSource, handler: string): JsonObject | undefined;
   restorePendingState?(source: VueEventSource, updates: JsonObject): void;
 }
@@ -487,8 +488,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   // Reports a failed call or action to the page. The code `stale_state` means the page is out of
   // date: the server no longer accepts its State (a deploy, a changed secret, an expired token), or
   // the browser runtime got a render from another release that it cannot read. That is reported
-  // as a `stale` notification first, and a listener may cancel it to replace the reload prompt;
-  // the `error` notification follows either way.
+  // as a `stale` notification first, and a listener may cancel it to replace Citry's own report
+  // (the development reload question or the console warning); the `error` notification follows
+  // either way.
   const reportFailure = (source: VueEventSource, handler: string, error: unknown): void => {
     const reported = activityError(error);
     if (reported.code === "stale_state") {
@@ -496,7 +498,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       // does not also raise it as a page error. The runtime's own error needs marking here; the
       // server's answer is marked where it arrives.
       if (error !== null && typeof error === "object") reportableFailures.add(error);
-      if (lifecycle("stale", source, handler, { reason: "version" })) options.host.promptReload?.();
+      if (lifecycle("stale", source, handler, { reason: "version" })) options.host.reportOutOfDate?.();
     }
     lifecycle("error", source, handler, { error: reported as JsonObject });
   };
@@ -1211,7 +1213,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     } catch (error) {
       // Preflight is where the runtime finds a render from another Citry release. Other preflight
       // failures stay silent as before, but this one gets the same notifications as a sent call,
-      // so the page offers its reload and a `stale` listener can replace it.
+      // so the app hears about it and a `stale` listener can replace Citry's own report.
       if (activityError(error).code === "stale_state" && lifecycle("before", source, job.input.handler)) {
         reportFailure(source, job.input.handler, error);
         lifecycle("after", source, job.input.handler, { ok: false });

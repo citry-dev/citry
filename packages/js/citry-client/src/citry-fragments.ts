@@ -20,7 +20,7 @@ export function installFragmentManager(
   ) => Promise<{ appId: string; app: { unmount(): void } }>,
   documentNonce = "",
   carriesPageNonce: (block: HTMLScriptElement) => boolean = (block) => block.nonce === documentNonce,
-  promptReload: () => void = () => {},
+  reportOutOfDate: (development: boolean) => void = () => {},
 ): FragmentManager {
   const processed = new WeakMap<HTMLScriptElement, Promise<void>>();
   const reservedHosts = new Set<Element>();
@@ -122,11 +122,26 @@ export function installFragmentManager(
     }
   };
   // A fragment the prepared runtime refuses for the same reason (a render compiled by another
-  // release) fails with the same code, so both offer the page's one reload prompt. The load still
-  // rejects, so a caller of `Citry.fragments.load` sees the failure.
+  // release) fails with the same code. A fragment comes from no event call, so no
+  // `citry:events:stale` reports it; `citry:fragments:stale` does, with the same `reason`, and a
+  // listener may cancel it to replace Citry's own report. The load still rejects, so a caller of
+  // `Citry.fragments.load` sees the failure.
   const load = (raw: unknown, tag?: HTMLScriptElement): Promise<void> =>
     loadOnce(raw, tag).catch((error: unknown) => {
-      if (isPageOutOfDate(error)) promptReload();
+      if (isPageOutOfDate(error)) {
+        // The event starts at the fragment's data block when it is still in the page, like a call's
+        // notification starts at its component, and reaches a listener on `document` either way.
+        const target = tag?.isConnected ? tag : pageDocument;
+        const notice = new CustomEvent("citry:fragments:stale", {
+          detail: { reason: "version", error },
+          bubbles: true,
+          cancelable: true,
+        });
+        // The configuration the fragment carries says whether a development server wrote it.
+        const development =
+          (raw as { vue?: { prepared?: { development?: unknown } } } | null)?.vue?.prepared?.development === true;
+        if (target.dispatchEvent(notice)) reportOutOfDate(development);
+      }
       throw error;
     });
   const manager: FragmentManager = {

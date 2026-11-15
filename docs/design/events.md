@@ -2356,7 +2356,7 @@ error limit and the CPU limit while it runs, and a write that arrives
 when the request's time is already gone is refused before it starts.
 Values that no longer fit the class (for example after a deploy that
 changed a field's type) fail with `stale_state` (409), and the browser
-asks the visitor to reload.
+reports an out-of-date page.
 
 The calls of one request often restore the same values, as when 16 calls
 carry the same token: the second restore of the same values for the same
@@ -3182,7 +3182,7 @@ bubbling DOM CustomEvents, all under the reserved `citry:` prefix:
 | `citry:events:after` | When a call or mounted-source `applyActions` settles, success and failure alike (the stop-side counterpart to `before`). | `ok` (boolean) |
 | `citry:events:error` | When a call or mounted-source `applyActions` fails: a transport failure, an error result, an interpreter error, or a timeout (5.6). | `error`: the `{status, code, message, fieldErrors?}` envelope (3.7) |
 | `citry:events:swapped` | After a `render` action has updated the DOM. | `els`: the swapped-in root elements |
-| `citry:events:stale` | Something was dropped or cancelled, and this is the one event that says so (research doc R3): every drop the runtime performs, of a response's application, of a queued call it cancels before sending, or of a one-shot send it drops at fire time (5.5 machinery item 5), fires it with a `reason` naming the cause. (The one cancel outside the claim is a send stopped by a `citry:events:before` listener's `preventDefault`: the page performed that cancel itself and already knows.) The reasons: `epoch` (an out-of-order response: its echoed epoch, 4.2, is not newer than what the anchor already applied, so its instance-mutating actions, the self-targeted render and the token refresh, drop rather than roll newer state back to older; the caller's promise still resolves with its `data` and all other actions apply), `retired` (the response's instance, or a single action's target, left the DOM, 5.5), `cancelled` (a send's dispatching element was dead when it was due to fire, at dequeue, 5.6, or at a one-shot closure's fire time, 5.5: never sent, promise rejected), `superseded` (a newer call superseded it under `@event(latest_wins=True)`, 3.5), `timeout` (a response arrived after its call timed out, 5.6), `version` (the version-skew prompt of 4.5 rides this same event under this reason; its default handling is the soft reload prompt). The `epoch` case in one line: an older call's delayed action is still waiting when a newer result for the same component is accepted, so the action would change a page the newer result already replaced; it is dropped and this event fires instead. | `reason`, plus the dropped result's `event` name |
+| `citry:events:stale` | Something was dropped or cancelled, and this is the one event that says so (research doc R3): every drop the runtime performs, of a response's application, of a queued call it cancels before sending, or of a one-shot send it drops at fire time (5.5 machinery item 5), fires it with a `reason` naming the cause. (The one cancel outside the claim is a send stopped by a `citry:events:before` listener's `preventDefault`: the page performed that cancel itself and already knows.) The reasons: `epoch` (an out-of-order response: its echoed epoch, 4.2, is not newer than what the anchor already applied, so its instance-mutating actions, the self-targeted render and the token refresh, drop rather than roll newer state back to older; the caller's promise still resolves with its `data` and all other actions apply), `retired` (the response's instance, or a single action's target, left the DOM, 5.5), `cancelled` (a send's dispatching element was dead when it was due to fire, at dequeue, 5.6, or at a one-shot closure's fire time, 5.5: never sent, promise rejected), `superseded` (a newer call superseded it under `@event(latest_wins=True)`, 3.5), `timeout` (a response arrived after its call timed out, 5.6), `version` (the page is out of date, 4.5: Citry's own report rides this same event under this reason; it is a reload question on a page rendered in development mode and a console warning otherwise, and cancelling the event replaces it). The `epoch` case in one line: an older call's delayed action is still waiting when a newer result for the same component is accepted, so the action would change a page the newer result already replaced; it is dropped and this event fires instead. | `reason`, plus the dropped result's `event` name |
 
 For the Vue v1 mounted-source `applyActions` path, a delayed action that
 loses its source is also reported as `citry:events:stale` and followed by
@@ -4914,8 +4914,8 @@ are whole seconds and a shorter lifetime would expire every token at once.
 
 A later 1.x release may move State tokens to a new version, because only
 Citry reads them. That works because a server answers `stale_state` (409)
-for a token whose version it does not know, and the browser then offers a
-reload. The server checks the version before it uses anything else from
+for a token whose version it does not know, and the browser then reports
+an out-of-date page, which a reload fixes. The server checks the version before it uses anything else from
 the token:
 
 - the prefix: any `ce`, letter, number prefix other than `cev1` and
@@ -5025,7 +5025,7 @@ memory CPython uses for each entry's strings plus a fixed 256 bytes. This
 bounds the memory a client can fill whatever caller instances it names,
 and the separate store means State never pushes out page assets. The cost
 moves to other visitors instead: one client that sends many calls can push
-their State out, and they then see a reload prompt, so rate-limit the
+their State out, and their next calls then fail with `stale_state`, so rate-limit the
 Events routes where that matters. A dropped entry answers `stale_state`
 (409) on its next use, the same as an expired one. An entry larger than
 the whole budget is not stored, and Citry logs a warning.

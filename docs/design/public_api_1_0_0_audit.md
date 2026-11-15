@@ -642,7 +642,8 @@ Open items found while making this inventory, left for the maintainer:
   (`py/citry/citry/_vue/compiler.py:526-540`) that the browser checks
   against its own (`client.js:1462`). A page rendered by the old release
   cannot apply a render from a newer server whose helpers changed; it
-  fails the call with `stale_state` and offers a reload, and the spec
+  fails the call with `stale_state` and reports an out-of-date page
+  (a reload question only in development mode), and the spec
   says so. Rolling deploys are promised only between 1.x
   releases (decided; 0.x to 1.0.0 starts fresh).
   `scripts/rolling_deploy/check.py` covers it once a 1.x release changes

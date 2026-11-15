@@ -68,8 +68,8 @@ A token expires 24 hours after Citry issues it, with either storage.
 Citry issues a new token each time it renders the component and after
 each call that changes State. The expiry limits how long a copied token
 stays useful. A call with an expired token does not run its handler: it
-gets a `stale_state` error, and Citry's browser code offers to reload
-the page, which brings a fresh token.
+gets a `stale_state` error. Reloading the page brings a fresh token;
+[Handle an out-of-date page](/reference/browser-apis/#out-of-date-pages) shows how to tell the visitor.
 
 To change the lifetime, set `State._max_age` to a `timedelta` of at least
 one second. Token times are whole seconds, so a token can stop working up
@@ -86,8 +86,8 @@ class State:
 
 To stop accepting every signed token issued so far, give
 `Citry(secret=...)` a new secret and drop the one that signed them. A page
-that is already open then gets a `stale_state` error on its next call,
-and Citry's browser code offers to reload the page. If you pass
+that is already open then gets a `stale_state` error on its next call
+(see [Handle an out-of-date page](/reference/browser-apis/#out-of-date-pages)). If you pass
 `citry.contrib.django.secret()`, that means changing Django's
 `SECRET_KEY` and not keeping the old key in `SECRET_KEY_FALLBACKS`. That
 also ends Django's sessions and signs every user out. Give Citry a secret
@@ -124,7 +124,7 @@ default `InMemoryCache` counts such State against a 64 MiB budget and
 drops the entry used longest ago when it is full; see
 [Server-stored State](/performance/cache-backends/#server-stored-state).
 One client that sends many calls can push other visitors' State out, and
-those visitors then see a reload prompt, so rate-limit the Events routes
+those visitors' next calls then fail with `stale_state`, so rate-limit the Events routes
 if that matters for your app.
 
 ## Authorize every event

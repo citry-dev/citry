@@ -612,12 +612,13 @@ A page rendered by one release can also call an event handler on a
 worker that runs the other. Between two 1.x releases, that call either
 works or fails with `stale_state`. It fails when the other release no
 longer accepts the page's [State](/events/state/), or when it sends back
-a render that the browser code in the page cannot read. Citry then asks
-the visitor, once per page, whether to reload. A visitor who declines
-keeps the page, but its event calls keep failing until they reload. You
-do not need to change anything for this. To show your own message
-instead of the question, see
-[`citry:events:stale`](/reference/browser-apis/#events-fired-around-each-call).
+a render that the browser code in the page cannot read. Citry does not
+reload the page by itself, and in production it asks the visitor
+nothing: the page's event calls keep failing until it is reloaded. Tell
+your visitors with a listener, as
+[Handle an out-of-date page](/reference/browser-apis/#out-of-date-pages) shows. You need that listener anyway,
+because a State token that expired (24 hours after Citry issued it, by
+default) fails the same way on any day, deploy or not.
 
 ### Stop CDNs caching 404s
 

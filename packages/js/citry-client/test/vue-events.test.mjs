@@ -1107,7 +1107,7 @@ test("a stale_state answer reports a cancelable version notification before the 
       lifecycle.push([kind, event, detail]);
       return true;
     },
-    promptReload() {
+    reportOutOfDate() {
       prompts += 1;
     },
   };
@@ -1142,7 +1142,7 @@ test("a cancelled version notification skips the reload prompt, and other errors
       kinds.push(kind === "stale" ? `stale:${detail.reason}` : kind);
       return kind !== "stale";
     },
-    promptReload() {
+    reportOutOfDate() {
       prompts += 1;
     },
   };
@@ -1185,7 +1185,7 @@ test("a result the page cannot apply because it is out of date offers the reload
       kinds.push(kind === "stale" ? `stale:${detail.reason}` : kind === "error" ? `error:${detail.error.code}` : kind);
       return true;
     },
-    promptReload() {
+    reportOutOfDate() {
       prompts += 1;
     },
   };

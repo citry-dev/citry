@@ -2249,8 +2249,9 @@ it as public and ask the maintainer in the pull request.
   server answers `stale_state` (409) for a token whose prefix has the same
   shape (`ce`, a letter, a number) but another value, such as `cev2.`, and
   for a token or server-stored entry whose payload names a version other
-  than 1. Citry's browser client offers a reload for that code. The
-  visitor accepts the prompt and the page then has a fresh token. Until
+  than 1. Citry's browser client reports that code as an out-of-date
+  page (the app decides what the visitor sees; a development page asks
+  Citry's own reload question), and a reload brings a fresh token. Until
   then the call fails with `stale_state`. So a release may raise the
   token version. A new token version changes the prefix and keeps its
   shape, because 1.0.0 answers `invalid_state` for a prefix of any other shape; the
@@ -2261,7 +2262,8 @@ it as public and ask the maintainer in the pull request.
   for a different helper contract) and the Vue fragment messages
   (`citry-vue-fragment/1`) meet this condition too. When Citry's browser
   code in a page that an older 1.x release rendered gets a render or a
-  fragment it cannot read, it offers the visitor a reload. Before you
+  fragment it cannot read, it reports an out-of-date page the same way
+  (`citry:events:stale` or `citry:fragments:stale`). Before you
   change any other message between the server and Citry's browser code,
   check what the browser code of the oldest 1.x release does with a
   version it does not know, because an open page keeps running the
@@ -2282,7 +2284,7 @@ For both kinds:
   data, the code that reads it, and every test, fixture and doc that
   shows it.
 - Record the new version in the changelog when a visitor or an operator
-  can notice it, such as an open page that asks for a reload or a
+  can notice it, such as an open page whose calls fail with `stale_state` or a
   render cache that renders again. A major release also lists it in its
   "Upgrading from" section.
 

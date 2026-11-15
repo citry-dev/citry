@@ -618,28 +618,74 @@ name the component as Citry last saw it.
 A `version` result has two causes:
 
 - The server no longer accepts the State this page holds. This usually
-  happens because the app was deployed, its signing secret changed, or the
-  page's State token expired (24 hours after Citry issued it, by default).
+  happens because the page's State token expired (24 hours after Citry
+  issued it, by default), the app was deployed, or its signing secret
+  changed. An expired token is the common case in production: a visitor
+  leaves a tab open for a day and then clicks.
 - During an upgrade, a server on another Citry release sent a render built
   for other render helpers than this page's browser code.
 
-In both cases the call rejects with an error whose `code` is
-`stale_state`, and Citry asks the visitor once per page whether to reload.
-The error's `status` is 409 when the server answered and 0 when the
-browser found the problem itself. To show your own message
-instead, cancel the event:
+See [Handle an out-of-date page](#out-of-date-pages) for what Citry does
+and how to tell your visitors.
+
+### Handle an out-of-date page { #out-of-date-pages }
+
+When a call fails with reason `version`, Citry does this:
+
+- The call rejects with an error whose `code` is `stale_state`. Its
+  `status` is 409 when the server answered and 0 when the browser found
+  the problem itself.
+- Citry fires `citry:events:stale` with reason `version`, then
+  `citry:events:error`.
+- On a page that `Citry(mode="development")` rendered, Citry asks once
+  per page "This page is out of date. Reload to continue?", so you notice
+  the case while you develop.
+- On any other page, Citry asks nothing and never reloads by itself. It
+  writes one warning per page to the browser console.
+
+So in production your app decides what visitors see. A starting point
+that shows a message with a reload button:
 
 ```js
+function showOutOfDate() {
+  if (document.getElementById("out-of-date")) return;
+  const banner = document.createElement("div");
+  banner.id = "out-of-date";
+  banner.textContent = "This page is out of date. ";
+  const button = document.createElement("button");
+  button.textContent = "Reload";
+  button.addEventListener("click", () => location.reload());
+  banner.append(button);
+  document.body.prepend(banner);
+}
+
 document.addEventListener("citry:events:stale", (event) => {
-  if (event.detail.reason !== "version") return;
-  event.preventDefault();
-  showUpdateBanner();
+  if (event.detail.reason === "version") showOutOfDate();
 });
+document.addEventListener("citry:fragments:stale", showOutOfDate);
 ```
 
-A Vue fragment from another Citry release that the page cannot read asks
-the same question but fires no `citry:events:*` event, so cancelling the
-event does not replace that question.
+This handler cancels nothing, so Citry still writes its console warning
+and, in development, still asks its question. Call
+`event.preventDefault()` in the listener to replace both.
+
+A Vue fragment inserted into the page can also come from another Citry
+release, for example from a worker that already runs the new release
+during a deploy. Citry does not start such a fragment. No event call is
+involved, so instead of `citry:events:stale` Citry fires
+`citry:fragments:stale`:
+
+- It starts at the fragment's data block when that block is still in the
+  page, and at `document` otherwise. It bubbles, so a listener on
+  `document` always hears it.
+- Its `detail` holds `reason`, which is `version`, and `error`, the
+  `stale_state` error described above.
+- It is cancelable, and cancelling it replaces Citry's console warning or
+  development question, as for `citry:events:stale`.
+
+Both events share the once-per-page rule: after Citry has reported an
+out-of-date page once, it reports nothing more, but the events still fire
+every time.
 
 The Events guides cover [State](/events/state/),
 [template bindings](/events/bindings/),

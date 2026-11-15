@@ -12,8 +12,8 @@
   already did. Citry issues a new token when it renders the component
   and after a call that changes State, so the pages affected are those whose State has not
   changed for more than 24 hours. A call with an expired token does not
-  run its handler: it gets a `stale_state` error, and Citry's browser
-  code asks once per page whether to reload. Tokens issued before the
+  run its handler: it gets a `stale_state` error (the next entry says
+  what the page shows). Tokens issued before the
   upgrade also expire 24 hours after Citry issued them. No setting turns
   expiry off; to keep a token working for longer, set a longer
   `_max_age`:
@@ -24,6 +24,18 @@
     class State:
         _max_age = timedelta(days=7)
     ```
+
+- **Citry no longer asks visitors to reload an out-of-date page in
+  production:** when a call fails with `stale_state`, most often because
+  the page's State token expired, Citry asked every visitor "This page and
+  the server are running different versions of the app. Reload to get
+  back in sync?". Now only a page that `Citry(mode="development")`
+  rendered asks, with "This page is out of date. Reload to continue?". In
+  production Citry asks nothing, never reloads by itself, and writes one
+  console warning per page. Show your own message from a
+  `citry:events:stale` listener (reason `version`), as
+  [Handle an out-of-date page](https://citry.dev/reference/browser-apis/#out-of-date-pages)
+  shows.
 
 - **`State._max_age` must be at least one second:** a shorter value,
   including `timedelta(0)`, made every token expire as soon as Citry
@@ -60,18 +72,17 @@
 ### Changed
 
 - If a later Citry release changes the State token format, a page from
-  the other release gets `stale_state` (409) during a deploy, and Citry's
-  browser code offers a reload. Before, it got `invalid_state` (403) and
+  the other release gets `stale_state` (409) during a deploy, so the page
+  reports that it is out of date. Before, it got `invalid_state` (403) and
   an error.
-- When you later deploy another Citry release, a page rendered by this
-  release asks the visitor to reload if it gets a render or a Vue fragment
-  built for other render helpers or another fragment format. An event call
-  that gets such a render fails with `stale_state`, as it does for an
-  expired State token. Before, the call failed with an error and the page
-  did not offer a reload.
-- The browser's reload question now reads "This page is out of date.
-  Reload to continue?". It used to read "This page and the server are
-  running different versions of the app. Reload to get back in sync?".
+- When you later deploy another Citry release, an event call from a page
+  this release rendered that gets a render built for other render helpers
+  fails with `stale_state`, as for an expired State token, instead of a
+  plain error.
+- You can now find out when the page gets a Vue fragment from another
+  Citry release: the page fires the new `citry:fragments:stale` event and
+  does not start the fragment. Before, the fragment failed with only a
+  console error.
 
 ## v0.9.0
 

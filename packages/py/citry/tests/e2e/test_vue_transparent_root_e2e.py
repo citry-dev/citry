@@ -305,18 +305,18 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
       await first;
       return {same: first === second, mounts: globalThis.__fragmentMounts};
     }""") == {"same": True, "mounts": 1}
-    assert (
-        page.evaluate("""async () => {
+    assert page.evaluate("""async () => {
       const tag = document.querySelector('script[data-citry-vue-fragment]');
       const manifest = JSON.parse(tag.textContent);
-      // A top-level field this runtime does not know marks a fragment from another release.
+      // A top-level field this runtime does not know marks a fragment from another release,
+      // which the app hears about through citry:fragments:stale.
       manifest.calls = [];
+      const heard = [];
+      document.addEventListener('citry:fragments:stale', event => heard.push(event.detail.reason));
       try { await Citry.fragments.load(manifest); }
-      catch (error) { return error.code === 'stale_state'; }
-      return false;
-    }""")
-        is True
-    )
+      catch (error) { return {code: error.code, heard}; }
+      return null;
+    }""") == {"code": "stale_state", "heard": ["version"]}
     assert page.evaluate("""async () => {
       const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
       const manifest = structuredClone(source);
