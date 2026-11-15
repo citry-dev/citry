@@ -36,7 +36,7 @@ PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry_ui"
 QUALIFIER: Final = PACKAGE_ROOT / "citry_ui" / "quality" / "qualify_wheel.py"
 # The 0.4.0 sdist is about 778 KiB; 1 MiB leaves room for normal growth.
 MAX_SDIST_BYTES: Final = 1024 * 1024
-EXPECTED_REQUIRES_DIST: Final = {"citry>=0.9.0"}
+EXPECTED_REQUIRES_DIST: Final = {"citry<2,>=1.0.0"}
 
 
 class DistributionVerificationError(RuntimeError):
@@ -239,7 +239,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         raise DistributionVerificationError(f"{path.name} contains an unexpected generated setup.cfg")
     if relative["citry_ui.egg-info/dependency_links.txt"] != b"\n":
         raise DistributionVerificationError(f"{path.name} contains unexpected dependency links")
-    if relative["citry_ui.egg-info/requires.txt"] != b"citry>=0.9.0\n":
+    if relative["citry_ui.egg-info/requires.txt"] != b"citry<2,>=1.0.0\n":
         raise DistributionVerificationError(f"{path.name} contains unexpected runtime dependencies")
     if relative["citry_ui.egg-info/top_level.txt"] != b"citry_ui\ncitry_ui_i18n\n":
         raise DistributionVerificationError(f"{path.name} contains unexpected top-level packages")

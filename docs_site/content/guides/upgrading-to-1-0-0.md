@@ -202,4 +202,4 @@ No action needed in most projects:
   new version answers `stale_state` (HTTP 409) instead of
   `invalid_state` (HTTP 403), and Citry fires `citry:events:stale`.
 
-Every change: the [1.0.0 release notes](/releases/).
+Every change: the [1.0.0 release notes](/releases/v1.0.0/).

@@ -72,6 +72,10 @@ Other packages:
   `"citry-ui>=0.6.0,<0.7"`.
 - **`citry-lsp`:** every 1.x works with every `citry` 1.x, so you can
   upgrade either one first.
+- **VS Code extension:** it runs the `citry-lsp` installed in your
+  project. Each extension release is tested with one `citry-lsp`
+  version, the one its manifest names as `citry.lspVersion`. No other
+  pairing of the two is promised, so keep both on their newest release.
 
 ## Python and browsers { #platforms }
 

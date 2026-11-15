@@ -17,7 +17,7 @@ Install the server in the same Python environment as the Citry project:
 python -m pip install citry-lsp
 ```
 
-The server requires Citry 0.9.0 or newer and Python 3.11 through 3.15. It checks
+The server works with every Citry 1.x release and Python 3.11 through 3.15. It checks
 catalog and protocol schemas for compatibility. It installs
 the compatible Citry runtime, pygls, and the supported `ty` analyzer
 automatically.
@@ -139,9 +139,9 @@ listens on a network port.
 
 ## Compatibility
 
-The server advertises language-server version 0.4.0, component catalog v1, and
-client protocol v1. It accepts Citry 0.9.0 and newer without a version upper
-bound, and checks the catalog, the client protocol, and the version of the
+The server advertises language-server version 1.0.0, component catalog v1, and
+client protocol v1. Every citry-lsp 1.x works with every Citry 1.x, so you can
+upgrade either one first. It checks the catalog, the client protocol, and the version of the
 i18n data Citry writes for the editor before returning registry-backed
 results. When the i18n data version differs, the status names the package to
 upgrade.

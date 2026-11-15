@@ -9,17 +9,17 @@ lists.
 
 | Package | Releases that get security fixes |
 | ------- | -------------------------------- |
-| `citry` | The newest release (see below) |
+| `citry` | The newest 1.x minor release (see below) |
 | `citry-core` | The version that a supported `citry` release installs |
-| `citry-lsp` | The newest release (1.x from 1.0.0) |
-| VS Code extension (`citry-dev.citry`) | The newest release (1.x from 1.0.0) |
-| `pygments-citry` | The newest release (1.x from 1.0.0) |
+| `citry-lsp` | The newest 1.x release |
+| VS Code extension (`citry-dev.citry`) | The newest 1.x release |
+| `pygments-citry` | The newest 1.x release |
 | `citry-ui` | The newest release (0.x, alpha) |
 
-From `citry` 1.0.0 on, the newest 1.x minor release gets security fixes.
-When 2.0.0 comes out, the last 1.x minor release also gets them for 12
-months after the 2.0.0 release. The 0.x releases get no fixes once 1.0.0
-is out.
+For `citry`, a fix ships in the newest 1.x minor release: once 1.2.0 is
+out, a fix ships as 1.2.1, not as a 1.1.x release. When 2.0.0 comes out,
+the last 1.x minor release also gets security fixes for 12 months after
+the 2.0.0 release. The 0.x releases get no fixes.
 
 The [Versioning and support](https://citry.dev/about/versioning/) page
 explains what each kind of release may change and how long a deprecated

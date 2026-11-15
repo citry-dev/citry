@@ -1,8 +1,24 @@
 # Release notes
 
-## Unreleased
+## v1.0.0
+
+Citry 1.0.0 is the first stable release. Code that uses what the docs
+describe keeps working in every 1.x release, so you can allow any of
+them with `citry>=1.0.0,<2`.
+[Versioning and support](https://citry.dev/about/versioning/) says what
+this covers, what is experimental, which versions get fixes, and how
+deprecations work. The upgrade from 0.9.x is small. The change most apps
+notice: State that Citry sends to the page now expires after 24 hours,
+and in production Citry no longer asks visitors to reload an out-of-date
+page, so show your own message. Upgrade citry-lsp to 1.0.0 at the same time; every citry-lsp
+1.x works with every Citry 1.x. citry-ui 0.6.0 is released alongside and
+needs Citry 1.0.0 or later.
 
 ### Upgrading from 0.9.x
+
+Follow [Upgrade to Citry 1.0.0](https://citry.dev/guides/upgrading-to-1-0-0/)
+for the steps in order. On a release older than 0.9.x, upgrade to 0.9.x
+first. The changes that can affect your code:
 
 - **State sent to the page now expires after 24 hours by default:**
   Citry sends each component's State to the page as a signed string, the

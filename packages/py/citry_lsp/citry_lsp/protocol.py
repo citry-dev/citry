@@ -7,10 +7,10 @@ from typing import Literal
 
 from citry_core.template_formatter import python_expression_provider
 
-SERVER_VERSION = "0.4.0"
+SERVER_VERSION = "1.0.0"
 PROTOCOL_VERSION = 1
 CATALOG_SCHEMA_VERSION = 1
-MINIMUM_CITRY_VERSION = (0, 9, 0)
+MINIMUM_CITRY_VERSION = (1, 0, 0)
 MINIMUM_CITRY_SERIES = MINIMUM_CITRY_VERSION[:2]
 BROWSER_PROJECTION_METHOD = "citry/browserProjection"
 HTML_PROJECTION_METHOD = "citry/htmlProjection"

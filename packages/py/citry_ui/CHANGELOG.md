@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## [0.6.0] - 2026-11-15
+
+### Changed
+
+- **Breaking:** Citry UI now requires Citry 1.0.0 or later and below
+  2.0.0 (`citry>=1.0.0,<2`). If you stay on Citry 0.9.x, keep citry-ui
+  0.5.x. Citry UI itself stays on 0.x, so pin one minor release, such as
+  `citry-ui>=0.6.0,<0.7`.
 
 ### Fixed
 

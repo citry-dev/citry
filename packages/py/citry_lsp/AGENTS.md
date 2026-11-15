@@ -75,9 +75,11 @@ repository's own workspace Citry. So the floor moves only in the change
 that also sets `version` in `packages/py/citry/pyproject.toml` to that
 release, usually the release pull request, and these change together:
 
-- the `citry>=` requirement in this package's `pyproject.toml`;
+- the `citry>=` floor in this package's `pyproject.toml` (keep the `<2`
+  cap beside it for all of 1.x);
 - `MINIMUM_CITRY_VERSION` in `citry_lsp/protocol.py`;
-- the expected `citry>=` entry in `scripts/verify_citry_lsp_distribution.py`.
+- the expected `citry` entry in `scripts/verify_citry_lsp_distribution.py`,
+  written as the built metadata writes it (`citry<2,>=1.0.0`).
 
 `test_runtime_compatibility_matches_the_declared_dependency_floor` fails when
 the constant and the installed requirement disagree.

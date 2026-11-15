@@ -61,14 +61,17 @@ test("coalesces Python watcher bursts by URI", () => {
 	batcher.dispose();
 });
 
-test("accepts only the companion 0.1, 0.2, 0.3, and 0.4 language-server lines", () => {
+test("accepts only the companion 0.1, 0.2, 0.3, 0.4, and 1.x language-server lines", () => {
 	assert.equal(supportsLanguageServerVersion("0.1.0"), true);
 	assert.equal(supportsLanguageServerVersion("0.1.7+local"), true);
 	assert.equal(supportsLanguageServerVersion("0.2.0"), true);
 	assert.equal(supportsLanguageServerVersion("0.3.0"), true);
 	assert.equal(supportsLanguageServerVersion("0.4.0"), true);
 	assert.equal(supportsLanguageServerVersion("0.5.0"), false);
-	assert.equal(supportsLanguageServerVersion("1.0.0"), false);
+	assert.equal(supportsLanguageServerVersion("1.0.0"), true);
+	assert.equal(supportsLanguageServerVersion("1.12.3+local"), true);
+	assert.equal(supportsLanguageServerVersion("2.0.0"), false);
+	assert.equal(supportsLanguageServerVersion("10.0.0"), false);
 	assert.equal(supportsLanguageServerVersion("not-a-version"), false);
 });
 

@@ -1,5 +1,18 @@
 # Release notes
 
+## v2.1.0
+
+### Changed
+
+- citry-core is now marked stable (`Development Status :: 5 -
+  Production/Stable`). Depend on `citry`, not on citry-core: each `citry`
+  release installs the one citry-core version it needs.
+
+### Added
+
+- `html_transform` has a URL scheme reader that `citry` uses to check
+  link URLs. It is private, and only `citry` calls it.
+
 ## v2.0.0
 
 ### Changed

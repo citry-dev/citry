@@ -635,17 +635,17 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.
-- **Keep contract versions at 1 before a package's 1.0.0.** A contract version
-  is the number Citry writes into stored or exchanged data (protocol, schema,
-  manifest, cache payload, render cache, runtime compatibility) so the code
-  reading it can tell which format it got. Until `citry` 1.0.0 is released,
-  and in any package still below 1.0.0 (`citry-ui` after that release), keep
-  every contract version at `1`. When a format must change incompatibly, edit
-  version 1 itself and update every producer, consumer, fixture, test, and
-  current doc together, unless the user explicitly directs otherwise. From
-  `citry` 1.0.0, follow
-  [Contract versions](docs/codebase.md#contract-versions) for `citry`. Tests
-  of the version-check code itself may use made-up version numbers.
+- **Change a contract version only as the versioning rules allow.** A
+  contract version is the number Citry writes into stored or exchanged data
+  (protocol, schema, manifest, cache payload, render cache, runtime
+  compatibility) so the code reading it can tell which format it got. For
+  `citry` and every package at 1.0.0 or later, follow
+  [Contract versions](docs/codebase.md#contract-versions). In a package still
+  below 1.0.0 (`citry-ui`), keep every contract version at `1`: when a format
+  must change incompatibly, edit version 1 itself and update every producer,
+  consumer, fixture, test, and current doc together, unless the user
+  explicitly directs otherwise. Tests of the version-check code itself may
+  use made-up version numbers.
 - **Follow the shared-worktree testing practice.** The authoritative workflow
   is [`docs/codebase.md`](docs/codebase.md#testing-practices-in-a-shared-worktree):
   run focused checks while implementing, then the fast repository profile once
@@ -1004,8 +1004,7 @@ Users pin `citry>=1.0.0,<2` and expect their code to keep working on every
 `packages/`, and when you review one, check it against the rules in
 [`docs/codebase.md`](docs/codebase.md#breaking-changes) and the Versioning
 and support page (`docs_site/content/about/versioning.md`), and say the
-result in the pull request. Until `citry` 1.0.0 is released, the
-"Keep contract versions at 1" bullet above still decides contract versions.
+result in the pull request.
 
 - **Does it break anything the 1.x promise covers?** The lists in
   [Breaking changes](docs/codebase.md#breaking-changes) say what is
