@@ -73,6 +73,10 @@ jobs:
           print('GIL disabled build:', bool(sysconfig.get_config_var('Py_GIL_DISABLED')));
           import citry; print('GIL enabled after import citry:', getattr(sys, '_is_gil_enabled', lambda: True)())"
 
+      # pytest's settings in pyproject.toml already print the failure summary
+      # and the stack of any test still running after 5 minutes. Keep comments
+      # out of the folded command below: YAML joins its lines into one shell
+      # line, so a `#` line there turns every option after it into a comment.
       - name: Run Python tests
         run: >-
           uv run --no-sync pytest
@@ -81,10 +85,6 @@ jobs:
           -n 4
           --dist loadfile
           --durations 30
-          # Print the failure summary, and the stack of any test still running
-          # after 10 minutes, so a hang or a killed runner still names the test.
-          -rfE
-          -o faulthandler_timeout=600
 
       # A free-threaded build keeps the GIL on once citry_core loads, so this
       # step turns it off to run the render, serialize, Events and thread tests

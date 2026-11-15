@@ -4,12 +4,10 @@
 
 ### Fixes
 
-- **State kept on the server works on PyPy:** on PyPy, a component whose
-  State is kept on the server failed to render with
-  `TypeError: getsizeof(...)` when the app used the default
-  `InMemoryCache`. Citry now counts each stored State entry by its UTF-8
-  size on PyPy, where `sys.getsizeof` gives no size. CPython counts
-  entries as before.
+- **Server-stored State works on PyPy:** a component whose State sets
+  `_storage = "server"` no longer fails to render on PyPy when the cache
+  is an `InMemoryCache`, including the default cache. The error was a
+  `TypeError` from `sys.getsizeof`. CPython is unchanged.
 
 ## v0.9.0
 

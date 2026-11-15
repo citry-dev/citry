@@ -444,7 +444,11 @@ Some setups need care:
 - **Your own threads.** A page rendered in a thread you start with
   `loop.run_in_executor()` or `threading.Thread` cannot see the request,
   so its URLs use the app's setting. Use `asyncio.to_thread()` or
-  Starlette's `run_in_threadpool()`, which pass the request along.
+  Starlette's `run_in_threadpool()`, which pass the current request
+  along. On the free-threaded build of Python (`python3.14t` and later),
+  a new thread starts with the sub-path of the request that started it,
+  and `loop.run_in_executor()` reuses its threads, so a later page can
+  get another visitor's earlier sub-path and its scripts fail to load.
 - **Flask streamed responses.** A generator response sees the sub-path
   only when you wrap it with `stream_with_context()`. Without it, the
   streamed page's URLs use `APPLICATION_ROOT`, and its scripts fail to

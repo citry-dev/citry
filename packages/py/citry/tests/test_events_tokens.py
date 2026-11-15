@@ -130,10 +130,10 @@ class EnumShapeState:
     combo: typing.Tuple = ()  # noqa: UP006
 
 
-# PyPy writes the annotation `tuple[()]` as the text "tuple[]" when it
-# compiles a module from a syntax tree, as pytest does to rewrite asserts,
-# and "tuple[]" does not resolve. Naming the type here keeps that text out
-# of the class annotations (#585).
+# Under `from __future__ import annotations`, PyPy writes the annotation
+# `tuple[()]` as the text "tuple[]" when it compiles a module from a syntax
+# tree, as pytest does to rewrite asserts, and "tuple[]" does not resolve.
+# Naming the type here keeps that text out of the class annotations (#585).
 EmptyTuple = tuple[()]
 
 

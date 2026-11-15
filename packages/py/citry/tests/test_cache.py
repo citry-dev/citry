@@ -196,8 +196,8 @@ class TestInMemoryCache:
         assert cache.get("citry:state:other") == "kept"
         assert any("larger than its whole state_max_bytes" in record.message for record in caplog.records)
 
-    # The bound below is CPython's string layout; PyPy keeps strings as
-    # UTF-8, which the next test covers on every interpreter (#585).
+    # The bound below follows CPython's string layout; PyPy keeps strings
+    # as UTF-8, which the next test covers on every interpreter (#585).
     @pytest.mark.skipif(sys.implementation.name != "cpython", reason="checks CPython's string layout; see #585")
     def test_non_ascii_state_counts_the_memory_it_really_takes(self):
         # One character above U+FFFF makes CPython store the whole string at
