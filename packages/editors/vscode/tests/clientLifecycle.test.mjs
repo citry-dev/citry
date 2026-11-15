@@ -70,6 +70,8 @@ test("accepts only the companion 0.1, 0.2, 0.3, 0.4, and 1.x language-server lin
 	assert.equal(supportsLanguageServerVersion("0.5.0"), false);
 	assert.equal(supportsLanguageServerVersion("1.0.0"), true);
 	assert.equal(supportsLanguageServerVersion("1.12.3+local"), true);
+	assert.equal(supportsLanguageServerVersion("1.1.0rc1"), true);
+	assert.equal(supportsLanguageServerVersion("2.0.0rc1"), false);
 	assert.equal(supportsLanguageServerVersion("2.0.0"), false);
 	assert.equal(supportsLanguageServerVersion("10.0.0"), false);
 	assert.equal(supportsLanguageServerVersion("not-a-version"), false);

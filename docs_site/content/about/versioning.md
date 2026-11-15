@@ -73,9 +73,14 @@ Other packages:
 - **`citry-lsp`:** every 1.x works with every `citry` 1.x, so you can
   upgrade either one first.
 - **VS Code extension:** it runs the `citry-lsp` installed in your
-  project. Each extension release is tested with one `citry-lsp`
-  version, the one its manifest names as `citry.lspVersion`. No other
-  pairing of the two is promised, so keep both on their newest release.
+  project and does not install it. Extension 1.x accepts `citry-lsp`
+  0.1.x to 0.4.x and any 1.x, and for another version it shows "Citry
+  unavailable" with the versions it accepts. Each extension release is
+  tested with one `citry-lsp` release (extension 1.0.0 with `citry-lsp`
+  1.0.0). No other pairing is promised, so keep both on their newest
+  release.
+- **`pygments-citry`:** the `citry` and `citry-html` lexer names keep
+  working in every 1.x release.
 
 ## Python and browsers { #platforms }
 

@@ -28,7 +28,7 @@ var RestartCoordinator = class {
   }
 };
 function supportsLanguageServerVersion(version) {
-  return /^(?:0\.[1-4]|1\.\d+)\.\d+(?:[+.-][0-9A-Za-z.-]+)?$/.test(version);
+  return /^(?:0\.[1-4]|1\.\d+)\.\d+(?:(?:a|b|rc)\d+)?(?:[+.-][0-9A-Za-z.-]+)?$/.test(version);
 }
 var WatchedFileChangeBatcher = class {
   constructor(send, delayMs = 100) {

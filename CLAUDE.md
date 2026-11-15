@@ -635,7 +635,8 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.
-- **Change a contract version only as the versioning rules allow.** A
+- **Contract versions: `citry-ui` stays at 1, other packages follow the
+  versioning rules.** A
   contract version is the number Citry writes into stored or exchanged data
   (protocol, schema, manifest, cache payload, render cache, runtime
   compatibility) so the code reading it can tell which format it got. For

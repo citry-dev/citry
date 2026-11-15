@@ -16,10 +16,10 @@ lists.
 | `pygments-citry` | The newest 1.x release |
 | `citry-ui` | The newest release (0.x, alpha) |
 
-For `citry`, a fix ships in the newest 1.x minor release: once 1.2.0 is
-out, a fix ships as 1.2.1, not as a 1.1.x release. When 2.0.0 comes out,
-the last 1.x minor release also gets security fixes for 12 months after
-the 2.0.0 release. The 0.x releases get no fixes.
+For `citry`, only the newest 1.x minor release gets fixes: once 1.2.0 is
+out, a fix arrives as 1.2.1, not as a 1.1.x release. After 2.0.0 comes
+out, the last 1.x minor release keeps getting security fixes, but no
+other fixes, for 12 months. The 0.x releases get no fixes.
 
 The [Versioning and support](https://citry.dev/about/versioning/) page
 explains what each kind of release may change and how long a deprecated

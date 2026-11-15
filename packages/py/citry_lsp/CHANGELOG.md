@@ -9,7 +9,8 @@ All notable changes to `citry-lsp` are documented here.
 - **Breaking:** citry-lsp now requires Citry 1.0.0 or later and below
   2.0.0 (`citry>=1.0.0,<2`). Every citry-lsp 1.x works with every Citry
   1.x, so within 1.x you can upgrade either one first. If you stay on
-  Citry 0.9.x, keep citry-lsp 0.4.x.
+  Citry 0.9.x, keep citry-lsp 0.4.x. VS Code users: update the extension
+  to 1.0.0 in the same step, because older versions refuse citry-lsp 1.x.
 - The editor now reads the i18n and link-check data that a later Citry
   1.x writes, even when that Citry adds fields to it. Before, an added
   field made the editor fall back to checking template syntax only.

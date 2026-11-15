@@ -23,8 +23,9 @@ applications.
 Citry supports Python 3.11 through 3.15.
 
 Citry is stable. Code that uses what the docs describe keeps working in
-every 1.x release; [Versioning and support](https://citry.dev/about/versioning/)
-says what this covers and which releases get fixes.
+every 1.x release, apart from experimental features and security fixes.
+[Versioning and support](https://citry.dev/about/versioning/) says what
+this covers and which releases get fixes.
 
 **Our mission:** a safe, reliable, and intuitive frontend ecosystem for Python.
 
@@ -141,10 +142,13 @@ Or add it to a `uv` project:
 uv add citry
 ```
 
-In your project's dependencies, allow any 1.x release, so upgrades bring
-fixes and new features but no breaking changes:
+To stay on 1.x, require `citry>=1.0.0,<2` in `pyproject.toml` (if
+`uv add` already wrote a `citry` line, edit that line). Upgrades then
+bring fixes and new features, and code that uses what the docs describe
+keeps working:
 
 ```toml
+[project]
 dependencies = ["citry>=1.0.0,<2"]
 ```
 

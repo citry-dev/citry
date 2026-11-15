@@ -2193,7 +2193,9 @@ contract version at 1, as the contract-version rule in
 [`CLAUDE.md`](../CLAUDE.md) says, and fixes a format in place.
 
 **For `citry`** and every other package at 1.0.0 or later, the rest of
-this section applies.
+this section applies. `citry-core` follows its own version numbers, and a
+`citry-core` format counts only where a covered `citry` behavior depends
+on it.
 
 A deploy that replaces servers one at a time leaves old and new `citry`
 versions running together for a while, and a deploy can skip releases

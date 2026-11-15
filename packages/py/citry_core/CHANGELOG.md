@@ -4,14 +4,10 @@
 
 ### Changed
 
-- citry-core is now marked stable (`Development Status :: 5 -
-  Production/Stable`). Depend on `citry`, not on citry-core: each `citry`
-  release installs the one citry-core version it needs.
-
-### Added
-
-- `html_transform` has a URL scheme reader that `citry` uses to check
-  link URLs. It is private, and only `citry` calls it.
+- The PyPI page now lists citry-core as Production/Stable, because it
+  ships with Citry 1.0.0. Its own API is still not covered by the 1.x
+  promise and can change in any release, so depend on `citry`: each
+  `citry` release installs the one citry-core version it needs.
 
 ## v2.0.0
 
