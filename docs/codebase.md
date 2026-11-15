@@ -2002,8 +2002,11 @@ version:
   an extension hook reads from them through `ctx.nodes`.
 - The Events wire format `citry-events/1`, which carries the server
   events that run Python handlers from the browser: its requests,
-  replies, manifests and records. An incompatible change waits for a
-  major release, which names the new format `citry-events/2`.
+  replies, manifests and records. It is frozen for all of 1.x. Any
+  change to it, even an addition, needs the new format
+  `citry-events/2`, except that a security fix may refuse input. Every
+  1.x release still accepts valid `citry-events/1` requests (see
+  [Contract versions](#contract-versions)).
 - The module `citry._lsp_support`, which re-exports everything that
   `citry-lsp` imports from `citry`. Its names and signatures stay the
   same for all of 1.x.
@@ -2039,12 +2042,17 @@ break a user's setup. List each one in the changelog:
 - A minor update of the Vue version that Citry bundles. Moving to a new
   Vue major needs a new `citry` major.
 
-A change that has to break covered behavior in a minor or patch release
-is the maintainer's decision. Ask the maintainer before you open a pull
-request, and give the change an "Upgrading from" section in the
-changelog. When the change closes a security hole in a released
-version, do not open a public pull request. Follow Mechanism 7 in
+A minor or patch release may refuse input that earlier releases
+accepted when that is needed to fix a security problem, and its
+changelog says so. When the hole is in a released version, do not open a
+public pull request, and keep the changelog line in the private fix
+until the advisory is published. Follow Mechanism 7 in
 [`CLAUDE.md`](../CLAUDE.md) and [`SECURITY.md`](../SECURITY.md).
+
+Any other change that has to break covered behavior in a minor or patch
+release is the maintainer's decision. Ask the maintainer before you open
+a pull request, and give the change an "Upgrading from" section in the
+changelog.
 
 ### Deprecating a feature
 
@@ -2155,11 +2163,12 @@ versions running together for a while, and a deploy can skip releases
 (1.0.0 to 1.7.0). Each version reads data that the other wrote: the
 State tokens (the tokens that carry a component's State, or point to it
 on the server), Events requests, and HTML fragments that the server
-sends after the page has loaded. So a change to a Citry format must not
-leave an open page broken. At worst the browser asks the visitor to
-reload. Citry promises this for a deploy between any two 1.x releases. A
-deploy from 0.x to 1.0.0 is a fresh start, so 1.0.0 does not need to
-read 0.x data.
+sends after the page has loaded. So a change to a Citry format should
+leave an open page working, or at worst make the browser ask the visitor
+to reload. The bullets below name the formats that do not meet this. The
+rules cover a deploy between any two 1.x releases. A deploy
+from 0.x to 1.0.0 is a fresh start, so 1.0.0 does not need to read 0.x
+data.
 
 A **public format** is one that the docs or a spec describe, or that
 code other than Citry's own server and browser code reads, such as a
@@ -2168,17 +2177,33 @@ tool or an editor. Examples are `citry-events/1`, the JSON of
 that `citry-lsp` reads, even though the Python API that produces the
 analysis data is experimental.
 
-- Change a public format incompatibly only in a major release, which
-  also raises its number (`citry-events/2`).
-- Adding to a public format is a change too, and it is safe only when
-  every reader accepts it. Events readers reject unknown fields and
-  unknown values (such as an action type), so 1.x adds no fields and no
-  new values to `citry-events/1`. For another format, find every reader
-  in `citry`, `citry-lsp`, the browser code and the Rust crates. One
-  that rejects what it does not know turns the addition into a break.
-  You cannot find every reader of a format that users' own tools read,
-  such as the JSON of `citry check`, so add a field to it only when its
-  docs tell readers to ignore fields they do not know.
+- `citry-events/1` is frozen for all of 1.x and is never changed in
+  place, apart from the security exception below. Its readers reject
+  unknown fields and unknown values (such as an action type), so an
+  addition is a change too. A new field, a new value, or any other
+  change needs the new format `citry-events/2`, which a 1.x release may
+  add beside `citry-events/1`. Every 1.x release still accepts valid
+  `citry-events/1` requests. The first release that stops accepting
+  them is 2.0.0 or later, and comes at least one minor release after
+  the first release that accepts `citry-events/2`. A page that a newer
+  release rendered can reach a server still running an older release,
+  which answers `protocol_mismatch`, and the call fails with that error.
+  The Events spec,
+  [`packages/protocol/events/v1/spec.md`](../packages/protocol/events/v1/spec.md),
+  says the same in its "Versioning" section; keep the two in step.
+- Change another public format incompatibly only in a major release,
+  which also raises its number. Adding to it is a change too, and it is
+  safe only when every reader accepts it: find every reader in `citry`,
+  `citry-lsp`, the browser code and the Rust crates. One that rejects
+  what it does not know turns the addition into a break. You cannot find
+  every reader of a format that users' own tools read, such as the JSON
+  of `citry check`, so add a field to it only when its docs tell readers
+  to ignore fields they do not know.
+- One exception applies to every public format whose input Citry reads,
+  `citry-events/1` included. A 1.x release may refuse input that earlier
+  releases accepted when that is needed to fix a security problem. The
+  release's changelog says so. The Events spec states the same
+  exception for `citry-events/1`.
 - Follow the spec of a format when it has one (the Events spec requires
   readers to reject unknown fields). Otherwise write each new reader so
   that it skips fields it does not know, and uses a default for a field
@@ -2218,13 +2243,17 @@ it as public and ask the maintainer in the pull request.
   that is out cannot change that answer, so the token version stays at 1
   for all of 1.x unless 1.0.0 itself answers `stale_state` for an
   unknown version.
-- The HTML fragment messages are in the same position. The browser code
-  throws on a fragment message that has a field it does not know or a
-  protocol string other than `citry-vue-fragment/1`, so an open page
-  that receives one shows an error instead of a reload offer. Other
-  messages between the server and Citry's browser code need the same
-  check, because an open page keeps running the browser code of the
-  release that built it.
+- The `prepared` object of a `vue-prepared/1` render is in the same
+  position. The browser runtime of the release that wrote it owns its
+  contents, and a page that an older release rendered can fail to apply
+  one from a newer server, with an error and no reload prompt. The
+  Events spec says so in its "Versioning" section. The Vue fragment
+  messages (`citry-vue-fragment/1`) have the same problem: the browser
+  code throws on a top-level field it does not know or another protocol
+  string. Other messages
+  between the server and Citry's browser code need the same check,
+  because an open page keeps running the browser code of the release
+  that built it.
 - The data between `citry` and its pinned `citry-core` never meets
   another release, because the two install together. Its readers may
   reject what they do not know: the request types of the Vue compiler
@@ -2235,10 +2264,11 @@ it as public and ask the maintainer in the pull request.
 
 For both kinds:
 
-- Never change a released version in place. A change that old readers
-  cannot read gets the next number, and one change updates the code that
-  writes the data, the code that reads it, and every test, fixture and
-  doc that shows it.
+- Never change a released version in place, except as the security
+  exception above allows. A change that old readers cannot read gets
+  the next number, and one change updates the code that writes the
+  data, the code that reads it, and every test, fixture and doc that
+  shows it.
 - Record the new version in the changelog when a visitor or an operator
   can notice it, such as an open page that asks for a reload or a
   render cache that renders again. A major release also lists it in its
