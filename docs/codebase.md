@@ -451,6 +451,17 @@ cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_nativ
 cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_native_render -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
 ```
 
+The Python tests fail on any deprecation warning. The `filterwarnings`
+setting in the root `pyproject.toml` turns each one into an error, and each
+warning that Citry cannot fix is listed there as a named exception. How to fix
+a warning or add an exception is in the "Fix deprecation warnings" section of
+`docs_site/content/community/development.md`.
+
+Do not run `pytest -W error::DeprecationWarning` here. anyio's pytest plugin
+raises a deprecation while pytest loads it, so pytest stops before any test
+runs. The `filterwarnings` setting avoids this by listing that one warning as
+an exception.
+
 #### Browser end-to-end tests
 
 Install the browser-test dependencies and Chromium before running the E2E

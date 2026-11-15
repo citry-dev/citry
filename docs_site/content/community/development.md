@@ -185,6 +185,43 @@ uv run mypy packages/py/citry_core
 python scripts/validate.py
 ```
 
+### Fix deprecation warnings
+
+A Python test run (`uv run pytest`, or the tests phase of
+`python scripts/check.py`) fails on a deprecation warning, whether Citry or
+a library it uses raises it. A `PendingDeprecationWarning`, the early
+notice before a deprecation, fails the same way. So the code the tests run
+never calls a deprecated function, and a library's deprecation shows up
+when you upgrade that library, not when it removes the function.
+
+When a test fails this way, fix the code that triggers the warning. To read
+a warning without failing the test, run that one test with the flag that
+shows it:
+
+```sh
+uv run pytest path/to/test.py::test_name \
+    -W default::DeprecationWarning
+```
+
+For a pending warning, use `default::PendingDeprecationWarning` instead.
+
+When the warning comes from a library and Citry cannot change that library,
+add an `ignore` entry to `filterwarnings` under `[tool.pytest.ini_options]`
+in the root `pyproject.toml`:
+
+1. Write it as `ignore:<start of the message>:<warning class>:<module>`,
+   like the entries already there. Match the library's module and the
+   start of the message, so a different deprecation from the same library
+   still fails.
+2. Put a comment above it that names the library and says why Citry cannot
+   fix it, so the next contributor knows when to delete it.
+
+The message and the module are regular expressions that match from the
+start, so escape a character such as `(` with a backslash. The message
+cannot contain a colon, because colons separate the fields. When pytest
+itself reports the warning, as it does for a plugin's fixture definition,
+the module is a `_pytest` one, so only the message can narrow the entry.
+
 ### Custom validators
 
 The custom validators check repository rules that no other tool covers,

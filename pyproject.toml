@@ -476,6 +476,51 @@ pythonpath = ["."]
 # output, so a hang shows where it waits. The slowest test takes under a
 # minute on CI. This only reports: the test keeps running.
 faulthandler_timeout = 300
+# pytest-asyncio (installed with pytest-lsp for the language server tests)
+# warns when this is unset, because it will change its default. That warning
+# is a deprecation, so the `filterwarnings` entries below would make it an
+# error. The language server fixtures are all function-scoped, where the
+# current default and "function" behave the same. A run without
+# pytest-asyncio (the examples job installs only pytest) prints one
+# harmless "unknown config option" note for this line.
+asyncio_default_fixture_loop_scope = "function"
+# Fail a test on any deprecation warning, so a test run never carries one.
+# That includes `citry.CitryDeprecationWarning`, which is a
+# `DeprecationWarning`. The second entry covers `PendingDeprecationWarning`,
+# an early notice that is not a `DeprecationWarning`. Fix a deprecation in
+# the code that triggers it, or list it below when Citry cannot fix it.
+#
+# pytest applies the entries in order and a later entry wins, so the
+# exceptions go after the two error entries. An exception has the form
+# `ignore:<start of the message>:<warning class>:<module>`. pytest reads the
+# message and the module as patterns that must match at the start of the
+# text, and a colon cannot appear in the message. Name the library's module
+# and the start of the message, so a different deprecation from the same
+# library still fails. Delete an exception once the library has fixed the
+# warning and the tests install that release.
+#
+# A deprecation raised inside the language server can make a test hang
+# instead of fail. Run that test with `-W default::DeprecationWarning` to
+# read the warning.
+filterwarnings = [
+    "error::DeprecationWarning",
+    "error::PendingDeprecationWarning",
+    # anyio (a dependency of Starlette, FastAPI and httpx) installs a pytest
+    # plugin that imports `CallSpec2`, which pytest has renamed to
+    # `CallSpec`. Only anyio's plugin module raises it.
+    "ignore:_pytest.python.CallSpec2 has been renamed:pytest.PytestRemovedIn10Warning:anyio\\.pytest_plugin$",
+    # pygls (the language server library behind citry-lsp) calls
+    # `asyncio.iscoroutinefunction`, which Python 3.14 deprecates and Python
+    # 3.16 will remove. The language server tests run pygls's own code, so Citry
+    # cannot change it.
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:pygls\\.",
+    # pytest-playwright (used by the browser end-to-end tests) writes its
+    # session-scoped `base_url` fixture as an instance method, which pytest
+    # 9.2 deprecates. pytest reports it from its own module, so the entry
+    # names the fixture in the message, in the second line. `(?s)` lets the
+    # `.*` cross that line break.
+    "ignore:(?s)Session-scoped fixtures defined as instance methods are deprecated.*in the .base_url. fixture:pytest.PytestRemovedIn10Warning:_pytest\\.fixtures",
+]
 markers = [
     "e2e: browser end-to-end test (needs Playwright and a browser binary)",
     "qualification: slow boundary proof kept in full integration and version-matrix runs",
