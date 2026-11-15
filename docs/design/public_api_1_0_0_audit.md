@@ -633,14 +633,15 @@ Open items found while making this inventory, left for the maintainer:
   (`py/citry/citry/_vue/compiler.py:526-540`) that the browser checks
   against its own (`client.js:1462`). A page rendered by the old release
   cannot apply a render from a newer server whose helpers changed. The
-  spec now says so. The rolling-deploy test (decision 10) should cover
-  it. Runtime digests during an upgrade are already covered by
-  `docs_site/content/advanced/web-frameworks.md` ("Deploy a Citry
-  upgrade").
-- **Security fixes.** The spec's freeze allows a 1.x release to change a
-  check only to close a security hole. The maintainer should confirm
-  that exception. The public "Versioning and support" page (#624 item
-  14) should then state it for every covered part.
+  spec now says so. Rolling deploys are promised only between 1.x
+  releases (decided; 0.x to 1.0.0 starts fresh), so the rolling-deploy
+  test (decision 10) should cover a 1.x upgrade that changes the
+  helpers.
+- **Security fixes.** Decided: a 1.x release may refuse a
+  `citry-events/1` input that earlier releases accepted when a security
+  fix needs it, and says so in the changelog. The public "Versioning and
+  support" page (#624 item 14) should state the same exception for every
+  covered part.
 
 ## 5. Covered parts this audit does not list
 

@@ -1224,7 +1224,9 @@ The number after the slash in the `protocol` string is the protocol major,
 so `citry-events/1` is major 1. Major 1 is frozen: Citry 1.0.0 ships it as
 this document describes it, and no 1.x release changes or removes a field,
 value, check, or HTTP route described here, except to close a security
-hole.
+hole. When a security fix needs it, a 1.x release may refuse a
+`citry-events/1` input that earlier releases accepted, and its changelog
+says so.
 
 A 1.x server accepts every valid `citry-events/1` call and answers it with
 a valid `citry-events/1` result. So a custom transport or a third-party
@@ -1252,7 +1254,9 @@ A 1.x release may add `citry-events/2` beside `citry-events/1`, and every
 stops accepting them is 2.0.0 or later, and comes at least one minor
 release after the first release that accepts `citry-events/2`. A rolling deploy needs this overlap: pages
 rendered by the old release still send `citry-events/1` calls, and they may
-reach a server that already runs the new release.
+reach a server that already runs the new release. This promise covers
+deploys from one 1.x release to another; a deploy from 0.x to 1.0.0
+starts fresh.
 
 This overlap helps only pages from the old release. A page rendered by the
 new release that reaches a server still running the old release may send a
