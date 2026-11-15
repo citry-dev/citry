@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 - 2026-11-15
+## 1.0.0 - 2026-11-16
 
 - The extension is now stable: its settings and commands keep working in
   every 1.x release.
