@@ -247,6 +247,9 @@ def engine_inject_keys(engine: Citry, workspace: Path) -> dict[str, object]:
     ``self.inject()`` calls in the file being edited. ``checked`` is false
     when the rule cannot run, and the editor then reports nothing.
     """
+    # citry-lsp reads this record from every Citry 1.x (`_inject_keys` in
+    # citry_lsp/project.py). During 1.x only add keys, never remove or
+    # retype one.
     registrations = engine.components
     scopes = inject_key_scopes(engine, registrations, workspace)
     if scopes is None:

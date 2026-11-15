@@ -2891,6 +2891,9 @@ class TemplateAnalysis:
 
     def to_dict(self) -> dict[str, object]:
         """Return a fresh JSON-ready copy of this analysis snapshot."""
+        # citry-lsp reads `tag_rules` from this copy with every Citry 1.x
+        # (`ProjectState` in citry_lsp/project.py). During 1.x only add keys,
+        # never remove or retype one.
         return {
             "schema_version": TEMPLATE_ANALYSIS_SCHEMA_VERSION,
             "component_names": sorted(self.component_names),

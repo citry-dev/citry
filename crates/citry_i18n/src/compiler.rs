@@ -717,6 +717,11 @@ struct ParamDeclaration {
     span: Range<usize>,
 }
 
+// Citry copies these two records into the i18n index it builds for
+// citry-lsp, which reads them from every Citry 1.x (`_i18n_parameter` in
+// citry_lsp/project.py). During Citry 1.x only add fields, each with
+// `#[serde(default)]` so data an older Citry compiled still decodes, and
+// never remove or retype one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ParameterMetadata {
     type_name: String,
