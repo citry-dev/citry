@@ -25,8 +25,8 @@ component's [State](/events/state/) to the page) expire after 24 hours.
    every `_max_age` at one second or more.
 5. [Add a listener for out-of-date pages](#out-of-date-listener), so
    visitors see a message when a call fails with `stale_state`.
-6. [Rename attributes](#reserved-attribute-names) that use a name
-   Citry reserves.
+6. Find `c-bind` and Citry UI `attrs=` dicts whose keys use a
+   [reserved name](#reserved-attribute-names), and rename those keys.
 7. Run your tests on 1.0.0.
 8. [Deploy](#deploy-the-upgrade) with fresh whole-page caches.
 9. Check whether your code uses an
@@ -158,23 +158,24 @@ page is out of date, as
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows.
 
-## Rename reserved attributes { #reserved-attribute-names }
+## Rename reserved names { #reserved-attribute-names }
 
-Citry and Citry UI find their own elements in the page by a few
-attribute names. In 1.0.0, those names raise `ValueError`, in any letter
-case, where you pass attributes as a dict:
+Citry and Citry UI use some attribute names to find their own elements
+in the page. A dict key with one of these names now raises `ValueError`
+when the page renders, in any letter case. Two places are affected:
 
-- **`c-bind` keys:** on an HTML element, a key such as `c-render-id`,
-  `data-cid-x`, `data-ccss-x` or `data-citry-key` raises `ValueError`.
-  `<c-element>` with `c-is` or `c-bind` refuses them even when you
-  write them in the template. Fix: rename the attribute to a `data-`
-  name of your own. The full list is under
+- **`c-bind` on an HTML tag**, such as `<div c-bind="attrs">`: a key
+  such as `c-render-id` or `data-ccss-x` raises `ValueError`. Rename
+  the key, for example to `data-my-key`. The full list is under
   [Names Citry reserves](/advanced/html-attributes/#names-citry-reserves).
-- **Citry UI `attrs=` and `*_attrs=` maps (citry-ui 0.6.0):** a key
-  that starts with `data-citry-`, `data-cui-`, `data-cev` or `data-cid`
-  raises `ValueError`. Attrs a component gives you in slot data, such as
-  `activator_attrs`, still work. Fix: rename the key to a `data-` name
-  of your own.
+  A `<c-element>` with `c-is` or `c-bind` also refuses these names when
+  you write them in the template.
+- **Citry UI `attrs=` inputs** (citry-ui 0.6.0), such as `CButton`
+  `attrs=` or `CSplitButton` `primary_attrs=`: a key that starts with
+  `data-citry-`, `data-cui-`, `data-cev` or `data-cid` raises
+  `ValueError`. Rename it, for example to `data-my-key`. Attrs a Citry
+  UI component hands you, such as `activator_attrs`, still work when
+  you pass them on as you got them, with your own keys added.
 
 ## Deploy the upgrade { #deploy-the-upgrade }
 
