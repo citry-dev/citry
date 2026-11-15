@@ -262,8 +262,8 @@ Status** and check these first:
 - `citry.envFile`, when set, exists and supplies any variables required before
   importing `citry.app`.
 - Citry and the `citry-lsp` release that supports it are installed
-  together: Citry 0.7.0 with `citry-lsp` 0.3.x, or Citry 0.6.0 with
-  `citry-lsp` 0.2.x.
+  together: Citry 0.9.0 with `citry-lsp` 0.4.x, Citry 0.7.0 or 0.8.0
+  with `citry-lsp` 0.3.x, or Citry 0.6.0 with `citry-lsp` 0.2.x.
 
 Pylance can turn a string into an f-string when `{` is typed if
 `python.analysis.autoFormatStrings` is enabled. Citry never reverses deliberate

@@ -358,6 +358,10 @@ These cases can surprise you:
 - A script an extension supplies through `prepare_browser_render()`
   (an experimental method) runs after every component script, once for
   the page and once for each fragment.
+- A script from an extension's `browser_plugin()` (an experimental
+  method), such as the i18n runtime, runs after Citry's own browser code
+  and before every dependency file and component script, on every
+  interactive page.
 
 Citry promises no other order, such as the order the components appear
 in the page's HTML. The clearest place for setup that several

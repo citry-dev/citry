@@ -18,7 +18,10 @@ versions:
   include: []
   # Unique normalized single-segment identifiers always excluded, with the same
   # character policy as include. An identifier cannot be in both lists.
-  exclude: []
+  # 0.8.0 is excluded because it does not import on Pyodide (Python in the
+  # browser), so its snapshot cannot run the docs playground. Citry 0.9.0
+  # imports there again.
+  exclude: ["0.8.0"]
   # Empty string or a full major.minor.patch lower bound.
   oldest: "0.1.0"
   # Empty string or a full major.minor.patch upper bound.

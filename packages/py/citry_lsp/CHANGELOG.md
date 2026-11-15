@@ -2,7 +2,7 @@
 
 All notable changes to `citry-lsp` are documented here.
 
-## [Unreleased]
+## [0.4.0] - 2026-11-14
 
 ### Changed
 
@@ -14,11 +14,13 @@ All notable changes to `citry-lsp` are documented here.
   pins ty 0.0.101, the Python type checker it runs, which split the old
   rule in two. The part of a `citry.python.` code after the dot is ty's
   rule name. Update a script that matches the old code.
-- Upgrade citry-lsp together with citry: this release reads only the
-  editor data that the matching citry release writes. With a citry whose
-  data it cannot read, the editor checks template syntax only, for every
-  project, and its status message names both versions and the package to
-  upgrade.
+- **Breaking:** citry-lsp now requires Citry 0.9.0 or later, because it
+  reads only the editor data that Citry 0.9.0 writes. Installing this
+  citry-lsp upgrades Citry when needed. If you stay on Citry 0.7.x or
+  0.8.x, keep citry-lsp 0.3.x. If a later Citry writes data that
+  citry-lsp cannot read, the editor checks template syntax only, for
+  every project, and its status message names both versions and the
+  package to upgrade.
 
 ## [0.3.0] - 2026-11-02
 

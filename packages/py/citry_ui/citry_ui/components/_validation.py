@@ -80,9 +80,9 @@ def first_attribute_occurrences(attrs: list[tuple[str, str | None]]) -> list[tup
     checks of rendered output read this list, so they decide on the
     attributes the page really has. ``HTMLParser`` already lowercases names.
     """
-    # Citry 0.9.0 and later already hand the start tag handlers this list,
-    # but Citry UI also runs on older releases, whose parser keeps every
-    # occurrence.
+    # Citry UI requires Citry 0.9.0, whose parser already hands the start
+    # tag handlers this list. The checks still apply the rule themselves,
+    # so their result does not depend on that detail of the parser.
     seen: set[str] = set()
     kept: list[tuple[str, str | None]] = []
     for name, value in attrs:
