@@ -803,8 +803,8 @@ def test_the_framework_floor_job_tests_the_floors_the_starters_declare() -> None
         assert len(declared) == 1, (framework, project["project"]["dependencies"])
         assert _release_tuple(declared[0]) == _release_tuple(pins[framework]), framework
 
-    # The floors pair with the oldest supported Python, the one cell where a
-    # floor and an interpreter are most likely to disagree.
+    # The floors run on the oldest supported Python, which every floor
+    # supports; an old framework release may predate the newest Python.
     python_steps = [step for step in job["steps"] if step.get("uses", "").startswith("actions/setup-python@")]
     assert len(python_steps) == 1
     oldest = min((cell[1] for cell in _python_test_cells()["full"]), key=_release_tuple)

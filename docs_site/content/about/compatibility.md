@@ -8,8 +8,8 @@ description: The Python versions, web frameworks, operating systems, CPU archite
 Check this page before you install Citry on a new server, CI image, or
 platform. It lists the Python versions, web frameworks, systems, and
 browsers Citry supports, and the one case where installing it needs a
-compiler. [Versioning and support](/about/versioning/#platforms) explains
-how these lists change between releases.
+compiler. [Versioning and support](/about/versioning/#platforms) says
+when a release can add or drop a Python version or a browser.
 
 ## Python versions { #supported-python-versions }
 
@@ -25,29 +25,33 @@ See the
 [Python release status](https://devguide.python.org/versions/){: target="_blank" rel="noopener"}
 for which versions are still maintained upstream.
 
-### PyPy and free-threading { #pypy-and-free-threaded }
+### PyPy and free-threaded { #pypy-and-free-threaded }
 
-PyPy and free-threaded CPython are supported on a best-effort basis.
-Citry's tests run on them once a week, not on every change, so a problem
-there can reach a release and be fixed in a later one. The known
-differences are listed under [Differences on PyPy](#differences-on-pypy)
-and [Prebuilt wheels](#architectures-and-prebuilt-wheels).
+Citry also runs on PyPy and on free-threaded CPython (a build with the
+GIL turned off), on a best-effort basis: its tests run on PyPy 3.11 and
+free-threaded CPython 3.14 once a week, not on every change. So a problem
+there can reach a release and be fixed in a later one. See
+[Differences on PyPy](#differences-on-pypy) and
+[Prebuilt wheels](#architectures-and-prebuilt-wheels) for the known
+differences.
 
 ## Web frameworks { #web-frameworks }
 
-Citry's [adapters](/advanced/web-frameworks/) work with these versions
-and newer:
+The code that [mounts Citry on a web framework](/advanced/web-frameworks/)
+works with these versions and later releases of the same major
+version. Citry's tests run on the oldest version of each framework below
+and on a recent release.
 
-| Framework | Oldest version |
+| Framework | Oldest supported version |
 |---|---|
 | Django | 5.2.0 |
 | FastAPI | 0.141.0 |
-| Starlette | 0.46.0 |
+| Starlette, used directly | 0.46.0 |
 | Flask | 3.1.0 |
 
-Citry does not install a framework for you. Install the one your app
-uses, and keep it on its newest patch release, which has the latest
-security fixes.
+The mounts for a bare ASGI or WSGI app (`citry.contrib.asgi` and
+`citry.contrib.wsgi`) need no framework. Citry does not install a
+framework for you, so install the one your app uses.
 
 ## Operating systems
 
@@ -117,8 +121,10 @@ then run the install again. Nothing else in Citry needs a build step.
 ## Browsers { #browser-runtime }
 
 Citry supports the latest two versions of Chrome, Edge, Firefox, and
-Safari. Its browser code is tested in Playwright's builds of Chromium,
-Firefox, and WebKit, the engines those four browsers use.
+Safari. Its browser tests run in the Chromium, Firefox, and WebKit builds
+that the Playwright test tool ships (Chrome and Edge are built on
+Chromium, and Safari on WebKit). Chromium runs on every change; Firefox
+and WebKit run once a week.
 
 Citry loads its own pinned copy of Vue for interactive components. Do not
 mount another Vue application over HTML that Citry rendered. To use Vue
