@@ -26,7 +26,7 @@ What each kind of release does:
 - **Patch** (1.0.0 to 1.0.1): bug fixes. Code that uses
   [covered parts](#what-is-covered) needs no changes, except for a
   [security fix](#security-exception) that refuses input your code
-  relied on. Open pages may need a reload (see
+  relied on. An open page may reload once (see
   [Rolling deploys](#rolling-deploys)).
 - **Minor** (1.0.0 to 1.1.0): new features. Code that uses
   [covered parts](#what-is-covered) keeps working. A minor release may
@@ -37,7 +37,7 @@ What each kind of release does:
     - add a [check rule](#new-check-rules);
     - drop an end-of-life Python version or move to a newer Vue minor
       version (see [Python and browsers](#platforms));
-    - change the State token format, so open pages need a reload (see
+    - change the State token format, so an open page reloads once (see
       [Rolling deploys](#rolling-deploys)).
 - **Major** (1.x to 2.0.0): may remove deprecated features and make other
   breaking changes. The release notes say what to change.
@@ -137,19 +137,17 @@ severity".
 
 During a deploy that upgrades one server at a time, a page from an old
 server talks to a new server, and the other way round. Citry supports
-this between any two 1.x releases, not across 1.x and 2.x. Every
-upgrade, patch releases too, may leave an open page needing a reload.
-What can happen:
+this between any two 1.x releases, not across 1.x and 2.x. What can
+happen:
 
 - **Event calls:**
-    - old page to new server: accepted (but see renders below);
+    - old page to new server: accepted;
     - new page to old server: accepted, unless the new release added
       `citry-events/2`; then the old server answers `protocol_mismatch`.
-- **State tokens** (the signed copy of a component's State in the page):
-    - a minor release may change their format;
-    - a server then refuses a token from the other version with
-      `invalid_state`, and no reload prompt appears;
-    - fix: the visitor reloads the page.
+- **Data an old page cannot read:** a State token (the signed copy of a
+  component's State in the page), a render or a fragment written by a
+  newer release. The page reloads once and then works with the new
+  release.
 - **[Render cache](/performance/caching/):** every upgrade, patch
   releases too, ignores entries that another Citry version wrote. While
   old and new servers share one cache, expect slower renders until the
@@ -157,12 +155,6 @@ What can happen:
 - **Browser runtime:** an old page loads the old runtime file. Clear
   whole-page caches and give every server one shared cache (see
   [Deploy a Citry upgrade](/advanced/web-frameworks/#deploy-a-new-version)).
-- **Renders from event handlers:**
-    - if the new release changed Citry's browser code, an old page
-      cannot apply a render from a new server;
-    - that call fails, and so does every later call that returns a
-      render;
-    - fix: the visitor reloads the page.
 
 ## Events protocol { #events-protocol }
 
