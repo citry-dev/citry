@@ -101,10 +101,24 @@ STATE_KEY_PREFIX = "citry:state:"
 # expires.
 DEFAULT_STATE_MAX_BYTES = 64 * 1024 * 1024
 # What one stored entry costs beyond its two strings, whose own size
-# `sys.getsizeof` gives: the stored tuple and expiry, the dictionary slot,
+# `_string_bytes` gives: the stored tuple and expiry, the dictionary slot,
 # and its pair in the deadline list. Counting it makes many tiny entries
 # count toward the budget too.
 _STATE_ENTRY_OVERHEAD_BYTES = 256
+
+
+def _string_bytes(text: str) -> int:
+    """Estimate the bytes one string takes in memory, for the State byte budget."""
+    # `getsizeof` counts the bytes CPython really uses for each string: one
+    # character above U+00FF makes the whole string take two or four bytes
+    # per character, which `len` would not show.
+    size = sys.getsizeof(text, -1)
+    if size >= 0:
+        return size
+    # PyPy never reports a size (`getsizeof` always returns the default
+    # there) and keeps each string as UTF-8, so the UTF-8 length is close to
+    # what it holds. `surrogatepass` keeps a lone surrogate from raising.
+    return len(text) if text.isascii() else len(text.encode("utf-8", "surrogatepass"))
 
 
 class InMemoryCache:
@@ -171,10 +185,7 @@ class InMemoryCache:
     @staticmethod
     def _entry_bytes(key: str, value: str) -> int:
         """Estimate what one State entry holds in memory, for its budget."""
-        # `getsizeof` counts the bytes CPython really uses for each string:
-        # one character above U+00FF makes the whole string take two or four
-        # bytes per character, which `len` would not show.
-        return sys.getsizeof(key) + sys.getsizeof(value) + _STATE_ENTRY_OVERHEAD_BYTES
+        return _string_bytes(key) + _string_bytes(value) + _STATE_ENTRY_OVERHEAD_BYTES
 
     def _store(self, key: str) -> OrderedDict[str, tuple[str, float | None]]:
         """Return the store that holds ``key``: the State store or the ordinary one."""

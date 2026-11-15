@@ -30,7 +30,6 @@ import subprocess
 import sys
 import threading
 import time
-import tracemalloc
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, cast, get_args
@@ -58,6 +57,8 @@ from citry.ext.events.tokens import (
     apply_state_updates,
     mint_state_token,
 )
+
+from ._memory import requires_tracemalloc, tracemalloc
 
 SIGNING_KEY = "test-secret-key"
 
@@ -293,6 +294,9 @@ def test_a_few_undeclared_keys_still_get_a_message_each() -> None:
     assert result.fields == {"x": "Extra inputs are not permitted", "y": "Extra inputs are not permitted"}
 
 
+# On PyPy, building the copy of this 300-model chain uses all the runner's
+# memory and crashes the test worker (#708).
+@pytest.mark.skipif(sys.implementation.name == "pypy", reason="uses all memory on PyPy; see #708")
 def test_a_chain_of_nested_models_deeper_than_the_nesting_limit_is_refused(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -1245,6 +1249,24 @@ def test_a_strict_pydantic_dataclass_as_event_data_accepts_valid_data() -> None:
 
 
 # --- registration -----------------------------------------------------------------
+
+
+def test_the_pydantic_check_works_without_reading_the_validator_signature(monkeypatch: pytest.MonkeyPatch) -> None:
+    # PyPy cannot read the signature of pydantic-core's compiled classes, so
+    # the check must not depend on it (#585).
+    def no_signature(_obj: object) -> None:
+        raise ValueError
+
+    monkeypatch.setattr("inspect.signature", no_signature)
+    assert bounded._rebuild_supported()
+
+    class OldValidator:
+        # A pydantic-core older than the keyword refuses it.
+        def __init__(self, schema: object, config: object = None) -> None:
+            pass
+
+    monkeypatch.setattr(pydantic_core, "SchemaValidator", OldValidator)
+    assert not bounded._rebuild_supported()
 
 
 def test_an_old_pydantic_is_refused_when_a_component_registers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2417,6 +2439,7 @@ def test_a_list_inside_json_below_a_wrap_validator_hands_it_every_bad_item() -> 
     assert result.value.f == [1, 2, 3]  # type: ignore[attr-defined]
 
 
+@requires_tracemalloc
 def test_a_wrap_validator_that_recovers_from_too_many_bad_items_inside_json_is_refused() -> None:
     data = pydantic.create_model(
         "Data", f=(Annotated[pydantic.Json[list[int]], pydantic.WrapValidator(_drop_bad)], ...)
@@ -3237,6 +3260,7 @@ def test_each_thread_counts_its_own_cpu_time_against_a_shared_budget() -> None:
     assert not budget._clocks
 
 
+@requires_tracemalloc
 def test_the_longest_path_walk_holds_only_the_current_path() -> None:
     payload = {"pad": [[] for _ in range(200_000)], "deep": [[["a" * 10]]]}
 

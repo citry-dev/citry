@@ -29,6 +29,17 @@
   including `timedelta(0)`, made every token expire as soon as Citry
   issued it, and now raises `ValueError` when the class is defined.
 
+### Fixes
+
+- **Server-stored State works on PyPy:** a component whose State sets
+  `_storage = "server"` no longer fails to render on PyPy when the cache
+  is an `InMemoryCache`, including the default cache. The error was a
+  `TypeError` from `sys.getsizeof`. CPython is unchanged.
+- **Pydantic classes work with Events on PyPy:** with Pydantic 2.13.0
+  or newer installed, Events now accepts Pydantic State and event data
+  classes on PyPy. Before, it refused every one of them with "Events
+  needs Pydantic 2.13.0 or newer".
+
 ### Changed
 
 - If a later Citry release changes the State token format, a page from

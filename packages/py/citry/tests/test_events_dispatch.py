@@ -18,7 +18,6 @@ import importlib.util
 import json
 import logging
 import re
-import tracemalloc
 from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +41,8 @@ from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
 from citry.util.routing import RouteResponse
+
+from ._memory import tracemalloc
 
 SIGNING_KEY = "test-secret-key"
 FIXED_NOW = 1_700_000_000.0
@@ -961,7 +962,11 @@ class TestServerStoredState:
         }
         [state_action, _data] = _dispatch(c, grow)["results"][0]["actions"]
         big_token = state_action["stateToken"]
-        tracemalloc.start()
+        # PyPy has no `_tracemalloc`, so `tracemalloc` is None there; the
+        # test still checks the store's own byte count and skips only the
+        # process-memory bound.
+        if tracemalloc is not None:
+            tracemalloc.start()
         for batch in range(20):
             calls = [
                 {
@@ -977,13 +982,15 @@ class TestServerStoredState:
             assert all(item["ok"] or item["error"]["code"] == "stale_state" for item in results)
         # The responses carry the public State too; only the store is measured.
         del results, calls
-        held, _peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
+        if tracemalloc is not None:
+            held, _peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
         # 320 calls would have stored about 19 MB; the store is full but
         # holds no more than its budget.
         assert len(c.cache._state) >= 5
         assert c.cache._state_bytes <= budget
-        assert held < 2 * budget
+        if tracemalloc is not None:
+            assert held < 2 * budget
         assert c.cache.get("citry:asset:page.js") == "js"
 
     def test_ordinary_calls_keep_working_under_the_state_budget(self):

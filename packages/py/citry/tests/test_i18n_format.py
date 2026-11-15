@@ -4,7 +4,6 @@
 
 import importlib.util
 import logging
-import tracemalloc
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
@@ -34,6 +33,8 @@ from citry import (
 )
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.i18n import I18nRuntimeUnavailableError
+
+from ._memory import requires_tracemalloc, tracemalloc
 
 
 def formats() -> FormatRegistry:
@@ -720,6 +721,7 @@ def _formatter_calls(fmt, value):
     }
 
 
+@requires_tracemalloc
 @pytest.mark.parametrize("text", _HUGE_DECIMALS)
 @pytest.mark.parametrize("formatter", ["number", "percent", "currency", "unit", "relative_time"])
 def test_a_decimal_outside_the_formatter_range_is_refused_before_its_digits_are_written(
@@ -739,6 +741,7 @@ def test_a_decimal_outside_the_formatter_range_is_refused_before_its_digits_are_
     assert len(str(caught.value)) < 300
 
 
+@requires_tracemalloc
 def test_zero_with_a_huge_exponent_formats_as_zero_without_writing_its_digits() -> None:
     fmt = _english_formatters()
     tracemalloc.start()

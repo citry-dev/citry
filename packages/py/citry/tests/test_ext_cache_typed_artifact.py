@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import gc
 import json
-import tracemalloc
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import field, replace
@@ -80,6 +79,8 @@ from citry.ext.events.cache import stage_events_cache
 from citry.ext.events.emission import EXTRA_KEY as EVENTS_EXTRA_KEY
 from citry.ext.i18n import bindings as i18n_bindings
 from citry.extension import OnRenderCacheStageContext, RenderCacheWrite, StagedRenderCacheContribution
+
+from ._memory import requires_tracemalloc, tracemalloc
 
 
 def _artifact(*parts: object) -> CachedRenderArtifact:
@@ -1840,6 +1841,7 @@ def test_polling_prepared_element_uses_live_render_until_cache_schema_supports_i
         _export_typed_leaf(opening)
 
 
+@requires_tracemalloc
 def test_render_data_with_a_long_key_is_checked_without_copying_the_key() -> None:
     # Render data can come from a request. Writing a path for each item would
     # copy the key each time: 800 MB for this value.

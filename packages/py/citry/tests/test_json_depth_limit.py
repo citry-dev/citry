@@ -14,13 +14,13 @@ import random
 import subprocess
 import sys
 import textwrap
-import tracemalloc
 
 import pytest
 
 from citry._protocol.events import MAX_JSON_DEPTH, JsonNestingError, check_json_depth, loads_strict_json
 
 from ._growth import assert_grows_in_step
+from ._memory import requires_tracemalloc, tracemalloc
 
 # Deep enough to crash CPython 3.12 and 3.13 in a 512 KiB thread (4,000
 # levels already does), and still small enough to build quickly.
@@ -120,6 +120,7 @@ class TestCheckJsonDepth:
         # times as long.
         assert_grows_in_step(scan, texts(62_500), texts(500_000), factor=8)
 
+    @requires_tracemalloc
     @pytest.mark.parametrize(
         "body",
         ["a" * 1_000_000, "\\a" * 500_000, "[]" * 500_000, '\\"' * 500_000],

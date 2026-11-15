@@ -571,17 +571,30 @@ def test_another_threads_v1_check_while_the_hooks_are_in_gets_every_error() -> N
         expected = err.errors()
 
     got: list[Any] = []
+    hooks_in = threading.Event()
 
     def other_thread() -> None:
+        hooks_in.wait()
         try:
             Board(rows=rows)
         except v1.ValidationError as err:
             got.append(err.errors())
 
-    with bounded.validation_scope({}), bounded.guarding_pydantic_v1():
-        assert _hooks_in_place()
-        worker = threading.Thread(target=other_thread)
-        worker.start()
+    # Start the thread before the scope opens: free-threaded Python 3.14
+    # copies the starting thread's context variables into a new thread, so
+    # a thread started inside the scope would run inside this test's
+    # validation scope and hit its limits.
+    worker = threading.Thread(target=other_thread)
+    worker.start()
+    try:
+        with bounded.validation_scope({}), bounded.guarding_pydantic_v1():
+            assert _hooks_in_place()
+            hooks_in.set()
+            worker.join()
+    finally:
+        # A failure before `set()` must not leave the thread waiting, or
+        # pytest would hang at exit instead of reporting the failure.
+        hooks_in.set()
         worker.join()
 
     assert expected is not None
