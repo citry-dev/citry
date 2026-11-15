@@ -31,6 +31,12 @@
 
 ### Fixes
 
+- With `security_javascript="omit"`, Citry now drops a `Script` or
+  `Style` dependency whose URL is a `javascript:` URL written as `Markup`
+  with a character reference, such as
+  `Style(url=Markup("java&#115;cript:x"))`, and removes such a URL from
+  a dependency's attributes, as it already did for a plain string. Before,
+  Citry reported it but left it on the page.
 - **Server-stored State works on PyPy:** a component whose State sets
   `_storage = "server"` no longer fails to render on PyPy when the cache
   is an `InMemoryCache`, including the default cache. The error was a
