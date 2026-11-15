@@ -205,9 +205,16 @@ a breaking change. Making a lenient default stricter later is.
    is additive and can come in 1.x.
 7. **`EventsDispatcher` and `TransportContext`** pass the Events v1 call
    and result data. If the Events v1 task keeps that format internal,
-   mark both experimental; if it freezes it, keep them. Decided: keep.
-   `citry-events/1` is frozen for all of 1.x, and both classes stay
-   stable (`packages/protocol/events/v1/spec.md`, "Versioning").
+   mark both experimental; if it freezes it, keep them. Decided:
+   `citry-events/1` is frozen for all of 1.x
+   (`packages/protocol/events/v1/spec.md`, "Versioning"), but both
+   classes are experimental. Running calls from server code has almost no
+   docs, and `EventsDispatcher()` built with no arguments cannot produce
+   the Vue render form: a probe dispatching a render with it answered
+   `handler_error` ("no configured renderer was advertised") for a client
+   that asks for `vue-prepared/1`, as Citry's browser code does. Only the
+   engine's own dispatcher (`citry.ext.events.renderers.dispatcher_for`,
+   not exported) can.
 8. **One experimental marker.** Decided: the `Experimental:` docstring
    section, as described after the table in 1.1.
 
@@ -307,7 +314,7 @@ field in 0.6.0.
 | `citry.ext.debug` | `Debug` | keep (optional rename, row 13) |
 | `citry.ext.dependencies` | `CitryDependencies`, `DependenciesConfig`, `DependenciesExtension`, `Dependency`, `DependencyRecord`, `OnDependenciesContext`, `Script`, `Style`, `get_dependencies` | keep |
 | `citry.ext.events` | `X_CITRY_EVENTS_HEADER`, `CallEvent`, `EventError`, `EventRequest`, `EventsExtension`, `UploadedFile`, `ViewEvents`, `event`, `get_event_url`, and the module `actions` (`Action`, `Data`, `Dispatch`, `Download`, `PushUrl`, `Redirect`, `Render`, `ReplaceUrl`) | keep |
-| `citry.ext.events` | `EventsDispatcher`, `TransportContext` | keep: Events v1 is frozen (1.4 question 7) |
+| `citry.ext.events` | `EventsDispatcher`, `TransportContext` | mark experimental (1.4 question 7); the `citry-events/1` format they carry is frozen |
 | `citry.ext.i18n` | the 33 i18n names listed in 4.1, plus `make_context` | keep (add `I18nExtension`, see 1.2) |
 | `citry.ext.preview` | `Layout`, `PreviewComponent`, `PreviewError`, `PreviewExtension`, `PreviewGroup`, `PreviewItem`, `PreviewMetadata`, `PreviewPage`, `PreviewVariant`, `Variant`, `Viewport`, `variant` | mark experimental (row 3) |
 
@@ -625,9 +632,10 @@ Open items found while making this inventory, left for the maintainer:
   docs playground and the benchmark app import it. The constructor
   keywords `render_encoders` and `preferred_renderer` take a
   `RenderEncoder`, and `dispatch(csrf_check=...)` takes an
-  `EventHandler`; no public module exports either. The docs now say that
-  a bridge for Citry's own pages forwards to the HTTP routes. A public
-  way to get the Vue-capable dispatcher would be an addition in 1.x.
+  `EventHandler`; no public module exports either. Decided: both
+  classes are experimental (1.4 question 7), and the docs say that a
+  bridge for Citry's own pages forwards to the HTTP routes. A public way
+  to get the Vue-capable dispatcher would be an addition in 1.x.
 - **Prepared renders during an upgrade.** The `prepared` object of a
   `vue-prepared/1` render carries a helper contract hash
   (`py/citry/citry/_vue/compiler.py:526-540`) that the browser checks

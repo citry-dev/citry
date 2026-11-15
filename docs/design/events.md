@@ -9,8 +9,10 @@ the current contract and [`vue.md`](vue.md) win.
 Migration qualification is recorded in [`vue.md`](vue.md).
 
 **Status (2026-11-15): Events v1 is frozen.** `citry-events/1` stays fixed
-for all of Citry 1.x, together with the custom transport API
-(`EventsDispatcher`, `TransportContext` and `Citry.events.registerTransport`).
+for all of Citry 1.x, together with the browser's custom transport API
+(`Citry.events.registerTransport`). The Python classes for running calls
+from server code, `EventsDispatcher` and `TransportContext`, are
+experimental.
 Any change to the wire format, even an addition, needs `citry-events/2`
 (a security fix is the one exception);
 the spec's

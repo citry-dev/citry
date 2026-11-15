@@ -1199,8 +1199,9 @@ not `GET` when the page has a token and the event URL is on the page's
 origin. Browser code that sends calls some other
 way, such as a transport registered with `Citry.events.registerTransport`,
 must send the headers it is given. Server code that runs calls itself,
-rather than through the HTTP routes, passes them to the dispatcher in
-`TransportContext.headers` and runs its own CSRF check.
+rather than through the HTTP routes, passes them to the code that builds
+the answer (in Python, the experimental `TransportContext.headers`) and
+runs its own CSRF check.
 
 For GET, handler arguments keep their query names and protocol metadata uses:
 
