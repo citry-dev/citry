@@ -5,31 +5,36 @@ description: Move a Citry project to 1.0.0, prepare for deprecation warnings, an
 
 # Upgrade to Citry 1.0.0
 
-How to move a project to Citry 1.0.0, the first stable release. Most
-projects need no code changes. The one change most projects notice:
-[State tokens expire](#state-tokens-expire) after 24 hours.
+How to move a project to Citry 1.0.0, the first stable release. Citry
+0.9.0 made the last large set of breaking changes, so most projects need
+no code changes. The one change most projects notice:
+[State tokens](#state-tokens-expire) (the signed strings that carry a
+component's [State](/events/state/) to the page) expire after 24 hours.
 
 ## Upgrade steps { #upgrade-checklist }
 
 1. Upgrade to the newest 0.9.x and follow its
    [upgrade notes](#upgrade-to-0-9-first).
-2. Make `CitryDeprecationWarning` an error in your
-   [tests](#fix-deprecation-warnings).
+2. Make `CitryDeprecationWarning` (Citry's warning for a feature that
+   is going away) an error in your [tests](#fix-deprecation-warnings).
 3. [Upgrade the packages](#upgrade-the-packages) and pin
    `citry>=1.0.0,<2`.
 4. Set a longer `State._max_age` where a page must work
-   [after 24 hours](#state-tokens-expire) or stays cached longer. Keep
+   [after 24 hours](#state-tokens-expire) or sits in a whole-page cache
+   for longer than that. Keep
    every `_max_age` at one second or more.
 5. Run your tests on 1.0.0.
 6. [Deploy](#deploy-the-upgrade) with fresh whole-page caches.
-7. Check for [experimental features](#check-experimental) and
+7. Check whether your code uses an
+   [experimental feature](#check-experimental), and read the
    [other changes](#other-changes).
 
 Skip step 4 if no component uses server events.
 
 ## Upgrade to 0.9.x first { #upgrade-to-0-9-first }
 
-Already on 0.9.x: skip to step 2 below. On an older release:
+Move to the newest 0.9.x. Already on 0.9.x: do only step 2 of this
+list. On an older release:
 
 1. Follow the "Upgrading from" notes of each release you skip, oldest
    first, in the [release notes](/releases/). From 0.8.x:
@@ -55,7 +60,7 @@ filterwarnings = [
 - Why add it anyway: a 1.x minor release may deprecate a feature, and
   Python hides the warning in most programs. The setting turns each use
   into a failing test.
-- To see the warning in a running server, see
+- To see the warning in a running server:
   [Deprecations](/about/versioning/#deprecations).
 
 ## Upgrade the packages { #upgrade-the-packages }
@@ -67,8 +72,8 @@ python -m pip install -U "citry>=1.0.0,<2"
 Add the packages you use to the same command:
 
 - `"citry-lsp>=1.0.0,<2"`: the language server behind editor support.
-  Update the [VS Code extension](/ide/vscode/) to 1.0.0 at the same
-  time.
+  If you use the [VS Code extension](/ide/vscode/), update it to 1.0.0
+  at the same time.
 - `"pygments-citry>=1.0.0,<2"`: Citry syntax highlighting for Pygments.
 - `"citry-ui>=0.6.0,<0.7"`: the [UI library](/ui-library/).
     - 0.6.0 needs Citry 1.0.0 or later.
@@ -84,8 +89,8 @@ Then:
 
 ## Handle State expiry { #state-tokens-expire }
 
-What you see, for a component whose `State` sets no `_max_age`, when
-its page's State has not changed for 24 hours:
+If a component's `State` sets no `_max_age` and its page's State has
+not changed for 24 hours:
 
 - the next event call fails with `stale_state`, without running its
   handler;
@@ -104,10 +109,12 @@ class State:
     _max_age = timedelta(days=7)
 ```
 
-Good to know:
+Details:
 
-- **New tokens:** Citry issues one on every render of the component and
-  after every call that changes State.
+- **New tokens:** Citry issues a new token on every render of the
+  component and after every call that changes State.
+- **A longer `_max_age`** applies to tokens Citry issues after the
+  upgrade.
 - **Tokens issued before the upgrade:** expire 24 hours after Citry
   issued them, whatever `_max_age` says.
 - **Whole-page caches** (in your CDN or web framework): a cached page
@@ -132,7 +139,8 @@ server-stored State. See
 - Minimum: one second.
 - A shorter value, `timedelta(0)` included, raises `ValueError` when
   Python imports the component.
-- In 0.9.x, it made every token expire as soon as Citry issued it.
+- In 0.9.x, a shorter value made every token expire as soon as Citry
+  issued it.
 
 ## Deploy the upgrade { #deploy-the-upgrade }
 
@@ -140,9 +148,9 @@ Follow [Deploy a Citry upgrade](/advanced/web-frameworks/#deploy-a-new-version):
 
 - clear cached copies of whole pages (in your CDN or web framework);
 - give every server one shared cache while you upgrade servers one at
-  a time.
+  a time (a rolling deploy).
 
-Open pages keep working during such a rolling deploy only between two
+Open pages keep working during a rolling deploy only between two
 1.x releases (see [Rolling deploys](/about/versioning/#rolling-deploys)).
 A page opened on 0.9.x may show components that do not start until the
 visitor reloads it.
@@ -152,13 +160,13 @@ visitor reloads it.
 Experimental features may change in a minor release.
 
 - The list: [Experimental features](/about/versioning/#experimental).
-- If your code uses one, read the release notes before each minor
-  upgrade.
-- Among them: calling event handlers from your own server code with
+- Example: calling event handlers from your own server code with
   `EventsDispatcher` and `TransportContext`.
 - Not experimental: the `citry-events/1` protocol and the transports
   you register in the browser (see
   [Events protocol](/about/versioning/#events-protocol)).
+- If your code uses one, read the release notes before each minor
+  upgrade.
 
 ## Other changes in 1.0.0 { #other-changes }
 
@@ -173,10 +181,12 @@ No action needed in most projects:
     - citry-ui 0.6.0: `CButton` `href`, `CForm` `action`, and a
       `formaction` in `CButton` `attrs` or `CSplitButton`
       `primary_attrs` raise `ValueError` for it;
-    - both already refused the same URL written as a plain string.
+    - Citry and citry-ui already refused the same URL written as a
+      plain string.
 - **Unknown State token version:** nothing changes today. If a later
   1.x release changes the token format, a server that does not know the
   new version answers `stale_state` (HTTP 409) instead of
-  `invalid_state` (HTTP 403), and the browser offers a reload.
+  `invalid_state` (HTTP 403), and Citry's browser code offers a
+  reload.
 
 Every change: the [1.0.0 release notes](/releases/).
