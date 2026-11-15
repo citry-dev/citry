@@ -500,7 +500,7 @@ def _is_reserved_manifest(script: Script) -> bool:
     )
 
 
-def _written_attribute_text(value: str) -> str:
+def _written_attribute_text(value: object) -> str:
     """Return the attribute value a browser reads once ``format_attrs`` writes ``value``."""
     # A plain string is written as typed, but a Markup value is written with
     # its character references decoded. Running the same writer and undoing
@@ -521,7 +521,8 @@ def _sanitize_structured_attributes(
             continue
         # Read the value as the page gets it, so Markup("java&#115;cript:x")
         # is seen as the javascript: URL the browser reads.
-        text = _written_attribute_text(value) if isinstance(value, str) else None
+        written_as_text = isinstance(value, str) or hasattr(value, "__html__")
+        text = _written_attribute_text(value) if written_as_text else None
         flags = _classify_dependency_attribute(tag, authored_name, text)
         detail: str | None = None
         if flags & _ACTIVATION_ATTRIBUTE:

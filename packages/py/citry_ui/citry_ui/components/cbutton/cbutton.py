@@ -69,8 +69,9 @@ def _check_formaction(attrs: Mapping[str, object] | None) -> None:
     # through _build_button_snapshot too.
     for key, value in (attrs or {}).items():
         if key.lower() == "formaction" and value is not None and not isinstance(value, bool):
-            # Read the value as Citry writes it: str() would drop a Markup
-            # value's HTML, and Citry decodes that HTML in the attribute.
+            # Read the value as Citry writes it: str() would keep a Markup
+            # value's character references undecoded, while Citry decodes
+            # them in the attribute.
             check_link_url("CButton attrs 'formaction'", attribute_text(value))
 
 

@@ -4,13 +4,12 @@
 
 ### Fixed
 
-- A `Markup` URL passed to `CButton` `href`, `CForm` `action`, or a
-  `formaction` in `CButton` `attrs` or `CSplitButton` `primary_attrs` is
-  now checked as the browser reads it. Citry decodes the character
-  references in a `Markup` value when it writes the attribute, so
-  `Markup("java&#115;cript:alert(1)")` became a `javascript:` link that
-  the check had let through. Such a value now raises `ValueError`, like
-  the same URL written as a plain string.
+- `CButton` `href`, `CForm` `action`, and a `formaction` in `CButton`
+  `attrs` or `CSplitButton` `primary_attrs` now raise `ValueError` for a
+  `Markup` URL whose scheme is spelled with character references, such as
+  `Markup("java&#115;cript:alert(1)")`, as they do for the same URL
+  written as a plain string. Before, Citry decoded the references when it
+  wrote the attribute, so the page got a `javascript:` link.
 
 ## [0.5.0] - 2026-11-14
 

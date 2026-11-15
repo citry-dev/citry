@@ -52,9 +52,10 @@ def attribute_text(value: object) -> str:
     other value is written as its plain text.
     """
     # Run Citry's own attribute writer and undo only its escaping, so this
-    # check cannot drift from what the page gets. The writer escapes every
-    # "&" it emits, so unescaping its output gives back exactly the text
-    # the browser reads from the attribute.
+    # check cannot drift from what the page gets. Every "&" in the writer's
+    # output starts one of its own escapes, so unescaping it gives back the
+    # text the browser reads. The browser also turns NUL into U+FFFD and CR
+    # into LF; neither can make a refused scheme read as an allowed one.
     return html.unescape(escape_attribute_value(value))
 
 

@@ -1921,6 +1921,7 @@ class TestJavascriptDeliveryPolicy:
         [
             Style(url=Markup("java&#115;cript:alert(1)")),
             Style(url=Markup("javascript&colon;alert(1)")),
+            Script(url=Markup("java&#115;cript:alert(1)")),
             Script(
                 content='{"ready":true}',
                 attrs={"type": "application/json", "src": Markup("javascript&#x3a;alert(1)")},

@@ -192,7 +192,12 @@ def test_link_inputs_that_copy_markup_to_text_write_it_as_typed(name: str, url: 
 @pytest.mark.parametrize("name", _LINK_INPUTS)
 def test_link_inputs_accept_ordinary_markup_urls(name: str) -> None:
     page = _render_link(name, Markup("/search?a=1&amp;b=2"))
-    assert "/search?a=1&amp;" in page
+    # An input that passes Markup through writes its decoded text; the others
+    # write the text as typed.
+    expected = "/search?a=1&b=2" if name in _MARKUP_LINK_INPUTS else "/search?a=1&amp;b=2"
+    if name == "CPagination href":
+        expected += "1"
+    assert expected in {unescape(value) for value in _URL_ATTRIBUTE.findall(page)}
 
 
 @pytest.mark.parametrize("url", _ENCODED_IMAGES)
@@ -211,7 +216,8 @@ def test_image_check_reads_markup_urls_as_the_browser_does(url: Markup) -> None:
 @pytest.mark.parametrize("name", _IMAGE_TEMPLATES)
 def test_image_inputs_accept_ordinary_markup_urls(name: str) -> None:
     page = _render(_IMAGE_TEMPLATES[name], {"url": Markup("/a.png?w=1&amp;h=2")})
-    assert "/a.png?w=1&amp;" in page
+    written = {unescape(value) for value in _URL_ATTRIBUTE.findall(page)}
+    assert ("/a.png?w=1&amp;h=2 2x" if name == "CImage srcset" else "/a.png?w=1&amp;h=2") in written
 
 
 def test_url_checks_read_the_text_citry_writes() -> None:

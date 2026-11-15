@@ -472,8 +472,9 @@ const ACTIVATION_ATTRIBUTE: u8 = 1;
 const NATIVE_EVENT_ATTRIBUTE: u8 = 2;
 const JAVASCRIPT_URL: u8 = 4;
 
-/// Classify one attribute of a structured `Script` or `Style` (a Python
-/// value, not HTML, so it is not entity-decoded).
+/// Classify one attribute of a structured `Script` or `Style`, given as the
+/// text the browser reads. This function decodes nothing: the Python caller
+/// passes a `Markup` value already decoded, as Citry writes it.
 ///
 /// Returns bit flags: 1 for a Vue activation attribute (`v-`, `@`, `:`),
 /// 2 for a native inline event attribute (`on*`), and 4 for a
