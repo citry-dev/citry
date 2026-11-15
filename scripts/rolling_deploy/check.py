@@ -15,16 +15,18 @@ the other. This script stages exactly that:
 4. Each answer must be a success or the documented `stale_state` error,
    which the page reports as out of date so the app can tell the visitor.
    Any other error fails the check. A success must also mean the right
-   thing: the counter's `bump` handler ran once on the State the page sent,
-   so the render it returns shows the count 1.
+   thing: the counters start at START_COUNT, away from State's default of
+   0, and the `bump` render must show START_COUNT + 1, which only the
+   page's own State can produce.
 5. For each counter whose first call succeeded, the page's next click is
    sent to the same serving release with the State the first answer
-   returned (`scenario.py answer`), and its render must show 2. With signed
-   State this proves the new token carries the new count. With server-stored
-   State the answer returns a new pointer, so this proves the serving
-   release wrote the new count to the shared store and reads it back. After
-   a `stale_state` answer the page has no State to send, so the second call
-   is skipped and reported as skipped, not failed.
+   returned (`scenario.py answer`), and its render must show
+   START_COUNT + 2. With signed State this proves the new token carries the
+   new count. With server-stored State the answer returns a new pointer, so
+   this proves the serving release wrote the new count to the shared store,
+   because a separate process reads it back. After an answer that leaves
+   the page out of date, the page sends no second call, so it is reported
+   as skipped, not failed.
 
 Steps 2 to 5 run twice: an old page sent to the new release, then a new page
 sent to the old release.
@@ -76,9 +78,12 @@ PREFIX = "/citry"
 SCENARIO_REQUIREMENTS = ("diskcache>=5.6",)
 # The Content-Type Citry's browser code sends with every Vue Events call.
 EVENTS_CONTENT_TYPE = "application/citry-events+json"
-# The text scenario.py's counters show, `count_label()` there; the number is
-# the count the render shows.
+# Matches the text scenario.py's `count_label()` builds; the captured number
+# is the count the render shows.
 COUNT_LABEL = re.compile(r"rolling-count-(\d+)")
+# The count the pages' counters start at. Any value other than State's
+# default of 0 tells "ran on the page's State" apart from "ran on a fresh one".
+START_COUNT = 41
 
 
 @dataclass
@@ -230,9 +235,10 @@ def follow_up_page(page: Page, actions: Any) -> Page | None:
     Return the page as the browser holds it after applying an answer, or None.
 
     The browser takes the State token and render ID from the Events record
-    for the same component class in the answer's render (field names the
-    Events protocol defines), and the app revision from the render of the
-    same app. None means the answer holds no new State for this component.
+    for the same component class in the answer's render, or the token from a
+    `state` action aimed at the page's render ID (field names the Events
+    protocol defines), and the app revision from the render of the same app.
+    None means the answer holds no new State for this component.
     """
     record = next(
         (
@@ -243,7 +249,21 @@ def follow_up_page(page: Page, actions: Any) -> Page | None:
         None,
     )
     if record is None:
-        return None
+        # The protocol also lets a release refresh the token with a `state`
+        # action instead of a render record; the render ID then stays.
+        state_action = next(
+            (
+                item
+                for item in _walk(actions)
+                if item.get("action") == "state"
+                and item.get("targetRenderId") == page.render_id
+                and isinstance(item.get("stateToken"), str)
+            ),
+            None,
+        )
+        if state_action is None:
+            return None
+        record = {"stateToken": state_action["stateToken"]}
     revision = next(
         (
             item["revision"]
@@ -371,7 +391,7 @@ def judge_event_answer(
     answer: dict[str, Any],
     *,
     page_reports_out_of_date: bool,
-    expected_count: int = 1,
+    expected_count: int = START_COUNT + 1,
     send_sequence: int = 1,
 ) -> str:
     """Classify the other release's answer to a page's event call, and return the status it added."""
@@ -400,7 +420,8 @@ def judge_event_answer(
             name, "fail", f"a success with HTTP {answer['status']} and sendSequence {result.get('sendSequence')!r}"
         )
         return "fail"
-    # A success must mean the handler ran once on the State the page sent:
+    # A success must mean the handler ran once on the page's own State: the
+    # pages start at START_COUNT, so a fresh default State shows another count.
     # the render shows exactly the next count, and no other.
     counts = shown_counts(result.get("actions", []))
     if counts != {expected_count}:
@@ -456,7 +477,17 @@ def check_direction(
     """Render pages with one release and send their requests to the other, then judge the answers."""
     work.mkdir(parents=True, exist_ok=True)
     store = work / "store"
-    run_scenario(render_python, "render", "--store", str(store), "--out", str(work / "pages.json"), cwd=work)
+    run_scenario(
+        render_python,
+        "render",
+        "--store",
+        str(store),
+        "--out",
+        str(work / "pages.json"),
+        "--start-count",
+        str(START_COUNT),
+        cwd=work,
+    )
     rendered = json.loads((work / "pages.json").read_text(encoding="utf-8"))
     pages = {name: read_page(rendered[name]) for name in ("signed", "stored")}
     requests: dict[str, dict[str, Any]] = {}
@@ -532,17 +563,17 @@ def plan_second_calls(
     """
     Build the page's next click for each counter whose first call succeeded.
 
-    A counter whose first call did not succeed is reported as skipped: after
-    `stale_state` the page has no State to send, and after a failure the
-    failure is already reported.
+    A counter whose first call did not succeed is reported as skipped: an
+    answer that leaves the page out of date means the page sends no second
+    call, and a failure is already reported.
     """
     next_pages: dict[str, Page] = {}
     requests: dict[str, dict[str, Any]] = {}
     for name, page in pages.items():
         check_name = f"{label}: second event call, {name} State"
         if first_status[name] != "ok":
-            reason = "stale_state" if first_status[name] == "stale" else "a failure"
-            report.add(check_name, "skip", f"the first call ended with {reason}, so the page sends no second call")
+            reason = "left the page out of date" if first_status[name] == "stale" else "failed"
+            report.add(check_name, "skip", f"the first call {reason}, so the page sends no second call")
             continue
         actions = json.loads(answers[f"event:{name}"]["body"])["results"][0].get("actions", [])
         next_page = follow_up_page(page, actions)
@@ -565,7 +596,15 @@ def check_second_calls(
     *,
     page_reports_out_of_date: bool,
 ) -> None:
-    """Send each counter's second click, with the State the first answer returned, to the same release."""
+    """
+    Send each counter's second click, with the State the first answer returned, to the same release.
+
+    For server-stored State the returned token is a new pointer: each write
+    stores the State under a new key and leaves the old entry in place, so
+    the original pointer would still show the old count. The new pointer is
+    read by a separate `scenario.py answer` process with a fresh engine, so
+    the count it shows can only come from the shared store.
+    """
     next_pages, requests = plan_second_calls(report, label, pages, answers, first_status)
     if not requests:
         return
@@ -590,7 +629,7 @@ def check_second_calls(
             f"rolling_{name}_2",
             second[f"event:{name}"],
             page_reports_out_of_date=page_reports_out_of_date,
-            expected_count=2,
+            expected_count=START_COUNT + 2,
             send_sequence=2,
         )
 

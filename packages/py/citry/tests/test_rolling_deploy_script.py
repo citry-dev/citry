@@ -39,7 +39,17 @@ def _answer(result: dict[str, Any], *, status: int = 200, request_id: str = "req
     return {"status": status, "body": json.dumps(body)}
 
 
-def _render(contract: str, *, shown: str = "rolling-count-1", token: str = "cev1.next") -> dict[str, Any]:  # noqa: S107 - an opaque test value
+# The pages start at START_COUNT, so the first click shows one more and the
+# second two more.
+FIRST = check.START_COUNT + 1
+SECOND = check.START_COUNT + 2
+
+
+def _shown(count: int) -> str:
+    return f"rolling-count-{count}"
+
+
+def _render(contract: str, *, shown: str = _shown(FIRST), token: str = "cev1.next") -> dict[str, Any]:  # noqa: S107 - an opaque test value
     # The shape of a Vue render: the shown text sits in the render data under
     # a name the release's compiler chose, beside the protocol's Events record.
     occurrence = {
@@ -57,7 +67,11 @@ def _render(contract: str, *, shown: str = "rolling-count-1", token: str = "cev1
 
 
 def _judge(
-    answer: dict[str, Any], *, page_reports_out_of_date: bool = True, expected_count: int = 1, send_sequence: int = 1
+    answer: dict[str, Any],
+    *,
+    page_reports_out_of_date: bool = True,
+    expected_count: int = FIRST,
+    send_sequence: int = 1,
 ) -> check.Outcome:
     report = check.Report(previous="1.0.0", candidate="1.1.0", promised=True)
     status = check.judge_event_answer(
@@ -144,9 +158,11 @@ def test_an_answer_that_is_not_a_result_for_this_call_fails(answer: dict[str, An
     ("shown", "detail"),
     [
         # The handler did not run, or ran on State that was not the page's.
-        ("rolling-count-0", "shows 0, not 1"),
-        ("rolling-count-2", "shows 2, not 1"),
-        ("nothing to see", "shows no count, not 1"),
+        # 1 is what a fresh default State would show after one click.
+        (_shown(1), f"shows 1, not {FIRST}"),
+        (_shown(check.START_COUNT), f"shows {check.START_COUNT}, not {FIRST}"),
+        (_shown(SECOND), f"shows {SECOND}, not {FIRST}"),
+        ("nothing to see", f"shows no count, not {FIRST}"),
     ],
 )
 def test_a_success_whose_render_shows_the_wrong_count_fails(shown: str, detail: str) -> None:
@@ -156,12 +172,12 @@ def test_a_success_whose_render_shows_the_wrong_count_fails(shown: str, detail: 
 
 
 def test_a_render_that_shows_two_counts_fails() -> None:
-    actions = [_render(CONTRACT), _render(CONTRACT, shown="rolling-count-3")]
+    actions = [_render(CONTRACT), _render(CONTRACT, shown=_shown(SECOND))]
     assert _judge(_answer({"ok": True, "sendSequence": 1, "actions": actions})).status == "fail"
 
 
 def test_the_count_is_found_in_an_html_render_too() -> None:
-    html_render = {"action": "render", "renderer": "html-fragment/1", "html": "<button>rolling-count-1</button>"}
+    html_render = {"action": "render", "renderer": "html-fragment/1", "html": f"<button>{_shown(FIRST)}</button>"}
     outcome = _judge(_answer({"ok": True, "sendSequence": 1, "actions": [html_render]}))
     assert outcome.status == "ok"
 
@@ -169,9 +185,9 @@ def test_the_count_is_found_in_an_html_render_too() -> None:
 def test_a_second_call_must_show_the_count_after_both_calls() -> None:
     # A store that kept the old count would make the second call show 1 again.
     stale_store = _answer({"ok": True, "sendSequence": 2, "actions": [_render(CONTRACT)]})
-    assert _judge(stale_store, expected_count=2, send_sequence=2).status == "fail"
-    updated = _answer({"ok": True, "sendSequence": 2, "actions": [_render(CONTRACT, shown="rolling-count-2")]})
-    assert _judge(updated, expected_count=2, send_sequence=2).status == "ok"
+    assert _judge(stale_store, expected_count=SECOND, send_sequence=2).status == "fail"
+    updated = _answer({"ok": True, "sendSequence": 2, "actions": [_render(CONTRACT, shown=_shown(SECOND))]})
+    assert _judge(updated, expected_count=SECOND, send_sequence=2).status == "ok"
 
 
 def test_the_next_click_carries_the_state_and_render_id_the_answer_returned() -> None:
@@ -182,6 +198,24 @@ def test_the_next_click_carries_the_state_and_render_id_the_answer_returned() ->
     other_class = _render(CONTRACT)
     other_class["prepared"]["occurrences"][0]["eventContext"]["componentClassId"] = "Other_def"
     assert check.follow_up_page(_page(), [other_class]) is None
+
+
+def test_a_refreshed_token_in_a_state_action_is_used_too() -> None:
+    # The protocol lets a release send the new token in a `state` action
+    # aimed at the caller instead of in the render's Events record.
+    state_action = {"action": "state", "targetRenderId": "r1", "stateToken": "cev1.from-state", "publicState": {}}
+    next_page = check.follow_up_page(_page(), [state_action])
+    assert next_page is not None
+    assert (next_page.state_token, next_page.render_id, next_page.revision) == ("cev1.from-state", "r1", 0)
+    aimed_elsewhere = {**state_action, "targetRenderId": "someone-else"}
+    assert check.follow_up_page(_page(), [aimed_elsewhere]) is None
+
+
+def test_a_wrong_count_fails_even_when_the_render_uses_other_helpers() -> None:
+    # The count is checked first: a page that would report itself out of date
+    # does not excuse a handler that ran on the wrong State.
+    answer = _answer({"ok": True, "sendSequence": 1, "actions": [_render(OTHER_CONTRACT, shown=_shown(1))]})
+    assert _judge(answer, page_reports_out_of_date=True).status == "fail"
 
 
 def test_a_second_call_is_skipped_after_stale_state_or_a_failure() -> None:
@@ -195,6 +229,11 @@ def test_a_second_call_is_skipped_after_stale_state_or_a_failure() -> None:
     next_pages, requests = check.plan_second_calls(
         report, "dir", pages, answers, {"signed": "ok", "stored": "stale", "other": "fail"}
     )
+    details = {outcome.name: outcome.detail for outcome in report.outcomes}
+    # A render with other helpers also leaves the page out of date, so the
+    # reason does not claim stale_state.
+    assert "left the page out of date" in details["dir: second event call, stored State"]
+    assert "failed" in details["dir: second event call, other State"]
     assert list(next_pages) == ["signed"]
     call = json.loads(requests["event:signed"]["body"])["calls"][0]
     assert (call["stateToken"], call["callerRenderId"], call["sendSequence"]) == ("cev1.next", "r2", 2)

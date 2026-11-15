@@ -17,8 +17,9 @@ Three commands:
   uses it for the second event call, which needs the State the first answer
   returned.
 
-`check.py` runs the two commands in both directions: old release renders and
-new release serves, then the other way round. Both processes use one
+`check.py` runs `render` with one release and `serve` and `answer` with the
+other, in both directions: old release renders and new release serves, then
+the other way round. Both processes use one
 `DiskCache` directory, the store the docs recommend for workers on one host,
 so the serving process sees what the rendering one wrote, as workers sharing
 a cache do during a deploy.
@@ -58,7 +59,8 @@ def count_label(count: int) -> str:
 
     The whole text is one value, so it reaches the render as one string
     whatever form the release uses (HTML, or the data of a Vue render), and
-    no part of it is left in the template.
+    the template itself holds none of the text, so the template alone
+    cannot match.
     """
     return f"rolling-count-{count}"
 
@@ -158,12 +160,14 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
     return engine, components
 
 
-def render(store: Path, out: Path) -> None:
+def render(store: Path, out: Path, start_count: int) -> None:
     """Render what an open page from this release holds."""
     _engine, components = build_app(store)
+    # The counters start away from State's default of 0, so a server that
+    # ignored the page's State and built a fresh one would show another count.
     pages = {
-        "signed": components["SignedCounter"](count=0).render().serialize(),
-        "stored": components["StoredCounter"](count=0).render().serialize(),
+        "signed": components["SignedCounter"](count=start_count).render().serialize(),
+        "stored": components["StoredCounter"](count=start_count).render().serialize(),
         "cached": components["CachedCard"](name="Travel mug").render().serialize(),
     }
     out.write_text(json.dumps(pages), encoding="utf-8")
@@ -249,6 +253,7 @@ def main() -> None:
     render_parser = commands.add_parser("render")
     render_parser.add_argument("--store", type=Path, required=True)
     render_parser.add_argument("--out", type=Path, required=True)
+    render_parser.add_argument("--start-count", type=int, required=True)
     serve_parser = commands.add_parser("serve")
     serve_parser.add_argument("--store", type=Path, required=True)
     serve_parser.add_argument("--requests", type=Path, required=True)
@@ -259,7 +264,7 @@ def main() -> None:
     answer_parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "render":
-        render(args.store, args.out)
+        render(args.store, args.out, args.start_count)
     elif args.command == "serve":
         serve(args.store, args.requests, args.out)
     else:
