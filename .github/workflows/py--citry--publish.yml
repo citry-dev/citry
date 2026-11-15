@@ -225,9 +225,64 @@ jobs:
           fi
           python scripts/rolling_deploy/check.py --candidate "${wheels[0]}" "${core[@]}"
 
+  # The oldest published citry-lsp of the candidate's major version runs its
+  # own tests against the candidate, because every citry-lsp 1.x must work
+  # with every citry 1.x. It runs in parallel with smoke-python, so the release
+  # waits only for the time it takes beyond that job. Before a citry-lsp 1.x is on
+  # PyPI the script skips the pair with a message
+  # (scripts/lsp_citry_pairs.py).
+  lsp-pairs:
+    if: ${{ inputs.operation == 'qualify' }}
+    needs: [verify-version, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # CodeQL treats a checkout of the release_commit input as untrusted
+          # code. In a qualify run, verify-version requires release_commit to
+          # equal github.sha, so checking out github.sha gives the same commit.
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: raw-citry-distributions
+          path: dist
+      - uses: actions/download-artifact@v8
+        if: contains(inputs.workspace_dependencies, 'citry-core')
+        with:
+          name: candidate-citry-core-wheel
+          path: core-dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          prune-cache: true
+          enable-cache: false
+          version: ${{ env.UV_VERSION }}
+      - name: Run the oldest citry-lsp of this major version with the candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheels=(dist/citry-*.whl)
+          if [[ ${#wheels[@]} -ne 1 || ! -f ${wheels[0]} ]]; then
+            printf 'Expected exactly one candidate citry wheel, found: %s\n' "${wheels[*]}" >&2
+            exit 1
+          fi
+          core=()
+          if [[ -d core-dist ]]; then
+            core_wheels=(core-dist/*.whl)
+            if [[ ${#core_wheels[@]} -ne 1 || ! -f ${core_wheels[0]} ]]; then
+              printf 'Expected exactly one candidate Core wheel, found: %s\n' "${core_wheels[*]}" >&2
+              exit 1
+            fi
+            core=(--core-wheel "${core_wheels[0]}")
+          fi
+          python scripts/lsp_citry_pairs.py old-lsp --citry-wheel "${wheels[0]}" "${core[@]}"
+
   verify-distributions:
     if: ${{ inputs.operation == 'qualify' }}
-    needs: [verify-version, build, smoke-python, rolling-deploy]
+    needs: [verify-version, build, smoke-python, rolling-deploy, lsp-pairs]
     runs-on: ubuntu-24.04
     permissions:
       attestations: write

@@ -9,8 +9,7 @@ import pytest
 from lsprotocol import types
 
 from citry import Citry, Component
-from citry._checker import _check_template, _TemplateSource
-from citry.analysis import browser_state_bindings
+from citry._lsp_support import _check_template, _TemplateSource, browser_state_bindings
 from citry_core.template_parser import parse_template
 from citry_lsp.engine import DocumentState, browser_diagnostics, completion_items, definition, hover
 from citry_lsp.project import ProjectState, load_project

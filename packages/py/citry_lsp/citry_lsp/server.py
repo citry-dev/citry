@@ -16,8 +16,7 @@ from lsprotocol import types
 from pygls.exceptions import JsonRpcException, JsonRpcInvalidParams
 from pygls.lsp.server import LanguageServer
 
-from citry._diagnostic_catalog import FORMAT_PROVIDER_INVALID, FORMAT_STALE_DOCUMENT
-from citry._symbol_table import EDITOR_NOTE, symtable_missing
+from citry._lsp_support import EDITOR_NOTE, FORMAT_PROVIDER_INVALID, FORMAT_STALE_DOCUMENT, symtable_missing
 from citry_core.template_formatter import EmbeddedFormatResult
 from citry_lsp.engine import (
     DocumentState,

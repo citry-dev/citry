@@ -2037,6 +2037,35 @@ These are not covered, so any minor or patch release may change them:
 - Features marked experimental in their docs and docstrings, such as
   `ComponentGraph`.
 
+One private module has a rule of its own. citry-lsp imports the Citry
+internals it needs, and the experimental template analysis names, from
+`citry._lsp_support`, which also holds the private attribute and setting
+names that citry-lsp reads by name. Every citry-lsp 1.x must work with
+every `citry` 1.x. Users must not import it, and the docs do not describe it,
+but during 1.x treat it as covered:
+
+- Do not remove or rename a name, remove a parameter, make a parameter
+  required, change a default, remove a public member of a class it
+  exports, change the value of a string or number constant, or remove an
+  entry from a collection constant. Keep what a function returns and the
+  arguments it passes to a callback.
+- You may add names, optional parameters and class members.
+- When citry-lsp needs another Citry internal, add it to the module and
+  record it by running
+  `packages/py/citry/tests/test_lsp_support_module.py` as a script. That
+  test checks the rules above against the recorded
+  `lsp_support_names.json`, and citry-lsp's `test_citry_imports.py`
+  fails when citry-lsp imports a private Citry module directly.
+- A name added after 1.0.0 is missing from older releases, so citry-lsp
+  imports it in a `try` block and turns off the feature that needs it
+  when the import fails. Do not raise citry-lsp's `citry>=` floor above
+  1.0.0 for it.
+- Release qualification runs `scripts/lsp_citry_pairs.py` for two
+  pairs: the oldest citry-lsp of the major version with the candidate
+  `citry`, and the candidate citry-lsp with the oldest `citry` of the
+  major version. Its docstring says what to do when an old test fails
+  for a reason that is not a break.
+
 Three kinds of change may come in a minor release even though they can
 break a user's setup. List each one in the changelog:
 

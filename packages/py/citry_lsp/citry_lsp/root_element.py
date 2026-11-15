@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-from citry._walk import Call, run
+from citry._lsp_support import Call, run
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement
 
 # The type of `$el` when the root is a fragment or cannot be proven.

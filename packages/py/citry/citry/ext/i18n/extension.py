@@ -1138,9 +1138,9 @@ class I18nExtension(Extension):
     def _tooling_index(self) -> dict[str, object]:
         """Return detached compiler facts for Citry's isolated tooling worker."""
         # citry-lsp reads this index from every Citry 1.x (`I18nProjectIndex`
-        # in citry_lsp/project.py), and its worker finds this method by name.
-        # During 1.x keep the name, only add keys here, never remove or
-        # retype one, and keep `version` at 1.
+        # in citry_lsp/project.py), through `citry._lsp_support.i18n_tooling_index`.
+        # During 1.x only add keys here, never remove or retype one, and
+        # keep `version` at 1.
         self._load_project_sources()
         with self._catalog_lock:
             catalog = self._compiled_catalog

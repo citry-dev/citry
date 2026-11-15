@@ -5,8 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, TypeAlias
 
-from citry import (
-    LspPosition,
+from citry import LspPosition
+from citry._lsp_support import (
+    FORMAT_INELIGIBLE,
+    FORMAT_PROVIDER_INVALID,
+    FORMAT_STALE_DOCUMENT,
     PythonComponentAssetNotice,
     PythonComponentAssetPlan,
     PythonComponentAssetRequest,
@@ -14,11 +17,6 @@ from citry import (
     finish_python_component_assets,
     format_python_templates,
     prepare_python_component_assets,
-)
-from citry._diagnostic_catalog import (
-    FORMAT_INELIGIBLE,
-    FORMAT_PROVIDER_INVALID,
-    FORMAT_STALE_DOCUMENT,
 )
 from citry_core.template_formatter import (
     EmbeddedFormatNotice,

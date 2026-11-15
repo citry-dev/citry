@@ -20,7 +20,7 @@ from typing import Any, NoReturn
 from lsprotocol import types
 from pygls.client import JsonRPCClient
 
-from citry._source_lines import line_break_count, source_lines
+from citry._lsp_support import line_break_count, source_lines
 from citry_lsp.uri import canonical_document_uri, file_uri_path
 
 TY_VERSION = "0.0.101"
