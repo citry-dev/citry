@@ -5,6 +5,7 @@ description = "Safe Python expression eval"
 # Edition 2024 needs Rust 1.85 or later. From the repository root,
 # `rustup toolchain install` fetches the toolchain rust-toolchain.toml names.
 edition = "2024"
+publish = false
 rust-version = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
