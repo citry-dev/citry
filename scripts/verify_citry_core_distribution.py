@@ -31,7 +31,7 @@ except ImportError:  # Run as `python scripts/<name>.py`, where scripts/ itself 
     import release_links  # type: ignore[no-redef]
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
     from email.message import Message
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
@@ -149,6 +149,53 @@ def expected_release_filenames(version: str) -> set[str]:
     wheels.add(f"citry_core-{version}-{config['python_tag']}-{config['abi_tag']}-{config['platform_tag']}.whl")
     wheels.add(f"citry_core-{version}.tar.gz")
     return wheels
+
+
+def _artifact_identity(name: str) -> str:
+    """
+    Return the key that every spelling of one release file name shares.
+
+    A wheel name joins several tags of one kind with dots, such as
+    `manylinux_2_17_x86_64.manylinux2014_x86_64`, and the wheel specification
+    does not fix their order. A new maturin release can change the order it
+    writes. The key sorts each group of tags, so a wheel counts as the expected
+    file whichever order its builder chose. A group with a tag removed, added,
+    or repeated gets a different key. Any other name, such as the sdist, is its
+    own key.
+    """
+    if not name.endswith(".whl"):
+        return name
+    parts = name.removesuffix(".whl").split("-")
+    # A wheel name is `{distribution}-{version}[-{build}]-{python}-{abi}-{platform}`.
+    if len(parts) not in {5, 6}:
+        return name
+    *leading, python, abi, platform = parts
+    tag_sets = (".".join(sorted(tags.split("."))) for tags in (python, abi, platform))
+    return "-".join([*leading, *tag_sets]) + ".whl"
+
+
+def _names_by_identity(names: Iterable[str]) -> dict[str, str]:
+    """Map each file name's identity to the name, and refuse two spellings of one wheel."""
+    result: dict[str, str] = {}
+    for name in sorted(names):
+        identity = _artifact_identity(name)
+        # Two files that differ only in tag order are the same wheel twice, and the inventory
+        # could not tell which of the two to release.
+        if identity in result:
+            raise DistributionVerificationError(
+                f"artifacts {result[identity]!r} and {name!r} differ only in the order of their tags"
+            )
+        result[identity] = name
+    return result
+
+
+def _inventory_difference(expected: Iterable[str], actual: Iterable[str]) -> tuple[list[str], list[str]]:
+    """Return the `(missing, unexpected)` file names, ignoring the order of dot-joined wheel tags."""
+    expected_names = _names_by_identity(expected)
+    actual_names = _names_by_identity(actual)
+    missing = sorted(expected_names[key] for key in expected_names.keys() - actual_names.keys())
+    unexpected = sorted(actual_names[key] for key in actual_names.keys() - expected_names.keys())
+    return missing, unexpected
 
 
 def source_inventory() -> dict[str, str]:
@@ -519,11 +566,8 @@ def stage_and_verify(raw_dir: Path, output_dir: Path) -> dict[str, Any]:
     if duplicates:
         raise DistributionVerificationError(f"duplicate artifact basenames: {', '.join(duplicates)}")
     version = package_version()
-    expected = expected_release_filenames(version)
-    actual = set(by_name)
-    if actual != expected:
-        missing = sorted(expected - actual)
-        unexpected = sorted(actual - expected)
+    missing, unexpected = _inventory_difference(expected_release_filenames(version), by_name)
+    if missing or unexpected:
         raise DistributionVerificationError(
             f"release inventory mismatch; missing={missing!r}; unexpected={unexpected!r}"
         )
@@ -531,7 +575,9 @@ def stage_and_verify(raw_dir: Path, output_dir: Path) -> dict[str, Any]:
         raise DistributionVerificationError(f"verified output directory is not empty: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
     artifacts: list[dict[str, Any]] = []
-    for name in sorted(expected):
+    # Stage each file under the name its builder gave it, because the recorded hashes and the
+    # upload to PyPI both name the file as built.
+    for name in sorted(by_name):
         source = by_name[name][0]
         report = (
             verify_wheel(source, version=version) if name.endswith(".whl") else verify_sdist(source, version=version)
@@ -554,17 +600,16 @@ def verify_staged_bundle(bundle_dir: Path) -> dict[str, Any]:
     if any(entry.is_symlink() or not entry.is_file() for entry in entries):
         raise DistributionVerificationError("qualification bundle must contain only regular files at its root")
     version = package_version()
-    expected_artifacts = expected_release_filenames(version)
-    expected_names = expected_artifacts | {"release-inventory.json"}
     by_name = {entry.name: entry for entry in entries}
-    if set(by_name) != expected_names:
-        missing = sorted(expected_names - set(by_name))
-        unexpected = sorted(set(by_name) - expected_names)
+    missing, unexpected = _inventory_difference(
+        {*expected_release_filenames(version), "release-inventory.json"}, by_name
+    )
+    if missing or unexpected:
         raise DistributionVerificationError(
             f"qualification bundle mismatch; missing={missing!r}; unexpected={unexpected!r}"
         )
     artifacts = []
-    for name in sorted(expected_artifacts):
+    for name in sorted(by_name.keys() - {"release-inventory.json"}):
         path = by_name[name]
         report = verify_wheel(path, version=version) if name.endswith(".whl") else verify_sdist(path, version=version)
         artifacts.append(report)
