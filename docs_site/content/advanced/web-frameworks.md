@@ -610,14 +610,20 @@ serve these runtimes, even from a shared cache.
 
 A page rendered by one release can also call an event handler on a
 worker that runs the other. Between two 1.x releases, that call either
-works or fails with `stale_state`. It fails when the other release no
-longer accepts the page's [State](/events/state/), or when it sends back
-a render that the browser code in the page cannot read. A Vue fragment
-from the other release can fail the same way, and Citry does not start
-it. Citry does not reload the page, and in production it shows the
-visitor nothing, so the page stays unusable until the visitor reloads
-it. Citry fires `citry:events:stale` or `citry:fragments:stale` instead.
-Listen for them and show a message, as
+works or fails with the error code `stale_state` (or
+`protocol_mismatch`, if the newer release added `citry-events/2`; see
+[Rolling deploys](/about/versioning/#rolling-deploys)). It fails when
+the other release no longer accepts the page's
+[State](/events/state/), or when it sends back a render that the
+browser code in the page cannot read. A Vue fragment from the other
+release can fail the same way, and Citry then leaves it without its
+Vue behavior.
+
+In production Citry does not tell the visitor, and calls from that
+component keep failing until the visitor reloads the page. Add a
+listener for `citry:events:stale` (event calls) and
+`citry:fragments:stale` (Vue fragments) that tells the visitor to
+reload, as
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows. You need that listener even without deploys: a State token that
 expired (24 hours after Citry issued it, by default) fails the same

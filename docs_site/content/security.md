@@ -68,8 +68,8 @@ A token expires 24 hours after Citry issues it, with either storage.
 Citry issues a new token each time it renders the component and after
 each call that changes State. The expiry limits how long a copied token
 stays useful. A call with an expired token does not run its handler: it
-gets a `stale_state` error, and the page stays unusable until the
-visitor reloads it, which brings a fresh token.
+gets a `stale_state` error, and calls from that component keep failing
+until the visitor reloads the page, which brings a fresh token.
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows how to tell the visitor.
 

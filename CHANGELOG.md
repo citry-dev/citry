@@ -13,7 +13,7 @@
   and after a call that changes State, so the pages affected are those
   whose State has not changed for more than 24 hours. A call with an
   expired token does not run its handler: it gets a `stale_state` error
-  (see the next entry for what the page shows). Tokens issued before
+  (see the next entry). Tokens issued before
   the upgrade also expire 24 hours after Citry issued them. No setting turns
   expiry off; to keep a token working for longer, set a longer
   `_max_age`:
@@ -27,13 +27,12 @@
 
 - **Citry no longer asks visitors to reload an out-of-date page in
   production:** when a call fails with `stale_state`, most often because
-  the page's State token expired, Citry asked every visitor whose call
-  failed "This page and the server are running different versions of
-  the app. Reload to get back in sync?". Now only a page that
-  `Citry(mode="development")` rendered asks, with "This page is out of
-  date. Reload to continue?". In production Citry asks nothing, never
-  reloads by itself, and writes one console warning per page, so the
-  page's calls keep failing until the visitor reloads it. Show your own
+  the page's State token expired, every visitor whose call failed got a
+  confirm dialog asking whether to reload. Now only a page that
+  `Citry(mode="development")` rendered asks. In production Citry asks
+  nothing, never reloads by itself, and writes one console warning per
+  page, so calls from that component keep failing until the visitor
+  reloads the page. Show your own
   message from a listener, as
   [Handle out-of-date pages](https://citry.dev/reference/browser-apis/#out-of-date-pages)
   shows:
@@ -86,13 +85,13 @@
 ### Changed
 
 - If a later Citry release changes the State token format, a page from
-  the other release gets `stale_state` (409) during a deploy, and the
-  page reports that it is out of date. Before, it got `invalid_state`
+  the other release gets `stale_state` (409) during a deploy, and Citry
+  fires `citry:events:stale`. Before, it got `invalid_state`
   (403) and an error.
-- When you later deploy another Citry release, an event call from a page
-  this release rendered fails with `stale_state`, as for an expired State
-  token, when the response is one the page's browser code cannot read.
-  Before, it failed with a plain error.
+- During a later deploy, a page that Citry 1.0.0 rendered now fails an
+  event call with `stale_state`, as an expired State token does, when
+  the response comes from another release and the page's browser code
+  cannot read it. Before, the call failed with a plain error.
 
 ## v0.9.0
 

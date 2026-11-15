@@ -232,8 +232,8 @@ each one:
 
 - **When a call restores State.** If the values in the page no longer fit
   the model, for example because you changed a field's type and deployed,
-  the call fails with `stale_state` (409), and the page stays unusable
-  until the visitor reloads it (see
+  the call fails with `stale_state` (409), and calls from that
+  component keep failing until the visitor reloads the page (see
   [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)).
   The same happens when the State nests deeper than Pydantic can write as
   JSON on this server (Pydantic's limit depends on the platform).

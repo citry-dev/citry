@@ -79,12 +79,11 @@ app = Citry(cache=backend)
 
 When the budget is full, the store drops the State entry used longest
 ago. The visitor whose entry was dropped sees their next call fail with
-`stale_state`, and the page stays unusable until the visitor reloads it
-(see
+`stale_state`, and calls from that component keep failing until the
+visitor reloads the page (see
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)).
-Other entries, such as
-the scripts and styles that open pages load, never make room for State,
-so many State writes cannot push them out.
+Other entries, such as the scripts and styles that open pages load,
+never make room for State, so many State writes cannot push them out.
 
 The budget counts the memory each entry's text takes in Python, plus 256
 bytes for the objects that hold it. Text such as emoji takes up to four

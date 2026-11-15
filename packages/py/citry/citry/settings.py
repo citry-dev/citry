@@ -693,8 +693,8 @@ class CitrySettings:
             logs a browser console warning when Vue's first render of a
             part Vue builds in the browser differs from the HTML the
             server sent. A production page does not load this browser
-            check. And when an event call fails because the page is out of
-            date, the browser asks whether to reload; a production page
+            check. And when an event call or a Vue fragment fails because the
+            page is out of date, the browser asks whether to reload; a production page
             only writes a console warning. An unrecognized value raises
             ``ValueError`` at
             construction. See [Development mode](/guides/development-mode/).

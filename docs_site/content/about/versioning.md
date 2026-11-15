@@ -26,8 +26,9 @@ What each kind of release does:
 - **Patch** (1.0.0 to 1.0.1): bug fixes. Code that uses
   [covered parts](#what-is-covered) needs no changes, except for a
   [security fix](#security-exception) that refuses input your code
-  relied on. An open page's next event call may fail with
-  `stale_state` (see [Rolling deploys](#rolling-deploys)).
+  relied on. An open page's next event call may fail with the error
+  code `stale_state`, which means the page is out of date (see
+  [Rolling deploys](#rolling-deploys)).
 - **Minor** (1.0.0 to 1.1.0): new features. Code that uses
   [covered parts](#what-is-covered) keeps working. A minor release may
   also:
@@ -149,8 +150,8 @@ happen:
     - new page to old server: accepted, unless the new release added
       `citry-events/2`; then the old server answers `protocol_mismatch`.
 - **Data an old page cannot read:** a State token (the signed copy of a
-  component's State in the page), a render or a fragment written by a
-  newer release. The page's next event call fails with the error code
+  component's State in the page), a render or a fragment written by
+  another release. The page's next event call fails with the error code
   `stale_state`, or the fragment does not start. Citry fires events your
   app can use to tell the visitor (see
   [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)).
