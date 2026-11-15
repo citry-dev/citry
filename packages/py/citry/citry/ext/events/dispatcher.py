@@ -156,6 +156,12 @@ class TransportContext:
     ``citry.ext.events.routes``; a custom transport builds its own) and
     passed to [`EventsDispatcher.dispatch`][citry.ext.events.EventsDispatcher.dispatch].
 
+    Experimental:
+        Part of the experimental API for running event calls from server
+        code. It stays usable, but it may change in a 1.x minor release
+        without a deprecation period. The ``citry-events/1`` format it
+        carries is frozen for all of 1.x.
+
     Attributes:
         transport: The transport's name, such as ``"http"``; handlers see it
             as ``event.transport``.
@@ -461,6 +467,18 @@ class EventsDispatcher:
     browser code sends (the ``citry-events/1`` call envelope)
     and calls [`dispatch`][citry.ext.events.EventsDispatcher.dispatch]
     (or its async twin) directly.
+
+    ``EventsDispatcher()`` with no arguments answers a render only as
+    ``html-fragment/1``. Citry's own browser code asks for
+    ``vue-prepared/1`` renders, so a handler that returns a render fails
+    when such a page calls through this dispatcher. A transport that
+    serves Citry's own pages forwards calls to Citry's HTTP routes.
+
+    Experimental:
+        Part of the experimental API for running event calls from server
+        code. It stays usable, but it may change in a 1.x minor release
+        without a deprecation period. The ``citry-events/1`` format it
+        reads and writes is frozen for all of 1.x.
     """
 
     def __init__(

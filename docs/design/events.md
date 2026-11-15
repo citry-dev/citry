@@ -8,8 +8,17 @@ browser contract; where they conflict with the current Vue v1 contract below,
 the current contract and [`vue.md`](vue.md) win.
 Migration qualification is recorded in [`vue.md`](vue.md).
 
-**Status (2026-07-26): Events v1 is implemented but not yet frozen or
-released as the v1 beta.** The exact current wire contract is
+**Status (2026-11-15): Events v1 is frozen.** `citry-events/1` stays fixed
+for all of Citry 1.x, together with the browser's custom transport API
+(`Citry.events.registerTransport`). The Python classes for running calls
+from server code, `EventsDispatcher` and `TransportContext`, are
+experimental.
+Any change to the wire format, even an addition, needs `citry-events/2`
+(a security fix is the one exception);
+the spec's
+[Versioning](../../packages/protocol/events/v1/spec.md#versioning) section
+says how servers keep accepting `citry-events/1` calls during a rolling
+deploy. The exact wire contract is
 [`packages/protocol/events/v1/spec.md`](../../packages/protocol/events/v1/spec.md);
 this document owns the product and implementation design behind it. The current
 frontend-boundary source of truth is [`vue.md`](vue.md), and the shipped Vue v1
@@ -2510,11 +2519,11 @@ the shipped pattern with no core change; see section 14.)
 
 The major lives in the protocol string. Every fixed v1 structure is strict:
 missing and extra fields, unknown action kinds, swaps, capabilities, and error
-codes are errors. Only documented application-data bags remain open. Until
-the owning Citry package reaches `1.0.0`, incompatible corrections change v1
-in place as long as the spec, schemas, examples, server, browser, tests, and
-current docs move together. After `1.0.0`, an incompatible wire shape starts
-v2.
+codes are errors. Only documented application-data bags remain open. Because
+a reader rejects anything unknown, even an addition breaks it, so any change
+to the frozen v1 wire format starts v2. The
+[Versioning](../../packages/protocol/events/v1/spec.md#versioning) section of
+the spec owns the exact rule.
 
 ---
 
