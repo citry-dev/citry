@@ -277,8 +277,8 @@ class EventsExtension(Extension):
 
     introspection_version = 1
     render_cache_mode = "payload"
-    # Bump only as docs/codebase.md "Contract versions" allows for the
-    # render cache, an internal format.
+    # Change this only as the "Contract versions" section of
+    # docs/codebase.md allows for internal formats such as the render cache.
     render_cache_version = 1
 
     Config = Events

@@ -15,8 +15,9 @@ signed State token that Citry sends to the page now expires after 24
 hours, and in production Citry no longer asks visitors to reload an
 out-of-date page, so add your own message for them.
 
-Upgrade citry-lsp and the VS Code extension to 1.0.0 together with
-Citry, because an older extension refuses citry-lsp 1.x. After that,
+If you use citry-lsp or the VS Code extension, upgrade them to 1.0.0
+together with Citry, because an older extension refuses citry-lsp 1.x.
+After that,
 any citry-lsp 1.x works with any Citry 1.x, so you can upgrade either
 one first. citry-ui 0.6.0 is released alongside and needs Citry 1.0.0
 or later.

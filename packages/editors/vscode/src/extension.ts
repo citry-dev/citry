@@ -524,7 +524,7 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		entry.status = await client.sendRequest<ProjectStatus>(statusMethod, {});
 		if (environmentFile !== null && entry.status.environment_file === undefined) {
 			throw new Error(
-				'Configured citry.envFile is not supported by this citry-lsp installation. Upgrade it with `python -m pip install --upgrade "citry-lsp>=0.1,<2"`. citry-lsp 1.x needs Citry 1.0.0 or later, so this upgrades Citry too. To stay on Citry 0.9.x, install `citry-lsp>=0.4,<0.5` instead.',
+				'Configured citry.envFile is not supported by this citry-lsp installation. Upgrade it with `python -m pip install --upgrade "citry-lsp>=0.1,<2"`. citry-lsp 1.x needs Citry 1.0.0 or later, so this upgrades Citry too. To stay on Citry 0.9.x, install `python -m pip install "citry-lsp>=0.4,<0.5"` instead.',
 			);
 		}
 		if (entry.status.environment_file !== undefined && entry.status.environment_file !== null) {
@@ -552,7 +552,7 @@ async function probeLanguageServer(python: string, cwd: string): Promise<void> {
 				if (error !== null) {
 					reject(
 						new Error(
-							'Install it in that environment with `python -m pip install "citry-lsp>=0.1,<2"`. citry-lsp 1.x needs Citry 1.0.0 or later, so this upgrades Citry too. To stay on Citry 0.9.x, install `citry-lsp>=0.4,<0.5` instead.',
+							'Install it in that environment with `python -m pip install "citry-lsp>=0.1,<2"`. citry-lsp 1.x needs Citry 1.0.0 or later, so this upgrades Citry too. To stay on Citry 0.9.x, install `python -m pip install "citry-lsp>=0.4,<0.5"` instead.',
 						),
 					);
 					return;

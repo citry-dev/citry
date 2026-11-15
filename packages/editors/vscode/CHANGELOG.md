@@ -9,8 +9,9 @@
   is the release it is tested with.
 - When it cannot find citry-lsp, it now suggests
   `python -m pip install "citry-lsp>=0.1,<2"`. That installs citry-lsp
-  1.x, which needs Citry 1.0.0 or later, so it upgrades Citry too. The
-  message says to install `citry-lsp>=0.4,<0.5` to stay on Citry 0.9.x.
+  1.x, which needs Citry 1.0.0 or later, so it upgrades Citry too. To
+  stay on Citry 0.9.x, the message says to run
+  `python -m pip install "citry-lsp>=0.4,<0.5"` instead.
 
 ## 0.4.0 - 2026-11-14
 
