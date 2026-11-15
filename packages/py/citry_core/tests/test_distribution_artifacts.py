@@ -291,6 +291,149 @@ def test_wheel_verifier_rejects_a_purelib_native_wheel(tmp_path: Path) -> None:
         verify_wheel(wheel, version="1.7.0")
 
 
+def _reverse_joined_tags(name: str) -> str:
+    """Write each dot-joined group of tags in a wheel name in the opposite order, as another builder may."""
+    if not name.endswith(".whl"):
+        return name
+    *leading, python, abi, platform = name.removesuffix(".whl").split("-")
+    reversed_sets = (".".join(reversed(tags.split("."))) for tags in (python, abi, platform))
+    return "-".join([*leading, *reversed_sets]) + ".whl"
+
+
+def test_release_inventory_accepts_every_wheel_with_its_tags_in_the_other_order() -> None:
+    expected = expected_release_filenames("1.7.0")
+    built = {_reverse_joined_tags(name) for name in expected}
+
+    # Reversing really changes the names that carry dot-joined tags, so the
+    # comparison below is not trivially passing on identical strings.
+    assert built != expected
+    assert "citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl" in built
+    assert "citry_core-1.7.0-cp311-abi3-manylinux1_i686.manylinux_2_5_i686.whl" in built
+    assert distribution_verifier._inventory_difference(expected, built) == ([], [])
+    assert distribution_verifier._inventory_difference(expected, expected) == ([], [])
+
+
+@pytest.mark.parametrize(
+    "tag_order",
+    ["manylinux_2_17_x86_64.manylinux2014_x86_64", "manylinux2014_x86_64.manylinux_2_17_x86_64"],
+)
+def test_wheel_verifier_reads_dot_joined_filename_tags_as_a_set(tmp_path: Path, tag_order: str) -> None:
+    wheel = tmp_path / f"citry_core-1.7.0-cp311-abi3-{tag_order}.whl"
+    # maturin lists each tag of the set on its own line.
+    _write_wheel(
+        wheel,
+        extension="citry_core/_rust.abi3.so",
+        tag="cp311-abi3-manylinux2014_x86_64\nTag: cp311-abi3-manylinux_2_17_x86_64",
+    )
+
+    report = verify_wheel(wheel, version="1.7.0")
+
+    assert report["name"] == wheel.name
+    assert report["tags"] == [
+        "cp311-abi3-manylinux2014_x86_64",
+        "cp311-abi3-manylinux_2_17_x86_64",
+    ]
+
+
+def test_release_inventory_still_rejects_a_different_set_of_tags() -> None:
+    expected = {"citry_core-1.7.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"}
+    # A wheel that drops one tag of the set is a different file, not a respelling.
+    built = {"citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.whl"}
+
+    assert distribution_verifier._inventory_difference(expected, built) == (sorted(expected), sorted(built))
+
+
+def test_release_inventory_does_not_collapse_a_repeated_tag() -> None:
+    expected = {"citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.whl"}
+    # A name that lists a tag twice is not a respelling of the expected file.
+    built = {"citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.manylinux2014_x86_64.whl"}
+
+    assert distribution_verifier._inventory_difference(expected, built) == (sorted(expected), sorted(built))
+
+
+def test_release_inventory_refuses_two_spellings_of_one_wheel() -> None:
+    names = {
+        "citry_core-1.7.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+    }
+
+    with pytest.raises(DistributionVerificationError, match="differ only in the order of their tags"):
+        distribution_verifier._inventory_difference(names, names)
+
+
+@pytest.mark.parametrize(
+    "built_name",
+    [
+        "citry_core-1.7.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+    ],
+)
+def test_stage_and_verify_keeps_the_built_name_of_a_wheel_matched_by_tag_set(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    built_name: str,
+) -> None:
+    raw = tmp_path / "raw" / "wheels-linux"
+    raw.mkdir(parents=True)
+    wheel = raw / built_name
+    wheel.write_bytes(b"built-wheel")
+    # The closed release set always spells the tags one way, whatever order the builder used.
+    expected = "citry_core-1.7.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+    report = {"name": built_name, "bytes": len(b"built-wheel"), "sha256": hex_sha256(b"built-wheel")}
+    monkeypatch.setattr(distribution_verifier, "expected_release_filenames", lambda _version: {expected})
+    monkeypatch.setattr(distribution_verifier, "package_version", lambda: "1.7.0")
+    monkeypatch.setattr(distribution_verifier, "verify_wheel", lambda _path, **_kwargs: report)
+
+    staged = stage_and_verify(tmp_path / "raw", tmp_path / "verified")
+
+    assert staged["artifacts"] == [report]
+    assert sorted(path.name for path in (tmp_path / "verified").iterdir()) == [built_name, "release-inventory.json"]
+    assert json.loads((tmp_path / "verified" / "release-inventory.json").read_text()) == staged
+
+    # The qualification bundle is re-checked later against the same closed set, so it must agree.
+    assert verify_staged_bundle(tmp_path / "verified") == staged
+
+
+@pytest.mark.parametrize("problem", ["short_tag_set", "missing_inventory", "stray_file"])
+def test_staged_bundle_rejects_a_changed_file_set(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    problem: str,
+) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    expected = "citry_core-1.7.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+    built = "citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.whl" if problem == "short_tag_set" else expected
+    (bundle / built).write_bytes(b"wheel")
+    if problem != "missing_inventory":
+        (bundle / "release-inventory.json").write_text("{}", encoding="utf-8")
+    if problem == "stray_file":
+        (bundle / "notes.txt").write_text("extra", encoding="utf-8")
+    monkeypatch.setattr(distribution_verifier, "expected_release_filenames", lambda _version: {expected})
+    monkeypatch.setattr(distribution_verifier, "package_version", lambda: "1.7.0")
+
+    with pytest.raises(DistributionVerificationError, match="qualification bundle mismatch"):
+        verify_staged_bundle(bundle)
+
+
+def test_stage_and_verify_names_the_files_of_a_real_inventory_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.whl").write_bytes(b"short-tag-set")
+    expected = "citry_core-1.7.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+    monkeypatch.setattr(distribution_verifier, "expected_release_filenames", lambda _version: {expected})
+    monkeypatch.setattr(distribution_verifier, "package_version", lambda: "1.7.0")
+
+    with pytest.raises(DistributionVerificationError, match="release inventory mismatch") as error:
+        stage_and_verify(raw, tmp_path / "verified")
+
+    assert expected in str(error.value)
+    assert "citry_core-1.7.0-cp311-abi3-manylinux2014_x86_64.whl" in str(error.value)
+
+
 def test_inventory_rejects_duplicate_basenames_before_staging(tmp_path: Path) -> None:
     raw = tmp_path / "raw"
     (raw / "first").mkdir(parents=True)
