@@ -1,0 +1,77 @@
+
+@layer citry-ui.theme {
+  :where(.cui-split-button) {
+    --_cui-split-button-divider-color: var(
+      --cui-split-button-divider-color,
+      color-mix(in srgb, currentColor 32%, transparent)
+    );
+    --_cui-split-button-divider-width: var(--cui-split-button-divider-width, 1px);
+    --_cui-split-button-menu-inline-size: var(
+      --cui-split-button-menu-inline-size,
+      var(--_cui-button-height)
+    );
+    --_cui-split-button-radius: var(
+      --cui-split-button-radius,
+      var(--cui-button-radius, 0.5rem)
+    );
+
+    display: inline-flex;
+    max-inline-size: 100%;
+    border-radius: var(--_cui-split-button-radius);
+    vertical-align: middle;
+  }
+
+  :where(.cui-split-button[data-block]) {
+    display: flex;
+    inline-size: 100%;
+  }
+
+  :where(.cui-split-button__primary) {
+    min-inline-size: 0;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  :where(.cui-split-button[data-block] .cui-split-button__primary) {
+    flex: 1 1 auto;
+  }
+
+  :where(.cui-split-button__menu-trigger) {
+    flex: 0 0 var(--_cui-split-button-menu-inline-size);
+    inline-size: var(--_cui-split-button-menu-inline-size);
+    min-inline-size: var(--_cui-split-button-menu-inline-size);
+    margin-inline-start: calc(-1 * var(--_cui-split-button-divider-width));
+    padding-inline: 0;
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+  }
+
+  :where(.cui-split-button__menu-trigger)::before {
+    position: absolute;
+    inset-block: 18%;
+    inset-inline-start: 0;
+    inline-size: var(--_cui-split-button-divider-width);
+    background: var(--_cui-split-button-divider-color);
+    content: "";
+  }
+
+  :where(.cui-split-button > .cui-button:focus-visible) {
+    z-index: 1;
+  }
+
+  :where(.cui-split-button__indicator) {
+    display: block;
+    inline-size: 0.5em;
+    block-size: 0.5em;
+    border-inline-end: 0.125em solid currentColor;
+    border-block-end: 0.125em solid currentColor;
+    rotate: 45deg;
+    translate: 0 -0.125em;
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-split-button__menu-trigger)::before {
+      background: ButtonText;
+    }
+  }
+}

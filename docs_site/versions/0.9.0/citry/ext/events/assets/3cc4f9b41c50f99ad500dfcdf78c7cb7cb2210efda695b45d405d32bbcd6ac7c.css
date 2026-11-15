@@ -1,0 +1,5 @@
+
+:where(.progress-sizes) {
+  max-inline-size: 34rem;
+  color: CanvasText;
+}

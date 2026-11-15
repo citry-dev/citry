@@ -1,0 +1,15 @@
+
+:where(.card-sizes) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+  max-width: 64rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.card-sizes h2) {
+  margin: 0;
+  font-size: 1rem;
+}
