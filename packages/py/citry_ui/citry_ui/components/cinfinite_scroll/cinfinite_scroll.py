@@ -10,13 +10,18 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CInfiniteScrollReason = Literal["button", "intersection", "retry"]
 
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-busy",
@@ -80,11 +85,10 @@ def _attrs(
     # A Vue directive could rebind an owned attribute, change the root's
     # structure, or attach a listener, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CInfiniteScroll")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"CInfiniteScroll attrs require string keys, got {key!r}.")
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"CInfiniteScroll attrs cannot contain Citry runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where="CInfiniteScroll attrs")
     return merge_root_attrs(copied, class_, style)
 
 

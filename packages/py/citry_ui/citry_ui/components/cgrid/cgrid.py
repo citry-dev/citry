@@ -8,7 +8,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CContainerTag = Literal["div", "main", "section", "article", "nav", "aside"]
@@ -23,7 +29,6 @@ _GRID_ITEM_TAGS = ("div", "main", "section", "article", "aside", "li")
 _CONTAINER_SIZES = ("sm", "md", "lg", "xl", "xxl")
 _GAPS = ("0", "xs", "sm", "md", "lg", "xl")
 _BREAKPOINTS = ("sm", "md", "lg", "xl", "xxl")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _CONTAINER_OWNED_ATTRS = frozenset(
     {
         "data-citry-ui-part",
@@ -150,10 +155,8 @@ def _copy_attrs(
     # A Vue directive could rebind an owned attribute, spread over the root,
     # or change its structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, component_name)
-    for key in copied:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            msg = f"{component_name} attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{component_name} attrs")
     return copied
 
 

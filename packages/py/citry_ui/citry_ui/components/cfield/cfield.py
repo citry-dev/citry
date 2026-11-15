@@ -12,6 +12,7 @@ from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
+    citry_ui_owned_value,
     get_html_attr,
     get_html_form_owner,
     merge_root_attrs,
@@ -164,7 +165,7 @@ class CField(LibraryComponent):
             "aria-invalid": "true" if kwargs.invalid else None,
             "aria-describedby": described_by,
             "aria-errormessage": error_id if kwargs.invalid and has_error else None,
-            FIELD_CONTROL_MARKER: "",
+            FIELD_CONTROL_MARKER: citry_ui_owned_value(),
         }
         self.provide(
             FIELD_CONTEXT_KEY,

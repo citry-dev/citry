@@ -8,7 +8,13 @@ from typing import Any, Literal, cast
 
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
 from citry.attrs import validate_html_attr_name
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._url import check_image_url
 from citry_ui.components._validation import reject_owned_attrs
 
@@ -20,7 +26,6 @@ CAvatarStatus = Literal["fallback", "loading", "loaded", "error"]
 _VARIANTS = ("soft", "solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _SHAPES = ("circle", "rounded", "square")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -107,7 +112,7 @@ def _copy_attrs(
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"CAvatar {destination}")
-    for key in copied:
+    for key, attr_value in copied.items():
         # A Vue directive could rebind an owned attribute, add listeners, or
         # change the Avatar's structure, so none may arrive through Python data.
         # This runs before the name check so every directive spelling gets the same message.
@@ -119,9 +124,7 @@ def _copy_attrs(
             raise ValueError(msg)
         validate_html_attr_name(key, where=f"CAvatar {destination}")
         normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
-            msg = f"CAvatar {destination} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"CAvatar {destination}")
         # The image's load and error events drive the Avatar's status, so an
         # inline handler there would run beside that logic.
         if inert_only and normalized.startswith("on"):

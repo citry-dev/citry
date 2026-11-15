@@ -156,7 +156,7 @@ def test_invalid_composition_and_values_fail(source: str, match: str) -> None:
     ("owner", "attribute", "message"),
     [
         ("CCascader", "role", "cannot override owned attribute"),
-        ("CCascader", "data-citry-morph", "Citry runtime attribute"),
+        ("CCascader", "data-citry-morph", "are reserved for the browser"),
         ("CCascader", ":aria-label", "CCascader attrs cannot contain the Vue directive"),
         ("CCascader", "v-if", "Vue directive"),
         ("CCascader", "V-IF", "Vue directive"),

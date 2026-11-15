@@ -9,7 +9,13 @@ from decimal import Decimal
 from typing import Any, Literal, cast
 
 from citry import LibraryComponent, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._validation import reject_owned_attrs
 
 CProgressIntent = Literal["neutral", "primary", "success", "warn", "danger"]
@@ -19,7 +25,6 @@ CProgressShape = Literal["square", "rounded", "pill"]
 _INTENTS = ("neutral", "primary", "success", "warn", "danger")
 _SIZES = ("sm", "md", "lg")
 _SHAPES = ("square", "rounded", "pill")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNED_ATTRS = frozenset(
     {
         "aria-label",
@@ -99,10 +104,8 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     # A Vue directive could rebind the value or ARIA state this component
     # renders, or change its structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, "CProgress")
-    for key in copied:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            msg = f"CProgress attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CProgress attrs")
     return copied
 
 

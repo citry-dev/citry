@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from citry_ui.components._attrs import reject_citry_ui_reserved_attr
+
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
 
@@ -50,13 +52,20 @@ def reject_owned_attrs(
     component_name: str,
 ) -> None:
     owned_lower = {name.lower() for name in owned}
-    for key in attrs or {}:
+    for key, attr_value in (attrs or {}).items():
         if not isinstance(key, str):
             msg = f"{component_name} attrs require string keys, got {key!r}."
             raise TypeError(msg)
         if key.lower() in owned_lower:
             msg = f"{component_name} attrs cannot override owned attribute {key!r}."
             raise ValueError(msg)
+        # Every component runs this on its attrs maps, so a component that
+        # lists only the names it sets itself still refuses the names Citry's
+        # browser code reads.
+        # Callers pass "CButton" or "CButton attrs"; the message needs the
+        # second form.
+        where = component_name if component_name.endswith("attrs") else f"{component_name} attrs"
+        reject_citry_ui_reserved_attr(key, attr_value, where=where)
 
 
 def validate_html_id(component_name: str, value: str | None) -> None:

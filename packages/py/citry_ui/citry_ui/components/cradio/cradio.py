@@ -13,6 +13,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     get_html_form_owner,
     merge_root_attrs,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
@@ -28,7 +29,6 @@ _ORIENTATIONS = ("vertical", "horizontal")
 _VARIANTS = ("solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _LABEL_POSITIONS = ("start", "end")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _GROUP_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -197,10 +197,8 @@ def _validate_attrs(component: str, attrs: dict[str, object], owned: frozenset[s
     # A Vue directive could rebind the checked state, name, or Form wiring this
     # component owns, so none may arrive through Python data.
     reject_vue_directive_attrs(attrs, component.removesuffix("attrs").rstrip(" _"))
-    for key in attrs:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            msg = f"{component} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=component)
 
 
 class CRadioGroup(LibraryComponent):

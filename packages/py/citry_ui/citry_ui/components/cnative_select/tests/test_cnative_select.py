@@ -268,7 +268,7 @@ def test_direct_text_inputs_are_de_trusted_and_non_string_html_protocol_is_rejec
     ("attrs", "message"),
     [
         ({"readonly": True}, "owned attribute"),
-        ({"data-citry-root": "x"}, "reserved Citry runtime"),
+        ({"data-citry-root": "x"}, "are reserved for the browser"),
         ({":multiple": "many"}, "CNativeSelect attrs cannot contain the Vue directive ':multiple'"),
         ({"V-BIND:VALUE": "chosen"}, "CNativeSelect attrs cannot contain the Vue directive 'V-BIND:VALUE'"),
         ({".required": True}, "CNativeSelect attrs cannot contain the Vue directive '.required'"),

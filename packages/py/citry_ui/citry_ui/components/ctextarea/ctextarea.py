@@ -15,6 +15,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
@@ -106,11 +107,8 @@ def _validate_attrs(attrs: Mapping[str, object] | None) -> None:
     # A Vue directive could rebind `form` or another owned attribute, so none
     # may arrive through Python data.
     reject_vue_directive_attrs(attrs, "CTextarea")
-    for key in attrs or {}:
-        normalized = key.lower()
-        if normalized.startswith(("data-citry-", "data-cev", "data-cid")):
-            msg = f"CTextarea attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in (attrs or {}).items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CTextarea attrs")
 
 
 def _normalize_newlines(value: str) -> str:

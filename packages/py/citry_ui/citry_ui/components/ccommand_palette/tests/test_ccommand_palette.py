@@ -509,7 +509,7 @@ def test_command_fields_are_plain_and_typed(command: CCommandPaletteCommand) -> 
     [
         ("attrs", {"aria-label": "forged"}, "cannot override owned attributes"),
         ("attrs", {"open": True}, "cannot override owned attributes"),
-        ("attrs", {"data-cid-forged": "x"}, "cannot override owned attributes"),
+        ("attrs", {"data-cid-forged": "x"}, "are reserved for the browser"),
         ("attrs", {"c-bind": "{}"}, "cannot use ownership directives"),
         ("attrs", {"v-bind": "{}"}, "Vue directive"),
         ("attrs", {"v-bind:open": "x"}, "Vue directive"),

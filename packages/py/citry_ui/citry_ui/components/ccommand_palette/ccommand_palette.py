@@ -13,7 +13,14 @@ from citry import LibraryComponent, SlotInput, const_value
 from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._active_descendant import ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+)
 from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import first_attribute_occurrences
@@ -132,11 +139,6 @@ class _ResolvedEntry:
     commands: tuple[_ResolvedCommand, ...] = ()
 
 
-_RUNTIME_PREFIXES = (
-    "data-citry-",
-    "data-cev",
-    "data-cid",
-)
 # Citry template directive names would let a copied attribute re-enter the
 # template as a props or attribute spread.
 _OWNERSHIP_DIRECTIVES = frozenset({"c-bind"})
@@ -363,18 +365,15 @@ def _copy_attrs(
         raise TypeError(f"CCommandPalette {destination} must be a mapping or None.")
     copied = dict(value or {})
     seen: set[str] = set()
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"CCommandPalette {destination} requires string attribute names.")
         normalized = key.casefold()
         if normalized in seen:
             raise ValueError(f"CCommandPalette {destination} cannot contain duplicate case variants.")
         seen.add(normalized)
-        if (
-            normalized in owned
-            or normalized.startswith(_RUNTIME_PREFIXES)
-            or (reject_all_aria and normalized.startswith("aria-"))
-        ):
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"CCommandPalette {destination}")
+        if normalized in owned or (reject_all_aria and normalized.startswith("aria-")):
             raise ValueError(f"CCommandPalette {destination} cannot override owned attributes.")
         # A Vue directive could rebind an owned attribute, replace the palette's
         # own dialog and input listeners, or change its structure, so none may
@@ -836,7 +835,7 @@ class CCommandPalette(LibraryComponent):
                     "aria-haspopup": "dialog",
                     "aria-controls": data["dialog_id"],
                     "aria-expanded": "true" if data["open"] else "false",
-                    "data-citry-command-palette-trigger": "",
+                    "data-citry-command-palette-trigger": citry_ui_owned_value(),
                 },
                 "activator_disabled": data["disabled"],
                 "label_attrs": {"for": data["input_id"]},

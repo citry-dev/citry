@@ -18,6 +18,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     get_html_form_owner,
     merge_root_attrs,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
@@ -42,7 +43,6 @@ CRatingVariant = Literal["solid", "subtle"]
 CRatingChangeSource = Literal["pointer", "keyboard", "reset"]
 
 _PLAIN_DECIMAL = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
-_RUNTIME_PREFIXES = ("data-citry-", "data-crating", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -157,11 +157,12 @@ def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozense
         raise TypeError(f"CRating {destination} must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, owned, f"CRating {destination}")
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"CRating {destination} requires string keys, got {key!r}.")
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"CRating {destination} cannot contain runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(
+            key, attr_value, where=f"CRating {destination}", extra_prefixes=("data-crating",)
+        )
     # A Vue directive could rebind the checked state, listeners, or Form wiring
     # this component owns, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, f"CRating {destination.removesuffix('attrs').rstrip('_')}".rstrip())

@@ -276,7 +276,7 @@ def test_owned_static_dynamic_and_runtime_attributes_are_rejected(
         template = f"<c-CTagsInput {extra} />"
     else:
         template = f"<c-CTagsInput {extra} />"
-    with pytest.raises(ValueError, match="cannot override owned attribute"):
+    with pytest.raises(ValueError, match=r"cannot override owned attribute|are reserved for the browser"):
         _render(template, data)
 
 

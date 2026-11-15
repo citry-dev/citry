@@ -10,7 +10,14 @@ from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
 )
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    citry_ui_owned_value,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CHoverCardPlacement = Literal[
@@ -60,7 +67,6 @@ _PLACEMENTS = (
     "bottom",
     "bottom-end",
 )
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _SURFACE_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -150,10 +156,8 @@ def _validate_attrs(attrs: dict[str, object]) -> None:
     # relationships, change its structure, or attach a listener, so none may
     # arrive through Python data.
     reject_vue_directive_attrs(attrs, "CHoverCard")
-    for key in attrs:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            msg = f"CHoverCard attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where="CHoverCard attrs")
 
 
 class CHoverCard(LibraryComponent):
@@ -228,7 +232,7 @@ class CHoverCard(LibraryComponent):
             "arrow": bool(kwargs.arrow),
             "size": size,
             "activator_attrs": {
-                "data-citry-hover-card-trigger": "",
+                "data-citry-hover-card-trigger": citry_ui_owned_value(),
                 "style": {"anchor-name": anchor_name},
             },
             "attrs": merge_root_attrs(attrs, kwargs.class_, surface_style),

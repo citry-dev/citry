@@ -16,6 +16,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_citry_ui_reserved_attr,
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
@@ -26,7 +27,6 @@ CNativeSelectSize = Literal["sm", "md", "lg"]
 
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-invalid",
@@ -175,10 +175,8 @@ def _validate_attrs(
     # A Vue directive could rebind the value, options, or Form wiring this
     # component renders itself, so none may arrive through Python data.
     reject_vue_directive_attrs(attrs, component_name.removesuffix(" attrs"))
-    for key in attrs:
-        if key.lower().startswith(_RUNTIME_PREFIXES):
-            msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
+    for key, attr_value in attrs.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=component_name)
 
 
 def _morph_key(value: str) -> str:

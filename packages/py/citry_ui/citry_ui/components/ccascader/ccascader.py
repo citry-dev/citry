@@ -10,7 +10,13 @@ from hashlib import sha256
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -21,7 +27,6 @@ CCascaderChangeSource = Literal["pointer", "keyboard", "reset"]
 _CONTEXT = "citry_ui_cascader"
 _SIZES = ("sm", "md", "lg")
 _VARIANTS = ("outline", "soft", "plain")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
     {
         "aria-label",
@@ -172,11 +177,10 @@ def _attrs(
     # A Vue directive could rebind an owned attribute, add listeners, or
     # change the tree's structure, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, owner)
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{owner} attrs")
     return merge_root_attrs(copied, class_, style)
 
 

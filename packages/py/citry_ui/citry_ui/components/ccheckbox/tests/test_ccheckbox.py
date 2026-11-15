@@ -178,7 +178,7 @@ def test_checkbox_detrusts_safe_string_identity_before_label_association():
         ("attrs", "aria-hidden", "cannot override owned attribute"),
         ("attrs", "role", "cannot override owned attribute"),
         ("attrs", "tabindex", "cannot override owned attribute"),
-        ("attrs", "data-citry-morph", "reserved Citry runtime attribute"),
+        ("attrs", "data-citry-morph", "are reserved for the browser"),
         ("attrs", ":contenteditable", "Vue directive"),
         ("attrs", "v-bind", "Vue directive"),
         ("attrs", "v-html", "Vue directive"),

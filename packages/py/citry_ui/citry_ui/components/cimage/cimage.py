@@ -15,6 +15,7 @@ from citry_ui.components._attrs import (
     is_executable_event_attribute,
     is_vue_directive_attribute,
     merge_root_attrs,
+    reject_citry_ui_reserved_attr,
 )
 from citry_ui.components._url import check_image_url
 from citry_ui.components._validation import first_attribute_occurrences
@@ -50,11 +51,6 @@ _REFERRER_POLICIES = (
     "strict-origin",
     "strict-origin-when-cross-origin",
     "unsafe-url",
-)
-_RUNTIME_PREFIXES = (
-    "data-citry-",
-    "data-cev",
-    "data-cid",
 )
 _ROOT_OWNED = frozenset(
     {
@@ -337,16 +333,13 @@ def _copy_attrs(
         msg = f"CImage {destination} must be a mapping or None."
         raise TypeError(msg)
     copied = dict(value or {})
-    for key in copied:
+    for key, attr_value in copied.items():
         if not isinstance(key, str):
             msg = f"CImage {destination} requires string attribute names."
             raise TypeError(msg)
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"CImage {destination}")
         normalized = key.casefold()
-        if (
-            normalized in owned
-            or (reject_all_aria and normalized.startswith("aria-"))
-            or normalized.startswith(_RUNTIME_PREFIXES)
-        ):
+        if normalized in owned or (reject_all_aria and normalized.startswith("aria-")):
             msg = f"CImage {destination} cannot override owned attribute {key!r}."
             raise ValueError(msg)
         if is_executable_event_attribute(normalized):

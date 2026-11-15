@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    merge_root_attrs,
+    reject_citry_ui_reserved_attr,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._url import check_link_url
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
@@ -19,7 +25,6 @@ _LIST_CONTEXT_KEY = "citry_ui_list"
 _MARKERS = ("none", "disc", "decimal")
 _DENSITIES = ("comfortable", "compact")
 _VARIANTS = ("plain", "surface")
-_RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _LIST_OWNED = frozenset(
     {
         "aria-label",
@@ -128,9 +133,8 @@ def _attrs(component: str, value: Mapping[str, object] | None, owned: frozenset[
     # A Vue directive could rebind an owned attribute, change the list's
     # structure, or attach a listener, so none may arrive through Python data.
     reject_vue_directive_attrs(copied, component)
-    for key in copied:
-        if key.casefold().startswith(_RUNTIME_PREFIXES):
-            raise ValueError(f"{component} attrs cannot contain Citry runtime attribute {key!r}.")
+    for key, attr_value in copied.items():
+        reject_citry_ui_reserved_attr(key, attr_value, where=f"{component} attrs")
     return copied
 
 
