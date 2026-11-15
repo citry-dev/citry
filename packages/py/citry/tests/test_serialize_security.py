@@ -1916,6 +1916,36 @@ class TestJavascriptDeliveryPolicy:
         with pytest.raises(ValueError, match="native inline event attribute"):
             Card().render().serialize(deps_strategy="ignore")
 
+    @pytest.mark.parametrize(
+        "dependency",
+        [
+            Style(url=Markup("java&#115;cript:alert(1)")),
+            Style(url=Markup("javascript&colon;alert(1)")),
+            Script(
+                content='{"ready":true}',
+                attrs={"type": "application/json", "src": Markup("javascript&#x3a;alert(1)")},
+                wrap=False,
+            ),
+        ],
+    )
+    def test_omit_reads_markup_attributes_as_the_page_gets_them(self, dependency):
+        # Citry writes a Markup value's character references decoded, so the
+        # page would get a javascript: URL although the Python text has none.
+        # The dependency check must see it and drop the dependency, as it does
+        # for the same URL written as a plain string.
+        c = Citry(security_javascript="omit")
+
+        class Card(Component):
+            citry = c
+            template = "<p>Card</p>"
+
+            class Dependencies:
+                css = [dependency] if isinstance(dependency, Style) else []
+                js = [dependency] if isinstance(dependency, Script) else []
+
+        html = Card().render().serialize(deps_strategy="simple")
+        assert "javascript:" not in html
+
     def test_omit_sanitizes_active_attributes_from_inert_data_script(self):
         script = Script(
             content='{"ready":true}',

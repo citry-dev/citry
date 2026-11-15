@@ -10,7 +10,7 @@ from citry import LibraryComponent, SlotInput
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._shared_component_assets import build_shared_component_assets
-from citry_ui.components._url import check_link_url
+from citry_ui.components._url import attribute_text, check_link_url
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -69,7 +69,9 @@ def _check_formaction(attrs: Mapping[str, object] | None) -> None:
     # through _build_button_snapshot too.
     for key, value in (attrs or {}).items():
         if key.lower() == "formaction" and value is not None and not isinstance(value, bool):
-            check_link_url("CButton attrs 'formaction'", str(value))
+            # Read the value as Citry writes it: str() would drop a Markup
+            # value's HTML, and Citry decodes that HTML in the attribute.
+            check_link_url("CButton attrs 'formaction'", attribute_text(value))
 
 
 def _pop_case_insensitive(attrs: dict[str, object], name: str) -> object | None:

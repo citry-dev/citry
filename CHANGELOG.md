@@ -1,5 +1,17 @@
 # Release notes
 
+## Unreleased
+
+### Fixes
+
+- With `security_javascript="omit"`, Citry now removes a `javascript:`
+  URL written as `Markup` with a character reference from a `Script` or
+  `Style` dependency, such as `Style(url=Markup("java&#115;cript:x"))`,
+  as it does for the same URL written as a plain string. Citry decodes
+  the reference when it writes the attribute, but the dependency check
+  read the text before decoding, so Citry reported the URL and left it
+  on the page.
+
 ## v0.9.0
 
 Citry 0.9.0 states the order in which a page's scripts and

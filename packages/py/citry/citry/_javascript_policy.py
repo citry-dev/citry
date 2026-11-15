@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 
@@ -10,6 +11,7 @@ from citry._caller_warnings import warn_at_caller
 from citry._csp_validation import _ASCII_LOWER
 from citry._serialization_security import _is_executable
 from citry.ext.dependencies.types import Dependency, Script, Style
+from citry.util.html import escape_attribute_value
 from citry_core.html_transform import _classify_dependency_attribute, _is_javascript_url
 
 if TYPE_CHECKING:
@@ -498,6 +500,14 @@ def _is_reserved_manifest(script: Script) -> bool:
     )
 
 
+def _written_attribute_text(value: str) -> str:
+    """Return the attribute value a browser reads once ``format_attrs`` writes ``value``."""
+    # A plain string is written as typed, but a Markup value is written with
+    # its character references decoded. Running the same writer and undoing
+    # only its escaping reads both the way the page gets them.
+    return html.unescape(escape_attribute_value(value))
+
+
 def _sanitize_structured_attributes(
     dependency: Script | Style,
 ) -> tuple[Script | Style | None, tuple[tuple[str, str], ...]]:
@@ -509,9 +519,10 @@ def _sanitize_structured_attributes(
         if not isinstance(authored_name, str):
             safe_attrs[authored_name] = value  # type: ignore[index]
             continue
-        # A structured value is a Python string, not HTML, so it is read
-        # without decoding character references.
-        flags = _classify_dependency_attribute(tag, authored_name, value if isinstance(value, str) else None)
+        # Read the value as the page gets it, so Markup("java&#115;cript:x")
+        # is seen as the javascript: URL the browser reads.
+        text = _written_attribute_text(value) if isinstance(value, str) else None
+        flags = _classify_dependency_attribute(tag, authored_name, text)
         detail: str | None = None
         if flags & _ACTIVATION_ATTRIBUTE:
             detail = "a browser activation attribute"
@@ -523,7 +534,7 @@ def _sanitize_structured_attributes(
             safe_attrs[authored_name] = value
         else:
             findings.append((authored_name, detail))
-    if dependency.url is not None and _is_javascript_url(dependency.url):
+    if dependency.url is not None and _is_javascript_url(_written_attribute_text(dependency.url)):
         findings.append(("src" if isinstance(dependency, Script) else "href", "a javascript: URL"))
         return None, tuple(findings)
     if not findings:

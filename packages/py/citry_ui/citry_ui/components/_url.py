@@ -6,7 +6,9 @@ that comes from the app's records or from a request. Escaping keeps that value
 from breaking out of its attribute, but the browser still acts on the scheme:
 a ``javascript:`` link runs script when clicked. So every such kwarg goes
 through one function here, which accepts a relative URL or an allowed scheme
-and raises ``ValueError`` for anything else.
+and raises ``ValueError`` for anything else. The check reads the URL as the
+browser will: for a ``Markup`` value, that is the text after Citry decodes
+its character references, so ``Markup("java&#115;cript:x")`` is refused.
 
 The CAvatar and CImage browser code repeats the image rule for client props;
 ``tests/test_url_schemes.py`` runs both against the same cases.
@@ -14,7 +16,10 @@ The CAvatar and CImage browser code repeats the image rule for client props;
 
 from __future__ import annotations
 
+import html
 import string
+
+from citry.util.html import escape_attribute_value
 
 # The WHATWG URL parser strips these from both ends before it reads the scheme.
 _C0_CONTROL_OR_SPACE = "".join(chr(code) for code in range(0x21))
@@ -36,6 +41,21 @@ IMAGE_SCHEMES = ("http", "https", "blob", "data")
 
 _LINK_RULE = "a relative URL or an http:, https:, mailto:, sms:, or tel: URL"
 _IMAGE_RULE = "a relative URL or an http:, https:, blob:, or data:image/ URL"
+
+
+def attribute_text(value: object) -> str:
+    """
+    Return the attribute value a browser reads once Citry writes ``value`` into an attribute.
+
+    A ``Markup`` value (any object with ``__html__``) holds HTML, so Citry
+    decodes its character references before it writes the attribute; any
+    other value is written as its plain text.
+    """
+    # Run Citry's own attribute writer and undo only its escaping, so this
+    # check cannot drift from what the page gets. The writer escapes every
+    # "&" it emits, so unescaping its output gives back exactly the text
+    # the browser reads from the attribute.
+    return html.unescape(escape_attribute_value(value))
 
 
 def _read_scheme(url: str) -> tuple[str | None, str]:
@@ -65,14 +85,16 @@ def check_link_url(label: str, url: str) -> str:
 
     Args:
         label: The component and input name for the error, such as ``"CButton href"``.
-        url: The plain string the component will write into the attribute.
+        url: The string the component will write into the attribute. A
+            ``Markup`` value is read after decoding its character references,
+            as Citry writes it.
 
     Raises:
         ValueError: If the URL has a scheme other than http, https, mailto,
             sms, or tel.
 
     """
-    scheme, _ = _read_scheme(url)
+    scheme, _ = _read_scheme(attribute_text(url))
     if scheme is not None and scheme not in LINK_SCHEMES:
         msg = f"{label} must be {_LINK_RULE}."
         raise ValueError(msg)
@@ -80,8 +102,8 @@ def check_link_url(label: str, url: str) -> str:
 
 
 def is_image_url_allowed(url: str) -> bool:
-    """Return whether ``url`` is a relative URL or an allowed image source."""
-    scheme, rest = _read_scheme(url)
+    """Return whether ``url`` is a relative URL or an allowed image source, read as Citry writes it."""
+    scheme, rest = _read_scheme(attribute_text(url))
     if scheme is None:
         return True
     if scheme == "data":
@@ -97,7 +119,9 @@ def check_image_url(label: str, url: str) -> str:
 
     Args:
         label: The component and input name for the error, such as ``"CAvatar src"``.
-        url: The plain string the component will write into ``src`` or a ``srcset`` candidate.
+        url: The string the component will write into ``src`` or a ``srcset``
+            candidate. A ``Markup`` value is read after decoding its character
+            references, as Citry writes it.
 
     Raises:
         ValueError: If the URL has a scheme other than http, https, or blob, or is

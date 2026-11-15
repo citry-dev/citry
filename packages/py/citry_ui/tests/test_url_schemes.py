@@ -6,13 +6,15 @@ import json
 import re
 import shutil
 import subprocess
+from html import unescape
 
 import pytest
+from markupsafe import Markup
 
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CAvatar, CBreadcrumbItem, CImage
-from citry_ui.components._url import _read_scheme, check_link_url, is_image_url_allowed
+from citry_ui.components._url import _read_scheme, attribute_text, check_link_url, is_image_url_allowed
 from citry_ui.components.cimage.cimage import _srcset_urls
 
 # Each case spells a refused scheme the way a browser would still read it:
@@ -136,6 +138,87 @@ def test_link_inputs_accept_ordinary_urls(name: str, url: str) -> None:
     html = _render_link(name, url)
     # The URL reaches the attribute unchanged; Pagination fills in page 1 for the first link.
     assert (f'="{url}1"' if name == "CPagination href" else f'="{url}"') in html
+
+
+# Entity-encoded spellings of a refused scheme. Citry writes a Markup value's
+# HTML decoded, so an input that passes Markup through reaches the browser
+# with the refused scheme.
+_ENCODED_LINKS = [
+    Markup("javascript&#58;alert(1)"),
+    Markup("javascript&colon;alert(1)"),
+    Markup("javascript&#x3a;alert(1)"),
+    Markup("java&#115;cript:alert(1)"),
+    Markup("&#x4A;ava&#X53;cript&#X3A;alert(1)"),
+]
+_ENCODED_IMAGES = [
+    Markup("data&#58;text/html,x"),
+    Markup("data&colon;text/html,x"),
+    Markup("data&#x3a;text/html,x"),
+    Markup("d&#97;ta:text/html,x"),
+    Markup("&#x44;ATA&#X3A;text/html,x"),
+]
+# These inputs pass a Markup value to the page as HTML. The others copy it to
+# a plain string first, so the page shows its text as typed.
+_MARKUP_LINK_INPUTS = [
+    "CButton href",
+    "CForm action",
+    "CButton attrs formaction",
+    "CSplitButton primary_attrs formaction",
+]
+_URL_ATTRIBUTE = re.compile(r'\s(?:href|action|formaction|src|srcset)="([^"]*)"')
+
+
+def _written_schemes(page: str) -> set[str | None]:
+    # Read each URL attribute the way the browser does: decode it, then take its scheme.
+    return {_read_scheme(unescape(value))[0] for value in _URL_ATTRIBUTE.findall(page)}
+
+
+@pytest.mark.parametrize("url", _ENCODED_LINKS)
+@pytest.mark.parametrize("name", _MARKUP_LINK_INPUTS)
+def test_link_inputs_read_markup_urls_as_the_browser_does(name: str, url: Markup) -> None:
+    with pytest.raises(ValueError, match=_LINK_ERROR):
+        _render_link(name, url)
+
+
+@pytest.mark.parametrize("url", _ENCODED_LINKS)
+@pytest.mark.parametrize("name", [name for name in _LINK_INPUTS if name not in _MARKUP_LINK_INPUTS])
+def test_link_inputs_that_copy_markup_to_text_write_it_as_typed(name: str, url: Markup) -> None:
+    # The page shows the Markup's text as typed, which the browser reads as a
+    # relative URL. If one of these inputs starts passing Markup through as
+    # HTML, its check refuses the URL and it belongs in _MARKUP_LINK_INPUTS.
+    assert _written_schemes(_render_link(name, url)) <= {None}
+
+
+@pytest.mark.parametrize("name", _LINK_INPUTS)
+def test_link_inputs_accept_ordinary_markup_urls(name: str) -> None:
+    page = _render_link(name, Markup("/search?a=1&amp;b=2"))
+    assert "/search?a=1&amp;" in page
+
+
+@pytest.mark.parametrize("url", _ENCODED_IMAGES)
+@pytest.mark.parametrize("name", _IMAGE_TEMPLATES)
+def test_image_inputs_write_markup_urls_as_typed(name: str, url: Markup) -> None:
+    # Every image input copies its URL to a plain string first.
+    assert _written_schemes(_render(_IMAGE_TEMPLATES[name], {"url": url})) <= {None}
+
+
+@pytest.mark.parametrize("url", _ENCODED_IMAGES)
+def test_image_check_reads_markup_urls_as_the_browser_does(url: Markup) -> None:
+    assert not is_image_url_allowed(url)
+    assert is_image_url_allowed(str(url))
+
+
+@pytest.mark.parametrize("name", _IMAGE_TEMPLATES)
+def test_image_inputs_accept_ordinary_markup_urls(name: str) -> None:
+    page = _render(_IMAGE_TEMPLATES[name], {"url": Markup("/a.png?w=1&amp;h=2")})
+    assert "/a.png?w=1&amp;" in page
+
+
+def test_url_checks_read_the_text_citry_writes() -> None:
+    # A plain string is written as typed; Markup is written decoded.
+    assert attribute_text("a&amp;b") == "a&amp;b"
+    assert attribute_text(Markup("a&amp;b&#58;&quot;")) == 'a&b:"'
+    assert attribute_text(Markup("/a?copy&copy=1")) == "/a?copy&copy=1"
 
 
 @pytest.mark.parametrize("url", _REFUSED_IMAGES)
