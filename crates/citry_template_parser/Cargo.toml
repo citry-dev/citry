@@ -3,6 +3,7 @@ name = "citry_template_parser"
 description = "Parse Citry's Vue-like templates into an AST and compile them to various languages"
 version = "1.0.0"
 edition = "2021"
+publish = false
 rust-version = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }

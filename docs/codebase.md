@@ -3195,7 +3195,7 @@ dig @<authoritative-nameserver> TXT _visual-studio-marketplace-citry-dev.citry.d
 Do not record the challenge value in the repository; use the current value
 shown in the publisher portal.
 
-- Rust crates are not published to crates.io; they are an internal implementation detail surfaced through the Python packages.
+- Rust crates are not published to crates.io; they are an internal implementation detail surfaced through the Python packages. Each crate's `Cargo.toml` sets `publish = false`, so `cargo publish` refuses to upload it; add the same line to any new crate.
 - The root `pyproject.toml` is never published (no build-system; `Private :: Do Not Upload`).
 
 ## Future Architecture
