@@ -1176,26 +1176,27 @@ only text, so their values bind as described in
 `componentClassId` and `handlerName`; an explicit protocol body must agree
 with it.
 
-The built-in HTTP transport gives these request headers a meaning:
+Citry's HTTP routes read these request headers:
 
 | Header | Meaning |
 |---|---|
 | `X-Citry-Events` | Any value; Citry's browser code sends `1`. Required on a call that is not `GET` and has a JSON body. A plain HTML form cannot set it, which is part of the CSRF defense. |
 | `X-Citry-Vue-App` | The ID of the Vue app on the page that makes the call. |
 | `X-Citry-Vue-Occurrence` | The ID the browser keeps for the calling component across renders. It is not the component's `renderId`. |
-| `X-Citry-Vue-Revision` | The revision of the component that the browser shows, in ASCII digits, at most 2^53 - 1. |
+| `X-Citry-Vue-Revision` | The revision of the Vue app that the browser has applied, in ASCII digits, at most 2^53 - 1. |
 | CSRF token header | `X-CSRFToken` unless the page configures another name. Read by a host framework that checks a token, such as Django, or by a component's own `_csrf` check. |
 
 A `vue-prepared/1` render needs all three `X-Citry-Vue-*` headers; without
 them the call fails with `handler_error`. A client that asks only for
 `html-fragment/1` renders does not need them. A call that is not `GET`
 must also come from the page's own origin: the server rejects one whose
-`Origin` header names another host, or whose `Sec-Fetch-Site` header is
+`Origin` header names another host or port, or whose `Sec-Fetch-Site` header is
 not `same-origin` or `none`, with `csrf_failed`.
 
 Citry's browser code sends `X-Citry-Events` and the three `X-Citry-Vue-*`
-headers on every call, and the CSRF token header on a call that is not
-`GET` when the page has a token. Browser code that sends calls some other
+headers on every call. It sends the CSRF token header on a call that is
+not `GET` when the page has a token and the event URL is on the page's
+origin. Browser code that sends calls some other
 way, such as a transport registered with `Citry.events.registerTransport`,
 must send the headers it is given. Server code that runs calls itself,
 rather than through the HTTP routes, passes them to the dispatcher in
@@ -1231,10 +1232,12 @@ client written against this document keeps working on every 1.x release.
 
 The `prepared` object of a `vue-prepared/1` render is the one part this
 document does not define. Its contents belong to the browser runtime of the
-release that wrote it, and Citry's browser code refuses one written for a
-different runtime. So during an upgrade, a page rendered by the old release
-can fail to apply a `vue-prepared/1` render from a server already running
-the new release, until the visitor reloads the page. An `html-fragment/1`
+release that wrote it, and Citry's browser code refuses one whose helper
+contract differs from its own. So during an upgrade, a page rendered by the
+old release can fail to apply a `vue-prepared/1` render from a server
+already running the new release. The call fails with an error, no reload
+prompt appears, and the page keeps failing such calls until the visitor
+reloads it. An `html-fragment/1`
 render has no such limit.
 
 A v1 reader rejects unknown fields and values (see
@@ -1245,9 +1248,9 @@ renderer, a new error code, or any other change needs a new protocol,
 examples.
 
 A 1.x release may add `citry-events/2` beside `citry-events/1`, and every
-1.x release still accepts `citry-events/1` calls. A release that stops
-accepting them comes at least one minor release after the first release
-that accepts `citry-events/2`. A rolling deploy needs this overlap: pages
+1.x release still accepts `citry-events/1` calls. The first release that
+stops accepting them is 2.0.0 or later, and comes at least one minor
+release after the first release that accepts `citry-events/2`. A rolling deploy needs this overlap: pages
 rendered by the old release still send `citry-events/1` calls, and they may
 reach a server that already runs the new release.
 

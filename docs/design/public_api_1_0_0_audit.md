@@ -639,8 +639,8 @@ Open items found while making this inventory, left for the maintainer:
   upgrade").
 - **Security fixes.** The spec's freeze allows a 1.x release to change a
   check only to close a security hole. The maintainer should confirm
-  that exception, and the Versioning page should state it for every
-  covered part.
+  that exception. The public "Versioning and support" page (#624 item
+  14) should then state it for every covered part.
 
 ## 5. Covered parts this audit does not list
 

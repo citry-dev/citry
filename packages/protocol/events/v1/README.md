@@ -8,7 +8,8 @@ dispatch a DOM event, or resolve the caller with data.
 This directory is the language-neutral contract for protocol major 1. It
 defines the JSON sent in both directions and the inert manifest that teaches
 the browser which handlers and State belong to each rendered component.
-No Citry 1.x release changes the `citry-events/1` format. The
+No Citry 1.x release changes the `citry-events/1` format, except to
+close a security hole. The
 [Versioning](spec.md#versioning) section of the spec lists what that
 covers and how a later `citry-events/2` would arrive.
 

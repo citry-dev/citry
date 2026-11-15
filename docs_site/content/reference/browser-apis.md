@@ -557,25 +557,28 @@ Send `request.headers` to the server with the envelope. When a handler
 returns a render, the server reads the `X-Citry-Vue-App`,
 `X-Citry-Vue-Occurrence`, and `X-Citry-Vue-Revision` headers to find the
 component the browser shows. Without them the call fails with
-`handler_error`, and the server log names the missing headers. So the
-simplest transport forwards the call to Citry's own event route.
+`handler_error`, and the server log says the app, occurrence, or
+revision header is missing or invalid. The simplest transport sends the
+envelope and `request.headers` to `request.url`, Citry's own event
+route.
 
 Server code can also run a call itself with
 [`EventsDispatcher`][citry.ext.events.EventsDispatcher], passing the
 headers in [`TransportContext`][citry.ext.events.TransportContext]. But
-`EventsDispatcher()` answers a render only as plain HTML, which Citry's
-browser code does not apply, so a handler that returns a render fails
-when one of Citry's pages calls it this way.
+`EventsDispatcher()` can build a render only as HTML, while Citry's
+browser code accepts only Vue renders, so a handler that returns a render
+answers `handler_error` when one of Citry's pages calls it this way.
 
 From Citry 1.0.0 on, a custom transport keeps working on every 1.x
 release. These stay the same:
 
 - in the browser: the `send(envelope, request)` call, the `url`,
   `method`, `headers` and `signal` fields of `request`, and the
-  `X-Citry-Vue-*` headers;
+  `X-Citry-Events` and `X-Citry-Vue-*` headers;
 - on the server: `EventsDispatcher` and `TransportContext`;
-- the envelopes, which follow the
-  [`citry-events/1` protocol](https://github.com/citry-dev/citry/blob/main/packages/protocol/events/v1/spec.md#versioning){: target="_blank" rel="noopener"}.
+- the envelopes of the
+  [`citry-events/1` protocol](https://github.com/citry-dev/citry/blob/main/packages/protocol/events/v1/spec.md#versioning){: target="_blank" rel="noopener"},
+  which every 1.x server accepts.
 
 ### `citry:events:*` events { #events-fired-around-each-call }
 

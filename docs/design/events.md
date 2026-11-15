@@ -11,7 +11,8 @@ Migration qualification is recorded in [`vue.md`](vue.md).
 **Status (2026-11-15): Events v1 is frozen.** `citry-events/1` stays fixed
 for all of Citry 1.x, together with the custom transport API
 (`EventsDispatcher`, `TransportContext` and `Citry.events.registerTransport`).
-Any change to the wire format, an addition included, needs `citry-events/2`;
+Any change to the wire format, even an addition, needs `citry-events/2`
+(a security fix is the one exception);
 the spec's
 [Versioning](../../packages/protocol/events/v1/spec.md#versioning) section
 says how servers keep accepting `citry-events/1` calls during a rolling
@@ -2517,7 +2518,8 @@ the shipped pattern with no core change; see section 14.)
 The major lives in the protocol string. Every fixed v1 structure is strict:
 missing and extra fields, unknown action kinds, swaps, capabilities, and error
 codes are errors. Only documented application-data bags remain open. Because
-of that, v1 is frozen and any change to the wire format starts v2. The
+a reader rejects anything unknown, even an addition breaks it, so any change
+to the frozen v1 wire format starts v2. The
 [Versioning](../../packages/protocol/events/v1/spec.md#versioning) section of
 the spec owns the exact rule.
 

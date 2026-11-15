@@ -157,7 +157,7 @@ class TransportContext:
     passed to [`EventsDispatcher.dispatch`][citry.ext.events.EventsDispatcher.dispatch].
 
     Citry 1.x keeps this class, and the ``citry-events/1`` format it goes
-    with, unchanged. A transport written against them keeps working on
+    with, unchanged, except to close a security hole. A transport written against them keeps working on
     every 1.x release.
 
     Attributes:
@@ -474,7 +474,7 @@ class EventsDispatcher:
 
     Citry 1.x keeps ``EventsDispatcher()``, ``dispatch``,
     ``dispatch_async`` and the ``citry-events/1`` call and result format
-    unchanged. Any change to the format needs ``citry-events/2``, and
+    unchanged, except to close a security hole. Any change to the format needs ``citry-events/2``, and
     every 1.x release still accepts ``citry-events/1`` calls.
     """
 
