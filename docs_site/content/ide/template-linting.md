@@ -270,10 +270,12 @@ Citry checks the list when the class is defined:
 
 ## Change rule severity { #change-how-strict-a-rule-is }
 
-Each rule has a `rule_*` setting on `LintSettings` that accepts `"ignore"`,
-`"warning"`, or `"error"`. The [strict CSP rule](#find-csp-problems) is
-the exception: it follows `security_csp`. Warnings are shown but do not
-fail `citry check`; errors do, and `"ignore"` turns the rule off. These are the defaults:
+Most rules have a `rule_*` setting on `LintSettings` that accepts
+`"ignore"`, `"warning"`, or `"error"`. Warnings are shown but do not
+fail `citry check`; errors do, and `"ignore"` turns the rule off. The
+[strict CSP rule](#find-csp-problems) follows `security_csp` instead.
+Some rules have no setting; the [Diagnostics](/ide/diagnostics/) page
+marks each rule you can change. These are the defaults:
 
 ```python
 from citry import Citry, LintSettings

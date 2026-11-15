@@ -151,6 +151,7 @@ areas:
         collapsible: true
         section_style: true
         items:
+          - { title: Versioning and support, path: /about/versioning/, needs_review: true }
           - { title: Compatibility, path: /about/compatibility/ }
           - { title: Benchmarks, path: /about/benchmarks/ }
           - { title: Security, path: /security/, needs_review: true }
