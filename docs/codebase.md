@@ -1937,6 +1937,342 @@ Tools exclude standard build artifacts and caches:
   the release-order rule below keeps that pair coherent.
 - Rust crates declare their versions in their `Cargo.toml` files.
 
+### Breaking changes
+
+This section tells contributors how to keep Citry's compatibility
+promise. The promise starts with `citry` 1.0.0: code that worked on one
+1.x release keeps working on the next, a breaking change needs a new
+major version, and a feature is deprecated before it is removed (see
+[Deprecating a feature](#deprecating-a-feature)). The Versioning and
+support page of the docs site tells users what Citry promises. Before
+1.0.0, `citry` may change its API in any release, and
+[Contract versions](#contract-versions) says when the version number of
+a data format may change.
+
+The rules cover `citry`, the package that applications depend on. It
+pins one exact `citry-core` version and installs it, so the rules do not
+cover `citry-core`'s own API. A `citry-core` change that alters what a
+covered `citry` name, the template syntax or a diagnostic does is still
+a breaking change to `citry`. Other published packages at 1.0.0 or later,
+such as `citry-lsp`, apply the rules to the names and settings their own
+docs describe. `citry-ui` is below 1.0.0 and may change its API in a
+minor release.
+
+A change is breaking when code or data that worked on one 1.x release
+can fail or behave differently on the next, and what it relied on is
+covered. A name, setting or format is covered when the docs describe it
+and do not mark it experimental, or when a list below names it. If the
+two disagree, the not-covered list wins.
+
+Breaking changes:
+
+- removing or renaming a covered name;
+- adding a required argument;
+- rejecting input that was accepted before;
+- raising a different exception type, because code that catches the old
+  type stops catching it;
+- changing a default to a stricter value;
+- changing what a setting means.
+
+Not breaking:
+
+- adding a name, an optional argument, or a setting whose default keeps
+  the old behavior;
+- making a check less strict;
+- fixing behavior that contradicted the docs.
+
+These are covered. Change them incompatibly only in a new major
+version:
+
+- The names in `citry.__all__`, and in the `__all__` of each
+  `citry.ext.<name>` module or package, each `citry.contrib.<name>`
+  module and `citry.reload`, and the names that one of those lists
+  exports from its own `__all__`, such as `citry.ext.events.actions`:
+  their signatures, documented behavior and exception types. Node class
+  constructors are the exception.
+- The template syntax and the reserved tag and attribute names, the
+  component class attributes and nested classes (`Kwargs`, `Slots`,
+  `State` and the rest), the settings and their defaults, the CLI
+  commands and options, the JSON that `citry check --format json`
+  prints, and the documented extension hooks.
+- The diagnostic rule names, which are the names `citry check` gives its
+  findings, such as `citry.template.unknown-component`.
+- The names of the node classes (the classes that compiled templates
+  create, such as `ComponentNode` and `IfNode`) and the attributes that
+  an extension hook reads from them through `ctx.nodes`.
+- The Events wire format `citry-events/1`, which carries the server
+  events that run Python handlers from the browser: its requests,
+  replies, manifests and records. It is frozen for all of 1.x. Any
+  change to it, even an addition, needs the new format
+  `citry-events/2`, except that a security fix may refuse input. Every
+  1.x release still accepts valid `citry-events/1` requests (see
+  [Contract versions](#contract-versions)).
+
+These are not covered, so any minor or patch release may change them:
+
+- Names that start with `_`, except the ones the docs tell users to set,
+  such as `_guard` on an `Events` class and `_public` on a `State`
+  class.
+- `citry_core._rust`, and submodules that no `__all__` above exports.
+  Import names from `citry`, not from its submodules:
+  `from citry import Slot` is covered, and
+  `from citry.slots import Slot` is not. The same holds for
+  `citry.ext.events.handlers`.
+- The code the template compiler generates, the text of error messages,
+  and the exact whitespace of rendered HTML.
+- The messages that Citry's server and its own browser code send each
+  other, other than Events. [Contract versions](#contract-versions) says
+  what limits a change to them.
+- Features marked experimental in their docs and docstrings, such as
+  `ComponentGraph`.
+
+Three kinds of change may come in a minor release even though they can
+break a user's setup. List each one in the changelog:
+
+- A new `citry check` rule. A new rule can make `citry check` fail in a
+  user's CI, so the changelog names each new rule and the setting that
+  turns it off. Give every rule that a user may reasonably disagree with
+  a `rule_*` setting. A minor release never adds a rule that turns a
+  template that renders today into a render error.
+- A new supported Python version, and dropping a Python version after
+  upstream support for it ends.
+- A minor update of the Vue version that Citry bundles. Moving to a new
+  Vue major needs a new `citry` major.
+
+A minor or patch release may refuse input that earlier releases
+accepted when that is needed to fix a security problem, and its
+changelog says so. When the hole is in a released version, do not open a
+public pull request, and keep the changelog line in the private fix
+until the advisory is published. Follow Mechanism 7 in
+[`CLAUDE.md`](../CLAUDE.md) and [`SECURITY.md`](../SECURITY.md).
+
+Any other change that has to break covered behavior in a minor or patch
+release is the maintainer's decision. Ask the maintainer before you open
+a pull request, and give the change an "Upgrading from" section in the
+changelog.
+
+### Deprecating a feature
+
+From `citry` 1.0.0, Citry deprecates a covered feature before it
+removes it. A deprecated feature keeps working and keeps warning until a
+major release removes it. A minor or patch release never removes it, and
+a major release may remove it however soon it comes. A feature
+deprecated in 1.4.0 still works in 1.9.0, and 2.0.0 can remove it.
+
+1. Leave the old name, argument or setting working, with its old
+   behavior.
+2. In the code that handles the old name, argument or setting, on every
+   path that reaches it, call
+   `warn_at_caller(message, CitryDeprecationWarning)` from
+   [`citry/_caller_warnings.py`](../packages/py/citry/citry/_caller_warnings.py).
+   `citry.CitryDeprecationWarning` is public and a subclass of
+   `DeprecationWarning`, so users can turn it into an error in their
+   tests. The message names the old way and its replacement, and says
+   the old way can be removed in the next major release.
+3. Move everything else in Citry to the replacement, including its docs
+   examples and its other tests.
+4. Mark the feature in its docs page and its docstring: start a line
+   with `Deprecated in version 1.4.0.` (the release that first warns),
+   and name the replacement.
+5. Add a `### Deprecated` section to the package's changelog entry for
+   the release, next to `### Added` and `### Changed`. Name what is
+   deprecated and what replaces it. Most users learn of a deprecation
+   from this entry, because Python shows a `DeprecationWarning` only
+   when it points at the `__main__` module, and a web server runs the
+   user's code in imported modules. The entry is also the list of work
+   to do before the next major upgrade.
+6. When the major release removes the feature, say so in an "Upgrading
+   from" section of that release's changelog entry.
+
+For example, deprecating an argument:
+
+```python
+from citry._caller_warnings import (
+    CitryDeprecationWarning,
+    warn_at_caller,
+)
+
+
+def render_page(page, *, old_title=None, title=None):
+    if old_title is not None:
+        warn_at_caller(
+            "`old_title` is deprecated, use `title`. It can "
+            "be removed in the next major release.",
+            CitryDeprecationWarning,
+        )
+        # The old argument keeps its old meaning until it is removed.
+        title = old_title if title is None else title
+    ...
+```
+
+`warn_at_caller` points the warning at the first call outside the citry
+package, so it names the user's own line on most paths (`str()`,
+`serialize()`, a framework adapter). A fixed `stacklevel` would point
+into Citry on some of those paths. Two cases cannot name the user's
+line: a warning raised while Citry builds an Events response names the
+web framework's line, and one raised under the `citry` command, when no
+user code is on the stack, names a line inside Citry.
+
+A test for the deprecated path checks three things: the old way still
+returns what it returned before, it warns with
+`CitryDeprecationWarning` (inside `pytest.warns`, so the warning does
+not fail a suite that turns warnings into errors), and the warning
+points at the test file.
+[`test_caller_warnings.py`](../packages/py/citry/tests/test_caller_warnings.py)
+shows how to read the file a warning points at. A path that builds an
+Events response cannot point at the test file, so its test checks the
+warning class only.
+
+Steps 1 and 2 fit a Python name, argument or setting. For template
+syntax, a CLI option or a changed default, `warn_at_caller` may not fit.
+Propose the warning in the pull request (for template syntax, a
+`citry check` finding may fit better) and ask the maintainer.
+
+### Contract versions
+
+When you change data that Citry stores or sends, this section says
+whether you may change its version number. A contract version is the
+number Citry writes into that data so that the code reading it can tell
+which format it got. Examples:
+
+- the `citry-events/1` string in every Events request;
+- `_ARTIFACT_VERSION` and `_CITRY_COMPATIBILITY_VERSION` in
+  [`citry/ext/cache/artifact.py`](../packages/py/citry/citry/ext/cache/artifact.py),
+  for the render cache, which stores rendered output;
+- `_PROTOCOL_VERSION` in
+  [`citry/ext/events/tokens.py`](../packages/py/citry/citry/ext/events/tokens.py),
+  for State tokens;
+- `TEMPLATE_ANALYSIS_SCHEMA_VERSION` in
+  [`citry/analysis.py`](../packages/py/citry/citry/analysis.py), for the
+  data that the editor reads;
+- the `SCHEMA` string of the Vue compiler crate
+  ([`citry_vue_compiler`](../crates/citry_vue_compiler/src/lib.rs)).
+
+**Before 1.0.0.** A package below 1.0.0 keeps each contract version at
+1, as the contract-version rule in [`CLAUDE.md`](../CLAUDE.md) says, and
+fixes a format in place. That is `citry` until it releases 1.0.0, and
+`citry-ui` after that.
+
+**From `citry` 1.0.0**, the rest of this section applies.
+
+A deploy that replaces servers one at a time leaves old and new `citry`
+versions running together for a while, and a deploy can skip releases
+(1.0.0 to 1.7.0). Each version reads data that the other wrote: the
+State tokens (the tokens that carry a component's State, or point to it
+on the server), Events requests, and HTML fragments that the server
+sends after the page has loaded. So a change to a Citry format should
+leave an open page working, or at worst make the browser ask the visitor
+to reload. The one case that still fails is a page from a newer release
+that calls a server still running an older release (see the
+`citry-events/1` bullet below). The rules cover a deploy between any two
+1.x releases. A deploy from 0.x to 1.0.0 is a fresh start, so 1.0.0 does
+not need to read 0.x data.
+
+A **public format** is one that the docs or a spec describe, or that
+code other than Citry's own server and browser code reads, such as a
+tool or an editor. Examples are `citry-events/1`, the JSON of
+`citry check --format json`, and the catalog and template analysis data
+that `citry-lsp` reads, even though the Python API that produces the
+analysis data is experimental.
+
+- `citry-events/1` is frozen for all of 1.x and is never changed in
+  place, apart from the security exception below. Its readers reject
+  unknown fields and unknown values (such as an action type), so an
+  addition is a change too. A new field, a new value, or any other
+  change needs the new format `citry-events/2`, which a 1.x release may
+  add beside `citry-events/1`. Every 1.x release still accepts valid
+  `citry-events/1` requests. The first release that stops accepting
+  them is 2.0.0 or later, and comes at least one minor release after
+  the first release that accepts `citry-events/2`. A page that a newer
+  release rendered can reach a server still running an older release,
+  which answers `protocol_mismatch`, and the call fails with that error.
+  The Events spec,
+  [`packages/protocol/events/v1/spec.md`](../packages/protocol/events/v1/spec.md),
+  says the same in its "Versioning" section; keep the two in step.
+- Change another public format incompatibly only in a major release,
+  which also raises its number. Adding to it is a change too, and it is
+  safe only when every reader accepts it: find every reader in `citry`,
+  `citry-lsp`, the browser code and the Rust crates. One that rejects
+  what it does not know turns the addition into a break. You cannot find
+  every reader of a format that users' own tools read, such as the JSON
+  of `citry check`, so add a field to it only when its docs tell readers
+  to ignore fields they do not know.
+- One exception applies to every public format whose input Citry reads,
+  `citry-events/1` included. A 1.x release may refuse input that earlier
+  releases accepted when that is needed to fix a security problem. The
+  release's changelog says so. The Events spec states the same
+  exception for `citry-events/1`.
+- Follow the spec of a format when it has one (the Events spec requires
+  readers to reject unknown fields). Otherwise write each new reader so
+  that it skips fields it does not know, and uses a default for a field
+  that an older writer did not send. A newer `citry-lsp` reading data
+  from `citry` 1.0.0 is a case that must keep working.
+
+An **internal format** is one that only Citry's own code reads back:
+State tokens, render-cache entries, the messages between the server and
+Citry's own browser code, and the data that `citry` hands to the
+`citry-core` it pins. When you cannot tell which kind a format is, treat
+it as public and ask the maintainer in the pull request.
+
+- A minor or patch release may move an internal format to a new
+  version, but only when the releases already out treat data in a
+  version they do not know as missing. The render cache then renders
+  again, and a page whose token is rejected as stale is offered a
+  reload. This must be true of the releases already out, because during
+  a deploy an old process reads what a new one wrote, and the code of a
+  release that is out cannot change. So read what the oldest 1.x
+  release does with a version it does not know, and write a test that
+  gives the new code the old version. Staging a change over two
+  releases (one that reads the new version, a later one that writes it)
+  does not help, because a deploy can skip releases.
+- The render cache meets this condition. Citry treats a cache entry
+  with an unknown version, or one written by a different `citry`
+  version, compiler or browser runtime, as not found, and renders again
+  instead of using it. Each entry stores a hash of the installed `citry`
+  version and of the compiler and runtime contracts, so after a release
+  every entry that an older release wrote is not found. Processes of two
+  releases that share a cache replace each other's entries until the
+  deploy ends. The integer versions rarely need to change.
+- A signed State token meets this condition. A signed token starts
+  `cev1.`, and a token that points to State on the server starts
+  `ces1.`. The server answers a token with another version or prefix
+  with `stale_state` (409), and Citry's browser client offers a reload
+  for that code. The visitor accepts the prompt and the page then has a
+  fresh token. Until then the call fails with `stale_state`. So a
+  release may raise the token version.
+- The `prepared` object of a `vue-prepared/1` render (the data that
+  Citry's browser code applies to the page, which refuses one written
+  for a different helper contract) and the Vue fragment messages
+  (`citry-vue-fragment/1`) meet this condition too. When Citry's browser
+  code in a page that an older 1.x release rendered gets a render or a
+  fragment it cannot read, it offers the visitor a reload. Before you
+  change any other message between the server and Citry's browser code,
+  check what the browser code of the oldest 1.x release does with a
+  version it does not know, because an open page keeps running the
+  browser code of the release that built it.
+- The data between `citry` and its pinned `citry-core` never meets
+  another release, because the two install together. Its readers may
+  reject what they do not know: the request types of the Vue compiler
+  use the serde attribute `deny_unknown_fields`, the Rust JSON reader
+  setting that rejects unknown fields. If someone installs a different
+  `citry-core` anyway, the request fails with an error instead of being
+  misread.
+
+For both kinds:
+
+- Never change a released version in place, except as the security
+  exception above allows. A change that old readers cannot read gets
+  the next number, and one change updates the code that writes the
+  data, the code that reads it, and every test, fixture and doc that
+  shows it.
+- Record the new version in the changelog when a visitor or an operator
+  can notice it, such as an open page that asks for a reload or a
+  render cache that renders again. A major release also lists it in its
+  "Upgrading from" section.
+
+Tests of the version-check code itself may use several arbitrary version
+numbers. These rules govern the contract versions Citry ships.
+
 ## Changelog management
 
 ### Package-owned changelogs
