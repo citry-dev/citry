@@ -275,6 +275,13 @@ entries become the component's inputs:
 must be a valid attribute name. `None` applies nothing, and any other value
 that is not a mapping raises `TypeError`.
 
+On an HTML element, a key the browser reads as code or markup (`on*`,
+`innerHTML`, `outerHTML`, `srcdoc`) raises `ValueError`; see
+[Write handlers in the template](/advanced/html-attributes/#write-handlers-in-the-template).
+So does a key that is one of the
+[names Citry reserves](/advanced/html-attributes/#names-citry-reserves),
+such as `c-render-id` or `data-cid-x`.
+
 Keys are used exactly as written. Unlike a `c-` attribute, a key named
 `c-title` stays `c-title`:
 

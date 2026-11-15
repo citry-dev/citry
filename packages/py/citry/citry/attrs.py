@@ -265,6 +265,15 @@ C_ELEMENT_HANDLER_FIX = (
 )
 """The fix for a `<c-element>` with `c-is` or `c-bind`, which refuses a template-written handler too."""
 
+CITRY_MARKER_ATTR_FIX = "Remove the key from the mapping, or rename it to a data-* name of your own."
+"""The fix the error names when a mapping sets one of Citry's marker names: drop or rename the key."""
+
+C_ELEMENT_MARKER_FIX = (
+    "<c-element> cannot tell a name written in the template from one passed in as data, so it refuses both. "
+    "Rename the attribute to a data-* name of your own."
+)
+"""The fix for a `<c-element>` with `c-is` or `c-bind`, which refuses a template-written marker name too."""
+
 
 def reject_script_capable_attr_name(
     name: object, *, tag_name: str, where: str, fix: str = SCRIPT_CAPABLE_ATTR_FIX
@@ -291,6 +300,83 @@ def reject_script_capable_attr_name(
         msg = (
             f"{where} sets {name!r} on <{tag_name}>. An attribute name from data may not start with 'on' or be "
             f"innerHTML, outerHTML, or srcdoc, because the browser reads that value as code or markup. {fix}"
+        )
+        raise ValueError(msg)
+
+
+# Attribute names that Citry writes into the page and reads again later.
+# After rendering, the server replaces each empty `<template c-render-id>`
+# with a child component's HTML; `data-cid` and `data-cid-*` mark component
+# roots and Events instances; `data-ccss-*` scopes CSS variables; the
+# `data-cev-*` and `data-citry-*` names below are read by the Events, i18n,
+# Vue, and stylesheet code in the browser and by the render cache. Citry UI
+# writes names of its own under `data-citry-` through `c-bind`, so only the
+# names core Citry reads are listed, not the whole `data-citry-` prefix.
+_CITRY_MARKER_ATTR_NAMES = frozenset(
+    {
+        "c-render-id",
+        "data-cid",
+        "data-citry",
+        "data-citry-i18n",
+        "data-citry-i18n-binding",
+        "data-citry-key",
+        "data-citry-morph",
+    }
+)
+_CITRY_MARKER_ATTR_PREFIXES = (
+    "data-cid-",
+    "data-ccss-",
+    "data-cev-",
+    "data-citry-css-",
+    "data-citry-omit-handler-",
+    "data-citry-opaque-",
+    "data-citry-runtime-",
+    "data-citry-security-",
+    "data-citry-vue-",
+)
+
+
+def is_citry_marker_attr_name(name: object) -> bool:
+    """Return whether Citry reserves this attribute name for its own elements and placeholders."""
+    if not isinstance(name, str):
+        return False
+    # Browsers and Citry's own code lowercase only ASCII letters when they
+    # compare names, so `C-Render-Id` is the same name and a lookalike with
+    # non-ASCII letters is a different one.
+    folded = str.translate(name, _ASCII_LOWER_TRANSLATION)
+    return folded in _CITRY_MARKER_ATTR_NAMES or folded.startswith(_CITRY_MARKER_ATTR_PREFIXES)
+
+
+def reject_citry_marker_attr_name(
+    name: object, *, tag_name: str, where: str, fix: str = CITRY_MARKER_ATTR_FIX
+) -> None:
+    """
+    Raise `ValueError` when render-time data sets an attribute name Citry reserves for its own elements.
+
+    These are `c-render-id`, `data-cid` and `data-cid-*`, `data-ccss-*`,
+    `data-cev-*`, and the `data-citry-*` names Citry's browser code and
+    render cache read. A name from data, such as a `c-bind` mapping key,
+    could otherwise make the server copy another component's HTML into the
+    page or make Citry's browser code treat the element as one it manages. A name
+    the author writes on a plain element in the template never reaches this
+    check; a `<c-element>` with `c-is` or `c-bind` checks every name.
+
+    Args:
+        name: The attribute name to check.
+        tag_name: The tag the attribute would be set on, for the message.
+        where: What set the attribute (a `c-bind` mapping, `<c-element>`), for the message.
+        fix: The sentence that tells the author what to do instead.
+
+    Raises:
+        ValueError: When `name` is one of the reserved names, in any ASCII letter case.
+
+    """
+    if is_citry_marker_attr_name(name):
+        msg = (
+            f"{where} sets {name!r} on <{tag_name}>. An attribute name from data may not be one Citry reserves "
+            "for its own elements (c-render-id, data-cid, data-cid-*, data-ccss-*, or a data-citry-* name Citry "
+            "reads; see 'Names Citry reserves' on the HTML attributes page of the docs), because Citry would act "
+            f"on it as if Citry had written it. {fix}"
         )
         raise ValueError(msg)
 
