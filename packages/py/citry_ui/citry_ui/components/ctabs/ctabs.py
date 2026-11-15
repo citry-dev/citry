@@ -99,7 +99,9 @@ def _reject_owned_attrs(
         if key.lower() in owned:
             msg = f"{location} attrs cannot override owned attribute {key!r}."
             raise ValueError(msg)
-        reject_citry_ui_reserved_attr(key, attr_value, where=f"{location} attrs")
+        # `location` is "CTabs" or "CTabs tab_list_attrs"; name the input once.
+        where = location if location.endswith("attrs") else f"{location} attrs"
+        reject_citry_ui_reserved_attr(key, attr_value, where=where)
         # A Vue directive could rebind an owned attribute or add a listener, so
         # none may arrive through Python data.
         if is_vue_directive_attribute(key):

@@ -112,6 +112,7 @@ def _copy_attrs(value: Mapping[str, object] | None) -> dict[str, object]:
         name = key.casefold()
         if name in _ALLOWED_PLAIN or name in _ALLOWED_ARIA:
             continue
+        # Reserved `data-` names were already refused above.
         if name.startswith("data-"):
             continue
         if name in _CITRY_DIRECTIVES:

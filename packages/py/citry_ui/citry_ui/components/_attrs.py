@@ -108,13 +108,13 @@ def reject_vue_directive_attrs(
             raise ValueError(msg)
 
 
-# Citry UI's browser code finds its elements by `data-citry-*` names, such as
-# `data-citry-dialog-close`, some of which it builds at run time from a part or
-# action name. Core Citry's browser code and render cache read `data-cev*` and
-# `data-cid*` names. The whole `data-citry-` prefix is reserved, rather than a
-# list of today's names, so a name a later release starts reading is already
-# covered.
-_RESERVED_ATTR_PREFIXES = ("data-citry-", "data-cev", "data-cid")
+# Citry UI's browser code finds its elements by `data-citry-*` and `data-cui-*`
+# names, such as `data-citry-dialog-close`, and builds some of them at run time
+# from a part or action name. Core Citry's browser code, and its cache of
+# rendered output, read `data-cev*` and `data-cid*` names; those two have no
+# trailing hyphen so that `data-cid` itself is covered. Whole prefixes are
+# reserved, so a name a later release starts reading is already covered.
+_RESERVED_ATTR_PREFIXES = ("data-citry-", "data-cui-", "data-cev", "data-cid")
 # Only these names can carry a value Citry UI wrote; see `CitryUiOwnedValue`.
 _OWNED_VALUE_PREFIX = "data-citry-"
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
@@ -122,13 +122,13 @@ _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrst
 
 class CitryUiOwnedValue(str):
     """
-    The value of a `data-citry-*` attribute that Citry UI itself wrote into slot data.
+    The value of a `data-citry-*` attribute that a Citry UI component wrote itself.
 
-    A Citry UI component hands some of its own marker attributes to the caller,
-    such as `activator_attrs` with `data-citry-dialog-trigger`, so the caller
-    can spread them onto a `<c-CButton>`. The receiving component's check
-    accepts a reserved name only when its value is one of these. Data read from
-    a request or from storage is a plain `str`, so it cannot make one.
+    Some components give the caller attrs to spread onto another component.
+    `CDialog`'s `activator_attrs` slot data, for example, holds
+    `data-citry-dialog-trigger`. Citry UI writes each such value as this `str`
+    subclass, so the receiving component can tell it from the same text in a
+    plain `str`. Request data and JSON only ever give a plain `str`.
     """
 
     __slots__ = ()
@@ -147,22 +147,23 @@ def reject_citry_ui_reserved_attr(
     extra_prefixes: tuple[str, ...] = (),
 ) -> None:
     """
-    Raise `ValueError` when an attribute map from Python sets a name Citry UI's browser code reads.
+    Raise `ValueError` when an attribute name from Python is one that Citry's browser code reads.
 
     Every Citry UI `attrs=` and `*_attrs=` input calls this for each name. The
-    reserved names are every `data-citry-*` name, and the `data-cev*` and
-    `data-cid*` names core Citry reads. A component may pass `extra_prefixes`
-    for names only it reads.
+    reserved names are every `data-citry-*` and `data-cui-*` name, and the
+    `data-cev*` and `data-cid*` names core Citry reads. A component may pass
+    `extra_prefixes` to reserve more.
 
     Args:
         name: The attribute name to check. A non-string name is left to the caller's own type check.
-        value: The value set for it. A `data-citry-*` name passes only with a `CitryUiOwnedValue`, or with
-            `None` or `False`, which write no attribute.
+        value: The value set for it. A `data-citry-*` name passes with a `CitryUiOwnedValue`; any
+            reserved name passes with `None` or `False`, which write no attribute.
         where: The component and input, such as `"CButton attrs"`, for the message.
         extra_prefixes: More reserved prefixes, in lowercase.
 
     Raises:
-        ValueError: When `name` starts with a reserved prefix, in any ASCII letter case.
+        ValueError: When `name` starts with a reserved prefix, in any ASCII letter case, and `value` is not
+            `None`, `False`, or (for a `data-citry-` name) a `CitryUiOwnedValue`.
 
     """
     if not isinstance(name, str):
@@ -170,7 +171,8 @@ def reject_citry_ui_reserved_attr(
     # Browsers compare attribute names after lowercasing ASCII letters only,
     # so `DATA-CITRY-X` is the same attribute and a non-ASCII lookalike is not.
     folded = name.translate(_ASCII_LOWER)
-    if not folded.startswith(_RESERVED_ATTR_PREFIXES + extra_prefixes):
+    reserved = _RESERVED_ATTR_PREFIXES + extra_prefixes
+    if not folded.startswith(reserved):
         return
     # A `None` or `False` value renders no attribute at all, so it is harmless.
     if value is None or value is False:
@@ -178,11 +180,11 @@ def reject_citry_ui_reserved_attr(
     # The one way through: a value a Citry UI component wrote into slot data.
     if folded.startswith(_OWNED_VALUE_PREFIX) and isinstance(value, CitryUiOwnedValue):
         return
-    prefixes = ", ".join(repr(prefix) for prefix in _RESERVED_ATTR_PREFIXES + extra_prefixes)
+    listed = ", ".join(repr(prefix) for prefix in reserved[:-1]) + f" or {reserved[-1]!r}"
     msg = (
-        f"{where} cannot set {name!r}. Attribute names that start with {prefixes} are reserved for the browser "
-        "code of Citry and Citry UI, which would act on the element as if Citry had written it. Pass the attrs a "
-        "Citry UI slot hands you (such as activator_attrs) as they are, or choose another name."
+        f"{where} cannot set {name!r}. Names that start with {listed} are reserved for the browser code of "
+        "Citry and Citry UI, which would treat the element as one it manages. Rename the key. Attrs that a "
+        "Citry UI slot hands you, such as activator_attrs, are accepted when you pass them on unchanged."
     )
     raise ValueError(msg)
 

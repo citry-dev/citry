@@ -213,9 +213,10 @@ attributes such as `data-open`, `data-loading`, `data-selected`, and
 
 `attrs` targets the root and `input_attrs` targets the visible input. Both
 accept ordinary native, ARIA, and data attributes. They reject the attributes
-Combobox sets itself (such as `data-open` on the root and `role` on the input),
-Citry runtime attributes (names starting with `data-citry-`, `data-cev`, or
-`data-cid`), and any Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`.
+Combobox sets itself (such as `data-open` on the root and `role` on the
+input), names that Citry's browser code reads (starting with `data-citry-`,
+`data-cui-`, `data-cev`, or `data-cid`), and any Vue directive syntax: names
+starting with `v-`, `:`, `.`, `^`, `@`, or `#`.
 Write Vue bindings and listeners on the component tag in your template instead.
 
 The popup stays under the component and inherits its theme. It does not use the

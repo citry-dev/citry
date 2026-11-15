@@ -157,10 +157,12 @@ def _copy_attrs(
         native_marker = input_name == "target_attrs" and normalized == "data-citry-context-menu-native"
         if not native_marker:
             reject_citry_ui_reserved_attr(key, attr_value, where=f"CContextMenu {input_name}")
+        # `None` and `False` write no attribute, so they need no marking.
         elif attr_value is not None and attr_value is not False:
             # ContextMenu hands the target attrs on through slot data, usually
             # to a `<c-CButton>`, whose own check accepts this name only as a
-            # value Citry UI wrote. Replacing a value keeps the key set intact.
+            # value Citry UI wrote. Assigning to an existing key is safe while
+            # looping over `attrs`.
             attrs[key] = citry_ui_owned_value(attr_value if isinstance(attr_value, str) else "")
         root_aria = input_name == "attrs" and normalized.startswith("aria-")
         if (root_aria or normalized in reserved) and not native_marker:

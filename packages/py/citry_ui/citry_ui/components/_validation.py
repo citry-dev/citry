@@ -59,9 +59,11 @@ def reject_owned_attrs(
         if key.lower() in owned_lower:
             msg = f"{component_name} attrs cannot override owned attribute {key!r}."
             raise ValueError(msg)
-        # Every caller passes a map from Python, so this is also where a name
-        # Citry UI's browser code reads is refused for components that list
-        # only the names they write themselves.
+        # Every component runs this on its attrs maps, so a component that
+        # lists only the names it sets itself still refuses the names Citry's
+        # browser code reads.
+        # Callers pass "CButton" or "CButton attrs"; the message needs the
+        # second form.
         where = component_name if component_name.endswith("attrs") else f"{component_name} attrs"
         reject_citry_ui_reserved_attr(key, attr_value, where=where)
 

@@ -100,6 +100,12 @@ episode and use the server value for that field.
 `type`, `href`, and `attrs` remain server-only because they define native
 structure and browser behavior.
 
+`attrs` raises `ValueError` for a name that starts with `data-citry-`,
+`data-cui-`, `data-cev`, or `data-cid`, because Citry's browser code finds
+its elements by those names. The exception is the slot attrs that a component
+such as [`CDialog`](/ui-library/components/dialog/) gives you, such as `activator_attrs`.
+Pass them on with `c-attrs="activator_attrs"`.
+
 ## Choose a variant
 
 Use `solid` for the strongest action, `outline` for a visible alternative, and
@@ -214,10 +220,7 @@ Supported native attributes include `name`, `value`, `form`, `formaction`,
 `formenctype`, `formmethod`, `formnovalidate`, and `formtarget`. A `formaction`
 value follows the same rule as `CForm`'s `action`: a relative URL or an `http:`,
 `https:`, `mailto:`, `sms:`, or `tel:` URL, and any other scheme raises
-`ValueError`. `attrs` also rejects names starting with `data-citry-`, `data-cev`,
-or `data-cid`, which Citry's browser code acts on. The slot attrs another
-component hands you, such as Dialog's `activator_attrs`, are the exception and
-can be passed as they are. Other `attrs` values are written as given, so do not pass request
+`ValueError`. Other `attrs` values are written as given, so do not pass request
 data into them unchecked. Listen to native `click`, `submit`, and `reset` events
 with Vue. `CButton` does not duplicate them with component callbacks or custom
 DOM events.

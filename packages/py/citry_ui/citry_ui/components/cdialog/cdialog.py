@@ -151,6 +151,8 @@ class CDialog(LibraryComponent):
                 "aria-haspopup": "dialog",
                 "aria-controls": dialog_id,
                 "aria-expanded": "true" if kwargs.open else "false",
+                # Marked as written by Citry UI, so a `<c-CButton>` that gets
+                # these attrs through slot data accepts the name.
                 "data-citry-dialog-trigger": citry_ui_owned_value(),
             },
             "close_attrs": {

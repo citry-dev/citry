@@ -58,6 +58,7 @@ def _render(app: Citry, template: str, data: dict[str, Any] | None = None) -> st
         "data-cev-action",
         "data-cid",
         "data-cid-c00example",
+        "data-cui-listbox-option-disabled",
     ],
 )
 def test_reserved_names_are_refused_with_a_plain_value(name: str) -> None:
@@ -78,7 +79,7 @@ def test_core_citry_names_stay_refused_even_with_an_owned_value(value: object) -
         "title",
         "data-state",
         "data-citrine",
-        # Browsers fold only ASCII letters, so a dotless i is another name.
+        # Browsers lowercase only ASCII letters, so a dotless i is another name.
         "data-c\N{LATIN SMALL LETTER DOTLESS I}try-dialog-close",
     ],
 )
@@ -110,12 +111,12 @@ def test_the_map_check_reads_every_entry() -> None:
         reject_citry_ui_reserved_attrs({"title": "x", "data-citry-tour-trigger": ""}, "CButton attrs")
 
 
-# --- Every name the browser code reads is covered ------------------------------
+# --- Every Citry UI marker name in the shipped source is covered ----------------
 
 
 def _browser_code_names() -> set[str]:
     """
-    Return every `data-citry-*` name in the source Citry UI ships.
+    Return every `data-citry-*` and `data-cui-*` name in the source Citry UI ships.
 
     Component `js`, the shared runtime modules, `runtime.source.js` files,
     templates and CSS all count: the browser reads a name in a script, a
@@ -127,23 +128,30 @@ def _browser_code_names() -> set[str]:
         if path.suffix not in {".py", ".js", ".css"} or "tests" in path.parts or ".min." in path.name:
             continue
         text = path.read_text(encoding="utf-8")
-        names.update(re.findall(r"data-citry-[a-z0-9-]*[a-z0-9]", text))
-        for prop in re.findall(r"dataset\.(citry[A-Z][A-Za-z0-9]*)", text):
+        names.update(re.findall(r"data-(?:citry|cui)-[a-z0-9-]*[a-z0-9]", text))
+        for prop in re.findall(r"dataset\.((?:citry|cui)[A-Z][A-Za-z0-9]*)", text):
             names.add("data-" + re.sub(r"[A-Z]", lambda match: "-" + match.group(0).lower(), prop))
     return names
 
 
-def test_every_data_citry_name_in_citry_ui_source_is_refused() -> None:
+def test_every_marker_name_in_citry_ui_source_is_refused() -> None:
     """
-    Fails when the check stops covering a name Citry UI's browser code reads.
+    Fails when the check stops covering a marker name Citry UI's browser code reads.
 
-    The check refuses the whole `data-citry-` prefix, so this holds as long as
-    nobody narrows it to a list that misses a name.
+    The check refuses the whole `data-citry-` and `data-cui-` prefixes, so this
+    holds as long as nobody narrows them to a list that misses a name. Names
+    outside these prefixes that the browser code reads, such as `data-value`,
+    are refused by each component's list of the names it sets itself.
     """
     names = _browser_code_names()
     # Guards the scan itself: an empty or tiny result means the regex or the
     # file walk broke, not that the check is complete.
-    assert {"data-citry-dialog-close", "data-citry-ui-part", "data-citry-toast-id"} <= names
+    assert {
+        "data-citry-dialog-close",
+        "data-citry-ui-part",
+        "data-citry-toast-id",
+        "data-cui-listbox-option-disabled",
+    } <= names
     assert len(names) > 100
     missed = []
     for name in sorted(names):
@@ -159,7 +167,7 @@ def test_every_data_citry_name_in_citry_ui_source_is_refused() -> None:
 
 
 def test_button_refuses_another_components_marker_from_data(app: Citry) -> None:
-    """The case from the issue: request data that names `data-citry-dialog-close` on a Button."""
+    """The case from #716: request data that names `data-citry-dialog-close` on a Button."""
     with pytest.raises(ValueError, match=f"CButton attrs cannot set 'data-citry-dialog-close'.*{REFUSED}"):
         _render(
             app,
@@ -231,8 +239,8 @@ def test_context_menu_target_keeps_its_documented_native_escape(app: Citry) -> N
     assert re.search(r'<button class="cui-button"[^>]*data-citry-context-menu-native', html)
 
 
-# One case per component that checked only the names it writes itself before
-# the shared check existed, plus a data object input.
+# One render case for each component that the changelog names, plus a data
+# object input. CButton has its own test above.
 COMPONENT_CASES: dict[str, tuple[str, dict[str, Any]]] = {
     "dialog": (
         """
@@ -263,6 +271,39 @@ COMPONENT_CASES: dict[str, tuple[str, dict[str, Any]]] = {
         <c-CCombobox name="plan" c-options="options" c-input_attrs="attrs" />
         """,
         {"options": ()},
+    ),
+    "field": (
+        """
+        <c-CField c-attrs="attrs">
+          <c-fill name="label">Name</c-fill>
+          <c-fill name="default"><input /></c-fill>
+        </c-CField>
+        """,
+        {},
+    ),
+    "sidebar": (
+        """
+        <c-CSidebar label="Main" c-attrs="attrs">x</c-CSidebar>
+        """,
+        {},
+    ),
+    "tabs": (
+        """
+        <c-CTabs default_value="a" aria_label="Topics" c-attrs="attrs">
+          <c-CTab value="a">A</c-CTab>
+          <c-CTabPanel value="a">Panel</c-CTabPanel>
+        </c-CTabs>
+        """,
+        {},
+    ),
+    "tab-list": (
+        """
+        <c-CTabs default_value="a" aria_label="Topics" c-tab_list_attrs="attrs">
+          <c-CTab value="a">A</c-CTab>
+          <c-CTabPanel value="a">Panel</c-CTabPanel>
+        </c-CTabs>
+        """,
+        {},
     ),
     "table-cell": (
         """
@@ -329,3 +370,49 @@ def test_every_component_module_with_an_attrs_input_runs_the_shared_check() -> N
         if _declares_attrs_input(tree) and not _calls_a_check(tree):
             missing.append(path.parent.name)
     assert missing == []
+
+
+def test_context_menu_target_refuses_other_reserved_names(app: Citry) -> None:
+    """Only the native escape is allowed on the target; any other `data-citry-*` name is refused."""
+    with pytest.raises(ValueError, match=f"CContextMenu target_attrs cannot set 'data-citry-dialog-close'.*{REFUSED}"):
+        _render(
+            app,
+            """
+            <c-CContextMenu aria_label="Actions" c-target_attrs="target">
+              <c-fill name="target" data="{ target_attrs }">
+                <div c-bind="target_attrs">Target</div>
+              </c-fill>
+              <c-fill name="menu">
+                <c-CMenuItem value="copy">Copy</c-CMenuItem>
+              </c-fill>
+            </c-CContextMenu>
+            """,
+            {"target": {"data-citry-dialog-close": ""}},
+        )
+
+
+def test_listbox_option_refuses_a_data_cui_name_from_data(app: Citry) -> None:
+    """`data-cui-listbox-option-disabled` would make the browser code treat the option as disabled."""
+    with pytest.raises(ValueError, match=f"'data-cui-listbox-option-disabled'.*{REFUSED}"):
+        _render(
+            app,
+            """
+            <c-CListbox label="Planets">
+              <c-CListboxOption value="a" c-attrs="attrs">A</c-CListboxOption>
+            </c-CListbox>
+            """,
+            {"attrs": {"data-cui-listbox-option-disabled": "x"}},
+        )
+
+
+def test_button_renders_nothing_for_a_reserved_name_set_to_none(app: Citry) -> None:
+    """`None` writes no attribute, so the name is accepted and left out."""
+    html = _render(
+        app,
+        """
+        <c-CButton c-attrs="attrs">Save</c-CButton>
+        """,
+        {"attrs": {"data-citry-dialog-close": None}},
+    )
+
+    assert "data-citry-dialog-close" not in html
