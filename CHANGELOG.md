@@ -1,5 +1,16 @@
 # Release notes
 
+## Unreleased
+
+### Fixes
+
+- **State kept on the server works on PyPy:** on PyPy, a component whose
+  State is kept on the server failed to render with
+  `TypeError: getsizeof(...)` when the app used the default
+  `InMemoryCache`. Citry now counts each stored State entry by its UTF-8
+  size on PyPy, where `sys.getsizeof` gives no size. CPython counts
+  entries as before.
+
 ## v0.9.0
 
 Citry 0.9.0 states the order in which a page's scripts and

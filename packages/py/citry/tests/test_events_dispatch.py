@@ -18,7 +18,6 @@ import importlib.util
 import json
 import logging
 import re
-import tracemalloc
 from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +41,8 @@ from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
 from citry.util.routing import RouteResponse
+
+from ._memory import requires_tracemalloc, tracemalloc
 
 SIGNING_KEY = "test-secret-key"
 FIXED_NOW = 1_700_000_000.0
@@ -943,6 +944,7 @@ class TestServerStoredState:
         assert item["ok"] is True
         assert item["actions"] == [{"action": "data", "value": {"done": True}}]
 
+    @requires_tracemalloc
     def test_replayed_calls_naming_made_up_callers_stay_within_the_state_budget(self):
         # A client can name any caller instance and replay one token whose
         # State is already near the cap; each changed call then stores a new

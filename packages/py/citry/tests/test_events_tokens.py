@@ -130,6 +130,13 @@ class EnumShapeState:
     combo: typing.Tuple = ()  # noqa: UP006
 
 
+# PyPy writes the annotation `tuple[()]` as the text "tuple[]" when it
+# compiles a module from a syntax tree, as pytest does to rewrite asserts,
+# and "tuple[]" does not resolve. Naming the type here keeps that text out
+# of the class annotations (#585).
+EmptyTuple = tuple[()]
+
+
 @dataclass
 class TypedShapeState:
     # Field types whose check has a special case of its own.
@@ -140,7 +147,7 @@ class TypedShapeState:
     reader: Reader | None = None
     ratio: Literal[1.0, 2.5] = 1.0
     color: Literal[Color.RED, Color.BLUE] = Color.RED
-    nothing: tuple[()] = ()
+    nothing: EmptyTuple = ()
     anything: tuple = ()
     either: list[int] | list[str] = field(default_factory=list)
     numbers: list[int] = field(default_factory=list)

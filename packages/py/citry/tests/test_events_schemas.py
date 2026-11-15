@@ -12,7 +12,6 @@ import json
 import subprocess
 import sys
 import textwrap
-import tracemalloc
 import typing
 import weakref
 from collections.abc import Mapping
@@ -43,6 +42,8 @@ from citry.ext.events.schemas import (
     pydantic_can_report,
     validate_args,
 )
+
+from ._memory import requires_tracemalloc, tracemalloc
 
 try:
     import pydantic
@@ -1979,6 +1980,7 @@ class TestPydanticPathText:
         assert reads["scanned"] <= 2 * len(text)
         assert reads["calls"] <= 10
 
+    @requires_tracemalloc
     def test_json_text_that_opens_a_bracket_at_every_character_is_read_in_little_memory(self):
         class WithJson(pydantic.BaseModel):
             data: pydantic.Json[list[Any]]

@@ -11,7 +11,6 @@ with a comment saying what changed and why.
 
 import random
 import re
-import tracemalloc
 
 import pytest
 
@@ -30,6 +29,7 @@ from citry.attrs import _split_style_declarations, _style_property_re, exact_str
 from citry.nodes import ElementKeyNode
 
 from ._growth import assert_grows_in_step
+from ._memory import requires_tracemalloc, tracemalloc
 
 
 class TestFormatAttrs:
@@ -364,6 +364,7 @@ class TestParseStringStyle:
     def test_comment_like_text_in_quotes_and_escapes_is_kept(self, css_text, expected):
         assert parse_string_style(css_text) == expected
 
+    @requires_tracemalloc
     @pytest.mark.parametrize(
         "value",
         ['"' + "a" * 1_000_000 + '"', '"' + "\\a" * 500_000 + '"', "'" + "a" * 1_000_000 + "'", '"' + "a" * 1_000_000],
@@ -380,6 +381,7 @@ class TestParseStringStyle:
         assert parsed["color"] == "red"
         assert peak < 8 * len(css_text)
 
+    @requires_tracemalloc
     @pytest.mark.parametrize(
         ("value", "comments"),
         [

@@ -30,7 +30,6 @@ import subprocess
 import sys
 import threading
 import time
-import tracemalloc
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, cast, get_args
@@ -58,6 +57,8 @@ from citry.ext.events.tokens import (
     apply_state_updates,
     mint_state_token,
 )
+
+from ._memory import requires_tracemalloc, tracemalloc
 
 SIGNING_KEY = "test-secret-key"
 
@@ -2417,6 +2418,7 @@ def test_a_list_inside_json_below_a_wrap_validator_hands_it_every_bad_item() -> 
     assert result.value.f == [1, 2, 3]  # type: ignore[attr-defined]
 
 
+@requires_tracemalloc
 def test_a_wrap_validator_that_recovers_from_too_many_bad_items_inside_json_is_refused() -> None:
     data = pydantic.create_model(
         "Data", f=(Annotated[pydantic.Json[list[int]], pydantic.WrapValidator(_drop_bad)], ...)
@@ -3237,6 +3239,7 @@ def test_each_thread_counts_its_own_cpu_time_against_a_shared_budget() -> None:
     assert not budget._clocks
 
 
+@requires_tracemalloc
 def test_the_longest_path_walk_holds_only_the_current_path() -> None:
     payload = {"pad": [[] for _ in range(200_000)], "deep": [[["a" * 10]]]}
 
