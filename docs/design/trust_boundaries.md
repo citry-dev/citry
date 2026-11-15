@@ -51,8 +51,7 @@ Each row answers four questions.
    reach it.
 4. **What the docs say**: the public page or docstring that states the
    rule. "Missing" means the code makes the input author only or app code
-   but no public page says so yet; [Docs still to add](#docs-still-to-add)
-   lists those.
+   but no public page says so yet.
 
 Paths are repo-relative, with these short forms:
 
@@ -157,9 +156,9 @@ report `javascript:` URLs in the HTML sent to the browser (section 12).
 
 | Input | Who may supply it | Browser | What Citry does, and where | Docs |
 |---|---|---|---|---|
-| `c-href`, `c-src`, `c-action`, `c-formaction`, `c-srcset`, `c-xlink:href`, `c-poster`, `c-data`, `c-ping`, `c-cite`, and the same names from `c-bind` | App code (check the scheme first) | Navigates or loads; `javascript:` runs, `data:` can open a document | Attribute escape only (`citry/util/html.py:547`). Vue sets the same decoded text (`citry/_vue/json_data.py:283-286`). | `docs/security.md:206-222` ("does not check the scheme") |
-| `c-content` on `<meta http-equiv="refresh">` | App code | Navigates after a delay | Attribute escape only. | Missing on `docs/security.md:206` (follow-up below) |
-| `c-to`, `c-from`, `c-by`, `c-values` on SVG `<set>` / `<animate>` | App code | Can change a link target | Attribute escape only; `attributeName` is not checked. | Missing on `docs/security.md:206` (follow-up below) |
+| `c-href`, `c-src`, `c-action`, `c-formaction`, `c-srcset`, `c-xlink:href`, `c-poster`, `c-data`, `c-ping`, `c-cite`, and the same names from `c-bind` | App code (check the scheme first) | Navigates or loads; `javascript:` runs, `data:` can open a document | Attribute escape only (`citry/util/html.py:547`). Vue sets the same decoded text (`citry/_vue/json_data.py:283-286`). | `docs/security.md:206-226` ("does not check the scheme") |
+| `c-content` on `<meta http-equiv="refresh">` | App code | Navigates after a delay | Attribute escape only. | `docs/security.md:216-219` |
+| `c-to`, `c-from`, `c-by`, `c-values` on SVG `<set>` / `<animate>` | App code | Can change a link target | Attribute escape only; `attributeName` is not checked. | `docs/security.md:216-219` |
 | `c-srcdoc` on `<iframe>` | App code (trusted markup) | Parses a whole page with its own scripts | Attribute escape only; the browser decodes it and runs what is inside. A data-chosen `srcdoc` name is refused (2.2). | `docs/advanced/html-attributes.md:246-254` |
 
 ## 3. Tags and dynamic components
@@ -184,7 +183,7 @@ report `javascript:` URLs in the HTML sent to the browser (section 12).
 ## 5. Template source and the expression sandbox
 
 Template source is code: the server runs its expressions and the browser
-parses its markup. Every row here is author only. `docs/security.md:914-919`
+parses its markup. Every row here is author only. `docs/security.md:918-923`
 and `docs/syntax/expressions.md:272-275` state the rule "never build a
 template from request data".
 
@@ -194,9 +193,9 @@ template from request data".
 | `Component.template_file` | Author only (a path from app code) | As above | Resolved next to the class, then `Citry(dirs=...)`; an absolute path is used as it is. | docstring `citry/component.py` |
 | `Citry.render_template(source, ...)` | `source`: author only. Variables and slots: sections 1 and 4 | As above | Same parse and compile through a private root component (`citry/citry.py:388`). | Docstring `citry/citry.py:399` ("trusted standalone Citry template source") |
 | `render_compiled_body`, `CompiledBody` (experimental host-template embedding) | Author only | As above | Checks the handle belongs to this engine (`citry/host_templates.py:79`). | Experimental; no page |
-| Expression text in `{{ }}`, `c-*`, `c-for`, `c-if` | Author only | Server-side Python | `compile_expr(source, sandboxed=...)` (`packages/py/citry_core/citry_core/safe_eval/eval.py:253`); every call site passes the instance's `sandboxed` flag, so no path runs unsandboxed while the sandbox is on. | `docs/security.md:908-1065` |
-| Values in the render context (`template_data()`, kwargs, `template_globals`, `provides`) | App code chooses the objects; their data may come from a request | What an expression can read and call | The sandbox blocks `_` names, unsafe builtins, `@unsafe` and `alters_data` callables (`.../safe_eval/sandbox.py:286`, `:335`, `:403`). It does not limit what public methods do. | `docs/security.md:920-925`, `:990-1019` |
-| `Citry(sandbox_expressions=False)` | App code | Turns the sandbox off | `CitrySettings.sandbox_expressions` (`citry/settings.py:858`). | `docs/security.md:1046-1065` |
+| Expression text in `{{ }}`, `c-*`, `c-for`, `c-if` | Author only | Server-side Python | `compile_expr(source, sandboxed=...)` (`packages/py/citry_core/citry_core/safe_eval/eval.py:253`); every call site passes the instance's `sandboxed` flag, so no path runs unsandboxed while the sandbox is on. | `docs/security.md:912-1069` |
+| Values in the render context (`template_data()`, kwargs, `template_globals`, `provides`) | App code chooses the objects; their data may come from a request | What an expression can read and call | The sandbox blocks `_` names, unsafe builtins, `@unsafe` and `alters_data` callables (`.../safe_eval/sandbox.py:286`, `:335`, `:403`). It does not limit what public methods do. | `docs/security.md:924-929`, `:990-1019` |
+| `Citry(sandbox_expressions=False)` | App code | Turns the sandbox off | `CitrySettings.sandbox_expressions` (`citry/settings.py:858`). | `docs/security.md:1050-1069` |
 
 ## 6. Component data and assets
 
@@ -210,7 +209,7 @@ template from request data".
 | `Dependencies.js` / `.css` URL entries | Author only | Loads and runs | No scheme check on the server. On a Vue page and in fragments the browser runtime refuses a script URL that is not `http:`, `https:`, or `blob:`, or `file:` on a `file:` page (`requireWebAssetUrl`, `citry/_vue/client.js:2882`); a static page writes `<script src>` without checking its scheme. | `docs/advanced/dependency-files.md` ("Add a library URL") |
 | `Dependencies` entry with `__html__` (a ready-made tag) | App code | Markup | Inserted raw (`citry/ext/dependencies/emission.py:1113`); refused in fragments, on Vue pages, and with a nonce or Citry SRI. | `docs/advanced/dependency-files.md:266-276` |
 | `Script(url=, content=, attrs=)`, `Style(...)` in `Dependencies`, `Component.on_dependencies()`, or the `on_dependencies` hook | App code | Runs / CSS | `content` checked by `_check_validity`; `attrs` names by `validate_html_attr_name`, values escaped. No scheme check; an `on*` key in `attrs` is allowed. | `docs/advanced/dependency-files.md` ("Customize the tag") and the `Script` / `Style` docstrings |
-| `serialize(csp_nonce=)`, Events `_csp_nonce` | App code (syntax-checked, so a bad value cannot break out) | Lets scripts run under the CSP | `_validate_csp_nonce` (`citry/serialize.py:1151`, CSP base64 only), then added to every structured tag after the dependency hooks (`citry/_serialization_security.py:497`), the fragment loader, and the Vue data. Tags written in a template never get it. | `docs/security.md:1119-1285` |
+| `serialize(csp_nonce=)`, Events `_csp_nonce` | App code (syntax-checked, so a bad value cannot break out) | Lets scripts run under the CSP | `_validate_csp_nonce` (`citry/serialize.py:1151`, CSP base64 only), then added to every structured tag after the dependency hooks (`citry/_serialization_security.py:497`), the fragment loader, and the Vue data. Tags written in a template never get it. | `docs/security.md:1129-1295` |
 
 ## 7. Vue and translated text
 
@@ -273,8 +272,8 @@ page by Citry itself; it is listed because it decides what a handler sees.
 | Input | Who may supply it | What Citry does, and where | Docs |
 |---|---|---|---|
 | Handler name and component class id | Request data OK | Dict lookups only, never `getattr` (`citry/ext/events/routes.py:514`). | `docs/events/routes.md:14-23` |
-| Event data, body size, form field count | Request data OK | `decode_request` (`citry/ext/events/codecs.py:293`), schema binding, size and field limits in `_prepare_dispatch` (`citry/ext/events/routes.py:338`). | `docs/security.md:405-468` |
-| CSRF | Request data (any site can send one) | `build_csrf_check` (`citry/ext/events/csrf.py:114`). | `docs/security.md:238-403` |
+| Event data, body size, form field count | Request data OK | `decode_request` (`citry/ext/events/codecs.py:293`), schema binding, size and field limits in `_prepare_dispatch` (`citry/ext/events/routes.py:338`). | `docs/security.md:409-472` |
+| CSRF | Request data (any site can send one) | `build_csrf_check` (`citry/ext/events/csrf.py:114`). | `docs/security.md:242-407` |
 | State token | Request data (opaque, signed) | `verify_state_token` (`citry/ext/events/tokens.py:627`): HMAC-SHA256 with a derived key, constant-time comparison, class binding, expiry. A cached render verifies and re-signs it (`citry/ext/events/cache.py:122-169`). | `docs/security.md:24-96` |
 | `stateUpdates` (writes from `$state` and `:c-*`) | Request data OK | `apply_state_updates` (`citry/ext/events/tokens.py:885`): only `_model` fields, typed. | `docs/events/state.md:167-170` |
 | Sub-path (ASGI `root_path`, WSGI `SCRIPT_NAME`) | App deployment only; it becomes request data when a proxy passes on a client's `X-Forwarded-Prefix` | `normalize_sub_path` (`citry/_sub_path.py:34`) uses the site root for a value that is not a path starting with one `/`, and percent-encodes the rest, so it stays a path on the same site either way. | `docs/advanced/web-frameworks.md:419-439` |
@@ -285,9 +284,9 @@ page by Citry itself; it is listed because it decides what a handler sees.
 | Route or response | What it serves | Checks, and where | Docs |
 |---|---|---|---|
 | Every adapter | Any response | Adds `X-Content-Type-Options: nosniff` unless the response sets that header itself, and `charset=utf-8` to a `text/*` string body (`citry/util/routing.py:302`, `:318`). | `docs/advanced/extensions.md:400-404` |
-| Events response body and errors | JSON, or `text/plain` without JavaScript | Strict JSON; error text that echoes request values is only sent as `text/plain` or JSON with `nosniff`. Exception text appears only when the `citry` logger is at `DEBUG` (`citry/ext/events/dispatcher.py:448`). A `GET` call answers with `Cache-Control: no-store` (`citry/ext/events/routes.py:813`); a `Download` always does (`citry/ext/events/dispatcher.py:1127`). | `docs/security.md:1094-1106` |
-| Runtime files (`citry.<digest>.js`, `ext/events/definitions/<digest>.js`, `ext/events/assets/<digest>.css`, i18n runtime) | Citry's own files | Digest must be 64 hex characters; a shared-cache copy is served only if its hash matches (`citry/_hashed_runtime.py:54`, `:172`; `citry/_vue/events.py:414`). These, and their 404s, carry `Access-Control-Allow-Origin: *` (`citry/_owned_resource.py:19`); hashed files are sent as `immutable`. | `docs/security.md:1697-1735` |
-| `cache/<class>.<hash>.{js,css}`, `asset/<file>` | Component files and the `css_data()` stylesheet | Class must be registered; type from a fixed table; content only from Citry's cache (`citry/ext/dependencies/routes.py:111`, `:159`). The `asset/` bytes are not re-hashed when served, so the cache operator is trusted. Successful responses carry `Access-Control-Allow-Origin: *` (`citry/_owned_resource.py:58`, `:66`, `:80`), so any site that has the URL can read a `css_data()` stylesheet; `css_data()` must not return secrets. 404s carry no CORS header. | `docs/security.md:1697-1735` |
+| Events response body and errors | JSON, or `text/plain` without JavaScript | Strict JSON; error text that echoes request values is only sent as `text/plain` or JSON with `nosniff`. Exception text appears only when the `citry` logger is at `DEBUG` (`citry/ext/events/dispatcher.py:448`). A `GET` call answers with `Cache-Control: no-store` (`citry/ext/events/routes.py:813`); a `Download` always does (`citry/ext/events/dispatcher.py:1127`). | `docs/security.md:1104-1116` |
+| Runtime files (`citry.<digest>.js`, `ext/events/definitions/<digest>.js`, `ext/events/assets/<digest>.css`, i18n runtime) | Citry's own files | Digest must be 64 hex characters; a shared-cache copy is served only if its hash matches (`citry/_hashed_runtime.py:54`, `:172`; `citry/_vue/events.py:414`). These, and their 404s, carry `Access-Control-Allow-Origin: *` (`citry/_owned_resource.py:19`); hashed files are sent as `immutable`. | `docs/security.md:1707-1745` |
+| `cache/<class>.<hash>.{js,css}`, `asset/<file>` | Component files and the `css_data()` stylesheet | Class must be registered; type from a fixed table; content only from Citry's cache (`citry/ext/dependencies/routes.py:111`, `:159`). The `asset/` bytes are not re-hashed when served, so the cache operator is trusted. Successful responses carry `Access-Control-Allow-Origin: *` (`citry/_owned_resource.py:58`, `:66`, `:80`), so any site that has the URL can read a `css_data()` stylesheet; `css_data()` must not return secrets. 404s carry no CORS header. | `docs/security.md:1707-1745` |
 | i18n messages route | Message JSON | 64 KiB, exact fields, allowed locales, known public message ids (`citry/ext/i18n/routes.py:79`). | `docs/i18n/browser.md:227-229` |
 | Preview routes (experimental) | Component previews | Mounted only by the preview command, loopback `Host` and `Origin` only (`citry/ext/preview/host.py:57-89`). | `docs/advanced/previews.md:109-115` |
 
@@ -309,7 +308,7 @@ a hook may pass request data through.
 | `on_component_input()`, `on_component_data()` changes | Request data OK to the same degree as the kwarg or variable it fills | As the template uses it | No hook-specific check; the template rules apply. | Docstrings `citry/extension.py:952-966` |
 | `browser_plugin()`, `prepare_browser_render()` (experimental) | Script: app code. `payload`: request data OK as JSON | Runs / JSON | `_validate_plugin` and `_validate_json` (`citry/browser_render.py:280`, `:365`); the payload is written with `script_json`. | Experimental |
 | `Extension.urls` route handlers | App code | As its content type says | The adapter adds `nosniff` and a charset; the body is the handler's choice. | `docs/advanced/extensions.md:400-404` |
-| A stored render-cache entry | Whoever can write the cache store (trusted like the database) | Markup, scripts, CSS | Decoded strictly (`citry/ext/cache/artifact.py:334`, `:360`, `:423`); template text, raw blocks, Vue bindings, dynamic tags, render ids, and the CSS data are checked against this process's live templates on replay (`citry/ext/cache/replay.py:925`, `:1019-1039`). Trusted HTML parts and template-written attribute text replay as stored. | `docs/performance/caching.md:187-189` ("Protect the cache store like your database") |
+| A stored render-cache entry | Whoever can write the cache store (trusted like the database) | Markup, scripts, CSS | Decoded strictly (`citry/ext/cache/artifact.py:334`, `:360`, `:423`); template text, raw blocks, Vue bindings, dynamic tags, render ids, and the CSS data are checked against this process's live templates on replay (`citry/ext/cache/replay.py:925`, `:1019-1039`). Trusted HTML parts and template-written attribute text replay as stored. | `docs/performance/caching.md:187-189` ("Protect the cache store like your database"); `docs/security.md:1098-1102` |
 | Cache keys (`Component.Cache`, `<c-cache>`) | App code; may include request values | None directly; a wrong key serves one user's HTML to another | Hashed (`citry/ext/cache/keys.py:188`); `Secret` refused as a key part (`:404`). | `docs/performance/caching.md:175-189` |
 | `export_render_cache()`, `stage_render_cache()`, `render_cache_bypass_reason()` | App code | Through the extension's own output | `render_cache_mode` defaults to `"deny"`, which skips caching for any render a hook touched (`citry/extension.py:1078`); a stored payload must be strict JSON (`citry/ext/cache/artifact.py:435`). | `docs/advanced/extensions.md:326-359` |
 | Hooks whose return does not reach the page: `on_extension_created`, `on_component_class_created`, `on_component_registered`, `on_component_unregistered`, `on_citry_cleared`, `on_template_reset`, `on_render_context_merge`, `on_files_reset`, `on_component_cache_hit`, `validate_config_fields`, `inspect_component`, `inspect_template_namespace` | App code | Nothing from the return value | Return values are ignored or used only for metadata and analysis. Changes these hooks make (to `ctx.parent_context.extra`, or to a component class) reach the page only through the extension's other hooks or the class itself. | Docstrings in `citry/extension.py` |
@@ -319,9 +318,9 @@ a hook may pass request data through.
 
 | Setting | Who may supply it | What Citry does, and where | Docs |
 |---|---|---|---|
-| `security_csp` (`off`, `warn`, `strict`) | App code | One Rust scan of the final page, after every hook: `check_output_html` (`crates/citry_html_transform/src/output_policy.rs:187`, via `citry/_output_policy.py:138`). Reports template-written `<script>` and `<style>`, `on*` handlers, and `javascript:` URLs, reading attribute values as the browser does. Off by default, so it is a safety net, not the place a rule is enforced. It does not see what Vue builds in the browser. | `docs/security.md:1287-1386` |
-| `security_javascript` (`allow`, `warn`, `omit`, `forbid`) | App code | The same scan with the JavaScript rules: handlers, `javascript:` URLs, embedded documents, encoding-dependent text, and parser differences (`output_policy.rs:322`, `:1433-1541`, `:1664`). Structured `Script` and `Style` dependencies are filtered first (`citry/_javascript_policy.py:91`); until [#697](https://github.com/citry-dev/citry/pull/697) merges, `omit` reads a `Markup` URL there before decoding it, so it can leave one on the page (`warn` and `forbid` still catch it in the whole-page scan). | `docs/security.md:1387-1635` |
-| `security_script_integrity` (`off`, `citry`) | App code | Under both values, the tags Citry writes for files it serves carry `integrity` (`citry/ext/dependencies/types.py:134`). `citry` also lists SHA-384 hashes of `Script` objects in `SerializedSecurity` and raises `TypeError` for a ready-made tag (`citry/settings.py:725-732`). | `docs/security.md:1636-1696` |
+| `security_csp` (`off`, `warn`, `strict`) | App code | One Rust scan of the final page, after every hook: `check_output_html` (`crates/citry_html_transform/src/output_policy.rs:187`, via `citry/_output_policy.py:138`). Reports template-written `<script>` and `<style>`, `on*` handlers, and `javascript:` URLs, reading attribute values as the browser does. Off by default, so it is a safety net, not the place a rule is enforced. It does not see what Vue builds in the browser. | `docs/security.md:1297-1396` |
+| `security_javascript` (`allow`, `warn`, `omit`, `forbid`) | App code | The same scan with the JavaScript rules: handlers, `javascript:` URLs, embedded documents, encoding-dependent text, and parser differences (`output_policy.rs:322`, `:1433-1541`, `:1664`). Structured `Script` and `Style` dependencies are filtered first (`citry/_javascript_policy.py:91`); until [#697](https://github.com/citry-dev/citry/pull/697) merges, `omit` reads a `Markup` URL there before decoding it, so it can leave one on the page (`warn` and `forbid` still catch it in the whole-page scan). | `docs/security.md:1397-1645` |
+| `security_script_integrity` (`off`, `citry`) | App code | Under both values, the tags Citry writes for files it serves carry `integrity` (`citry/ext/dependencies/types.py:134`). `citry` also lists SHA-384 hashes of `Script` objects in `SerializedSecurity` and raises `TypeError` for a ready-made tag (`citry/settings.py:725-732`). | `docs/security.md:1646-1706` |
 
 ## 13. Citry UI
 
@@ -359,9 +358,9 @@ reads from `window`, `document`, or a form.
 | App ids, render ids, component instance ids, mark names, State field names, extension names, transport names, locale names | Request data OK | Keys | Kept in `Map`s or in objects with no prototype, read through `own()` (`citry/_vue/client.js:186`, `:1434`, `:1601-1645`; `js/citry-i18n-runtime.ts:1107`). Targets from page code must match `/^[a-z0-9_-]+$/` or the mark-name pattern (`citry/_vue/client.js:420`, `:450`). The runtime never reads these names from the page's markup, so a marker name written by data does not change a lookup. The exception is the i18n runtime, which looks up format profile names and message ids by plain index, so `__proto__` gives wrong output instead of an error: [#701](https://github.com/citry-dev/citry/issues/701). | Internal |
 | Definition ids and component type keys | Server JSON only | Keys | Plain objects (`window.__citryRuntimeDefinitions`, `componentTypes`), but filled only from Citry's own output; an id such as `constructor` fails when registered (`citry/_vue/client.js:1461`). | Internal |
 | `window`, `document`, and form members | Element `id` and `name` in the page may be data | Reads | `ownGlobal`, `pageDocument`, and `callBuiltIn` (`citry/_vue/client.js:15`, `:32-37`, `:44-84`) read past named elements. A few calls on a form that is a component root or carries server-event listeners still read the member directly, so a control with a matching name breaks the binding (no code runs): [#703](https://github.com/citry-dev/citry/issues/703). | Internal |
-| Document data block (`data-citry-vue-document`) | Server only | JSON that drives every script load | `startDocument` (`citry/_vue/client.js:5740`) needs exactly one block and, on a page with a nonce, the page's nonce (`:5720-5724`). | `docs/security.md:1279-1285` |
-| Vue fragment data block (`data-citry-vue-fragment`) | Server only | Starts a Vue app when it enters the page | Refused without the page's nonce on a page with one (`js/citry-fragments.ts:112-135`); on a page without a nonce every block starts. | `docs/security.md:1264-1275` |
-| Definition and asset scripts named in a manifest | Server only | Loaded as `<script>` | `requireWebAssetUrl` (`citry/_vue/client.js:2882`) allows `http`, `https`, `blob` (and `file` when the page itself is a `file:` page); Citry-served files carry SRI from their digest (`:2807`). Script URLs resolve against `document.baseURI`, so a `<base>` tag moves them. | `docs/security.md:1180-1207` |
+| Document data block (`data-citry-vue-document`) | Server only | JSON that drives every script load | `startDocument` (`citry/_vue/client.js:5740`) needs exactly one block and, on a page with a nonce, the page's nonce (`:5720-5724`). | `docs/security.md:1289-1295` |
+| Vue fragment data block (`data-citry-vue-fragment`) | Server only | Starts a Vue app when it enters the page | Refused without the page's nonce on a page with one (`js/citry-fragments.ts:112-135`); on a page without a nonce every block starts. | `docs/security.md:1274-1285` |
+| Definition and asset scripts named in a manifest | Server only | Loaded as `<script>` | `requireWebAssetUrl` (`citry/_vue/client.js:2882`) allows `http`, `https`, `blob` (and `file` when the page itself is a `file:` page); Citry-served files carry SRI from their digest (`:2807`). Script URLs resolve against `document.baseURI`, so a `<base>` tag moves them. | `docs/security.md:1190-1217` |
 | `Citry.events.applyActions(actions)` | Page code, with result data from the app's own server | Applies redirects, URL changes, events, State, and renders | Checked like a server result (`assertPublicActionList`, `citry/_vue/client.js:478-544`); a `render` action for a Vue component can name scripts that load with the page's nonce, so the actions must come from the app's own server. | `docs/reference/browser-apis.md` |
 | `Citry.fragments.load(manifest)` called without a tag | Page code | Starts a Vue app | Skips the nonce check (`js/citry-fragments.ts:134`). Not documented as a public API. | None (not public) |
 | An Events `Render` result sent as an HTML fragment (`html-fragment/1`) | Server | Not inserted by the runtime | The runtime refuses it (`citry/_vue/client.js:3789`); only the no-JavaScript response serves it, as `text/html`. | Internal |
@@ -383,15 +382,6 @@ as far as the review found.
 | `Dispatch(name=)` fires a DOM event that bubbles, so a name such as `click` runs the page's own listeners. Should Citry refuse standard event names? | [#704](https://github.com/citry-dev/citry/issues/704) |
 | A form control named after a DOM method (`addEventListener`, `contains`) can break a server-event binding on that form. | [#703](https://github.com/citry-dev/citry/issues/703) |
 | Should Citry allow a template-written `onclick` on `<c-element>` with `c-is` or `c-bind`? It is refused. | [#605](https://github.com/citry-dev/citry/issues/605) |
-
-## Docs still to add
-
-- `docs/security.md`, "Check URL attributes": add the `content` of
-  `<meta http-equiv="refresh">` and the `to`, `from`, `by`, and `values` of
-  SVG `<set>` and `<animate>` to the list of URL attributes.
-- `docs/security.md`: say that whoever can write the render cache store can
-  put HTML into the page, so the store needs the same protection as the
-  database.
 
 ## Keeping this doc accurate
 
