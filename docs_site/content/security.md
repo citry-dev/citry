@@ -207,12 +207,19 @@ your own check. Citry plans a built-in check
 
 A URL is something the browser acts on, so a value that request data puts in
 an `href`, `src` or `action` can run script when the visitor clicks: a
-`javascript:` URL does. Citry escapes a value for the place it lands, but it
-does not check the scheme of a URL you give to a plain HTML attribute, and
-plain Vue, Jinja and Django behave the same way. Check the scheme before you
-pass a URL from the request to an attribute, and allow only `http:`,
-`https:`, `mailto:`, `tel:` and relative URLs. The Citry UI components that
-take a link or an image URL refuse other schemes themselves.
+`javascript:` URL does.
+
+Citry escapes a value for the place it lands, but it does not check the
+scheme of a URL you give to a plain HTML attribute. Check the scheme before
+you pass a URL from the request to an attribute, and allow only `http:`,
+`https:`, `mailto:`, `sms:`, `tel:` and relative URLs.
+
+The Citry UI components that take a link or form action accept the same
+list. The ones that take an image URL accept `http:`, `https:`, `blob:`,
+`data:image/` and relative URLs. Given any other URL, these components
+raise `ValueError` when they render on the server. In the browser,
+`CAvatar` and `CImage` ignore a new value with another scheme and keep
+the image the server rendered.
 
 ## Check form field names { #check-form-field-names }
 
