@@ -1,8 +1,8 @@
 # Citry v1 beta research
 
-**Status (2026-07-23): Stages 0 and 1 complete; Stage 2 bounded pilot complete
-and circuit breaker awaiting a maintainer scope decision; Stage 1 decisions
-remain open for final resolution in Stage 10.**
+**Status (2026-11-15): closed. The plan for Citry's stable release is issue
+[#624](https://github.com/citry-dev/citry/issues/624).
+The artifacts in this directory are kept as history.**
 
 This directory is the canonical home for sanitized artifacts produced by the
 research charter in

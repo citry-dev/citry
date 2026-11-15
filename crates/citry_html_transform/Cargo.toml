@@ -3,6 +3,7 @@ name = "citry_html_transform"
 description = "Transform HTML in a single pass, applying changes needed by Citry"
 version = "1.0.3"
 edition = "2021"
+publish = false
 rust-version = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }

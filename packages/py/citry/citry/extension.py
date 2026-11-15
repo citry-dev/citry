@@ -998,7 +998,8 @@ class Extension:
         original. Raising propagates. As with ``on_component_rendered``, a
         ``CitryRender`` replaces the output, a plain ``str`` is shown as text
         (Citry escapes it), and [`Markup`][citry.Markup] is inserted as HTML,
-        on static and interactive pages alike.
+        on static and interactive pages alike. Never pass user input to the
+        ``Markup()`` constructor.
 
         Raises:
             TypeError: Citry raises it when the hook returns a value of any
@@ -1028,6 +1029,12 @@ class Extension:
                 or ``#``), or changes the value of such an attribute written
                 in the template. Removing one, or keeping it unchanged, is
                 allowed.
+            ValueError: Citry raises it when the hook adds an attribute the
+                browser reads as code or markup: a name starting with
+                ``on``, or ``innerHTML``, ``outerHTML``, or ``srcdoc``, in
+                any letter case. Changing the value of such an attribute
+                that the template wrote is allowed, so never put request
+                data into it.
 
         """
 

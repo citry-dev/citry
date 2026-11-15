@@ -11,9 +11,13 @@
 # `citry.contrib.<name>` module, and the `citry.reload` module. Features
 # marked experimental in their docs and docstrings, such as
 # `ComponentGraph`, may still change in a minor release. Deeper modules
-# (citry.ext.events.handlers, ...), other submodules (citry.slots,
-# citry.nodes, ...), and any name that starts with `_` are internal and
-# free to change between releases.
+# (citry.ext.events.handlers, ...) and other submodules (citry.slots,
+# citry.nodes, ...) are internal and free to change between releases. So
+# is any name that starts with `_`, except the configuration names the docs
+# teach users to set, such as `_guard` on `Events` and `_max_age` on
+# `State`. Those start with `_` only so they cannot clash with a handler
+# or field name, and they are covered. The full list of what is covered is
+# on the Versioning and support page (docs_site/content/about/versioning.md).
 
 from markupsafe import Markup
 

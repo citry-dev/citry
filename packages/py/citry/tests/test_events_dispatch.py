@@ -1161,6 +1161,34 @@ class TestErrors:
             "message": "The state token is stale (expired or rotated out); reload the page to get a fresh one.",
         }
 
+    def test_a_token_without_max_age_is_stale_after_24_hours(self, monkeypatch):
+        # The conformance Counter sets no _max_age, so its token gets the
+        # 24-hour default and then answers like any expired token.
+        c = _citry()
+        counter = _counter(c)
+        token = _token(counter)
+        call = {
+            "componentClassId": counter.class_id,
+            "handlerName": "increment",
+            "callerRenderId": "c9zk1q00",
+            "stateToken": token,
+        }
+        monkeypatch.setattr("citry.ext.events.tokens._now", lambda: FIXED_NOW + 24 * 60 * 60 - 1)
+        assert _dispatch(c, call)["results"][0]["ok"] is True
+        monkeypatch.setattr("citry.ext.events.tokens._now", lambda: FIXED_NOW + 24 * 60 * 60)
+        error = _dispatch(c, call)["results"][0]["error"]
+        assert (error["status"], error["code"]) == (409, "stale_state")
+
+    def test_a_token_from_an_unknown_token_version_is_stale(self):
+        # What a page rendered by a release with a newer token version sends.
+        c = _citry()
+        counter = _counter(c)
+        result = _dispatch(
+            c, {"componentClassId": counter.class_id, "handlerName": "increment", "stateToken": "cev2.payload.sig"}
+        )
+        error = result["results"][0]["error"]
+        assert (error["status"], error["code"]) == (409, "stale_state")
+
     def test_missing_token_for_a_state_declaring_handler(self):
         c = _citry()
         counter = _counter(c)

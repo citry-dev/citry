@@ -955,11 +955,21 @@ class I18nService:
         return self._context
 
     def tr(self, message_id: str, *, attr: str | None = None, **values: object) -> str:
-        """Resolve one message to plain text with the bound context."""
+        """
+        Resolve one message to plain text with the bound context.
+
+        The text is not escaped. A template escapes it like any other value;
+        to put it into HTML you build in Python, use ``Markup.format()``,
+        which escapes each value it inserts.
+        """
         return self._extension.tr(message_id, attr=attr, context=self._context, **values)
 
     def resolve(self, message_id: str, *, attr: str | None = None, **values: object) -> LocalizedText:
-        """Resolve text and retain its selected locale and fallback metadata."""
+        """
+        Resolve text and retain its selected locale and fallback metadata.
+
+        As with `tr()`, the text is not escaped.
+        """
         return self._extension.resolve(message_id, attr=attr, context=self._context, **values)
 
     @property
@@ -2078,6 +2088,10 @@ class I18nExtension(Extension):
         Prefer `for_context(context).tr(...)` outside components so the locale
         dependency stays explicit. Omitting `context` here uses a new default
         context and is mainly useful for tooling and simple startup checks.
+
+        The text is not escaped. A template escapes it like any other value;
+        to put it into HTML you build in Python, use ``Markup.format()``,
+        which escapes each value it inserts.
         """
         return self._resolve_parts(message_id, attr=attr, context=context, values=values)[0]
 
@@ -2094,7 +2108,8 @@ class I18nExtension(Extension):
 
         `message_id` and `attr` must name a public checked output. `values`
         must match that output's `@param` interface exactly. The supplied
-        context must still carry the current catalog revision.
+        context must still carry the current catalog revision. As with
+        `tr()`, the text is not escaped.
         """
         text, selected_locale, selected_direction, used_fallback = self._resolve_parts(
             message_id,

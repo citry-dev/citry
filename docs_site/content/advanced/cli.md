@@ -211,6 +211,12 @@ A TypeScript or ty finding from `--types` counts in its file too. Its
 `origin` also holds the position, counted from 1, as `tsc` prints it:
 `/srv/shop/app/components/lane.py:24:13`.
 
+A script that reads this report should ignore keys it does not know. A
+minor release can add keys, and each new `citry check` rule adds a new
+[`code`](/ide/diagnostics/) value. Handle a `code` you do not know like
+any other finding: read its `severity`, and let `exit_code` decide
+whether the check passed.
+
 ### `check --static` syntax
 
 When you cannot import the project, for example in a CI job without its

@@ -863,7 +863,7 @@ Every wire error has exactly `status`, `code`, and `message`, plus optional
 |---|---:|---|
 | `invalid_args` | 422 | Handler args or State updates failed validation. |
 | `invalid_state` | 403 | The server cannot read the State token, or the token belongs to another component class. See [State tokens](#state-tokens). |
-| `stale_state` | 409 | The token expired, its signature matches no current secret, the State it points to is gone, or its State no longer fits the component. See [State tokens](#state-tokens). |
+| `stale_state` | 409 | The token comes from a token version the server does not know, it expired, its signature matches no current secret, the State it points to is gone, or its State no longer fits the component. See [State tokens](#state-tokens). |
 | `unknown_event` | 404 | The component class declares no handler under that name. |
 | `unknown_component` | 404 | No registered component class has that ID. |
 | `forbidden` | 403 | Application authorization denied the call. |
@@ -970,20 +970,29 @@ a fresh token. It treats `invalid_state` (403) like any other error.
 The server checks the token of a call that needs State in this order, and
 answers the first problem it finds:
 
-1. The call sends no token, or the server cannot read it as one of its own
+1. The token's version is one the server does not know:
+   `stale_state`. The server uses no other value from such a token. A
+   token whose version the server cannot read at all belongs to step 2.
+2. The call sends no token, or the server cannot read it as one of its own
    tokens, for example because the encoding, the JSON, or a field is
-   wrong, or the token version is unknown: `invalid_state`.
-2. The token expired, its signature matches none of the server's current
+   wrong: `invalid_state`.
+3. The token expired, its signature matches none of the server's current
    signing secrets, or, for a token that points to State the server
    stores, the server no longer holds that State: `stale_state`.
-3. The token was minted for a different component class than the call
+4. The token was minted for a different component class than the call
    names: `invalid_state`.
-4. The token's State fields no longer fit the component's State class, as
+5. The token's State fields no longer fit the component's State class, as
    after a deploy that changed the class: `stale_state`.
 
 On a component that declares State, a call needs State when its handler
 reads State, when it sends `stateUpdates`, or when it sends a token at
 all. A component without State ignores a token.
+
+Step 1 exists because a later release can change the token format.
+During a deploy, a page that the new release rendered can send its token
+to a process still running the old release. That process answers
+`stale_state`, so Citry's browser client asks the visitor to reload
+instead of showing a plain error.
 
 A server cannot tell a token with a changed signature from an honest token
 signed with a secret it has since removed, because both are readable
@@ -1127,8 +1136,14 @@ The protocol is transport-neutral. The built-in HTTP transport mounts:
 POST      <prefix>/ext/events/call
 GET       <prefix>/citry.<sha256>.js
 GET       <prefix>/ext/events/runtime.js
-GET|POST  <prefix>/ext/events/e/{componentClassId}/{handlerName}
+<method>  <prefix>/ext/events/e/{componentClassId}/{handlerName}
 ```
+
+`<method>` is a method the handler declares, from `GET`, `HEAD`, `POST`,
+`PUT`, `PATCH`, `DELETE`, and `OPTIONS`. A handler that declares none
+accepts `POST`. Citry's browser code sends the manifest's `httpMethod`, the
+handler's first method. A request with any other method gets `405` with an
+`Allow` header that lists the accepted ones.
 
 An Events page loads the browser runtime from `<prefix>/citry.<sha256>.js`,
 where `<sha256>` is the SHA-256 of the runtime file as 64 lowercase hex
@@ -1156,7 +1171,7 @@ stable address stays for pages rendered by older versions and for apps that
 link the runtime by hand.
 
 The batch route accepts the standard protocol envelope and always uses POST. The
-per-handler route uses the handler's allowed method and mirrors a single error
+per-handler route uses one of the handler's allowed methods and mirrors a single error
 result's status onto HTTP for useful middleware and access logs. Redirects
 remain actions, never HTTP 30x responses.
 
@@ -1169,6 +1184,33 @@ only text, so their values bind as described in
 [Arguments collected from a form](#arguments-collected-from-a-form). The URL supplies
 `componentClassId` and `handlerName`; an explicit protocol body must agree
 with it.
+
+Citry's HTTP routes read these request headers:
+
+| Header | Meaning |
+|---|---|
+| `X-Citry-Events` | Any value; Citry's browser code sends `1`. Required on a call that is not `GET` and has a JSON body. A plain HTML form cannot set it, which is part of the CSRF defense. |
+| `X-Citry-Vue-App` | The ID of the Vue app on the page that makes the call. |
+| `X-Citry-Vue-Occurrence` | The ID the browser keeps for the calling component across renders. It is not the component's `renderId`. |
+| `X-Citry-Vue-Revision` | The revision of the Vue app that the browser has applied, in ASCII digits, at most 2^53 - 1. |
+| CSRF token header | `X-CSRFToken` unless the page configures another name. Read by a host framework that checks a token, such as Django, or by a component's own `_csrf` check. |
+
+A `vue-prepared/1` render needs all three `X-Citry-Vue-*` headers; without
+them the call fails with `handler_error`. A client that asks only for
+`html-fragment/1` renders does not need them. A call that is not `GET`
+must also come from the page's own origin: the server rejects one whose
+`Origin` header names another host or port, or whose `Sec-Fetch-Site` header is
+not `same-origin` or `none`, with `csrf_failed`.
+
+Citry's browser code sends `X-Citry-Events` and the three `X-Citry-Vue-*`
+headers on every call. It sends the CSRF token header on a call that is
+not `GET` when the page has a token and the event URL is on the page's
+origin. Browser code that sends calls some other
+way, such as a transport registered with `Citry.events.registerTransport`,
+must send the headers it is given. Server code that runs calls itself,
+rather than through the HTTP routes, passes them to the code that builds
+the answer (in Python, the experimental `TransportContext.headers`) and
+runs its own CSRF check.
 
 For GET, handler arguments keep their query names and protocol metadata uses:
 
@@ -1188,17 +1230,55 @@ token, or send sequence.
 
 ## Versioning
 
-The protocol major is part of the exact `protocol` string. This directory is
-the working pre-release v1 contract. Until the owning Citry package reaches
-`1.0.0`, clearer field names and other incompatible corrections change v1 in
-place, but schemas, examples, server, browser, tests, and current docs must
-move together.
+The number after the slash in the `protocol` string is the protocol major,
+so `citry-events/1` is major 1. Major 1 is frozen: Citry 1.0.0 ships it as
+this document describes it, and no 1.x release changes or removes a field,
+value, check, or HTTP route described here, except to close a security
+hole. When a security fix needs it, a 1.x release may refuse a
+`citry-events/1` input that earlier releases accepted, and its changelog
+says so.
 
-Unknown fields and values are not a minor-version extension mechanism. A v1
-reader rejects them. If a future extension or third-party integration needs
-more wire data, design that point deliberately and add conformance examples.
-After Citry reaches `1.0.0`, an incompatible shape starts `v2/` and uses
-`citry-events/2`.
+A 1.x server accepts every valid `citry-events/1` call and answers it with
+a valid `citry-events/1` result. So a custom transport or a third-party
+client written against this document keeps working on every 1.x release.
+
+The `prepared` object of a `vue-prepared/1` render is one part this
+document does not define. Its contents belong to the browser runtime of the
+release that wrote it, and Citry's browser code refuses one whose helper
+contract differs from its own. So during an upgrade, a page rendered by the
+old release can fail to apply a `vue-prepared/1` render from a server
+already running the new release. The call fails with an error, no reload
+prompt appears, and the page keeps failing such calls until the visitor
+reloads it. An `html-fragment/1`
+render has no such limit.
+
+The format inside `stateToken` is not defined here either, and a 1.x
+release may change it. A server answers a token from a token version it
+does not know with `stale_state` (see [State tokens](#state-tokens)), so
+during an upgrade a page with such a token is offered a reload.
+
+A v1 reader rejects unknown fields and values (see
+[The contract is strict](#the-contract-is-strict)), so v1 has no room for
+additions. A new field, a new kind of action, a new `swap` value, a new
+renderer, a new error code, or any other change needs a new protocol,
+`citry-events/2`, in a new `v2/` directory, with its own conformance
+examples.
+
+A 1.x release may add `citry-events/2` beside `citry-events/1`, and every
+1.x release still accepts `citry-events/1` calls. The first release that
+stops accepting them is 2.0.0 or later, and comes at least one minor
+release after the first release that accepts `citry-events/2`. A rolling deploy needs this overlap: pages
+rendered by the old release still send `citry-events/1` calls, and they may
+reach a server that already runs the new release. This promise covers
+deploys from one 1.x release to another; a deploy from 0.x to 1.0.0
+starts fresh.
+
+This overlap helps only pages from the old release. A page rendered by the
+new release that reaches a server still running the old release may send a
+protocol the old server does not know. The old server answers
+`protocol_mismatch` (see
+[Failures before a request ID can be read](#failures-before-a-request-id-can-be-read)),
+and the call fails with that error.
 
 ## The conformance component
 

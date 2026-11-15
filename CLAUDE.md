@@ -75,6 +75,20 @@ carries the rules, or the work is done without them.
   what is next, open decisions) in a short progress file named in its brief.
   The measurements behind this rule are in
   [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md#token-cost-of-long-running-agents).
+- **Check free disk space before starting agents in parallel.** Every
+  worktree, virtual environment (venv), build, and test run writes to the
+  same disk as Claude Code's temporary directory, and when it fills, every
+  agent stops at once. Before starting a batch of agents, run `df -h /` and
+  start no more than the disk budget in
+  [`docs/codebase.md`](docs/codebase.md#saving-disk-space) allows. Tell
+  every agent in its brief to stop and report when free space drops below
+  1 GB.
+- **Remove your own worktrees when their work is done.** Delete a
+  worktree's `target/` once its pull request is open, and remove the
+  worktree, its local branch, and any venv the agent left in the scratchpad
+  when the pull request merges or closes. The steps are in
+  [`docs/codebase.md`](docs/codebase.md#saving-disk-space). Remove only
+  worktrees you or your agents created.
 - **Find code with the `LSP` tool and read only the lines you need.** When
   the `LSP` tool is available, use
   it to find definitions and references rather than grepping and then reading
@@ -403,6 +417,9 @@ Then follow these steps:
 6. **Say in the docs when an input is author-only.** When a value is trusted
    because only the template author writes it, the page that documents the
    API must say so, so app authors know not to pass request data into it.
+   [`docs/design/trust_boundaries.md`](docs/design/trust_boundaries.md)
+   lists who may supply each input that reaches the page; update the
+   input's row in the same change.
 7. **Record a pass that leaves no hole open.** After the change merges,
    write a short record in [`docs/security/reviews/`](docs/security/reviews/README.md)
    using the template in its README. A hole in a released version follows
@@ -618,14 +635,17 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.
-- **Pre-1.0 contracts stay at version 1.** While the owning published package
-  is below `1.0.0`, keep product protocol, schema, manifest, cache-payload,
-  render-cache, and runtime compatibility version constants at `1`. Apply
-  breaking corrections to version 1 in place and update every producer,
-  consumer, fixture, test, and current doc together. Increment these contract
-  versions only after the owning package reaches `1.0.0`, unless the user
-  explicitly directs otherwise. Generic tests for version-mismatch machinery
-  may still use several arbitrary values; this rule governs product contracts.
+- **Keep contract versions at 1 before a package's 1.0.0.** A contract version
+  is the number Citry writes into stored or exchanged data (protocol, schema,
+  manifest, cache payload, render cache, runtime compatibility) so the code
+  reading it can tell which format it got. Until `citry` 1.0.0 is released,
+  and in any package still below 1.0.0 (`citry-ui` after that release), keep
+  every contract version at `1`. When a format must change incompatibly, edit
+  version 1 itself and update every producer, consumer, fixture, test, and
+  current doc together, unless the user explicitly directs otherwise. From
+  `citry` 1.0.0, follow
+  [Contract versions](docs/codebase.md#contract-versions) for `citry`. Tests
+  of the version-check code itself may use made-up version numbers.
 - **Follow the shared-worktree testing practice.** The authoritative workflow
   is [`docs/codebase.md`](docs/codebase.md#testing-practices-in-a-shared-worktree):
   run focused checks while implementing, then the fast repository profile once
@@ -969,6 +989,48 @@ yourself writing "renamed from", "replaces", "no longer", or "instead of" in a
 doc or comment, reframe in terms of what is there now.
 (`RATIONALE.md` post-mortems are the narrow exception, and even there prefer
 abstract framing of the failure mode.)
+
+## Check every change against the versioning rules
+
+Users pin `citry>=1.0.0,<2` and expect their code to keep working on every
+1.x release. So when you write a change to code under `crates/` or
+`packages/`, and when you review one, check it against the rules in
+[`docs/codebase.md`](docs/codebase.md#breaking-changes) and the Versioning
+and support page (`docs_site/content/about/versioning.md`), and say the
+result in the pull request. Until `citry` 1.0.0 is released, the
+"Keep contract versions at 1" bullet above still decides contract versions.
+
+- **Does it break anything the 1.x promise covers?** The lists in
+  [Breaking changes](docs/codebase.md#breaking-changes) say what is
+  covered. Adding a name or an optional argument is not a break. A break
+  cannot ship in 1.x as written: keep the old behavior and deprecate it
+  ([Deprecating a feature](docs/codebase.md#deprecating-a-feature)), or
+  hold the change for the next major release. A security fix may refuse
+  input Citry used to accept, and its changelog entry says so. For any
+  other break, ask the maintainer before opening the pull request.
+- **Does one release write data that another release reads?** For example
+  an Events request, a State token, a cache entry, or the JSON of
+  `citry check`. Follow [Contract versions](docs/codebase.md#contract-versions).
+  A public format (one the docs describe, or that tools outside Citry
+  read) does not change incompatibly in 1.x: the change gets a new number,
+  such as `citry-events/2`, and ships beside the old one until a major
+  release drops it. An internal format (one only Citry's own code reads
+  back) may get a new version number only when the 1.x releases already
+  out treat an unknown version as missing. If you cannot tell which kind
+  it is, treat it as public.
+- **Which version does the package need next?** A fix needs a patch
+  release, a new feature or a deprecation needs a minor release, and a
+  removal needs a major release. When the change needs a bigger release
+  than the one being prepared, say so in the pull request rather than
+  shipping it under the smaller number.
+
+Experimental features and the "not covered" list in Breaking changes may
+change in a minor release. The rules cover `citry` and every other package
+at 1.0.0 or later; `citry-ui` stays at 0.x, and a `citry-core` change counts
+only when it changes a covered `citry` behavior.
+
+The independent reviewer (Mechanism 6) runs the same check and reports what
+it found, or that the change touches nothing the rules cover.
 
 ## Changelog entries
 
