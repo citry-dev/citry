@@ -979,7 +979,7 @@ declarations and no State on the subclass fail at definition, the same as
   | `_model` | tuple of field names | same as `_public` | Which public fields the client may write, through two-way bindings or `$state`; declare it only to clamp down. Must be a subset of `_public` (7.2). |
   | `_storage` | `"signed"` \| `"server"` | `"signed"` | Where the round-trip State lives: signed into the client token (7.1), or, opt-in, a server-side store keyed by an opaque token (the livecomponents migration's step one, 10). |
   | `_max_bytes` | `int`, or `None` with server storage | `8192`; `65536` with server storage | Signed storage: mint-time cap on the serialized State, a design-smell canary, not a technical limit (7.1); a browser write that would make the State larger answers 422 `invalid_args` before the handler runs, when the call would return a new token (a caller instance that accepts the `state` action). Server storage: browser writes may not grow the stored State past it; the call answers 422 `invalid_args` before the handler runs. `None` turns that check off, and is a definition error for signed storage. |
-  | `_max_age` | `timedelta` | none; 24 hours with server storage | Optional token expiry; expired tokens answer `stale_state` and degrade per component, not per page (7.1). Server storage uses it as the cache entry's lifetime. |
+  | `_max_age` | `timedelta` | 24 hours | Token expiry in both storage modes; expired tokens answer `stale_state` and degrade per component, not per page (7.1). Server storage uses it as the cache entry's lifetime. A page that stays open longer sets a longer `timedelta`; there is no "never expires" value. |
 
   Details and the security doctrine in 7.2.
 - State may carry methods; they survive the dataclass conversion. The
@@ -1845,7 +1845,7 @@ data.
 Error results carry `{status, code, message, fieldErrors?}` with stable string
 codes, each with a fixed status except the catch-all: `invalid_args`
 (422), `invalid_state` (403, a malformed token), `stale_state` (409, an
-expired or rotated-out token), `unknown_event` and `unknown_component`
+expired, rotated-out, or unknown-version token), `unknown_event` and `unknown_component`
 (404), `forbidden` (403), `not_found` (404), `conflict` (409), `error`
 (the catch-all for user-raised statuses with no dedicated code, 3.7;
 it ships the raised 400-599 unchanged), `csrf_failed` (403),
@@ -1857,8 +1857,10 @@ between the two token codes: a payload that still parses as a
 well-formed token (valid base64 and JSON with the version, component
 class, and state fields) answers `stale_state`, because a token signed
 by a rotated-out secret looks exactly like that; anything less (bad
-base64, bad JSON, wrong version, missing fields) answers
-`invalid_state`. A signature-only tamper is indistinguishable from an
+base64, bad JSON, a version that is not an integer, missing fields)
+answers `invalid_state`. A token whose version is an integer the server
+does not know answers `stale_state` whatever its signature, as 7.1
+describes. A signature-only tamper is indistinguishable from an
 honest rotated-out token, so it takes the 409 path; the payload's
 values are only used to pick the error code, never trusted before the
 signature verifies. On the per-event route
@@ -4683,7 +4685,7 @@ transports would both need belongs in the dispatcher, never duplicated):
 | Envelope validation | Structural check of the call envelope (field presence, types, the 16-call cap) before any other work. | Plain Python checks, not JSON-Schema loading at runtime; the protocol package's schemas bind in tests (plan WP18). Cap violations map to `payload_too_large` (413). |
 | Version and capabilities | Reject unknown protocol majors; resolve an absent `capabilities` field to the baseline; hand the resolved set to action encoding so `morph` downgrades to `replace` and no action kind outside the set is ever emitted. | The baseline constant is the protocol package's `CAPABILITIES_BASELINE_V1`; rejections mirror per call so `results[i]` always answers `calls[i]`. |
 | Component and event resolution | The per-event URL is authoritative; explicit `componentClassId` and `handlerName` fields must match it. A failed lookup produces the wire error codes `unknown_component` / `unknown_event` (protocol constants from the 3.7 table, status 404), never a lookup of any user-defined name: there is no magic fallback component or handler to define. Custom not-found behavior hangs off the `on_event_error` hook or host middleware on the real URLs. | `Citry.get_component_by_class_id` resolves the class; wire names come from the handler metadata captured at class creation (plan WP7). |
-| Token verification and updates | Verify the signed `stateToken` (malformed 403, expired or rotated-out 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `stateUpdates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
+| Token verification and updates | Verify the signed `stateToken` (malformed 403, expired, rotated-out, or unknown-version 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `stateUpdates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
 | Args validation | Validate the wire args payload against the handler's `data` schema with the 3.3 coercions; failures are per-field 422s, never host 500s. | The data-schema machinery (plan WP9) returns structured results that the error mapping consumes. |
 | Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
@@ -4903,6 +4905,26 @@ key          = hmac_sha256("citry.events.state-token", secret)
 payload_json = {"v": 1, "c": "<class_id>", "s": {<state>}, "t": <mint epoch>, "x": <expiry epoch | null>}
 ```
 
+Citry always writes `x`: `_max_age` after the mint time, or 24 hours when
+`_max_age` is unset. Verification still accepts `null`, so the payload
+shape stays the same for every 1.x release.
+
+A later 1.x release may move State tokens to a new version, because only
+Citry reads them. That works because a server answers `stale_state` (409)
+for a token whose version it does not know, and the browser then offers a
+reload. The server checks the version first and reads nothing else from
+such a token:
+
+- the prefix: any `ce`, letter, number prefix other than `cev1` and
+  `ces1`, such as `cev2.`, before anything after it is decoded. Later
+  releases keep that prefix shape so 1.0.0 recognises their tokens;
+- the payload: an integer `v` other than 1, before the shape check (a
+  later version may use other fields), whether or not the signature
+  matched. A server-stored entry gets the same check.
+
+A version that is not an integer, and every other unreadable token, stays
+`invalid_state` (403).
+
 The signing key is HMAC-SHA256 of the secret, keyed with a fixed label.
 Django projects pass their `SECRET_KEY`, which other code may also sign
 with. A signature that code makes with the raw secret does not verify as
@@ -4941,8 +4963,8 @@ Rules, each closing a named prior-art hole:
   in State is visible in the page source"); the mitigations, in order: do
   not put secrets in State; keep an id in State and re-derive per call;
   use server-side State storage when the values must not ride in the token.
-- Optional expiry via State meta (`_max_age`, a `timedelta`); expired or
-  rotated-out tokens answer `stale_state` (409), malformed ones
+- Expiry via State meta (`_max_age`, a `timedelta`, 24 hours when unset);
+  expired, rotated-out, or unknown-version tokens answer `stale_state` (409), malformed ones
   `invalid_state` (403; the split is payload well-formedness, per the
   error-codes rule in 4.3), and both degrade per component, not per
   page.

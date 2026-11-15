@@ -173,7 +173,7 @@ any other user input. See [Security](/security/#treat-state-as-client-input).
 
 | Data | Put it in | How long it lives |
 |---|---|---|
-| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls. |
+| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls. The copy in the page expires after 24 hours unless `_max_age` sets another lifetime ([details](/security/#treat-state-as-client-input)). |
 | Larger or computed values the browser code reads | `js_data()` | Recomputed on each render. |
 | Browser-only UI state, such as whether a panel is open | Vue `data()` | Kept by the Vue component in the browser. |
 

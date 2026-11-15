@@ -232,8 +232,8 @@ the child lists it: `_public = ("project_id", "sort")`.
 
 A plain `class State:` starts from the default settings, not the
 parent's: values are stored, signed, in the page, browser code can read
-and change every field, the values never expire, and the size limit
-(`_max_bytes`) is the default. Citry warns when the parent set `_public`,
+and change every field, the values expire after the 24-hour default, and
+the size limit (`_max_bytes`) is the default. Citry warns when the parent set `_public`,
 `_model`, or `_max_age` and the new `State` does not. It does not warn
 about `_max_bytes`.
 

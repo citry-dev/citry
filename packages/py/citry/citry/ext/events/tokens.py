@@ -37,6 +37,12 @@ way (it only stores and echoes the string):
   serve the next call and must find the entry. Expiry rides the cache's own
   time-to-live, set from ``_max_age`` at mint, or 24 hours when it is unset.
 
+Both storage modes share one lifetime rule: a token is valid for ``_max_age``
+after it is minted, or for 24 hours when ``_max_age`` is unset. A token whose
+version this release does not know (one a newer or older release wrote) is
+treated like an expired one, so a version change in a later release costs an
+open page one reload.
+
 The per-call order the dispatcher (a later work package) drives is: verify the
 token, rebuild the State from ``verified.state_kwargs`` (``restore_state``), apply ``stateUpdates`` to
 the writable (``_model``) fields, refuse the call when those writes grow
@@ -55,6 +61,7 @@ import hashlib
 import hmac
 import json
 import math
+import re
 import secrets as secrets_module
 import sys
 import time
@@ -122,6 +129,14 @@ __all__ = [
 # that a token carries the prefix of the component's declared storage.
 _SIGNED_PREFIX = "cev1"
 _SERVER_PREFIX = "ces1"
+
+# The shape every State token prefix takes, in this release and in any later
+# one: ``ce``, a letter for the storage form, then a version number. A token
+# with this shape but neither prefix above was written by a release that uses
+# another token version, so verification answers stale (the browser offers a
+# reload) instead of malformed. Later releases must keep this shape, so that
+# 1.0.0 recognises their tokens as a version it does not know.
+_TOKEN_PREFIX_SHAPE = re.compile(r"ce[a-z][0-9]+\.")
 # Server-storage State lives in ``Citry.cache`` under this namespace, beside
 # Citry's other ``citry:``-prefixed keys. Prefixing the key read back from a
 # token also means a forged token can only name another State entry, never a
@@ -142,6 +157,10 @@ _STATE_TOKEN_KEY_LABEL = b"citry.events.state-token"
 # collected.
 _HINT_CACHE: WeakKeyDictionary[type, dict[str, Any]] = WeakKeyDictionary()
 
+_UNKNOWN_VERSION_MSG = (
+    "The state token was written in a token version this server does not know (for example by"
+    " another Citry release during a deploy). Reload the page to get a fresh token."
+)
 _MALFORMED_MSG = (
     "The state token is malformed and could not be read. It may have been truncated or"
     " altered in transit; reload the page to get a fresh token."
@@ -154,10 +173,12 @@ _NO_SIGNING_KEY_MSG = (
 )
 
 
-# How long a server-stored State entry lives when ``_max_age`` is unset. Every
-# render and every State change writes a new entry, and nothing else removes
-# the old ones, so an entry without a lifetime would stay in the cache for good.
-_SERVER_STATE_DEFAULT_TTL = timedelta(hours=24)
+# How long a State token stays valid when ``_max_age`` is unset, in both
+# storage modes. A server-stored entry needs a lifetime because every render
+# and every State change writes a new one and nothing else removes the old
+# ones. A signed token needs one because anyone who copied it could otherwise
+# send it back for as long as the signing secret stays in use.
+_STATE_DEFAULT_MAX_AGE = timedelta(hours=24)
 
 
 # The ids of in-memory caches with no State budget that already warned about
@@ -224,7 +245,9 @@ class InvalidStateError(StateTokenError):
     The token is malformed, or was minted for another component (403).
 
     Malformed means the payload cannot be read as a well-formed token: bad
-    base64, bad JSON, a wrong protocol version, or missing fields. A token that
+    base64, bad JSON, a version that is not an integer, or missing fields. A
+    token whose version is an integer this release does not know answers
+    [`StaleStateError`][citry.ext.events.tokens.StaleStateError]. A token that
     is well-formed but fails signature verification answers
     [`StaleStateError`][citry.ext.events.tokens.StaleStateError] instead; the
     split is the error-codes rule in design section 4.3.
@@ -236,7 +259,7 @@ class InvalidStateError(StateTokenError):
 
 class StaleStateError(StateTokenError):
     """
-    The token is stale: expired, rotated out, or its server-side entry is gone (409).
+    The token is stale: expired, rotated out, from another token version, or its server-side entry is gone (409).
 
     A well-formed token whose signature matches no configured secret answers
     this code (the error-codes rule in design section 4.3): a token signed by a
@@ -311,10 +334,10 @@ def mint_state_token(
             configured) raises
             [`SigningSecretError`][citry.ext.events.tokens.SigningSecretError]
             for signed storage.
-        max_age: Optional token lifetime. In signed storage it becomes the
-            payload's expiry field, and ``None`` never expires. In server
-            storage it becomes the cache entry's time-to-live, and ``None``
-            gives the entry a 24-hour lifetime.
+        max_age: How long the token stays valid; ``None`` means the
+            24-hour default. In signed storage it becomes the payload's
+            expiry field. In server storage it becomes the cache entry's
+            time-to-live.
         max_bytes: The mint-time size canary for signed storage: State whose
             serialized form exceeds it raises, with guidance to keep an id and
             reload the rest. The dispatcher also checks it against browser
@@ -394,7 +417,7 @@ def _prepare_state_token_values(
         raise ValueError(msg) from err
     if storage == "server":
         key = secrets_module.token_urlsafe(32)
-        ttl = (max_age if max_age is not None else _SERVER_STATE_DEFAULT_TTL).total_seconds()
+        ttl = _effective_max_age(max_age).total_seconds()
         return PreparedStateToken(
             token=f"{_SERVER_PREFIX}.{key}",
             cache_key=_state_cache_key(key),
@@ -531,10 +554,17 @@ def _reject_non_string_dict_keys(value: Any, class_id: str, field_name: str, see
             _reject_non_string_dict_keys(item, class_id, field_name, seen)
 
 
+def _effective_max_age(max_age: timedelta | None) -> timedelta:
+    """The token lifetime to use: the component's ``_max_age``, or the 24-hour default when it is unset."""
+    return max_age if max_age is not None else _STATE_DEFAULT_MAX_AGE
+
+
 def _build_payload(class_id: str, state_dict: dict[str, Any], max_age: timedelta | None) -> dict[str, Any]:
     """The canonical payload dict shared by both storage modes."""
     minted_at = int(_now())
-    expiry = minted_at + int(max_age.total_seconds()) if max_age is not None else None
+    # Every token Citry mints carries an expiry. Verification still accepts
+    # ``"x": null``, so the shape check stays the same for every 1.x release.
+    expiry = minted_at + int(_effective_max_age(max_age).total_seconds())
     return {"v": _PROTOCOL_VERSION, "c": class_id, "s": state_dict, "t": minted_at, "x": expiry}
 
 
@@ -656,11 +686,12 @@ def verify_state_token(
 
     Raises:
         InvalidStateError: The token is malformed (its payload cannot be read
-            as a well-formed token: bad base64, bad JSON, a wrong protocol
-            version, or missing fields), or it was minted for another
+            as a well-formed token: bad base64, bad JSON, a version that is
+            not an integer, or missing fields), or it was minted for another
             component, or ``storage`` is not a known mode (403).
-        StaleStateError: The token is stale (409): it is of the other
-            storage form (the component's ``_storage`` changed since the page
+        StaleStateError: The token is stale (409): its prefix or payload
+            names a token version this release does not know, it is of the
+            other storage form (the component's ``_storage`` changed since the page
             rendered), it expired, its signature
             matches no current secret while the payload is still well-formed
             (a rotated-out signing secret, or a tampered signature, which is
@@ -674,6 +705,10 @@ def verify_state_token(
         # with no state field) is malformed, not a crash: map it like any other
         # unreadable token instead of letting an AttributeError reach the caller.
         raise InvalidStateError(_MALFORMED_MSG)
+    # A token from another token version is refused before anything else is
+    # read from it. Nothing of such a token is used: it only picks stale over
+    # malformed, so a page from another release is offered a reload.
+    _refuse_unknown_version_prefix(token)
     # The component's storage picks the check, so a server-storage component
     # only ever loads State from the cache, which the client cannot write.
     if storage == "server":
@@ -701,6 +736,23 @@ def verify_state_token(
         raise InvalidStateError(msg)
 
     return VerifiedState(state_kwargs=payload["s"], class_id=payload["c"])
+
+
+def _refuse_unknown_version_prefix(token: str) -> None:
+    """Answer stale for a token whose prefix names a token version this release does not know."""
+    match = _TOKEN_PREFIX_SHAPE.match(token)
+    if match is not None and match.group()[:-1] not in (_SIGNED_PREFIX, _SERVER_PREFIX):
+        raise StaleStateError(_UNKNOWN_VERSION_MSG)
+
+
+def _refuse_unknown_payload_version(payload: object) -> None:
+    """Answer stale for a payload that names a protocol version this release does not know."""
+    # Only an integer version counts: that is the only form a release writes,
+    # so anything else is a malformed payload and the shape check refuses it.
+    if type(payload) is dict:
+        version = cast("dict[str, Any]", payload).get("v")
+        if type(version) is int and version != _PROTOCOL_VERSION:
+            raise StaleStateError(_UNKNOWN_VERSION_MSG)
 
 
 def _refuse_other_form(token: str, *, other: str) -> None:
@@ -791,6 +843,10 @@ def _decode_payload(payload_bytes: bytes) -> dict[str, Any]:
         # both are malformed and map to the 403 here instead of escaping
         # verify as a crash.
         raise InvalidStateError(_MALFORMED_MSG) from err
+    # A later version may use other fields, so the version is read before the
+    # shape is checked. A token whose signature matched nothing reaches here
+    # only to pick its error code, and both answers refuse it.
+    _refuse_unknown_payload_version(payload)
     if not _valid_payload_shape(payload):
         raise InvalidStateError(_MALFORMED_MSG)
     return cast("dict[str, Any]", payload)
@@ -871,9 +927,10 @@ def _load_server_payload(key: str, cache: CitryCache | None) -> dict[str, Any]:
         )
     except (json.JSONDecodeError, RecursionError, ValueError) as err:
         raise InvalidStateError(_MALFORMED_MSG) from err
-    # Same shape and protocol-version guard as the signed path (_decode_payload):
-    # during a rolling deploy a v1 worker must reject a payload a future v2 worker
-    # wrote, rather than read it under the wrong protocol.
+    # Same version and shape guard as the signed path (_decode_payload): during
+    # a rolling deploy a worker must not read an entry another release wrote in
+    # a version it does not know, and treats it as gone, so the page reloads.
+    _refuse_unknown_payload_version(payload)
     if not _valid_payload_shape(payload):
         raise InvalidStateError(_MALFORMED_MSG)
     return cast("dict[str, Any]", payload)

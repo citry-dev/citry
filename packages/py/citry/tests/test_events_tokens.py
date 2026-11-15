@@ -65,7 +65,11 @@ CLASS_ID = "Counter_ab12cd"
 TESTS_DIR = Path(__file__).resolve().parents[4] / "packages" / "protocol" / "events" / "v1" / "tests"
 
 # Locked golden vectors: mint(CounterState(count=3, label="hi"),
-# class_id=CLASS_ID, secret=SIGNING_KEY, _now=FIXED_NOW).
+# class_id=CLASS_ID, secret=SIGNING_KEY, _now=FIXED_NOW). With
+# ``max_age=None`` the token carries the 24-hour default expiry.
+GOLDEN_DEFAULT_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOjE3MDAwODY0MDB9.9dv5eLfN8SrUQfLekOLUHip8hINDy2KzWRMiEfzLtI8"  # noqa: E501
+# The same State with ``"x": null``. Citry no longer mints this, but verify
+# still accepts it, so tests that must verify at any clock reading use it.
 GOLDEN_NO_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOm51bGx9.7jlis78Jj3-eReJNBQ-ZAE6g8875aNn3QdSbDutdndk"  # noqa: E501
 GOLDEN_WITH_EXPIRY = "cev1.eyJjIjoiQ291bnRlcl9hYjEyY2QiLCJzIjp7ImNvdW50IjozLCJsYWJlbCI6ImhpIn0sInQiOjE3MDAwMDAwMDAsInYiOjEsIngiOjE3MDAwMDM2MDB9.Ss0KHdwx1rZqbHsgHrpxHmR8waawjODipotVIeAFzdo"  # noqa: E501
 
@@ -202,7 +206,7 @@ def _forge_signed_token(payload_bytes):
 
 
 class TestMintGoldenVectors:
-    def test_no_expiry_exact_token(self, monkeypatch):
+    def test_default_expiry_exact_token(self, monkeypatch):
         _pin_now(monkeypatch)
         token = mint_state_token(
             CounterState(count=3, label="hi"),
@@ -211,7 +215,7 @@ class TestMintGoldenVectors:
             max_age=None,
             max_bytes=8192,
         )
-        assert token == GOLDEN_NO_EXPIRY
+        assert token == GOLDEN_DEFAULT_EXPIRY
 
     def test_with_expiry_exact_token(self, monkeypatch):
         _pin_now(monkeypatch)
@@ -241,7 +245,7 @@ class TestMintGoldenVectors:
         )
         # Canonical JSON sorts keys, so the token is identical to the one from a
         # State that declares the same fields in the other order.
-        assert token == GOLDEN_NO_EXPIRY
+        assert token == GOLDEN_DEFAULT_EXPIRY
 
     def test_dict_value_key_order_does_not_change_token(self, monkeypatch):
         _pin_now(monkeypatch)
@@ -669,15 +673,16 @@ class TestInvalidState:
         assert exc_info.value.status == 403
         assert exc_info.value.code == "invalid_state"
 
-    def test_unverified_wrong_version_payload_is_invalid(self):
-        # An unverifiable signature over a payload declaring another protocol
-        # version is not a well-formed v1 token: invalid_state (403), not stale.
-        payload = tokens._canonical_json({"v": 2, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None})
-        token = _forge_signed_token(payload.encode("utf-8"))
-        with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
-        assert exc_info.value.status == 403
-        assert exc_info.value.code == "invalid_state"
+    def test_unverified_non_integer_version_payload_is_invalid(self):
+        # Releases write the version as an integer, so a payload whose
+        # version is anything else is malformed: invalid_state (403).
+        for version in ("2", 2.0, True, None):
+            payload = tokens._canonical_json({"v": version, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None})
+            token = _forge_signed_token(payload.encode("utf-8"))
+            with pytest.raises(InvalidStateError) as exc_info:
+                verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
+            assert exc_info.value.status == 403
+            assert exc_info.value.code == "invalid_state"
 
     def test_unverified_payload_missing_fields_is_invalid(self):
         # A well-formed token needs the component class ("c") and state ("s")
@@ -739,16 +744,6 @@ class TestInvalidState:
         # its 403 from the no-match classification: empty bytes are not JSON.
         with pytest.raises(InvalidStateError) as exc_info:
             verify_state_token("cev1.!!!.###", cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
-        assert exc_info.value.status == 403
-
-    def test_wrong_protocol_version_malformed(self):
-        # A validly-signed token whose payload declares v=2 is still rejected.
-        payload = {"v": 2, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None}
-        payload_bytes = tokens._canonical_json(payload).encode("utf-8")
-        signature = hmac.new(tokens._state_token_key(SIGNING_KEY), payload_bytes, hashlib.sha256).digest()
-        token = f"cev1.{tokens._b64url_encode(payload_bytes)}.{tokens._b64url_encode(signature)}"
-        with pytest.raises(InvalidStateError) as exc_info:
-            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 403
 
     def test_class_id_mismatch(self):
@@ -854,6 +849,132 @@ class TestStaleState:
             verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert exc_info.value.status == 409
         assert exc_info.value.code == "stale_state"
+
+
+class TestDefaultLifetime:
+    """A token minted without ``_max_age`` expires after 24 hours, in both storage modes."""
+
+    DAY = 24 * 60 * 60
+
+    def test_signed_token_without_max_age_expires_after_24_hours(self, monkeypatch):
+        _pin_now(monkeypatch, FIXED_NOW)
+        token = mint_state_token(
+            CounterState(count=1), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=None, max_bytes=8192
+        )
+        _pin_now(monkeypatch, FIXED_NOW + self.DAY - 1)
+        verified = verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
+        assert verified.state_kwargs["count"] == 1
+        # The same answer as any expired token: stale, so the browser offers a reload.
+        _pin_now(monkeypatch, FIXED_NOW + self.DAY)
+        with pytest.raises(StaleStateError) as exc_info:
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
+        assert exc_info.value.status == 409
+        assert exc_info.value.code == "stale_state"
+        assert "expired" in exc_info.value.message
+
+    def test_an_explicit_max_age_replaces_the_default(self, monkeypatch):
+        # A longer _max_age is how a page that stays open for days keeps its
+        # token valid; a shorter one ends it sooner.
+        _pin_now(monkeypatch, FIXED_NOW)
+        long_lived = mint_state_token(
+            CounterState(count=1), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=timedelta(days=30), max_bytes=8192
+        )
+        short_lived = mint_state_token(
+            CounterState(count=2), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=timedelta(minutes=5), max_bytes=8192
+        )
+        _pin_now(monkeypatch, FIXED_NOW + 2 * self.DAY)
+        assert (
+            verify_state_token(long_lived, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY]).state_kwargs[
+                "count"
+            ]
+            == 1
+        )
+        with pytest.raises(StaleStateError):
+            verify_state_token(short_lived, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
+
+    def test_server_entry_without_max_age_lives_24_hours(self):
+        # Server storage already used this default; both modes now share it.
+        cache = RecordingCache()
+        mint_state_token(
+            CounterState(count=1),
+            class_id=CLASS_ID,
+            secret=None,
+            max_age=None,
+            max_bytes=8192,
+            storage="server",
+            cache=cache,
+        )
+        assert list(cache.ttls.values()) == [self.DAY]
+
+
+class TestUnknownTokenVersion:
+    """
+    A token from a token version this release does not know answers stale.
+
+    A later 1.x release may move State tokens to a new version. A page it
+    rendered may then reach a server still running this release during a
+    deploy, and the browser must be offered a reload, not shown an error.
+    """
+
+    @pytest.mark.parametrize("storage", ["signed", "server"])
+    @pytest.mark.parametrize("prefix", ["cev2", "ces2", "cev10", "cex1"])
+    def test_an_unknown_prefix_is_stale(self, prefix, storage):
+        # Nothing after the prefix is read, so the rest need not be valid.
+        cache = InMemoryCache()
+        with pytest.raises(StaleStateError) as exc_info:
+            verify_state_token(
+                f"{prefix}.anything.at-all", cls=FakeCounter, storage=storage, secrets=[SIGNING_KEY], cache=cache
+            )
+        assert exc_info.value.status == 409
+        assert exc_info.value.code == "stale_state"
+
+    def test_a_signed_payload_with_an_unknown_version_is_stale(self):
+        # The signature verifies (a newer release signed it with the same
+        # secret), but the payload names version 2.
+        payload = tokens._canonical_json({"v": 2, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None})
+        payload_bytes = payload.encode("utf-8")
+        signature = hmac.new(tokens._state_token_key(SIGNING_KEY), payload_bytes, hashlib.sha256).digest()
+        token = f"cev1.{tokens._b64url_encode(payload_bytes)}.{tokens._b64url_encode(signature)}"
+        with pytest.raises(StaleStateError) as exc_info:
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
+        assert exc_info.value.status == 409
+
+    def test_an_unknown_version_with_other_fields_is_stale(self):
+        # A later version may use other fields entirely; the version is read
+        # before the shape is checked, so the answer is still stale.
+        payload = tokens._canonical_json({"v": 2, "state": {"count": 1}})
+        token = _forge_signed_token(payload.encode("utf-8"))
+        with pytest.raises(StaleStateError):
+            verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
+
+    def test_an_unsigned_unknown_version_reaches_no_state(self, monkeypatch):
+        # A forged token naming an unknown version is refused before the
+        # signature result could matter: it is never decoded into State, and
+        # the class check never runs.
+        restored: list[object] = []
+        monkeypatch.setattr(tokens, "_valid_payload_shape", lambda payload: restored.append(payload) or True)
+        payload = tokens._canonical_json({"v": 7, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None})
+        token = _forge_signed_token(payload.encode("utf-8"))
+        with pytest.raises(StaleStateError):
+            verify_state_token(token, cls=OtherComp, storage="signed", secrets=[SIGNING_KEY])
+        assert restored == []
+
+    def test_known_version_tokens_that_are_malformed_stay_invalid(self):
+        # The unknown-version rule does not widen stale: a cev1 token that
+        # cannot be read, one with a non-integer version, and a correctly
+        # signed token for another component still answer invalid_state.
+        malformed = "cev1.eyJ2IjoxfQ.dGFtcGVyZWQ"
+        non_int_version = _forge_signed_token(
+            tokens._canonical_json({"v": "1", "c": CLASS_ID, "s": {}, "t": 0, "x": None}).encode("utf-8")
+        )
+        other_component = mint_state_token(
+            CounterState(count=1), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=None, max_bytes=8192
+        )
+        for token, cls in ((malformed, FakeCounter), (non_int_version, FakeCounter), (other_component, OtherComp)):
+            with pytest.raises(InvalidStateError) as exc_info:
+                verify_state_token(token, cls=cls, storage="signed", secrets=[SIGNING_KEY])
+            assert exc_info.value.status == 403
+            assert exc_info.value.code == "invalid_state"
 
 
 class TestProtocolFixtureConformance:
@@ -1474,10 +1595,10 @@ class TestServerStorage:
         with pytest.raises(InvalidStateError):
             verify_state_token(token, cls=FakeCounter, storage="server", secrets=[])
 
-    def test_server_payload_wrong_version_rejected(self):
-        # A server-store entry written under a future protocol version must be
-        # rejected as malformed by a worker on this version, mirroring the signed
-        # path, so a rolling deploy never reads state under the wrong protocol.
+    def test_server_payload_unknown_version_is_stale(self):
+        # A cache entry another release wrote in a version this one does not
+        # know is treated as gone, as in the signed path: the worker never
+        # reads it, and the browser offers a reload.
         cache = InMemoryCache()
         key = "some-server-key"
         cache.set(
@@ -1485,10 +1606,10 @@ class TestServerStorage:
             tokens._canonical_json({"v": 2, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None}),
             ttl=None,
         )
-        with pytest.raises(InvalidStateError) as exc_info:
+        with pytest.raises(StaleStateError) as exc_info:
             verify_state_token(f"ces1.{key}", cls=FakeCounter, storage="server", secrets=[], cache=cache)
-        assert exc_info.value.status == 403
-        assert "malformed" in exc_info.value.message.lower()
+        assert exc_info.value.status == 409
+        assert exc_info.value.code == "stale_state"
 
 
 class TestResignFlow:

@@ -863,7 +863,7 @@ Every wire error has exactly `status`, `code`, and `message`, plus optional
 |---|---:|---|
 | `invalid_args` | 422 | Handler args or State updates failed validation. |
 | `invalid_state` | 403 | The server cannot read the State token, or the token belongs to another component class. See [State tokens](#state-tokens). |
-| `stale_state` | 409 | The token expired, its signature matches no current secret, the State it points to is gone, or its State no longer fits the component. See [State tokens](#state-tokens). |
+| `stale_state` | 409 | The token comes from a token version the server does not know, it expired, its signature matches no current secret, the State it points to is gone, or its State no longer fits the component. See [State tokens](#state-tokens). |
 | `unknown_event` | 404 | The component class declares no handler under that name. |
 | `unknown_component` | 404 | No registered component class has that ID. |
 | `forbidden` | 403 | Application authorization denied the call. |
@@ -970,20 +970,28 @@ a fresh token. It treats `invalid_state` (403) like any other error.
 The server checks the token of a call that needs State in this order, and
 answers the first problem it finds:
 
-1. The call sends no token, or the server cannot read it as one of its own
+1. The token comes from a token version the server does not know, as
+   when another release of the server wrote it during a deploy:
+   `stale_state`. The server reads nothing else from such a token.
+2. The call sends no token, or the server cannot read it as one of its own
    tokens, for example because the encoding, the JSON, or a field is
-   wrong, or the token version is unknown: `invalid_state`.
-2. The token expired, its signature matches none of the server's current
+   wrong: `invalid_state`.
+3. The token expired, its signature matches none of the server's current
    signing secrets, or, for a token that points to State the server
    stores, the server no longer holds that State: `stale_state`.
-3. The token was minted for a different component class than the call
+4. The token was minted for a different component class than the call
    names: `invalid_state`.
-4. The token's State fields no longer fit the component's State class, as
+5. The token's State fields no longer fit the component's State class, as
    after a deploy that changed the class: `stale_state`.
 
 On a component that declares State, a call needs State when its handler
 reads State, when it sends `stateUpdates`, or when it sends a token at
 all. A component without State ignores a token.
+
+Step 1 lets a server release move its tokens to a new internal format.
+During a deploy, a page that the new release rendered can send its token to
+a process still running the old release, and the visitor is offered a
+reload instead of an error.
 
 A server cannot tell a token with a changed signature from an honest token
 signed with a secret it has since removed, because both are readable
@@ -1242,6 +1250,11 @@ already running the new release. The call fails with an error, no reload
 prompt appears, and the page keeps failing such calls until the visitor
 reloads it. An `html-fragment/1`
 render has no such limit.
+
+The format inside `stateToken` is not defined here either, and a 1.x
+release may change it. A server answers a token from a token version it
+does not know with `stale_state` (see [State tokens](#state-tokens)), so
+during an upgrade a page with such a token is offered a reload.
 
 A v1 reader rejects unknown fields and values (see
 [The contract is strict](#the-contract-is-strict)), so v1 has no room for
