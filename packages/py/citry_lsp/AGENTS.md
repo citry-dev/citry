@@ -84,13 +84,13 @@ release, usually the release pull request, and these change together:
 `test_runtime_compatibility_matches_the_declared_dependency_floor` fails when
 the constant and the installed requirement disagree.
 
-The floor moves to 1.0.0 in the citry 1.0.0 release pull request, because
-`citry._lsp_support` first ships in 1.0.0. After that it stays at 1.0.0 for
-all of 1.x, since every citry-lsp 1.x must work with every citry 1.x. The
-same pull request releases citry-lsp 1.0.0 (citry-lsp keeps the same major
-version as citry, which `scripts/lsp_citry_pairs.py` relies on) and records
-`packages/py/citry/tests/lsp_support_names.json` again from scratch, so it
-lists what citry 1.0.0 exports.
+The floor is 1.0.0, the first citry release with `citry._lsp_support`, and
+it stays at 1.0.0 for all of 1.x, since every citry-lsp 1.x must work with
+every citry 1.x. citry-lsp keeps the same major version as citry, which
+`scripts/lsp_citry_pairs.py` relies on.
+`packages/py/citry/tests/lsp_support_names.json` records what citry exports
+to citry-lsp; record it again from scratch until the `citry@1.0.0` tag
+exists, and only add to it after that.
 
 ## Importing from Citry
 
