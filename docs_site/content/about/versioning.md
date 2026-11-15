@@ -150,8 +150,8 @@ happen:
       `citry-events/2`; then the old server answers `protocol_mismatch`.
 - **Data an old page cannot read:** a State token (the signed copy of a
   component's State in the page), a render or a fragment written by a
-  newer release. The page reloads once and then works with the new
-  release.
+  newer release. The page asks the visitor once to reload, and after the
+  reload it works with the new release.
 - **[Render cache](/performance/caching/):** every upgrade, patch
   releases too, ignores entries that another Citry version wrote. While
   old and new servers share one cache, expect slower renders until the

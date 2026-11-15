@@ -62,7 +62,7 @@ export function installFragmentManager(
       Object.keys(manifest).some((key) => key !== "vue") ||
       (typeof protocol === "string" && protocol !== "citry-vue-fragment/1")
     )
-      throw pageOutOfDateError("[Citry] this Vue fragment comes from a different version of the app; reload the page.");
+      throw pageOutOfDateError("[Citry] this Vue fragment comes from a different Citry release; reload the page.");
     const vue = manifest.vue;
     if (
       !vue ||

@@ -19,10 +19,10 @@ CONTRACT = "a" * 64
 OTHER_CONTRACT = "b" * 64
 
 
-def _old_page() -> check.OldPage:
-    return check.OldPage(
+def _page() -> check.Page:
+    return check.Page(
         script_urls=["/citry/citry.0123.js"],
-        definition_urls=["/citry/ext/events/definitions/0123.js"],
+        definitions=[("/citry/ext/events/definitions/0123.js", "c" * 64)],
         helper_contracts={CONTRACT},
         app_id="app",
         revision=0,
@@ -43,9 +43,9 @@ def _render(contract: str) -> dict[str, Any]:
     return {"action": "render", "renderer": "vue-prepared/1", "prepared": prepared}
 
 
-def _judge(answer: dict[str, Any], *, previous_offers_reload: bool = True) -> check.Outcome:
+def _judge(answer: dict[str, Any], *, page_offers_reload: bool = True) -> check.Outcome:
     report = check.Report(previous="1.0.0", candidate="1.1.0", promised=True)
-    check.judge_event_answer(report, "call", _old_page(), "req", answer, previous_offers_reload=previous_offers_reload)
+    check.judge_event_answer(report, "call", _page(), "req", answer, page_offers_reload=page_offers_reload)
     [outcome] = report.outcomes
     return outcome
 
@@ -117,15 +117,15 @@ def test_an_answer_that_is_not_a_result_for_this_call_fails(answer: dict[str, An
 
 def test_a_render_with_other_helpers_counts_as_a_reload_only_where_the_old_page_offers_one() -> None:
     answer = _answer({"ok": True, "sendSequence": 1, "actions": [_render(OTHER_CONTRACT)]})
-    assert _judge(answer, previous_offers_reload=True).status == "reload"
-    assert _judge(answer, previous_offers_reload=False).status == "fail"
+    assert _judge(answer, page_offers_reload=True).status == "reload"
+    assert _judge(answer, page_offers_reload=False).status == "fail"
 
 
 def test_old_page_records_are_found_in_its_vue_app_data() -> None:
     manifest = {
         "appId": "app-1",
         "revision": 0,
-        "definitions": [{"url": "/citry/ext/events/definitions/x.js", "helperContract": CONTRACT}],
+        "definitions": [{"url": "/citry/ext/events/definitions/x.js", "sha256": "d" * 64, "helperContract": CONTRACT}],
         "occurrences": [
             {
                 "id": "occ-1",
@@ -139,9 +139,9 @@ def test_old_page_records_are_found_in_its_vue_app_data() -> None:
         '<script src="https://cdn.example/other.js"></script>'
         f'<script type="application/json" data-citry-vue-document="app-1">{block}</script>'
     )
-    old = check.read_old_page(page)
+    old = check.read_page(page)
     assert old.script_urls == ["/citry/citry.abc.js"]
-    assert old.definition_urls == ["/citry/ext/events/definitions/x.js"]
+    assert old.definitions == [("/citry/ext/events/definitions/x.js", "d" * 64)]
     assert old.helper_contracts == {CONTRACT}
     assert (old.app_id, old.occurrence_id, old.component_class_id, old.render_id, old.state_token) == (
         "app-1",
@@ -155,10 +155,37 @@ def test_old_page_records_are_found_in_its_vue_app_data() -> None:
 
 
 def test_a_page_without_events_records_stops_the_check() -> None:
-    with pytest.raises(SystemExit, match="update read_old_page"):
-        check.read_old_page("<p>no app</p>")
+    with pytest.raises(SystemExit, match="update read_page"):
+        check.read_page("<p>no app</p>")
 
 
 def test_cached_renders_are_compared_without_their_render_ids() -> None:
     assert check.same_markup('<p data-cid-abc1="">x</p>', '<p data-cid-zz9="">x</p>')
     assert not check.same_markup('<p data-cid-abc1="">x</p>', '<p data-cid-abc1="">y</p>')
+
+
+def test_a_served_file_must_be_the_one_the_page_expects() -> None:
+    digest = "e" * 64
+    report = check.Report(previous="1.0.0", candidate="1.1.0", promised=True)
+    check.judge_file(report, "same", {"status": 200, "sha256": digest}, digest)
+    check.judge_file(report, "other bytes", {"status": 200, "sha256": "f" * 64}, digest)
+    check.judge_file(report, "missing", {"status": 404, "sha256": digest}, digest)
+    assert [outcome.status for outcome in report.outcomes] == ["ok", "fail", "fail"]
+    assert check.runtime_digest(f"/citry/citry.{digest}.js") == digest
+    assert check.runtime_digest("/citry/citry.js") == ""
+
+
+@pytest.mark.parametrize(("previous", "exit_code"), [("1.0.0", 1), ("0.9.0", 0)])
+def test_a_stage_that_cannot_run_fails_only_a_promised_deploy(
+    previous: str, exit_code: int, monkeypatch: pytest.MonkeyPatch, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def broken(*_args: object) -> None:
+        msg = "scenario.py uses a renamed API"
+        raise SystemExit(msg)
+
+    monkeypatch.setattr(check, "check", broken)
+    wheel = tmp_path / "citry-1.1.0-py3-none-any.whl"
+    argv = ["check.py", "--previous", previous, "--candidate", str(wheel), "--keep", str(tmp_path / "work")]
+    monkeypatch.setattr("sys.argv", argv)
+    assert check.main() == exit_code
+    assert "the check could not finish: scenario.py uses a renamed API" in capsys.readouterr().out

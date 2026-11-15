@@ -235,7 +235,7 @@
   // means another release compiled it, which is a page to reload rather than a broken render.
   function assertSameHelperContract(value) {
     if (typeof value === "string" && value !== HELPER_CONTRACT)
-      throw pageOutOfDateError("[Citry] the server sent a render from a different version of the app; reload the page");
+      throw pageOutOfDateError("[Citry] the server sent a render from a different Citry release; reload the page");
   }
   const registeredTypeOptions = new Map();
   const browserPluginFactories = new Map();
@@ -3744,6 +3744,13 @@
       preflightResult(result, source) {
         const renders = result.ok ? result.actions.filter(action => action.action === "render") : [];
         if (!renders.length) return {result};
+        // A render from another Citry release can fail any later check with a plain error, so its
+        // helper contract is read first and the page offers its reload instead.
+        for (const action of renders) {
+          const definitions = action.prepared?.definitions;
+          if (Array.isArray(definitions))
+            for (const asset of definitions) assertSameHelperContract(asset?.helperContract);
+        }
         if (renders.length > 1) {
           const indexes = renders.map(action => result.actions.indexOf(action));
           if (indexes.some((index, ordinal) => index !== indexes[0] + ordinal) ||

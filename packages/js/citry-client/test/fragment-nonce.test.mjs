@@ -153,7 +153,7 @@ for (const [name, manifest] of [
     });
     assert.deepEqual(prompts, ["This page is out of date. Reload to continue?"]);
     assert.equal(errors.length, 1, errors.join("\n"));
-    assert.match(errors[0], /different version of the app/);
+    assert.match(errors[0], /different Citry release/);
   });
 }
 

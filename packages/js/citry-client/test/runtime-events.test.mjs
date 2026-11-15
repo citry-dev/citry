@@ -674,7 +674,7 @@ test("a render definition compiled against other helpers fails as an out-of-date
   definition.helperContract = "0".repeat(64);
   assert.throws(
     () => fixture.stable.registerDefinition("app", "def", definition),
-    (error) => error.code === "stale_state" && error.status === 0 && /different version of the app/.test(error.message),
+    (error) => error.code === "stale_state" && error.status === 0 && /different Citry release/.test(error.message),
   );
   // A definition with no helper contract is malformed, not from another release.
   delete definition.helperContract;

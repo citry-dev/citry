@@ -1205,7 +1205,19 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       resolve() {},
       reject() {},
     } satisfies Job;
-    const prepared = options.host.preflightResult?.(result, source) ?? { result };
+    let prepared: PreparedVueResult;
+    try {
+      prepared = options.host.preflightResult?.(result, source) ?? { result };
+    } catch (error) {
+      // Preflight is where the runtime finds a render from another Citry release. Other preflight
+      // failures stay silent as before, but this one gets the same notifications as a sent call,
+      // so the page offers its reload and a `stale` listener can replace it.
+      if (activityError(error).code === "stale_state" && lifecycle("before", source, job.input.handler)) {
+        reportFailure(source, job.input.handler, error);
+        lifecycle("after", source, job.input.handler, { ok: false });
+      }
+      throw error;
+    }
     if (!lifecycle("before", source, job.input.handler)) {
       const error = new VueEventCancellation("Citry Events applyActions was cancelled by citry:events:before.");
       lifecycle("after", source, job.input.handler, { ok: false });

@@ -608,13 +608,16 @@ Each worker writes the runtimes it links to the shared cache, so any
 worker can answer for them. Workers on Citry 0.8.0 or earlier cannot
 serve these runtimes, even from a shared cache.
 
-A page rendered by the old release can also send an event call to a
-worker on the new release. Between two 1.x releases, the call either
-works or fails with `stale_state`, and the page then asks the visitor
-once whether to reload. That happens when the new release no longer
-accepts the page's State, or when it sends back a render that the page's
-older browser code cannot read. To show your own message instead of the
-question, see [`citry:events:stale`](/reference/browser-apis/#events-fired-around-each-call).
+A page rendered by one release can also call an event handler on a
+worker that runs the other. Between two 1.x releases, that call either
+works or fails with `stale_state`. It fails when the other release no
+longer accepts the page's [State](/events/state/), or when it sends back
+a render that the browser code in the page cannot read. Citry then asks
+the visitor, once per page, whether to reload. A visitor who declines
+keeps the page, but its event calls keep failing until they reload. You
+do not need to change anything for this. To show your own message
+instead of the question, see
+[`citry:events:stale`](/reference/browser-apis/#events-fired-around-each-call).
 
 ### Stop CDNs caching 404s
 

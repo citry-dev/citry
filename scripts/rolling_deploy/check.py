@@ -7,20 +7,25 @@ the other. This script stages exactly that:
 
 1. It installs the previous published citry release in one virtual
    environment and the candidate in another.
-2. The old release renders pages with State and Events, and a cached
-   component, into a store both processes share (`scenario.py render`).
-3. The new release answers the old pages' event calls, the old page's runtime
+2. One release renders pages with State and Events, and a cached component,
+   into a store both processes share (`scenario.py render`).
+3. The other release answers the pages' event calls and serves their runtime
    and definition files, and renders the cached component again
    (`scenario.py serve`).
 4. Each answer must be a success or the documented reload, a `stale_state`
-   error that makes the page offer the visitor a reload. Any other error fails
+   error that makes the page ask the visitor to reload. Any other error fails
    the check.
 
-Only deploys between two 1.x releases are promised to work (see the Versioning
-section of packages/protocol/events/v1/spec.md). When the previous release is
-0.x, or the two releases have different major versions, the script runs every
-check and reports the results, but a failed check does not fail the run. It
-decides this from the two version numbers alone.
+Steps 2 to 4 run twice: an old page sent to the new release, then a new page
+sent to the old release.
+
+Only deploys between two releases of the same major version, 1 or later, are
+promised to work (see the Versioning section of
+packages/protocol/events/v1/spec.md). For any other pair, such as 0.9.0 to
+1.0.0, the script runs every check and reports the results, and neither a
+failed check nor a stage that could not run fails the run. It decides this
+from the two version numbers alone. Finding the previous release on PyPI
+comes before that decision, so a failure there always fails the run.
 
 Run it from the repository root:
 
@@ -59,7 +64,7 @@ PYPI_JSON = "https://pypi.org/pypi/citry/json"
 PREFIX = "/citry"
 # What an application needs on top of citry to run scenario.py.
 SCENARIO_REQUIREMENTS = ("diskcache>=5.6",)
-# The headers Citry's browser code sends with every Vue Events call.
+# The Content-Type Citry's browser code sends with every Vue Events call.
 EVENTS_CONTENT_TYPE = "application/citry-events+json"
 
 
@@ -194,11 +199,12 @@ def _walk(value: Any) -> Any:
 
 
 @dataclass
-class OldPage:
-    """What the check needs from a page the old release rendered."""
+class Page:
+    """What the check needs from a page one release rendered."""
 
     script_urls: list[str]
-    definition_urls: list[str]
+    # Each definition file the page loads, with the SHA-256 the page expects.
+    definitions: list[tuple[str, str]]
     helper_contracts: set[str]
     app_id: str
     revision: int
@@ -208,16 +214,16 @@ class OldPage:
     state_token: str
 
 
-def read_old_page(page: str) -> OldPage:
+def read_page(page: str) -> Page:
     """
-    Find the Events records an old page holds.
+    Find the Events records a rendered page holds.
 
     The field names the Events protocol defines (`componentClassId`,
     `stateToken`) cannot change during 1.x. The surrounding Vue app data
-    belongs to the old release's browser code, so it is read loosely: any
-    record holding a State token, inside an occurrence with an `id`, inside a
-    manifest with an `appId`. If a later release moves these, this function
-    stops with a message instead of guessing.
+    belongs to the browser code of the release that rendered the page, so it
+    is read loosely: any record holding a State token, inside an occurrence
+    with an `id`, inside a manifest with an `appId`. If a later release moves
+    these, this function stops with a message instead of guessing.
     """
     parser = _PageParser()
     parser.feed(page)
@@ -230,9 +236,13 @@ def read_old_page(page: str) -> OldPage:
                 for record in _walk(occurrence):
                     if isinstance(record.get("stateToken"), str) and isinstance(record.get("componentClassId"), str):
                         definitions = [item for item in manifest.get("definitions", []) if isinstance(item, dict)]
-                        return OldPage(
+                        return Page(
                             script_urls=[url for url in parser.script_urls if url.startswith(PREFIX + "/")],
-                            definition_urls=[item["url"] for item in definitions if isinstance(item.get("url"), str)],
+                            definitions=[
+                                (item["url"], str(item.get("sha256", "")))
+                                for item in definitions
+                                if isinstance(item.get("url"), str)
+                            ],
                             helper_contracts={
                                 item["helperContract"]
                                 for item in definitions
@@ -245,12 +255,12 @@ def read_old_page(page: str) -> OldPage:
                             render_id=str(record.get("serverRenderId") or record.get("renderId")),
                             state_token=record["stateToken"],
                         )
-    msg = "found no Events record with a State token in the old page; update read_old_page() for its format"
+    msg = "found no Events record with a State token in the page; update read_page() for its format"
     raise SystemExit(msg)
 
 
-def event_call(page: OldPage, request_id: str) -> dict[str, Any]:
-    """Build the request the old page's browser code sends when the button is clicked."""
+def event_call(page: Page, request_id: str) -> dict[str, Any]:
+    """Build the request the page's browser code sends when the button is clicked."""
     envelope = {
         "protocol": "citry-events/1",
         "requestId": request_id,
@@ -285,9 +295,9 @@ def event_call(page: OldPage, request_id: str) -> dict[str, Any]:
 
 
 def judge_event_answer(
-    report: Report, name: str, page: OldPage, request_id: str, answer: dict[str, Any], *, previous_offers_reload: bool
+    report: Report, name: str, page: Page, request_id: str, answer: dict[str, Any], *, page_offers_reload: bool
 ) -> None:
-    """Classify the new release's answer to an old page's event call."""
+    """Classify the other release's answer to a page's event call."""
     try:
         body = json.loads(answer["body"])
         result = body["results"][0]
@@ -304,7 +314,7 @@ def judge_event_answer(
     if result.get("ok") is not True:
         code = (result.get("error") or {}).get("code")
         if code == "stale_state":
-            report.add(name, "reload", f"HTTP {answer['status']} stale_state: the old page offers a reload")
+            report.add(name, "reload", f"HTTP {answer['status']} stale_state: the page asks the visitor to reload")
         else:
             report.add(name, "fail", f"HTTP {answer['status']} error {code!r}: {answer['body'][:300]}")
         return
@@ -313,29 +323,31 @@ def judge_event_answer(
             name, "fail", f"a success with HTTP {answer['status']} and sendSequence {result.get('sendSequence')!r}"
         )
         return
-    # A Vue render from the new release carries the helper contract it was
-    # compiled for. The old page refuses another contract, and offers a reload
-    # only when the old release has that behaviour (1.0.0 and later).
+    # A Vue render carries the helper contract it was compiled for. The page
+    # refuses another contract, and asks the visitor to reload only when the
+    # release that rendered it has that behaviour. Other changes to the render
+    # format are not checked here.
     new_contracts = {
         record["helperContract"]
         for record in _walk(result.get("actions", []))
         if isinstance(record.get("helperContract"), str)
     }
-    changed = new_contracts - page.helper_contracts
-    if not changed:
-        report.add(name, "ok", "the call succeeded and the old page can apply its render")
-    elif previous_offers_reload:
-        report.add(name, "reload", "the render uses other render helpers: the old page offers a reload")
+    if not new_contracts - page.helper_contracts:
+        report.add(name, "ok", "the call succeeded, and its render uses the page's render helpers")
+    elif page_offers_reload:
+        report.add(name, "reload", "the render uses other render helpers: the page asks the visitor to reload")
     else:
-        report.add(name, "fail", "the render uses other render helpers, and the old page offers no reload for that")
+        report.add(name, "fail", "the render uses other render helpers, and the page offers no reload for that")
 
 
-def judge_file(report: Report, name: str, answer: dict[str, Any]) -> None:
-    """A file the old page links must still be served by a worker on the new release."""
-    if answer.get("status") == 200:
-        report.add(name, "ok", "served from the shared store")
-    else:
+def judge_file(report: Report, name: str, answer: dict[str, Any], expected_sha256: str) -> None:
+    """A file the page links must be served, byte for byte, by a worker on the other release."""
+    if answer.get("status") != 200:
         report.add(name, "fail", f"HTTP {answer.get('status')}")
+    elif answer.get("sha256") != expected_sha256:
+        report.add(name, "fail", f"served, but its SHA-256 is {answer.get('sha256')}, not {expected_sha256}")
+    else:
+        report.add(name, "ok", "served with the SHA-256 the page expects")
 
 
 def same_markup(first: str, second: str) -> bool:
@@ -344,32 +356,32 @@ def same_markup(first: str, second: str) -> bool:
     return pattern.sub("data-cid-ID", first) == pattern.sub("data-cid-ID", second)
 
 
-def check(previous: str, candidate: Path, core_wheel: Path | None, work: Path) -> Report:
-    """Install both releases, run the scenario on each, and judge the answers."""
-    new_version = candidate_version(candidate)
-    report = Report(previous=previous, candidate=new_version, promised=deploy_is_promised(previous, new_version))
-    store = work / "store"
-    old_python = make_environment(work / "old-env", [f"citry=={previous}", *SCENARIO_REQUIREMENTS])
-    new_requirements = [str(candidate), *SCENARIO_REQUIREMENTS]
-    if core_wheel is not None:
-        new_requirements.append(str(core_wheel))
-    new_python = make_environment(work / "new-env", new_requirements)
+def runtime_digest(url: str) -> str:
+    """Read the SHA-256 a hashed runtime URL such as `/citry/citry.<sha256>.js` names, or "" if none."""
+    match = re.search(r"\.([0-9a-f]{64})\.js$", url)
+    return match.group(1) if match else ""
 
-    run_scenario(old_python, "render", "--store", str(store), "--out", str(work / "pages.json"), cwd=work)
-    pages = json.loads((work / "pages.json").read_text(encoding="utf-8"))
-    old_pages = {name: read_old_page(pages[name]) for name in ("signed", "stored")}
+
+def check_direction(
+    report: Report, label: str, render_python: Path, serve_python: Path, work: Path, *, page_offers_reload: bool
+) -> None:
+    """Render pages with one release and send their requests to the other, then judge the answers."""
+    work.mkdir(parents=True, exist_ok=True)
+    store = work / "store"
+    run_scenario(render_python, "render", "--store", str(store), "--out", str(work / "pages.json"), cwd=work)
+    rendered = json.loads((work / "pages.json").read_text(encoding="utf-8"))
+    pages = {name: read_page(rendered[name]) for name in ("signed", "stored")}
     requests: dict[str, dict[str, Any]] = {}
-    for name, page in old_pages.items():
+    for name, page in pages.items():
         requests[f"event:{name}"] = event_call(page, f"rolling_{name}")
-    signed = old_pages["signed"]
+    signed = pages["signed"]
     for url in signed.script_urls:
         requests[f"runtime:{url}"] = {"method": "GET", "path": url}
-    for url in signed.definition_urls:
+    for url, _digest in signed.definitions:
         requests[f"definition:{url}"] = {"method": "GET", "path": url}
     (work / "requests.json").write_text(json.dumps(requests), encoding="utf-8")
-
     run_scenario(
-        new_python,
+        serve_python,
         "serve",
         "--store",
         str(store),
@@ -380,29 +392,60 @@ def check(previous: str, candidate: Path, core_wheel: Path | None, work: Path) -
         cwd=work,
     )
     served = json.loads((work / "served.json").read_text(encoding="utf-8"))
-    # The reload for a render the old page cannot read ships from 1.0.0 on.
-    previous_offers_reload = (version_tuple(previous) or (0,)) >= (1, 0, 0)
-    for name, page in old_pages.items():
+    answers = served["answers"]
+    for name, page in pages.items():
         judge_event_answer(
             report,
-            f"event call, {name} State",
+            f"{label}: event call, {name} State",
             page,
             f"rolling_{name}",
-            served["answers"][f"event:{name}"],
-            previous_offers_reload=previous_offers_reload,
+            answers[f"event:{name}"],
+            page_offers_reload=page_offers_reload,
         )
+    # A page that names no runtime or no definition file would make these
+    # checks pass without testing anything.
     if not signed.script_urls:
-        report.add("runtime URL", "fail", "the old page links no runtime under the Citry prefix")
+        report.add(f"{label}: runtime", "fail", "the page links no runtime under the Citry prefix")
     for url in signed.script_urls:
-        judge_file(report, f"runtime {url}", served["answers"][f"runtime:{url}"])
-    for url in signed.definition_urls:
-        judge_file(report, f"definition {url}", served["answers"][f"definition:{url}"])
+        judge_file(report, f"{label}: runtime {url}", answers[f"runtime:{url}"], runtime_digest(url))
+    if not signed.definitions:
+        report.add(f"{label}: definitions", "fail", "the page names no definition file")
+    for url, digest in signed.definitions:
+        judge_file(report, f"{label}: definition {url}", answers[f"definition:{url}"], digest)
     cached = served["cached"]
+    # Reusing the other release's entry and rendering again are both correct,
+    # as long as the output is what a render without that entry gives.
+    how = "reused the entry" if cached["reused"] else "rendered again"
     if same_markup(cached["shared"], cached["fresh"]):
-        report.add("cached render", "ok", "the new release's output matches a render that did not read the old entry")
+        report.add(f"{label}: cached render", "ok", f"{how}; the output matches a render without the entry")
     else:
-        report.add("cached render", "fail", f"shared {cached['shared']!r} != fresh {cached['fresh']!r}")
-    return report
+        report.add(f"{label}: cached render", "fail", f"{how}; {cached['shared']!r} != {cached['fresh']!r}")
+
+
+def check(previous: str, candidate: Path, core_wheel: Path | None, work: Path, report: Report) -> None:
+    """Install both releases and check the deploy in both directions."""
+    old_python = make_environment(work / "old-env", [f"citry=={previous}", *SCENARIO_REQUIREMENTS])
+    new_requirements = [str(candidate), *SCENARIO_REQUIREMENTS]
+    if core_wheel is not None:
+        new_requirements.append(str(core_wheel))
+    new_python = make_environment(work / "new-env", new_requirements)
+    # The reload for a render the page cannot read ships in 1.0.0, so a page
+    # from 0.x shows none. A run that starts from 0.x is never promised, so
+    # this only changes what such a run reports.
+    old_offers_reload = (version_tuple(previous) or (0,)) >= (1, 0, 0)
+    check_direction(
+        report,
+        "old page, new server",
+        old_python,
+        new_python,
+        work / "old-to-new",
+        page_offers_reload=old_offers_reload,
+    )
+    # During a deploy a page the new release rendered can also reach a worker
+    # that still runs the old release.
+    check_direction(
+        report, "new page, old server", new_python, old_python, work / "new-to-old", page_offers_reload=True
+    )
 
 
 def format_report(report: Report, seconds: float) -> str:
@@ -437,17 +480,23 @@ def main() -> int:
     parser.add_argument("--keep", type=Path, help="work in this directory and keep it, instead of a temporary one")
     args = parser.parse_args()
     candidate = args.candidate.resolve()
-    previous = args.previous or newest_release_before(candidate_version(candidate))
+    new_version = candidate_version(candidate)
+    previous = args.previous or newest_release_before(new_version)
+    report = Report(previous=previous, candidate=new_version, promised=deploy_is_promised(previous, new_version))
     started = time.monotonic()
-    if args.keep is not None:
-        args.keep.mkdir(parents=True, exist_ok=True)
-        report = check(previous, candidate, args.core_wheel, args.keep.resolve())
-    else:
-        # Each environment takes about 0.1 GB to 0.3 GB, so nothing is left behind.
-        work = Path(tempfile.mkdtemp(prefix="citry-rolling-deploy-"))
-        try:
-            report = check(previous, candidate, args.core_wheel, work)
-        finally:
+    # Each environment takes 0.1 GB to 0.3 GB, so a temporary work directory
+    # is deleted afterwards.
+    work = args.keep.resolve() if args.keep is not None else Path(tempfile.mkdtemp(prefix="citry-rolling-deploy-"))
+    work.mkdir(parents=True, exist_ok=True)
+    try:
+        check(previous, candidate, args.core_wheel, work, report)
+    except (SystemExit, Exception) as error:  # noqa: BLE001 - every stage's failure is reported the same way
+        # A deploy that is not promised may break the script itself, for
+        # example when the candidate renames an API scenario.py uses. That is
+        # reported like a failed check, so only a promised deploy fails the run.
+        report.add("run", "fail", f"the check could not finish: {error}")
+    finally:
+        if args.keep is None:
             shutil.rmtree(work, ignore_errors=True)
     seconds = time.monotonic() - started
     sys.stdout.write(format_report(report, seconds))

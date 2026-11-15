@@ -1244,13 +1244,16 @@ client written against this document keeps working on every 1.x release.
 
 The `prepared` object of a `vue-prepared/1` render is one part this
 document does not define. Its contents belong to the browser runtime of the
-release that wrote it, and Citry's browser code refuses one whose helper
-contract differs from its own. So during an upgrade, a page rendered by the
-old release can fail to apply a `vue-prepared/1` render from a server
-already running the new release. The call then fails in the browser with a
-`stale_state` error whose `status` is 0, and the page offers the visitor
-the same reload as for a `stale_state` answer from the server. An
-`html-fragment/1` render has no such limit.
+release that wrote it, and Citry's browser code refuses a render built for
+different render helpers than its own. So during an upgrade, a page
+rendered by one release can fail to apply a `vue-prepared/1` render from a
+server running another. The browser, not the server, then fails the call
+with an error whose code is `stale_state` and whose `status` is 0. That
+error never travels on the wire, so the 409 pairing in [Errors](#errors)
+does not apply to it. The page asks the visitor to reload, as it does when
+the server answers `stale_state`. If the visitor declines, the page keeps
+failing such calls until it is reloaded. An `html-fragment/1` render has
+no such limit.
 
 The format inside `stateToken` is not defined here either, and a 1.x
 release may change it. A server answers a token from a token version it

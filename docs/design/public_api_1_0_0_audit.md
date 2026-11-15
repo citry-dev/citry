@@ -644,9 +644,9 @@ Open items found while making this inventory, left for the maintainer:
   cannot apply a render from a newer server whose helpers changed; it
   fails the call with `stale_state` and offers a reload, and the spec
   says so. Rolling deploys are promised only between 1.x
-  releases (decided; 0.x to 1.0.0 starts fresh), so the rolling-deploy
-  test (decision 10) should cover a 1.x upgrade that changes the
-  helpers.
+  releases (decided; 0.x to 1.0.0 starts fresh).
+  `scripts/rolling_deploy/check.py` covers it once a 1.x release changes
+  the helpers.
 - **Security fixes.** Decided: a 1.x release may refuse a
   `citry-events/1` input that earlier releases accepted when a security
   fix needs it, and says so in the changelog. The public "Versioning and

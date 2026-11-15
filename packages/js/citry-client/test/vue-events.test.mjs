@@ -1161,18 +1161,23 @@ test("a cancelled version notification skips the reload prompt, and other errors
 });
 
 test("a result the page cannot apply because it is out of date offers the reload on every path", async () => {
-  // The prepared runtime fails this way when a newer server sends a render compiled against other
-  // helpers. Here an `event` action stands in for that render, so the host's failure is the only
-  // difference from a successful call.
+  // The prepared runtime fails this way when a server on another Citry release sends a render
+  // compiled against other helpers. It finds that in preflight; here the host's `event` action
+  // also fails the same way, which stands in for a failure while an action is applied.
   const outOfDate = () =>
-    Object.assign(new Error("[Citry] the server sent a render from a different version of the app"), {
+    Object.assign(new Error("[Citry] the server sent a render from a different Citry release"), {
       status: 0,
       code: "stale_state",
     });
   const kinds = [];
   let prompts = 0;
+  let failInPreflight = false;
   const host = {
     ...basicHost(),
+    preflightResult() {
+      if (failInPreflight) throw outOfDate();
+      return undefined;
+    },
     dispatchEvent() {
       throw outOfDate();
     },
@@ -1201,7 +1206,8 @@ test("a result the page cannot apply because it is out of date offers the reload
     actions = [{ action: "event", eventName: "changed", wait: false }];
     await bridge.send({ source, handler: "move" });
     await sleep(10);
-    // A result the page applies itself, as a custom transport does.
+    // A result the page applies itself, as a custom transport does, refused in preflight.
+    failInPreflight = true;
     await assert.rejects(
       bridge.applyActions([{ action: "event", eventName: "changed" }], source),
       (error) => error.code === "stale_state",

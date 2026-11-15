@@ -170,10 +170,12 @@ jobs:
             --core-wheel "${core_wheels[0]}"
 
   # A page the previous release rendered sends its requests to the candidate,
-  # as during a rolling deploy. Runs beside smoke-python, so it adds to the
-  # release only the time it takes beyond those jobs. Only deploys between
-  # two 1.x releases are promised; for any other pair the script reports its
-  # results without failing (scripts/rolling_deploy/check.py).
+  # and the other way round, as during a rolling deploy. Runs beside
+  # smoke-python, so it adds to the release only the time it takes beyond
+  # those jobs. Only deploys within one major version, 1 or later, are
+  # promised; for any other pair the script reports its results without
+  # failing, unless it cannot find the previous release on PyPI
+  # (scripts/rolling_deploy/check.py).
   rolling-deploy:
     if: ${{ inputs.operation == 'qualify' }}
     needs: [verify-version, build]

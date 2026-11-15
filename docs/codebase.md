@@ -2415,8 +2415,9 @@ Prepare a release as follows:
    GitHub archive digests for 30 days.
    Citry's qualification also runs `scripts/rolling_deploy/check.py`, which
    sends the requests of pages the previous release rendered to the
-   candidate, as a rolling deploy does; a failed check stops the release
-   only when both releases are 1.x.
+   candidate and the other way round, as a rolling deploy does; a failed
+   check stops the release only when both releases share a major version
+   of 1 or later.
    Qualification requires each worker to be dispatched from the planned commit
    on `main`. If `main` advances before dispatch, prepare a new candidate on
    current `main`.

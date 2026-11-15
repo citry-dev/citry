@@ -8,19 +8,23 @@ both releases, just as one application's code runs on both sides of a deploy.
 
 Two commands:
 
-- `render` (old release): renders a page and a cached component into the
-  shared store, and writes the HTML to a JSON file.
-- `serve` (new release): answers the requests in a JSON file through Citry's
-  WSGI app, renders the cached component again, and writes what it got.
+- `render`: renders pages and a cached component into the shared store, and
+  writes the HTML to a JSON file.
+- `serve` (the other release): answers the requests in a JSON file through
+  Citry's WSGI app, renders the cached component again, and writes what it
+  got.
 
-Both processes use one `DiskCache` directory, the store the docs recommend
-for workers on one host, so the new process sees what the old one wrote, as
-workers sharing a cache do during a deploy.
+`check.py` runs the two commands in both directions: old release renders and
+new release serves, then the other way round. Both processes use one
+`DiskCache` directory, the store the docs recommend for workers on one host,
+so the serving process sees what the rendering one wrote, as workers sharing
+a cache do during a deploy.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import sys
@@ -37,9 +41,11 @@ from citry.contrib.wsgi import wsgi_app
 # of one application do.
 SECRET = "rolling-deploy-check-secret-0123456789"  # noqa: S105
 PREFIX = "/citry"
-# The render cache keeps entries apart only by namespace and generation. Using
-# the same values on both releases is the case that could go wrong: a new
-# release reading an entry an old release wrote.
+CACHED_CARD_RENDERS: list[str] = []
+# Two releases share a render cache entry when the namespace, generation,
+# component and inputs match (unless a release adds more to the key). Using the
+# same namespace and generation on both releases is the case that could go
+# wrong: one release reading an entry the other wrote.
 CACHE_SETTINGS = {"namespace": "rolling-deploy", "generation": "same-on-both-releases", "ttl": 600}
 
 
@@ -117,6 +123,8 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
             version = 1
 
         def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002 - citry passes both
+            # Counted so `serve` can say whether it reused the other release's entry.
+            CACHED_CARD_RENDERS.append(kwargs.name)
             return {"name": kwargs.name}
 
         template = """
@@ -127,7 +135,7 @@ def build_app(store: Path, *, cache_generation: str | None = None) -> tuple[Citr
 
 
 def render(store: Path, out: Path) -> None:
-    """Render what an open page from the old release holds."""
+    """Render what an open page from this release holds."""
     _engine, components = build_app(store)
     pages = {
         "signed": components["SignedCounter"](count=0).render().serialize(),
@@ -174,11 +182,16 @@ def _call_wsgi(app: Any, request: dict[str, Any]) -> dict[str, Any]:
         close = getattr(chunks, "close", None)
         if close is not None:
             close()
-    return {**captured, "body": content.decode("utf-8", errors="replace")}
+    # The digest lets the check compare a served file with the one the page expects.
+    return {
+        **captured,
+        "body": content.decode("utf-8", errors="replace"),
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
 
 
 def serve(store: Path, requests_file: Path, out: Path) -> None:
-    """Answer the old page's requests and render the cached component on the new release."""
+    """Answer the other release's page requests, and render the cached component again."""
     engine, components = build_app(store)
     app = wsgi_app(engine)
     requests = json.loads(requests_file.read_text(encoding="utf-8"))
@@ -186,9 +199,13 @@ def serve(store: Path, requests_file: Path, out: Path) -> None:
     # The cached component, once through the shared entry the old release may
     # have written and once from an engine that cannot see that entry.
     shared = components["CachedCard"](name="Travel mug").render().serialize()
+    reused = not CACHED_CARD_RENDERS
     _fresh_engine, fresh_components = build_app(store, cache_generation="fresh-render")
     fresh = fresh_components["CachedCard"](name="Travel mug").render().serialize()
-    out.write_text(json.dumps({"answers": answers, "cached": {"shared": shared, "fresh": fresh}}), encoding="utf-8")
+    out.write_text(
+        json.dumps({"answers": answers, "cached": {"shared": shared, "fresh": fresh, "reused": reused}}),
+        encoding="utf-8",
+    )
 
 
 def main() -> None:
