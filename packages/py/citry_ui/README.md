@@ -19,14 +19,14 @@ guides and API references.
 
 Citry UI is in alpha.
 
-Before 1.0.0, a release may rename or remove components, inputs, template
-tags, CSS parts, or custom properties. Read the
+Before Citry UI 1.0.0, a release may rename or remove components,
+inputs, template tags, CSS parts, or custom properties. Read the
 [changelog](https://github.com/citry-dev/citry/blob/main/packages/py/citry_ui/CHANGELOG.md)
 and test the component states your application depends on before upgrading.
 
 ## Installation
 
-Install it on Python 3.11 through 3.15. It needs `citry>=0.9.0`:
+Install it on Python 3.11 through 3.15. It needs Citry 1.x (`citry>=1.0.0,<2`):
 
 ```console
 python -m pip install citry-ui

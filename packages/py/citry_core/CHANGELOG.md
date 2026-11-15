@@ -1,5 +1,14 @@
 # Release notes
 
+## v2.1.0
+
+### Changed
+
+- The PyPI page now lists citry-core as Production/Stable, because it ships
+  with Citry 1.0.0. Its own API is still not covered by Citry's 1.x
+  compatibility promise and can change in any release, so depend on `citry`:
+  each `citry` release installs the one citry-core version it needs.
+
 ## v2.0.0
 
 ### Changed

@@ -25,9 +25,11 @@ component's [State](/events/state/) to the page) expire after 24 hours.
    every `_max_age` at one second or more.
 5. [Add a listener for out-of-date pages](#out-of-date-listener), so
    visitors see a message when a call fails with `stale_state`.
-6. Run your tests on 1.0.0.
-7. [Deploy](#deploy-the-upgrade) with fresh whole-page caches.
-8. Check whether your code uses an
+6. Find `c-bind` and Citry UI `attrs=` dicts whose keys use a
+   [reserved name](#reserved-attribute-names), and rename those keys.
+7. Run your tests on 1.0.0.
+8. [Deploy](#deploy-the-upgrade) with fresh whole-page caches.
+9. Check whether your code uses an
    [experimental feature](#check-experimental), and read the
    [other changes](#other-changes).
 
@@ -156,6 +158,25 @@ page is out of date, as
 [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
 shows.
 
+## Rename reserved names { #reserved-attribute-names }
+
+Citry and Citry UI use some attribute names to find their own elements
+in the page. A dict key with one of these names now raises `ValueError`
+when the page renders, in any letter case. Two places are affected:
+
+- **`c-bind` on an HTML tag**, such as `<div c-bind="attrs">`: a key
+  such as `c-render-id` or `data-ccss-x` raises `ValueError`. Rename
+  the key, for example to `data-my-key`. The full list is under
+  [Names Citry reserves](/advanced/html-attributes/#names-citry-reserves).
+  A `<c-element>` with `c-is` or `c-bind` also refuses these names when
+  you write them in the template.
+- **Citry UI `attrs=` inputs** (citry-ui 0.6.0), such as `CButton`
+  `attrs=` or `CSplitButton` `primary_attrs=`: a key that starts with
+  `data-citry-`, `data-cui-`, `data-cev` or `data-cid` raises
+  `ValueError`. Rename it, for example to `data-my-key`. Attrs a Citry
+  UI component hands you, such as `activator_attrs`, still work when
+  you pass them on as you got them, with your own keys added.
+
 ## Deploy the upgrade { #deploy-the-upgrade }
 
 Follow [Deploy a Citry upgrade](/advanced/web-frameworks/#deploy-a-new-version):
@@ -202,4 +223,4 @@ No action needed in most projects:
   new version answers `stale_state` (HTTP 409) instead of
   `invalid_state` (HTTP 403), and Citry fires `citry:events:stale`.
 
-Every change: the [1.0.0 release notes](/releases/).
+Every change: the [1.0.0 release notes](/releases/v1.0.0/).

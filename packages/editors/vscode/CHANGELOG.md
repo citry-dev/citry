@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0 - 2026-11-15
+
+- The extension is now stable: its settings and commands keep working in
+  every 1.x release.
+- It now accepts citry-lsp 1.x, the language server for Citry 1.x
+  projects, as well as 0.4.x, 0.3.x, 0.2.x, and 0.1.x. citry-lsp 1.0.0
+  is the release it is tested with.
+- When it cannot find citry-lsp, it now suggests
+  `python -m pip install "citry-lsp>=0.1,<2"`. That installs citry-lsp
+  1.x, which needs Citry 1.0.0 or later, so it upgrades Citry too. To
+  stay on Citry 0.9.x, the message says to run
+  `python -m pip install "citry-lsp>=0.4,<0.5"` instead.
+
 ## 0.4.0 - 2026-11-14
 
 - The extension now works with citry-lsp 0.4.x, the language server for

@@ -2,6 +2,12 @@
 
 Python package that exposes Rust functionality from the twin [`citry_core_py`](https://github.com/citry-dev/citry/tree/main/crates/citry_core_py/) Rust crate.
 
+To use Citry in an app, depend on [`citry`](https://pypi.org/project/citry/),
+not on this package. Each `citry` release installs the one `citry-core`
+version it needs. `citry-core`'s own API can change in any release
+([what is not covered](https://citry.dev/about/versioning/#what-is-not-covered)),
+so if you call it directly, pin the exact version.
+
 ## Install and quick start
 
 ```bash

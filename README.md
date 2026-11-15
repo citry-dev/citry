@@ -22,6 +22,11 @@ applications.
 
 Citry supports Python 3.11 through 3.15.
 
+Citry is stable. Code that uses what the docs describe keeps working in
+every 1.x release, apart from experimental features and security fixes.
+[Versioning and support](https://citry.dev/about/versioning/) says what
+this covers and which releases get fixes.
+
 **Our mission:** a safe, reliable, and intuitive frontend ecosystem for Python.
 
 [Read the docs](https://citry.dev/docs/) ·
@@ -135,6 +140,16 @@ Or add it to a `uv` project:
 
 ```console
 uv add citry
+```
+
+To stay on 1.x, require `citry>=1.0.0,<2` in `pyproject.toml` (if
+`uv add` already wrote a `citry` line, edit that line). Upgrades then
+bring fixes and new features, and code that uses what the docs describe
+keeps working:
+
+```toml
+[project]
+dependencies = ["citry>=1.0.0,<2"]
 ```
 
 Define a component in ordinary Python. Typed inputs catch misspellings and

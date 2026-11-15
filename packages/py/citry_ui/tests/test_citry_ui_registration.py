@@ -1058,8 +1058,10 @@ def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():
 
     assert requirements is not None
     citry_requirement = next(requirement for requirement in requirements if requirement.startswith("citry"))
-    assert ">=0.9.0" in citry_requirement
-    assert "<" not in citry_requirement
+    # Citry UI allows every Citry 1.x and no 2.x, because it has not been
+    # tested with Citry 2.x, which may break it. Comparing the whole set
+    # keeps a wider cap such as `<20` from passing.
+    assert set(citry_requirement.removeprefix("citry").split(",")) == {">=1.0.0", "<2"}
     assert all(not requirement.startswith("typing-extensions") for requirement in requirements)
     assert resources.joinpath("py.typed").is_file()
     assert resources.joinpath("components/caccordion/caccordion.py").is_file()

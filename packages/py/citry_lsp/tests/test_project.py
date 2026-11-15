@@ -754,7 +754,7 @@ def test_source_analysis_declines_non_function_template_data_without_invoking_it
 
 @pytest.mark.parametrize(
     "version",
-    [".".join(map(str, MINIMUM_CITRY_VERSION)), "0.9.1", "1.0.0", "9.0.0"],
+    [".".join(map(str, MINIMUM_CITRY_VERSION)), "1.0.1", "1.1.0", "9.0.0"],
 )
 def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkeypatch, version):
     monkeypatch.chdir(tmp_path)
@@ -773,7 +773,7 @@ def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkey
     assert "schema 999 is unsupported" in state.status.message
 
 
-@pytest.mark.parametrize("version", ["0.4.5", "0.5.1", "0.6.0", "0.8.0", "development"])
+@pytest.mark.parametrize("version", ["0.4.5", "0.5.1", "0.6.0", "0.8.0", "0.9.0", "development"])
 def test_older_patch_versions_decline_registry_results(tmp_path, monkeypatch, version):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "minimum_version_app.py").write_text(
@@ -821,7 +821,9 @@ def test_runtime_compatibility_matches_the_declared_dependency_floor():
     requirements = [Requirement(value) for value in requires("citry-lsp")]
     requirement = next(value for value in requirements if value.name == "citry")
     minimum = ".".join(map(str, MINIMUM_CITRY_VERSION))
-    assert str(requirement.specifier) == f">={minimum}"
+    # The floor matches MINIMUM_CITRY_VERSION, and the cap keeps a 2.x
+    # Citry, which may break what citry-lsp 1.x reads, from installing.
+    assert {str(specifier) for specifier in requirement.specifier} == {f">={minimum}", "<2"}
     assert project_module._supported_citry_version(minimum)
     assert project_module._supported_citry_version(f"{minimum}+local")
     assert project_module._supported_citry_version(f"{minimum}.post1")

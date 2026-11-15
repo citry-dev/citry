@@ -2188,12 +2188,14 @@ which format it got. Examples:
 - the `SCHEMA` string of the Vue compiler crate
   ([`citry_vue_compiler`](../crates/citry_vue_compiler/src/lib.rs)).
 
-**Before 1.0.0.** A package below 1.0.0 keeps each contract version at
-1, as the contract-version rule in [`CLAUDE.md`](../CLAUDE.md) says, and
-fixes a format in place. That is `citry` until it releases 1.0.0, and
-`citry-ui` after that.
+**Before 1.0.0.** A package below 1.0.0, such as `citry-ui`, keeps each
+contract version at 1, as the contract-version rule in
+[`CLAUDE.md`](../CLAUDE.md) says, and fixes a format in place.
 
-**From `citry` 1.0.0**, the rest of this section applies.
+**For `citry`** and every other package at 1.0.0 or later, the rest of
+this section applies. `citry-core` follows its own version numbers, and a
+`citry-core` format counts only where a covered `citry` behavior depends
+on it.
 
 A deploy that replaces servers one at a time leaves old and new `citry`
 versions running together for a while, and a deploy can skip releases
