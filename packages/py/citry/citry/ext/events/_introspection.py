@@ -50,6 +50,10 @@ def _read_function_annotations(func: Callable[..., object]) -> dict[str, object]
 
 def inspect_events(info: EventsInfo) -> dict[str, object] | None:
     """Build the version 1 Events entry from class-creation metadata."""
+    # citry-lsp reads this entry from every Citry 1.x (`_handler_descriptions`
+    # in citry_lsp/engine.py). During 1.x only add keys, here and in each
+    # handler, never remove or retype one, and keep `introspection_version`
+    # at 1.
     if info.events_cls is None:
         return None
     return {

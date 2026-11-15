@@ -32,8 +32,27 @@ if TYPE_CHECKING:
     from citry_lsp.catalog import ComponentRecord
 
 WORKER_TIMEOUT_SECONDS = 15.0
+# The server runs the worker from this same install, so the records the
+# worker shapes itself (the source analysis, the target, the extension
+# envelope) always match this reader and keep their exact checks.
 _SOURCE_ANALYSIS_VERSION = 1
+# Citry writes the i18n index, the link verdicts, and the inject keys, and one
+# citry-lsp must read them from every Citry 1.x. Citry only adds keys during
+# 1.x and keeps this version at 1, so these readers ignore keys they do not
+# know and still reject a known key with the wrong type. A key Citry 1.0.0
+# already writes may be required, and a missing one gets a fallback only where
+# that just turns a feature off. A key Citry adds later must be read as
+# optional, because a newer citry-lsp still reads data from Citry 1.0.0.
 _I18N_ANALYSIS_VERSION = 1
+_I18N_AVAILABLE_FIELDS = frozenset(
+    {"version", "available", "configured", "revision", "locales", "outputs", "profiles"}
+)
+_I18N_OUTPUT_FIELDS = frozenset({"token", "message", "attribute", "owner", "definition", "interface"})
+_I18N_RANGE_FIELDS = frozenset({"path", "start", "end", "line", "column"})
+_I18N_REFERENCE_FIELDS = frozenset({"path", "start", "end", "token"})
+_I18N_PARAMETER_FIELDS = frozenset({"type_name", "direct", "declarations"})
+_I18N_PROFILE_NAMESPACES = ("format", "parse")
+_PATH_VERDICT_FIELDS = frozenset({"checked", "verdicts"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,29 +146,22 @@ class I18nProjectIndex:
         if not available:
             if configured:
                 raise ValueError("configured i18n analysis cannot be unavailable")
-            if set(payload) != {"version", "available", "configured"}:
-                raise ValueError("unavailable i18n analysis has unexpected fields")
+            # The unavailable form carries only the flags read above, so a
+            # key a newer Citry adds here is ignored.
             self.revision = None
             self.locales = ()
             self.outputs = {}
             self.references = ()
             self.profiles = {"format": {}, "parse": {}}
             return
-        if set(payload) != {
-            "version",
-            "available",
-            "configured",
-            "revision",
-            "locales",
-            "outputs",
-            "references",
-            "profiles",
-        }:
-            raise ValueError("available i18n analysis has unexpected fields")
+        if not _I18N_AVAILABLE_FIELDS.issubset(payload):
+            raise ValueError("available i18n analysis is missing fields")
         revision = payload.get("revision")
         locales = payload.get("locales")
         raw_outputs = payload.get("outputs")
-        raw_references = payload.get("references")
+        # Without references the editor only loses go-to-definition from a
+        # use site to its message, so a missing list reads as an empty one.
+        raw_references = payload.get("references", [])
         raw_profiles = payload.get("profiles")
         if type(revision) is not str or not revision:
             raise ValueError("i18n analysis revision is invalid")
@@ -186,14 +198,7 @@ class I18nProjectIndex:
 
 
 def _i18n_output(payload: object) -> I18nOutputRecord:
-    if type(payload) is not dict or set(payload) != {
-        "token",
-        "message",
-        "attribute",
-        "owner",
-        "definition",
-        "interface",
-    }:
+    if type(payload) is not dict or not _I18N_OUTPUT_FIELDS.issubset(payload):
         raise ValueError("i18n output metadata is invalid")
     token = payload.get("token")
     message = payload.get("message")
@@ -219,7 +224,7 @@ def _i18n_output(payload: object) -> I18nOutputRecord:
 
 
 def _i18n_definition(payload: object) -> I18nDefinitionRecord:
-    if type(payload) is not dict or set(payload) != {"path", "start", "end", "line", "column"}:
+    if type(payload) is not dict or not _I18N_RANGE_FIELDS.issubset(payload):
         raise ValueError("i18n definition metadata is invalid")
     path = payload.get("path")
     start = payload.get("start")
@@ -240,7 +245,7 @@ def _i18n_definition(payload: object) -> I18nDefinitionRecord:
 
 
 def _i18n_reference(payload: object) -> I18nReferenceRecord:
-    if type(payload) is not dict or set(payload) != {"path", "start", "end", "token"}:
+    if type(payload) is not dict or not _I18N_REFERENCE_FIELDS.issubset(payload):
         raise ValueError("i18n reference metadata is invalid")
     path = payload.get("path")
     start = payload.get("start")
@@ -256,8 +261,8 @@ def _i18n_reference(payload: object) -> I18nReferenceRecord:
 def _i18n_parameter(name: object, payload: object) -> I18nParameterRecord:
     if type(name) is not str or not name or type(payload) is not dict:
         raise ValueError("i18n parameter metadata is invalid")
-    if set(payload) != {"type_name", "direct", "declarations"}:
-        raise ValueError("i18n parameter metadata has unexpected fields")
+    if not _I18N_PARAMETER_FIELDS.issubset(payload):
+        raise ValueError("i18n parameter metadata is missing fields")
     type_name = payload.get("type_name")
     direct = payload.get("direct")
     declarations = payload.get("declarations")
@@ -265,23 +270,18 @@ def _i18n_parameter(name: object, payload: object) -> I18nParameterRecord:
         raise ValueError("i18n parameter metadata is invalid")
     validated_declarations: list[I18nParameterDeclarationRecord] = []
     for declaration in declarations:
-        if type(declaration) is not dict or set(declaration) != {
-            "path",
-            "start",
-            "end",
-            "line",
-            "column",
-            "description",
-            "annotated",
-        }:
+        if type(declaration) is not dict or not _I18N_RANGE_FIELDS.issubset(declaration):
             raise ValueError("i18n parameter declaration is invalid")
         path = declaration.get("path")
         start = declaration.get("start")
         end = declaration.get("end")
         line = declaration.get("line")
         column = declaration.get("column")
+        # A missing description only leaves the hover without the
+        # translator's note, and the editor does not act on `annotated`, so
+        # both fall back to "not given".
         description = declaration.get("description")
-        annotated = declaration.get("annotated")
+        annotated = declaration.get("annotated", False)
         if (
             type(path) is not str
             or not path
@@ -311,10 +311,12 @@ def _i18n_parameter(name: object, payload: object) -> I18nParameterRecord:
 
 
 def _i18n_profiles(payload: object) -> dict[str, dict[str, tuple[str, ...]]]:
-    if type(payload) is not dict or set(payload) != {"format", "parse"}:
+    # Both namespaces stay required: an empty fallback would report every
+    # profile name the template uses as unknown.
+    if type(payload) is not dict or not all(namespace in payload for namespace in _I18N_PROFILE_NAMESPACES):
         raise ValueError("i18n profile metadata is invalid")
     result: dict[str, dict[str, tuple[str, ...]]] = {}
-    for namespace in ("format", "parse"):
+    for namespace in _I18N_PROFILE_NAMESPACES:
         raw_namespace = payload.get(namespace)
         if type(raw_namespace) is not dict:
             raise ValueError(f"i18n {namespace} profile metadata is invalid")
@@ -400,6 +402,9 @@ class SourceAnalysisIndex:
     )
 
     def __init__(self, payload: object, catalog: CatalogIndex) -> None:
+        # citry-lsp's own worker builds this record, from the same install as
+        # this reader, so an unknown or missing key means a broken worker and
+        # these readers reject a key they do not know.
         if type(payload) is not dict or set(payload) != {"version", "components"}:
             raise ValueError("source analysis envelope is invalid")
         if payload.get("version") != _SOURCE_ANALYSIS_VERSION:
@@ -597,25 +602,29 @@ def _path_verdicts(value: object) -> dict[str, tuple[bool, str | None]] | None:
     Read the link verdicts the worker copied, or ``None`` when the app's web framework gave none.
 
     A worker on an older citry sends no record, which reads as no verdicts.
+    Citry writes this record, so a key a newer Citry adds is ignored and a
+    missing ``suggestion`` reads as none.
     """
     if value is None:
         return None
-    if type(value) is not dict or set(value) != {"checked", "verdicts"} or type(value["checked"]) is not bool:
+    if type(value) is not dict or not _PATH_VERDICT_FIELDS.issubset(value) or type(value["checked"]) is not bool:
         raise ValueError("path verdict envelope is invalid")
     raw = value["verdicts"]
     if type(raw) is not dict:
         raise ValueError("path verdicts must map paths to verdicts")
     verdicts: dict[str, tuple[bool, str | None]] = {}
     for path, verdict in raw.items():
+        # Without a suggestion the editor still reports the missing link,
+        # only without a "did you mean", so a missing one reads as none.
+        suggestion = verdict.get("suggestion") if type(verdict) is dict else None
         if (
             type(path) is not str
             or type(verdict) is not dict
-            or set(verdict) != {"found", "suggestion"}
-            or type(verdict["found"]) is not bool
-            or (verdict["suggestion"] is not None and type(verdict["suggestion"]) is not str)
+            or type(verdict.get("found")) is not bool
+            or (suggestion is not None and type(suggestion) is not str)
         ):
             raise ValueError("path verdicts must map paths to verdicts")
-        verdicts[path] = (verdict["found"], verdict["suggestion"])
+        verdicts[path] = (verdict["found"], suggestion)
     return verdicts if value["checked"] else None
 
 
@@ -1253,6 +1262,9 @@ def _project_from_worker_output(
         )
     try:
         source_analysis = SourceAnalysisIndex(payload.get("source_analysis"), catalog)
+        # The worker shapes this envelope itself, so it keeps its exact keys;
+        # the i18n index inside it comes from Citry and is read by
+        # `I18nProjectIndex`, which ignores keys it does not know.
         if type(raw_extensions) is not dict or set(raw_extensions) != {"i18n", "events"}:
             raise ValueError("extension analysis envelope is invalid")
         i18n = I18nProjectIndex(raw_extensions.get("i18n"))
@@ -1417,6 +1429,7 @@ def _environment_file_failure(environment_file: Path | None, error: EnvironmentF
 
 def _target_status_message(value: object) -> str | None:
     """Describe when the worker copied a library rather than a host app."""
+    # citry-lsp's own worker writes this record, so it keeps exact key checks.
     if type(value) is not dict:
         raise TypeError("target metadata must be an object")
     kind = value.get("kind")

@@ -933,6 +933,10 @@ class ComponentCatalog:
             values. Mutating it does not change the frozen catalog.
 
         """
+        # citry-lsp reads this catalog from every Citry 1.x (`CatalogIndex`
+        # in citry_lsp/catalog.py). During 1.x only add keys, here and in
+        # the nested records, never remove or retype one, and keep
+        # `schema_version` at 1.
         return {
             "schema_version": self.schema_version,
             "citry_version": self.citry_version,

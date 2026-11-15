@@ -2,6 +2,14 @@
 
 All notable changes to `citry-lsp` are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- The editor now reads the i18n and link-check data that a later Citry
+  1.x writes, even when that Citry adds fields to it. Before, an added
+  field made the editor fall back to checking template syntax only.
+
 ## [0.4.0] - 2026-11-14
 
 ### Changed
