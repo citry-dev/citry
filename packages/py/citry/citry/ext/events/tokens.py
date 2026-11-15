@@ -759,10 +759,10 @@ def _refuse_unknown_payload_version(payload: object) -> None:
 
 
 def _refuse_other_form(token: str, *, other: str) -> None:
-    """Answer stale for a token of the other storage form, so the browser offers a reload."""
+    """Answer stale for a token of the other storage form, so the browser treats the page as out of date."""
     # A page rendered before the component's _storage changed in a deploy
     # still holds the other form. Nothing from the token is read; stale
-    # (409) is the answer the browser turns into a reload prompt.
+    # (409) is the answer the browser reports as an out-of-date page.
     if token.startswith(other + "."):
         msg = (
             "The state token is of the other storage form than this component declares (its"

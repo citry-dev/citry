@@ -13,9 +13,8 @@ the other. This script stages exactly that:
    and definition files, and renders the cached component again
    (`scenario.py serve`).
 4. Each answer must be a success or the documented `stale_state` error,
-   which the page reports as out of date so the app can offer a reload.
-   Any other error fails
-   the check.
+   which the page reports as out of date so the app can offer a reload. Any
+   other error fails the check.
 
 Steps 2 to 4 run twice: an old page sent to the new release, then a new page
 sent to the old release.
@@ -71,7 +70,7 @@ EVENTS_CONTENT_TYPE = "application/citry-events+json"
 
 @dataclass
 class Outcome:
-    """One check's result: `ok`, `reload` (the documented stale_state), or `fail`."""
+    """One check's result: `ok`, `stale` (the documented stale_state), or `fail`."""
 
     name: str
     status: str
@@ -296,7 +295,7 @@ def event_call(page: Page, request_id: str) -> dict[str, Any]:
 
 
 def judge_event_answer(
-    report: Report, name: str, page: Page, request_id: str, answer: dict[str, Any], *, page_offers_reload: bool
+    report: Report, name: str, page: Page, request_id: str, answer: dict[str, Any], *, page_reports_out_of_date: bool
 ) -> None:
     """Classify the other release's answer to a page's event call."""
     try:
@@ -315,7 +314,7 @@ def judge_event_answer(
     if result.get("ok") is not True:
         code = (result.get("error") or {}).get("code")
         if code == "stale_state":
-            report.add(name, "reload", f"HTTP {answer['status']} stale_state: the page reports that it is out of date")
+            report.add(name, "stale", f"HTTP {answer['status']} stale_state: the page reports that it is out of date")
         else:
             report.add(name, "fail", f"HTTP {answer['status']} error {code!r}: {answer['body'][:300]}")
         return
@@ -335,8 +334,8 @@ def judge_event_answer(
     }
     if not new_contracts - page.helper_contracts:
         report.add(name, "ok", "the call succeeded, and its render uses the page's render helpers")
-    elif page_offers_reload:
-        report.add(name, "reload", "the render uses other render helpers: the page reports that it is out of date")
+    elif page_reports_out_of_date:
+        report.add(name, "stale", "the render uses other render helpers: the page reports that it is out of date")
     else:
         report.add(name, "fail", "the render uses other render helpers, and the page reports nothing for that")
 
@@ -364,7 +363,7 @@ def runtime_digest(url: str) -> str:
 
 
 def check_direction(
-    report: Report, label: str, render_python: Path, serve_python: Path, work: Path, *, page_offers_reload: bool
+    report: Report, label: str, render_python: Path, serve_python: Path, work: Path, *, page_reports_out_of_date: bool
 ) -> None:
     """Render pages with one release and send their requests to the other, then judge the answers."""
     work.mkdir(parents=True, exist_ok=True)
@@ -401,7 +400,7 @@ def check_direction(
             page,
             f"rolling_{name}",
             answers[f"event:{name}"],
-            page_offers_reload=page_offers_reload,
+            page_reports_out_of_date=page_reports_out_of_date,
         )
     # A page that names no runtime or no definition file would make these
     # checks pass without testing anything.
@@ -430,22 +429,22 @@ def check(previous: str, candidate: Path, core_wheel: Path | None, work: Path, r
     if core_wheel is not None:
         new_requirements.append(str(core_wheel))
     new_python = make_environment(work / "new-env", new_requirements)
-    # Reporting a render the page cannot read as an out-of-date page ships in
-    # 1.0.0, so a page from 0.x reports nothing. A run that starts from 0.x is never promised, so
+    # Reporting a render the page cannot read as an out-of-date page ships
+    # in 1.0.0, so a page from 0.x reports nothing. A run that starts from 0.x is never promised, so
     # this only changes what such a run reports.
-    old_offers_reload = (version_tuple(previous) or (0,)) >= (1, 0, 0)
+    old_reports_out_of_date = (version_tuple(previous) or (0,)) >= (1, 0, 0)
     check_direction(
         report,
         "old page, new server",
         old_python,
         new_python,
         work / "old-to-new",
-        page_offers_reload=old_offers_reload,
+        page_reports_out_of_date=old_reports_out_of_date,
     )
     # During a deploy a page the new release rendered can also reach a worker
     # that still runs the old release.
     check_direction(
-        report, "new page, old server", new_python, old_python, work / "new-to-old", page_offers_reload=True
+        report, "new page, old server", new_python, old_python, work / "new-to-old", page_reports_out_of_date=True
     )
 
 

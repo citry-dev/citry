@@ -173,7 +173,7 @@ any other user input. See [Security](/security/#treat-state-as-client-input).
 
 | Data | Put it in | How long it lives |
 |---|---|---|
-| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls until its token expires: 24 hours after Citry last issued one, unless `_max_age` sets another lifetime. After that, the next call asks the user to reload ([why tokens expire](/security/#treat-state-as-client-input)). |
+| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls until its token expires: 24 hours after Citry last issued one, unless `_max_age` sets another lifetime. After that, the next call fails with `stale_state` until the page is reloaded ([why tokens expire](/security/#treat-state-as-client-input), [how to tell the visitor](/reference/browser-apis/#out-of-date-pages)). |
 | Larger or computed values the browser code reads | `js_data()` | Recomputed on each render. |
 | Browser-only UI state, such as whether a panel is open | Vue `data()` | Kept by the Vue component in the browser. |
 
@@ -232,8 +232,9 @@ each one:
 
 - **When a call restores State.** If the values in the page no longer fit
   the model, for example because you changed a field's type and deployed,
-  the call fails with `stale_state` (409) and the page is out of date
-  ([what to do](/reference/browser-apis/#out-of-date-pages)).
+  the call fails with `stale_state` (409), and the page stays unusable
+  until the visitor reloads it (see
+  [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)).
   The same happens when the State nests deeper than Pydantic can write as
   JSON on this server (Pydantic's limit depends on the platform).
 - **When the browser writes a field.** The call fails with `invalid_args`

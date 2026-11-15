@@ -225,13 +225,13 @@
       return;
     }
     console.warn("[Citry] This page is out of date: the server no longer accepts its State, or it sent a " +
-      "render from another Citry release. Citry does not reload the page by itself. To tell the visitor, " +
+      "render or fragment from another Citry release. Citry does not reload the page by itself. To tell the visitor, " +
       "listen for citry:events:stale (reason \"version\") and citry:fragments:stale; see " +
-      "https://citry.dev/reference/browser-apis/#events-fired-around-each-call");
+      "https://citry.dev/reference/browser-apis/#out-of-date-pages");
   }
   // A render or fragment written by another release of the app (a newer server during a deploy) can
   // use a format this runtime cannot read. It fails with the code the server gives a State token it
-  // no longer accepts, so the page offers the same reload and a page that handles `stale_state`
+  // no longer accepts, so Citry reports it the same way and a page that handles `stale_state`
   // handles this case too. Status 0 marks a failure found in the browser, as it does for `timeout`.
   function pageOutOfDateError(message) {
     const error = new Error(message);
@@ -3753,7 +3753,7 @@
         const renders = result.ok ? result.actions.filter(action => action.action === "render") : [];
         if (!renders.length) return {result};
         // A render from another Citry release can fail any later check with a plain error, so its
-        // helper contract is read first and the page offers its reload instead.
+        // helper contract is read first and the page reports that it is out of date instead.
         for (const action of renders) {
           const definitions = action.prepared?.definitions;
           if (Array.isArray(definitions))
@@ -4275,7 +4275,7 @@
         const mounted = ownedApp.mounted.get(effectiveSource.stableId);
         // The calling component may be unmounted or replaced while its call is in flight. Page
         // listeners on `document` must still hear the notification (a `stale` event under reason
-        // `version` decides whether the reload prompt appears), so a gone component only changes
+        // `version` decides whether Citry makes its own report), so a gone component only changes
         // where the event starts. The detail keeps the render ID and class the call last reported,
         // so a listener can still match the notification to the `before` event it saw.
         const live = context && mounted && mounted.record.generation === effectiveSource.generation;

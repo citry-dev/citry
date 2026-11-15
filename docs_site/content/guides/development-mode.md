@@ -32,7 +32,7 @@ Any other value raises `ValueError` when you create the instance.
 
 ## What development mode changes
 
-Development mode changes three things:
+Development mode changes four things:
 
 - When you turn a page into HTML, such as with `str(page)`, Citry warns
   if two elements on it share an `id`. See
@@ -43,6 +43,10 @@ Development mode changes three things:
 - Citry reads translations straight from your `.ftl` files, so you can
   edit them without compiling. See
   [Production and deployment](/i18n/production/).
+- When an event call or a Vue fragment fails because the page is out of
+  date, the browser asks "This page is out of date. Reload to
+  continue?". In production Citry writes a console warning instead. See
+  [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages).
 
 The checks cost time on every render and add a script to some pages, so
 use production mode for deployed apps; a production page does not load

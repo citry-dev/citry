@@ -902,7 +902,7 @@ class EventsDispatcher:
                     )
                 # A model State validates its values here, and a
                 # ValidationError means the same as a dataclass's TypeError.
-                # The browser will offer a reload, so the server says why.
+                # The page only learns that it is out of date, so the server log says why.
                 logger.warning(
                     f"Component {comp_cls.__name__}: a verified State token no longer fits the State class, so the"
                     f" call answers stale_state: {type(err).__name__}."

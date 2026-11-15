@@ -52,6 +52,7 @@ def _expected_report(mode: str, dialogs: list[str], warnings: list[str]) -> None
         assert dialogs == []
         assert len(warnings) == 1, warnings
         assert "citry:events:stale" in warnings[0]
+        assert "#out-of-date-pages" in warnings[0]
 
 
 def _collect_page_errors(page: Any) -> list[str]:

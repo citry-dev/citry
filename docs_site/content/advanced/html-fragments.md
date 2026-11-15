@@ -212,6 +212,11 @@ shared cache backend so that every worker can serve those files. See
 Use the same URL prefix and cache configuration in the processes that
 render and the processes that serve.
 
+During a deploy, a fragment can come from a server on another Citry
+release than the page. When the page cannot read it, Citry does not
+start it and fires `citry:fragments:stale`. See
+[Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages).
+
 ## How assets load
 
 A fragment includes each [dependency](/advanced/dependency-files/)

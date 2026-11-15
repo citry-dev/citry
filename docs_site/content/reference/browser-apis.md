@@ -19,7 +19,8 @@ The names fall into five groups:
   [`$loading`](#loading), [`$error`](#error),
   [`$sendEvent`](#send-event), and [`$onEvent`](#on-event).
 - **Page-wide settings:** [`Citry.configure`](#citry-configure).
-- **Page-wide events API:** [`Citry.events`](#citry-events).
+- **Page-wide events API:** [`Citry.events`](#citry-events), and the
+  events that say a page is [out of date](#out-of-date-pages).
 - **Vue and translations:** [`Citry.vue`](#citry-vue),
   [`Citry.vue.use`](#citry-vue-use), and [`$i18n`](#i18n).
 
@@ -596,7 +597,7 @@ spinner, log failures, or react when a result is dropped:
 | `citry:events:after` | After the call finishes. | `ok` |
 | `citry:events:error` | When the call fails. | `error` |
 | `citry:events:swapped` | After a render replaced elements. | `els` |
-| `citry:events:stale` | When the result will not reach the page. | `reason` |
+| `citry:events:stale` | When the result will not reach the page. Calling `preventDefault()` replaces Citry's own report when `reason` is `version`. | `reason` |
 
 Every `detail` includes `instance`, `class`, and `event`. Each event
 bubbles from the first element of the component that made the call. When
@@ -613,41 +614,32 @@ name the component as Citry last saw it.
 | `retired` | The component was removed or replaced before the call finished. |
 | `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. This also happens when the call's own Render replaced the component and the page then accepted a newer result for the new component. A delayed redirect is never dropped for this reason. A result from a handler declared with `@event(detached=True)` never counts as newer, and its own actions without a delay are never dropped for this reason. |
 | `disposed` | The page's Vue app was shut down. |
-| `version` | The page is out of date: the server does not accept its State, or sent a render this page's Citry browser code cannot read. |
+| `version` | The page is out of date: the server does not accept its State, or sent a response this page's Citry browser code cannot read. See [Handle out-of-date pages](#out-of-date-pages). |
 
-A `version` result has two causes:
+### Handle out-of-date pages { #out-of-date-pages }
 
-- The server no longer accepts the State this page holds. This usually
-  happens because the page's State token expired (24 hours after Citry
-  issued it, by default), the app was deployed, or its signing secret
-  changed. An expired token is the common case in production: a visitor
-  leaves a tab open for a day and then clicks.
-- During an upgrade, a server on another Citry release sent a render built
-  for other render helpers than this page's browser code.
+A visitor can keep a page open until the server no longer accepts it.
+Their next event call then fails with `stale_state`. In production Citry
+shows no message and does not reload the page, so add a listener that
+tells the visitor.
 
-See [Handle an out-of-date page](#out-of-date-pages) for what Citry does
-and how to tell your visitors.
+This happens for two reasons:
 
-### Handle an out-of-date page { #out-of-date-pages }
+- The server no longer accepts the page's State token, the signed copy of
+  a component's State that the page sends back with each call. Most
+  often the token expired (24 hours after Citry issued it, by default):
+  a visitor leaves a tab open for a day and then clicks. This is the
+  common case in production. A changed signing secret, or a deploy that
+  changed the State class (such as a field's type), does the same.
+- During a deploy, a server on another Citry release sent a response
+  this page's browser code cannot read.
 
-When a call fails with reason `version`, Citry does this:
-
-- The call rejects with an error whose `code` is `stale_state`. Its
-  `status` is 409 when the server answered and 0 when the browser found
-  the problem itself.
-- Citry fires `citry:events:stale` with reason `version`, then
-  `citry:events:error`.
-- On a page that `Citry(mode="development")` rendered, Citry asks once
-  per page "This page is out of date. Reload to continue?", so you notice
-  the case while you develop.
-- On any other page, Citry asks nothing and never reloads by itself. It
-  writes one warning per page to the browser console.
-
-So in production your app decides what visitors see. A starting point
-that shows a message with a reload button:
+A starting point: a script on every page, loaded before the visitor can
+click, that shows a message with a reload button.
 
 ```js
 function showOutOfDate() {
+  // The events fire on every failed call; add one message.
   if (document.getElementById("out-of-date")) return;
   const banner = document.createElement("div");
   banner.id = "out-of-date";
@@ -665,27 +657,43 @@ document.addEventListener("citry:events:stale", (event) => {
 document.addEventListener("citry:fragments:stale", showOutOfDate);
 ```
 
-This handler cancels nothing, so Citry still writes its console warning
-and, in development, still asks its question. Call
-`event.preventDefault()` in the listener to replace both.
+Let the visitor choose to reload rather than reloading from the
+listener. A page that reloads by itself can loop when the cause is still
+there, for example a cached page that holds an expired token.
 
-A Vue fragment inserted into the page can also come from another Citry
-release, for example from a worker that already runs the new release
-during a deploy. Citry does not start such a fragment. No event call is
-involved, so instead of `citry:events:stale` Citry fires
-`citry:fragments:stale`:
+What Citry does by itself:
 
-- It starts at the fragment's data block when that block is still in the
-  page, and at `document` otherwise. It bubbles, so a listener on
-  `document` always hears it.
+- The call rejects with an error whose `code` is `stale_state`. Its
+  `status` is 409 when the server answered and 0 when the browser found
+  the problem itself.
+- Citry fires `citry:events:stale` with reason `version`, then
+  `citry:events:error`.
+- Once per page, Citry makes its own report. On a page that
+  `Citry(mode="development")` rendered, it shows the browser's confirm
+  dialog "This page is out of date. Reload to continue?", so you notice
+  the case while you develop. On any other page it writes a console
+  warning that starts with "[Citry] This page is out of date". The events
+  still fire on every failed call.
+
+The listeners above do not cancel the events, so Citry still makes its
+own report. To replace it, call `event.preventDefault()` in the
+listener.
+
+A [Vue fragment](/advanced/html-fragments/), HTML your server returns
+for the browser to insert into an open page, can also come from another
+Citry release, for example from a server process that already runs the
+new release during a deploy. Citry does not start such a fragment. No
+event call is involved, so Citry fires `citry:fragments:stale` instead
+of `citry:events:stale`:
+
+- It fires on the `<script>` tag that holds the fragment's data while
+  that tag is in the page, and on `document` otherwise. It bubbles, so a
+  listener on `document` always hears it.
 - Its `detail` holds `reason`, which is `version`, and `error`, the
   `stale_state` error described above.
-- It is cancelable, and cancelling it replaces Citry's console warning or
-  development question, as for `citry:events:stale`.
-
-Both events share the once-per-page rule: after Citry has reported an
-out-of-date page once, it reports nothing more, but the events still fire
-every time.
+- It is cancelable, and cancelling it replaces Citry's own report, as for
+  `citry:events:stale`. Citry reports once per page for both events
+  together.
 
 The Events guides cover [State](/events/state/),
 [template bindings](/events/bindings/),

@@ -1132,7 +1132,7 @@ test("a stale_state answer reports a cancelable version notification before the 
   assert.equal(prompts, 2);
 });
 
-test("a cancelled version notification skips the reload prompt, and other errors never prompt", async () => {
+test("a cancelled version notification skips Citry's own report, and other errors never report", async () => {
   const kinds = [];
   let prompts = 0;
   let answer = staleStateError;
@@ -1160,7 +1160,7 @@ test("a cancelled version notification skips the reload prompt, and other errors
   assert.deepEqual(kinds, ["before", "stale:version", "error", "after", "before", "error", "after"]);
 });
 
-test("a result the page cannot apply because it is out of date offers the reload on every path", async () => {
+test("a result the page cannot apply because it is out of date is reported on every path", async () => {
   // The prepared runtime fails this way when a server on another Citry release sends a render
   // compiled against other helpers. It finds that in preflight; here the host's `event` action
   // also fails the same way, which stands in for a failure while an action is applied.

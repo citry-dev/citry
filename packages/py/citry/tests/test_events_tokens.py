@@ -591,7 +591,7 @@ class TestStorageAndUnusableKeys:
     def test_server_storage_refuses_a_correctly_signed_token(self):
         # The client must never write a server-storage component's State, so
         # even a token signed with the real key is the wrong form here. It is
-        # stale, so a page from before a _storage change offers a reload.
+        # stale, so a page from before a _storage change is reported as out of date.
         with pytest.raises(StaleStateError):
             verify_state_token(
                 self._signed_token(), cls=FakeCounter, storage="server", secrets=[SIGNING_KEY], cache=InMemoryCache()
@@ -873,7 +873,7 @@ class TestDefaultLifetime:
         _pin_now(monkeypatch, FIXED_NOW + self.DAY - 1)
         verified = verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
         assert verified.state_kwargs["count"] == 1
-        # The same answer as any expired token: stale, so the browser offers a reload.
+        # The same answer as any expired token: stale, an out-of-date page in the browser.
         _pin_now(monkeypatch, FIXED_NOW + self.DAY)
         with pytest.raises(StaleStateError) as exc_info:
             verify_state_token(token, cls=FakeCounter, storage="signed", secrets=[SIGNING_KEY])
@@ -991,7 +991,7 @@ class TestUnknownTokenVersion:
 
     A later 1.x release may move State tokens to a new version. A page it
     rendered may then reach a server still running this release during a
-    deploy, and the browser must be offered a reload, not shown an error.
+    deploy, and the browser must treat the page as out of date, not show an error.
     """
 
     @pytest.mark.parametrize("storage", ["signed", "server"])
@@ -1682,7 +1682,7 @@ class TestServerStorage:
     def test_server_payload_unknown_version_is_stale(self):
         # A cache entry another release wrote in a version this one does not
         # know is treated as gone, as in the signed path: the worker never
-        # reads it, and the browser offers a reload.
+        # reads it, and the browser reports an out-of-date page.
         cache = InMemoryCache()
         key = "some-server-key"
         cache.set(

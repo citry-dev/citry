@@ -79,7 +79,10 @@ app = Citry(cache=backend)
 
 When the budget is full, the store drops the State entry used longest
 ago. The visitor whose entry was dropped sees their next call fail with
-`stale_state`, and the page is [out of date](/reference/browser-apis/#out-of-date-pages). Other entries, such as
+`stale_state`, and the page stays unusable until the visitor reloads it
+(see
+[Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)).
+Other entries, such as
 the scripts and styles that open pages load, never make room for State,
 so many State writes cannot push them out.
 
@@ -101,8 +104,8 @@ many visitors keep pages open for hours, and lower it on a small worker.
 
 The budget keeps one client from filling the worker's memory, but such a
 client can still push out other visitors' State by sending many calls.
-Those visitors' next calls then fail with `stale_state`. Rate-limit the Events routes if
-that matters for your app.
+Those visitors' next calls then fail with `stale_state`. Rate-limit the
+Events routes if that matters for your app.
 
 ## Share a store
 

@@ -879,7 +879,9 @@ class Component(metaclass=ComponentMeta):
     State token (the string Citry sends to the page for the next call)
     works after Citry issues it. With ``None``, the token expires after 24
     hours in either storage; a call with an expired token fails with
-    ``stale_state``, and Citry's browser code offers a reload.
+    ``stale_state``; see
+    [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
+    for how to tell the visitor.
 
     Citry starts State from same-named keyword arguments and field defaults.
     Define ``state_data(self, kwargs, slots)`` when the values need to be

@@ -29,8 +29,18 @@ async function startWith({
   blockAttributes = {},
   manifest = MANIFEST,
   cancelStale = false,
+  blockConnected = false,
 }) {
   const events = [];
+  const record = (target, event) => {
+    events.push({
+      type: event.type,
+      target,
+      reason: event.detail?.reason ?? null,
+      code: event.detail?.error?.code ?? null,
+    });
+    return !(cancelStale && event.cancelable);
+  };
   class Document {
     get currentScript() {
       return runtimeScript;
@@ -54,6 +64,11 @@ async function startWith({
   const runtimeScript = new HTMLScriptElement(PAGE_NONCE);
   const block = new HTMLScriptElement(blockNonce);
   block.textContent = manifest;
+  // A block still in the page is where the fragment's event starts.
+  if (blockConnected) {
+    block.isConnected = true;
+    block.dispatchEvent = (event) => record("block", event);
+  }
   block.attributes = { type: "application/json", "data-citry-vue-fragment": "", ...blockAttributes };
   const document = new Document();
   Object.assign(document, {
@@ -66,10 +81,7 @@ async function startWith({
     addEventListener() {},
     removeEventListener() {},
     // Records what the page hears; a listener that cancels `citry:fragments:stale` returns false.
-    dispatchEvent(event) {
-      events.push({ type: event.type, reason: event.detail?.reason ?? null, code: event.detail?.error?.code ?? null });
-      return !(cancelStale && event.cancelable);
-    },
+    dispatchEvent: (event) => record("document", event),
   });
   // A named element such as <form name="currentScript"> becomes an own property of the
   // document that hides the Document.prototype getter, and it has an empty nonce.
@@ -163,7 +175,7 @@ test("a fragment block that took in the next tag's attributes is refused, nonce 
 // A server on another Citry release can write a fragment this runtime does not know: another
 // protocol string, or a top-level field beside `vue`. The page tells the app with
 // `citry:fragments:stale`, and Citry itself only writes a console warning.
-const FRAGMENT_STALE = { type: "citry:fragments:stale", reason: "version", code: "stale_state" };
+const FRAGMENT_STALE = { type: "citry:fragments:stale", target: "document", reason: "version", code: "stale_state" };
 const QUESTION = "This page is out of date. Reload to continue?";
 const otherProtocol = (development = false) => ({
   vue: {
@@ -213,6 +225,30 @@ test("cancelling citry:fragments:stale replaces Citry's own report", async () =>
     cancelStale: true,
   });
   assert.equal(events.filter((event) => event.type === FRAGMENT_STALE.type).length, 1);
+  assert.deepEqual(prompts, []);
+  assert.deepEqual(warnings, []);
+});
+
+test("the fragment event starts at its data block while the block is in the page", async () => {
+  const { events } = await startWith({
+    blockNonce: PAGE_NONCE,
+    clobberCurrentScript: false,
+    manifest: JSON.stringify(otherProtocol()),
+    blockConnected: true,
+  });
+  assert.deepEqual(
+    events.filter((event) => event.type === FRAGMENT_STALE.type),
+    [{ ...FRAGMENT_STALE, target: "block" }],
+  );
+});
+
+test("cancelling citry:fragments:stale on a production page also skips the console warning", async () => {
+  const { prompts, warnings } = await startWith({
+    blockNonce: PAGE_NONCE,
+    clobberCurrentScript: false,
+    manifest: JSON.stringify(otherProtocol()),
+    cancelStale: true,
+  });
   assert.deepEqual(prompts, []);
   assert.deepEqual(warnings, []);
 });

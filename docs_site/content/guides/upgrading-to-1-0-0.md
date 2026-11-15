@@ -94,13 +94,18 @@ not changed for 24 hours:
 
 - the next event call fails with `stale_state`, without running its
   handler;
-- Citry's browser code asks the visitor once per page whether to
+- in production Citry shows the visitor nothing and writes a console
+  warning; only a page rendered in development mode asks whether to
   reload;
 - until the visitor reloads, every call from that component fails the
   same way.
 
 Fix: set a longer `_max_age` in the `State` class inside the component.
-No setting turns expiry off.
+No setting turns expiry off. Also add a listener that tells visitors
+the page is out of date, as
+[Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
+shows. Expired tokens are the common case, but a deploy can cause the
+same failure.
 
 ```python
 from datetime import timedelta
@@ -186,7 +191,7 @@ No action needed in most projects:
 - **Unknown State token version:** nothing changes today. If a later
   1.x release changes the token format, a server that does not know the
   new version answers `stale_state` (HTTP 409) instead of
-  `invalid_state` (HTTP 403), and Citry's browser code offers a
-  reload.
+  `invalid_state` (HTTP 403), and the page reports that it is out of
+  date.
 
 Every change: the [1.0.0 release notes](/releases/).

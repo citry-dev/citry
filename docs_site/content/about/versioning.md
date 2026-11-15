@@ -150,10 +150,11 @@ happen:
       `citry-events/2`; then the old server answers `protocol_mismatch`.
 - **Data an old page cannot read:** a State token (the signed copy of a
   component's State in the page), a render or a fragment written by a
-  newer release. The page's next event call fails with `stale_state`,
-  or the fragment does not start, and the page reports that it is out of
-  date (see [Handle an out-of-date page](/reference/browser-apis/#out-of-date-pages)). After a reload it
-  works with the new release.
+  newer release. The page's next event call fails with the error code
+  `stale_state`, or the fragment does not start. Citry fires events your
+  app can use to tell the visitor (see
+  [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)).
+  After a reload the page works with the new release.
 - **[Render cache](/performance/caching/):** every upgrade, patch
   releases too, ignores entries that another Citry version wrote. While
   old and new servers share one cache, expect slower renders until the
@@ -184,7 +185,9 @@ sends each component's State to the page as a signed State token.
 - Signed tokens and State kept on the server both expire 24 hours after
   Citry issues them, unless you set `State._max_age`.
 - An expired token fails the call with `stale_state`. Show visitors a
-  message for it, as [Handle an out-of-date page](/reference/browser-apis/#out-of-date-pages) shows.
+  message for it, as
+  [Handle out-of-date pages](/reference/browser-apis/#out-of-date-pages)
+  shows.
 - For a longer lifetime, set `State._max_age` to a longer `timedelta`.
   [Treat State as input](/security/#treat-state-as-client-input) explains
   why tokens expire.
@@ -231,7 +234,7 @@ release. Covered, unless marked [experimental](#experimental):
     - `$component(...)` in component JavaScript;
     - the `onServerRender` callback;
     - the Events helpers such as `$state` and `$sendEvent`, and `$i18n`;
-    - the `citry:events:*` DOM events.
+    - the `citry:events:*` DOM events and `citry:fragments:stale`.
 - **HTTP routes** under Citry's prefix, such as the event routes and the
   runtime script addresses: paths, methods and meaning, so your
   forwarding or proxy rules keep working. Preview server routes are

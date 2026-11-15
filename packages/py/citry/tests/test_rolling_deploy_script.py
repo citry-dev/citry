@@ -43,9 +43,9 @@ def _render(contract: str) -> dict[str, Any]:
     return {"action": "render", "renderer": "vue-prepared/1", "prepared": prepared}
 
 
-def _judge(answer: dict[str, Any], *, page_offers_reload: bool = True) -> check.Outcome:
+def _judge(answer: dict[str, Any], *, page_reports_out_of_date: bool = True) -> check.Outcome:
     report = check.Report(previous="1.0.0", candidate="1.1.0", promised=True)
-    check.judge_event_answer(report, "call", _page(), "req", answer, page_offers_reload=page_offers_reload)
+    check.judge_event_answer(report, "call", _page(), "req", answer, page_reports_out_of_date=page_reports_out_of_date)
     [outcome] = report.outcomes
     return outcome
 
@@ -93,7 +93,7 @@ def test_stale_state_is_the_documented_reload_whatever_the_http_status() -> None
     error = {"status": 409, "code": "stale_state", "message": "stale"}
     # The call route answers 200 with a per-call error; a single-call route answers 409.
     for status in (200, 409):
-        assert _judge(_answer({"ok": False, "sendSequence": 1, "error": error}, status=status)).status == "reload"
+        assert _judge(_answer({"ok": False, "sendSequence": 1, "error": error}, status=status)).status == "stale"
 
 
 def test_any_other_error_fails() -> None:
@@ -117,8 +117,8 @@ def test_an_answer_that_is_not_a_result_for_this_call_fails(answer: dict[str, An
 
 def test_a_render_with_other_helpers_counts_as_a_reload_only_where_the_old_page_offers_one() -> None:
     answer = _answer({"ok": True, "sendSequence": 1, "actions": [_render(OTHER_CONTRACT)]})
-    assert _judge(answer, page_offers_reload=True).status == "reload"
-    assert _judge(answer, page_offers_reload=False).status == "fail"
+    assert _judge(answer, page_reports_out_of_date=True).status == "stale"
+    assert _judge(answer, page_reports_out_of_date=False).status == "fail"
 
 
 def test_old_page_records_are_found_in_its_vue_app_data() -> None:
