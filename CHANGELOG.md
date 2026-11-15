@@ -26,7 +26,7 @@ or later.
 
 If you are on a release older than 0.9.x, upgrade to 0.9.x before you
 start. [Upgrade to Citry 1.0.0](https://citry.dev/guides/upgrading-to-1-0-0/)
-lists the steps in order. These changes can affect your code:
+lists the steps in order.
 
 - **State sent to the page now expires after 24 hours by default:**
   Citry sends each component's State to the page as a signed string, the
