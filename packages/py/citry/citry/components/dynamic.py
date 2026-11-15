@@ -40,8 +40,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from citry.attrs import (
     C_ELEMENT_HANDLER_FIX,
+    C_ELEMENT_MARKER_FIX,
     format_attrs,
     merge_attrs,
+    reject_citry_marker_attr_name,
     reject_script_capable_attr_name,
     validate_html_attr_name,
 )
@@ -377,6 +379,7 @@ def _resolve_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any])
         name = validate_html_attr_name(key, where="<c-element>")
         _reject_reserved_events_attr(name, tag_name=tag)
         reject_script_capable_attr_name(name, tag_name=tag, where="<c-element>", fix=C_ELEMENT_HANDLER_FIX)
+        reject_citry_marker_attr_name(name, tag_name=tag, where="<c-element>", fix=C_ELEMENT_MARKER_FIX)
     for value in contributions.values():
         # A nested-template attribute value resolves to a CitryRender, whose
         # parts may hold not-yet-rendered child components, so it cannot be

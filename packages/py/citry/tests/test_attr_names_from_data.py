@@ -267,3 +267,208 @@ def test_template_written_handler_renders_on_a_page_with_browser_code() -> None:
     html = str(Page())
     assert 'onclick="x"' in html
     assert ">y</div>" in html
+
+
+# Names Citry uses to find its own placeholders and elements, in the server, the
+# render cache, and the browser code. A name from data must not be able to write one.
+_CITRY_MARKER_NAMES = [
+    "c-render-id",
+    "C-Render-Id",
+    "data-cid",
+    "DATA-CID-abc",
+    "data-ccss-x",
+    "data-citry",
+    "data-citry-vue-document",
+    "data-citry-vue-fragment",
+    "data-citry-css-url",
+    "data-citry-key",
+    "data-citry-morph",
+    "data-citry-i18n-binding",
+    "data-citry-opaque-root",
+    "data-citry-security-x",
+    "data-citry-omit-handler-x",
+]
+
+_MARKER_SHAPES = {
+    **_TEMPLATE_SHAPES,
+    "c-element-dynamic": '<c-element c-is="tag" c-bind="attrs">x</c-element>',
+    "vue-prepared-c-element": '<c-element c-is="tag" c-bind="attrs">x</c-element>',
+}
+
+
+def _render_marker_spread(shape: str, key: str) -> str:
+    """Render a page whose `c-bind` mapping holds the single key `key`, on any marker shape."""
+    app = Citry(autodiscover=False, extensions=[])
+    uses_vue = shape.startswith("vue")
+
+    class Page(Component):
+        citry = app
+        template = _MARKER_SHAPES[shape]
+        if uses_vue:
+            js = """
+                $component({});
+            """
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {key: "x"}, "tag": "div"}
+
+    if shape.startswith("vue-prepared"):
+        return str(render_prepared(Page()))
+    return str(Page())
+
+
+@pytest.mark.parametrize("shape", list(_MARKER_SHAPES))
+@pytest.mark.parametrize("key", _CITRY_MARKER_NAMES)
+def test_spread_keys_may_not_name_citry_markers(shape: str, key: str) -> None:
+    # A data-chosen `c-render-id` on an empty `<template>` would make the server copy
+    # another component's HTML there; the other names steer Citry's browser code.
+    with pytest.raises(ValueError, match=r"Citry reserves") as excinfo:
+        _render_marker_spread(shape, key)
+    assert repr(key) in str(excinfo.value)
+
+
+@pytest.mark.parametrize("shape", list(_MARKER_SHAPES))
+@pytest.mark.parametrize(
+    "key",
+    [
+        "data-x",
+        "data-cidr",
+        "data-ccssx",
+        "data-citryx",
+        # Citry UI writes names under `data-citry-` through `c-bind`, so only the
+        # names core Citry reads are refused.
+        "data-citry-ui-part",
+        # The browser lowercases only ASCII letters, so these are different names.
+        pytest.param("data-cİd-x", id="dotted-capital-i"),
+        pytest.param("c-render-İd", id="render-id-dotted-capital-i"),
+    ],
+)
+def test_spread_keys_close_to_citry_markers_still_render(shape: str, key: str) -> None:
+    # Control: these names only look like reserved ones and still render, so the
+    # check above refuses exact reserved names, not look-alikes.
+    assert f'{key}="x"' in _render_marker_spread(shape, key)
+
+
+@pytest.mark.parametrize("shape", ["plain", "vue"])
+@pytest.mark.parametrize("key", ["data-cev-x", "DATA-CITRY-RUNTIME-EVENTS"])
+def test_spread_keys_in_the_events_namespace_keep_their_own_error(shape: str, key: str) -> None:
+    # The Events names are refused first, with the error that names the Events fix.
+    with pytest.raises(RuntimeError, match="reserved internal Events namespace"):
+        _render_spread(shape, key)
+
+
+@pytest.mark.parametrize("key", ["c-render-id", "data-cid-x", "data-citry-vue-fragment"])
+def test_spread_keys_may_not_name_citry_markers_beside_a_translation_binding(key: str) -> None:
+    # An element with a `$c-tr` binding reads its `c-bind` mapping in separate code
+    # (the i18n extension), so it needs its own test.
+    app = Citry(autodiscover=False, extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}})
+
+    class Page(Component):
+        citry = app
+        messages = "save = Save"
+        template = """
+            <div
+              c-bind="attrs"
+              c-aria-label="tr('save')"
+              $c-tr:save[aria-label]
+            >x</div>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {key: "x"}}
+
+    with pytest.raises(ValueError, match=r"Citry reserves"):
+        str(Page())
+
+
+def test_spread_key_marker_error_says_how_to_fix_it() -> None:
+    with pytest.raises(ValueError, match="Remove the key from the mapping, or rename it"):
+        _render_marker_spread("plain", "data-cid-x")
+
+
+@pytest.mark.parametrize(
+    ("template", "expected"),
+    [
+        pytest.param('<div data-cid-q c-c-render-id="tag">y</div>', 'data-cid-q c-render-id="div"', id="plain"),
+        pytest.param('<c-element is="div" data-cid-q>y</c-element>', "data-cid-q", id="c-element-static-is"),
+    ],
+)
+def test_template_written_marker_names_still_render(template: str, expected: str) -> None:
+    # The template author wrote the name, so it is not data. These elements compile
+    # to plain tags, so Citry knows the name came from the template.
+    app = Citry(autodiscover=False, extensions=[])
+
+    class Page(Component):
+        citry = app
+
+        def template_data(self, kwargs, slots) -> dict[str, Any]:
+            return {"tag": "div"}
+
+    Page.template = template
+    assert expected in str(Page())
+
+
+def test_dynamic_element_refuses_a_template_written_marker_name() -> None:
+    # A `<c-element c-is>` receives every name as data, so it refuses a written
+    # marker name too, as it does a written handler.
+    app = Citry(autodiscover=False, extensions=[])
+
+    class Page(Component):
+        citry = app
+        template = '<c-element c-is="tag" data-cid-q>y</c-element>'
+
+        def template_data(self, kwargs, slots) -> dict[str, Any]:
+            return {"tag": "div"}
+
+    with pytest.raises(ValueError, match="refuses both") as excinfo:
+        str(Page())
+    assert "Citry reserves" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("shape", ["plain", "vue", "vue-prepared"])
+def test_attrs_hook_may_add_a_reserved_name_to_a_dynamic_element(shape: str) -> None:
+    # A hook is extension code, so it may add reserved names (the Events extension
+    # adds `data-cev-*`), on a page with or without Vue alike.
+    class Hook(Extension):
+        name = "hook"
+
+        def on_attrs_resolved(self, ctx):
+            return {**ctx.attrs, "data-ccss-hook": ""}
+
+    app = Citry(autodiscover=False, extensions=[Hook])
+
+    class Page(Component):
+        citry = app
+        template = '<c-element c-is="tag">y</c-element>'
+        if shape != "plain":
+            js = """
+                $component({});
+            """
+
+        def template_data(self, kwargs, slots) -> dict[str, Any]:
+            return {"tag": "div"}
+
+    html = str(render_prepared(Page())) if shape == "vue-prepared" else str(Page())
+    assert "data-ccss-hook" in html
+
+
+def test_attrs_hook_adding_the_private_key_attribute_conflicts_with_c_key() -> None:
+    # An extension hook is extension code, so it may add marker names (the Events
+    # extension adds `data-cev-*`). The `#c-key` attribute is still checked after it.
+    class Hook(Extension):
+        name = "hook"
+
+        def on_attrs_resolved(self, ctx):
+            return {**ctx.attrs, "data-citry-key": "forged"}
+
+    app = Citry(autodiscover=False, extensions=[Hook])
+
+    class Page(Component):
+        citry = app
+        template = """<c-element c-is="tag" #c-key="'row'">y</c-element>"""
+
+        def template_data(self, kwargs, slots) -> dict[str, Any]:
+            return {"tag": "div"}
+
+    with pytest.raises(ValueError, match=r"conflicts with its private #c-key metadata"):
+        str(Page())

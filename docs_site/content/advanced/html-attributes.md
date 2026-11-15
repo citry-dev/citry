@@ -263,6 +263,36 @@ name that is empty, or contains whitespace, a control character, a quote,
 noncharacter, or `{#`, raises `ValueError`. `c-bind` checks names the
 same way when it adds a mapping to an element.
 
+### Names Citry reserves
+
+Citry uses some attribute names to find its own elements and
+placeholders in the HTML it renders. If request data could choose one of
+these names, it could make Citry copy another component's HTML into the
+page. So on an HTML element, `c-bind` raises `ValueError` for a key that
+is:
+
+- `c-render-id`, `data-cid`, or `data-citry`
+- `data-citry-key`, `data-citry-morph`, `data-citry-i18n`, or
+  `data-citry-i18n-binding`
+- a name that starts with `data-cid-`, `data-ccss-`, `data-cev-`,
+  `data-citry-css-`, `data-citry-omit-handler-`, `data-citry-opaque-`,
+  `data-citry-runtime-`, `data-citry-security-`, or `data-citry-vue-`
+
+Letter case does not matter, so `DATA-CID-x` is refused too. Rename the
+key to a `data-` name of your own. Other `data-` names work.
+
+A name you write in the template, such as `<div data-cid-x>`, is not
+checked, because you chose it. A `<c-element>` with `c-is` or `c-bind`
+refuses these names whether you wrote them or passed them in, as it does
+with handlers. An `on_attrs_resolved` hook may add these names; Citry's
+Events extension adds `data-cev-` names that way.
+
+`data-cev-` names, `data-citry-runtime-control`, and
+`data-citry-runtime-events` raise `RuntimeError` instead of
+`ValueError`, with a message about Events bindings. When i18n is set up,
+`data-citry-i18n-binding` also raises `RuntimeError`, with a message that
+points you to `$c-tr`.
+
 ### Escape `Markup` values
 
 A value with an `__html__()` method, such as `Markup`, is escaped like

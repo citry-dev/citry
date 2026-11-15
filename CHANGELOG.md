@@ -29,6 +29,17 @@
   including `timedelta(0)`, made every token expire as soon as Citry
   issued it, and now raises `ValueError` when the class is defined.
 
+- **A `c-bind` key may not use an attribute name Citry reserves:** on
+  an HTML element, a key such as `c-render-id`, `data-cid-x`,
+  `data-ccss-x`, or `data-citry-key` now raises `ValueError`, in any
+  letter case. Citry uses these names to find its own elements and
+  placeholders in the page, so a name taken from request data could
+  make the server copy another component's HTML into the page.
+  `<c-element>` with `c-is` or `c-bind` refuses them even when you write
+  them in the template. Rename such an attribute to a `data-` name of
+  your own; the full list is under
+  [Names Citry reserves](https://citry.dev/advanced/html-attributes/#names-citry-reserves).
+
 ### Fixes
 
 - With `security_javascript="omit"`, Citry now drops a `Script` or

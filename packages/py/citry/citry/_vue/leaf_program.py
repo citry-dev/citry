@@ -22,6 +22,7 @@ from citry.attrs import (
     format_attrs,
     is_unchanged_template_value,
     merge_attrs,
+    reject_citry_marker_attr_name,
     reject_script_capable_attr_name,
     reject_vue_code_attr_name,
     template_attr_value,
@@ -4045,6 +4046,7 @@ def _spread_with_source_attrs(
                 reject_script_capable_attr_name(name, tag_name=node.tag, where="c-bind")
                 _reject_dynamic_translation_binding(name, tag_name=node.tag)
                 _reject_reserved_events_attr(name, tag_name=node.tag)
+                reject_citry_marker_attr_name(name, tag_name=node.tag, where="c-bind")
                 items.append((name, const_value(value)))
         elif type(attr) is StaticHtmlAttr:
             # A written empty class or style joins the merge as an empty
@@ -4179,6 +4181,7 @@ def _root_spread_plan(node: PreparedElementOpenNode, keys: tuple[str, ...]) -> t
             reject_script_capable_attr_name(name, tag_name=node.tag, where="c-bind")
             _reject_dynamic_translation_binding(name, tag_name=node.tag)
             _reject_reserved_events_attr(name, tag_name=node.tag)
+            reject_citry_marker_attr_name(name, tag_name=node.tag, where="c-bind")
         if any(is_client_props_key(name, tag_name=node.tag) for name in names):
             return None
     except (TypeError, ValueError, RuntimeError):

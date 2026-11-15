@@ -80,6 +80,7 @@ from citry._vue import native_render as _native_render
 from citry._vue import native_walk as _native_walk
 from citry.attrs import (
     C_ELEMENT_HANDLER_FIX,
+    C_ELEMENT_MARKER_FIX,
     TEMPLATE_EMPTY_VALUE,
     VueCodeError,
     _format_resolved_attrs_to_str,
@@ -90,6 +91,7 @@ from citry.attrs import (
     is_vue_code_attr_name,
     is_vue_directive_name,
     merge_attrs,
+    reject_citry_marker_attr_name,
     reject_script_capable_attr_name,
     reject_vue_code_attr_name,
     template_attr_value,
@@ -1421,6 +1423,8 @@ class ElementAttrsNode(Node):
                     reject_vue_code_attr_name(resolved_key, tag_name=self.tag_name, origin="c-bind")
                     reject_script_capable_attr_name(resolved_key, tag_name=self.tag_name, where="c-bind")
                     _reject_reserved_events_attr(resolved_key, tag_name=self.tag_name)
+                    # Runs after the Events check, so an Events name keeps that error.
+                    reject_citry_marker_attr_name(resolved_key, tag_name=self.tag_name, where="c-bind")
                     if cacheable_key and len(self._validated_spread_keys) < 64:
                         self._validated_spread_keys.add(resolved_key)
                     items.append((resolved_key, const_value(item)))
@@ -2207,6 +2211,9 @@ class ComponentNode(Node):
                         _reject_reserved_events_attr(resolved_bound_key, tag_name="c-element")
                         reject_script_capable_attr_name(
                             resolved_bound_key, tag_name="c-element", where="c-bind", fix=C_ELEMENT_HANDLER_FIX
+                        )
+                        reject_citry_marker_attr_name(
+                            resolved_bound_key, tag_name="c-element", where="c-bind", fix=C_ELEMENT_MARKER_FIX
                         )
                     elif not isinstance(bound_key, str):
                         msg = (
